@@ -262,11 +262,11 @@ async fn scoped_callers_mark_only_their_own_workspace() {
     for (target, allowed) in [(&own.name, true), (&other.name, false)] {
         for mut method in [
             AssignmentMethod::MarkReady {
-                workspace: target.clone(),
+                space: target.clone(),
                 selection: Selection::default(),
             },
             AssignmentMethod::ClearReady {
-                workspace: target.clone(),
+                space: target.clone(),
                 selection: Selection::default(),
                 draft: None,
             },

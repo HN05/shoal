@@ -20,12 +20,12 @@ pub enum AssignmentMethod {
         workspace: String,
     },
     MarkReady {
-        workspace: String,
+        space: String,
         selection: crate::forge::items::link::Selection,
     },
     /// `draft` overrides `[pr] draft_on_unready` when set.
     ClearReady {
-        workspace: String,
+        space: String,
         selection: crate::forge::items::link::Selection,
         draft: Option<bool>,
     },

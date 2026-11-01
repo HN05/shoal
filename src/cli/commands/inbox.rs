@@ -23,7 +23,7 @@ use crate::{
         questions::{Listing, Question},
     },
     demos::Running,
-    model::{Chat, CheckoutSync, UntrackedWorktree, Workspace},
+    model::{Chat, CheckoutSync, ReviewMark, SpaceLinks, UntrackedWorktree, Workspace},
     protocol::{ApprovalMethod, DemoMethod, QuestionMethod, RepositoryMethod, WorkspaceMethod},
     state::WorkspaceState,
 };
@@ -102,6 +102,7 @@ impl Inbox {
             request::<Vec<Running>>(&ctx.paths, DemoMethod::ListDemos { workspace: None }).await?;
         let mut items = decision_items(questions, requests, &workspaces, &chats, detached);
         items.extend(workspace_items(&workspaces, &stopped));
+        items.extend(chat_items(&chats));
         items.extend(
             demos
                 .into_iter()
@@ -246,6 +247,19 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<String>) -> Vec<I
     waiting.chain(failed).chain(review).collect()
 }
 
+/// Each mark of the running chats.
+fn chat_items(chats: &[Chat]) -> Vec<Item> {
+    let running = chats.iter().filter(|chat| chat.restore.is_none());
+    running
+        .flat_map(|chat| {
+            chat.review.iter().map(|mark| Item::ChatReady {
+                chat: chat.clone(),
+                mark: mark.clone(),
+            })
+        })
+        .collect()
+}
+
 impl Item {
     /// The workspace or chat it belongs to.
     pub(in crate::cli) fn space_id(&self) -> &str {
@@ -255,6 +269,7 @@ impl Item {
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.id,
+            Self::ChatReady { chat, .. } => &chat.id,
             Self::Demo { demo } => &demo.workspace_id,
             Self::Untracked { .. } | Self::Cleanup { .. } | Self::SyncFailed { .. } => "",
         }
@@ -281,6 +296,7 @@ impl Item {
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,
+            Self::ChatReady { chat, .. } => &chat.name,
             Self::Demo { demo } => &demo.workspace,
             // The directory a workspace adopting it would be named after.
             Self::Untracked { worktree } => worktree
@@ -302,7 +318,7 @@ impl Item {
             Self::Approval { .. } => ("approval", Style::Warning),
             Self::NeedsInput { .. } => ("needs input", Style::Warning),
             Self::Failed { .. } => ("failed", Style::Error),
-            Self::Ready { .. } => ("ready", Style::Success),
+            Self::Ready { .. } | Self::ChatReady { .. } => ("ready", Style::Success),
             Self::Demo { .. } => ("demo", Style::Success),
             Self::Untracked { .. } => ("untracked", Style::Warning),
             Self::Cleanup { .. } => ("cleanup", Style::Error),
@@ -326,13 +342,11 @@ impl Item {
                 .map_or_else(|| title(workspace), str::to_owned),
             // A mark on the workspace itself needs no label beside its name.
             Self::Ready { workspace, mark } if mark.url.is_none() => title(workspace),
-            Self::Ready { workspace, mark } => {
-                let label = ui::mark_label(mark);
-                match &workspace.links.issue_title {
-                    Some(issue) => format!("{label} {issue}"),
-                    None => label,
-                }
+            Self::Ready { workspace, mark } => marked(mark, &workspace.links),
+            Self::ChatReady { chat, mark } if mark.url.is_none() => {
+                chat.links.issue_title.clone().unwrap_or_default()
             }
+            Self::ChatReady { chat, mark } => marked(mark, &chat.links),
             Self::Demo { demo } => demo.launch.name.clone(),
             Self::Untracked { worktree } => home_relative(&worktree.path),
             Self::Cleanup { error } => error.clone(),
@@ -355,6 +369,15 @@ impl Item {
             Self::SyncFailed { .. } => "retry with shoal repo sync".to_owned(),
             _ => String::new(),
         }
+    }
+}
+
+/// The marked item, with the title of the space's issue when it has one.
+fn marked(mark: &ReviewMark, links: &SpaceLinks) -> String {
+    let label = ui::mark_label(mark);
+    match &links.issue_title {
+        Some(issue) => format!("{label} {issue}"),
+        None => label,
     }
 }
 

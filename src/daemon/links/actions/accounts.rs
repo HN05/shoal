@@ -45,7 +45,7 @@ impl Manager {
     }
 
     /// The agent account of the current configuration.
-    pub(in crate::daemon::links) fn agent_account(&self) -> Account {
+    pub(crate) fn agent_account(&self) -> Account {
         self.agent_account_from(&self.config())
     }
 

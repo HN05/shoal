@@ -1,4 +1,5 @@
-//! Untracked user hooks receive workspace identity without an execution scope.
+//! Untracked user hooks receive the identity of their space, a workspace or
+//! chat, without an execution scope.
 use std::{collections::BTreeMap, ffi::OsString, path::Path, process::Stdio, time::Duration};
 
 use anyhow::{Context, Result, ensure};
@@ -6,8 +7,50 @@ use tokio::process::Command;
 
 pub(crate) use crate::config::hooks::{HookDirectory, HookKind};
 use crate::{
-    daemon::resources::ResourceLease, env, model::Workspace, paths::Paths, protocol::timing,
+    daemon::resources::ResourceLease,
+    env,
+    model::{Chat, Workspace},
+    paths::Paths,
+    protocol::timing,
 };
+
+/// Whose identity a hook carries and where it runs: a workspace's, in its
+/// worktree, or a chat's, in its repository's registered checkout.
+#[derive(Clone, Copy)]
+pub enum HookSpace<'a> {
+    Workspace(&'a Workspace),
+    Chat { chat: &'a Chat, checkout: &'a Path },
+}
+
+impl<'a> From<&'a Workspace> for HookSpace<'a> {
+    fn from(workspace: &'a Workspace) -> Self {
+        Self::Workspace(workspace)
+    }
+}
+
+impl<'a> HookSpace<'a> {
+    /// The directory the hook's paths start from.
+    fn root(self) -> &'a Path {
+        match self {
+            Self::Workspace(workspace) => &workspace.path,
+            Self::Chat { checkout, .. } => checkout,
+        }
+    }
+
+    /// Give `command` the space's identity.
+    fn apply_identity(self, command: &mut Command, paths: &Paths) {
+        match self {
+            Self::Workspace(workspace) => {
+                env::apply_workspace_identity(command, workspace, paths);
+                command.env(env::WORKSPACE_PATH, &workspace.path);
+            }
+            Self::Chat { chat, .. } => {
+                env::apply_chat_identity(command, chat, paths);
+                command.env_remove(env::WORKSPACE_PATH);
+            }
+        }
+    }
+}
 
 /// Longest a daemon-side hook may run before the operation fails.
 const DETACHED_TIMEOUT: Duration = Duration::from_secs(60);
@@ -47,13 +90,13 @@ impl Hook<'_> {
 
 fn command(
     hook: Hook<'_>,
-    workspace: &Workspace,
+    space: HookSpace<'_>,
     executable: &Path,
     paths: &Paths,
     configured_env: &BTreeMap<String, OsString>,
 ) -> Result<Command> {
     let mut command = Command::new(executable);
-    env::apply_workspace_identity(&mut command, workspace, paths);
+    space.apply_identity(&mut command, paths);
     for name in env::inherited_secret_exports() {
         command.env_remove(name);
     }
@@ -62,14 +105,13 @@ fn command(
     }
     command
         .current_dir(hook.kind().directory().path(
-            &workspace.path,
+            space.root(),
             match hook {
                 Hook::PostRemove(checkout) => checkout,
-                _ => &workspace.path,
+                _ => space.root(),
             },
         ))
         .env(env::HOOK, hook.kind().as_str())
-        .env(env::WORKSPACE_PATH, &workspace.path)
         .env_remove(env::AGENT)
         .env_remove(env::AGENT_EXIT_CODE)
         .env_remove(env::AGENT_EXIT_COMPLETE)
@@ -131,7 +173,7 @@ pub async fn run_until(
     configured_env: &BTreeMap<String, OsString>,
     stop: impl Future<Output = ()>,
 ) -> Result<()> {
-    let mut child = command(hook, workspace, executable, paths, configured_env)?
+    let mut child = command(hook, workspace.into(), executable, paths, configured_env)?
         .stdin(Stdio::null())
         .spawn()
         .with_context(|| format!("launch {} {}", hook.kind().key(), executable.display()))?;
@@ -179,19 +221,19 @@ async fn stop_group(child: &mut tokio::process::Child, group: i32) -> Result<()>
 }
 
 /// Run a hook from the daemon, without a terminal and with a time limit.
-pub async fn run_detached(
+pub async fn run_detached<'a>(
     hook: Hook<'_>,
-    workspace: &Workspace,
+    space: impl Into<HookSpace<'a>>,
     executable: &Path,
     paths: &Paths,
     configured_env: &BTreeMap<String, OsString>,
 ) -> Result<()> {
-    let output =
-        crate::subprocess::Run::new(command(hook, workspace, executable, paths, configured_env)?)
-            .timeout(DETACHED_TIMEOUT)
-            .capture()
-            .await
-            .with_context(|| format!("run {} {}", hook.kind().key(), executable.display()))?;
+    let command = command(hook, space.into(), executable, paths, configured_env)?;
+    let output = crate::subprocess::Run::new(command)
+        .timeout(DETACHED_TIMEOUT)
+        .capture()
+        .await
+        .with_context(|| format!("run {} {}", hook.kind().key(), executable.display()))?;
     let diagnostic = crate::subprocess::diagnostic(&output.stderr);
     ensure!(
         output.status.success(),

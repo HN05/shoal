@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{approvals::ApprovalRequest, demos::Running, output::outputs, questions::Question},
-    model::{CheckoutSync, ReviewMark, UntrackedWorktree, Workspace},
+    model::{Chat, CheckoutSync, ReviewMark, UntrackedWorktree, Workspace},
 };
 
 /// Something that needs the user.
@@ -24,6 +24,11 @@ pub enum Item {
     },
     Ready {
         workspace: Workspace,
+        mark: ReviewMark,
+    },
+    /// A chat's mark on its linked work or on itself.
+    ChatReady {
+        chat: Chat,
         mark: ReviewMark,
     },
     Demo {

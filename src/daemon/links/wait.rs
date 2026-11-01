@@ -13,7 +13,7 @@ use tokio::sync::Notify;
 use self::held::HeldPasses;
 use super::{
     pr::RegistrationKind,
-    space::{LinkSpace, require_watchable},
+    space::{LinkSpace, require_ready_space},
 };
 use crate::{
     daemon::{agent_messages::AgentMessage, notifications::NotificationKind, workspace::Manager},
@@ -785,7 +785,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                require_watchable(&tx, &id)?;
+                require_ready_space(&tx, &id)?;
                 let linked = polled_items(&tx, &id)?;
                 let mut merged = false;
                 for (url, kind, mut snapshot) in
@@ -954,7 +954,7 @@ impl Manager {
         let agents = self.tracked_agents().await;
         self.store.run(move |db| {
             let tx = db.transaction()?;
-            require_watchable(&tx, &id)?;
+            require_ready_space(&tx, &id)?;
             let items = followed_items(&tx, &id, selection.kind)?;
             if selection.input.is_none() && items.is_empty() {
                 ensure!(links_kind(&tx, &id, selection.kind, &agents)?, "{NO_LINKED_ITEMS}");
@@ -1046,7 +1046,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                require_watchable(&tx, &id)?;
+                require_ready_space(&tx, &id)?;
                 // The agent also received the updates of the child workspaces
                 // it works on.
                 let delivered = crate::daemon::workspace::receiving_paths(&tx, &id, &agents)?;

@@ -705,6 +705,56 @@ fn a_chat_opens_issues_and_acts_on_its_linked_items() {
 }
 
 #[test]
+fn a_chat_marks_its_pr_ready_at_its_head_or_itself_at_its_checkout() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .current_dir(fixture.root.path())
+        .spawn()
+        .unwrap();
+    let chat = fixture.request(json!({"start_chat": {"repository": repository,
+        "name": "planning", "agent": "claude", "pid": agent.id()}}));
+    assert_eq!(chat["type"], "chat", "{chat}");
+    // Nothing linked marks the chat itself, at its checkout's HEAD.
+    let head = git(&fixture.repo, &["rev-parse", "HEAD"]);
+    let marks = fixture.ok(&["ready", "--space", "planning"]);
+    assert_eq!(marks[0]["url"], Value::Null, "{marks}");
+    assert_eq!(marks[0]["head"], head.trim(), "{marks}");
+    let inbox = fixture.ok(&["inbox"]);
+    assert_eq!(inbox[0]["kind"], "chat_ready", "{inbox}");
+    assert_eq!(inbox[0]["chat"]["name"], "planning", "{inbox}");
+    let ready = fixture.ok(&["work", "--chats", "--status", "ready"]);
+    assert_eq!(ready.to_string().matches("planning").count(), 1, "{ready}");
+
+    // A linked PR is marked at its head on the forge, replacing that mark.
+    let mut pr = pull(9, "open", "Fix", &[]);
+    pr["head"]["sha"] = json!("prhead");
+    fixture.respond(json!({"GET repos/team/project/pulls/9": {"body": pr}}));
+    fixture.ok(&["link", "pr", "9", "assigned", "--space", "planning"]);
+    let marks = fixture.ok(&["ready", "--space", "planning"]);
+    let url = format!("{}/pulls/9", fixture.web);
+    assert_eq!(
+        (&marks[0]["url"], &marks[0]["head"]),
+        (&json!(url), &json!("prhead")),
+        "{marks}"
+    );
+    let chats = fixture.request(json!("list_chats"));
+    let recorded = &chats["data"][0]["review"][0];
+    assert_eq!(
+        (&recorded["url"], &recorded["head"]),
+        (&json!(url), &json!("prhead")),
+        "{chats}"
+    );
+    fixture.ok(&["ready", "--undo", "--no-draft", "--space", "planning"]);
+    let chats = fixture.request(json!("list_chats"));
+    assert_eq!(chats["data"][0].get("review"), None, "{chats}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn changes_use_the_agent_account_and_merges_the_users() {
     for forge in [Forge::GitHub, Forge::Forgejo] {
         let fixture = Fixture::new(forge, AGENT_TOKEN);
@@ -2113,7 +2163,7 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
     assert_eq!(links["issue"], format!("{}/issues/8", fixture.web));
     assert_eq!(links["prs"], json!([format!("{}/pulls/9", fixture.web)]));
 
-    let marks = fixture.ok(&["ready", "#9", "--workspace", "topic"]);
+    let marks = fixture.ok(&["ready", "#9", "--space", "topic"]);
     assert_eq!(marks[0]["kind"], "pr", "{marks}");
     fixture.ok(&["unlink", "8", "assigned", "--space", "topic"]);
     let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
@@ -3958,7 +4008,7 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
     );
     let viewed = fixture.ok(&["view", "ci", "--space", "topic"]);
     assert_eq!(viewed[0]["state"], "failed", "{viewed}");
-    let output = fixture.run(&["ready", "ci", "--workspace", "topic"]);
+    let output = fixture.run(&["ready", "ci", "--space", "topic"]);
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("not marked ready"),
         "{output:?}"

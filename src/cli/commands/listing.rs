@@ -49,7 +49,6 @@ impl ListFilter {
             && self.keeps_status(ListStatus::of_entry(entry))
     }
 
-    /// A chat's status is `running`.
     pub(super) fn keeps_chat(&self, chat: &Chat) -> bool {
         self.keeps_repository(&chat.repository_id) && self.keeps_status(ListStatus::of_chat(chat))
     }

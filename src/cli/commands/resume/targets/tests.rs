@@ -23,6 +23,7 @@ fn spaces() -> Spaces {
         session: None,
         restore,
         links: Default::default(),
+        review: Vec::new(),
     };
     Spaces {
         workspaces: vec![workspace],

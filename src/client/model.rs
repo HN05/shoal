@@ -855,6 +855,9 @@ pub struct Chat {
     /// The issues, PRs and CI runs it links.
     #[serde(default)]
     pub links: SpaceLinks,
+    /// Its ready-for-review marks, on its linked items or on itself.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub review: Vec<ReviewMark>,
 }
 
 /// A space as it exists: a workspace or a chat, running or saved, which

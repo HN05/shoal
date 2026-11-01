@@ -8,7 +8,7 @@ use crate::client::output::workspaces::Registered;
 use crate::{
     agent::Agent,
     cli::{
-        args::items::{ItemArgs, RelationArgs, WorkspaceItems},
+        args::items::{ItemArgs, RelationArgs},
         client,
         context::Context,
         ui,
@@ -30,15 +30,6 @@ pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(String, Se
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
     let selection = resolve_kind(ctx, &space, selection).await?;
     Ok((space, selection))
-}
-
-/// [`select`] for the commands that still name a workspace.
-async fn select_in_workspace(ctx: &Context, items: WorkspaceItems) -> Result<(String, Selection)> {
-    let selection = Selection::parse(items.kind_or_url, items.item)?;
-    let workspace =
-        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
-    let selection = resolve_kind(ctx, &workspace, selection).await?;
-    Ok((workspace, selection))
 }
 
 /// The items selected in the named or current space, with the kind of a bare
@@ -353,56 +344,60 @@ pub(super) async fn watch(
     workspaces::watch_items(ctx, space, selected, timeout, resumed).await
 }
 
-pub(super) async fn ready(ctx: &Context, items: WorkspaceItems) -> Result<i32> {
-    let (workspace, selection) = select_in_workspace(ctx, items).await?;
-    let marks: Vec<ReviewMark> = client::request(
-        &ctx.paths,
-        AssignmentMethod::MarkReady {
-            workspace,
-            selection,
-        },
-    )
-    .await?;
+pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
+    let (space, selection) = select(ctx, items).await?;
+    let itself = space_kind(ctx, &space).await?;
+    let marks: Vec<ReviewMark> =
+        client::request(&ctx.paths, AssignmentMethod::MarkReady { space, selection }).await?;
     for warning in marks.iter().flat_map(|mark| &mark.warnings) {
         eprintln!("{warning}");
     }
     ctx.emit(
-        &format!("Ready for review:\n{}", review_lines(&marks)),
+        &format!("Ready for review:\n{}", review_lines(&marks, itself)),
         &marks,
     )?;
     Ok(0)
 }
 
 /// `draft` overrides `[pr] draft_on_unready` when given.
-pub(super) async fn unready(
-    ctx: &Context,
-    items: WorkspaceItems,
-    draft: Option<bool>,
-) -> Result<i32> {
-    let (workspace, selection) = select_in_workspace(ctx, items).await?;
+pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
+    let (space, selection) = select(ctx, items).await?;
+    let itself = space_kind(ctx, &space).await?;
     let marks: Vec<ReviewMark> = client::request(
         &ctx.paths,
         AssignmentMethod::ClearReady {
-            workspace,
+            space,
             selection,
             draft,
         },
     )
     .await?;
-    let message = format!("Ready-for-review marks cleared:\n{}", review_lines(&marks));
+    let message = format!(
+        "Ready-for-review marks cleared:\n{}",
+        review_lines(&marks, itself)
+    );
     ctx.emit(&message, &marks)?;
     Ok(0)
 }
 
-/// One indented line per mark: its item, or the workspace, and whether new
-/// commits arrived since.
-pub(super) fn review_lines(marks: &[ReviewMark]) -> String {
+/// What a mark on the space `space` itself is called: `workspace` or
+/// `chat`.
+async fn space_kind(ctx: &Context, space: &str) -> Result<&'static str> {
+    Ok(match client::present_space(&ctx.paths, space).await? {
+        Some(PresentSpace::Chat(_)) => "chat",
+        _ => "workspace",
+    })
+}
+
+/// One indented line per mark: its item, or the space itself, called
+/// `itself`, and whether new commits arrived since.
+pub(super) fn review_lines(marks: &[ReviewMark], itself: &str) -> String {
     marks
         .iter()
         .map(|mark| {
             let item = match (mark.kind, &mark.url) {
                 (Some(kind), Some(url)) => format!("{kind} {url}"),
-                _ => "workspace".to_owned(),
+                _ => itself.to_owned(),
             };
             let outdated = if mark.stale == Some(true) {
                 " (outdated)"

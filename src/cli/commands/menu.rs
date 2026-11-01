@@ -254,7 +254,7 @@ impl Row {
             },
             Item::NeedsInput { .. } => Self::NeedsInput(workspace),
             Item::Failed { .. } => Self::Failed(workspace),
-            Item::Ready { mark, .. } => Self::Ready {
+            Item::Ready { mark, .. } | Item::ChatReady { mark, .. } => Self::Ready {
                 workspace,
                 url: mark.url.clone(),
             },

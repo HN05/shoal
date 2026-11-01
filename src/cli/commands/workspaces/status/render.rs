@@ -280,7 +280,7 @@ fn render_attention(status: &WorkspaceStatus) {
         outln!("Review:        none");
     } else {
         outln!("Review:        ready for review");
-        outln!("{}", links::review_lines(&workspace.review));
+        outln!("{}", links::review_lines(&workspace.review, "workspace"));
     }
     outln!("Notifications: {} unread", status.unread_notifications);
 }

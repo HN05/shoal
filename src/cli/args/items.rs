@@ -45,10 +45,10 @@ pub enum ItemsCommand {
     /// Issues and PRs show their status and discussion, CI runs their jobs,
     /// and `view review` the workspace's latest local review with its findings.
     View(ViewArgs),
-    /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
+    /// Mark linked items, or the space when none are linked, ready for review.
     Ready {
         #[command(flatten)]
-        items: WorkspaceItems,
+        items: ItemArgs,
         /// Withdraw ready-for-review marks from the selected items.
         #[arg(long)]
         undo: bool,
@@ -131,21 +131,6 @@ pub struct ItemArgs {
     /// workspace, or a picker.
     #[arg(long)]
     pub space: Option<String>,
-}
-
-// [`ItemArgs`] for a command that acts on a workspace.
-#[derive(Debug, Args)]
-pub struct WorkspaceItems {
-    /// pr/issue/ci to select a kind, an issue or PR number, or an issue, PR
-    /// or CI run URL.
-    #[arg(value_parser = item_reference)]
-    pub kind_or_url: Option<String>,
-    /// Number or URL when a kind is supplied.
-    #[arg(requires = "kind_or_url", value_parser = item_reference)]
-    pub item: Option<String>,
-    /// Workspace to use; defaults to the current workspace or picker.
-    #[arg(long)]
-    pub workspace: Option<String>,
 }
 
 impl ItemArgs {

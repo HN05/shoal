@@ -189,6 +189,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 session: None,
                 restore: None,
                 links: Default::default(),
+                review: Vec::new(),
             }])
         } else {
             assert!(matches!(
@@ -259,6 +260,7 @@ fn resume_completes_resumable_spaces() {
         session: None,
         restore,
         links: Default::default(),
+        review: Vec::new(),
     };
     let candidates = saved_chat_candidates(vec![
         chat("talk", Some(crate::state::ChatRestore::Resume)),

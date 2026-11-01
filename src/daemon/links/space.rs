@@ -8,6 +8,7 @@ use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
 use crate::{
+    config::Effective,
     daemon::{store, workspace::Manager},
     forge::ForgeRepo,
     model::{Chat, PresentSpace, Repository, Workspace},
@@ -125,6 +126,15 @@ impl Manager {
         }
     }
 
+    /// The settings of the space: a workspace's own, or a chat's
+    /// repository's.
+    pub(crate) async fn space_settings(&self, space: &LinkSpace) -> Result<Effective> {
+        match space {
+            LinkSpace::Workspace(workspace) => self.workspace_settings(workspace).await,
+            LinkSpace::Chat { checkout, .. } => self.repository_settings(&checkout.id).await,
+        }
+    }
+
     /// The forge of the space's `origin`.
     pub(crate) async fn space_forge(&self, space: &LinkSpace) -> Result<ForgeRepo> {
         let remote = crate::repository::remote_url_from_path(space.origin_path())
@@ -139,9 +149,9 @@ pub(crate) fn is_chat(db: &Connection, id: &str) -> Result<bool> {
     store::exists(db, "SELECT 1 FROM chats WHERE id=?1", [id])
 }
 
-/// Refuse to record what a watch observed for a workspace that is not
-/// ready; a chat records it whenever it runs.
-pub(crate) fn require_watchable(db: &Connection, id: &str) -> Result<()> {
+/// Refuse a change to the links, cursor or marks of a workspace that is not
+/// ready; a chat takes one whenever it is recorded.
+pub(crate) fn require_ready_space(db: &Connection, id: &str) -> Result<()> {
     if is_chat(db, id)? {
         return Ok(());
     }

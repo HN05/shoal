@@ -1,7 +1,12 @@
 //! Ready-for-review marks: an agent's statement that linked work is ready at a
 //! commit. Integrations read them from the event journal; they neither notify
 //! the user nor affect completion or cleanup.
-use std::{path::Path, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    ffi::OsString,
+    path::Path,
+    time::Duration,
+};
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
@@ -9,14 +14,17 @@ use rusqlite::{Connection, params};
 use super::{GuardMode, Manager};
 use crate::{
     daemon::{
-        links::{pr::current_head, wait::linked_items},
+        links::{
+            pr::current_head,
+            space::{LinkSpace, require_ready_space},
+            wait::linked_items,
+        },
         notifications::NotificationKind,
         reviews::gate::Gate,
-        store,
     },
     forge::items::link::{ItemKind, LinkKind, Selection},
-    hooks::{self, Hook, HookKind},
-    model::{ReviewMark, Workspace},
+    hooks::{self, Hook, HookKind, HookSpace},
+    model::{Chat, ReviewMark, Workspace},
 };
 
 /// How long a listing waits for its review checks before it leaves their
@@ -73,6 +81,9 @@ impl Manager {
         selection: Selection,
         gated: bool,
     ) -> Result<Vec<ReviewMark>> {
+        if let space @ LinkSpace::Chat { .. } = self.link_space(selector).await? {
+            return self.mark_chat_ready(&space, selection).await;
+        }
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         let settings = self.workspace_settings(&workspace).await?;
         let command = HookKind::PostReady
@@ -94,14 +105,20 @@ impl Manager {
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(&workspace.path, &selection).await?);
         let mut marks = self
-            .record_marks(&workspace.id, kind, explicit, head)
+            .record_marks(&workspace.id, kind, explicit, head, HashMap::new())
             .await?;
+        let space = LinkSpace::from(workspace.clone());
         let undrafted = match settings.pr.undraft_on_ready {
-            true => self.set_draft(&workspace, &pr_urls(&marks), false).await,
+            true => self.set_draft(&space, &pr_urls(&marks), false).await,
             false => Ok(()),
         };
         if let Some(command) = command {
-            self.run_post_ready(&workspace, &command, &marks).await;
+            match self.configured_workspace_environment(&workspace).await {
+                Ok(configured) => {
+                    (self.run_post_ready((&workspace).into(), &command, &configured, &marks)).await;
+                }
+                Err(error) => self.post_ready_failed(&workspace.name, &error).await,
+            }
         }
         self.tell_coordinator(
             &workspace.name,
@@ -112,48 +129,132 @@ impl Manager {
         )
         .await;
         undrafted.context("marked ready for review, but a PR is still a draft")?;
-        self.check_conventions(&workspace, &settings, &mut marks)
-            .await;
+        self.check_conventions(&space, &settings, &mut marks).await;
         Ok(marks)
     }
 
-    /// Run `hooks.post_ready`; a failure notifies and keeps the marks.
-    async fn run_post_ready(&self, workspace: &Workspace, command: &Path, marks: &[ReviewMark]) {
-        let result = async {
-            let configured_env = self.configured_workspace_environment(workspace).await?;
-            hooks::run_detached(
-                Hook::PostReady(marks),
-                workspace,
-                command,
-                &self.paths,
-                &configured_env,
-            )
+    /// [`Self::mark_ready`] for a chat, which works on no branch of its own:
+    /// each linked PR is marked at its head on the forge, and an issue or the
+    /// chat itself at its checkout's HEAD. A chat is unscoped, so no review
+    /// gate applies, and no coordinator hears of it.
+    async fn mark_chat_ready(
+        &self,
+        space: &LinkSpace,
+        selection: Selection,
+    ) -> Result<Vec<ReviewMark>> {
+        let LinkSpace::Chat { chat, checkout } = space else {
+            bail!("only a chat is marked this way");
+        };
+        let _guard = self.gates.lock_prs([space.id()]).await;
+        let settings = self.space_settings(space).await?;
+        let kind = marked_kind(&selection)?;
+        let explicit = marked_item(self.explicit_item(&checkout.path, &selection).await?);
+        let heads = self.marked_pr_heads(space, kind, explicit.as_ref()).await?;
+        let (head, _) = crate::git::head_and_branch(&checkout.path)
             .await
+            .context("cannot read the checkout's HEAD")?;
+        let mut marks = (self.record_marks(space.id(), kind, explicit, head, heads)).await?;
+        let undrafted = match settings.pr.undraft_on_ready {
+            true => self.set_draft(space, &pr_urls(&marks), false).await,
+            false => Ok(()),
+        };
+        if let Some(command) = HookKind::PostReady.command(&settings) {
+            let hook = HookSpace::Chat {
+                chat,
+                checkout: &checkout.path,
+            };
+            let configured = chat_hook_environment(chat);
+            self.run_post_ready(hook, &checkout.path.join(command), &configured, &marks)
+                .await;
         }
-        .await;
+        undrafted.context("marked ready for review, but a PR is still a draft")?;
+        self.check_conventions(space, &settings, &mut marks).await;
+        Ok(marks)
+    }
+
+    /// The forge's head of each linked PR the marks of `kind`, or the
+    /// `explicit` item, cover.
+    async fn marked_pr_heads(
+        &self,
+        space: &LinkSpace,
+        kind: Option<ItemKind>,
+        explicit: Option<&(String, ItemKind)>,
+    ) -> Result<HashMap<String, String>> {
+        let urls = match explicit {
+            Some((url, ItemKind::Pr)) => vec![url.clone()],
+            Some(_) => Vec::new(),
+            None if kind == Some(ItemKind::Issue) => Vec::new(),
+            None => {
+                let id = space.id().to_owned();
+                (self
+                    .store
+                    .run(move |db| linked_items(db, &id, Some(ItemKind::Pr))))
+                .await?
+                .into_iter()
+                .map(|(url, _)| url)
+                .collect()
+            }
+        };
+        if urls.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let forge = self.space_forge(space).await?;
+        let account = self.agent_account();
+        let mut heads = HashMap::new();
+        for url in urls {
+            let head = (forge.pull_head(&account, &url).await)
+                .with_context(|| format!("could not read the head of {url}"))?;
+            heads.insert(url, head);
+        }
+        Ok(heads)
+    }
+
+    /// Run `hooks.post_ready` in `space` with the `configured`
+    /// environment; a failure notifies and keeps the marks.
+    async fn run_post_ready(
+        &self,
+        space: HookSpace<'_>,
+        command: &Path,
+        configured: &BTreeMap<String, OsString>,
+        marks: &[ReviewMark],
+    ) {
+        let hook = Hook::PostReady(marks);
+        let result = hooks::run_detached(hook, space, command, &self.paths, configured).await;
         if let Err(error) = result {
-            self.notify(
-                Some(&workspace.name),
-                NotificationKind::HookFailed,
-                format!("marked ready for review; {error:#}"),
-            )
-            .await;
+            let name = match space {
+                HookSpace::Workspace(workspace) => &workspace.name,
+                HookSpace::Chat { chat, .. } => &chat.name,
+            };
+            self.post_ready_failed(name, &error).await;
         }
     }
 
+    /// Tell the user that `hooks.post_ready` of the space `name` failed.
+    async fn post_ready_failed(&self, name: &str, error: &anyhow::Error) {
+        self.notify(
+            Some(name),
+            NotificationKind::HookFailed,
+            format!("marked ready for review; {error:#}"),
+        )
+        .await;
+    }
+
+    /// Record marks of `kind`, or of the `explicit` item, at `head`, or for
+    /// a PR at its own head `heads` names.
     async fn record_marks(
         &self,
         id: &str,
         kind: Option<ItemKind>,
         explicit: Option<(String, ItemKind)>,
         head: String,
+        heads: HashMap<String, String>,
     ) -> Result<Vec<ReviewMark>> {
         let id = id.to_owned();
         let created_at = i64::try_from(crate::time::unix_seconds())?;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                store::require_ready(&tx, &id)?;
+                require_ready_space(&tx, &id)?;
                 let linked = linked_items(&tx, &id, kind)?;
                 let items: Vec<(Option<String>, Option<ItemKind>)> = match explicit {
                     Some((url, kind)) => {
@@ -184,6 +285,10 @@ impl Manager {
                 }
                 let mut marks = Vec::new();
                 for (url, kind) in items {
+                    let head = (url.as_ref())
+                        .and_then(|url| heads.get(url))
+                        .unwrap_or(&head)
+                        .clone();
                     tx.execute(
                         "INSERT INTO space_review(space_id,url,kind,head,created_at)
                          VALUES (?1,?2,?3,?4,?5)
@@ -194,7 +299,7 @@ impl Manager {
                     marks.push(ReviewMark {
                         kind,
                         url,
-                        head: head.clone(),
+                        head,
                         created_at,
                         stale: Some(false),
                         warnings: Vec::new(),
@@ -215,27 +320,24 @@ impl Manager {
         selection: Selection,
         draft: Option<bool>,
     ) -> Result<Vec<ReviewMark>> {
-        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
+        let id = self.link_space(selector).await?.id().to_owned();
+        let _guard = self.gates.lock_prs([&id]).await;
+        let space = self.link_space(&id).await?;
         let kind = marked_kind(&selection)?;
-        let explicit = marked_item(self.explicit_item(&workspace.path, &selection).await?);
-        let selected = self.selected_marks(&workspace.id, kind, explicit).await?;
+        let explicit = marked_item(self.explicit_item(space.origin_path(), &selection).await?);
+        let selected = self.selected_marks(space.id(), kind, explicit).await?;
         let draft = match draft {
             Some(draft) => draft,
-            None => {
-                self.workspace_settings(&workspace)
-                    .await?
-                    .pr
-                    .draft_on_unready
-            }
+            None => self.space_settings(&space).await?.pr.draft_on_unready,
         };
         if draft {
-            self.set_draft(&workspace, &pr_urls(&selected), true)
+            self.set_draft(&space, &pr_urls(&selected), true)
                 .await
                 .context(
                     "kept the marks: a PR could not return to draft; retry, or pass --no-draft",
                 )?;
         }
-        self.delete_marks(&workspace.id, &selected).await?;
+        self.delete_marks(space.id(), &selected).await?;
         Ok(selected)
     }
 
@@ -317,6 +419,18 @@ impl Manager {
             .ok()?
             .ok()
     }
+}
+
+/// What a chat's hooks add to their environment: its temporary directory.
+fn chat_hook_environment(chat: &Chat) -> BTreeMap<String, OsString> {
+    (chat.tmp_dir.iter())
+        .map(|directory| {
+            (
+                crate::env::TMPDIR.to_owned(),
+                directory.as_os_str().to_owned(),
+            )
+        })
+        .collect()
 }
 
 /// The PRs among `marks`.

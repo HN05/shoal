@@ -330,6 +330,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
                 title: None,
             }],
         },
+        review: Vec::new(),
     };
     let mut manifest = Manifest {
         remote_url: None,

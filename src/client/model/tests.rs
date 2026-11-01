@@ -107,6 +107,7 @@ fn spaces_find_a_workspace_or_a_running_or_saved_chat_by_id_or_name() {
         session: None,
         restore,
         links: Default::default(),
+        review: Vec::new(),
     };
     let spaces = Spaces {
         workspaces: vec![workspace],

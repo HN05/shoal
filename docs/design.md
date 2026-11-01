@@ -1744,6 +1744,10 @@ ready unless `--draft` or `[pr] draft_on_unready` asks to return it to draft, be
 an agent usually withdraws to push more work that still needs CI and review.
 A failed forge change fails the command with the marks kept, so the agent can
 retry it.
+A chat marks the same way, except that its checkout is not on a PR's branch:
+it marks each linked PR at the head the forge reports, and its issue or itself
+at its checkout's HEAD. Its marks are not journal events, since the journal
+records workspaces, and they show it `ready` in lists and the inbox.
 
 Agent state is the turn state a workspace's agent reports from its hooks:
 `working`, `waiting` for the user mid-turn, or `idle` before its first turn

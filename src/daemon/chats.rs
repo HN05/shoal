@@ -83,6 +83,7 @@ impl Manager {
             session: None,
             restore: None,
             links: SpaceLinks::default(),
+            review: Vec::new(),
         };
         let birth = process.birth.clone();
         let chat = self
@@ -478,41 +479,42 @@ fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> 
 
 /// The running and saved chats in start order.
 fn recorded(db: &Connection) -> Result<Vec<Chat>> {
-    Ok(db
-        .prepare(
-            "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
+    db.prepare(
+        "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
                     chats.restore
              FROM chats JOIN repositories ON repositories.id=chats.repository_id
              ORDER BY chats.started_at, chats.rowid",
-        )?
-        .query_map([], |row| {
-            let id: String = row.get(0)?;
-            let repository_id: String = row.get(1)?;
-            let tmp_dir = row.get::<_, Option<String>>(7)?.map(|directory| {
-                tmp_dirs::Layout::new(Path::new(&directory), &repository_id).locate(&id)
-            });
-            Ok(Chat {
-                id,
-                repository_id,
-                name: row.get(2)?,
-                agent: row.get(3)?,
-                pid: row.get(4)?,
-                started_at: row.get(5)?,
-                origin: store::json_column(row, "origin")?,
-                tmp_dir,
-                session: row.get(8)?,
-                restore: row.get(9)?,
-                links: SpaceLinks::default(),
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<Chat>>>()?
-        .into_iter()
-        .map(|mut chat| {
-            chat.links = store::space_links(db, &chat.id)?;
-            Ok(chat)
+    )?
+    .query_map([], |row| {
+        let id: String = row.get(0)?;
+        let repository_id: String = row.get(1)?;
+        let tmp_dir = row.get::<_, Option<String>>(7)?.map(|directory| {
+            tmp_dirs::Layout::new(Path::new(&directory), &repository_id).locate(&id)
+        });
+        Ok(Chat {
+            id,
+            repository_id,
+            name: row.get(2)?,
+            agent: row.get(3)?,
+            pid: row.get(4)?,
+            started_at: row.get(5)?,
+            origin: store::json_column(row, "origin")?,
+            tmp_dir,
+            session: row.get(8)?,
+            restore: row.get(9)?,
+            links: SpaceLinks::default(),
+            review: Vec::new(),
         })
-        .collect::<rusqlite::Result<_>>()?)
+    })?
+    .collect::<rusqlite::Result<Vec<Chat>>>()?
+    .into_iter()
+    .map(|mut chat| {
+        chat.links = store::space_links(db, &chat.id)?;
+        chat.review = crate::daemon::workspace::review::list(db, &chat.id)?;
+        Ok(chat)
+    })
+    .collect()
 }
 
 /// The process the chat `id` lasts while, unless it has ended or was saved.

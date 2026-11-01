@@ -121,6 +121,9 @@ files a finished workspace handed back. Answer what you can decide with
 (`--attach FILE` hands it a file), and ask the user about the rest. Link the
 issues, PRs and CI runs you follow yourself with `shoal link <item> <relation>`:
 `shoal view` shows them, and their activity arrives with your Shoal messages.
+When the work you follow yourself is ready for the user, run `shoal ready`: it
+marks your linked PRs at their heads, or the chat itself when nothing is
+linked, and `shoal ready --undo` withdraws the marks.
 
 To ask the user something in a chat, run `shoal questions ask --in-chat`, then
 write the question as your final message and end your turn: it also reaches

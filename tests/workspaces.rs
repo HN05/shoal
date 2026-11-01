@@ -2242,7 +2242,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     for args in [
         vec!["stop", ""],
         vec!["done", "--undo", ""],
-        vec!["ready", "--undo", "--workspace", ""],
+        vec!["ready", "--undo", "--space", ""],
         vec!["release", "hold", "--workspace", ""],
         vec!["branch", "base", "clear", "--workspace", ""],
     ] {
@@ -11899,7 +11899,7 @@ fn work_lists_only_the_selected_statuses() {
     let fixture = Fixture::new();
     fixture.add("quiet");
     fixture.add("reviewed");
-    fixture.ok(&["ready", "--workspace", "reviewed"]);
+    fixture.ok(&["ready", "--space", "reviewed"]);
     let names = |statuses: &[&str]| -> Vec<_> {
         let mut args = vec!["work"];
         for status in statuses {
@@ -12012,7 +12012,7 @@ fn inbox_lists_what_needs_the_user_by_kind() {
         String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap(),
         "Nothing needs you\n"
     );
-    fixture.ok(&["ready", "--workspace", "reviewed"]);
+    fixture.ok(&["ready", "--space", "reviewed"]);
     // The agent's state lasts while its execution runs, until `release`
     // exists; the loop's bound only keeps a failed test from leaving it behind.
     let release = fixture.root.path().join("release");
@@ -21583,7 +21583,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     let marks: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert!(marks[0]["url"].is_null() && marks[0]["stale"] == false);
     for args in [
-        &["ready", "--workspace", "other"][..],
+        &["ready", "--space", "other"][..],
         &["ready", "pr"],
         &["ready", "--undo", "pr", "12"],
     ] {

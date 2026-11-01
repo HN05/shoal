@@ -239,6 +239,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
         session: None,
         restore: None,
         links: Default::default(),
+        review: Vec::new(),
     };
     assert_eq!(
         chat_dir_args(&defaults, "codex", home.path(), &chat, &[]),

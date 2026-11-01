@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 
 use super::{
     proposals::OpenOutcome,
+    space::LinkSpace,
     wait::{OwnChange, record_own_change},
 };
 use crate::{
@@ -134,19 +135,19 @@ impl Manager {
         }
     }
 
-    /// Move the workspace's open PRs at `urls` into or out of draft as its
+    /// Move the space's open PRs at `urls` into or out of draft as its
     /// agent account, leaving those already in that state unchanged. The
-    /// caller holds the workspace's PR gate.
+    /// caller holds the space's PR gate.
     pub(crate) async fn set_draft(
         &self,
-        workspace: &Workspace,
+        space: &LinkSpace,
         urls: &[String],
         draft: bool,
     ) -> Result<()> {
         if urls.is_empty() {
             return Ok(());
         }
-        let forge = self.workspace_forge(workspace).await?;
+        let forge = self.space_forge(space).await?;
         let account = self.agent_account();
         let action = Action::edit(Edit {
             draft: Some(draft),
@@ -163,7 +164,7 @@ impl Manager {
                     number,
                     url,
                 };
-                self.apply_own(&workspace.id, &forge, &account, target, &action)
+                self.apply_own(space.id(), &forge, &account, target, &action)
                     .await?;
             }
         }
@@ -175,20 +176,21 @@ impl Manager {
     /// was checked when Shoal opened it, so only its labels are.
     pub(crate) async fn check_conventions(
         &self,
-        workspace: &Workspace,
+        space: &LinkSpace,
         settings: &Effective,
         marks: &mut [ReviewMark],
     ) {
-        let Ok((forge, account)) = self.workspace_forge_account(workspace).await else {
+        let Ok(forge) = self.space_forge(space).await else {
             return;
         };
+        let account = self.agent_account();
         for mark in marks {
             let Some(item) = marked_item(&forge, &account, mark).await else {
                 continue;
             };
             let required = required_labels(settings, item.kind);
             mark.warnings =
-                conventions::warnings(&forge, &account, &workspace.path, &item, None, required)
+                conventions::warnings(&forge, &account, space.origin_path(), &item, None, required)
                     .await;
         }
     }

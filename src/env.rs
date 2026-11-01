@@ -226,6 +226,21 @@ fn workspace_identity(workspace: &Workspace, paths: &Paths) -> BTreeMap<String, 
     ])
 }
 
+/// Give `command` the identity of `chat`: the chat and the state directory
+/// whose daemon recorded it, as its hooks receive them.
+pub fn apply_chat_identity(command: &mut Command, chat: &crate::model::Chat, paths: &Paths) {
+    for name in inherited_port_exports() {
+        command.env_remove(name);
+    }
+    command
+        .env(CHAT, &chat.id)
+        .env(STATE_DIR, &paths.state)
+        .env_remove(WORKSPACE_ID)
+        .env_remove(RUN_ID)
+        .env_remove(WORKSPACE_NAME)
+        .env_remove(SHELL_DIRECTIVE);
+}
+
 /// A chat agent's identity: its chat, and the state directory whose daemon
 /// recorded it, which the agent's own Shoal commands must reach; its
 /// temporary directory; and the agents' output default.

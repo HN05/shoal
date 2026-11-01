@@ -3821,7 +3821,15 @@ stalled.
 it selects no mark. Unlinking an item withdraws its mark, and removal deletes
 all marks. Each mark and withdrawal
 is a [workspace event](#workspace-events). Scoped callers mark only their own
-workspace; `--workspace` selects another one for unscoped callers.
+workspace; `--space` selects another workspace or a chat for unscoped callers.
+
+A [chat](#chats) marks each linked PR at the PR's head on the forge, since its
+checkout is not on the PR's branch, and its linked issue, or the chat itself
+when nothing is linked, at its checkout's HEAD. `work --chats` shows a marked
+chat as `ready`, `inbox` lists its marks, and `work --json` lists them as the
+chat's `review` without `stale`. A chat's marks are not workspace events, and
+the [review gate](#local-reviews) does not apply to them; `hooks.post_ready` runs in
+the chat's checkout.
 
 `hooks.post_ready` runs in the daemon after marks are recorded, under the same
 rules, precedence and limits as `hooks.post_done`, with `SHOAL_REVIEW_MARKS` holding
