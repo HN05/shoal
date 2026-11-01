@@ -1,16 +1,13 @@
 //! Deletion of branches that removal kept once a remote or the default branch
 //! has their commits too. Nothing is lost, so nobody is told.
-use std::{
-    collections::{HashMap, HashSet},
-    time::Duration,
-};
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::{Result, ensure};
 use tokio::time::Instant;
 
 use crate::{
     daemon::{log, workspace::Manager},
-    git::RemoteHead,
+    git::{self, RemoteHead},
 };
 
 /// Ask a repository's remotes for their branches at most this often.
@@ -59,10 +56,14 @@ impl State {
 /// not skip the others.
 pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
     let mut failed = Vec::new();
-    let stalled = stalled_checkouts(manager).await?;
     for repository_id in manager.kept_branch_repositories().await? {
-        if stalled.contains(&repository_id) {
-            continue;
+        match checkout_answers(manager, &repository_id).await {
+            Ok(true) => {}
+            Ok(false) => continue,
+            Err(error) => {
+                failed.push(format!("{repository_id}: {error:#}"));
+                continue;
+            }
         }
         // Squash and rebase merges show only on the fetched default branch;
         // any other evidence comes from what the remotes advertise now, never
@@ -84,14 +85,15 @@ pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
     Ok(())
 }
 
-/// The repositories whose checkout, where their kept branches' Git runs, is
-/// in a directory whose file access stalled.
-async fn stalled_checkouts(manager: &Manager) -> Result<HashSet<String>> {
-    Ok(manager
-        .repositories()
-        .await?
-        .into_iter()
-        .filter(|repo| manager.access_stalled(&repo.path))
-        .map(|repo| repo.id)
-        .collect())
+/// Whether the repository's checkout, where its kept branches' Git runs,
+/// answers. One in a directory whose file access stalled is checked again
+/// when due, since nothing else may once its workspaces are gone, and
+/// skipped meanwhile.
+async fn checkout_answers(manager: &Manager, repository_id: &str) -> Result<bool> {
+    let repo = manager.repository(repository_id).await?;
+    if !manager.access_stalled(&repo.path) {
+        return Ok(true);
+    }
+    let head = git::revision(&repo.path, "HEAD", git::run);
+    Ok(manager.check_access(&repo.path, head).await.is_ok())
 }

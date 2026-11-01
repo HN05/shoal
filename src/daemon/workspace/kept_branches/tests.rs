@@ -109,6 +109,28 @@ async fn a_kept_branch_goes_once_a_remote_has_its_commits() {
 }
 
 #[tokio::test]
+async fn the_sweep_rechecks_a_stalled_checkout_without_workspaces_and_deletes_its_kept_branches() {
+    let (_root, manager, repo, _other) = fixture().await;
+    kept(&manager, &repo, "topic").await;
+    git(&repo.path, &["push", "-q", "-u", "origin", "topic"]);
+    // Paused only around the stall, since real Git would let the clock run
+    // out its time limit. No workspace is left to recheck the directory.
+    tokio::time::pause();
+    let stalled = manager
+        .check_access(&repo.path, std::future::pending::<anyhow::Result<()>>())
+        .await;
+    tokio::time::advance(crate::daemon::file_access::RECHECK_AFTER).await;
+    tokio::time::resume();
+    assert!(stalled.is_err());
+
+    crate::daemon::cleanup::sweep(&manager, &mut Default::default())
+        .await
+        .unwrap();
+    assert_eq!(manager.file_access.stalls(), []);
+    assert!(!branch_exists(&repo, "topic"));
+}
+
+#[tokio::test]
 async fn a_kept_branch_goes_once_the_default_branch_has_its_changes() {
     let (_root, manager, repo, other) = fixture().await;
     kept(&manager, &repo, "topic").await;
