@@ -347,6 +347,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 104 {
         db.execute_batch(include_str!("saved_chats.sql"))?;
     }
+    if version >= 105 {
+        db.execute_batch(STOPPED_CHAT_PROCESSES)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

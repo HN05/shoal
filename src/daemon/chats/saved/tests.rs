@@ -707,6 +707,95 @@ async fn a_stop_after_the_agent_exited_ends_what_carries_the_chat() {
     drop(group);
 }
 
+/// A stop signals a child of the agent and is interrupted, as by a daemon
+/// crash; the child, terminating, starts a process of its own session
+/// without the chat's identity and exits. Only the lineage of the child,
+/// which the stop recorded before signalling it, still leads to that
+/// process, by the never-reused IDs macOS reports.
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn an_interrupted_stop_leaves_what_its_signalled_child_started_traceable() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let started = root.path().join("child");
+    let detached = root.path().join("descendant");
+    // Terminating, the child starts a process in a session of its own and
+    // exits once that process names itself, since macOS drops the link to an
+    // exited parent when an adopted process replaces its image. The child
+    // names itself once it handles the signal.
+    let script = root.path().join("child.sh");
+    std::fs::write(
+        &script,
+        r#"trap 'kill $s
+perl -MPOSIX -e "POSIX::setsid(); open my \$f, q(>), shift; print \$f \$\$; close \$f; sleep 600" "$1" &
+while [ ! -s "$1" ]; do sleep 0.1; done
+exit' TERM
+sleep 600 & s=$!
+echo $$ > "$2"
+wait
+"#,
+    )
+    .unwrap();
+    let mut leader = ProcessGroup::spawn(
+        unmarked("sh")
+            .arg("-c")
+            .arg("sh \"$0\" \"$1\" \"$2\" & wait")
+            .arg(&script)
+            .arg(&detached)
+            .arg(&started),
+    );
+    let group = KilledGroup(leader.id());
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "claude".into(),
+            leader.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let child = wait_for_child(&started).await;
+    let child = crate::process::identity::capture(child).unwrap().unwrap();
+    let agent = crate::process::identity::capture(chat.pid)
+        .unwrap()
+        .unwrap();
+    manager
+        .store
+        .run(|db| super::save(db, ChatRestore::Resume))
+        .await
+        .unwrap();
+    // The stop records the child and signals it, then the daemon crashes.
+    manager
+        .record_chat_stopping(&chat.id, vec![child.clone()])
+        .await
+        .unwrap();
+    unsafe { libc::kill(child.pid as i32, libc::SIGTERM) };
+    let descendant = wait_for_child(&detached).await;
+    let escaped = KilledGroup(descendant);
+    while crate::process::identity::alive(&child).unwrap() {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
+    leader.wait().unwrap();
+
+    let error = manager.discard_saved_chat("talk").await.unwrap_err();
+    assert!(
+        error.to_string().contains(&format!("kill {descendant}")),
+        "{error:#}"
+    );
+    manager.stop_saved(&chat.id, &agent).await.unwrap();
+    manager.discard_saved_chat("talk").await.unwrap();
+    assert!(!chat.tmp_dir.unwrap().exists());
+    drop(escaped);
+    drop(group);
+}
+
 /// `program` without the identity of a workspace or chat the runner may run
 /// in, which would make what it starts theirs rather than the test chat's.
 fn unmarked(program: &str) -> std::process::Command {

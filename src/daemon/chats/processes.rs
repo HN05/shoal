@@ -11,19 +11,20 @@ use crate::process::identity::{self, Identity};
 const ROUNDS: usize = 5;
 
 /// The processes the chat `chat`, saved while it ran as `recorded`, may
-/// still own after a stop that failed or was interrupted, other than the
-/// execution `wrappers`, which hold its restore or discard: those it
-/// [`owned`], and the members of the group it led, which keeps its ID while
-/// any member remains, other than a workspace's. A group under that ID is
-/// another's once a different process has the ID, or the process ran in an
-/// earlier boot. Membership alone does not prove ownership, so only
-/// refusing counts it.
+/// still own after a stop that failed or was interrupted, having signalled
+/// `stopped`, other than the execution `wrappers`, which hold its restore or
+/// discard: those it [`owned`], and the members of the group it led, which
+/// keeps its ID while any member remains, other than a workspace's. A group
+/// under that ID is another's once a different process has the ID, or the
+/// process ran in an earlier boot. Membership alone does not prove
+/// ownership, so only refusing counts it.
 pub(super) async fn survivors(
     chat: &str,
     recorded: &Identity,
+    stopped: &[Identity],
     wrappers: &[Identity],
 ) -> Result<Vec<Identity>> {
-    let mut survivors = owned(chat, recorded, &[], wrappers).await?;
+    let mut survivors = owned(chat, recorded, stopped, wrappers).await?;
     let (_, members) = match led_group(recorded)? {
         Some(group) => identity::related(None, Some(group), None).await?,
         None => Default::default(),
@@ -41,9 +42,9 @@ pub(super) async fn survivors(
 
 /// The processes the chat `chat`, saved while it ran as `recorded`, is
 /// proven to own, other than the execution `wrappers`, which a stop may
-/// signal: that process while it lives, those carrying the chat's identity,
-/// and those it or the processes of `stopped`, which it owned, started, by
-/// the lineage of their never-reused IDs where recorded.
+/// signal: that process and those of `stopped`, which it owned, while they
+/// live, those carrying the chat's identity, and those they started, by the
+/// lineage of their never-reused IDs where recorded.
 pub(super) async fn owned(
     chat: &str,
     recorded: &Identity,
@@ -56,44 +57,76 @@ pub(super) async fn owned(
         .filter(|process| !wrappers.contains(process))
         .collect();
     let ancestors = [std::slice::from_ref(recorded), stopped].concat();
-    for started in identity::started_by(&ancestors, wrappers).await? {
-        if !owned.contains(&started) {
-            owned.push(started);
+    let started = identity::started_by(&ancestors, wrappers).await?;
+    for process in started.into_iter().chain(living(&ancestors)?) {
+        if !owned.contains(&process) {
+            owned.push(process);
         }
-    }
-    if identity::alive(recorded)? && !owned.contains(recorded) {
-        owned.push(recorded.clone());
     }
     Ok(owned)
 }
 
-/// Stop what the saved chat `chat`, whose process `recorded` ended, is
-/// proven to own, other than the execution `wrappers`, again while stopping
-/// it starts others, which descend from what each round stopped.
-pub(super) async fn stop_owned(
-    chat: &str,
-    recorded: &Identity,
-    wrappers: &[Identity],
-) -> Result<()> {
-    stop_in_rounds(|stopped| async move { owned(chat, recorded, &stopped, wrappers).await }).await
+/// Those of `processes` still running.
+fn living(processes: &[Identity]) -> Result<Vec<Identity>> {
+    let mut living = Vec::new();
+    for process in processes {
+        if identity::alive(process)? {
+            living.push(process.clone());
+        }
+    }
+    Ok(living)
 }
 
-/// Stop the processes `owned`, given those stopped before, finds, again
+/// Stop what the saved chat `chat`, whose process `recorded` ended, is
+/// proven to own, other than the execution `wrappers`, again while stopping
+/// it starts others, which descend from what each round and the earlier
+/// stops that signalled `stopped` stopped. Each round first has `record`
+/// keep what it signals.
+pub(super) async fn stop_owned<R>(
+    chat: &str,
+    recorded: &Identity,
+    stopped: Vec<Identity>,
+    wrappers: &[Identity],
+    record: impl Fn(Vec<Identity>) -> R,
+) -> Result<()>
+where
+    R: Future<Output = Result<()>>,
+{
+    stop_in_rounds(
+        stopped,
+        |stopped| async move { owned(chat, recorded, &stopped, wrappers).await },
+        record,
+    )
+    .await
+}
+
+/// Stop the processes `owned`, given those `stopped` before, finds, again
 /// while stopping them starts others, refusing with those still running
-/// after the last round.
-async fn stop_in_rounds<F, Fut>(owned: F) -> Result<()>
+/// after the last round. `record` keeps what each round signals before it
+/// does, so a stop interrupted after signalling them leaves what they start
+/// traceable.
+async fn stop_in_rounds<F, Fut, R>(
+    mut stopped: Vec<Identity>,
+    owned: F,
+    record: impl Fn(Vec<Identity>) -> R,
+) -> Result<()>
 where
     F: Fn(Vec<Identity>) -> Fut,
     Fut: Future<Output = Result<Vec<Identity>>>,
+    R: Future<Output = Result<()>>,
 {
-    let mut stopped = Vec::new();
     for _ in 0..ROUNDS {
         let found = owned(stopped.clone()).await?;
         if found.is_empty() {
             return Ok(());
         }
+        record(found.clone()).await?;
         identity::stop_verified(&found).await?;
-        stopped.extend(found);
+        for process in found {
+            if !stopped.contains(&process) {
+                stopped.push(process);
+            }
+        }
     }
     let pids: Vec<String> = owned(stopped)
         .await?
@@ -156,16 +189,31 @@ impl<'a> ChatProcesses<'a> {
     }
 
     /// Stop every process the chat owns, again while stopping them starts
-    /// others, refusing with those still running after the last round.
-    pub(super) async fn stop(&self) -> Result<()> {
-        stop_in_rounds(|stopped| async move { self.owned(&stopped).await }).await
+    /// others, which descend from what each round and the earlier stops that
+    /// signalled `stopped` stopped, refusing with those still running after
+    /// the last round. Each round first has `record` keep what it signals.
+    pub(super) async fn stop<R>(
+        &self,
+        stopped: Vec<Identity>,
+        record: impl Fn(Vec<Identity>) -> R,
+    ) -> Result<()>
+    where
+        R: Future<Output = Result<()>>,
+    {
+        stop_in_rounds(
+            stopped,
+            |stopped| async move { self.owned(&stopped).await },
+            record,
+        )
+        .await
     }
 
-    /// The live processes the chat owns now, given those a stop of it
-    /// already ended. Each is verified as its own: carrying the chat's
-    /// identity, descended by unique IDs from its process or one of
-    /// `stopped`, or still in its group once captured, which a process that
-    /// took a reused PID cannot join; none is a workspace's.
+    /// The live processes the chat owns now, given those stops of it
+    /// already signalled. Each is verified as its own: carrying the chat's
+    /// identity, its process or one of `stopped` still running, descended by
+    /// unique IDs from one of them, or still in its group once captured,
+    /// which a process that took a reused PID cannot join; none is a
+    /// workspace's.
     async fn owned(&self, stopped: &[Identity]) -> Result<Vec<Identity>> {
         // A wrapper started in the chat carries its marker, not its workspace's.
         let mut owned: Vec<Identity> = identity::scan_chat(self.chat)
@@ -176,8 +224,8 @@ impl<'a> ChatProcesses<'a> {
         let ancestors = [std::slice::from_ref(&self.process), stopped].concat();
         let started = identity::started_by(&ancestors, &self.wrappers).await?;
         let grouped = self.grouped().await?;
-        let live = identity::alive(&self.process)?.then(|| self.process.clone());
-        for process in started.into_iter().chain(grouped).chain(live) {
+        let living = living(&ancestors)?;
+        for process in started.into_iter().chain(grouped).chain(living) {
             if !owned.contains(&process) {
                 owned.push(process);
             }

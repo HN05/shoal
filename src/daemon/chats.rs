@@ -214,9 +214,10 @@ impl Manager {
             .await?
             .context("the chat has ended")?;
         let wrappers = self.execution_wrappers().await?;
+        let stopped = self.stopped_chat_processes(id).await?;
         processes::ChatProcesses::of(id, &recorded, wrappers)?
             .context("the chat has ended")?
-            .stop()
+            .stop(stopped, |found| self.record_chat_stopping(id, found))
             .await?;
         self.end_finished_chats().await
     }
@@ -631,6 +632,7 @@ fn assign(db: &mut Connection, workspace: &str, chat: Option<&str>) -> Result<()
 mod processes;
 mod restores;
 mod saved;
+mod stopped;
 
 #[cfg(test)]
 mod tests;

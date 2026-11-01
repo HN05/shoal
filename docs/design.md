@@ -1732,9 +1732,11 @@ process, leaving no wrapper to report its exit, so the record lasts while a
 process with the registered identity lives, checked periodically and before
 chats are listed. With no wrapper to save it, the daemon saves a chat itself
 where it saves workspaces' agents, marking its record before stopping its
-processes so the end of the process does not end the chat, and a stop that
-fails leaves it running only while its agent does: a stop before a
-shutdown or a signal's saves it to come back on its own, and `shoal daemon stop`
+processes so the end of the process does not end the chat. A stop records each
+process before signalling it, so a later stop and the check before a restore or
+discard follow the lineage of what it signalled after an interrupted stop
+forgot them. A stop that fails leaves it running only while its agent does: a
+stop before a shutdown or a signal's saves it to come back on its own, and `shoal daemon stop`
 for `shoal resume`. A saved chat keeps its record, and with it its name, files,
 messages, workspaces and temporary directory, until a restore runs it again in
 a new process or a discard ends it. Restores and discards wait for a save

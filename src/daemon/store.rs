@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 104;
+const SCHEMA_VERSION: i64 = 105;
 
 #[cfg(test)]
 mod benchmark;
@@ -449,6 +449,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (102, include_str!("store/reviews.sql"), None),
     (103, include_str!("store/file_events.sql"), None),
     (104, include_str!("store/saved_chats.sql"), None),
+    (105, STOPPED_CHAT_PROCESSES, None),
 ];
 
 /// Whether an agent asked the question in its chat, where the user may
@@ -485,6 +486,18 @@ const FILE_SPACES: &str = "ALTER TABLE workspace_files RENAME COLUMN workspace_i
 const ENDED_CHATS: &str = "CREATE TABLE ended_chats (
     chat_id TEXT PRIMARY KEY,
     expires_at INTEGER NOT NULL
+);";
+
+/// The processes a stop of each chat was about to signal, with the
+/// never-reused ID, as JSON, where the platform reports one, so a later stop
+/// and the check before a restore or discard follow what they started once
+/// an interrupted stop forgot them.
+const STOPPED_CHAT_PROCESSES: &str = "CREATE TABLE IF NOT EXISTS chat_stopped_processes (
+    chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    pid INTEGER NOT NULL,
+    birth TEXT NOT NULL,
+    unique_id TEXT,
+    PRIMARY KEY(chat_id, pid, birth)
 );";
 
 /// The JSON array of paths of the files attached to an agent message.

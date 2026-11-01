@@ -9,7 +9,7 @@ use rusqlite::{Connection, params};
 use super::{
     Over, ensure_checkout_free,
     processes::{self, ChatProcesses},
-    recorded,
+    recorded, stopped,
 };
 use crate::{
     daemon::{log, workspace::Manager},
@@ -76,12 +76,14 @@ impl Manager {
     /// once it ended, so they only hold its restore.
     async fn stop_saved(&self, id: &str, process: &Identity) -> Result<()> {
         let wrappers = self.execution_wrappers().await?;
+        let stopped = self.stopped_chat_processes(id).await?;
+        let record = |found| self.record_chat_stopping(id, found);
         if let Some(processes) = ChatProcesses::of(id, process, wrappers.clone())? {
-            return processes.stop().await;
+            return processes.stop(stopped, record).await;
         }
         let chat = id.to_owned();
         let recorded = self.store.run(move |db| saved_process(db, &chat)).await?;
-        processes::stop_owned(id, &recorded, &wrappers).await
+        processes::stop_owned(id, &recorded, stopped, &wrappers, record).await
     }
 
     /// Run the saved chat `id` again as process `pid`, at `origin` in a
@@ -195,7 +197,8 @@ impl Manager {
         let id = chat.id.clone();
         let recorded = self.store.run(move |db| saved_process(db, &id)).await?;
         let wrappers = self.execution_wrappers().await?;
-        let mut running = processes::survivors(&chat.id, &recorded, &wrappers).await?;
+        let stopped = self.stopped_chat_processes(&chat.id).await?;
+        let mut running = processes::survivors(&chat.id, &recorded, &stopped, &wrappers).await?;
         running.retain(|process| process.pid != caller);
         let pids: Vec<String> = running
             .iter()
@@ -304,7 +307,9 @@ struct Restored {
 }
 
 /// Record that the saved chat `restored` names runs again, starting until it
-/// is moved when it hands over, unless a restore took it first.
+/// is moved when it hands over, unless a restore took it first. The check
+/// before it found nothing its stops signalled still running, nor anything
+/// they started.
 fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
     let tx = db.transaction()?;
     ensure_checkout_free(&tx, &restored.repository)?;
@@ -324,6 +329,7 @@ fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
         ],
     )?;
     ensure!(updated == 1, "the chat is no longer saved");
+    stopped::forget(&tx, &restored.id)?;
     let chat = recorded(&tx)?
         .into_iter()
         .find(|chat| chat.id == restored.id)
