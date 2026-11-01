@@ -26,6 +26,11 @@ impl Manager {
     /// whose processes do not stop runs on.
     pub(crate) async fn save_chats(&self, restore: ChatRestore) {
         let _saving = self.chat_saves.lock().await;
+        // A chat whose agent exited since the last sweep has ended, and
+        // would otherwise come back.
+        if let Err(error) = self.end_finished_chats().await {
+            log!("ended chats not found before saving: {error:#}");
+        }
         let saved = match self.store.run(move |db| save(db, restore)).await {
             Ok(saved) => saved,
             Err(error) => {

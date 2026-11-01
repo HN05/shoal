@@ -421,3 +421,39 @@ async fn a_survivor_that_left_the_chats_group_holds_it_saved() {
     assert!(chat.tmp_dir.unwrap().exists());
     drop(escaped);
 }
+
+#[tokio::test]
+async fn a_chat_that_ended_before_the_save_is_not_saved() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, process) = running_chat(root.path(), &manager).await;
+    process.kill();
+
+    manager.save_chats(ChatRestore::Automatic).await;
+
+    assert!(manager.chats().await.unwrap().is_empty());
+    assert!(!chat.tmp_dir.unwrap().exists());
+    assert_eq!(
+        chat_events(&manager).await,
+        ["chat_started talk", "chat_ended talk"]
+    );
+}
+
+#[test]
+fn a_group_under_the_agents_id_is_its_own_only_while_nobody_took_the_id() {
+    use crate::daemon::chats::processes::led_group;
+    use crate::process::identity::{Identity, capture};
+    let live = capture(std::process::id()).unwrap().unwrap();
+    assert_eq!(led_group(&live).unwrap(), Some(live.pid));
+    // Another process now has the ID.
+    let reused = Identity {
+        birth: "an earlier process".into(),
+        unique: None,
+        ..live.clone()
+    };
+    assert_eq!(led_group(&reused).unwrap(), None);
+    // After a reboot, any group under the ID is another's.
+    assert_eq!(
+        led_group(&live.recorded_in("an-earlier-boot")).unwrap(),
+        None
+    );
+}
