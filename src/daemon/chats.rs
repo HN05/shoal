@@ -205,8 +205,24 @@ impl Manager {
 
     /// End the running chat `id`: stop every process it owns, so none goes
     /// on writing the agent's session, then end its record as when the
-    /// process it lasts while exits.
+    /// process it lasts while exits. Until the stop finishes, the chat
+    /// keeps its record and temporary directory.
     pub(crate) async fn end_chat(&self, id: &str) -> Result<()> {
+        self.end_chat_recording(id, |found| self.record_chat_stopping(id, found))
+            .await
+    }
+
+    /// [`Self::end_chat`], with `record` keeping what each round of the
+    /// stop signals before it does.
+    async fn end_chat_recording<R>(
+        &self,
+        id: &str,
+        record: impl Fn(Vec<Identity>) -> R,
+    ) -> Result<()>
+    where
+        R: Future<Output = Result<()>>,
+    {
+        let stopping = self.chat_stops.hold(id);
         let chat = id.to_owned();
         let recorded = self
             .store
@@ -217,8 +233,9 @@ impl Manager {
         let stopped = self.stopped_chat_processes(id).await?;
         processes::ChatProcesses::of(id, &recorded, wrappers)?
             .context("the chat has ended")?
-            .stop(stopped, |found| self.record_chat_stopping(id, found))
+            .stop(stopped, record)
             .await?;
+        drop(stopping);
         self.end_finished_chats().await
     }
 
@@ -232,10 +249,14 @@ impl Manager {
             .collect())
     }
 
-    /// End running chats whose process has exited.
+    /// End running chats whose process has exited, other than those a stop
+    /// is ending, which end once it finishes.
     pub(crate) async fn end_finished_chats(&self) -> Result<()> {
         let ended = finished(self.store.run(|db| recorded_processes(db)).await?)
             .into_iter()
+            // Read after the processes: a stop's hold begins before it
+            // signals the agent.
+            .filter(|(id, _)| !self.chat_stops.under_way(id))
             .map(|(id, process)| (id, Over::Exited(process)))
             .collect();
         self.end_chats(ended).await
@@ -633,6 +654,9 @@ mod processes;
 mod restores;
 mod saved;
 mod stopped;
+mod stopping;
+
+pub(crate) use stopping::Stopping;
 
 #[cfg(test)]
 mod tests;

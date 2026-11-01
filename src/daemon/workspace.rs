@@ -137,6 +137,7 @@ pub struct Manager {
     /// Held while chats are saved and their processes stopped, and to
     /// restore or discard a saved chat, so neither overlaps a stop.
     pub(crate) chat_saves: tokio::sync::Mutex<()>,
+    pub(crate) chat_stops: crate::daemon::chats::Stopping,
     pub(crate) seeds: super::seed::Seeds,
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     pub(crate) reviews: crate::daemon::reviews::Reviews,
@@ -176,6 +177,7 @@ impl Manager {
             leftovers: Default::default(),
             chat_handoffs: Default::default(),
             chat_saves: Default::default(),
+            chat_stops: Default::default(),
             seeds: Default::default(),
             forge_memories: Default::default(),
             reviews: Default::default(),
