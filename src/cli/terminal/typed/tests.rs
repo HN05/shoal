@@ -105,6 +105,13 @@ async fn a_shell_without_a_line_editor_is_typed_into_after_the_limit() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_read_that_never_answers_ends_at_the_limit() {
+    let start = tokio::time::Instant::now();
+    await_prompt(std::future::pending::<Option<bool>>).await;
+    assert!(start.elapsed() >= PROMPT_LIMIT);
+}
+
+#[tokio::test(start_paused = true)]
 async fn an_unreadable_terminal_is_not_waited_for() {
     let mut reads = 0;
     await_prompt(|| {

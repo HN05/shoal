@@ -155,16 +155,18 @@ fn place_command(line: &str, ends_shell: bool) -> [String; 3] {
 /// its prompt, which takes the terminal out of line-at-a-time input, as
 /// `canonical` reads it. Text typed before shows twice: the terminal echoes
 /// it, then the line editor draws it again. A terminal whose mode
-/// `canonical` cannot read is not waited for.
+/// `canonical` cannot read is not waited for, and the limit bounds its reads.
 pub(in crate::cli) async fn await_prompt<Canonical, Read>(mut canonical: Canonical)
 where
     Canonical: FnMut() -> Read,
     Read: Future<Output = Option<bool>>,
 {
-    let limit = tokio::time::Instant::now() + PROMPT_LIMIT;
-    while canonical().await == Some(true) && tokio::time::Instant::now() < limit {
-        tokio::time::sleep(PROMPT_POLL).await;
-    }
+    let wait = async {
+        while canonical().await == Some(true) {
+            tokio::time::sleep(PROMPT_POLL).await;
+        }
+    };
+    let _ = tokio::time::timeout(PROMPT_LIMIT, wait).await;
 }
 
 /// The launch step: run the command `file` carries, after deleting it.
