@@ -57,7 +57,10 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
             .map(|workspace| workspace.id)
             .collect::<Vec<_>>()
     };
-    assert_eq!(targets(QueuedLaunches::Cancel).await, std::slice::from_ref(&child.id));
+    assert_eq!(
+        targets(QueuedLaunches::Cancel).await,
+        std::slice::from_ref(&child.id)
+    );
     assert!(targets(QueuedLaunches::Keep).await.is_empty());
 
     let kept = manager
