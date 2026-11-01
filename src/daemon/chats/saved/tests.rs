@@ -466,3 +466,22 @@ fn a_group_under_the_agents_id_is_its_own_only_while_nobody_took_the_id() {
         None
     );
 }
+
+#[tokio::test]
+async fn a_restore_during_a_shutdown_leaves_the_chat_saved() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
+    manager.save_chats(ChatRestore::Automatic).await;
+    process.wait().unwrap();
+    // A restore claimed earlier arrives once the shutdown held the queue.
+    manager.agent_queue.suspend(true).await;
+
+    let error = manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("shutdown"), "{error:#}");
+    let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.restore, Some(ChatRestore::Automatic));
+}
