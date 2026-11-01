@@ -3397,6 +3397,13 @@ fn a_chats_watch_reports_the_failed_step_of_a_check() {
         .unwrap_or_else(|| panic!("{result}"));
     let message = ci["message"].as_str().unwrap();
     assert!(message.contains("failed step: Main Test"), "{message}");
+    // Without a number the log is the chat's linked PR's.
+    fixture.ok(&["link", "pr", "8", "assigned", "--space", "planning"]);
+    let log = fixture.ok(&["view", "pr", "--space", "planning", "--check", "rust"]);
+    assert!(
+        log["text"].as_str().unwrap().contains("assertion failed"),
+        "{log}"
+    );
     agent.kill().unwrap();
     agent.wait().unwrap();
 }

@@ -3,7 +3,7 @@
 use anyhow::{Context as _, Result, bail};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{links::space::LinkSpace, workspace::Manager},
     forge::{
         ForgeRepo,
         capability::Capability,
@@ -11,7 +11,6 @@ use crate::{
         items::link::{LinkKind, Selection},
         updates::Update,
     },
-    model::Workspace,
     protocol::ItemContext,
 };
 
@@ -68,7 +67,7 @@ impl Manager {
     }
 
     /// The log of the failed check `name` of the PR `selection` names in
-    /// the repository of `context`, or of the workspace's linked PR.
+    /// the repository of `context`, or of the space's linked PR.
     pub async fn check_log(
         &self,
         context: &ItemContext,
@@ -78,24 +77,27 @@ impl Manager {
         validate_check_name(name)?;
         let place = self.place(context).await?;
         let (forge, account) = self.place_forge_account(&place).await?;
-        let url = self
-            .check_log_pr(place.workspace(), &forge, selection)
-            .await?;
+        let space = match (place.workspace(), context) {
+            (Some(workspace), _) => Some(LinkSpace::from(workspace.clone())),
+            (None, ItemContext::Chat(chat)) => Some(self.link_space(chat).await?),
+            (None, _) => None,
+        };
+        let url = self.check_log_pr(space.as_ref(), &forge, selection).await?;
         forge.failed_check_log(&account, &url, name).await
     }
 
     /// The URL of the one PR `selection` names on `forge`, which in a
-    /// workspace may be its linked PR.
+    /// space may be its linked PR.
     async fn check_log_pr(
         &self,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
         forge: &ForgeRepo,
         selection: &Selection,
     ) -> Result<String> {
         if !matches!(selection.kind, None | Some(LinkKind::Pr)) {
             bail!(ONE_PR);
         }
-        let Some(workspace) = workspace else {
+        let Some(space) = space else {
             let input = (selection.input.as_deref()).context(super::actions::NOTHING_LINKED)?;
             return Ok(forge.pull(input)?.1);
         };
@@ -103,8 +105,7 @@ impl Manager {
             kind: Some(LinkKind::Pr),
             input: selection.input.clone(),
         };
-        let space = workspace.clone().into();
-        match self.selected_items(&space, &selection).await?.as_slice() {
+        match self.selected_items(space, &selection).await?.as_slice() {
             [(url, LinkKind::Pr)] => Ok(url.clone()),
             _ => bail!(ONE_PR),
         }
