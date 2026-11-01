@@ -20657,7 +20657,11 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
     let fixture = Fixture::new();
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
     // The sleep stands in for the chat's agent.
-    let mut agent = Command::new("sleep").arg("600").spawn().unwrap();
+    let mut agent = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .current_dir(fixture.root.path())
+        .spawn()
+        .unwrap();
     let response = fixture.request(serde_json::json!({"start_chat":{
         "repository": repository["id"], "name": "planning", "agent": "claude",
         "pid": agent.id()

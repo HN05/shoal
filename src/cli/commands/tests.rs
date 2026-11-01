@@ -180,23 +180,36 @@ fn a_resumed_watch_names_its_workspace() {
 }
 
 #[test]
-fn a_resumed_wake_names_its_space() {
-    let arguments = [
-        "shoal", "internal", "wake", "--agent", "7", "--space", "work", "--resume",
-    ];
-    let cli = <Cli as clap::Parser>::try_parse_from(arguments).unwrap();
-    let Some(Command::Internal {
-        command:
-            InternalCommand::Wake {
-                agent,
-                space,
-                resume,
-            },
-    }) = cli.command
-    else {
-        panic!("expected the wake hook");
+fn a_resumed_wake_names_its_space_or_an_earlier_releases_workspace() {
+    let parse = |arguments: &[&str]| {
+        let arguments = ["shoal", "internal", "wake", "--agent", "7"]
+            .iter()
+            .chain(arguments);
+        let cli = <Cli as clap::Parser>::try_parse_from(arguments)?;
+        let Some(Command::Internal {
+            command:
+                InternalCommand::Wake {
+                    agent,
+                    space,
+                    handed_over,
+                    resume,
+                },
+        }) = cli.command
+        else {
+            panic!("expected the wake hook");
+        };
+        assert_eq!(agent, 7);
+        assert!(resume);
+        Ok::<_, clap::Error>((space, handed_over))
     };
-    assert_eq!(agent, 7);
-    assert_eq!(space.as_deref(), Some("work"));
-    assert!(resume);
+    assert_eq!(
+        parse(&["--space", "work", "--resume"]).unwrap(),
+        (Some("work".to_owned()), None)
+    );
+    // The wake hook of an earlier release hands its wait over this way.
+    assert_eq!(
+        parse(&["--workspace", "work", "--resume"]).unwrap(),
+        (None, Some("work".to_owned()))
+    );
+    assert!(parse(&["--workspace", "work"]).is_err());
 }

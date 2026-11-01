@@ -75,6 +75,15 @@ pub enum InternalCommand {
         /// agent's own.
         #[arg(long, hide = true)]
         space: Option<String>,
+        /// The workspace the wake hook of an earlier release names when an
+        /// upgrade hands its wait over to this one.
+        #[arg(
+            long = "workspace",
+            hide = true,
+            conflicts_with = "space",
+            requires = "resume"
+        )]
+        handed_over: Option<String>,
         /// Continue a wait across a daemon restart, as the installed release
         /// does after an upgrade restarted the daemon.
         #[arg(long, hide = true)]
