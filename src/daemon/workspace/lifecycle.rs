@@ -1245,6 +1245,14 @@ impl Manager {
         {
             bail!("{retention}; retaining workspace");
         }
+        // As the sweep skips them, an unattended removal leaves the
+        // workspaces below alone, which may be in another directory.
+        if matches!(stage, Stage::Initial)
+            && removal.unattended()
+            && let Some(name) = self.stalled_below(&check.workspace).await?
+        {
+            bail!("file access stalled in the directory of {name}, below it; retaining workspace");
+        }
         removal.verify(&check, stage)?;
         match (removal, stage) {
             (Removal::Merged { head } | Removal::Completed { head, .. }, _) => ensure!(
@@ -1287,6 +1295,20 @@ impl Manager {
             (Removal::Manual { .. } | Removal::Deleted | Removal::Parent { .. }, _) => {}
         }
         Ok(check)
+    }
+
+    /// The first workspace below `workspace` whose directory's file access
+    /// stalled. The sweep's own pass of that workspace rechecks it.
+    async fn stalled_below(&self, workspace: &Workspace) -> Result<Option<String>> {
+        let mut pending = workspace.child_workspaces.clone();
+        while let Some(child) = pending.pop() {
+            let child = self.workspace(&child.id).await?;
+            if self.file_access.stalled(&child.path).is_some() {
+                return Ok(Some(child.name));
+            }
+            pending.extend(child.child_workspaces);
+        }
+        Ok(None)
     }
 
     /// The directory is gone: a worktree that was deleted rather than moved is

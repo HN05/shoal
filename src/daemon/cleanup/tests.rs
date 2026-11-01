@@ -857,3 +857,56 @@ async fn a_sweep_rechecks_a_stalled_worktree_deleted_since_and_forgets_it() {
     assert_eq!(manager.file_access.stalls(), []);
     assert!(manager.list_workspaces().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
+    use crate::test_support::{manager, repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    // The parent's explicit path puts it in another directory than its child.
+    let parent = manager
+        .create_workspace(
+            &repo.id,
+            "parent".into(),
+            None,
+            None,
+            Some(temp.path().join("elsewhere").join("parent")),
+        )
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    assert_ne!(parent.path.parent(), child.path.parent());
+    manager
+        .mark_done(&parent.id, true, false, vec![], &Attacher::User)
+        .await
+        .unwrap();
+    manager.file_access.stall_rechecking(&child.path);
+
+    sweep(&manager, &mut Timers::default()).await.unwrap();
+
+    let failures: Vec<_> = manager
+        .notifications(true, 100)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|notification| notification.kind == NotificationKind::CleanupFailed)
+        .map(|notification| (notification.workspace, notification.message))
+        .collect();
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert_eq!(failures[0].0.as_deref(), Some("parent"));
+    assert!(
+        failures[0]
+            .1
+            .contains("file access stalled in the directory of child, below it"),
+        "{failures:?}"
+    );
+    assert!(parent.path.exists());
+    assert!(child.path.exists());
+}
