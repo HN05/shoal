@@ -707,7 +707,7 @@ impl Manager {
                 ) {
                     let previous: Option<String> = tx
                         .query_row(
-                            "SELECT record FROM workspace_item_activity WHERE workspace_id=?1 AND url=?2",
+                            "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
                             params![id, url],
                             |row| row.get(0),
                         )
@@ -728,9 +728,9 @@ impl Manager {
                         }
                     }
                     tx.execute(
-                        "INSERT INTO workspace_item_activity(workspace_id,url,record)
+                        "INSERT INTO space_item_activity(space_id,url,record)
                          VALUES (?1,?2,?3)
-                         ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record",
+                         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
                         params![id, url, serde_json::to_string(&snapshot)?],
                     )?;
                 }
@@ -881,7 +881,7 @@ impl Manager {
                     continue;
                 }
                 let previous: Option<String> = tx.query_row(
-                    "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+                    "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
                     params![id, url], |row| row.get(0),
                 ).optional()?;
                 let mut previous: ActivityRecord = previous.map(|text| serde_json::from_str(&text)).transpose()?.unwrap_or_default();
@@ -906,7 +906,7 @@ impl Manager {
                 }
                 updates.extend(pending.clone());
                 let record = ActivityRecord { snapshot, pending, authored: previous.authored, own_state_at: previous.own_state_at, held: previous.held };
-                tx.execute("INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3) ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record", params![id, url, serde_json::to_string(&record)?])?;
+                tx.execute("INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,?3) ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record", params![id, url, serde_json::to_string(&record)?])?;
             }
             tx.commit()?;
             Ok(updates)
@@ -934,7 +934,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let mut statement =
-                    db.prepare("SELECT url,record FROM pr_activity WHERE workspace_id=?1")?;
+                    db.prepare("SELECT url,record FROM pr_activity WHERE space_id=?1")?;
                 let records = statement.query_map([id], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
                 })?;
@@ -1010,7 +1010,7 @@ pub(crate) fn record_own_change(
 ) -> Result<()> {
     let previous: Option<String> = db
         .query_row(
-            "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+            "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
             params![workspace_id, change.url],
             |row| row.get(0),
         )
@@ -1025,8 +1025,8 @@ pub(crate) fn record_own_change(
         record.own_state_at = Some(crate::time::unix_seconds());
     }
     db.execute(
-        "INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3)
-         ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record",
+        "INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,?3)
+         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
         params![workspace_id, change.url, serde_json::to_string(&record)?],
     )?;
     Ok(())
@@ -1041,7 +1041,7 @@ pub(super) fn queue_update(
 ) -> Result<()> {
     let previous: Option<String> = db
         .query_row(
-            "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+            "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
             params![workspace_id, update.url],
             |row| row.get(0),
         )
@@ -1053,8 +1053,8 @@ pub(super) fn queue_update(
     let url = update.url.clone();
     record.pending.push(update);
     db.execute(
-        "INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3)
-         ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record",
+        "INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,?3)
+         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
         params![workspace_id, url, serde_json::to_string(&record)?],
     )?;
     Ok(())
@@ -1075,7 +1075,7 @@ fn acknowledge_deliveries(
             .retain(|update| !deliveries.contains(&update.delivery));
         if record.pending.len() != pending {
             db.execute(
-                "UPDATE pr_activity SET record=?1 WHERE workspace_id=?2 AND url=?3",
+                "UPDATE pr_activity SET record=?1 WHERE space_id=?2 AND url=?3",
                 params![serde_json::to_string(&record)?, id, url],
             )?;
         }
@@ -1170,7 +1170,7 @@ fn redeliver_after(
         }
         if moved {
             db.execute(
-                "UPDATE pr_activity SET record=?1 WHERE workspace_id=?2 AND url=?3",
+                "UPDATE pr_activity SET record=?1 WHERE space_id=?2 AND url=?3",
                 params![serde_json::to_string(&record)?, id, url],
             )?;
         }
@@ -1225,7 +1225,7 @@ fn activity_records(
     ids: &[String],
 ) -> Result<Vec<(String, String, String)>> {
     let mut statement =
-        db.prepare("SELECT ?1, url, record FROM pr_activity WHERE workspace_id=?1")?;
+        db.prepare("SELECT ?1, url, record FROM pr_activity WHERE space_id=?1")?;
     let mut records = Vec::new();
     for id in ids {
         records.extend(
@@ -1298,7 +1298,7 @@ fn with_runs(
 fn linked_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
     let urls = db
         .prepare(
-            "SELECT url FROM workspace_items WHERE workspace_id=?1 AND kind=?2
+            "SELECT url FROM space_items WHERE space_id=?1 AND kind=?2
              ORDER BY created_at, rowid",
         )?
         .query_map(params![id, LinkKind::Ci], |row| row.get::<_, String>(0))?
@@ -1351,7 +1351,7 @@ fn unpolled_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
 fn cursor_record(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Option<ActivityRecord>> {
     let record: Option<String> = db
         .query_row(
-            "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+            "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
             params![id, url],
             |row| row.get(0),
         )
@@ -1369,7 +1369,7 @@ pub(crate) fn linked_items(
     if kind != Some(ItemKind::Issue) {
         let registration: Option<String> = db
             .query_row(
-                "SELECT record FROM pr_cleanup WHERE workspace_id=?1",
+                "SELECT record FROM pr_cleanup WHERE space_id=?1",
                 [id],
                 |row| row.get(0),
             )
@@ -1387,7 +1387,7 @@ pub(crate) fn linked_items(
     if kind != Some(ItemKind::Pr) {
         let url: Option<String> = db
             .query_row(
-                "SELECT url FROM workspace_issue WHERE workspace_id=?1",
+                "SELECT url FROM space_issue WHERE space_id=?1",
                 [id],
                 |row| row.get(0),
             )
@@ -1412,7 +1412,7 @@ pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &str) -> Result<boo
 fn observed_item(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Option<Snapshot>> {
     let record: Option<String> = db
         .query_row(
-            "SELECT record FROM workspace_item_activity WHERE workspace_id=?1 AND url=?2",
+            "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
             params![id, url],
             |row| row.get(0),
         )
@@ -1427,7 +1427,7 @@ fn observed_item(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Optio
 fn activity_ended(db: &rusqlite::Connection, id: &str, url: &str, done: bool) -> Result<bool> {
     let record: Option<String> = db
         .query_row(
-            "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+            "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
             params![id, url],
             |row| row.get(0),
         )

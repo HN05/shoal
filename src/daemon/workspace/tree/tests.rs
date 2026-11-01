@@ -612,7 +612,7 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
             .store
             .run(move |db| {
                 db.execute(
-                    "INSERT INTO workspace_items(workspace_id,relation,kind,url)
+                    "INSERT INTO space_items(space_id,relation,kind,url)
                      VALUES (?1,'related','issue',?2)",
                     [&id, issue],
                 )?;

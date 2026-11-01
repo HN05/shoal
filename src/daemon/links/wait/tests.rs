@@ -231,7 +231,7 @@ async fn register_watch(manager: &Manager, id: &str, url: &str) {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT OR REPLACE INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                "INSERT OR REPLACE INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
                 params![id, serde_json::to_string(&registration)?],
             )?;
             Ok(())
@@ -1114,7 +1114,7 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,'issue')",
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,'issue')",
                 [id],
             )?;
             Ok(())
@@ -1304,7 +1304,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,'issue')",
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,'issue')",
                 [id],
             )?;
             Ok(())
@@ -1574,7 +1574,7 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         restarted
             .store
             .run(move |db| Ok(db.query_row(
-                "SELECT COUNT(*) FROM pr_activity WHERE workspace_id=?1",
+                "SELECT COUNT(*) FROM pr_activity WHERE space_id=?1",
                 [id],
                 |row| row.get::<_, i64>(0)
             )?))
@@ -1689,7 +1689,7 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,'issue')",
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,'issue')",
                 [id],
             )?;
             Ok(())

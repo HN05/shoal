@@ -309,7 +309,7 @@ async fn item_activity(manager: &Manager) -> Result<HashMap<String, HashMap<Stri
         .store
         .run(|db| {
             Ok(db
-                .prepare("SELECT workspace_id,url,record FROM workspace_item_activity")?
+                .prepare("SELECT space_id,url,record FROM space_item_activity")?
                 .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
                 .collect::<rusqlite::Result<Vec<(String, String, String)>>>()?)
         })

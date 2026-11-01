@@ -29,7 +29,7 @@ async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
         .unwrap();
     let id = workspace.id.clone();
     manager.store.run(move |db| {
-            db.execute("INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+            db.execute("INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
                 rusqlite::params![id, json!({"urls":["https://github.com/team/repo/pull/1", "https://github.com/team/repo/pull/2"]}).to_string()])?;
             Ok(())
         }).await.unwrap();

@@ -29,7 +29,7 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .query_row(
-                        "SELECT url,error FROM workspace_issue WHERE workspace_id=?1",
+                        "SELECT url,error FROM space_issue WHERE space_id=?1",
                         [id],
                         |row| {
                             Ok(Registration {
@@ -138,7 +138,7 @@ fn assign(db: &Connection, id: &str, url: &str, title: Option<&str>) -> Result<(
     super::ensure_accepts_links(db, id)?;
     let existing: Option<String> = db
         .query_row(
-            "SELECT url FROM workspace_issue WHERE workspace_id=?1",
+            "SELECT url FROM space_issue WHERE space_id=?1",
             [id],
             |row| row.get(0),
         )
@@ -148,8 +148,8 @@ fn assign(db: &Connection, id: &str, url: &str, title: Option<&str>) -> Result<(
         "workspace is already associated with a different issue"
     );
     db.execute(
-        "INSERT INTO workspace_issue(workspace_id,url,title) VALUES (?1,?2,?3)
-         ON CONFLICT(workspace_id) DO UPDATE SET title=COALESCE(excluded.title,title)",
+        "INSERT INTO space_issue(space_id,url,title) VALUES (?1,?2,?3)
+         ON CONFLICT(space_id) DO UPDATE SET title=COALESCE(excluded.title,title)",
         rusqlite::params![id, url, title],
     )?;
     if existing.is_none() {
@@ -171,7 +171,7 @@ fn unlink(db: &Connection, id: &str, selected: Option<&str>) -> Result<()> {
     super::ensure_accepts_links(db, id)?;
     let existing: Option<String> = db
         .query_row(
-            "SELECT url FROM workspace_issue WHERE workspace_id=?1",
+            "SELECT url FROM space_issue WHERE space_id=?1",
             [id],
             |row| row.get(0),
         )
@@ -185,7 +185,7 @@ fn unlink(db: &Connection, id: &str, selected: Option<&str>) -> Result<()> {
     if let Some(url) = existing {
         super::forget_assigned(db, id, ItemKind::Issue, &[url])?;
     }
-    db.execute("DELETE FROM workspace_issue WHERE workspace_id=?1", [id])?;
+    db.execute("DELETE FROM space_issue WHERE space_id=?1", [id])?;
     Ok(())
 }
 

@@ -359,6 +359,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 108 {
         db.execute_batch(include_str!("question_spaces.sql"))?;
     }
+    if version >= 109 {
+        db.execute_batch(include_str!("link_spaces.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

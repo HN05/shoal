@@ -85,11 +85,11 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
                 params![id, registration.to_string()],
             )?;
             db.execute(
-                "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,?2)",
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
                 params![id, linked_issue],
             )?;
             Ok(())
@@ -439,7 +439,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
                 params![id, registration.to_string()],
             )?;
             Ok(())

@@ -225,7 +225,7 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
                 rusqlite::params![id, record],
             )?;
             Ok(())
@@ -251,7 +251,7 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
         .store
         .run(move |db| {
             Ok(db.query_row(
-                "SELECT record FROM pr_cleanup WHERE workspace_id=?1",
+                "SELECT record FROM pr_cleanup WHERE space_id=?1",
                 [id],
                 |row| row.get(0),
             )?)

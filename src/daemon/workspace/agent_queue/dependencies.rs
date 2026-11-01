@@ -316,7 +316,7 @@ fn issue_workspaces(db: &Connection, repository: &str, url: &str) -> Result<Vec<
     Ok(db
         .prepare(&format!(
             "SELECT {WORKSPACE_COLUMNS} FROM workspaces WHERE repository_id=?1
-             AND id IN (SELECT workspace_id FROM workspace_issue WHERE url=?2) ORDER BY name"
+             AND id IN (SELECT space_id FROM space_issue WHERE url=?2) ORDER BY name"
         ))?
         .query_map([repository, url], store::workspace)?
         .collect::<rusqlite::Result<Vec<_>>>()?)

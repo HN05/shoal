@@ -176,6 +176,18 @@ fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
+    // Links name their workspace again, as before chats linked items.
+    db.execute_batch(
+        "DROP TRIGGER workspace_links_removed; DROP TRIGGER chat_links_removed;
+         ALTER TABLE space_issue RENAME TO workspace_issue;
+         ALTER TABLE workspace_issue RENAME COLUMN space_id TO workspace_id;
+         ALTER TABLE pr_cleanup RENAME COLUMN space_id TO workspace_id;
+         ALTER TABLE space_items RENAME TO workspace_items;
+         ALTER TABLE workspace_items RENAME COLUMN space_id TO workspace_id;
+         ALTER TABLE pr_activity RENAME COLUMN space_id TO workspace_id;
+         ALTER TABLE space_item_activity RENAME TO workspace_item_activity;
+         ALTER TABLE workspace_item_activity RENAME COLUMN space_id TO workspace_id;",
+    )?;
     // Ready-for-review marks, agent states and chats record into the
     // journal, so they go with it.
     db.execute_batch(

@@ -2600,7 +2600,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     );
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
-        "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+        "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
         rusqlite::params![
             workspace["id"].as_str().unwrap(),
             serde_json::json!({
@@ -16344,7 +16344,7 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
         };
         let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
         db.execute(
-            "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+            "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
             rusqlite::params![workspace["id"].as_str().unwrap(), record.to_string()],
         )
         .unwrap();
@@ -16388,7 +16388,7 @@ fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
         serde_json::json!({"url": "https://forge.example/team/repo/pulls/7", "head": "abc123", "error": null}),
     ] {
         db.execute(
-            "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+            "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
             rusqlite::params![workspace["id"].as_str().unwrap(), record.to_string()],
         )
         .unwrap();

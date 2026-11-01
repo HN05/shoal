@@ -36,7 +36,7 @@ impl Fixture {
             .store
             .run(move |db| {
                 db.execute(
-                    "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,'issue')",
+                    "INSERT INTO space_issue(space_id,url) VALUES (?1,'issue')",
                     [id],
                 )?;
                 Ok(())
@@ -62,7 +62,7 @@ impl Fixture {
         self.manager
             .store
             .run(move |db| {
-                db.execute("DELETE FROM workspace_issue WHERE workspace_id=?1", [id])?;
+                db.execute("DELETE FROM space_issue WHERE space_id=?1", [id])?;
                 Ok(())
             })
             .await

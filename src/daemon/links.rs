@@ -295,14 +295,14 @@ pub(crate) fn record(
     }
     ensure_accepts_links(db, id)?;
     let added = db.execute(
-        "INSERT INTO workspace_items(workspace_id,relation,kind,url,title)
+        "INSERT INTO space_items(space_id,relation,kind,url,title)
          VALUES (?1,?2,?3,?4,?5) ON CONFLICT DO NOTHING",
         rusqlite::params![id, relation, kind, url, title],
     )?;
     if added == 0 {
         db.execute(
-            "UPDATE workspace_items SET title=COALESCE(?4,title)
-             WHERE workspace_id=?1 AND relation=?2 AND url=?3",
+            "UPDATE space_items SET title=COALESCE(?4,title)
+             WHERE space_id=?1 AND relation=?2 AND url=?3",
             rusqlite::params![id, relation, url, title],
         )?;
     } else {
@@ -322,7 +322,7 @@ fn remove(
     ensure_accepts_links(db, id)?;
     let removed = db
         .prepare(
-            "DELETE FROM workspace_items WHERE workspace_id=?1 AND relation=?2
+            "DELETE FROM space_items WHERE space_id=?1 AND relation=?2
              AND (?3 IS NULL OR kind=?3) AND (?4 IS NULL OR url=?4) RETURNING kind,url",
         )?
         .query_map(rusqlite::params![id, relation, kind, url], |row| {
@@ -342,7 +342,7 @@ fn forget_unlinked_runs(db: &Connection, id: &str, removed: &[(LinkKind, String)
     let mut unlinked = Vec::new();
     for (kind, url) in removed {
         let linked: bool = db.query_row(
-            "SELECT EXISTS(SELECT 1 FROM workspace_items WHERE workspace_id=?1 AND url=?2)",
+            "SELECT EXISTS(SELECT 1 FROM space_items WHERE space_id=?1 AND url=?2)",
             rusqlite::params![id, url],
             |row| row.get(0),
         )?;
@@ -372,10 +372,10 @@ pub(crate) fn forget_assigned(
 /// Drop the replay cursors of items that are no longer linked.
 fn forget_activity(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
     let urls = serde_json::to_string(urls)?;
-    for table in ["pr_activity", "workspace_item_activity"] {
+    for table in ["pr_activity", "space_item_activity"] {
         db.execute(
             &format!(
-                "DELETE FROM {table} WHERE workspace_id=?1
+                "DELETE FROM {table} WHERE space_id=?1
                  AND url IN (SELECT value FROM json_each(?2))"
             ),
             rusqlite::params![id, urls],

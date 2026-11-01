@@ -114,7 +114,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,'https://forge/issue/1')",
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,'https://forge/issue/1')",
                 [id],
             )?;
             Ok(())
@@ -248,11 +248,11 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO workspace_issue(workspace_id,url,title) VALUES (?1,'https://github.com/acme/repo/issues/1','Fix it')",
+                "INSERT INTO space_issue(space_id,url,title) VALUES (?1,'https://github.com/acme/repo/issues/1','Fix it')",
                 [&id],
             )?;
             db.execute(
-                "INSERT INTO workspace_items(workspace_id,relation,kind,url,title) VALUES
+                "INSERT INTO space_items(space_id,relation,kind,url,title) VALUES
                     (?1,'opened','issue','https://github.com/acme/repo/issues/2','Follow-up'),
                     (?1,'related','pr','https://github.com/acme/repo/pull/3',NULL)",
                 [&id],

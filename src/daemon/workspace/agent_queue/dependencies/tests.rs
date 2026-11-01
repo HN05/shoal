@@ -137,7 +137,7 @@ async fn issue_dependencies_wait_for_closure_or_a_done_workspace_linking_them() 
             .store
             .run(move |db| {
                 db.execute(
-                    "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,?2)",
+                    "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
                     [id, url],
                 )?;
                 Ok(())

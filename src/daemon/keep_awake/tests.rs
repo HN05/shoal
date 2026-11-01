@@ -11,7 +11,7 @@ async fn watch_pr(manager: &Manager, workspace: &crate::model::Workspace) {
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
                 rusqlite::params![id, r#"{"url":"https://example.com/o/r/pulls/1"}"#],
             )?;
             Ok(())
@@ -71,7 +71,7 @@ async fn an_idle_agent_has_work_while_its_watched_pr_is_open() {
             .store
             .run(move |db| {
                 db.execute(
-                    "INSERT OR REPLACE INTO workspace_item_activity(workspace_id,url,record)
+                    "INSERT OR REPLACE INTO space_item_activity(space_id,url,record)
                      VALUES (?1,'https://example.com/o/r/pulls/1',?2)",
                     rusqlite::params![id, record],
                 )?;
@@ -88,7 +88,7 @@ async fn an_idle_agent_has_work_while_its_watched_pr_is_open() {
         .store
         .run(move |db| {
             db.execute(
-                "DELETE FROM workspace_item_activity WHERE workspace_id=?1",
+                "DELETE FROM space_item_activity WHERE space_id=?1",
                 [id],
             )?;
             Ok(())

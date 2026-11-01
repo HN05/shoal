@@ -39,7 +39,7 @@ impl Manager {
             .run(move |db| {
                 let record: Option<String> = db
                     .query_row(
-                        "SELECT record FROM pr_cleanup WHERE workspace_id=?1",
+                        "SELECT record FROM pr_cleanup WHERE space_id=?1",
                         [id],
                         |r| r.get(0),
                     )
@@ -324,7 +324,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 db.execute(
-                    "UPDATE pr_cleanup SET record=?2 WHERE workspace_id=?1",
+                    "UPDATE pr_cleanup SET record=?2 WHERE space_id=?1",
                     rusqlite::params![id, record],
                 )?;
                 Ok(())
@@ -469,11 +469,11 @@ fn store_registration(
 ) -> Result<()> {
     match registration {
         Some(registration) => db.execute(
-            "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)
-             ON CONFLICT(workspace_id) DO UPDATE SET record=excluded.record",
+            "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)
+             ON CONFLICT(space_id) DO UPDATE SET record=excluded.record",
             rusqlite::params![id, serde_json::to_string(registration)?],
         )?,
-        None => db.execute("DELETE FROM pr_cleanup WHERE workspace_id=?1", [id])?,
+        None => db.execute("DELETE FROM pr_cleanup WHERE space_id=?1", [id])?,
     };
     Ok(())
 }

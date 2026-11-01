@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 108;
+const SCHEMA_VERSION: i64 = 109;
 
 #[cfg(test)]
 mod benchmark;
@@ -453,6 +453,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (106, include_str!("store/review_false_positive_failures.sql"), None),
     (107, CHAT_MESSAGE_ATTACHMENTS, None),
     (108, include_str!("store/question_spaces.sql"), None),
+    (109, include_str!("store/link_spaces.sql"), None),
 ];
 
 /// The JSON array of paths of the files attached to a chat's message.
@@ -1055,7 +1056,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
 pub fn workspace_links(db: &Connection, workspace_id: &str) -> rusqlite::Result<WorkspaceLinks> {
     let (issue, issue_title) = db
         .query_row(
-            "SELECT url,title FROM workspace_issue WHERE workspace_id=?1",
+            "SELECT url,title FROM space_issue WHERE space_id=?1",
             [workspace_id],
             |row| Ok((Some(row.get(0)?), row.get(1)?)),
         )
@@ -1063,7 +1064,7 @@ pub fn workspace_links(db: &Connection, workspace_id: &str) -> rusqlite::Result<
         .unwrap_or_default();
     let prs = db
         .query_row(
-            "SELECT record FROM pr_cleanup WHERE workspace_id=?1",
+            "SELECT record FROM pr_cleanup WHERE space_id=?1",
             [workspace_id],
             |row| row.get::<_, String>(0),
         )
@@ -1093,7 +1094,7 @@ pub fn recorded_items(
     relation: Relation,
 ) -> rusqlite::Result<Vec<LinkedItem>> {
     db.prepare(
-        "SELECT kind,url,title FROM workspace_items WHERE workspace_id=?1 AND relation=?2
+        "SELECT kind,url,title FROM space_items WHERE space_id=?1 AND relation=?2
          ORDER BY created_at,rowid",
     )?
     .query_map(rusqlite::params![workspace_id, relation], |row| {

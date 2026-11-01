@@ -516,11 +516,11 @@ async fn issue_and_watch_completion_wait_for_explicit_done() {
         .run(move |db| {
             // Without an origin, any issue or PR lookup would record an error.
             db.execute(
-                "INSERT INTO pr_cleanup(workspace_id,record) VALUES (?1,?2)",
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
                 rusqlite::params![id, record],
             )?;
             db.execute(
-                "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,?2)",
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
                 rusqlite::params![id, "https://github.com/team/repo/issues/1"],
             )?;
             Ok(())
