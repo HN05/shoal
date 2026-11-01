@@ -24,6 +24,7 @@ pub(crate) struct Gates {
     proposal_files: Mutex<()>,
     announcements: Mutex<()>,
     git: Keyed<Mutex<()>>,
+    fetches: Keyed<Mutex<()>>,
     message_files: Keyed<Mutex<()>>,
     forge_hosts: Keyed<Mutex<()>>,
     resources: Keyed<RwLock<()>>,
@@ -118,6 +119,14 @@ impl Gates {
     /// must not already hold it.
     pub(crate) async fn lock_git(&self, repository_id: &str) -> OwnedMutexGuard<()> {
         self.git.gate(repository_id).lock_owned().await
+    }
+
+    /// Hold the repository's fetch gate while a sync fetches its remotes, so
+    /// syncs of one repository never overlap and moving or removing its
+    /// directory waits for the fetch, while commands that take only the Git
+    /// gate do not. Callers take it before the Git gate.
+    pub(crate) async fn lock_fetch(&self, repository_id: &str) -> OwnedMutexGuard<()> {
+        self.fetches.gate(repository_id).lock_owned().await
     }
 
     /// [`Self::lock_git`] when nothing holds the gate.

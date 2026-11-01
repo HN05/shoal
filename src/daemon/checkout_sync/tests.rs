@@ -183,3 +183,26 @@ async fn a_repository_syncs_while_another_ones_git_gate_is_held() {
     assert_eq!(git(&other, &["rev-parse", "main"]), pushed, "{sync:?}");
     assert_eq!(f.manager.checkout_sync(&f.repo_id), None);
 }
+
+#[tokio::test]
+async fn workspace_creation_never_waits_on_a_sync_fetching() {
+    let f = Fixture::new().await;
+    let pushed = f.push("remote\n");
+    let fetching = f.manager.gates.lock_fetch(&f.repo_id).await;
+    let manager = f.manager.clone();
+    let repo_id = f.repo_id.clone();
+    let sync = tokio::spawn(async move { manager.sync_repository(&repo_id.into()).await });
+    // A hang guard only: creation takes no gate the held fetch holds.
+    let workspace = tokio::time::timeout(
+        Duration::from_secs(120),
+        f.manager
+            .create_workspace(&f.repo_id, "worker".into(), None, None, None),
+    )
+    .await
+    .expect("creation waited on the fetch")
+    .unwrap();
+    assert_ne!(git(&workspace.path, &["rev-parse", "HEAD"]), pushed);
+    drop(fetching);
+    sync.await.unwrap().unwrap();
+    assert_eq!(git(&f.repo, &["rev-parse", "main"]), pushed);
+}

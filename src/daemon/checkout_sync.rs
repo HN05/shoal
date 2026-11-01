@@ -189,25 +189,35 @@ impl Manager {
         synced
     }
 
-    /// Fetch and fast-forward under the repository's Git gate.
+    /// Fetch under the repository's fetch gate, then fast-forward under its
+    /// Git gate, so commands that take only the Git gate never wait on the
+    /// remote.
     async fn fetch_and_fast_forward(&self, repository_id: &str) -> Synced {
         let started = Instant::now();
-        let _git = self.gates.lock_git(repository_id).await;
-        let synced = async {
-            let repo = self.repository(repository_id).await?;
-            let default = self.fetch_default_remotes(&repo).await?;
-            Ok((repo, default))
-        }
-        .await;
-        let (repo, default) = match synced {
-            Ok(fetched) => fetched,
+        let fetched = {
+            let _fetch = self.gates.lock_fetch(repository_id).await;
+            self.fetch_repository(repository_id).await
+        };
+        let default = match fetched {
+            Ok(default) => default,
             Err(error) => return Synced::Unfetched(error),
         };
         self.syncs.fetched(repository_id, started);
-        Synced::Fetched(self.fast_forward_default(&repo, &default).await)
+        let _git = self.gates.lock_git(repository_id).await;
+        let synced = async {
+            // A move may have finished while the fetch ran.
+            let repo = self.repository(repository_id).await?;
+            self.fast_forward_default(&repo, &default).await
+        };
+        Synced::Fetched(synced.await)
     }
 
-    /// Sync each repository, logging the ones that fail.
+    /// Fetch the repository's default-branch remotes; returns the default branch.
+    async fn fetch_repository(&self, repository_id: &str) -> Result<String> {
+        let repo = self.repository(repository_id).await?;
+        self.fetch_default_remotes(&repo).await
+    }
+
     /// Every registered repository, forgetting the syncs of those removed.
     async fn registered_repository_ids(&self) -> Vec<String> {
         match self.repositories().await {

@@ -53,6 +53,7 @@ impl Manager {
         let repo = self.repository(selector).await?;
         let _seed = self.stop_seed_build(&repo.id).await;
         self.stop_repository_reviews(&repo.id).await;
+        let _fetch = self.gates.lock_fetch(&repo.id).await;
         let _git = self.gates.lock_git(&repo.id).await;
         self.remove_locked_repository(repo).await
     }
@@ -69,6 +70,7 @@ impl Manager {
         let repo = self.repository(id).await?;
         let _seed = self.stop_seed_build(&repo.id).await;
         self.stop_repository_reviews(&repo.id).await;
+        let _fetch = self.gates.lock_fetch(&repo.id).await;
         let _git = self.gates.lock_git(&repo.id).await;
         if !repo.contribution
             || self.checkout_has_work(&repo).await?

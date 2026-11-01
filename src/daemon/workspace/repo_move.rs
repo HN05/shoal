@@ -140,6 +140,7 @@ impl Manager {
             })
             .await?;
         for id in pending {
+            let _fetch = self.gates.lock_fetch(&id).await;
             let _git = self.gates.lock_git(&id).await;
             let _files = self.gates.lock_message_files(&id).await;
             self.finish_repository_move(&id)
@@ -260,6 +261,7 @@ impl Manager {
 
     async fn move_repository(&self, repo: &Repository, root: &Path) -> Result<MovedRepository> {
         let _seed = self.stop_seed_build(&repo.id).await;
+        let _fetch = self.gates.lock_fetch(&repo.id).await;
         let _git = self.gates.lock_git(&repo.id).await;
         let _files = self.gates.lock_message_files(&repo.id).await;
         let repo = self.repository(&repo.id).await?;
