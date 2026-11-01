@@ -28,7 +28,7 @@ pub(in crate::daemon::chats) async fn named_chat(
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = ProcessGroup::spawn(unmarked("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
@@ -210,7 +210,7 @@ async fn a_restore_whose_agent_did_not_start_waits_for_resume_again() {
     let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
     manager.save_chats(ChatRestore::Automatic).await;
     process.wait().unwrap();
-    let restoring = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let restoring = ProcessGroup::spawn(unmarked("sleep").arg("600"));
     let restoring_pid = restoring.id();
     manager
         .restore_chat(&chat.id, restoring_pid, None, false)
@@ -320,7 +320,7 @@ async fn a_survivor_in_the_chats_process_group_holds_it_saved() {
     // identity, as a command it ran.
     let started = root.path().join("child");
     let mut leader = ProcessGroup::spawn(
-        std::process::Command::new("sh")
+        unmarked("sh")
             .arg("-c")
             .arg("sleep 600 & echo $! > \"$0\"; wait")
             .arg(&started),
@@ -411,7 +411,7 @@ async fn a_survivor_that_left_the_chats_group_holds_it_saved() {
         .unwrap();
     let started = root.path().join("child");
     let mut leader = ProcessGroup::spawn(
-        std::process::Command::new("sh")
+        unmarked("sh")
             .arg("-c")
             .arg("perl -MPOSIX -e 'POSIX::setsid(); sleep 600' & echo $! > \"$0\"; wait")
             .arg(&started),
@@ -576,7 +576,7 @@ async fn a_saved_chat_takes_no_handoff() {
         .await
         .unwrap();
     // A launcher that hands the chat to a session it starts, as Happy's does.
-    let mut launcher = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let mut launcher = ProcessGroup::spawn(unmarked("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repo.id.into(),
@@ -617,7 +617,7 @@ async fn a_stop_after_the_agent_exited_ends_what_it_left_running() {
         .unwrap();
     let started = root.path().join("child");
     let mut leader = ProcessGroup::spawn(
-        std::process::Command::new("sh")
+        unmarked("sh")
             .arg("-c")
             .arg("sleep 600 & echo $! > \"$0\"; wait")
             .arg(&started),
@@ -707,12 +707,13 @@ async fn a_stop_after_the_agent_exited_ends_what_carries_the_chat() {
     drop(group);
 }
 
-/// `program` without the identity of a workspace the runner may run in,
-/// which would make what it starts the workspace's rather than a chat's.
+/// `program` without the identity of a workspace or chat the runner may run
+/// in, which would make what it starts theirs rather than the test chat's.
 fn unmarked(program: &str) -> std::process::Command {
     let mut command = std::process::Command::new(program);
     command
         .env_remove(crate::env::WORKSPACE_ID)
-        .env_remove(crate::env::EXECUTION_ID);
+        .env_remove(crate::env::EXECUTION_ID)
+        .env_remove(crate::env::CHAT);
     command
 }
