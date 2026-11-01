@@ -1681,9 +1681,7 @@ other commands do. Failed session closes notify and retry at startup or with
 with an agent about a repository, to discuss it, its issues and plans, or to
 coordinate work, without changing code. The repository is the named one, else the
 current checkout's or workspace's, else a picker. The agent is `--agent`, else
-`agent.default`, else a picker of the installed ones. The chat first refreshes the
-default branch as `shoal repo sync` does, under the [creation refresh
-rules](#base-branch); a failed refresh warns and the chat still starts. The
+`agent.default`, else a picker of the installed ones. The
 agent's configured launcher runs in the registered checkout with the rendered [chat
 template](#prompt-templates) as its instructions. An agent with an
 `instructions` template (built in for Claude Code and Codex CLI) takes them
@@ -2080,13 +2078,10 @@ ambiguous). A missing symbolic remote HEAD is discovered with `ls-remote` and
 cached; update it with `git remote set-head origin --auto`. Without remotes, the
 registered checkout's current branch is used; a detached checkout needs `--base`.
 
-Before branching, Shoal fetches that local branch's upstream and fast-forwards
-it, even when the registered checkout is on another branch. A missing branch or
-upstream, failed fetch, divergence, or a dirty or managed default-branch
-checkout stops creation; an already-ahead branch is preserved. `--base REF`
-starts from any locally resolvable commit without refreshing,
-unless it names the local default branch; the resolved base is recorded for
-`shoal diff`.
+New branches start from the local default branch as the [sync](#repositories)
+left it; creation never fetches it. `--base REF` starts from any locally
+resolvable commit, fetching a remote branch it names first; the resolved base is
+recorded for `shoal diff`.
 Existing-branch workspaces diff against the local default, or their opening
 commit if on it or unavailable.
 
@@ -2252,9 +2247,10 @@ is another registered checkout, the selector is ambiguous and lists both matches
 
 The daemon keeps each registered checkout's default branch in sync with its
 remote: when it starts, every minute, and right after `shoal pr merge` or a
-watch sees a linked PR merge, it fetches the default branch's upstream and default remotes and fast-forwards the local default branch under
-the [creation refresh rules](#base-branch), moving only the ref when the
-checkout is on another branch. `shoal repo sync [repository]` syncs at once and
+watch sees a linked PR merge, it fetches the default branch's upstream and default remotes and fast-forwards the local default branch, moving
+only the ref when the checkout is on another branch. An ahead branch stays as it
+is; a missing upstream, failed fetch, divergence, or a dirty or managed checkout
+of the default branch leaves it unchanged until fixed. `shoal repo sync [repository]` syncs at once and
 reports the result or the error. Syncing never pushes or moves workspace branches.
 
 `repo setup [repository] [--local [--here] [--name NAME]] [--agent NAME] [-- ARGS]`

@@ -111,9 +111,10 @@ when behavior changes, distinguishing decisions from proposals.
   removals), never fail the operation for one, collapse repeated polled events
   until read, and deny reading them to scoped callers. A scoped caller may send
   the user a message for its own workspace, separate from completion.
-- `shoal repo sync` fetches the default branch's remote and fast-forwards the local
-  default branch under the creation refresh rules. It never pushes or moves
-  workspace branches; agents update their branch from it with plain Git.
+- The daemon keeps each registered checkout's default branch in sync with its
+  remote in the background, and `shoal repo sync` syncs it at once; commands that
+  only read the default branch use what the checkout has. Syncing never pushes or
+  moves workspace branches; agents update their branch from it with plain Git.
 - `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,
   240 idle minutes, persisted across restarts) removes merged, unused workspaces

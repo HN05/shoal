@@ -42,6 +42,12 @@ impl Fixture {
             .unwrap()
     }
 
+    async fn sync(&self) -> anyhow::Result<crate::model::SyncedRepository> {
+        self.manager
+            .sync_repository(&self.repo_id.clone().into())
+            .await
+    }
+
     fn remote(&self) -> PathBuf {
         let branch = git(&self.repo, &["branch", "--show-current"]);
         let branch = branch.trim_end_matches('\n');
@@ -124,6 +130,7 @@ async fn remote_default_controls_creation_diff_and_removal() {
         git(&f.repo, &["branch", "main"]);
         git(&f.repo, &["switch", "-c", "unrelated"]);
         let expected = git(&author, &["rev-parse", "HEAD"]);
+        f.sync().await.unwrap();
         let workspace = f.add("henrik/topic").await;
         assert_eq!(workspace.base_ref, Some(format!("refs/heads/{branch}")));
         assert_eq!(workspace.base_commit.as_deref(), Some(expected.trim()));
@@ -149,7 +156,7 @@ async fn remote_default_controls_creation_diff_and_removal() {
 }
 
 #[tokio::test]
-async fn non_main_default_refresh_preserves_safety_and_explicit_overrides() {
+async fn non_main_default_sync_preserves_a_dirty_checkout_creation_starts_from() {
     let f = Fixture::new().await;
     git(&f.repo, &["branch", "-m", "develop"]);
     git(&f.repo, &["branch", "main"]);
@@ -157,40 +164,33 @@ async fn non_main_default_refresh_preserves_safety_and_explicit_overrides() {
     git(&f.repo, &["remote", "rename", "origin", "upstream"]);
     let before = git(&f.repo, &["rev-parse", "HEAD"]);
     fs::write(f.repo.join("tracked"), "dirty\n").unwrap();
-    for (index, base) in [None, Some("develop"), Some("refs/heads/develop")]
-        .into_iter()
-        .enumerate()
+    let error = f.sync().await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("develop checkout has uncommitted"),
+        "{error:#}"
+    );
+    for (index, base) in [
+        None,
+        Some("develop"),
+        Some("refs/heads/develop"),
+        Some("main"),
+    ]
+    .into_iter()
+    .enumerate()
     {
-        let error = f
+        let workspace = f
             .manager
             .create_workspace(
                 &f.repo_id,
-                format!("blocked-{index}"),
+                format!("local-{index}"),
                 base.map(str::to_owned),
                 None,
                 None,
             )
             .await
-            .unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("develop checkout has uncommitted"),
-            "{error:#}"
-        );
+            .unwrap();
+        assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), before);
     }
-    let explicit = f
-        .manager
-        .create_workspace(
-            &f.repo_id,
-            "explicit".into(),
-            Some("main".into()),
-            None,
-            None,
-        )
-        .await
-        .unwrap();
-    assert_eq!(git(&explicit.path, &["rev-parse", "HEAD"]), before);
     assert_eq!(git(&f.repo, &["rev-parse", "develop"]), before);
     assert_eq!(
         fs::read_to_string(f.repo.join("tracked")).unwrap(),
@@ -286,7 +286,7 @@ async fn nested_branch_conflicts_suffix_the_blocked_component() {
 }
 
 #[tokio::test]
-async fn creation_refreshes_main_instead_of_using_checkout_head() {
+async fn creation_starts_from_the_synced_main_instead_of_checkout_head() {
     let f = Fixture::new().await;
     let original = git(&f.repo, &["rev-parse", "HEAD"]);
     let author = f.remote();
@@ -302,6 +302,7 @@ async fn creation_refreshes_main_instead_of_using_checkout_head() {
         commit(&author, "upstream");
         git(&author, &["push", "origin", "main"]);
         let expected = git(&author, &["rev-parse", "HEAD"]);
+        f.sync().await.unwrap();
         let workspace = f
             .manager
             .create_workspace(
@@ -328,10 +329,19 @@ async fn creation_refreshes_main_instead_of_using_checkout_head() {
         );
         assert_eq!(git(&f.repo, &["for-each-ref", "refs/shoal/pull/"]), "");
     }
+    // Creation itself never fetches.
+    let synced = git(&f.repo, &["rev-parse", "main"]);
+    fs::write(author.join("upstream"), "unsynced\n").unwrap();
+    commit(&author, "upstream");
+    git(&author, &["push", "origin", "main"]);
+    assert_eq!(
+        git(&f.add("unsynced").await.path, &["rev-parse", "HEAD"]),
+        synced
+    );
 }
 
 #[tokio::test]
-async fn creation_refuses_failed_refreshes_without_creating_a_branch() {
+async fn sync_leaves_main_it_cannot_fast_forward() {
     for failure in [
         "dirty",
         "diverged",
@@ -375,35 +385,22 @@ async fn creation_refuses_failed_refreshes_without_creating_a_branch() {
             }
         };
         let before = git(&f.repo, &["rev-parse", "main"]);
-        let error = f
-            .manager
-            .create_workspace(&f.repo_id, "worker".into(), None, None, None)
-            .await
-            .unwrap_err();
+        let error = f.sync().await.unwrap_err();
         assert!(
-            error.to_string().contains(expected_error),
+            format!("{error:#}").contains(expected_error),
             "{failure}: {error:#}"
         );
         assert_eq!(git(&f.repo, &["rev-parse", "main"]), before);
-        assert_eq!(
-            git(
-                &f.repo,
-                &["for-each-ref", "refs/heads/worker", "refs/shoal/pull/"]
-            ),
-            ""
-        );
-        let failed = f.manager.workspace("worker").await.unwrap();
-        assert_eq!(failed.state, crate::state::WorkspaceState::Failed);
-        assert!(!failed.path.exists());
+        assert_eq!(git(&f.repo, &["for-each-ref", "refs/shoal/pull/"]), "");
     }
 }
 
 #[tokio::test]
-async fn creation_honors_explicit_history_and_preserves_ahead_main() {
+async fn creation_honors_explicit_history_and_sync_preserves_ahead_main() {
     let f = Fixture::new().await;
     let original = git(&f.repo, &["rev-parse", "HEAD"]);
     let author = f.remote();
-    // Explicit history remains usable even when refreshing main would fail.
+    // Explicit history remains usable even when syncing main would fail.
     fs::write(f.repo.join("tracked"), "local edits\n").unwrap();
     for (index, base) in ["HEAD", original.trim()].into_iter().enumerate() {
         let workspace = f
@@ -421,6 +418,7 @@ async fn creation_honors_explicit_history_and_preserves_ahead_main() {
         assert_eq!(git(&f.repo, &["rev-parse", "main"]), original);
     }
     fs::write(f.repo.join("tracked"), "initial\n").unwrap();
+    f.sync().await.unwrap();
     let workspace = f.add("updated").await;
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]),
@@ -429,6 +427,7 @@ async fn creation_honors_explicit_history_and_preserves_ahead_main() {
     fs::write(f.repo.join("tracked"), "ahead\n").unwrap();
     commit(&f.repo, "tracked");
     let ahead = git(&f.repo, &["rev-parse", "main"]);
+    assert!(!f.sync().await.unwrap().default_branch.updated);
     assert_eq!(
         git(&f.add("ahead").await.path, &["rev-parse", "HEAD"]),
         ahead
@@ -1155,6 +1154,7 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
 async fn squash_merge_on_the_remote_default_branch_counts_as_retained() {
     let f = Fixture::new().await;
     let author = f.remote();
+    f.sync().await.unwrap();
     let workspace = f.add("worker").await;
     for file in ["one", "two"] {
         fs::write(workspace.path.join(file), format!("{file}\n")).unwrap();

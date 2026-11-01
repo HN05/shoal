@@ -212,8 +212,8 @@ instead of the PR delivery guidance below.
   validate their selected ID or active workspace/target/name record; grant reuse
   validates every workspace/target candidate, including released grants. Listings
   reject invalid selected records; malformed history outside a query does not block it.
-- Explicit creation bases resolve locally and are recorded for diff; only a base
-  naming the local default branch is refreshed, and one naming a remote branch is
+- Creation bases resolve locally, from the default branch as the background sync
+  left it, and are recorded for diff; only a base naming a remote branch is
   fetched first. A base naming another workspace's branch records that workspace
   as the base workspace; base changes stay in the same repository without cycles,
   and removal moves stacked workspaces down to the removed workspace's base.

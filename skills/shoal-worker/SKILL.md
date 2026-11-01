@@ -322,9 +322,11 @@ shoal conflicts     # exit 1 lists the paths that conflict with main
 git rebase main            # or git merge main; use your repo's branch name
 ```
 
-`shoal repo sync` fetches your repository's remote and fast-forwards the local
-default branch, advancing the registered checkout when it has that branch
-checked out, where `git fetch origin main:main` is refused. It never pushes or changes your branch. Rebase or merge
+Shoal keeps the local default branch in sync with its remote in the
+background, within about a minute. `shoal repo sync` syncs it at once: it
+fetches your repository's remote and fast-forwards the local default branch,
+advancing the registered checkout when it has that branch checked out, where
+`git fetch origin main:main` is refused. It never pushes or changes your branch. Rebase or merge
 with plain Git afterwards; other pushed branches are current as
 `origin/<branch>`. `shoal conflicts` checks committed HEAD against your base
 workspace's branch, otherwise the local default branch, or a branch you name,

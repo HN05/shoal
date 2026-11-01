@@ -15,15 +15,14 @@ use crate::client::output::chat::BackgroundChat;
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
-        agents,
-        client::{self, request},
+        agents, client,
         context::Context,
         output::{self, Palette},
         terminal, ui,
     },
     config::{Effective, templates},
-    model::{Chat, Repository, SyncedRepository},
-    protocol::{ConfigTarget, RepositoryMethod},
+    model::{Chat, Repository},
+    protocol::ConfigTarget,
     repository,
 };
 
@@ -197,7 +196,6 @@ pub(super) async fn launch(
     check_model(&settings, &agent, &model)?;
     let asks_name = topic.asks_name && requested.is_none();
     let name = initial_name(ctx, &topic, requested).await?;
-    sync(ctx, &repo).await;
     let settings = self::settings(ctx, &repo).await?;
     let resumed = resumed_args(&settings, &agent, session.as_deref())?;
     let launch = agents::ChatLaunch {
@@ -345,25 +343,6 @@ async fn ask_name(ctx: &Context, default: &str) -> Result<String> {
             Ok(()) => return Ok(name),
             Err(error) => eprintln!("{error:#}"),
         }
-    }
-}
-
-/// Refresh the default branch as `shoal repo sync` does, so the agent reads what
-/// the remote has; a chat still starts when the refresh fails.
-async fn sync(ctx: &Context, repo: &Repository) {
-    let synced = ctx
-        .progress(
-            "Syncing the default branch",
-            request::<SyncedRepository>(
-                &ctx.paths,
-                RepositoryMethod::SyncRepository {
-                    repository: repo.id.clone().into(),
-                },
-            ),
-        )
-        .await;
-    if let Err(error) = synced {
-        eprintln!("warning: cannot sync the default branch: {error:#}");
     }
 }
 

@@ -10541,6 +10541,7 @@ fn add_uses_develop_as_the_repository_default() {
     git(&fixture.repo, &["branch", "-m", "develop"]);
     let author = upstream_remote(&fixture);
     let expected = git(&author, &["rev-parse", "HEAD"]);
+    fixture.ok(&["repo", "sync", fixture.repo.to_str().unwrap()]);
     let workspace = fixture.add("henrik/8374-set-league-season-player-profile");
     assert_eq!(workspace["base_ref"], "refs/heads/develop");
     assert_eq!(workspace["base_commit"], expected.trim());
@@ -10681,10 +10682,11 @@ fn add_fetches_a_remote_branch_base_before_creating_the_worktree() {
 }
 
 #[test]
-fn add_refreshes_main_before_creating_the_worktree() {
+fn add_starts_from_the_synced_main() {
     let fixture = Fixture::new();
     let author = upstream_remote(&fixture);
     let expected = git(&author, &["rev-parse", "HEAD"]);
+    fixture.ok(&["repo", "sync", fixture.repo.to_str().unwrap()]);
     let workspace = fixture.add("fresh");
     let path = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), expected);
@@ -26163,7 +26165,7 @@ fn chat_instructions_append_the_checkout_template_to_the_global_one() {
 }
 
 #[test]
-fn chat_syncs_the_default_branch_before_the_agent_starts() {
+fn chat_starts_from_the_checkout_without_syncing() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
     install_test_script(
@@ -26190,8 +26192,7 @@ fn chat_syncs_the_default_branch_before_the_agent_starts() {
             format!("{}{transcript}", String::from_utf8_lossy(&output.stderr)),
         )
     };
-    // A refused agent leaves the checkout as it was.
-    let stale = git(&fixture.repo, &["rev-parse", "main"]);
+    // An agent that cannot run is refused before the chat starts.
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
@@ -26204,37 +26205,26 @@ fn chat_syncs_the_default_branch_before_the_agent_starts() {
         transcript.contains("Happy sessions are off"),
         "{transcript}"
     );
-    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), stale);
-    // The checkout on the default branch advances before the agent reads it,
-    // and the instructions come from the refreshed checkout.
+    // The chat starts from the checkout as the sync left it, and the
+    // instructions come from that checkout.
+    fixture.ok(&["repo", "sync", fixture.repo.to_str().unwrap()]);
     let upstream = git(&author, &["rev-parse", "HEAD"]);
-    assert_eq!(chat().0, upstream);
-    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), upstream);
+    let (head, output) = chat();
+    assert_eq!(head, upstream);
+    assert!(!output.contains("Syncing"), "{output}");
     let instructions = &chat_args(&fixture)[1];
     assert!(
         instructions.contains("Upstream chat guidance"),
         "{instructions}"
     );
-    // Another checked-out branch stays put while the default branch advances.
-    git(&fixture.repo, &["switch", "-c", "notes"]);
-    commit_file(&author, "later", "later\n");
-    git(&author, &["push", "origin", "main"]);
-    let later = git(&author, &["rev-parse", "HEAD"]);
-    assert_eq!(chat().0, upstream);
-    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), later);
-    assert_eq!(git(&fixture.repo, &["branch", "--show-current"]), "notes\n");
-    // A refresh that cannot fast-forward warns and the chat still starts.
-    git(&fixture.repo, &["switch", "main"]);
+    // A default branch no sync can fast-forward does not hold the chat back.
     commit_file(&fixture.repo, "local", "local\n");
     let local = git(&fixture.repo, &["rev-parse", "main"]);
     commit_file(&author, "remote", "remote\n");
     git(&author, &["push", "origin", "main"]);
     let (head, output) = chat();
     assert_eq!(head, local);
-    assert!(
-        output.contains("warning:") && output.contains("diverged"),
-        "{output}"
-    );
+    assert!(!output.contains("diverged"), "{output}");
 }
 
 #[test]

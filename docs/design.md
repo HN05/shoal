@@ -515,12 +515,13 @@ registration is never turned into one.
 
 A new branch starts from the repository default branch: `origin/HEAD`, the sole
 remote's HEAD, or the checkout's current branch without remotes, never a guessed
-`main`. The selected local default branch is fast-forwarded from its upstream first,
-preserving an ahead branch and refusing divergence, dirty or managed checkouts, and
-failed fetches. `--base REF` starts from any locally resolvable
-commit ref without refreshing, except when it names the local default branch or a
-configured remote's branch, which is fetched first and must succeed.
-Creation, default-branch refresh, setup, repository removal, and recovery share
+`main`. It starts from the local default branch as the background sync left it,
+so creating a workspace never waits on the remote; the sync fast-forwards it from
+its upstream, preserving an ahead branch and leaving it on divergence, dirty or
+managed checkouts, and failed fetches. `--base REF` starts from any locally
+resolvable commit ref, except a configured remote's branch, which is fetched first
+and must succeed.
+Creation, default-branch sync, setup, repository removal, and recovery share
 a per-repository Git gate. Shoal's own Git commands skip optional locks, so
 background status checks never hold a worktree's index lock, and except clones
 are stopped after ten minutes, so a hung volume fails the request that waits on it. Daemon ref updates
@@ -717,7 +718,7 @@ as work. `conflicts` asks `git merge-tree` whether committed HEAD merges cleanly
 into a target, by default the base workspace's branch, otherwise the local default
 branch, which the daemon keeps current; it writes only objects. Every minute, after a
 PR of the repository merges, and on `sync`, the daemon fetches the default branch's remotes and fast-forwards the local default
-branch under the creation refresh rules, under the repository's Git gate, advancing a clean registered checkout where
+branch under the repository's Git gate, advancing a clean registered checkout where
 `git fetch` into the checked-out branch is refused; it never pushes or moves workspace branches, so updating
 a workspace from it stays plain Git. Shoal has no merge or rebase command: Git
 already does both in a workspace. `land`,
@@ -1757,9 +1758,9 @@ keeps a GPT-5.6 or later cache, and a guess for other tools.
 A chat is a conversation with an agent about a repository, not an assignment,
 so it runs in the registered checkout with the user's authority instead of in a
 workspace: coordinating work is one thing a chat may do, and scoped sessions
-cannot create workspaces. It refreshes the default branch first, as workspace
-creation does, so the discussion starts from the remote's work; a failed
-refresh only warns, so an offline or diverged checkout still gets its chat. Its
+cannot create workspaces. It starts at once from the default branch the
+background sync keeps current, so an offline or diverged checkout still gets its
+chat. Its
 instructions describe the discussion only, from a chat template that
 repositories can extend like the other prompt templates; the orchestrator skill is available when the user asks for coordination. Belonging
 to no workspace, a chat is not a tracked execution: queuing and overload stops

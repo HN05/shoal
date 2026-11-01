@@ -77,7 +77,6 @@ use crate::{
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
-use branches::UpstreamPolicy;
 use futures_util::StreamExt as _;
 use ownership::owns_git_dir;
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
@@ -664,51 +663,37 @@ impl Manager {
         }
     }
 
-    /// Select a new branch's base, refreshing the default or fetching a named
-    /// remote branch when needed.
+    /// Select a new branch's base: the local default branch as the
+    /// background sync left it, or a named base, fetching a remote branch it
+    /// names.
     async fn new_branch_base(&self, repo: &Repository, base: Option<&str>) -> Result<String> {
-        let lookup = if base.is_none() {
-            DefaultBranchLookup::Discover
-        } else {
-            DefaultBranchLookup::Cached
+        let Some(base) = base else {
+            let default =
+                crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover)
+                    .await?;
+            return Ok(git::local_ref(&default));
         };
-        let default = crate::git::default_branch::resolve(&repo.path, lookup).await;
-        match base {
-            None => {
-                let default = default?;
-                self.refresh_branch(repo, &default, UpstreamPolicy::AllowLocalOnly)
-                    .await
-                    .context("could not refresh the default branch before creating workspace")?;
-                Ok(git::local_ref(&default))
-            }
-            Some(base) => {
-                // An explicit ref remains an escape hatch when remote
-                // default-branch discovery is unavailable; only a remote
-                // branch it names is fetched.
-                if let Ok(default) = default {
-                    let default_ref = git::local_ref(&default);
-                    if default == base || default_ref == base {
-                        self.refresh_branch(repo, &default, UpstreamPolicy::AllowLocalOnly)
-                            .await
-                            .context(
-                                "could not refresh the default branch before creating workspace",
-                            )?;
-                        return Ok(default_ref);
-                    }
-                }
-                if let Some((remote, branch)) = git::remote_branch(&repo.path, base).await? {
-                    return git::fetch::configured_branch(&repo.path, &remote, &branch)
-                        .await
-                        .with_context(|| {
-                            format!("could not fetch {remote}/{branch} before creating workspace; pass a commit to start from the local state")
-                        });
-                }
-                Ok(base.to_owned())
+        // An explicit ref remains an escape hatch when remote default-branch
+        // discovery is unavailable; only a remote branch it names is fetched.
+        if let Ok(default) =
+            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await
+        {
+            let default_ref = git::local_ref(&default);
+            if default == base || default_ref == base {
+                return Ok(default_ref);
             }
         }
+        if let Some((remote, branch)) = git::remote_branch(&repo.path, base).await? {
+            return git::fetch::configured_branch(&repo.path, &remote, &branch)
+                .await
+                .with_context(|| {
+                    format!("could not fetch {remote}/{branch} before creating workspace; pass a commit to start from the local state")
+                });
+        }
+        Ok(base.to_owned())
     }
 
-    /// Record the base after refresh and before Worktrunk creates the worktree.
+    /// Record the base before Worktrunk creates the worktree.
     async fn record_worktree_base(
         &self,
         repo: &Repository,
