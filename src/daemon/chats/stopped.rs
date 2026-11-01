@@ -50,13 +50,15 @@ fn stopped(db: &mut Connection, id: &str) -> Result<Vec<Identity>> {
     Ok(processes)
 }
 
-/// Record that a stop of the chat `id` signals `processes`.
+/// Record that a stop of the chat `id` signals `processes`, unless the chat
+/// ended while it stops, as when a listing finds its agent exited: then no
+/// later stop or check follows them.
 fn record(db: &mut Connection, id: &str, processes: &[Identity]) -> Result<()> {
     let tx = db.transaction()?;
     for process in processes {
         tx.execute(
             "INSERT OR IGNORE INTO chat_stopped_processes(chat_id,pid,birth,unique_id)
-             VALUES (?1,?2,?3,?4)",
+             SELECT ?1,?2,?3,?4 WHERE EXISTS (SELECT 1 FROM chats WHERE id=?1)",
             params![
                 id,
                 process.pid,
@@ -79,3 +81,6 @@ pub(super) fn forget(db: &Connection, id: &str) -> Result<()> {
     db.execute("DELETE FROM chat_stopped_processes WHERE chat_id=?1", [id])?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
