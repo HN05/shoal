@@ -1,6 +1,5 @@
-//! Agent names and the hooks agents run Shoal through, independent of the
-//! integrations that launch them.
-pub mod hooks;
+//! Agent names and the models they run with, independent of the integrations
+//! that launch them.
 
 use crate::state::states;
 

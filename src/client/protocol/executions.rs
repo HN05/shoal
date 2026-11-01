@@ -32,7 +32,7 @@ pub enum ExecutionMethod {
         demo: Option<Box<crate::demos::Launch>>,
         /// Where the wrapper runs in a terminal host.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        origin: Option<Box<crate::sessions::Origin>>,
+        origin: Option<Box<crate::client::sessions::Origin>>,
     },
     /// Verify that this worker belongs to an unscoped caller's landing execution.
     CheckLanding,

@@ -2,62 +2,16 @@
 //! simctl action and retained after the workspace is gone.
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, params};
-use serde::{Deserialize, Serialize};
 
+pub(crate) use crate::client::sim::{
+    AuditEntry, CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice,
+};
 use crate::{
     daemon::{allocation::Allocation, approvals::DecisionStatus, workspace::Manager},
     model::Workspace,
     sim::{SimRequest, Simulator},
-    state::states,
     time::unix_seconds,
 };
-
-states!(CleanRequestStatus {
-    /// Recorded; the allocation is in progress.
-    Requested => "requested",
-    Acquired => "acquired",
-    /// No capacity; the same request ID may retry.
-    Busy => "busy",
-    Failed => "failed",
-    /// The daemon stopped while the request was in progress.
-    Interrupted => "interrupted",
-});
-
-states!(CleanAction {
-    /// A fresh device was created.
-    Create => "create",
-    /// An existing idle device was erased.
-    Erase => "erase",
-    /// Idle devices were deleted to make room, then a fresh one created.
-    CreateAfterEviction => "create_after_eviction",
-});
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct EvictedDevice {
-    pub id: String,
-    pub udid: Option<String>,
-    pub installed_apps: Option<usize>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CleanRequest {
-    pub workspace_id: String,
-    pub workspace_name: String,
-    pub repository_id: String,
-    pub execution_id: Option<String>,
-    pub requested_at: u64,
-    pub updated_at: u64,
-    pub attempts: u64,
-    pub request: SimRequest,
-    pub status: CleanRequestStatus,
-    pub action: Option<CleanAction>,
-    pub simulator_id: Option<String>,
-    pub udid: Option<String>,
-    pub apps_removed: Option<usize>,
-    pub erase_completed: bool,
-    pub evicted: Vec<EvictedDevice>,
-    pub error: Option<String>,
-}
 
 impl CleanRequest {
     /// Record an idle device about to be deleted to make room.
@@ -112,13 +66,6 @@ impl CleanRequest {
             }
         }
     }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AuditEntry {
-    pub id: i64,
-    #[serde(flatten)]
-    pub request: CleanRequest,
 }
 
 impl Manager {

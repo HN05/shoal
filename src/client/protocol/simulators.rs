@@ -1,4 +1,4 @@
-use crate::sim::SimRequest;
+use crate::client::sim::SimRequest;
 use serde::{Deserialize, Serialize};
 
 /// Requests about simulator leases.

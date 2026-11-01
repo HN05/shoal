@@ -14,10 +14,10 @@ use serde_json::{Value, json};
 use super::{
     AgentEnvironment, Integration, Wake,
     desktop::App,
+    hooks,
     trust::{CLAUDE_CODE, TrustFile},
 };
 use crate::{
-    agent::hooks,
     ai::IntegrationKind,
     state::{AgentState, TurnFailure},
 };

@@ -1,3 +1,4 @@
+pub(crate) use crate::client::sim::{DeviceType, Runtime};
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -9,43 +10,6 @@ pub struct Inventory {
     pub devicetypes: Vec<DeviceType>,
     pub runtimes: Vec<Runtime>,
     pub devices: BTreeMap<String, Vec<Device>>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct DeviceType {
-    pub identifier: String,
-    pub name: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Runtime {
-    pub identifier: String,
-    pub name: String,
-    pub is_available: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>,
-    #[serde(default, skip_serializing)]
-    pub supported_device_types: Option<Vec<DeviceType>>,
-}
-
-impl Runtime {
-    pub fn supports(&self, device: &DeviceType) -> bool {
-        self.supported_device_types
-            .as_ref()
-            .is_none_or(|types| types.iter().any(|d| d.identifier == device.identifier))
-    }
-
-    pub fn ios_version(&self) -> Option<Vec<u64>> {
-        self.identifier
-            .strip_prefix("com.apple.CoreSimulator.SimRuntime.iOS-")?;
-        self.version
-            .as_deref()?
-            .split('.')
-            .map(str::parse)
-            .collect::<Result<_, _>>()
-            .ok()
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

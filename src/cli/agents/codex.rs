@@ -13,9 +13,10 @@ use serde_json::Value;
 use super::{
     AgentEnvironment, Integration, Wake,
     desktop::{self, App},
+    hooks,
     trust::{CODEX, TrustFile},
 };
-use crate::{agent::hooks, ai::IntegrationKind, state::AgentState};
+use crate::{ai::IntegrationKind, state::AgentState};
 
 /// The Codex app, which `codex app` offers to install when it is missing.
 pub(in crate::cli) const APP: App = App {

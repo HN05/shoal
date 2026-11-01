@@ -11,6 +11,7 @@ mod desktop;
 mod detached;
 #[cfg(feature = "happy")]
 mod happy;
+pub(in crate::cli) mod hooks;
 mod launch;
 mod sessions;
 mod shortcuts;

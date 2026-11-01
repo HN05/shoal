@@ -27,5 +27,5 @@ pub struct Machine {
     pub forges: forges::Forges,
     /// Named Git settings a repository or agent selects.
     pub git_profiles: crate::git_profile::Git,
-    pub simulators: crate::sim::SimConfig,
+    pub simulators: crate::client::sim::SimConfig,
 }

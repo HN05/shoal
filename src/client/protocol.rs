@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::{
+    client::removal::{RemovalCheck, RemovalResult},
+    client::sim::{AuditEntry, Simulator, SimulatorCatalog},
     config::repo::ConfigLayers,
     daemon::{
         allocation::Allocation,
@@ -19,8 +21,6 @@ use crate::{
         WorkspaceStatus,
     },
     process::identity::Identity,
-    removal::{RemovalCheck, RemovalResult},
-    sim::{Simulator, SimulatorCatalog, audit::AuditEntry},
 };
 
 mod agents;
@@ -529,8 +529,8 @@ response_bodies! {
     QueueEntries(Vec<crate::model::QueueEntry>),
     RunningAgents(Vec<crate::model::RunningAgent>),
     OwnedPlaces(Vec<crate::model::OwnedPlace>),
-    PlaceClose(crate::sessions::PlaceClose),
-    PlaceOwnership(crate::sessions::PlaceOwnership),
+    PlaceClose(crate::client::sessions::PlaceClose),
+    PlaceOwnership(crate::client::sessions::PlaceOwnership),
     QueueEntry(crate::model::QueueEntry),
     MovedEntry(crate::model::MovedEntry),
     QueuedPlan(crate::model::QueuedPlan),
@@ -615,7 +615,7 @@ response_bodies! {
     Simulator(Simulator),
     Simulators(Vec<Simulator>),
     SimCatalog(SimulatorCatalog),
-    SimOverview(crate::sim::SimulatorOverview),
+    SimOverview(crate::client::sim::SimulatorOverview),
     SimHistory(Vec<AuditEntry>),
     OperationStarted(operations::Started),
     OperationEvent(operations::OperationEvent),
@@ -844,7 +844,7 @@ pub enum ExecutionEvent {
     /// daemon answers [`Control::Registered`], or a stop.
     Register {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        origin: Option<Box<crate::sessions::Origin>>,
+        origin: Option<Box<crate::client::sessions::Origin>>,
     },
 }
 

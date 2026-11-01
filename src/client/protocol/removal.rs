@@ -1,4 +1,4 @@
-use crate::removal::UnsavedWork;
+use crate::client::removal::UnsavedWork;
 use serde::{Deserialize, Serialize};
 
 /// Requests that stop, remove, clean up, export and restore workspaces.

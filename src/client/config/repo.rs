@@ -1,6 +1,6 @@
 use crate::agent::Agent;
+use crate::client::sessions::HostName;
 use crate::config::{options::Options, templates};
-use crate::sessions::HostName;
 use crate::state::states;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};

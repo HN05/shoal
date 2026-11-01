@@ -9,8 +9,6 @@ mod stdout;
 pub mod client;
 
 #[cfg(feature = "cli")]
-mod agent;
-#[cfg(feature = "cli")]
 mod agent_git;
 #[cfg(feature = "cli")]
 mod build;
@@ -20,8 +18,6 @@ mod caches;
 mod cli;
 #[cfg(feature = "cli")]
 mod daemon;
-#[cfg(feature = "cli")]
-mod demos;
 #[cfg(feature = "cli")]
 mod env;
 #[cfg(feature = "cli")]
@@ -49,8 +45,6 @@ mod proxy;
 #[cfg(feature = "cli")]
 mod removal;
 #[cfg(feature = "cli")]
-mod reviews;
-#[cfg(feature = "cli")]
 mod secrets;
 #[cfg(feature = "cli")]
 mod seed;
@@ -73,7 +67,9 @@ mod transfer;
 
 #[cfg(feature = "cli")]
 use cli::Cli;
-use client::{ai, config, model, protocol, repository, state, time, validate};
+use client::{
+    agent, ai, config, demos, model, protocol, repository, reviews, state, time, validate,
+};
 use shoal_forge as forge;
 #[cfg(feature = "cli")]
 use shoal_subprocess as subprocess;

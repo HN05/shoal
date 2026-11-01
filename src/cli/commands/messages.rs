@@ -208,7 +208,7 @@ pub(super) async fn hook(ctx: &Context) -> Result<i32> {
     if from_subagent(&input) {
         return Ok(0);
     }
-    let deadline = tokio::time::Instant::now() + crate::agent::hooks::MESSAGE_DAEMON_LIMIT;
+    let deadline = tokio::time::Instant::now() + crate::cli::agents::hooks::MESSAGE_DAEMON_LIMIT;
     if user_prompt(&input)
         && let Err(error) = report_reply(ctx, deadline).await
     {

@@ -80,7 +80,7 @@ pub struct Launch {
     pub environment: BTreeMap<String, String>,
     /// The place the demo runs in, such as a zmx session.
     #[serde(flatten)]
-    pub origin: crate::sessions::Origin,
+    pub origin: crate::client::sessions::Origin,
 }
 
 /// A running demo as listings show it.

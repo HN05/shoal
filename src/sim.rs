@@ -7,133 +7,21 @@ mod simctl;
 
 use anyhow::{Result, ensure};
 use rusqlite::params;
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use uuid::Uuid;
 
+pub(crate) use crate::client::sim::{
+    Profile, SimConfig, SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, SimulatorState,
+};
 use audit::CleanRequest;
 use simctl::Inventory;
 
 use crate::{
     daemon::{allocation::Allocation, approvals, queue, scope::Caller, workspace::Manager},
     model::Workspace,
-    state::{WorkspaceState, states},
+    state::WorkspaceState,
     time::unix_seconds,
     validate,
 };
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Profile {
-    #[serde(default)]
-    pub requires_approval: bool,
-    #[serde(default)]
-    pub approval_lifetime: crate::daemon::approvals::Lifetime,
-    pub device: String,
-    /// Empty selects the latest available compatible iOS runtime.
-    #[serde(default)]
-    pub runtime: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct SimConfig {
-    pub max_booted: usize,
-    pub max_devices: usize,
-    pub idle_seconds: u64,
-    /// Allow devices outside the configured profiles (with a reason).
-    pub allow_any: bool,
-    pub default: Option<String>,
-    pub profiles: BTreeMap<String, Profile>,
-}
-
-impl Default for SimConfig {
-    fn default() -> Self {
-        Self {
-            max_booted: 2,
-            max_devices: 4,
-            idle_seconds: 120,
-            allow_any: false,
-            default: None,
-            profiles: BTreeMap::new(),
-        }
-    }
-}
-
-impl SimConfig {
-    pub fn validate(&self) -> Result<()> {
-        ensure!(
-            self.max_booted > 0
-                && self.max_booted <= 64
-                && self.max_devices >= self.max_booted
-                && self.max_devices <= 256,
-            "machine.simulators limits require 1 <= max_booted <= 64 and max_booted <= max_devices <= 256"
-        );
-        ensure!(
-            self.idle_seconds <= 86400,
-            "machine.simulators.idle_seconds must be at most 86400"
-        );
-        if let Some(name) = &self.default {
-            ensure!(
-                self.profiles.contains_key(name),
-                "unknown default simulator profile: {name}"
-            );
-        }
-        for (name, profile) in &self.profiles {
-            validate::name("simulator profile", name)?;
-            ensure!(
-                !profile.device.is_empty(),
-                "simulator profile {name} requires a device"
-            );
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct SimRequest {
-    /// Client-generated UUID that makes clean requests idempotent and auditable.
-    pub request_id: String,
-    pub clean: bool,
-    pub name: String,
-    pub profile: Option<String>,
-    pub device: Option<String>,
-    pub runtime: Option<String>,
-    pub reason: Option<String>,
-    /// Take a place in the simulator queue while simulators are busy.
-    #[serde(default)]
-    pub queue: bool,
-}
-
-states!(SimulatorState {
-    /// Claimed; simctl create has not returned a UDID yet.
-    Creating => "creating",
-    /// Claimed; booting (or erasing) for a lease.
-    Booting => "booting",
-    Leased => "leased",
-    /// Released and reusable until the idle policy deletes it.
-    Idle => "idle",
-    /// A simctl step failed; release deletes the device.
-    Failed => "failed",
-});
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Simulator {
-    pub id: String,
-    pub udid: Option<String>,
-    pub device: String,
-    pub runtime: String,
-    pub workspace_id: Option<String>,
-    pub last_workspace_id: Option<String>,
-    pub lease_name: Option<String>,
-    pub reason: Option<String>,
-    pub state: SimulatorState,
-    pub last_used: u64,
-    pub error: Option<String>,
-    /// User apps counted at release; `None` when unknown.
-    #[serde(default)]
-    pub installed_apps: Option<usize>,
-}
 
 impl Simulator {
     /// An unclaimed record for a device simctl has not created yet.
@@ -195,29 +83,9 @@ impl Simulator {
     }
 }
 
-/// What could be created for a workspace: installed inventory, the policy,
-/// and the repository's preferred profiles.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SimulatorCatalog {
-    pub device_types: Vec<simctl::DeviceType>,
-    pub runtimes: Vec<simctl::Runtime>,
-    pub policy: SimConfig,
-    pub preferred: Vec<String>,
-    /// Why the installed device types and runtimes could not be read, such
-    /// as a host without Xcode; the configuration is listed regardless.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub inventory_error: Option<String>,
-}
-
 /// The runtimes simctl reports as usable.
 fn available(runtimes: Vec<simctl::Runtime>) -> Vec<simctl::Runtime> {
     runtimes.into_iter().filter(|r| r.is_available).collect()
-}
-
-/// Managed simulators and their leases.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SimulatorOverview {
-    pub simulators: Vec<Simulator>,
 }
 
 impl Manager {

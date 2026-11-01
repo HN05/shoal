@@ -2,12 +2,11 @@
 //! user opened stay theirs, even when Shoal runs an agent in them.
 pub(crate) mod herdr;
 mod locking;
-mod origin;
 pub(crate) mod rex;
 pub(crate) mod tmux;
 pub(crate) mod zmx;
 
-pub(crate) use origin::{HostName, Origin};
+pub(crate) use crate::client::sessions::{HostName, Origin, PlaceClose, PlaceOwnership};
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
@@ -27,35 +26,6 @@ pub(crate) struct Session {
 pub(crate) enum Owner {
     Workspace(String),
     Demo(String),
-}
-
-/// Whose a place is, as the daemon knows it when asked for a workspace.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PlaceOwnership {
-    /// The workspace's: its record names the workspace, or its host labels
-    /// it as the workspace's session, so the workspace's removal closes it.
-    Workspace,
-    /// Another workspace's agent or a chat took it over.
-    Elsewhere,
-    /// Neither recorded nor labelled, as a place opened before Shoal
-    /// recorded its places.
-    Unknown,
-}
-
-/// What happened to a recorded place a watcher asked the daemon to close.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PlaceClose {
-    /// It was the workspace's, and is closed.
-    Closed,
-    /// Another workspace's agent or a chat took it over, so it stays open.
-    OwnedElsewhere,
-    /// It was the workspace's, and its host, whose places the daemon cannot
-    /// close, closes it.
-    HostCloses,
-    /// The daemon keeps no record of it; its host closes it.
-    NotRecorded,
 }
 
 /// A host exposes its session operations; lifecycle policy belongs to the daemon.
@@ -79,6 +49,17 @@ pub(crate) trait Host: Send + Sync {
         place: &'a Origin,
         owner: &'a Owner,
     ) -> BoxFuture<'a, Result<()>>;
+}
+
+impl Origin {
+    /// What names the server holding the place among its host's servers,
+    /// as the host reads its data; empty for a host with one server. Places
+    /// of different servers may share an ID.
+    pub fn server(&self) -> String {
+        host(self.host)
+            .map(|host| host.server(&self.data))
+            .unwrap_or_default()
+    }
 }
 
 pub(crate) fn hosts() -> Vec<Arc<dyn Host>> {

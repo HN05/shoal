@@ -1,6 +1,7 @@
-//! Where Shoal runs work in a terminal host, recorded the same way for every
-//! host so later work can find the place again. Generic code stores and
-//! passes the record; only the named host reads its group, place and data.
+//! Places in terminal hosts: where Shoal runs work, recorded the same way for
+//! every host so later work can find the place again, and whose a place is.
+//! Generic code stores and passes the record; only the named host reads its
+//! group, place and data.
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
@@ -68,19 +69,39 @@ impl Origin {
         }
     }
 
-    /// What names the server holding the place among its host's servers,
-    /// as the host reads its data; empty for a host with one server. Places
-    /// of different servers may share an ID.
-    pub fn server(&self) -> String {
-        super::host(self.host)
-            .map(|host| host.server(&self.data))
-            .unwrap_or_default()
-    }
-
     /// The place's ID; empty for a group alone.
     pub fn id(&self) -> &str {
         self.place.as_deref().unwrap_or_default()
     }
+}
+
+/// Whose a place is, as the daemon knows it when asked for a workspace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaceOwnership {
+    /// The workspace's: its record names the workspace, or its host labels
+    /// it as the workspace's session, so the workspace's removal closes it.
+    Workspace,
+    /// Another workspace's agent or a chat took it over.
+    Elsewhere,
+    /// Neither recorded nor labelled, as a place opened before Shoal
+    /// recorded its places.
+    Unknown,
+}
+
+/// What happened to a recorded place a watcher asked the daemon to close.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaceClose {
+    /// It was the workspace's, and is closed.
+    Closed,
+    /// Another workspace's agent or a chat took it over, so it stays open.
+    OwnedElsewhere,
+    /// It was the workspace's, and its host, whose places the daemon cannot
+    /// close, closes it.
+    HostCloses,
+    /// The daemon keeps no record of it; its host closes it.
+    NotRecorded,
 }
 
 #[cfg(test)]

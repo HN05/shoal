@@ -251,7 +251,7 @@ fn rex_defaults_and_options_resolve_independently() {
     let defaults = stack("", "", "").resolve().unwrap();
     assert_eq!(
         defaults.terminal.default_host,
-        crate::sessions::HostName::Zmx
+        crate::client::sessions::HostName::Zmx
     );
     let rex = defaults.terminal.rex;
     assert!(rex.enabled && rex.new_window);
@@ -267,7 +267,7 @@ fn rex_defaults_and_options_resolve_independently() {
     .unwrap();
     assert_eq!(
         settings.terminal.default_host,
-        crate::sessions::HostName::Rex
+        crate::client::sessions::HostName::Rex
     );
     assert!(settings.terminal.rex.enabled);
     assert_eq!(settings.terminal.rex.session_name, "work");
@@ -281,7 +281,7 @@ fn rex_defaults_and_options_resolve_independently() {
         .unwrap();
     assert_eq!(
         herdr.terminal.default_host,
-        crate::sessions::HostName::Herdr
+        crate::client::sessions::HostName::Herdr
     );
     assert!(Config::from_toml("terminal.default_host = 'screen'\n").is_err());
     assert!(Config::from_toml("terminal.default_host = 'terminal'\n").is_err());

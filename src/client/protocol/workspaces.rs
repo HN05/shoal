@@ -128,7 +128,7 @@ pub enum WorkspaceMethod {
     /// the workspace is removed.
     RecordOwnedPlace {
         workspace: String,
-        origin: crate::sessions::Origin,
+        origin: crate::client::sessions::Origin,
     },
     /// The places Shoal created for every workspace.
     OwnedPlaces,
@@ -137,12 +137,12 @@ pub enum WorkspaceMethod {
     /// may already be removed.
     CloseOwnedPlace {
         workspace: String,
-        place: crate::sessions::Origin,
+        place: crate::client::sessions::Origin,
     },
     /// Whose `place` is, as the daemon knows it for `workspace`.
     PlaceOwnership {
         workspace: String,
-        place: crate::sessions::Origin,
+        place: crate::client::sessions::Origin,
     },
     /// One effective hook, resolved against the directory where it runs.
     WorkspaceHook {

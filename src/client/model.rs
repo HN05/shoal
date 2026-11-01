@@ -3,10 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::{
+    client::sim::Simulator,
     config::repo::{ConflictPolicy, PortDefinition},
     daemon::resources::ResourceLease,
     process::identity::Identity,
-    sim::Simulator,
     state::{AgentState, ExecutionState, QueueKind, QueueState, WorkspaceState},
 };
 
@@ -452,7 +452,7 @@ pub struct Execution {
     pub group_id: Option<u32>,
     /// Where it runs in a terminal host, when its wrapper runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub origin: Option<crate::sessions::Origin>,
+    pub origin: Option<crate::client::sessions::Origin>,
     /// The agent it runs, when it runs one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
@@ -495,7 +495,7 @@ pub struct Inspection {
     /// The places Shoal created for the workspace, such as a session whose
     /// launch failed and left its shell.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub places: Vec<crate::sessions::Origin>,
+    pub places: Vec<crate::client::sessions::Origin>,
     pub ports: Vec<PortReservation>,
     pub resources: Vec<ResourceLease>,
     pub simulators: Vec<Simulator>,
@@ -812,7 +812,7 @@ pub struct Chat {
     pub started_at: i64,
     /// Where it runs in a terminal host, when it runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub origin: Option<crate::sessions::Origin>,
+    pub origin: Option<crate::client::sessions::Origin>,
     /// Its own directory for temporary files, which goes with it; none in a
     /// repository without a directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -847,7 +847,7 @@ impl PresentSpace {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedPlace {
     pub workspace_id: String,
-    pub origin: crate::sessions::Origin,
+    pub origin: crate::client::sessions::Origin,
 }
 
 /// A connected agent, or an execution whose wrapper is gone.
@@ -869,7 +869,7 @@ pub struct RunningAgent {
     pub interrupted: bool,
     /// Where it runs in a terminal host, when its wrapper runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub origin: Option<crate::sessions::Origin>,
+    pub origin: Option<crate::client::sessions::Origin>,
     /// The `shoal restart` runs a restart started it again for, including
     /// runs that joined another's restart, while this daemon runs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
