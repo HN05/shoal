@@ -31,10 +31,12 @@ pub enum ChatMethod {
         hands_over: bool,
     },
     /// Return the chat `chat`, restored as process `pid`, to waiting for
-    /// `shoal resume`, as when its restore failed before its agent ran.
+    /// `shoal resume`, as when its restore failed with `error` before its
+    /// agent ran.
     SaveChat {
         chat: String,
         pid: u32,
+        error: String,
     },
     /// Record that `chat`'s agent now runs as process `pid`, for an agent
     /// started detached instead of in place of the recording process.

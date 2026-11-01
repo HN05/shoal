@@ -34,7 +34,9 @@ pub(super) async fn restore_automatic(manager: &Arc<Manager>) -> Result<Vec<Join
             let manager = manager.clone();
             tokio::spawn(async move {
                 if let Err(error) = resume(&manager.paths, &chat).await {
-                    manager.notify_restore_failed(&chat, &error).await;
+                    manager
+                        .notify_restore_failed(&chat, &format!("{error:#}"))
+                        .await;
                 }
             })
         })
@@ -42,13 +44,15 @@ pub(super) async fn restore_automatic(manager: &Arc<Manager>) -> Result<Vec<Join
 }
 
 impl Manager {
-    async fn notify_restore_failed(&self, chat: &Chat, error: &anyhow::Error) {
-        log!("chat {} not restored: {error:#}", chat.id);
+    /// Tell the user that `chat` waits for `shoal resume` since its restore
+    /// failed with `error`.
+    pub(super) async fn notify_restore_failed(&self, chat: &Chat, error: &str) {
+        log!("chat {} not restored: {error}", chat.id);
         self.notify_about(
             About::workspace(&chat.name, &chat.id),
             NotificationKind::ChatRestoreFailed,
             format!(
-                "Could not restore chat {}: {error:#}; restore it with shoal resume {}",
+                "Could not restore chat {}: {error}; restore it with shoal resume {}",
                 chat.name, chat.name
             ),
         )

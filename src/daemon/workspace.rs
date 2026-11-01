@@ -134,6 +134,9 @@ pub struct Manager {
     /// process, so a chat's new process is never found untracked: its
     /// launcher waits for the handoff and keeps it a tracked descendant.
     pub(crate) chat_handoffs: tokio::sync::RwLock<()>,
+    /// Held while chats are saved and their processes stopped, and to
+    /// restore or discard a saved chat, so neither overlaps a stop.
+    pub(crate) chat_saves: tokio::sync::Mutex<()>,
     pub(crate) seeds: super::seed::Seeds,
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     pub(crate) reviews: crate::daemon::reviews::Reviews,
@@ -172,6 +175,7 @@ impl Manager {
             usage: Default::default(),
             leftovers: Default::default(),
             chat_handoffs: Default::default(),
+            chat_saves: Default::default(),
             seeds: Default::default(),
             forge_memories: Default::default(),
             reviews: Default::default(),

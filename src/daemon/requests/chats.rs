@@ -40,8 +40,8 @@ pub(super) async fn handle(
             origin,
             hands_over,
         } => Body::Chat(manager.restore_chat(&chat, pid, origin, hands_over).await?),
-        ChatMethod::SaveChat { chat, pid } => {
-            manager.return_to_saved(&chat, pid).await?;
+        ChatMethod::SaveChat { chat, pid, error } => {
+            manager.return_to_saved(&chat, pid, &error).await?;
             Body::Ok
         }
         ChatMethod::DiscardChat { chat } => Body::Chat(manager.discard_saved_chat(&chat).await?),

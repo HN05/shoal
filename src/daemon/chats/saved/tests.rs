@@ -184,9 +184,19 @@ async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
         .await
         .unwrap_err();
 
-    assert!(error.to_string().contains("still runs"), "{error:#}");
+    assert!(
+        error.to_string().contains("still has processes running"),
+        "{error:#}"
+    );
     let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.pid, chat.pid);
+    // Nor is it discarded, which would delete the files its agent uses.
+    let error = manager.discard_saved_chat("talk").await.unwrap_err();
+    assert!(
+        error.to_string().contains(&format!("kill {}", chat.pid)),
+        "{error:#}"
+    );
+    assert!(chat.tmp_dir.unwrap().exists());
 }
 
 #[tokio::test]
@@ -203,7 +213,7 @@ async fn a_restore_whose_agent_did_not_start_waits_for_resume_again() {
         .unwrap();
 
     manager
-        .return_to_saved(&chat.id, restoring_pid)
+        .return_to_saved(&chat.id, restoring_pid, "the agent is not installed")
         .await
         .unwrap();
     restoring.kill();
@@ -212,11 +222,22 @@ async fn a_restore_whose_agent_did_not_start_waits_for_resume_again() {
     assert_eq!(saved.len(), 1);
     assert_eq!(saved[0].restore, Some(ChatRestore::Resume));
     assert!(chat.tmp_dir.unwrap().exists());
+    let notifications = manager.notifications(true, 10).await.unwrap();
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.kind == crate::daemon::notifications::NotificationKind::ChatRestoreFailed
+                && notification.message.contains("the agent is not installed")
+        }),
+        "{notifications:?}"
+    );
     // Another process cannot return it.
     manager
         .restore_chat(&chat.id, std::process::id(), None, false)
         .await
         .unwrap();
-    let error = manager.return_to_saved(&chat.id, 1).await.unwrap_err();
+    let error = manager
+        .return_to_saved(&chat.id, 1, "unused")
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("does not run"), "{error:#}");
 }

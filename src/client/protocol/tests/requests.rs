@@ -102,7 +102,7 @@ const REQUESTS: &[&str] = &[
     // Chats.
     r#"{"start_chat":{"repository":"app","name":"app-chat","agent":"claude","pid":4}}"#,
     r#"{"restore_chat":{"chat":"c1","pid":5}}"#,
-    r#"{"save_chat":{"chat":"c1","pid":5}}"#,
+    r#"{"save_chat":{"chat":"c1","pid":5,"error":"the agent is not installed"}}"#,
     r#"{"move_chat":{"chat":"c1","pid":5}}"#,
     r#""list_chats""#,
     r#"{"discard_chat":{"chat":"app-chat"}}"#,

@@ -21,6 +21,7 @@ impl Manager {
     /// processes each owns, so none goes on writing its session. A chat
     /// whose processes do not stop runs on.
     pub(crate) async fn save_chats(&self, restore: ChatRestore) {
+        let _saving = self.chat_saves.lock().await;
         let saved = match self.store.run(move |db| save(db, restore)).await {
             Ok(saved) => saved,
             Err(error) => {
@@ -65,11 +66,9 @@ impl Manager {
         hands_over: bool,
     ) -> Result<Chat> {
         let process = identity::capture(pid)?.context("the chat process is not running")?;
-        let saved = self
-            .recorded_chat(id)
-            .await?
-            .filter(|chat| chat.restore.is_some())
-            .with_context(|| format!("no saved chat {id}"))?;
+        let _saving = self.chat_saves.lock().await;
+        let saved = self.saved_chat(id).await?;
+        self.ensure_ended(&saved, pid).await?;
         let repository = self
             .reserve_repository_directory(&saved.repository_id)
             .await?;
@@ -90,32 +89,84 @@ impl Manager {
                 Ok(chat)
             }
             Err(error) => {
-                self.return_to_saved(&chat.id, pid).await?;
+                self.return_to_saved(&chat.id, pid, &format!("{error:#}"))
+                    .await?;
                 Err(error)
             }
         }
     }
 
     /// Return the chat `id`, restored as process `pid`, to waiting for
-    /// `shoal resume`, as when its restore failed before its agent ran, so
-    /// the end of that process does not end it.
-    pub async fn return_to_saved(&self, id: &str, pid: u32) -> Result<()> {
-        let id = id.to_owned();
-        self.store.run(move |db| resave(db, &id, pid)).await
+    /// `shoal resume`, as when its restore failed with `error` before its
+    /// agent ran, so the end of that process does not end it, and tell the
+    /// user, who may not see where it ran.
+    pub async fn return_to_saved(&self, id: &str, pid: u32, error: &str) -> Result<()> {
+        let chat = id.to_owned();
+        let saved = self.store.run(move |db| resave(db, &chat, pid)).await?;
+        self.notify_restore_failed(&saved, error).await;
+        Ok(())
     }
 
     /// End the saved chat `selector` names, by ID or name, without
     /// restoring it, as if its process had exited.
     pub(crate) async fn discard_saved_chat(&self, selector: &str) -> Result<Chat> {
-        let chat = self
-            .recorded_chat(selector)
-            .await?
-            .filter(|chat| chat.restore.is_some())
-            .with_context(|| format!("no saved chat {selector}"))?;
+        let _saving = self.chat_saves.lock().await;
+        let chat = self.saved_chat(selector).await?;
+        self.ensure_ended(&chat, std::process::id()).await?;
         self.end_chats(vec![(chat.id.clone(), Over::Discarded)])
             .await?;
         Ok(chat)
     }
+
+    /// The saved chat `selector` names, by ID or name.
+    async fn saved_chat(&self, selector: &str) -> Result<Chat> {
+        self.recorded_chat(selector)
+            .await?
+            .filter(|chat| chat.restore.is_some())
+            .with_context(|| format!("no saved chat {selector}"))
+    }
+
+    /// Refuse the saved `chat` while a process it owns still runs, other
+    /// than `caller`, as after a stop that did not end them: a restore would
+    /// have two agents write one session, and a discard would delete files
+    /// they use.
+    async fn ensure_ended(&self, chat: &Chat, caller: u32) -> Result<()> {
+        let id = chat.id.clone();
+        let recorded = self.store.run(move |db| saved_process(db, &id)).await?;
+        let wrappers = self.execution_wrappers().await?;
+        let mut running: Vec<Identity> = identity::scan_chat(&chat.id)
+            .await?
+            .into_iter()
+            .filter(|process| process.pid != caller && !wrappers.contains(process))
+            .collect();
+        if identity::alive(&recorded)? && !running.contains(&recorded) {
+            running.push(recorded);
+        }
+        let pids: Vec<String> = running
+            .iter()
+            .map(|process| process.pid.to_string())
+            .collect();
+        ensure!(
+            pids.is_empty(),
+            "chat {} still has processes running; end them with kill {}",
+            chat.name,
+            pids.join(" ")
+        );
+        Ok(())
+    }
+}
+
+/// The process the saved chat `id` ran as.
+fn saved_process(db: &mut Connection, id: &str) -> Result<Identity> {
+    Ok(
+        db.query_row("SELECT pid,birth FROM chats WHERE id=?1", [id], |row| {
+            Ok(Identity {
+                pid: row.get(0)?,
+                birth: row.get(1)?,
+                unique: None,
+            })
+        })?,
+    )
 }
 
 /// Mark every running chat saved to come back as `restore` says, returning
@@ -131,14 +182,21 @@ fn save(db: &mut Connection, restore: ChatRestore) -> Result<Vec<(String, Identi
     Ok(running)
 }
 
-/// Mark the running chat `id` of process `pid` saved for `shoal resume`.
-fn resave(db: &mut Connection, id: &str, pid: u32) -> Result<()> {
-    let saved = db.execute(
+/// Mark the running chat `id` of process `pid` saved for `shoal resume`,
+/// returning it.
+fn resave(db: &mut Connection, id: &str, pid: u32) -> Result<Chat> {
+    let tx = db.transaction()?;
+    let saved = tx.execute(
         "UPDATE chats SET restore=?3 WHERE id=?1 AND pid=?2 AND restore IS NULL",
         params![id, pid, ChatRestore::Resume],
     )?;
     ensure!(saved == 1, "chat {id} does not run as process {pid}");
-    Ok(())
+    let chat = recorded(&tx)?
+        .into_iter()
+        .find(|chat| chat.id == id)
+        .context("the chat ended")?;
+    tx.commit()?;
+    Ok(chat)
 }
 
 /// Return the chat `id`, saved while it ran as `process`, to running.
@@ -178,18 +236,6 @@ struct Restored {
 fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
     let tx = db.transaction()?;
     ensure_checkout_free(&tx, &restored.repository)?;
-    if let Some(saved) = recorded(&tx)?
-        .into_iter()
-        .find(|chat| chat.id == restored.id)
-    {
-        // A save whose stop never ended the agent leaves it writing its session.
-        ensure!(
-            !still_runs(&tx, &saved)?,
-            "chat {} still runs as process {}; end it before restoring it",
-            saved.name,
-            saved.pid
-        );
-    }
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL
          WHERE id=?1 AND restore IS NOT NULL",
