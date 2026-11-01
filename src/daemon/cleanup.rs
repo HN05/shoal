@@ -18,7 +18,7 @@ pub(crate) use crate::client::cleanup::{
 };
 use crate::{
     daemon::{
-        caches::Emptying, events::EventCause, log, notifications::NotificationKind,
+        caches::Emptying, events::EventCause, log, notifications::NotificationKind, volume_access,
         workspace::Manager,
     },
     model::{CleanupReason, Workspace},
@@ -351,19 +351,28 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
 
 async fn observe_branches(manager: &Manager) -> Result<()> {
     for workspace in manager.list_workspaces().await? {
-        if workspace.state == WorkspaceState::Ready
-            && workspace.path.is_dir()
-            && let Err(error) = manager
-                .check_volume(
-                    &workspace.path,
-                    manager.observe_workspace_branch(&workspace),
-                )
-                .await
-        {
+        if workspace.state != WorkspaceState::Ready || !is_dir(&workspace.path).await {
+            continue;
+        }
+        let observed = manager.observe_workspace_branch(&workspace);
+        if let Err(error) = manager.check_volume(&workspace.path, observed).await {
             log!("branch observation skipped {}: {error:#}", workspace.name);
         }
     }
     Ok(())
+}
+
+/// Whether `path` is a directory, read off the runtime's threads and within
+/// a check's time limit, since a stalled volume can hold the read. The daemon's
+/// own read says nothing about the processes it starts there, so it records
+/// no stall.
+async fn is_dir(path: &std::path::Path) -> bool {
+    let path = path.to_owned();
+    let read = tokio::task::spawn_blocking(move || path.is_dir());
+    matches!(
+        tokio::time::timeout(volume_access::LIMIT, read).await,
+        Ok(Ok(true))
+    )
 }
 
 /// Each workspace's idle delay comes from its own layered config; a disabled
