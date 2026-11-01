@@ -6,8 +6,9 @@ use std::{
 
 use super::*;
 
-/// A new terminal's slave, kept open, and its device.
-fn terminal() -> (File, PathBuf) {
+/// A new terminal's master and slave, which keep its device while open,
+/// and the device.
+fn terminal() -> (File, File, PathBuf) {
     let (mut master, mut slave) = (-1, -1);
     // SAFETY: openpty initializes both descriptors; File owns them below.
     let opened = unsafe {
@@ -21,7 +22,7 @@ fn terminal() -> (File, PathBuf) {
     };
     assert_eq!(opened, 0);
     // SAFETY: openpty returned the descriptors, which nothing else owns.
-    drop(unsafe { File::from_raw_fd(master) });
+    let master = unsafe { File::from_raw_fd(master) };
     let slave = unsafe { File::from_raw_fd(slave) };
     let mut name = [0 as libc::c_char; 128];
     // SAFETY: ttyname_r writes at most the buffer's length.
@@ -29,12 +30,12 @@ fn terminal() -> (File, PathBuf) {
     assert_eq!(named, 0);
     // SAFETY: ttyname_r wrote a terminated string.
     let name = unsafe { CStr::from_ptr(name.as_ptr()) };
-    (slave, PathBuf::from(name.to_str().unwrap()))
+    (master, slave, PathBuf::from(name.to_str().unwrap()))
 }
 
 #[test]
 fn a_terminal_takes_lines_until_a_line_editor_reads_keys() {
-    let (slave, device) = terminal();
+    let (_master, slave, device) = terminal();
     assert_eq!(canonical(&device), Some(true));
     let mut settings = std::mem::MaybeUninit::<libc::termios>::uninit();
     // SAFETY: tcgetattr initializes settings on success, which it asserts.
