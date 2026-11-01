@@ -568,8 +568,9 @@ configured command for another agent, plus proven child
   changes without the matching sentence edit, text that restates code or
   history, and sentences that list or count what a rule covers instead of
   stating the rule; an overstated rule is narrowed, not annotated with its
-  exceptions. Never ask for a comment on clear code, a reworded correct one,
-  or a longer document.
+  exceptions. Flag documentation that says what has or has not been tested,
+  run or verified; that belongs in the PR. Never ask for a comment on clear
+  code, a reworded correct one, or a longer document.
 
 ## Delivery
 
