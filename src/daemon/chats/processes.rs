@@ -13,7 +13,8 @@ const ROUNDS: usize = 5;
 /// The processes the chat `chat`, saved while it ran as `recorded`, still
 /// owns after a stop that failed or was interrupted, other than the
 /// execution `wrappers`: that process while it lives, those carrying the
-/// chat's identity, and the members of the group it led, which keeps its ID
+/// chat's identity, those it started, by the lineage of its never-reused ID
+/// when recorded, and the members of the group it led, which keeps its ID
 /// while any member remains, other than a workspace's.
 pub(super) async fn survivors(
     chat: &str,
@@ -25,6 +26,11 @@ pub(super) async fn survivors(
         .into_iter()
         .filter(|process| !wrappers.contains(process))
         .collect();
+    for started in identity::started_by(recorded, wrappers).await? {
+        if !survivors.contains(&started) {
+            survivors.push(started);
+        }
+    }
     let (_, members) = identity::related(None, Some(recorded.pid), None).await?;
     for member in members {
         if identity::group_of(&member) == Some(recorded.pid)

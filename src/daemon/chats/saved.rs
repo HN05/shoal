@@ -171,15 +171,16 @@ impl Manager {
 
 /// The process the saved chat `id` ran as.
 fn saved_process(db: &mut Connection, id: &str) -> Result<Identity> {
-    Ok(
-        db.query_row("SELECT pid,birth FROM chats WHERE id=?1", [id], |row| {
-            Ok(Identity {
-                pid: row.get(0)?,
-                birth: row.get(1)?,
-                unique: None,
-            })
-        })?,
-    )
+    let (pid, birth, unique): (u32, String, Option<String>) = db.query_row(
+        "SELECT pid,birth,unique_id FROM chats WHERE id=?1",
+        [id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    Ok(Identity {
+        pid,
+        birth,
+        unique: unique.as_deref().map(serde_json::from_str).transpose()?,
+    })
 }
 
 /// Mark every running chat saved to come back as `restore` says, returning
@@ -187,12 +188,24 @@ fn saved_process(db: &mut Connection, id: &str) -> Result<Identity> {
 fn save(db: &mut Connection, restore: ChatRestore) -> Result<Vec<(String, Identity)>> {
     let tx = db.transaction()?;
     let running = super::recorded_processes(&tx)?;
-    tx.execute(
-        "UPDATE chats SET restore=?1 WHERE restore IS NULL",
-        [restore],
-    )?;
+    for (id, process) in &running {
+        tx.execute(
+            "UPDATE chats SET restore=?2,unique_id=?3 WHERE id=?1",
+            params![id, restore, unique_id(process)?],
+        )?;
+    }
     tx.commit()?;
     Ok(running)
+}
+
+/// The never-reused ID of `process`, as JSON, while it runs.
+fn unique_id(process: &Identity) -> Result<Option<String>> {
+    let unique = identity::capture(process.pid)?
+        .filter(|live| live == process)
+        .and_then(|live| live.unique);
+    Ok(unique
+        .map(|unique| serde_json::to_string(&unique))
+        .transpose()?)
 }
 
 /// Mark the running chat `id` of process `pid` saved for `shoal resume`,

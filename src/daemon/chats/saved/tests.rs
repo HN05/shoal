@@ -368,3 +368,56 @@ impl Drop for KilledGroup {
         unsafe { libc::kill(-(self.0 as i32), libc::SIGKILL) };
     }
 }
+
+/// A child that left the agent's group and carries no chat identity is
+/// found by the lineage of the agent's never-reused ID, which macOS reports.
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn a_survivor_that_left_the_chats_group_holds_it_saved() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let started = root.path().join("child");
+    let mut leader = ProcessGroup::spawn(
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg("perl -MPOSIX -e 'POSIX::setsid(); sleep 600' & echo $! > \"$0\"; wait")
+            .arg(&started),
+    );
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            leader.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let child = wait_for_child(&started).await;
+    // The child leads a session of its own, out of the agent's group.
+    let escaped = KilledGroup(child);
+    while unsafe { libc::getpgid(child as i32) } != child as i32 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    // A save interrupted before its stop, then the agent ended.
+    manager
+        .store
+        .run(|db| super::save(db, ChatRestore::Resume))
+        .await
+        .unwrap();
+    unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
+    leader.wait().unwrap();
+
+    let error = manager.discard_saved_chat("talk").await.unwrap_err();
+    assert!(
+        error.to_string().contains(&format!("kill {child}")),
+        "{error:#}"
+    );
+    assert!(chat.tmp_dir.unwrap().exists());
+    drop(escaped);
+}

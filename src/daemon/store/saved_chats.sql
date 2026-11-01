@@ -2,6 +2,10 @@
 -- runs. A saved chat keeps its record, and with it its name, files and
 -- messages, until it is restored or really ends.
 ALTER TABLE chats ADD COLUMN restore TEXT CHECK(restore IN ('automatic','resume'));
+-- The never-reused ID, as JSON, of the process a chat was saved while running
+-- as, where the platform reports one, which finds what it started once it
+-- ended.
+ALTER TABLE chats ADD COLUMN unique_id TEXT;
 
 CREATE TRIGGER chat_saved AFTER UPDATE OF restore ON chats
 WHEN OLD.restore IS NULL AND NEW.restore IS NOT NULL BEGIN
