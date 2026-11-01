@@ -20779,18 +20779,7 @@ fn the_wake_hook_exits_with_its_agent() {
 #[test]
 fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
     let fixture = Fixture::new();
-    let repository = fixture.ok(&["repo", "ls"])[0].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = support::isolated(fixture.root.path(), "sleep")
-        .arg("600")
-        .current_dir(fixture.root.path())
-        .spawn()
-        .unwrap();
-    let response = fixture.request(serde_json::json!({"start_chat":{
-        "repository": repository["id"], "name": "planning", "agent": "claude",
-        "pid": agent.id()
-    }}));
-    assert_eq!(response["type"], "chat", "{response}");
+    let (mut agent, _) = start_test_chat(&fixture, "planning");
 
     // A failed turn reports for the chat, which keeps the session it names.
     let mut report = fixture
@@ -20913,7 +20902,7 @@ fn a_message_to_all_skips_workspaces_without_a_running_agent() {
     ]);
     assert_eq!(sent, serde_json::json!({"workspaces": []}));
     assert_eq!(fixture.ok(&["messages", "idle"]), serde_json::json!([]));
-    let output = fixture.run(&["messages", "send", "--all", "--workspace", "idle", "hi"]);
+    let output = fixture.run(&["messages", "send", "--all", "--space", "idle", "hi"]);
     assert!(!output.status.success(), "{output:?}");
 }
 
@@ -20926,13 +20915,13 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         "messages",
         "send",
         "Stop the dev server",
-        "--workspace",
+        "--space",
         "receiver",
     ]);
     let output = scoped_command(
         &fixture,
         "receiver",
-        &["messages", "send", "hello", "--workspace", "receiver"],
+        &["messages", "send", "hello", "--space", "receiver"],
     );
     assert!(!output.status.success(), "agents cannot send: {output:?}");
     let output = scoped_command(&fixture, "receiver", &["messages", "other"]);
@@ -20973,13 +20962,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
     };
     let event = r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#;
     assert_eq!(hook(event), "");
-    fixture.ok(&[
-        "messages",
-        "send",
-        "Free disk space",
-        "--workspace",
-        "receiver",
-    ]);
+    fixture.ok(&["messages", "send", "Free disk space", "--space", "receiver"]);
     let output: Value = serde_json::from_str(&hook(event)).unwrap();
     assert_eq!(
         output["hookSpecificOutput"],
@@ -20998,7 +20981,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         "send",
         "--body-file",
         body,
-        "--workspace",
+        "--space",
         "receiver",
     ]);
     let output: Value = serde_json::from_str(&hook(event)).unwrap();
@@ -21014,7 +20997,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
         "messages",
         "send",
         "Rebase onto main",
-        "--workspace",
+        "--space",
         "receiver",
     ]);
     let output = fixture
@@ -21055,7 +21038,7 @@ fn messages_carry_copies_of_attached_files() {
             "send",
             "--attach",
             "shot.png#Login screen",
-            "--workspace",
+            "--space",
             "receiver",
         ])
         .output()
@@ -21078,6 +21061,58 @@ fn messages_carry_copies_of_attached_files() {
         String::from_utf8(paths.stdout).unwrap().trim(),
         copy.display().to_string()
     );
+}
+
+/// Start a chat named `name` in the fixture's repository, whose agent the
+/// returned sleep stands in for, and return it with the chat's ID.
+fn start_test_chat(fixture: &Fixture, name: &str) -> (std::process::Child, String) {
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    let agent = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .current_dir(fixture.root.path())
+        .spawn()
+        .unwrap();
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository["id"], "name": name, "agent": "claude",
+        "pid": agent.id()
+    }}));
+    assert_eq!(response["type"], "chat", "{response}");
+    let chat = response["data"]["id"].as_str().unwrap().to_owned();
+    (agent, chat)
+}
+
+#[test]
+fn messages_reach_a_chat_with_their_files() {
+    let fixture = Fixture::new();
+    fixture.add("worker");
+    let (mut agent, _) = start_test_chat(&fixture, "planning");
+    // The user sends the chat a message with a file, which its inbox shows once.
+    fs::write(fixture.root.path().join("shot.png"), "image").unwrap();
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args(["messages", "send", "Look at this", "--space", "planning"])
+        .args(["--attach", "shot.png#Login screen"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let messages = fixture.ok(&["messages", "planning"]);
+    assert_eq!(messages[0]["message"], "Look at this", "{messages}");
+    let copy = Path::new(messages[0]["attachments"][0].as_str().unwrap());
+    assert_eq!(fs::read_to_string(copy).unwrap(), "image");
+    let files = fixture.ok(&["files", "planning"]);
+    assert_eq!(files[0]["source"], "message", "{files}");
+    assert_eq!(files[0]["title"], "Login screen", "{files}");
+    assert_eq!(fixture.ok(&["messages", "planning"]), serde_json::json!([]));
+    // A workspace process cannot send to a chat.
+    let output = scoped_command(
+        &fixture,
+        "worker",
+        &["messages", "send", "hi", "--space", "planning"],
+    );
+    assert!(!output.status.success(), "{output:?}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
 }
 
 #[test]
@@ -27283,7 +27318,7 @@ fn an_idle_codex_with_updates_is_prompted_in_its_zmx_session() {
         "messages",
         "send",
         "Rebase onto main",
-        "--workspace",
+        "--space",
         "prompted",
     ]);
     let home = fixture.root.path();

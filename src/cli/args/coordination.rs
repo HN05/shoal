@@ -6,15 +6,17 @@ use clap::{Args, Subcommand};
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum CoordinationCommand {
-    /// Read new messages or send one to a workspace's agents.
+    /// Read new messages or send one to a space's agents.
     #[command(args_conflicts_with_subcommands = true)]
     Messages {
         #[command(subcommand)]
         command: Option<MessagesCommand>,
-        workspace: Option<String>,
+        /// Space, a workspace or chat, whose messages to read; defaults to the
+        /// current chat or workspace, or a picker.
+        space: Option<String>,
         /// Run as an agent hook: read the hook event on stdin, print new
         /// messages as additional context, and never fail the agent.
-        #[arg(long, conflicts_with = "workspace")]
+        #[arg(long, conflicts_with = "space")]
         hook: bool,
     },
     /// Review and answer questions from workspace agents.
@@ -117,7 +119,7 @@ pub struct QuestionsArgs {
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum MessagesCommand {
-    /// Queue a message for the agents working in a workspace.
+    /// Queue a message for the agents working in a space.
     Send {
         /// Text such as "Stop the dev server before running tests".
         #[arg(required_unless_present_any = ["body_file", "attach"])]
@@ -130,11 +132,13 @@ pub enum MessagesCommand {
         /// repeat for more.
         #[arg(long = "attach", value_name = "FILE")]
         attach: Vec<String>,
-        /// Workspace to use; defaults to the current workspace or picker.
+        /// Space, a workspace or chat, to send to; defaults to the current
+        /// chat or workspace, or a picker.
         #[arg(long, conflicts_with = "all")]
-        workspace: Option<String>,
+        space: Option<String>,
         /// Send to every workspace of the repository with a running agent,
-        /// such as to have them rebase onto a fix on the default branch.
+        /// such as to have them rebase onto a fix on the default branch;
+        /// chats are left out, since such messages are about branches.
         #[arg(long)]
         all: bool,
         /// Repository whose agents --all reaches; defaults to the current one.

@@ -5,24 +5,74 @@
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 
+use std::path::PathBuf;
+
 use crate::daemon::{
     agent_messages::{AgentMessage, MAX_UNREAD, MAX_UNREAD_BYTES},
     links::wait::{RESPONSE_LIMIT, Updates},
     notifications::{self, About, NotificationKind},
     workspace::Manager,
+    workspace_files::{self, Attacher, NewFile, layout::Copy},
 };
 
 impl Manager {
     /// Queue a message from the user for the running chat `chat` names by ID
-    /// or name. It is dropped if the chat ends first.
-    pub async fn send_chat_message(&self, chat: &str, message: String) -> Result<()> {
-        crate::validate::agent_message(&message)?;
+    /// or name, with copies of `attachments`, which the chat's attached files
+    /// list from then on as attached by `attacher`; without text, the files
+    /// are the message. It is dropped if the chat ends first.
+    pub async fn send_chat_message(
+        &self,
+        chat: &str,
+        message: String,
+        attachments: Vec<NewFile>,
+        attacher: &Attacher,
+    ) -> Result<()> {
+        if !message.is_empty() || attachments.is_empty() {
+            crate::validate::agent_message(&message)?;
+        }
         let chat = self
             .running_chat(chat)
             .await?
             .with_context(|| format!("no running chat {chat}"))?;
-        self.queue_chat_message(&chat.id, None, None, None, message)
-            .await
+        if attachments.is_empty() {
+            return self
+                .queue_chat_message(&chat.id, None, None, None, message)
+                .await;
+        }
+        let id = chat.id.clone();
+        let text = message.clone();
+        self.queue_attached(chat.into(), &text, attachments, |copies| {
+            self.queue_attached_chat_message(id, message, copies, attacher.clone())
+        })
+        .await
+    }
+
+    /// Queue `message` from the user with Shoal's copies `attachments`,
+    /// which the chat's attached files list from then on as attached by
+    /// `attacher`.
+    async fn queue_attached_chat_message(
+        &self,
+        chat: String,
+        message: String,
+        attachments: Vec<Copy>,
+        attacher: Attacher,
+    ) -> Result<()> {
+        let queued = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let paths: Vec<_> = attachments.iter().map(|copy| copy.path.clone()).collect();
+                let queued = insert(&tx, &chat, &About::default(), None, &message, &paths)?;
+                let source = workspace_files::FileSource::Message;
+                workspace_files::record(&tx, &chat, source, Some(&attacher), &attachments)?;
+                tx.commit()?;
+                Ok(queued)
+            })
+            .await?;
+        if queued {
+            self.signals.chat_message_queued();
+        }
+        Ok(())
     }
 
     /// Queue `message` for the chat, about the workspace named `workspace`
@@ -48,7 +98,7 @@ impl Manager {
                     id: workspace_id,
                     subject: None,
                 };
-                let queued = insert(&tx, &chat, &about, kind, &message)?;
+                let queued = insert(&tx, &chat, &about, kind, &message, &[])?;
                 tx.commit()?;
                 Ok(queued)
             })
@@ -67,7 +117,7 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .prepare(
-                        "SELECT id,created_at,workspace,message FROM chat_messages
+                        "SELECT id,created_at,workspace,message,attachments FROM chat_messages
                             WHERE chat_id=?1 ORDER BY id",
                     )?
                     .query_map([chat], |row| {
@@ -80,7 +130,8 @@ impl Manager {
                             } else {
                                 format!("{workspace}: {message}")
                             },
-                            attachments: Vec::new(),
+                            attachments: crate::daemon::store::json_column(row, "attachments")?
+                                .unwrap_or_default(),
                         })
                     })?
                     .collect::<rusqlite::Result<_>>()?)
@@ -143,19 +194,23 @@ impl Manager {
 }
 
 /// Queue a message about the named workspace, or from the user without one,
-/// in the caller's transaction, returning whether it was new.
+/// with the files `attachments` Shoal has copied, in the caller's
+/// transaction, returning whether it was new.
 fn insert(
     tx: &Transaction<'_>,
     chat: &str,
     about: &About,
     kind: Option<NotificationKind>,
     message: &str,
+    attachments: &[PathBuf],
 ) -> Result<bool> {
     let workspace = about.name.as_deref().unwrap_or_default();
+    let attachments = serde_json::to_string(attachments)?;
     let pending: Option<i64> = tx
         .query_row(
-            "SELECT id FROM chat_messages WHERE chat_id=?1 AND workspace=?2 AND message=?3",
-            params![chat, workspace, message],
+            "SELECT id FROM chat_messages
+                WHERE chat_id=?1 AND workspace=?2 AND message=?3 AND attachments=?4",
+            params![chat, workspace, message, attachments],
             |row| row.get(0),
         )
         .optional()?;
@@ -163,7 +218,8 @@ fn insert(
         return Ok(false);
     }
     let (unread, bytes): (i64, i64) = tx.query_row(
-        "SELECT COUNT(*),COALESCE(SUM(LENGTH(CAST(workspace || message AS BLOB))),0)
+        "SELECT COUNT(*),
+                COALESCE(SUM(LENGTH(CAST(workspace || message || attachments AS BLOB))),0)
             FROM chat_messages WHERE chat_id=?1",
         [chat],
         |row| Ok((row.get(0)?, row.get(1)?)),
@@ -173,19 +229,22 @@ fn insert(
         "the chat already has {MAX_UNREAD} unread messages"
     );
     ensure!(
-        usize::try_from(bytes)? + workspace.len() + message.len() <= MAX_UNREAD_BYTES,
+        usize::try_from(bytes)? + workspace.len() + message.len() + attachments.len()
+            <= MAX_UNREAD_BYTES,
         "the chat's unread messages would exceed {MAX_UNREAD_BYTES} bytes"
     );
     tx.execute(
-        "INSERT INTO chat_messages(chat_id,created_at,workspace,workspace_id,kind,message)
-            VALUES (?1,?2,?3,COALESCE(?4,(SELECT id FROM workspaces WHERE name=?3)),?5,?6)",
+        "INSERT INTO chat_messages
+            (chat_id,created_at,workspace,workspace_id,kind,message,attachments)
+            VALUES (?1,?2,?3,COALESCE(?4,(SELECT id FROM workspaces WHERE name=?3)),?5,?6,?7)",
         params![
             chat,
             i64::try_from(crate::time::unix_seconds())?,
             workspace,
             about.id,
             kind,
-            message
+            message,
+            attachments
         ],
     )?;
     Ok(true)

@@ -1,6 +1,6 @@
-//! `shoal messages send` queues a message for a workspace's agents, or with
-//! `--all` for every running agent of a repository; `shoal messages`
-//! shows the workspace's undelivered messages once.
+//! `shoal messages send` queues a message for a space's agents, or with
+//! `--all` for every running agent of a repository's workspaces;
+//! `shoal messages` shows the space's undelivered messages once.
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -27,8 +27,8 @@ use crate::{
 
 /// Who `shoal messages send` reaches.
 pub(super) enum Recipients {
-    /// The agents of the named workspace, else the current one or a picked one.
-    Workspace(Option<String>),
+    /// The agents of the named space, else the current one or a picked one.
+    Space(Option<String>),
     /// Every running agent of the named repository, else the current one.
     Repository(Option<String>),
 }
@@ -43,33 +43,31 @@ pub(super) async fn send(
     let message = message_text(message, body_file, !attach.is_empty())?;
     let attachments = attachments(&attach)?;
     match recipients {
-        Recipients::Workspace(workspace) => {
-            send_to_workspace(ctx, workspace, message, attachments).await
-        }
+        Recipients::Space(space) => send_to_space(ctx, space, message, attachments).await,
         Recipients::Repository(repository) => {
             send_to_repository(ctx, repository, message, attachments).await
         }
     }
 }
 
-async fn send_to_workspace(
+async fn send_to_space(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     message: String,
     attachments: Vec<NewFile>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     request::<()>(
         &ctx.paths,
         AgentMethod::SendAgentMessage {
-            workspace,
+            space,
             message,
             attachments,
             sender_chat: crate::env::chat(),
         },
     )
     .await?;
-    ctx.emit("Message queued for the workspace's agents.", ())?;
+    ctx.emit("Message queued.", ())?;
     Ok(0)
 }
 
@@ -166,11 +164,9 @@ fn message_text(
     }
 }
 
-pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let inbox = match workspace {
-        Some(workspace) => Inbox::Workspace(workspace),
-        None => Inbox::current(ctx, Fallback::CurrentDirectory).await?,
-    };
+pub(super) async fn show(ctx: &Context, space: Option<String>) -> Result<i32> {
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let inbox = Inbox::named(ctx, &space).await?;
     let messages = inbox.messages(ctx).await?;
     ctx.show(&messages, |messages| {
         let palette = Palette::stdout(ctx.json);
@@ -387,8 +383,10 @@ impl WakeWait {
         let inbox = match &self.inbox {
             Some(inbox) => inbox,
             None => {
-                let space = self.space.clone();
-                let inbox = Inbox::select(ctx, space, Fallback::OwnWorkspace).await?;
+                let inbox = match &self.space {
+                    Some(space) => Inbox::named(ctx, space).await?,
+                    None => Inbox::current(ctx, Fallback::OwnWorkspace).await?,
+                };
                 self.inbox.insert(inbox)
             }
         };
@@ -425,12 +423,9 @@ enum Inbox {
 }
 
 impl Inbox {
-    /// The inbox of the space `explicit` names, else [`Self::current`].
-    async fn select(ctx: &Context, explicit: Option<String>, fallback: Fallback) -> Result<Self> {
-        let Some(space) = explicit else {
-            return Self::current(ctx, fallback).await;
-        };
-        match client::present_space(&ctx.paths, &space).await? {
+    /// The inbox of the workspace or running chat `space` names.
+    async fn named(ctx: &Context, space: &str) -> Result<Self> {
+        match client::present_space(&ctx.paths, space).await? {
             Some(PresentSpace::Workspace(workspace)) => Ok(Self::Workspace(workspace.id)),
             Some(PresentSpace::Chat(chat)) => Ok(Self::Chat(chat.id)),
             None => bail!("no workspace or running chat {space}"),
@@ -461,7 +456,10 @@ impl Inbox {
                 let workspace = workspace.clone();
                 request(&ctx.paths, AgentMethod::AgentMessages { workspace }).await
             }
-            Self::Chat(chat) => Ok(chat_updates(ctx, chat).await?.messages),
+            Self::Chat(chat) => {
+                let chat = chat.clone();
+                request(&ctx.paths, ChatMethod::ChatMessages { chat }).await
+            }
         }
     }
 

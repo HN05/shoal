@@ -397,7 +397,7 @@ messages naming the child instead of reaching the user; `shoal files <child>`
 shows the files it hands back with `done --attach`. Answer its questions
 with `shoal questions <number> --answer <answer>`, or ask the user yourself with
 `shoal questions ask` when the decision is theirs. Send it instructions with
-`shoal messages send --workspace <child> "<text>"`, or `--body-file <path>` for
+`shoal messages send --space <child> "<text>"`, or `--body-file <path>` for
 several lines; `--attach FILE` hands it a file such as a log or screenshot.
 `shoal stop <child>` stops its agent and those below it, keeping their sessions
 (`--skip-children` stops only the child) and cancelling agents still queued to

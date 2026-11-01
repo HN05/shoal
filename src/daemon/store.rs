@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 106;
+const SCHEMA_VERSION: i64 = 107;
 
 #[cfg(test)]
 mod benchmark;
@@ -451,7 +451,12 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (104, include_str!("store/saved_chats.sql"), None),
     (105, STOPPED_CHAT_PROCESSES, None),
     (106, include_str!("store/review_false_positive_failures.sql"), None),
+    (107, CHAT_MESSAGE_ATTACHMENTS, None),
 ];
+
+/// The JSON array of paths of the files attached to a chat's message.
+const CHAT_MESSAGE_ATTACHMENTS: &str =
+    "ALTER TABLE chat_messages ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';";
 
 /// Whether an agent asked the question in its chat, where the user may
 /// reply instead of answering it, and whether the agent an execution runs

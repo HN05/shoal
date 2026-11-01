@@ -797,7 +797,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         // its agents are listed.
         let methods = [
             AgentMethod::SendAgentMessage {
-                workspace: name(),
+                space: name(),
                 message: "Rebase onto main".into(),
                 attachments: Vec::new(),
                 sender_chat: None,

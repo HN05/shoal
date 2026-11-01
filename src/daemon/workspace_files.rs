@@ -103,6 +103,29 @@ pub(crate) async fn discard(kept: Kept) {
 }
 
 impl Manager {
+    /// Copy `attachments` into the files of `space` and queue `message` with
+    /// the copies through `queue`, deleting the copies made for a message it
+    /// refuses.
+    pub(crate) async fn queue_attached<Queue, Queued>(
+        &self,
+        space: Space,
+        message: &str,
+        attachments: Vec<NewFile>,
+        queue: Queue,
+    ) -> Result<()>
+    where
+        Queue: FnOnce(Vec<layout::Copy>) -> Queued,
+        Queued: Future<Output = Result<()>>,
+    {
+        let (layout, _files) = self.lock_files(&space).await?;
+        let kept = keep(layout, &space.id, message, attachments).await?;
+        let queued = queue(kept.copies.clone()).await;
+        if queued.is_err() {
+            discard(kept).await;
+        }
+        queued
+    }
+
     /// Who a request from `caller` attaches files as: the agent it comes
     /// from, else the running chat `sender_chat` whose agent sends it
     /// outside any workspace scope, else the user.

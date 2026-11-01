@@ -133,14 +133,14 @@ pub(super) async fn handle(
                 .await?,
         ),
         AgentMethod::SendAgentMessage {
-            workspace,
+            space,
             message,
             attachments,
             sender_chat,
         } => {
             let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
             manager
-                .send_agent_message(&workspace, message, attachments, &attacher)
+                .send_space_message(&space, message, attachments, &attacher)
                 .await?;
             Body::Ok
         }
@@ -225,7 +225,7 @@ impl Scoped for AgentMethod {
                     )
                     .await?,
             ),
-            AgentMethod::SendAgentMessage { workspace, .. } => Some(
+            AgentMethod::SendAgentMessage { space: workspace, .. } => Some(
                 manager
                     .workspace_below(
                         caller,

@@ -93,9 +93,9 @@ pub enum AgentMethod {
     AgentSession {
         workspace: String,
     },
-    /// A message from the user to a workspace's agents.
+    /// A message to the agents of a workspace or running chat.
     SendAgentMessage {
-        workspace: String,
+        space: String,
         message: String,
         /// Files to attach by absolute path, which the daemon copies.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

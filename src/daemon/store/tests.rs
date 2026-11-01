@@ -353,6 +353,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 106 {
         db.execute_batch(include_str!("review_false_positive_failures.sql"))?;
     }
+    if version >= 107 {
+        db.execute_batch(CHAT_MESSAGE_ATTACHMENTS)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

@@ -67,7 +67,7 @@ pub(in crate::cli::commands) async fn request_title(
     request::<()>(
         &ctx.paths,
         AgentMethod::SendAgentMessage {
-            workspace: workspace.id,
+            space: workspace.id,
             message: TITLE_REQUEST.into(),
             attachments: Vec::new(),
             sender_chat: None,

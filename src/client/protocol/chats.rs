@@ -55,7 +55,7 @@ pub enum ChatMethod {
         name: String,
     },
     /// A message from the user to the agent of the running chat `chat`, by
-    /// ID or name.
+    /// ID or name, which other senders send as [`super::AgentMethod::SendAgentMessage`].
     SendChatMessage {
         chat: String,
         message: String,
@@ -68,6 +68,11 @@ pub enum ChatMethod {
     /// take now.
     FreeChatName {
         name: String,
+    },
+    /// The chat's undelivered messages, oldest first, leaving a running wait
+    /// for them in place.
+    ChatMessages {
+        chat: String,
     },
     /// The chat's undelivered messages about the workspaces it coordinates,
     /// without waiting; acknowledge them with

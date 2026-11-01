@@ -2,6 +2,7 @@ use crate::{
     daemon::{
         notifications::NotificationKind,
         workspace::{Manager, Source},
+        workspace_files::Attacher,
     },
     model::{Chat, Workspace},
     state::AgentState,
@@ -183,7 +184,12 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
         async move { manager.wait_chat_messages(&chat).await }
     });
     manager
-        .send_chat_message(&chat.name, "Pick a new name".into())
+        .send_chat_message(
+            &chat.name,
+            "Pick a new name".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let woken = waiting.await.unwrap().unwrap();
@@ -191,13 +197,23 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
 
     // Sent again before the chat reads it, by ID this time, it collapses.
     manager
-        .send_chat_message(&chat.id, "Pick a new name".into())
+        .send_chat_message(
+            &chat.id,
+            "Pick a new name".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(received(&manager, &chat).await, ["Pick a new name"]);
 
     let error = manager
-        .send_chat_message("missing", "Pick a new name".into())
+        .send_chat_message(
+            "missing",
+            "Pick a new name".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap_err();
     assert_eq!(error.to_string(), "no running chat missing");

@@ -7,6 +7,7 @@ use super::super::{
     answer::Answer,
     scope::{Caller, Scoped, denied},
     workspace::Manager,
+    workspace_files::Attacher,
 };
 use crate::protocol::{Body, ChatMethod};
 
@@ -49,7 +50,9 @@ pub(super) async fn handle(
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
         ChatMethod::RenameChat { chat, name } => Body::Chat(manager.rename_chat(chat, name).await?),
         ChatMethod::SendChatMessage { chat, message } => {
-            manager.send_chat_message(&chat, message).await?;
+            manager
+                .send_chat_message(&chat, message, Vec::new(), &Attacher::User)
+                .await?;
             Body::Ok
         }
         ChatMethod::CheckChatName { name } => {
@@ -57,6 +60,9 @@ pub(super) async fn handle(
             Body::Ok
         }
         ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),
+        ChatMethod::ChatMessages { chat } => {
+            Body::AgentMessages(manager.chat_messages(&chat).await?)
+        }
         ChatMethod::ChatUpdates { chat } => Body::PrUpdates(manager.chat_updates(&chat).await?),
         ChatMethod::AcknowledgeChatMessages {
             chat,
@@ -83,6 +89,7 @@ impl Scoped for ChatMethod {
             | ChatMethod::SendChatMessage { .. }
             | ChatMethod::CheckChatName { .. }
             | ChatMethod::FreeChatName { .. }
+            | ChatMethod::ChatMessages { .. }
             | ChatMethod::ChatUpdates { .. }
             | ChatMethod::WaitChatMessages { .. }
             | ChatMethod::AcknowledgeChatMessages { .. } => return Err(denied()),

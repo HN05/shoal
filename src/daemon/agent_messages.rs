@@ -14,7 +14,7 @@ use crate::{
         workspace::Manager,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
     },
-    model::Workspace,
+    model::{PresentSpace, Workspace},
     repository::Selector,
     state::WorkspaceState,
 };
@@ -176,21 +176,34 @@ impl Manager {
         if attachments.is_empty() {
             return self.queue_agent_message(&workspace.id, message).await;
         }
-        let (layout, _files) = self.lock_files(&workspace.clone().into()).await?;
-        let kept = workspace_files::keep(layout, &workspace.id, &message, attachments).await?;
-        let queued = self
-            .queue_attached_message(
-                &workspace.id,
-                message,
-                kept.copies.clone(),
-                Some(attacher.clone()),
-                Delivery::Wake,
-            )
-            .await;
-        if queued.is_err() {
-            workspace_files::discard(kept).await;
+        let id = workspace.id.clone();
+        let text = message.clone();
+        self.queue_attached(workspace.into(), &text, attachments, |copies| {
+            let attacher = Some(attacher.clone());
+            self.queue_attached_message(&id, message, copies, attacher, Delivery::Wake)
+        })
+        .await
+    }
+
+    /// [`Self::send_agent_message`] to the workspace, or
+    /// [`Self::send_chat_message`] to the running chat, `selector` names.
+    pub async fn send_space_message(
+        &self,
+        selector: &str,
+        message: String,
+        attachments: Vec<NewFile>,
+        attacher: &Attacher,
+    ) -> Result<()> {
+        match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                self.send_agent_message(&workspace.id, message, attachments, attacher)
+                    .await
+            }
+            PresentSpace::Chat(chat) => {
+                self.send_chat_message(&chat.id, message, attachments, attacher)
+                    .await
+            }
         }
-        queued
     }
 
     /// [`Self::send_agent_message`] to every workspace of `repository` with

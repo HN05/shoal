@@ -117,7 +117,7 @@ In a `shoal chat`, the agents of the workspaces you open report to you instead
 of the user: their messages, questions, completion, ready marks and exits
 arrive as Shoal messages naming the workspace, and `shoal files <name>` shows the
 files a finished workspace handed back. Answer what you can decide with
-`shoal questions`, write to an agent with `shoal messages send --workspace <name>`
+`shoal questions`, write to an agent with `shoal messages send --space <name>`
 (`--attach FILE` hands it a file), and ask the user about the rest.
 
 ## Finish and clean up

@@ -216,7 +216,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
         }
     }
     let mut method = AgentMethod::SendAgentMessage {
-        workspace: workspace.name.clone(),
+        space: workspace.name.clone(),
         message: "hello".into(),
         attachments: Vec::new(),
         sender_chat: None,
