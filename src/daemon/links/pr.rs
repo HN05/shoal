@@ -87,6 +87,11 @@ impl Manager {
             previous.as_ref(),
             kind.map(|kind| Registration { kind, error: None }),
         );
+        self.record_chat_registration(id, change).await
+    }
+
+    /// Applies `change` to the PR registration of the chat `id`.
+    async fn record_chat_registration(&self, id: String, change: RegistrationChange) -> Result<()> {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
