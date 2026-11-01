@@ -384,6 +384,7 @@ pub(super) async fn start_chat(
         name: chat_name,
         settings,
         model,
+        restores,
         ..
     } = chat;
     super::ensure_available(name, settings)?;
@@ -395,7 +396,16 @@ pub(super) async fn start_chat(
     }
     // This process holds the chat until the session runs, which is not in
     // this terminal.
-    let record = client::start_chat(&ctx.paths, repository, chat_name, name, None, true).await?;
+    let record = client::record_chat(
+        &ctx.paths,
+        repository,
+        chat_name,
+        name,
+        None,
+        true,
+        restores.as_deref(),
+    )
+    .await?;
     let (prompt, args) = chat_input(app, &ctx.paths.home, &record, chat);
     let args = [model_args, args].concat();
     let files = ctx.paths.chat_files(&record);

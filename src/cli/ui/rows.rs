@@ -114,8 +114,8 @@ pub fn workspace_rows(
     rows_with_status(workspaces, repositories, statuses, palette, width, true)
 }
 
-/// `workspace_rows` for workspaces and the running chats that opened some
-/// of them: the user's own workspaces, then each chat followed by its
+/// `workspace_rows` for workspaces and the running and saved chats that
+/// opened some of them: the user's own workspaces, then each chat followed by its
 /// workspaces, indented. Child workspaces follow their parent, indented
 /// below it. A chat row names the chat, its status and its agent.
 pub fn workspace_tree_rows(
@@ -233,7 +233,7 @@ pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> E
 }
 
 fn chat_row(chat: &Chat, palette: Palette) -> (String, [Cell; 5]) {
-    let status = ListStatus::ProcessRunning;
+    let status = ListStatus::of_chat(chat);
     (
         palette.paint(Style::Heading, "◆"),
         [

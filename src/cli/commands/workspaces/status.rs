@@ -51,7 +51,7 @@ pub(in crate::cli::commands) async fn status(
 /// The status of `workspace`, with the sessions its terminal hosts keep.
 async fn status_view(ctx: &Context, workspace: String) -> Result<StatusView> {
     // Listing chats first ends finished ones, returning their workspaces to the user.
-    let chats = client::chats(&ctx.paths).await?;
+    let chats = client::recorded_chats(&ctx.paths).await?;
     let status =
         request::<WorkspaceStatus>(&ctx.paths, WorkspaceMethod::WorkspaceStatus { workspace })
             .await?;

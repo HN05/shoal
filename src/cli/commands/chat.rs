@@ -59,6 +59,9 @@ pub(super) struct Options {
     /// The agent session the chat continues, such as one `shoal move
     /// import` brought, instead of starting a new one.
     pub session: Option<String>,
+    /// The saved chat, by ID, that this start restores under its own name
+    /// instead of recording a new one.
+    pub restore: Option<String>,
 }
 
 /// Where a chat runs.
@@ -85,10 +88,11 @@ impl ChatPlace {
 
 impl Options {
     /// Refuse a `--name` the daemon would refuse, before any picker opens.
+    /// A restored chat keeps its own.
     pub async fn check_name(&self, ctx: &Context) -> Result<()> {
-        match &self.name {
-            Some(name) => client::check_chat_name(&ctx.paths, name).await,
-            None => Ok(()),
+        match (&self.name, &self.restore) {
+            (Some(name), None) => client::check_chat_name(&ctx.paths, name).await,
+            _ => Ok(()),
         }
     }
 }
@@ -180,6 +184,7 @@ pub(super) async fn launch(
         model,
         args,
         session,
+        restore,
     } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
@@ -197,6 +202,7 @@ pub(super) async fn launch(
         repository: repo,
         settings,
         args: [resumed.clone(), args.clone()].concat(),
+        restores: restore.clone(),
     };
     if let Some(code) = agents::start_chat(ctx, agent.name(), &launch).await? {
         return Ok(Started::Exited(code));
@@ -218,6 +224,7 @@ pub(super) async fn launch(
         model: &model,
         args: &args,
         session: session.as_deref(),
+        restore: restore.as_deref(),
     };
     if place == ChatPlace::Background {
         let note = terminal::start_chat_in_background(
@@ -246,13 +253,14 @@ pub(super) async fn launch(
         return Ok(Started::Exited(0));
     }
     agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
-    let chat = client::start_chat(
+    let chat = client::record_chat(
         &ctx.paths,
         &repo,
         &name,
         agent.name(),
         terminal::current_place().await,
         false,
+        restore.as_deref(),
     )
     .await?;
     let command = command(
@@ -370,9 +378,9 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     Ok(0)
 }
 
-/// The running chats `filter` keeps.
+/// The running and saved chats `filter` keeps.
 pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<Chat>> {
-    let mut chats = client::chats(&ctx.paths).await?;
+    let mut chats = client::recorded_chats(&ctx.paths).await?;
     chats.retain(|chat| filter.keeps_chat(chat));
     Ok(chats)
 }
@@ -434,7 +442,8 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
 }
 
 /// A chat to start in a new place: its topic, name, agent, requested model,
-/// forwarded arguments and the session it continues.
+/// forwarded arguments, the session it continues and the saved chat it
+/// restores.
 struct Beside<'a> {
     topic: &'a Topic,
     name: &'a str,
@@ -442,6 +451,7 @@ struct Beside<'a> {
     model: &'a ModelChoice,
     args: &'a [OsString],
     session: Option<&'a str>,
+    restore: Option<&'a str>,
 }
 
 impl Beside<'_> {
@@ -465,6 +475,9 @@ impl Beside<'_> {
         }
         if let Some(session) = self.session {
             chat.extend(["--session".into(), session.into()]);
+        }
+        if let Some(restore) = self.restore {
+            chat.extend(["--restore".into(), restore.into()]);
         }
         if !self.args.is_empty() {
             chat.push("--".into());

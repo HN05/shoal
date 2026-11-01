@@ -26,6 +26,18 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             opened_in,
             close_in,
         } => {
+            let (chats, targets) = resume::chats::split(&ctx, targets).await?;
+            if !chats.is_empty() {
+                return resume::chats::resume(
+                    &ctx,
+                    chats,
+                    &targets,
+                    execution.as_deref(),
+                    discard,
+                    focus,
+                )
+                .await;
+            }
             if let Some(host) = opened_in {
                 resume::record_place(&ctx, host, &targets).await;
             }

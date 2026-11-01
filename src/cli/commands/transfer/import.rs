@@ -211,6 +211,7 @@ impl Package {
             model: Default::default(),
             args: Vec::new(),
             session,
+            restore: None,
         })
     }
 }

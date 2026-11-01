@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     client::output::{batch::Failure, outputs},
-    model::{QueueEntry, RemovedWorkspace, Workspace},
+    model::{Chat, QueueEntry, RemovedWorkspace, Workspace},
 };
 
 /// A workspace's stopped commands, which Shoal reports rather than reruns.
@@ -61,4 +61,38 @@ pub struct Reopened {
     pub queued: Option<Queued>,
 }
 
-outputs!(StoppedCommands, Resumed, DiscardedWork, Queued, Reopened);
+/// A saved chat a resume restored in the background.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestoredChat {
+    pub chat: String,
+    pub agent: String,
+    pub repository: String,
+    /// Where it runs and how to reach it, as the host that runs it says;
+    /// none when an app runs it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<String>,
+}
+
+/// The saved chats a resume restored, and those it failed for.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestoredChats {
+    pub restored: Vec<RestoredChat>,
+    pub failed: Vec<Failure>,
+}
+
+/// The saved chats a discard ended, and those it failed for.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscardedChats {
+    pub discarded: Vec<Chat>,
+    pub failed: Vec<Failure>,
+}
+
+outputs!(
+    StoppedCommands,
+    Resumed,
+    DiscardedWork,
+    Queued,
+    Reopened,
+    RestoredChats,
+    DiscardedChats
+);

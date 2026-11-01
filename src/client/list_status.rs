@@ -1,11 +1,11 @@
 //! The status column of workspace and agent queue lists, and the marker
 //! that starts each row.
 use crate::{
-    model::{QueueEntry, Workspace},
+    model::{Chat, QueueEntry, Workspace},
     state::{AgentState, QueueState, WorkspaceState},
 };
 
-/// What a list row shows a workspace or queued agent doing. Its value name
+/// What a list row shows a workspace, chat or queued agent doing. Its value name
 /// is the row's label in kebab case.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
@@ -57,6 +57,15 @@ impl ListStatus {
                 None if outdated => Self::ReadyOutdated,
                 None => Self::Inactive,
             },
+        }
+    }
+
+    /// A chat Shoal saved is stopped until it is restored; another runs
+    /// without a reported turn state.
+    pub fn of_chat(chat: &Chat) -> Self {
+        match chat.restore {
+            Some(_) => Self::Stopped,
+            None => Self::ProcessRunning,
         }
     }
 

@@ -40,6 +40,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                 model: model.into(),
                 args,
                 session: None,
+                restore: None,
             };
             super::repo_setup::start(ctx, repository, local, options).await
         }

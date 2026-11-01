@@ -68,6 +68,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             name,
             model,
             session,
+            restore,
             args,
         } => {
             let options = chat::Options {
@@ -77,6 +78,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
                 model: model.into(),
                 args,
                 session,
+                restore,
             };
             chat::start(&ctx, repository, options).await
         }
@@ -103,6 +105,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
                 model: model.into(),
                 args,
                 session: None,
+                restore: None,
             };
             plan::start(&ctx, issue, repository, pick, options).await
         }

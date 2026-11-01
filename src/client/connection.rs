@@ -449,7 +449,62 @@ pub async fn move_chat(daemon: &impl Daemon, chat: &Chat, pid: u32) -> Result<Ch
 
 /// Running chats; listing them ends those whose agent exited.
 pub async fn chats(daemon: &impl Daemon) -> Result<Vec<Chat>> {
+    let mut chats = recorded_chats(daemon).await?;
+    chats.retain(|chat| chat.restore.is_none());
+    Ok(chats)
+}
+
+/// Running chats and those Shoal saved to restore.
+pub async fn recorded_chats(daemon: &impl Daemon) -> Result<Vec<Chat>> {
     request(daemon, ChatMethod::ListChats).await
+}
+
+/// [`start_chat`], or for a start that `restores` a saved chat, by ID,
+/// [`restore_chat`], which keeps the chat's own name and agent.
+pub async fn record_chat(
+    daemon: &impl Daemon,
+    repository: &Repository,
+    name: &str,
+    agent: &str,
+    origin: Option<crate::client::sessions::Origin>,
+    hands_over: bool,
+    restores: Option<&str>,
+) -> Result<Chat> {
+    match restores {
+        Some(chat) => restore_chat(daemon, chat, origin, hands_over).await,
+        None => start_chat(daemon, repository, name, agent, origin, hands_over).await,
+    }
+}
+
+/// Run the saved chat `chat`, by ID, again in this process, as
+/// [`start_chat`] records a new chat.
+pub async fn restore_chat(
+    daemon: &impl Daemon,
+    chat: &str,
+    origin: Option<crate::client::sessions::Origin>,
+    hands_over: bool,
+) -> Result<Chat> {
+    request(
+        daemon,
+        ChatMethod::RestoreChat {
+            chat: chat.to_owned(),
+            pid: std::process::id(),
+            origin,
+            hands_over,
+        },
+    )
+    .await
+}
+
+/// End the saved chat `chat`, by ID or name, without restoring it.
+pub async fn discard_chat(daemon: &impl Daemon, chat: &str) -> Result<Chat> {
+    request(
+        daemon,
+        ChatMethod::DiscardChat {
+            chat: chat.to_owned(),
+        },
+    )
+    .await
 }
 
 pub async fn repositories(daemon: &impl Daemon) -> Result<Vec<Repository>> {

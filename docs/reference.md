@@ -143,10 +143,12 @@ How the daemon exits decides what becomes of tracked agents and commands:
 - `shoal daemon restart`, `shoal daemon install` when it replaces an
   incompatible daemon, an update, and a crash leave them running.
 - `shoal daemon stop` stops them as `shoal stop --all` does, so agents stay down
-  until `shoal resume`, then stops the daemon.
+  until `shoal resume`, saves and stops running [chats](#chats) for
+  `shoal resume` too, then stops the daemon.
 - SIGTERM or SIGINT, as a shutdown, a logout or a service manager's stop sends,
   stops them as the daemon does before a system shutdown: each wrapper saves its
-  agent first, and restores that need no user wait in the agent queue. The
+  agent first, and restores that need no user wait in the agent queue; running
+  chats are saved and stopped. The
   service definition's `ExitTimeOut` (launchd) or `TimeoutStopSec` (systemd)
   gives the stop time before the service manager kills the daemon.
 
@@ -445,6 +447,10 @@ terminals. `--focus` restores one agent in the current terminal at once,
 regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
+A named [chat](#chats) Shoal saved restores at once under its name, continuing
+its session, in a background place where a restored agent opens, or in this
+terminal with `--focus`; `--discard` ends it instead. Name chats and workspaces
+in separate calls.
 When a stopped agent's execution is unknown, after a daemon restart or a stop
 Shoal could not prove, the daemon forgets it once its wrapper has exited and none
 of its processes remain, keeping the record for `shoal resume`, which repeats the
@@ -1621,14 +1627,19 @@ an earlier chat with its name, at `<state>/chats/<name>.log` and `.prompt.md`;
 the `chat`, `log`, `prompt_file`, `prompt_delivered`, `happy_session_id` and
 `happy_daemon_recorded`. Chats run with your
 authority, not a workspace scope, and workspace processes cannot start one.
-Chats are not tracked executions, so they are never queued, stopped under
-pressure or restored by `shoal resume`. The daemon records each chat under its
+Chats are not tracked executions, so they are never queued or stopped under
+pressure. The daemon records each chat under its
 name while its agent process runs, with the session the agent's session-start
 hook last reported, which [`shoal move`](#move-a-space-to-another-machine)
-continues on another machine. Workspaces and running chats share one set of names across
+continues on another machine. A chat running when the daemon stops for a
+shutdown, a logout, a signal or `shoal daemon stop` is saved and stopped, and
+waits for `shoal resume <chat>`, which restores it under its name, continuing
+its session. A saved chat keeps its files, messages,
+workspaces and `TMPDIR`, `shoal work` lists it as `stopped`, and
+`shoal resume <chat> --discard` ends it. Workspaces and chats share one set of names across
 repositories: a chat cannot take a workspace's name or a name an unfinished
-rename reserves, and a workspace cannot be created or renamed to a running
-chat's name. The name frees once the chat's process ends.
+rename reserves, and a workspace cannot be created or renamed to a chat's name.
+The name frees once the chat ends.
 
 `shoal chat rename [chat] NAME` gives a running chat, `shoal plan` chats
 included, a new name that is free as a new chat's would be, and frees the old

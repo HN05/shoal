@@ -920,6 +920,7 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
     Some(text)
 }
 
+pub mod chats;
 mod queue;
 
 #[cfg(test)]

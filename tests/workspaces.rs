@@ -7250,6 +7250,90 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
 }
 
 #[test]
+fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
+    let mut fixture = Fixture::with_config(Some(
+        "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n",
+    ));
+    let home = fixture.root.path().to_owned();
+    // The agent reports its session as Claude Code's hook does, writes to
+    // its temporary directory, then talks until a signal ends it; resumed,
+    // it only records how it ran.
+    fs::write(
+        fixture.repo.join("chat-agent.sh"),
+        format!(
+            "printf '%s\\n' \"$@\" > \"$HOME/chat-args\"\n\
+             echo \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\n\
+             echo \"$TMPDIR\" > \"$HOME/chat-tmpdir\"\n\
+             case \" $* \" in *' --resume '*) exit 0;; esac\n\
+             printf '{{\"session_id\":\"chat-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n\
+             touch \"$TMPDIR/notes\" \"$HOME/chat-started\"\n\
+             trap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    let chat = std::thread::scope(|scope| {
+        let chat = scope.spawn(|| {
+            fixture.interactive_command(
+                fixture
+                    .command()
+                    .current_dir(&fixture.repo)
+                    .args(["chat", "--here", "--agent", "claude", "--name", "talk"]),
+                "",
+            )
+        });
+        wait_until("chat started", || home.join("chat-started").exists());
+        let chats = fixture.ok(&["work", "--chats"]);
+        // `shoal daemon stop` saves the chat for `shoal resume`, stopping
+        // its agent.
+        let output = fixture.run(&["daemon", "stop"]);
+        assert!(output.status.success(), "{output:?}");
+        let (output, transcript) = chat.join().unwrap();
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+        chats[0].clone()
+    });
+    assert!(fixture.daemon.child.wait().unwrap().success());
+    fixture.restart();
+    let id = chat["id"].as_str().unwrap();
+    let tmp_dir = PathBuf::from(fs::read_to_string(home.join("chat-tmpdir")).unwrap().trim());
+
+    let saved = fixture.ok(&["work", "--chats"]);
+    assert_eq!(saved[0]["id"], id, "{saved}");
+    assert_eq!(saved[0]["name"], "talk", "{saved}");
+    assert_eq!(saved[0]["restore"], "resume", "{saved}");
+    assert!(tmp_dir.join("notes").exists());
+    let listed = fixture.run(&["--text", "work", "--chats"]);
+    assert!(
+        String::from_utf8_lossy(&listed.stdout).contains("stopped"),
+        "{listed:?}"
+    );
+
+    let (output, transcript) =
+        fixture.interactive_command(fixture.command().args(["resume", "talk", "--focus"]), "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let args = fs::read_to_string(home.join("chat-args")).unwrap();
+    assert!(args.contains("--resume\nchat-session\n"), "{args}");
+    assert_eq!(fs::read_to_string(home.join("chat-id")).unwrap().trim(), id);
+    assert_eq!(
+        fs::read_to_string(home.join("chat-tmpdir")).unwrap().trim(),
+        tmp_dir.to_str().unwrap()
+    );
+    let kinds: Vec<Value> = journal(&fixture)
+        .into_iter()
+        .filter(|event| event["type"] == "chat")
+        .map(|event| event["kind"].clone())
+        .collect();
+    assert_eq!(
+        kinds,
+        ["chat_started", "chat_saved", "chat_restored"],
+        "{kinds:?}"
+    );
+    // The resumed agent exited, which ends the chat at last.
+    assert_eq!(fixture.ok(&["work", "--chats"]), Value::Array(vec![]));
+    assert!(!tmp_dir.exists());
+}
+
+#[test]
 fn registry_survives_daemon_restart() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("persistent");

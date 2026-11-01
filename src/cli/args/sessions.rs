@@ -5,7 +5,7 @@ use clap::Subcommand;
 
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, WorkspaceTargets},
+    cli::args::{AgentParser, SpaceTargets, WorkspaceTargets},
     model::QueuePlace,
     sessions::HostName,
 };
@@ -19,9 +19,11 @@ pub enum SessionsCommand {
     /// agent stopped, otherwise in a background Herdr tab or a detached zmx
     /// session. `--all` leaves out workspaces whose assignment is done. A named workspace
     /// whose agent's turn `shoal stop --interrupt` ended continues that turn instead.
+    /// A named chat Shoal saved restores at once under its name, continuing
+    /// its session.
     Resume {
         #[command(flatten)]
-        targets: WorkspaceTargets,
+        targets: SpaceTargets,
         /// Select a stopped execution when the workspace has several records.
         #[arg(long, conflicts_with = "all")]
         execution: Option<String>,

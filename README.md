@@ -196,6 +196,7 @@ shoal resume --all            # Queue the restore of stopped agents; report stop
 shoal resume fix-login        # Continue its stopped agent, or the turn shoal stop --interrupt ended
 shoal resume fix-login --now  # Restore its stopped agent at once in the background
 shoal resume fix-login --focus # Restore its stopped agent in this terminal
+shoal resume talk             # Restore a chat Shoal saved, continuing its session
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [cleanup.done] enabled = false
 shoal done --attach report.md  # Hand back files, such as an investigation's report

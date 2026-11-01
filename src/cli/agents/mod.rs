@@ -345,6 +345,8 @@ pub(in crate::cli) struct ChatLaunch {
     /// The model and effort it runs with.
     pub model: ModelChoice,
     pub args: Vec<OsString>,
+    /// The saved chat, by ID, it restores instead of recording a new one.
+    pub restores: Option<String>,
 }
 
 /// How a launch relates to the agents around it.

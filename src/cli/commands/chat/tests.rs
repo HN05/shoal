@@ -24,6 +24,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         model: &model,
         args: &args,
         session: None,
+        restore: None,
     };
     assert_eq!(
         beside.relaunch(),
@@ -33,9 +34,11 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         ]
         .map(OsString::from)
     );
-    // A chat continuing a session takes it to the place it opens.
+    // A chat continuing a session takes it to the place it opens, as a
+    // restore takes the saved chat.
     let resumed = Beside {
         session: Some("s1"),
+        restore: Some("c1"),
         ..beside
     };
     assert_eq!(
@@ -52,6 +55,8 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
             "high",
             "--session",
             "s1",
+            "--restore",
+            "c1",
             "--",
             "--search",
         ]
