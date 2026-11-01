@@ -602,7 +602,7 @@ impl Manager {
     /// every space unless `selector` names one.
     pub async fn questions(&self, selector: Option<&str>) -> Result<Listing> {
         let owner = match selector {
-            Some(selector) => Some(self.present_space(selector).await?.id().to_owned()),
+            Some(selector) => Some(self.asking_space(selector).await?),
             None => None,
         };
         let questions = self
@@ -619,6 +619,19 @@ impl Manager {
             })
             .await?;
         newest_that_fit(questions)
+    }
+
+    /// The ID of the workspace or chat `selector` names, whose questions a
+    /// listing keeps: a saved chat keeps its open questions too.
+    async fn asking_space(&self, selector: &str) -> Result<String> {
+        let error = match self.present_space(selector).await {
+            Ok(space) => return Ok(space.id().to_owned()),
+            Err(error) => error,
+        };
+        match self.recorded_chat(selector).await? {
+            Some(chat) => Ok(chat.id),
+            None => Err(error),
+        }
     }
 
     /// Every open question, oldest first, which subscription snapshots page.

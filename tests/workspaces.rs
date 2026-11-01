@@ -7331,6 +7331,8 @@ fn a_saved_chats_open_question_stays_in_the_inbox() {
     fixture.restart();
     let inbox = fixture.ok(&["inbox"]);
     assert_eq!(inbox[0]["question"]["space"], "talk", "{inbox}");
+    let listed = fixture.ok(&["questions", "--space", "talk"]);
+    assert_eq!(listed["questions"][0]["space"], "talk", "{listed}");
 }
 
 #[test]
