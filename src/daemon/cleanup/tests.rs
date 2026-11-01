@@ -1012,3 +1012,41 @@ async fn a_child_keeps_while_its_completed_parent_elsewhere_stalled() {
     assert!(parent.path.exists());
     assert!(child.path.exists());
 }
+
+#[tokio::test]
+async fn pr_cleanup_passes_over_a_stacked_workspace_it_removed_earlier() {
+    use crate::{
+        daemon::links::pr::Action,
+        test_support::{manager, repository},
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager
+        .create_workspace(&repo.id, "base".into(), None, None, None)
+        .await
+        .unwrap();
+    // Its name puts it before its base in the sweep, which still lists it
+    // on the base after removing it.
+    let stacked = manager
+        .create_workspace(
+            &repo.id,
+            "a-stacked".into(),
+            Some("base".into()),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    manager
+        .set_pr(&stacked.id, Action::Acknowledge)
+        .await
+        .unwrap();
+
+    manager.sweep_prs().await.unwrap();
+
+    assert!(!stacked.path.exists());
+}

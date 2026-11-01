@@ -257,13 +257,16 @@ impl Manager {
 
     /// Whether the PR sweep skips `listed`, as [`Manager::sweep_skips`]
     /// tells of it or of a workspace stacked on it, where restacking runs
-    /// Git and may be in another directory.
+    /// Git and may be in another directory. One the sweep removed since the
+    /// listing is passed over.
     async fn pr_sweep_skips(&self, listed: &Workspace) -> Result<bool> {
         if self.sweep_skips(&listed.path).await {
             return Ok(true);
         }
         for stacked in &listed.stacked_workspaces {
-            let stacked = self.workspace(&stacked.id).await?;
+            let Some(stacked) = self.find_workspace(&stacked.id).await? else {
+                continue;
+            };
             if self.sweep_skips(&stacked.path).await {
                 return Ok(true);
             }
