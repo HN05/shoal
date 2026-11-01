@@ -970,13 +970,12 @@ changes. The listing carries a web demo's URL, which the daemon derives as
 opening does, so clients do not rebuild it.
 
 `max_agents` admission belongs to the daemon, so concurrent additions and its
-dispatcher share one count. Slots derive from state the daemon already tracks:
-connected agents, executions awaiting reattachment, resume records and starting
-queue entries, excluding completed workspaces. Agents therefore count however
-they started, and no separate counter can leak a slot. Admitted one-shot runs,
-such as reviews, hold slots through their in-memory requests, which end with the
-run; a run whose processes could not be proven stopped keeps its slot until the
-daemon restarts, which is the only slot not derived from tracked state. `machine.max_agents`
+dispatcher share one count. Slots derive from what the daemon tracks: connected
+agents, executions awaiting reattachment, resume records, starting queue entries
+and admitted one-shot runs such as reviews, excluding completed workspaces.
+Agents therefore count however they started. A one-shot run's slot is its
+in-memory request, which ends with the run, or with the daemon for a run whose
+processes could not be proven stopped, so no slot outlives a restart. `machine.max_agents`
 limits the machine; the repository option `agent.max_running` limits each repository,
 with a global default like any other option, so one name never means both caps.
 The machine setting defaults to `dynamic`, which

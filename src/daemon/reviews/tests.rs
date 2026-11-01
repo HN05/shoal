@@ -892,6 +892,7 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     }
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
+    let repository = fixture.workspace.repository_id.as_str().to_owned();
     let id = fixture.workspace.id.clone();
     let stuck = manager
         .store
@@ -912,6 +913,7 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
         .unwrap();
     let run = manager.paths.reviews().join(stuck.to_string());
     std::fs::create_dir_all(run.join("checkout").join("file")).unwrap();
+    std::fs::write(run.join("repository"), &repository).unwrap();
     // Without write access to the run, its checkout cannot go.
     std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o500)).unwrap();
     manager.recover_reviews().await.unwrap();
@@ -922,6 +924,13 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     manager.recover_reviews().await.unwrap();
     let messages = manager.agent_messages(workspace).await.unwrap();
     assert_eq!(messages.len(), delivered);
+    // Nothing runs there, so only the checkout is held, not a slot.
+    assert!(manager.agent_queue.admitted_oneshots().is_empty());
+    let error = manager.ensure_no_reviews_in(&repository).await.unwrap_err();
+    assert!(
+        error.to_string().contains("shoal daemon restart"),
+        "{error:#}"
+    );
     std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o700)).unwrap();
     let review = manager.review(stuck).await.unwrap();
     assert_eq!(review.state, ReviewState::Failed, "{review:?}");

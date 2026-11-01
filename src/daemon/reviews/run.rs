@@ -425,23 +425,16 @@ impl Manager {
         let unreconciled = self.remove_interrupted_runs().await;
         let kept = match &unreconciled {
             Ok(kept) => kept.clone(),
-            Err(_) => self.store.run(|db| store::running(db)).await?,
+            Err(_) => self.unlisted_runs().await?,
         };
-        for id in &kept {
-            self.hold_unreconciled_run(*id).await;
+        for run in &kept {
+            self.hold_unreconciled_run(*run).await;
         }
+        let ids: Vec<i64> = kept.iter().map(|run| run.id).collect();
         let now = now();
         let (failed, requeued) = self
             .store
-            .run(move |db| {
-                let mut failed = Vec::new();
-                for id in &kept {
-                    if store::fail(db, *id, None, FailureReason::ExecutionFailed, now)? {
-                        failed.push(*id);
-                    }
-                }
-                Ok((failed, store::requeue_running(db, &kept)?))
-            })
+            .run(move |db| store::settle_interrupted(db, &ids, now))
             .await?;
         if requeued > 0 {
             log!("queued {requeued} interrupted reviews again");
@@ -453,17 +446,35 @@ impl Manager {
         unreconciled.map(drop)
     }
 
-    /// Hold what review `id`'s run, which could not be stopped or removed,
-    /// may still use until the daemon restarts: its tracking, its checkout
-    /// of the repository and an agent slot there.
-    async fn hold_unreconciled_run(&self, id: i64) {
+    /// The runs of the running reviews, any of whose processes may still
+    /// run, for when the run directories cannot be listed.
+    async fn unlisted_runs(&self) -> Result<Vec<Unreconciled>> {
+        let running = self.store.run(|db| store::running(db)).await?;
+        Ok(running
+            .into_iter()
+            .map(|id| Unreconciled {
+                id,
+                left_running: true,
+            })
+            .collect())
+    }
+
+    /// Hold what `run`, which could not be removed, may still use until the
+    /// daemon restarts: its checkout of the repository and, when its
+    /// processes may still run, its tracking and an agent slot there.
+    async fn hold_unreconciled_run(&self, run: Unreconciled) {
+        let Unreconciled { id, left_running } = run;
         let files = self.run_files(id);
-        self.oneshot_runs.track(&files.directory);
+        if left_running {
+            self.oneshot_runs.track(&files.directory);
+        }
         // The run names it, as removing the workspace deletes the review.
         match std::fs::read_to_string(files.repository()) {
             Ok(repository) => {
                 self.reviews.hold_checkout(id, &repository).keep();
-                self.agent_queue.hold_oneshot(&repository);
+                if left_running {
+                    self.agent_queue.hold_oneshot(&repository);
+                }
             }
             Err(error) => log!(
                 "review {id}: read {}: {error}",
@@ -472,25 +483,38 @@ impl Manager {
         }
     }
 
-    /// Remove the runs a stopped daemon left, returning the reviews whose
-    /// runs could not be removed; their checkouts stay for the next start.
-    async fn remove_interrupted_runs(&self) -> Result<Vec<i64>> {
+    /// Remove the runs a stopped daemon left, returning those that could
+    /// not be removed; their checkouts stay for the next start.
+    async fn remove_interrupted_runs(&self) -> Result<Vec<Unreconciled>> {
         let mut kept = Vec::new();
         for files in run_directories(&self.paths.reviews())? {
-            if let Err(error) = self.remove_interrupted_run(&files).await {
-                log!("{}: {error:#}", files.directory.display());
-                kept.extend(files.review());
+            let left_running = self.remove_interrupted_run(&files).await;
+            if let (Some(id), Some(left_running)) = (files.review(), left_running) {
+                kept.push(Unreconciled { id, left_running });
             }
         }
         Ok(kept)
     }
 
     /// Remove a run a stopped daemon left, after stopping its reviewer's
-    /// processes.
-    async fn remove_interrupted_run(&self, files: &Files) -> Result<()> {
-        self.oneshot_runs.stop_leftovers(&files.directory).await?;
-        remove_run(files).await
+    /// processes; when it stays, whether they may still run.
+    async fn remove_interrupted_run(&self, files: &Files) -> Option<bool> {
+        if let Err(error) = self.oneshot_runs.stop_leftovers(&files.directory).await {
+            log!("{}: {error:#}", files.directory.display());
+            return Some(true);
+        }
+        let error = remove_run(files).await.err()?;
+        log!("{}: {error:#}", files.directory.display());
+        Some(false)
     }
+}
+
+/// A run a stopped daemon left that recovery could not remove.
+#[derive(Clone, Copy)]
+struct Unreconciled {
+    id: i64,
+    /// Whether its reviewer's processes may still run.
+    left_running: bool,
 }
 
 /// Remove review `id`'s run and give back its checkout and slot. A run whose

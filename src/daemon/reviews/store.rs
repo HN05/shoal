@@ -104,6 +104,23 @@ pub(crate) fn requeue_running(db: &Connection, kept: &[i64]) -> Result<usize> {
     )?)
 }
 
+/// Fail the active reviews among `kept`, whose runs a restart could not
+/// remove, and queue the other running reviews again; returns the reviews
+/// it failed and how many it queued.
+pub(crate) fn settle_interrupted(
+    db: &Connection,
+    kept: &[i64],
+    now: i64,
+) -> Result<(Vec<i64>, usize)> {
+    let mut failed = Vec::new();
+    for id in kept {
+        if fail(db, *id, None, FailureReason::ExecutionFailed, now)? {
+            failed.push(*id);
+        }
+    }
+    Ok((failed, requeue_running(db, kept)?))
+}
+
 /// Queue running review `id` again after protection stopped its run, to wait
 /// for healthy readings; false when it is no longer running.
 pub(crate) fn requeue(db: &Connection, id: i64) -> Result<bool> {
