@@ -129,6 +129,11 @@ pub struct Manager {
     pub(crate) signals: signals::Signals,
     pub(crate) usage: usage::Usage,
     pub(crate) leftovers: crate::daemon::leftovers::Leftovers,
+    /// Held shared from reading the tracked processes until those found
+    /// untracked are stopped, and exclusively to hand a chat to another
+    /// process, so a chat's new process is never found untracked: its
+    /// launcher waits for the handoff and keeps it a tracked descendant.
+    pub(crate) chat_handoffs: tokio::sync::RwLock<()>,
     pub(crate) seeds: super::seed::Seeds,
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     pub(crate) reviews: crate::daemon::reviews::Reviews,
@@ -164,6 +169,7 @@ impl Manager {
             signals: Default::default(),
             usage: Default::default(),
             leftovers: Default::default(),
+            chat_handoffs: Default::default(),
             seeds: Default::default(),
             forge_memories: Default::default(),
             reviews: Default::default(),

@@ -133,7 +133,10 @@ impl Manager {
     /// inventory of this user's processes.
     pub(crate) async fn find_leftovers(&self) -> Result<()> {
         let spaces = self.surveyed_spaces().await?;
-        let found = self.untracked_processes(spaces, None).await?;
+        let found = {
+            let _handoffs = self.chat_handoffs.read().await;
+            self.untracked_processes(spaces, None).await?
+        };
         self.leftovers.record(described_leftovers(found).await?);
         Ok(())
     }

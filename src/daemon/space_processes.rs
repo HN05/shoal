@@ -182,6 +182,7 @@ impl Manager {
         selection: Selection,
         requester: Option<Identity>,
     ) -> Result<usize> {
+        let _handoffs = self.chat_handoffs.read().await;
         let mut stopped = std::collections::HashSet::new();
         for _ in 0..ROUNDS {
             let targets = self.selected(&space, selection, requester.clone()).await?;

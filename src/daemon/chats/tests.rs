@@ -235,6 +235,46 @@ async fn a_moved_chat_lasts_while_its_new_process_runs() {
     assert!(error.to_string().contains("unknown chat"), "{error:#}");
 }
 
+/// A process stop reads the tracked processes and stops the rest under the
+/// handoff lock, so a chat's new process, a descendant of the launcher that
+/// waits for its handoff, is never found untracked meanwhile.
+#[tokio::test]
+async fn a_chat_handoff_waits_for_a_process_stop_in_progress() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "chat-6".into(),
+            "happy-claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let stopping = manager.chat_handoffs.read().await;
+
+    let handoff = tokio::spawn({
+        let manager = manager.clone();
+        let chat = chat.id.clone();
+        let pid = process.id();
+        async move { manager.move_chat(&chat, pid).await }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(!handoff.is_finished());
+    assert_eq!(manager.chats().await.unwrap()[0].pid, std::process::id());
+    drop(stopping);
+
+    assert_eq!(handoff.await.unwrap().unwrap().pid, process.id());
+}
+
 #[tokio::test]
 async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
     let (temp, manager) = manager().await;

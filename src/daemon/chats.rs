@@ -142,6 +142,7 @@ impl Manager {
     pub async fn move_chat(&self, chat: &str, pid: u32) -> Result<Chat> {
         let process = identity::capture(pid)?.context("the chat process is not running")?;
         let chat = chat.to_owned();
+        let _handoff = self.chat_handoffs.write().await;
         self.store.run(move |db| move_to(db, &chat, &process)).await
     }
 
