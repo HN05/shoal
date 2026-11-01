@@ -67,6 +67,10 @@ const UNSETTLED: &str = "messages.settle_seconds = 0\n";
 /// The scripted forges serve Forgejo's API without answering which one they
 /// serve; `tests/forge.rs` covers asking.
 const FORGEJO_HOST: &str = "machine.forges.\"forge.example\".type = \"forgejo\"\n";
+/// Global config without overload warnings, which would add a message to
+/// each running agent's workspace whenever the runner is short of disk space,
+/// memory or CPU. The daemon's unit tests cover the warnings.
+const NO_OVERLOAD_WARNINGS: &str = "machine.overload.warning.enabled = false\n";
 /// A long-running command whose environment stays readable once launchd adopts
 /// it. macOS hides an orphaned `sleep`'s environment, which fails concurrent
 /// tests' setup verification.
@@ -97,7 +101,7 @@ impl Fixture {
         fs::write(
             root.path().join(".config/shoal/config.toml"),
             format!(
-                "{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}{}",
+                "{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}{NO_OVERLOAD_WARNINGS}{}",
                 config.unwrap_or_default()
             ),
         )
@@ -8602,7 +8606,11 @@ fn global_config_changes_reload_a_running_daemon() {
     .unwrap();
     assert!(!fixture.run(&["daemon", "reload"]).status.success());
     assert_eq!(policy()["default"], "phone");
-    fs::write(&config, format!("{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}")).unwrap();
+    fs::write(
+        &config,
+        format!("{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}{NO_OVERLOAD_WARNINGS}"),
+    )
+    .unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
     assert!(policy()["default"].is_null());
     let scoped = fixture

@@ -52,6 +52,11 @@ impl Drop for Fixture {
 const AGENT_TOKEN: &str = "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\n\
     token = \"usertoken\"\nagent_token = \"agenttoken\"\n";
 
+/// Global config without overload warnings, which would add a message to
+/// each running agent's workspace whenever the runner is short of disk space,
+/// memory or CPU.
+const NO_OVERLOAD_WARNINGS: &str = "machine.overload.warning.enabled = false\n";
+
 /// Start the Forgejo server in `root` and return it with its `host:port`.
 fn serve(root: &Path) -> (Child, String) {
     let port_file = root.join("forge/port");
@@ -95,7 +100,10 @@ impl Fixture {
             Forge::GitHub => "github",
             Forge::Forgejo => "forgejo",
         };
-        let mut config = config.replace("{forge}", &host).replace("{type}", kind);
+        let mut config = format!(
+            "{NO_OVERLOAD_WARNINGS}{}",
+            config.replace("{forge}", &host).replace("{type}", kind)
+        );
         let table = format!("[machine.forges.\"{host}\"]");
         if !config.contains(&table) {
             config.push_str(&format!(
