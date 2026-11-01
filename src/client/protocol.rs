@@ -714,6 +714,7 @@ paged_bodies!(
     AgentEnvironments,
     KeptBranches,
     UntrackedWorktrees,
+    FailingSyncs,
     Reconciled,
     Notifications,
     AgentMessages,

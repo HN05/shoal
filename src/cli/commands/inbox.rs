@@ -119,7 +119,7 @@ impl Inbox {
                 items.extend(error.map(|error| Item::Cleanup { error }));
             }
             let failing =
-                request::<Vec<CheckoutSync>>(&ctx.paths, RepositoryMethod::FailingSyncs).await?;
+                client::pages::<CheckoutSync>(&ctx.paths, RepositoryMethod::FailingSyncs).await?;
             items.extend(
                 failing
                     .into_iter()

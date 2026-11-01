@@ -1072,11 +1072,12 @@ fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
 }
 
 #[test]
-fn inbox_reads_untracked_worktrees_over_several_frames_and_failing_cleanup() {
+fn inbox_reads_untracked_worktrees_failing_syncs_over_several_frames_and_failing_cleanup() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let listener = support::fake_daemon::bind_fake_daemon(root.path());
     listener.set_nonblocking(true).unwrap();
     let worktree = |n: usize| json!({"repository_id": "repo", "path": format!("/repo/stray-{n}")});
+    let sync = |n: usize| json!({"repository_id": format!("repo-{n}"), "failing_since": 1, "error": "offline"});
     let daemon = thread::spawn(move || {
         loop {
             let stream = wait_for("client connection", || match listener.accept() {
@@ -1124,8 +1125,14 @@ fn inbox_reads_untracked_worktrees_over_several_frames_and_failing_cleanup() {
                     continue;
                 }
                 "failing_syncs" => {
-                    let reply = json!({"type": "failing_syncs", "data": []});
-                    support::fake_daemon::write_reply(&stream, &request, reply);
+                    let frames = [
+                        json!({"type": "failing_syncs", "data": [sync(0)]}),
+                        json!({"type": "failing_syncs", "data": [sync(1)]}),
+                        json!({"type": "ok"}),
+                    ]
+                    .map(|reply| support::fake_daemon::frame(&request, reply))
+                    .concat();
+                    (&stream).write_all(frames.as_bytes()).unwrap();
                     break;
                 }
                 method => panic!("unexpected request {method}"),
@@ -1140,16 +1147,25 @@ fn inbox_reads_untracked_worktrees_over_several_frames_and_failing_cleanup() {
     daemon.join().unwrap();
     assert!(output.status.success(), "{output:?}");
     let items: Value = serde_json::from_slice(&output.stdout).unwrap();
-    let (cleanup, worktrees) = items.as_array().unwrap().split_last().unwrap();
-    let paths: Vec<_> = worktrees
+    let items = items.as_array().unwrap();
+    let paths: Vec<_> = items
         .iter()
-        .map(|item| item["worktree"]["path"].as_str().unwrap())
+        .filter_map(|item| item["worktree"]["path"].as_str())
         .collect();
     assert_eq!(paths, ["/repo/stray-0", "/repo/stray-1", "/repo/stray-2"]);
+    let cleanup: Vec<_> = items
+        .iter()
+        .filter(|item| item["kind"] == "cleanup")
+        .collect();
     assert_eq!(
         cleanup,
-        &json!({"kind": "cleanup", "error": "Automatic cleanup failed"})
+        [&json!({"kind": "cleanup", "error": "Automatic cleanup failed"})]
     );
+    let failing: Vec<_> = items
+        .iter()
+        .filter_map(|item| item["sync"]["repository_id"].as_str())
+        .collect();
+    assert_eq!(failing, ["repo-0", "repo-1"]);
 }
 
 #[test]

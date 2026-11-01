@@ -58,7 +58,10 @@ pub(super) async fn handle(
         RepositoryMethod::SyncRepository { repository } => {
             Body::SyncedRepository(manager.sync_repository(&repository).await?)
         }
-        RepositoryMethod::FailingSyncs => Body::FailingSyncs(manager.failing_syncs().await?),
+        RepositoryMethod::FailingSyncs => {
+            let failing = manager.failing_syncs().await;
+            return Ok(Answer::pages(failing, Body::FailingSyncs));
+        }
         RepositoryMethod::ListBranches { repository } => {
             Body::Branches(manager.branches(&repository).await?)
         }
