@@ -230,18 +230,7 @@ impl Manager {
             Refresh::Unchanged(pulled) => return Ok(pulled),
             Refresh::Follow(following) => following,
         };
-        let tracking = git::existing_branch::upstream_ref(&repo.path, branch).await?;
-        let tracking = tracking.trim();
-        ensure!(
-            !tracking.is_empty(),
-            "{branch} has no remote-tracking branch; check the fetch refspec of {}",
-            following.remote
-        );
-        let commit = git::resolve_commit(&repo.path, tracking, git_run)
-            .await
-            .with_context(|| {
-                format!("{branch}'s remote-tracking branch {tracking} was never fetched")
-            })?;
+        let commit = fetched_upstream_commit(repo, &following).await?;
         let commit = self.advance(repo, &following, &commit).await?;
         Ok(following.pulled(repo, commit))
     }
@@ -502,6 +491,22 @@ impl Manager {
         }
         Ok(())
     }
+}
+
+/// The commit the branch's remote-tracking branch holds, as the last fetch
+/// left it.
+async fn fetched_upstream_commit(repo: &Repository, following: &Following) -> Result<String> {
+    let branch = following.branch.as_str();
+    let tracking = git::existing_branch::upstream_ref(&repo.path, branch).await?;
+    let tracking = tracking.trim();
+    ensure!(
+        !tracking.is_empty(),
+        "{branch} has no remote-tracking branch; check the fetch refspec of {}",
+        following.remote
+    );
+    git::resolve_commit(&repo.path, tracking, git_run)
+        .await
+        .with_context(|| format!("{branch}'s remote-tracking branch {tracking} was never fetched"))
 }
 
 #[cfg(test)]
