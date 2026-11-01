@@ -95,8 +95,8 @@ pub enum Worker<'a> {
     MenuRows { view: &'a str },
     /// Print the fzf actions that switch the picker to its next view.
     MenuNext,
-    /// Print the `shoal approvals` picker's rows, of `workspace` only when given.
-    ApprovalRows { workspace: Option<&'a str> },
+    /// Print the `shoal approvals` picker's rows, of `space` only when given.
+    ApprovalRows { space: Option<&'a str> },
     /// Make `decision` on the request whose picker row the picker appends.
     ApprovalDecide { decision: Decision },
     /// Send `report`, the JSON of a proxy's report, for a wrapper of an
@@ -279,10 +279,10 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
         }
         Worker::MenuRows { view } => args.extend([MENU_ROWS.into(), view.into()]),
         Worker::MenuNext => args.push(MENU_NEXT.into()),
-        Worker::ApprovalRows { workspace } => {
+        Worker::ApprovalRows { space } => {
             args.push(APPROVAL_ROWS.into());
-            if let Some(workspace) = workspace {
-                args.extend(["--workspace".into(), workspace.into()]);
+            if let Some(space) = space {
+                args.extend(["--space".into(), space.into()]);
             }
         }
         Worker::ApprovalDecide { decision } => {

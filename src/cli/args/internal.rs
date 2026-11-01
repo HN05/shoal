@@ -28,7 +28,7 @@ pub enum InternalCommand {
     #[command(name = internal::APPROVAL_ROWS)]
     ApprovalRows {
         #[arg(long)]
-        workspace: Option<String>,
+        space: Option<String>,
     },
     /// Decide the request a `shoal approvals` picker row names, and print the outcome.
     #[command(name = internal::APPROVAL_DECIDE)]

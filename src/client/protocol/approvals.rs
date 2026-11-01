@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum ApprovalMethod {
     ListApprovals {
-        workspace: Option<String>,
+        space: Option<String>,
     },
     ShowApproval {
         id: i64,
@@ -25,10 +25,10 @@ pub enum ApprovalMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<std::collections::BTreeMap<String, String>>,
     },
-    /// Pass a request the coordinating agent of `workspace` decides on to the
-    /// next coordinating agent above it that holds a grant, or to the user.
+    /// Pass a request the space `space` decides on to the space above it, or
+    /// to the user.
     EscalateApproval {
-        workspace: String,
+        space: String,
         id: i64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<Box<crate::client::approvals::ApprovalRequest>>,

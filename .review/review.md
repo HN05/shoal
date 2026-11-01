@@ -174,7 +174,8 @@ instead of the PR delivery guidance below.
   is an approval request bound to the branch HEAD unless `[permissions] land`
   and `[permissions] push` are both `"direct"`; approval never skips a landing check and lands only the approved commit.
   Under `[permissions] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
-  `pr open` records a proposal instead of opening; approval opens it as the agent
+  `pr open` records a proposal instead of opening, routed like other approval
+  requests, though only the user or a chat approves it; approval opens it as the agent
   account through the normal open path, a PR only at its recorded commit, and an
   issue proposal belongs to the repository and outlives its workspace.
   Under `[permissions] push = "propose"`, a scoped push, through `pr open` or
@@ -209,9 +210,10 @@ instead of the PR delivery guidance below.
 - Numbered questions and approvals inspect records without mutation in JSON or
   nonterminal output; interactive prompts preserve the shown request when deciding.
 - Resource approvals bind effective allocation settings and require an unscoped
-  decision, or one by the coordinating agent a child workspace's request was routed
-  to because it holds an approved grant for the same target and settings; it may pass
-  the request up instead. That decision, which queues an agent message for the requester; failing to queue it
+  decision, or one by the direct parent space the request was routed to: a parent
+  workspace with an agent approves only with an approved grant for the same target
+  and settings and otherwise denies or passes it up, and the chat that opened the
+  workspace may approve anything. That decision, which queues an agent message for the requester; failing to queue it
   never fails the decision. Pending requests reserve nothing; grant lifetime follows configuration
   and approval never bypasses capacity or simulator cleanup rules. Approval lookups
   validate their selected ID or active workspace/target/name record; grant reuse

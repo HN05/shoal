@@ -245,3 +245,86 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
     assert!(manager.notifications(true, 50).await.unwrap().is_empty());
     assert!(manager.pending_proposal(proposed).await.is_err());
 }
+
+#[tokio::test]
+async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
+    use crate::state::AgentState;
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    for id in [&parent.id, &child.id] {
+        manager
+            .set_agent_state(id, AgentState::Working, None, None)
+            .await
+            .unwrap();
+    }
+    let specification = Specification::Issue(IssueSpecification {
+        issue: NewIssue {
+            title: "Flaky".into(),
+            ..NewIssue::default()
+        },
+        repository: None,
+        link: false,
+        branch: "child".into(),
+        commit: "head".into(),
+        agent: None,
+        duplicates: Vec::new(),
+        follow_up: None,
+    });
+    let request = proposal(&child, Target::IssueOpen, proposals::ISSUE, specification);
+    let (proposed, _) = manager
+        .store_proposal(request, proposals::propose_issue)
+        .await
+        .unwrap();
+    manager.notify_approval(&child.name, &proposed).await;
+    let routed = manager
+        .approval_request(proposed.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(routed.decider.as_deref(), Some(parent.id.as_str()));
+
+    // Opening it, or commenting it on another issue, writes to the forge.
+    for (approve, details) in [
+        (true, ProposalDecision::default()),
+        (
+            false,
+            ProposalDecision {
+                duplicate_of: Some(Duplicate::Issue("12".into())),
+                ..ProposalDecision::default()
+            },
+        ),
+    ] {
+        let error = manager
+            .decide_routed_approval(&parent.id, proposed.id, approve, None, details)
+            .await
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("--escalate"), "{error:#}");
+    }
+    let denied = manager
+        .decide_routed_approval(
+            &parent.id,
+            proposed.id,
+            false,
+            None,
+            ProposalDecision {
+                reason: Some("Not a bug".into()),
+                ..ProposalDecision::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status, DecisionStatus::Denied);
+    assert!(manager.pending_proposal(proposed).await.is_err());
+}

@@ -209,15 +209,18 @@ impl Manager {
         })
     }
 
-    /// Open, deny or merge as a duplicate the proposal the user chose, then
-    /// forget it and tell the proposing workspace's agents. Approving a push
-    /// starts it in `env` instead, and its end decides the request.
+    /// Open, deny or merge as a duplicate the proposal the user or a chat
+    /// chose, then forget it and tell the proposing workspace's agents.
+    /// Approving a push starts it in `env` instead, and its end decides the
+    /// request. With `routed_to`, the workspace deciding it, the proposal
+    /// must still be routed there once its gate is held.
     pub(crate) async fn decide_proposal(
         &self,
         request: ApprovalRequest,
         approve: bool,
         decision: ProposalDecision,
         env: Option<std::collections::BTreeMap<String, String>>,
+        routed_to: Option<&str>,
     ) -> Result<ApprovalRequest> {
         decision.validate(&request.target, approve)?;
         // Cleanup holds the workspace's gate, so it cannot remove the
@@ -232,6 +235,13 @@ impl Manager {
             .lock_prs(changed.chain([&request.workspace_id]))
             .await;
         let request = self.pending_proposal(request).await?;
+        if let Some(workspace) = routed_to {
+            ensure!(
+                request.decider.as_deref() == Some(workspace),
+                "approval request {} is not routed to this workspace",
+                request.id
+            );
+        }
         self.ensure_not_pushing(&request)?;
         let workspace = self.find_workspace(&request.workspace_id).await?;
         // A PR an earlier approval posted was pushed already.

@@ -222,7 +222,7 @@ async fn select_held(
     let requests = client::request::<Vec<ApprovalRequest>>(
         &ctx.paths,
         ApprovalMethod::ListApprovals {
-            workspace: Some(workspace.to_owned()),
+            space: Some(workspace.to_owned()),
         },
     )
     .await?

@@ -1030,7 +1030,7 @@ async fn a_launch_reopens_only_its_recorded_workspace() {
 }
 
 #[tokio::test]
-async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
+async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_grant() {
     use crate::{
         daemon::approvals::{
             ApprovalRequest, DecisionStatus, Lifetime, SecretSpecification, Specification, Target,
@@ -1095,7 +1095,8 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(routed.decider.as_deref(), Some(root.id.as_str()));
+    // The direct parent decides, whether or not it holds a grant.
+    assert_eq!(routed.decider.as_deref(), Some(parent.id.as_str()));
     let messages = |workspace: &Workspace| {
         let id = workspace.id.clone();
         let manager = &manager;
@@ -1109,9 +1110,8 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
                 .collect::<Vec<_>>()
         }
     };
-    assert!(messages(&parent).await[0].ends_with("passed up, since you hold no grant for it"));
     assert!(
-        messages(&root)
+        messages(&parent)
             .await
             .last()
             .unwrap()
@@ -1130,7 +1130,7 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
 
     // Only the stored decider decides it; a shown request claiming another
     // decider changes nothing.
-    for (workspace, allowed) in [(&parent, false), (&root, true)] {
+    for (workspace, allowed) in [(&root, false), (&parent, true)] {
         manager
             .executions
             .issue_scope(
@@ -1159,13 +1159,48 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
         assert_eq!(authorized.is_ok(), allowed, "{}", workspace.name);
     }
     let refused = manager
-        .decide_routed_approval(&parent.id, requested.id, true, None)
+        .decide_routed_approval(&root.id, requested.id, true, None, Default::default())
         .await
         .unwrap_err();
     assert!(format!("{refused:#}").contains("not routed to this workspace"));
+    // Without a grant the parent may only deny or pass it up.
+    let refused = manager
+        .decide_routed_approval(&parent.id, requested.id, true, None, Default::default())
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{refused:#}").contains("holds no grant")
+            && refused.to_string().contains("--escalate"),
+        "{refused:#}"
+    );
 
-    // Passed up by the root, it reaches the user; repeating the request
-    // does not route it again.
+    // Passed up, it reaches the root, and from the root the user; repeating
+    // the request does not route it again. The requester's agent exiting
+    // since it was routed changes nothing about who is above its decider.
+    let requester = child.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "DELETE FROM workspace_agent_state WHERE workspace_id=?1",
+                [&requester],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let escalated = manager
+        .escalate_approval(&parent.id, requested.id, None)
+        .await
+        .unwrap();
+    assert_eq!(escalated.decider.as_deref(), Some(root.id.as_str()));
+    assert!(
+        messages(&root)
+            .await
+            .last()
+            .unwrap()
+            .contains("shoal approvals --escalate")
+    );
     let escalated = manager
         .escalate_approval(&root.id, requested.id, None)
         .await
@@ -1192,7 +1227,126 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
 }
 
 #[tokio::test]
-async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_user() {
+async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
+    use crate::{
+        daemon::{
+            approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},
+            notifications::NotificationKind,
+        },
+        state::AgentState,
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    // The chat opened the root, which has no agent of its own, so the
+    // child's requests skip it.
+    let root = manager
+        .create_workspace(&repo.id, "root".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .assign_chat(&root.id, Some(chat.id.clone()))
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&root.id, "child".into(), None)
+        .await
+        .unwrap();
+    manager
+        .set_agent_state(&child.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    let requested = manager
+        .request_approval(ApprovalRequest::new(
+            &child.id,
+            Target::Secret("token".into()),
+            "default",
+            Specification::Secret(SecretSpecification {
+                command: vec!["token-source".into()],
+                tools: vec![],
+            }),
+            Lifetime::Workspace,
+            Some("Publish the package"),
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    manager.notify_approval(&child.name, &requested).await;
+    let routed = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(routed.decider.as_deref(), Some(chat.id.as_str()));
+    let told = manager.chat_messages(&chat.id).await.unwrap();
+    assert!(
+        told.last()
+            .is_some_and(|message| message.message.contains("shoal approvals --escalate")),
+        "{told:?}"
+    );
+    // A malformed record of another workspace's history leaves the chat's
+    // requests readable.
+    let other = child.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number)
+                    VALUES ('broken',?1,'secret/other','default','not json',0,99)",
+                [&other],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let listed = manager.approval_requests(Some(&chat.name)).await.unwrap();
+    assert_eq!(listed.len(), 1);
+
+    // Retrying the request once the chat exited tells it without ending it
+    // under the announcement gate, which ending it takes.
+    process.kill();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        manager.notify_approval(&child.name, &routed),
+    )
+    .await
+    .expect("the retry waited on the gate it holds");
+    // An ended chat decides nothing more; the user does.
+    manager.chats().await.unwrap();
+    let passed = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(passed.decider, None);
+    let asked = manager
+        .notifications(false, 10)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|n| n.kind == NotificationKind::ApprovalRequested)
+        .count();
+    assert_eq!(asked, 1);
+}
+
+#[tokio::test]
+async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_the_user() {
     use crate::{
         daemon::{
             approvals::{
@@ -1262,7 +1416,7 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
         .unwrap()
         .unwrap();
     manager.notify_approval(&child.name, &requested).await;
-    // The grant ends before the parent decides, so the request passes up.
+    // The grant ends before the parent decides, so it may no longer approve.
     let parent_id = parent.id.clone();
     manager
         .store
@@ -1276,22 +1430,22 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
         .await
         .unwrap();
     let error = manager
-        .decide_routed_approval(&parent.id, requested.id, true, None)
+        .decide_routed_approval(&parent.id, requested.id, true, None, Default::default())
         .await
         .unwrap_err();
-    assert!(format!("{error:#}").contains("passed up"));
-    let passed = manager
+    assert!(format!("{error:#}").contains("holds no grant"), "{error:#}");
+    let kept = manager
         .approval_request(requested.id)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(
-        (passed.decider, passed.status),
-        (None, DecisionStatus::Pending)
+        (kept.decider.as_deref(), kept.status),
+        (Some(parent.id.as_str()), DecisionStatus::Pending)
     );
-    assert_eq!(user_requests().await, 1);
 
-    // A grant for another lifetime does not cover the request.
+    // A grant for another lifetime does not cover the request, which the
+    // parent may still deny.
     let lease = manager
         .request_approval(ApprovalRequest {
             lifetime: Lifetime::Lease,
@@ -1310,16 +1464,18 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
         .unwrap()
         .unwrap();
     manager.notify_approval(&child.name, &longer).await;
-    assert_eq!(
+    assert!(
         manager
-            .approval_request(longer.id)
+            .decide_routed_approval(&parent.id, longer.id, true, None, Default::default())
             .await
-            .unwrap()
-            .unwrap()
-            .decider,
-        None
+            .is_err()
     );
-    assert_eq!(user_requests().await, 2);
+    let denied = manager
+        .decide_routed_approval(&parent.id, longer.id, false, None, Default::default())
+        .await
+        .unwrap();
+    assert_eq!(denied.status, DecisionStatus::Denied);
+    assert_eq!(user_requests().await, 0);
 
     // A coordinator whose messages are full cannot be told; the user decides.
     let mut n = 0;
@@ -1336,7 +1492,7 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
         .unwrap()
         .unwrap();
     manager.notify_approval(&child.name, &other).await;
-    assert_eq!(user_requests().await, 3);
+    assert_eq!(user_requests().await, 1);
 }
 
 #[tokio::test]
@@ -1666,7 +1822,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .resource_guard(&child.id, crate::daemon::workspace::GuardMode::Exclusive)
         .unwrap();
     manager
-        .decide_routed_approval(&parent.id, requested.id, true, None)
+        .decide_routed_approval(&parent.id, requested.id, true, None, Default::default())
         .await
         .unwrap_err();
     let pending = manager
@@ -1677,7 +1833,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
     assert_eq!(pending.status, DecisionStatus::Pending);
     drop(hook);
     let decided = manager
-        .decide_routed_approval(&parent.id, requested.id, true, None)
+        .decide_routed_approval(&parent.id, requested.id, true, None, Default::default())
         .await
         .unwrap();
     assert_eq!(decided.status, DecisionStatus::Approved);

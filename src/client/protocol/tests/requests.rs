@@ -187,10 +187,10 @@ const REQUESTS: &[&str] = &[
     r#"{"accept_question_recommendation":{"id":6,"shown":null}}"#,
     r#"{"await_answer":{"space":"fix","id":6,"ask":{"question":"Which?","recommendation":"A","reason":"Simpler"}}}"#,
     // Approvals.
-    r#"{"list_approvals":{"workspace":null}}"#,
+    r#"{"list_approvals":{"space":null}}"#,
     r#"{"show_approval":{"id":7}}"#,
     r#"{"decide_approval":{"id":7,"approve":true,"details":{"reason":"later"}}}"#,
-    r#"{"escalate_approval":{"workspace":"fix","id":7}}"#,
+    r#"{"escalate_approval":{"space":"fix","id":7}}"#,
     r#"{"withdraw_approval":{"workspace":"fix","id":7}}"#,
     r#"{"branch_push":{"workspace":"fix"}}"#,
     r#"{"request_push":{"workspace":"fix","push":{"remote":"origin","destination":"refs/heads/fix","commit":"abc"}}}"#,

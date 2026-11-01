@@ -7,16 +7,17 @@ use crate::cli::args::BodyArgs;
 pub struct ApprovalsArgs {
     /// Request number; omit to choose a request.
     pub id: Option<i64>,
-    /// List requests and grants for this workspace.
+    /// List requests and grants for this space; a chat's are the requests
+    /// it decides.
     #[arg(long, conflicts_with_all = ["id", "approval_action"])]
-    pub workspace: Option<String>,
+    pub space: Option<String>,
     /// Approve the recorded settings, or open a proposed issue or PR.
     #[arg(long, group = "approval_action")]
     pub approve: bool,
     /// Deny the request.
     #[arg(long, group = "approval_action")]
     pub deny: bool,
-    /// Pass a request routed to this workspace's coordinator up to its parent or the user.
+    /// Pass a request routed to this space up to the space above it or the user.
     #[arg(long, group = "approval_action", requires = "id")]
     pub escalate: bool,
     /// Withdraw a request no longer needed.
@@ -45,7 +46,7 @@ pub enum ApprovalsCommand {
     Withdraw {
         /// Request number.
         id: i64,
-        /// Workspace to use; defaults to the current workspace or picker.
+        /// Workspace whose request it is; defaults to the request's.
         #[arg(long)]
         workspace: Option<String>,
     },

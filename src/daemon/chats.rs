@@ -206,6 +206,18 @@ impl Manager {
             .find(|chat| chat.id == selector || chat.name == selector))
     }
 
+    /// The running chat `selector` names, by ID or name, as recorded: unlike
+    /// [`Self::running_chat`], it ends no chat whose process exited, which
+    /// passes its approval requests up, so a caller holding the approval
+    /// announcement gate may look one up.
+    pub(crate) async fn recorded_running_chat(&self, selector: &str) -> Result<Option<Chat>> {
+        let selector = selector.to_owned();
+        let chats = self.store.run(|db| recorded(db)).await?;
+        Ok(chats
+            .into_iter()
+            .find(|chat| chat.restore.is_none() && (chat.id == selector || chat.name == selector)))
+    }
+
     /// End the running chat `id`: stop every process it owns, so none goes
     /// on writing the agent's session, then end its record as when the
     /// process it lasts while exits. Until the stop finishes, the chat
@@ -267,8 +279,9 @@ impl Manager {
 
     /// End the chats still recorded as `ended` found them: return their
     /// workspaces to the user along with the messages the chats had not
-    /// received, keep their attached files for the retention period, and
-    /// delete their records and temporary directories. A chat moved to
+    /// received and the approval requests they had not decided, keep their
+    /// attached files for the retention period, and delete their records and
+    /// temporary directories. A chat moved to
     /// another process, saved or restored since keeps its record.
     async fn end_chats(&self, ended: Vec<(String, Over)>) -> Result<()> {
         if ended.is_empty() {
@@ -283,6 +296,8 @@ impl Manager {
             if let Err(error) = self.delete_tmp_dir(&repository_id, &id).await {
                 log!("chat {id}: temporary directory not deleted: {error:#}");
             }
+            // An ended chat decides nothing more.
+            self.pass_up_chat_requests(&id).await;
         }
         if let Some(id) = deleted.notification {
             self.signals.notification_recorded(id);

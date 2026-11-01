@@ -38,7 +38,7 @@ pub(super) async fn run(ctx: &Context, args: ApprovalsArgs) -> Result<i32> {
         Some(id) if args.escalate => escalate(ctx, id, None).await,
         Some(id) if args.withdraw => withdraw(ctx, None, id).await,
         Some(id) => show(ctx, id).await,
-        None => list(ctx, args.workspace).await,
+        None => list(ctx, args.space).await,
     }
 }
 
@@ -281,22 +281,18 @@ pub(super) async fn submit(
     Ok(0)
 }
 
-/// Pass a request routed to this workspace's agent up to the next coordinating
-/// agent that holds a grant for it, or to the user.
+/// Pass a request routed to this space up to the space above it, or to the
+/// user.
 async fn escalate(ctx: &Context, id: i64, shown: Option<Box<ApprovalRequest>>) -> Result<i32> {
     ensure_scope_token(ctx)?;
-    let workspace = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
+    let space = ui::select_space(ctx, None, ui::Fallback::OwnWorkspace).await?;
     let request = request::<Box<ApprovalRequest>>(
         &ctx.paths,
-        ApprovalMethod::EscalateApproval {
-            workspace,
-            id,
-            shown,
-        },
+        ApprovalMethod::EscalateApproval { space, id, shown },
     )
     .await?;
     let decider = match &request.decider {
-        Some(_) => "the next coordinating agent",
+        Some(_) => "the space above",
         None => "the user",
     };
     ctx.emit(
@@ -333,10 +329,10 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
     Ok(0)
 }
 
-pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let requests = list_requests(ctx, workspace.clone()).await?;
+pub(super) async fn list(ctx: &Context, space: Option<String>) -> Result<i32> {
+    let requests = list_requests(ctx, space.clone()).await?;
     if ctx.interactive_output() && !requests.is_empty() {
-        return picker::pick_and_open(ctx, workspace, requests).await;
+        return picker::pick_and_open(ctx, space, requests).await;
     }
     ctx.show(&requests, |requests| {
         for request in requests {
@@ -351,9 +347,9 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
 
 pub(super) async fn list_requests(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
 ) -> Result<Vec<ApprovalRequest>> {
-    request(&ctx.paths, ApprovalMethod::ListApprovals { workspace }).await
+    request(&ctx.paths, ApprovalMethod::ListApprovals { space }).await
 }
 
 /// What a request asks for, and why when its agent said.

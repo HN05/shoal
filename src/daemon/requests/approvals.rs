@@ -23,8 +23,8 @@ pub(super) async fn handle(
         ApprovalMethod::WithdrawApproval { workspace, id } => {
             Body::ApprovalRequest(Box::new(manager.withdraw_approval(&workspace, id).await?))
         }
-        ApprovalMethod::ListApprovals { workspace } => {
-            Body::ApprovalRequests(manager.approval_requests(workspace.as_deref()).await?)
+        ApprovalMethod::ListApprovals { space } => {
+            Body::ApprovalRequests(manager.approval_requests(space.as_deref()).await?)
         }
         ApprovalMethod::ShowApproval { id } => {
             Body::ApprovalRequest(Box::new(show_approval(manager, caller, id).await?))
@@ -49,13 +49,9 @@ pub(super) async fn handle(
         ApprovalMethod::FinishPush { key, failure } => {
             Body::ApprovalRequest(Box::new(manager.finish_approved_push(&key, failure).await?))
         }
-        ApprovalMethod::EscalateApproval {
-            workspace,
-            id,
-            shown,
-        } => Body::ApprovalRequest(Box::new(
+        ApprovalMethod::EscalateApproval { space, id, shown } => Body::ApprovalRequest(Box::new(
             manager
-                .escalate_approval(&workspace, id, shown.map(|shown| *shown))
+                .escalate_approval(&space, id, shown.map(|shown| *shown))
                 .await?,
         )),
     }))
@@ -64,9 +60,7 @@ pub(super) async fn handle(
 impl Scoped for ApprovalMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
-            ApprovalMethod::ListApprovals { workspace } => {
-                Some(caller.own_by_default(workspace))
-            }
+            ApprovalMethod::ListApprovals { space } => Some(caller.own_by_default(space)),
             ApprovalMethod::ShowApproval { id } => {
                 show_approval(manager, Some(caller), *id).await?;
                 None
@@ -75,11 +69,11 @@ impl Scoped for ApprovalMethod {
                 shown.get_or_insert(Box::new(manager.routed_approval(caller, *id).await?));
                 None
             }
-            ApprovalMethod::EscalateApproval { workspace, .. } => Some(
+            ApprovalMethod::EscalateApproval { space, .. } => Some(
                 manager
                     .own_workspace(
                         caller,
-                        workspace,
+                        space,
                         "workspace processes pass up only the approval requests routed to their own workspace",
                     )
                     .await?,

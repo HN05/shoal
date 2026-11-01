@@ -3073,8 +3073,10 @@ in `placed_by` whether the user or an app hosting an external session placed it
 (`user`), or an agent (`agent`). Workspace processes hold and release the
 workspaces below their own directly. Holding their own workspace is an approval
 request with the target `hold/<name>`, which needs `--reason` and goes to the
-workspace's coordinating agent, which needs no grant to decide it, or to the
-user without one; approval places the hold, and acquiring again returns it.
+direct parent space, as other [approval requests](#resource-approvals) do: the
+parent workspace with a running agent, which needs no grant to decide it, else
+the chat that opened the workspace, else the user; approval places the hold,
+and acquiring again returns it.
 Workspace processes release only the holds agents placed, on their own workspace
 or below it; the user's stay theirs to release. `status` and `work --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
@@ -3424,8 +3426,10 @@ returns that request; at a newer commit it replaces it, and the old one stays
 Files given with `--attach` are copied into Shoal's state directory, since the
 agent's copies may be gone when you decide, and deleted once no pending proposal
 uses them, by the next decision or proposal or by the cleanup sweep. Both commands exit 0 with JSON `proposed`, the request, and the agent
-continues its work. Only you decide proposals; they are never routed to a
-coordinating agent, even in a child workspace.
+continues its work. A proposal is routed like other
+[approval requests](#resource-approvals): a workspace with an agent above it, or
+the chat that opened it, decides it before you do. Only you or a chat approve
+one; a parent workspace may deny it with `--reason` or pass it up.
 
 ```sh
 shoal approvals                     # proposals show their labels and description
@@ -4772,8 +4776,8 @@ still need a reason and the usual audit before mutations.
 
 Agents use the normal acquire command with `--reason`. `shoal approvals` shows
 these requests, land requests from a scoped `shoal land`,
-[proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --workspace <workspace>` filters
-by workspace. Scoped callers can inspect requests in their workspace tree. On a terminal,
+[proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --space <workspace>` filters
+by workspace, and `--space <chat>` lists the requests a chat decides. Scoped callers can inspect requests in their workspace tree. On a terminal,
 `shoal approvals` opens a picker; selecting a pending request or naming its number
 shows its recorded settings and prompts for `y` to approve or `n` to deny,
 case-insensitively; any other input cancels. In the list, Ctrl-A approves
@@ -4800,19 +4804,24 @@ unread; otherwise its deciding coordinator is told, or the user gets
 `approval_withdrawn`. A command that retries the request, such as a queued
 `acquire`, requests it again.
 
-A request from a [child workspace](#child-workspaces) with an agent of its own
-goes up the tree first. The nearest coordinating agent above it that holds an
-approved grant for the same target and settings decides it instead of the user,
-by number with `shoal approvals --approve <number>` or `shoal approvals --deny <number>`. It may also
-pass the request up with `shoal approvals --escalate <number>`, to the next coordinating
-agent with such a grant, or to the user. Each coordinating agent passed over
-without a grant receives a message saying so. Without a deciding coordinator,
-the user is notified as above. A land request names its own branch and commit,
-which no other workspace holds a grant for, so it always reaches the user. A
-request to hold the workspace goes to the nearest coordinating agent, which
-needs no grant for it. The
-request records its `decider`, the coordinator's workspace, while one decides
-it; the user may still decide it.
+A request from a workspace with an agent of its own goes to its direct parent
+space first: its parent [workspace](#child-workspaces), skipping one without a
+running agent, else the running [chat](#chats) that opened it. That space's
+agent is told and decides it instead of the user, by number with
+`shoal approvals --approve <number>` or `shoal approvals --deny <number>`, or
+passes it up with `shoal approvals --escalate <number>`, to the parent's parent
+and at the top to the user. A parent workspace approves only what it holds an
+approved grant for, with the same target and settings, or a request to hold the
+workspace, which needs none; otherwise `--approve` is refused and it denies or
+passes the request up. It never approves a proposal or denies one as a
+duplicate, which write to the forge. A chat runs with your authority and may
+approve anything.
+A land request names its own branch and commit, which no other workspace holds
+a grant for, so its parent workspace passes it up. When a chat ends, the
+requests it had not decided go to the user. Without a deciding space, the user
+is notified as above. The request records its `decider`, the deciding space,
+while one decides it; the user may still decide it. `shoal approvals --space
+<chat>` lists the requests a chat decides.
 
 An acquisition waiting for a decision returns exit 2 and JSON
 `code: "approval_pending"` with the request; denial returns `"approval_denied"`.

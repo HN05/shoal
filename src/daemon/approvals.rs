@@ -12,7 +12,7 @@ use crate::{
         store,
         workspace::Manager,
     },
-    model::Workspace,
+    model::{PresentSpace, Workspace},
 };
 
 pub mod proposals;
@@ -72,6 +72,25 @@ fn lookup(db: &Connection, sql: &str, params: impl Params) -> Result<Option<Appr
 
 fn by_key(db: &Connection, key: &str) -> Result<Option<ApprovalRequest>> {
     lookup(db, BY_KEY, [key])
+}
+
+/// The requests routed to the space `id`, in the order they were made; a
+/// malformed record of another space's history stays out of the selection.
+fn list_decided(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
+    db.prepare(&format!(
+        "{COLUMNS} WHERE CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1
+            ORDER BY rowid"
+    ))?
+    .query_map([id], record_row)?
+    .map(|row| decode_record(row?))
+    .collect()
+}
+
+/// The pending requests the space `id` decides.
+fn decided_by(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
+    let mut requests = list_decided(db, id)?;
+    requests.retain(|request| request.status == DecisionStatus::Pending);
+    Ok(requests)
 }
 
 fn by_number(db: &Connection, number: i64) -> Result<Option<ApprovalRequest>> {
@@ -270,23 +289,15 @@ fn may_decide(db: &Connection, workspace: &str, request: &ApprovalRequest) -> Re
     Ok(!request.target.needs_grant() || holds_grant(db, workspace, request)?)
 }
 
-/// A pending request and the coordinators routing passed over, which hold no
-/// grant for it.
-pub struct Routed {
-    pub request: ApprovalRequest,
-    pub passed: Vec<String>,
-}
-
-/// Give the pending request stored under `key` to the first of `candidates`
-/// that holds a grant for it, or to the user. Without `from` this is its
-/// first routing, which a routed request keeps; with `from`, the coordinator
-/// that decides it passes it on.
+/// Give the pending request stored under `key` to the first of `candidates`,
+/// or to the user. Without `from` this is its first routing, which a routed
+/// request keeps; with `from`, the space that decides it passes it on.
 fn route(
     tx: &Transaction<'_>,
     key: &str,
     candidates: &[String],
     from: Option<&str>,
-) -> Result<Routed> {
+) -> Result<ApprovalRequest> {
     let mut request = by_key(tx, key)?.context("the approval request no longer exists")?;
     ensure!(
         request.status == DecisionStatus::Pending,
@@ -294,41 +305,25 @@ fn route(
         request.id
     );
     match from {
-        None if request.routed => {
-            return Ok(Routed {
-                request,
-                passed: Vec::new(),
-            });
-        }
+        None if request.routed => return Ok(request),
         None => {}
         Some(from) => ensure!(
             request.decider.as_deref() == Some(from),
-            "approval request {} is no longer this workspace's to decide",
+            "approval request {} is no longer this space's to decide",
             request.id
         ),
     }
-    // Without coordinators the request stays the user's, as recorded.
+    // Without a decider above, the request stays the user's, as recorded.
     if candidates.is_empty() && !request.routed {
-        return Ok(Routed {
-            request,
-            passed: Vec::new(),
-        });
+        return Ok(request);
     }
-    let mut passed = Vec::new();
-    request.decider = None;
-    for candidate in candidates {
-        if may_decide(tx, candidate, &request)? {
-            request.decider = Some(candidate.clone());
-            break;
-        }
-        passed.push(candidate.clone());
-    }
+    request.decider = candidates.first().cloned();
     request.routed = true;
     tx.execute(
         "UPDATE access_requests SET record=?2 WHERE id=?1",
         params![key, serde_json::to_string(&request)?],
     )?;
-    Ok(Routed { request, passed })
+    Ok(request)
 }
 
 /// Keep a request bound to a commit that no longer applies, because it was
@@ -677,13 +672,20 @@ impl Manager {
             .await
     }
 
+    /// Every request, or those of the workspace `selector` names, or those
+    /// the chat it names decides, since a chat requests none.
     pub async fn approval_requests(&self, selector: Option<&str>) -> Result<Vec<ApprovalRequest>> {
+        if let Some(selector) = selector
+            && let PresentSpace::Chat(chat) = self.present_space(selector).await?
+        {
+            return self.store.run(move |db| list_decided(db, &chat.id)).await;
+        }
         let owner = self.workspace_filter(selector).await?;
         self.store.run(move |db| list(db, owner.as_deref())).await
     }
 
     /// Decide request `id` as `caller`: a workspace process decides only what
-    /// was routed to it, and only the user decides with `details`.
+    /// was routed to it, and denies a proposal with a reason at most.
     pub(super) async fn decide_approval_as(
         &self,
         caller: Option<&Caller>,
@@ -695,7 +697,7 @@ impl Manager {
     ) -> Result<ApprovalRequest> {
         match caller {
             Some(caller) => {
-                self.decide_routed_approval(&caller.workspace_id, id, approve, shown)
+                self.decide_routed_approval(&caller.workspace_id, id, approve, shown, details)
                     .await
             }
             None => self.decide_approval(id, approve, shown, details, env).await,
@@ -722,7 +724,9 @@ impl Manager {
             format_args!("approval request {id}"),
         )?;
         if request.target.is_proposal() {
-            return self.decide_proposal(request, approve, details, env).await;
+            return self
+                .decide_proposal(request, approve, details, env, None)
+                .await;
         }
         ensure!(
             details == proposals::ProposalDecision::default(),
@@ -737,14 +741,16 @@ impl Manager {
 
     /// Record the decision of the coordinating agent of `coordinator` on a
     /// request routed to it, rechecking with the decision that the request is
-    /// still its to decide and that it still holds a grant for the same thing.
-    /// Once the grant ended, the request passes up instead.
+    /// still its to decide. It approves only what it holds a grant for, and
+    /// otherwise denies the request or passes it up; `details` gives only a
+    /// denied proposal's reason.
     pub async fn decide_routed_approval(
         &self,
         coordinator: &str,
         id: i64,
         approve: bool,
         shown: Option<ApprovalRequest>,
+        details: proposals::ProposalDecision,
     ) -> Result<ApprovalRequest> {
         let request = self.approval_request(id).await?.ok_or_else(|| {
             Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
@@ -753,33 +759,51 @@ impl Manager {
             shown.is_none_or(|shown| request.is_same(&shown)),
             format_args!("approval request {id}"),
         )?;
-        let decided = self
+        if request.target.is_proposal() {
+            return self
+                .deny_routed_proposal(coordinator, request, approve, details)
+                .await;
+        }
+        ensure!(
+            details == proposals::ProposalDecision::default(),
+            "only issue and PR proposals take a title, body, reason or duplicate"
+        );
+        let decision = self
             .record_routed_decision(coordinator, &request, approve)
             .await?;
-        if let Some(decision) = decided {
-            if decision.new {
-                self.tell_requester(&decision.request).await;
-            }
-            return Ok(decision.request);
+        if decision.new {
+            self.tell_requester(&decision.request).await;
         }
-        let gate = self.gates.lock_announcements().await;
-        let routed = self.route_approval(&request, Some(coordinator)).await?;
-        self.announce_approval(&request.workspace, &routed).await;
-        drop(gate);
-        bail!(
-            "approval {id}: the grant for {} has ended, so the request passed up",
-            request.subject()
-        )
+        Ok(decision.request)
+    }
+
+    /// Deny the proposal `request` for `coordinator`, to which it is routed.
+    /// Approving it, or marking it a duplicate, writes to the forge, which
+    /// is for the user or a chat to do, so a workspace passes it up instead.
+    async fn deny_routed_proposal(
+        &self,
+        coordinator: &str,
+        request: ApprovalRequest,
+        approve: bool,
+        details: proposals::ProposalDecision,
+    ) -> Result<ApprovalRequest> {
+        let id = request.id;
+        ensure!(
+            !approve && details.duplicate_of.is_none(),
+            "approval {id}: a workspace may only deny a proposal, with --reason; pass it up with shoal approvals --escalate {id}"
+        );
+        self.decide_proposal(request, false, details, None, Some(coordinator))
+            .await
     }
 
     /// Decide `request` for `coordinator` in one transaction with the checks
-    /// that it decides it; `None` when its grant has ended.
+    /// that it decides it and, to approve, holds a grant for it.
     async fn record_routed_decision(
         &self,
         coordinator: &str,
         request: &ApprovalRequest,
         approve: bool,
-    ) -> Result<Option<Decision>> {
+    ) -> Result<Decision> {
         let request = request.clone();
         let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.id);
         let _hold = self.hold_decision_guard(&request, approve).await?;
@@ -796,12 +820,14 @@ impl Manager {
                     stored.is_same(&request),
                     format_args!("approval request {id}"),
                 )?;
-                if !may_decide(&tx, &coordinator, &stored)? {
-                    return Ok(None);
-                }
+                ensure!(
+                    !approve || may_decide(&tx, &coordinator, &stored)?,
+                    "approval {id}: this workspace holds no grant for {}; deny it or pass it up with shoal approvals --escalate {id}",
+                    stored.subject()
+                );
                 let decision = decide_and_place(&tx, &key, approve)?;
                 tx.commit()?;
-                Ok(Some(decision))
+                Ok(decision)
             })
             .await
     }
@@ -859,10 +885,10 @@ impl Manager {
         self.store.run(move |db| by_number(db, id)).await
     }
 
-    /// Tell whoever decides a pending request about it: the first coordinating
-    /// agent above its workspace that holds a grant for the same thing, the
-    /// coordinators passed over on the way, or else the user. A request is
-    /// routed once; repeating it tells its decider again.
+    /// Tell whoever decides a pending request about it: the space directly
+    /// above its workspace, a parent workspace with an agent or the chat that
+    /// opened it, or else the user. A request is routed once; repeating it
+    /// tells its decider again.
     pub async fn notify_approval(&self, workspace: &str, request: &ApprovalRequest) {
         let _gate = self.gates.lock_announcements().await;
         // It may have been withdrawn or decided since it was requested.
@@ -876,17 +902,8 @@ impl Manager {
             }
         };
         let request = &request;
-        // Publishing to a forge others see is the user's review, so proposals
-        // never go to a coordinator.
-        if request.target.is_proposal() {
-            self.ask_user(workspace, request).await;
-            return;
-        }
         let routed = match request.routed {
-            true => Ok(Routed {
-                request: request.clone(),
-                passed: Vec::new(),
-            }),
+            true => Ok(request.clone()),
             false => self.route_approval(request, None).await,
         };
         match routed {
@@ -898,16 +915,16 @@ impl Manager {
         }
     }
 
-    /// Pass the request the coordinator of `workspace` decides on to the next
-    /// coordinating agent above it that holds a grant, or to the user. With
-    /// `shown`, a later request reusing its number is refused.
+    /// Pass the request the space `space` decides on to the space above it,
+    /// or to the user. With `shown`, a later request reusing its number is
+    /// refused.
     pub async fn escalate_approval(
         &self,
-        workspace: &str,
+        space: &str,
         id: i64,
         shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
-        let workspace = self.workspace(workspace).await?;
+        let space = self.present_space(space).await?;
         let request = self.approval_request(id).await?.ok_or_else(|| {
             Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
         })?;
@@ -916,34 +933,34 @@ impl Manager {
             format_args!("approval request {id}"),
         )?;
         ensure!(
-            request.decider.as_deref() == Some(workspace.id.as_str()),
+            request.decider.as_deref() == Some(space.id()),
             "approval request {id} is not {}'s to decide",
-            workspace.name
+            space.name()
         );
         let _gate = self.gates.lock_announcements().await;
-        let routed = self.route_approval(&request, Some(&workspace.id)).await?;
+        let routed = self.route_approval(&request, Some(space.id())).await?;
         self.announce_approval(&request.workspace, &routed).await;
-        Ok(routed.request)
+        Ok(routed)
     }
 
-    /// Route `request` through the coordinators of its workspace, or through
-    /// those above `above` when that coordinator passes it on.
+    /// Route `request` to the space above its workspace, or to the one above
+    /// `above` when that space passes it on.
     async fn route_approval(
         &self,
         request: &ApprovalRequest,
         above: Option<&str>,
-    ) -> Result<Routed> {
+    ) -> Result<ApprovalRequest> {
         let agents = self.tracked_agents().await;
         let (key, workspace) = (request.key.clone(), request.workspace_id.clone());
         let above = above.map(str::to_owned);
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                // Passed up, it goes on above its decider, whatever became
+                // of the requester's agent since it was routed.
                 let candidates = match &above {
-                    Some(above) => {
-                        crate::daemon::workspace::ancestors_with_agents(&tx, above, &agents)?
-                    }
-                    None => crate::daemon::workspace::coordinators(&tx, &workspace, &agents)?,
+                    Some(above) => crate::daemon::workspace::spaces_above(&tx, above, &agents)?,
+                    None => crate::daemon::workspace::deciders(&tx, &workspace, &agents)?,
                 };
                 let routed = route(&tx, &key, &candidates, above.as_deref())?;
                 tx.commit()?;
@@ -952,23 +969,15 @@ impl Manager {
             .await
     }
 
-    /// Message the request's decider and the coordinators it passed over, or
-    /// notify the user when no coordinator decides it.
-    async fn announce_approval(&self, workspace: &str, routed: &Routed) {
-        let request = &routed.request;
+    /// Message the request's decider, or notify the user when no space
+    /// decides it or its decider cannot be told.
+    async fn announce_approval(&self, workspace: &str, request: &ApprovalRequest) {
         let about = format!(
             "{workspace}: approval {}: {}: {}",
             request.id,
             request.subject(),
             request.reason
         );
-        for passed in &routed.passed {
-            self.tell_agent(
-                passed,
-                format!("{about}; passed up, since you hold no grant for it"),
-            )
-            .await;
-        }
         let told = match &request.decider {
             Some(decider) => {
                 self.tell_agent(
@@ -982,15 +991,51 @@ impl Manager {
             }
             None => false,
         };
-        // The user decides what no coordinator could be told about.
+        // The user decides what no space could be told about.
         if !told {
             self.ask_user(workspace, request).await;
         }
     }
 
-    /// Queue `message` for the workspace's agent; false when it cannot be.
-    async fn tell_agent(&self, workspace: &str, message: String) -> bool {
-        match self.queue_agent_message(workspace, message).await {
+    /// Pass each pending request the chat `chat` decides up, to the user, as
+    /// the chat ends; a chat has no parent to pass them to.
+    pub(crate) async fn pass_up_chat_requests(&self, chat: &str) {
+        let decided = {
+            let chat = chat.to_owned();
+            self.store.run(move |db| decided_by(db, &chat)).await
+        };
+        let requests = match decided {
+            Ok(requests) => requests,
+            Err(error) => {
+                log!("approvals of chat {chat} not passed up: {error:#}");
+                return;
+            }
+        };
+        for request in requests {
+            if let Err(error) = self.escalate_ended(&request, chat).await {
+                log!("approval {} not passed up: {error:#}", request.id);
+            }
+        }
+    }
+
+    /// [`Self::escalate_approval`] for a chat that ended, which names no
+    /// present space.
+    async fn escalate_ended(&self, request: &ApprovalRequest, chat: &str) -> Result<()> {
+        let _gate = self.gates.lock_announcements().await;
+        let routed = self.route_approval(request, Some(chat)).await?;
+        self.announce_approval(&request.workspace, &routed).await;
+        Ok(())
+    }
+
+    /// Queue `message` for the agent of the workspace or chat `space`; false
+    /// when it cannot be. Callers hold the announcement gate, so the chat is
+    /// looked up without ending one that exited, which would take the gate.
+    async fn tell_agent(&self, space: &str, message: String) -> bool {
+        let queued = match self.recorded_running_chat(space).await {
+            Ok(Some(chat)) => (self.queue_chat_message(&chat.id, None, None, None, message)).await,
+            _ => self.queue_agent_message(space, message).await,
+        };
+        match queued {
             Ok(()) => true,
             Err(error) => {
                 log!("approval message not queued: {error:#}");

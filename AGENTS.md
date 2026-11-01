@@ -166,10 +166,15 @@ when behavior changes, distinguishing decisions from proposals.
   leases. Retries rerun hooks, and permit/lifecycle changes cannot overlap them
   in the same workspace. User scripts own underlying resource integrations.
 - Approvals are daemon-owned: scoped callers request and inspect their own;
-  only unscoped callers approve or deny, except that a request from a child workspace
-  with an agent goes to the nearest coordinating agent above it holding an approved
-  grant for the same target and settings, or to the nearest one for a hold, which decides it or passes it up to the
-  next such coordinator or the user; coordinators without a grant are told it passed. Resource grants bind effective
+  only unscoped callers approve or deny, except that a request from a workspace
+  with an agent goes to its direct parent space: its parent workspace, skipping
+  one without a running agent, else the chat that opened it. That space decides
+  it or passes it up, the parent's parent next and the user at the top; a parent
+  workspace without an approved grant for the same target and settings may only
+  deny or pass it up, while a chat, being unscoped, may approve anything.
+  Proposals route the same way, but only the user or a chat approves one; a
+  parent workspace may deny it with a reason or pass it up. An ending chat
+  passes its undecided requests to the user. Resource grants bind effective
   allocation settings, consume no capacity, and last until release or workspace
   removal according to configuration. Never bypass existing allocation rules.
   A scoped land

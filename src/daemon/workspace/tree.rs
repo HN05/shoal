@@ -257,46 +257,79 @@ pub(crate) enum Source {
     Agent,
 }
 
-/// The ancestors of the workspace `id` that have an agent, nearest first:
-/// those that may coordinate its work. A workspace without an agent of its
-/// own has none, since its coordinator or the user acts there.
-pub(crate) fn coordinators(
+/// The spaces that decide the requests of the workspace `id`, nearest first:
+/// each workspace's parent workspace, else the running chat that opened it,
+/// which ends the chain since a chat has no parent. Workspaces without an
+/// agent are skipped, and a workspace without an agent of its own has none,
+/// since its coordinator or the user acts there.
+pub(crate) fn deciders(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<Vec<String>> {
+    if !has_running_agent(db, id, agents)? {
+        return Ok(Vec::new());
+    }
+    spaces_above(db, id, agents)
+}
+
+/// The spaces above the space `id` that may decide what it passes up,
+/// nearest first, as [`deciders`] walks them; none above a chat.
+pub(crate) fn spaces_above(
     db: &Connection,
     id: &str,
     agents: &TrackedAgents,
 ) -> Result<Vec<String>> {
-    if !crate::daemon::store::exists(
+    let mut deciders = Vec::new();
+    let mut current = id.to_owned();
+    loop {
+        match space_above(db, &current)? {
+            Above::Workspace(parent) => {
+                if has_running_agent(db, &parent, agents)? {
+                    deciders.push(parent.clone());
+                }
+                current = parent;
+            }
+            Above::Chat(chat) => {
+                deciders.push(chat);
+                return Ok(deciders);
+            }
+            Above::User => return Ok(deciders),
+        }
+    }
+}
+
+/// The space directly above a workspace.
+enum Above {
+    Workspace(String),
+    /// The running chat that opened it; a chat's end clears its ownership.
+    Chat(String),
+    User,
+}
+
+/// The space directly above the workspace `id`: its parent workspace, else
+/// the chat that opened it.
+fn space_above(db: &Connection, id: &str) -> Result<Above> {
+    let above: Option<(Option<String>, Option<String>)> = db
+        .query_row(
+            "SELECT parent_workspace_id, chat_id FROM workspaces WHERE id=?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    Ok(match above {
+        Some((Some(parent), _)) => Above::Workspace(parent),
+        Some((None, Some(chat))) => Above::Chat(chat),
+        Some((None, None)) | None => Above::User,
+    })
+}
+
+/// Whether the workspace `id` has an agent among `agents`.
+fn has_running_agent(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<bool> {
+    crate::daemon::store::exists(
         db,
         &format!(
             "SELECT 1 FROM workspaces WHERE id=?1 AND {}",
             has_agent("workspaces.id")
         ),
         params![id, agents.parameter()],
-    )? {
-        return Ok(Vec::new());
-    }
-    ancestors_with_agents(db, id, agents)
-}
-
-/// The ancestors of the workspace `id` that have an agent, nearest first.
-pub(crate) fn ancestors_with_agents(
-    db: &Connection,
-    id: &str,
-    agents: &TrackedAgents,
-) -> Result<Vec<String>> {
-    Ok(db
-        .prepare(&format!(
-            "WITH RECURSIVE up(id, depth) AS (
-                SELECT parent_workspace_id, 1 FROM workspaces
-                    WHERE id=?1 AND parent_workspace_id IS NOT NULL
-                UNION SELECT workspaces.parent_workspace_id, up.depth + 1 FROM up
-                    JOIN workspaces ON workspaces.id=up.id
-                    WHERE workspaces.parent_workspace_id IS NOT NULL
-            ) SELECT id FROM up WHERE {} ORDER BY depth",
-            has_agent("up.id")
-        ))?
-        .query_map(params![id, agents.parameter()], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?)
+    )
 }
 
 /// Who coordinates a workspace's work.

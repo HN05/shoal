@@ -116,7 +116,11 @@ decides; the answer reaches the agent as a message.
 In a `shoal chat`, the agents of the workspaces you open report to you instead
 of the user: their messages, questions, completion, ready marks and exits
 arrive as Shoal messages naming the workspace, and `shoal files <name>` shows the
-files a finished workspace handed back. Answer what you can decide with
+files a finished workspace handed back. Their approval requests come to you
+too: decide them with `shoal approvals --approve <number>` or `--deny <number>`,
+or hand one to the user with `shoal approvals --escalate <number>`; `shoal
+approvals --space <chat>` lists them. Proposed issues and PRs come too, and
+`--approve` takes `--title` and `--body-file` edits as it does for the user. Answer what you can decide with
 `shoal questions`, write to an agent with `shoal messages send --space <name>`
 (`--attach FILE` hands it a file), and ask the user about the rest. Link the
 issues, PRs and CI runs you follow yourself with `shoal link <item> <relation>`:

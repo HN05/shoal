@@ -19,7 +19,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::Events { follow, since } => events::run(&ctx, follow, since).await,
         InternalCommand::MenuRows { view } => menu::print_rows(&ctx, view).await,
         InternalCommand::MenuNext => menu::print_next(&ctx),
-        InternalCommand::ApprovalRows { workspace } => approvals::print_rows(&ctx, workspace).await,
+        InternalCommand::ApprovalRows { space } => approvals::print_rows(&ctx, space).await,
         InternalCommand::ApprovalDecide { decision, row } => {
             approvals::decide_row(&ctx, &row, decision).await
         }

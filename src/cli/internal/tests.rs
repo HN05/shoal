@@ -169,14 +169,14 @@ fn menu_workers_round_trip_their_view() {
 }
 
 #[test]
-fn approval_workers_round_trip_their_workspace_and_decision() {
-    for workspace in [None, Some("agent")] {
-        let InternalCommand::ApprovalRows { workspace: parsed } =
-            parse(Worker::ApprovalRows { workspace }, false)
+fn approval_workers_round_trip_their_space_and_decision() {
+    for space in [None, Some("agent")] {
+        let InternalCommand::ApprovalRows { space: parsed } =
+            parse(Worker::ApprovalRows { space }, false)
         else {
             panic!("expected approval rows worker");
         };
-        assert_eq!(parsed.as_deref(), workspace);
+        assert_eq!(parsed.as_deref(), space);
     }
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());

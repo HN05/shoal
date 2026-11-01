@@ -443,7 +443,7 @@ impl Typed {
         if matches!(target, Target::ApprovalRequests) {
             let requests = client::request::<Vec<ApprovalRequest>>(
                 &paths,
-                ApprovalMethod::ListApprovals { workspace: None },
+                ApprovalMethod::ListApprovals { space: None },
             )
             .await?;
             return Ok(requests

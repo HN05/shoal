@@ -88,7 +88,7 @@ impl Inbox {
                 .questions;
         let requests = request::<Vec<ApprovalRequest>>(
             &ctx.paths,
-            ApprovalMethod::ListApprovals { workspace: None },
+            ApprovalMethod::ListApprovals { space: None },
         )
         .await?;
         let detached = |request: &ApprovalRequest| {

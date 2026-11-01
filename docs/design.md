@@ -634,9 +634,13 @@ daemon starts them detached; resuming what the user or Shoal stopped, and
 confirming that an execution Shoal cannot prove ended did, stay the user's.
 Stopping a workspace stops the workspaces below it unless `--skip-children`
 says otherwise, since their agents work for it. Approval
-requests go to the coordinator too when it holds an approved grant for the same
-thing, and a child agent's request to hold its own workspace goes to it without
-one; it decides them or passes them up, the user deciding at the top.
+requests go to the direct parent space too: the parent workspace, skipping one
+without a running agent, else the chat that opened the workspace, since each
+knows best what its children need. A parent workspace approves only what it
+holds an approved grant for, or a hold on its child, and otherwise denies or
+passes the request up; a chat runs with the user's authority and approves
+anything; the user decides at the top, and an ending chat hands the user what it
+had not decided.
 The worker skill steers agents to a subagent working in the child's directory
 over `--agent`: the child then has no agent of its own, so its activity reaches
 the parent, and the subagent reports to the parent directly, supervision Shoal
@@ -1818,9 +1822,10 @@ returns it to the user, so Shoal knows which chat coordinates which workers.
 Having no workspace, a chat keeps its messages in its own queue, which the same
 hooks deliver, including the user's request to rename it; a chat that ends gives the user the notifications its unread
 messages stand for, and its workers return to the user even if it is resumed.
-A chat passes a question up by asking the user, who attends it. Holding no
-grant, it receives no approval requests, though with the user's authority it
-may decide them. A repository may have several chats, so each call starts a new
+A chat passes a question up by asking the user, who attends it. The approval
+requests of the workspaces it opened come to it when no parent workspace above
+them has an agent, and with the user's authority it may approve them; those it
+has not decided go to the user when it ends. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
 ends or is renamed. Renaming changes the record and the files kept under the
@@ -2010,10 +2015,12 @@ A proposal is an approval request whose record carries the command's options wit
 their defaults resolved, the workspace, branch, commit and agent, and copies of its
 attachments in the state directory until no pending proposal uses them; the command
 reports it and exits 0, because the agent goes on with its work and hears the
-decision as a message. Only the user decides a proposal: publishing to a forge
-other people see is the review the setting asks for, so proposals are never routed
-to a coordinating agent. Approval carries data: the user may replace the title and
-body, and the daemon then opens the item as the agent account through the same path
+decision as a message. A proposal is routed like any request, to the direct parent
+space and up to the user, but publishing to a forge other people see is the review
+the setting asks for, so only the user or a chat, which runs with the user's
+authority, approves one. A parent workspace may deny it with a reason or pass it
+up; marking it a duplicate comments on the forge too, so that is not a workspace's
+either. Approval carries data: the decider may replace the title and body, and the daemon then opens the item as the agent account through the same path
 `issue open` and `pr open` use, recording and linking it. Denial may carry a reason,
 and an issue proposal may be denied as a duplicate of an existing issue, which gets
 its text as a comment, or of another pending proposal, which posts it once opened.
@@ -2086,10 +2093,11 @@ an assignment's cleanup follows the workspace's repository. A proposal records
 the repository it opens in.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
-only an unscoped caller decides it, or the nearest coordinating agent above the
-requesting child workspace that holds an approved grant for the same target and
-settings, which may pass it up to the next such coordinator or the user; the
-coordinators passed over are told so. The decision is sent to the requesting
+only an unscoped caller decides it, or the direct parent space of the requesting
+workspace: its parent workspace with an agent, which approves only what it holds
+an approved grant for with the same target and settings and otherwise denies or
+passes the request up, else the chat that opened it, which may approve anything;
+the user decides at the top. The decision is sent to the requesting
 workspace's agents as a message so they need not poll. Pending requests consume no capacity. Approval
 lasts until release by default, or for the workspace when configured, limited to the
 same resource and access settings. Changed settings require a new request; approval

@@ -22921,7 +22921,7 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
             .success()
     );
     assert!(
-        !scoped_command(&fixture, "human", &["approvals", "--workspace", "agent"])
+        !scoped_command(&fixture, "human", &["approvals", "--space", "agent"])
             .status
             .success()
     );

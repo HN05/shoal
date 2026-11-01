@@ -75,7 +75,7 @@ pub use simulators::SimulatorMethod;
 pub use subscriptions::SubscriptionMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 189;
+pub const VERSION: u32 = 190;
 /// The first protocol whose wrappers read [`Control::RestoreWaits`].
 pub const RESTORE_WAITS: u32 = 174;
 pub const MAX_FRAME: usize = 64 * 1024;

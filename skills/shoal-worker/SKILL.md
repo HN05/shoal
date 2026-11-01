@@ -94,9 +94,9 @@ revert merges.
 A repository can require the user's approval for issues and PRs you open
 (`[permissions]`). Then `issue open` and `pr open` exit 0 with `proposed`, an
 approval request, instead of the item; `pr open` still pushes unless pushes need
-approval too. Only the user decides
-proposals, never a coordinating agent. Continue your work and do not open the
-item another way. The user may edit the title and
+approval too. A proposal goes to the space above you like other approval
+requests, and only the user or a chat approves it. Continue your work and do not
+open the item another way. The decider may edit the title and
 description, and the decision arrives as a message: approval names the opened
 item, which a PR's watch then follows; denial may give a reason or name the
 issue it duplicates. A proposed issue stays when your workspace is removed, so
@@ -421,11 +421,12 @@ agents you stopped to continue; the user resumes the ones the user stopped.
 When a stopped child agent should not come back, such as one whose work is
 done, forget its saved session with `shoal resume <child> --discard`.
 
-A child agent's approval request comes to you when you hold an approved grant
-for the same thing, or when it asks to hold its own workspace; otherwise it
-passes you by, with a message saying so. Decide
-it with `shoal approvals --approve <number>` or `shoal approvals --deny <number>`, or pass it up with
-`shoal approvals --escalate <number>` when the user should decide.
+A child agent's approval request comes to you first. Approve it with
+`shoal approvals --approve <number>` only when you hold an approved grant for
+the same thing, or when it asks to hold its own workspace; otherwise approving
+is refused. Deny it with `shoal approvals --deny <number>`, or pass it up with
+`shoal approvals --escalate <number>` when the space above you or the user
+should decide.
 
 ## Ports
 
