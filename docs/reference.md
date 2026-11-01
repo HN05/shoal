@@ -418,13 +418,13 @@ processes do not exit is reported as pending with their PIDs and the command tha
 ends them, which also sets the exit status to 1, and restarts once they exit
 unless `shoal stop` cancels it.
 
-`shoal resume [workspace...]` queues the restore of each agent a saved recovery
+`shoal resume [space...]` queues the restore of each agent a saved recovery
 record or last session keeps after its wrapper exits, or only the `--execution <id>` one, and
 reports how many it queued; the [agent queue](#agent-queue) starts them as
 the agent limits allow. Without a
-workspace, resume uses the current workspace when it has something to resume,
+space, resume uses the current workspace when it has something to resume,
 otherwise a picker listing every workspace with what it would restore, stopped
-work first; with nothing to resume anywhere it reports that without a picker.
+work first, and the saved chats; with nothing to resume anywhere it reports that without a picker.
 Completion describes each workspace the same way.
 A workspace without stopped agents continues one of its last sessions at once,
 placed as `--now` places an agent, when resumed by itself, left by `shoal stop`
@@ -436,8 +436,8 @@ Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and resume commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal run` commands. Either way they are reported once.
-Several workspaces, which each need stopped work or a last session, or `--all` for every workspace whose
-assignment is not done, resume together and report commands without an agent,
+Several spaces, each workspace among them with stopped work or a last session, or `--all` for every
+saved chat and every workspace whose assignment is not done, resume together and report commands without an agent,
 skipping agents whose wrapper still waits to restore them; a done workspace's
 agent restores only when its workspace is named.
 `--now` starts the agents at once regardless of the limits; with several stopped
@@ -450,15 +450,14 @@ stopped in once that is back at its prompt. Otherwise it starts each in the back
 per agent where `terminal.herdr.new_tab` allows, labelled as `shoal add` labels it, or a
 detached zmx session per agent on a terminal outside Herdr. Where nothing can
 start in the background, such as without a terminal, it restores a single agent
-here and lists several as `shoal resume --focus` commands to run in separate
-terminals. `--focus` restores one agent in the current terminal at once,
+here, unless the run also restores a chat or fails for a space, and otherwise lists
+the agents as `shoal resume --focus` commands to run in separate terminals. `--focus` restores one agent in the current terminal at once,
 regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
-A named [chat](#chats) Shoal saved restores at once under its name, continuing
+A [chat](#chats) Shoal saved restores at once under its name, continuing
 its session, in a background place where a restored agent opens, or in this
-terminal with `--focus`; `--discard` ends it instead. Name chats and workspaces
-in separate calls.
+terminal with `--focus`; `--discard` ends it instead. A running chat has nothing to resume.
 When a stopped agent's execution is unknown, after a daemon restart or a stop
 Shoal could not prove, the daemon forgets it once its wrapper has exited and none
 of its processes remain, keeping the record for `shoal resume`, which repeats the

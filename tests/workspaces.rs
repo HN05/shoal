@@ -7419,6 +7419,93 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
 }
 
 #[test]
+fn a_resume_takes_saved_chats_and_workspaces_together() {
+    let mut fixture = chat_session_fixture();
+    let home = fixture.root.path().to_owned();
+    let save_chat = |fixture: &mut Fixture| {
+        let _ = fs::remove_file(home.join("chat-started"));
+        let chat = save_running_chat(fixture, |fixture| {
+            let output = fixture.run(&["daemon", "stop"]);
+            assert!(output.status.success(), "{output:?}");
+        });
+        assert!(fixture.daemon.child.wait().unwrap().success());
+        fixture.restart();
+        chat["id"].as_str().unwrap().to_owned()
+    };
+    let stop_agent = |fixture: &Fixture, workspace: &Value| {
+        let state = fixture
+            .root
+            .path()
+            .join("state/workspaces")
+            .join(workspace["id"].as_str().unwrap());
+        fs::create_dir_all(&state).unwrap();
+        fs::write(
+            state.join("worker-agent.recovery.json"),
+            r#"{"agent":"claude"}"#,
+        )
+        .unwrap();
+    };
+    let discarded_both = |discarded: &Value| {
+        assert_eq!(
+            discarded["discarded"],
+            serde_json::json!(["worker-agent"]),
+            "{discarded}"
+        );
+        assert_eq!(discarded["chats"][0]["name"], "talk", "{discarded}");
+    };
+    save_chat(&mut fixture);
+    let worker = fixture.add("worker");
+    stop_agent(&fixture, &worker);
+    // A list naming a chat and a workspace acts on both.
+    discarded_both(&fixture.ok(&["resume", "talk", "worker", "--discard"]));
+    assert_eq!(fixture.ok(&["work", "--chats"]), Value::Array(vec![]));
+    // `--all` takes the saved chats too.
+    save_chat(&mut fixture);
+    stop_agent(&fixture, &worker);
+    discarded_both(&fixture.ok(&["resume", "--all", "--discard"]));
+    assert_eq!(fixture.ok(&["work", "--chats"]), Value::Array(vec![]));
+    // A run that restores a chat lists the only agent for its own terminal
+    // instead of restoring it here in place of the run's report. The chat
+    // opens in a zmx session that gives it a terminal.
+    save_chat(&mut fixture);
+    stop_agent(&fixture, &worker);
+    install_test_script(home.join("bin").join("zmx"), terminal_zmx());
+    let (output, transcript) =
+        fixture.interactive_command(fixture.command().args(["resume", "--all", "--now"]), "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Restored chat talk")
+            && stdout.contains("shoal resume worker --execution worker-agent --focus"),
+        "{output:?}"
+    );
+    // The restored agent only records how it ran, which ends the chat.
+    wait_until("the restored chat to end", || {
+        fixture.ok(&["work", "--chats"]) == Value::Array(vec![])
+    });
+    fixture.ok(&["resume", "worker", "--discard"]);
+    // The picker offers the saved chats after the workspaces with stopped
+    // work.
+    let chat = save_chat(&mut fixture);
+    stop_agent(&fixture, &worker);
+    let both = format!("{chat} {}", worker["id"].as_str().unwrap());
+    let (output, rows) = fixture.pick(&["resume", "--discard"], &both, "");
+    assert!(output.status.success(), "{output:?}");
+    let rows = rows.lines().collect::<Vec<_>>();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(rows[0].contains("worker"), "{rows:?}");
+    assert!(
+        rows[1].contains("talk") && rows[1].contains("stopped"),
+        "{rows:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Discarded chat talk"),
+        "{output:?}"
+    );
+    assert_eq!(fixture.ok(&["work", "--chats"]), Value::Array(vec![]));
+}
+
+#[test]
 fn a_chat_a_signal_saved_comes_back_on_its_own() {
     let mut fixture = chat_session_fixture();
     let home = fixture.root.path().to_owned();
@@ -7433,12 +7520,7 @@ fn a_chat_a_signal_saved_comes_back_on_its_own() {
     fs::remove_file(home.join("chat-args")).unwrap();
     // The next daemon opens the chat in a zmx session, which runs it on a
     // terminal of its own, as a chat needs.
-    let zmx = PASSTHROUGH_ZMX.replace(
-        "sys.exit(subprocess.run(['sh', '-c', args[1]]).returncode)",
-        "import pty; sys.exit(os.waitstatus_to_exitcode(pty.spawn(['sh', '-c', args[1]])))",
-    );
-    assert_ne!(zmx, PASSTHROUGH_ZMX);
-    install_test_script(home.join("bin").join("zmx"), &zmx);
+    install_test_script(home.join("bin").join("zmx"), terminal_zmx());
     fixture.restart();
 
     // The resumed agent records its arguments, then its chat, then exits.
@@ -7460,6 +7542,29 @@ fn a_chat_a_signal_saved_comes_back_on_its_own() {
         chat_kinds(&fixture),
         ["chat_started", "chat_saved", "chat_restored", "chat_ended"]
     );
+}
+
+/// A [`PASSTHROUGH_ZMX`] whose sessions run their command on a terminal of
+/// their own, as a chat needs. It waits for the command rather than for the
+/// terminal to close, which `pty.spawn` waits for and macOS may never
+/// report, leaving the session behind.
+fn terminal_zmx() -> String {
+    let zmx = PASSTHROUGH_ZMX.replace(
+        "    sys.exit(subprocess.run(['sh', '-c', args[1]]).returncode)",
+        "    import pty, select\n\
+         \x20   pid, terminal = pty.fork()\n\
+         \x20   if pid == 0:\n\
+         \x20       os.execvp('sh', ['sh', '-c', args[1]])\n\
+         \x20   while not (status := os.waitpid(pid, os.WNOHANG))[0]:\n\
+         \x20       if select.select([terminal], [], [], 0.1)[0]:\n\
+         \x20           try:\n\
+         \x20               os.read(terminal, 4096)\n\
+         \x20           except OSError:\n\
+         \x20               pass\n\
+         \x20   sys.exit(os.waitstatus_to_exitcode(status[1]))",
+    );
+    assert_ne!(zmx, PASSTHROUGH_ZMX);
+    zmx
 }
 
 /// The kinds of the journal's chat events, in order.
@@ -11581,7 +11686,8 @@ fn resume_picker_describes_what_each_workspace_would_restore() {
     assert!(output.status.success(), "{output:?}");
     assert!(rows.is_empty(), "{rows}");
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("No stopped agents or commands"),
+        String::from_utf8_lossy(&output.stdout)
+            .contains("No stopped agents, commands or saved chats"),
         "{output:?}"
     );
     // Every workspace is listed with what it would restore, stopped work first.

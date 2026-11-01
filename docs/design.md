@@ -1747,7 +1747,9 @@ forgot them. A stop that fails leaves it running only while its agent does: a
 stop before a shutdown or a signal's saves it to come back on its own, and `shoal daemon stop`
 for `shoal resume`. A saved chat keeps its record, and with it its name, files,
 messages, workspaces and temporary directory, until a restore runs it again in
-a new process or a discard ends it. Restores and discards wait for a save
+a new process or a discard ends it. `shoal resume` resolves each target to a
+saved chat or a workspace in one lookup over the shared namespace, so its
+picker, `--all` and a list of names act on both. Restores and discards wait for a save
 under way and refuse while a process the chat owns still runs, since two agents
 would write one session and a discard would delete files in use, and a restore
 whose agent does not start leaves the chat saved and tells the user, who may

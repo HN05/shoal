@@ -168,10 +168,12 @@ pub async fn select_workspace_filter(
 
 /// Like `select_workspaces`, but the current workspace counts only with
 /// something to resume, and the picker lists what each workspace has to
-/// resume. `None` when nothing is resumable anywhere.
-pub async fn select_stopped_workspaces(
+/// resume beside the `saved` chats. `None` when nothing is resumable
+/// anywhere.
+pub async fn select_stopped_spaces(
     ctx: &Context,
     names: Vec<String>,
+    saved: &[Chat],
 ) -> Result<Option<Vec<String>>> {
     if !names.is_empty() {
         return select_workspaces(ctx, names).await.map(Some);
@@ -183,21 +185,22 @@ pub async fn select_stopped_workspaces(
         Resolution::Workspace(_) => client::workspaces(&ctx.paths).await?,
         Resolution::Picker(workspaces) => workspaces,
     };
-    let Some(entries) = resume_entries(ctx, workspaces) else {
+    let Some(entries) = resume_entries(ctx, workspaces, saved) else {
         return Ok(None);
     };
-    require_argument(ctx, "workspaces", WORKSPACE)?;
-    pick_many(ctx, "Workspaces> ", entries).map(Some)
+    require_argument(ctx, "spaces", SPACE)?;
+    pick_many(ctx, "Spaces> ", entries).map(Some)
 }
 
-/// Workspaces with stopped work come first, then those with a last session;
+/// Workspaces with stopped work come first, then those with a last session,
+/// then the `saved` chats, then the workspaces with nothing to resume;
 /// `None` when nothing is resumable.
-fn resume_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Option<Entries> {
+fn resume_entries(ctx: &Context, workspaces: Vec<Workspace>, saved: &[Chat]) -> Option<Entries> {
     let mut rows = workspaces
         .into_iter()
         .map(|w| (resumable(&ctx.paths, &w.id), w))
         .collect::<Vec<_>>();
-    if rows.iter().all(|(resumable, _)| resumable.is_none()) {
+    if saved.is_empty() && rows.iter().all(|(resumable, _)| resumable.is_none()) {
         return None;
     }
     rows.sort_by_key(|(resumable, _)| match resumable {
@@ -205,6 +208,10 @@ fn resume_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Option<Entries> 
         Some((_, false)) => 1,
         None => 2,
     });
+    let with_work = rows
+        .iter()
+        .filter(|(resumable, _)| resumable.is_some())
+        .count();
     let (statuses, workspaces): (Vec<_>, Vec<_>) = rows
         .into_iter()
         .map(|(resumable, w)| {
@@ -213,15 +220,12 @@ fn resume_entries(ctx: &Context, workspaces: Vec<Workspace>) -> Option<Entries> 
             ((status, resume_status_cell(resumable)), w)
         })
         .unzip();
-    let labels = rows_with_status(
-        &workspaces,
-        &[],
-        statuses,
-        Palette::stderr(ctx.json),
-        picker_width(),
-        false,
-    );
-    Some(workspaces.into_iter().map(|w| w.id).zip(labels).collect())
+    let palette = Palette::stderr(ctx.json);
+    let labels = rows_with_status(&workspaces, &[], statuses, palette, picker_width(), false);
+    let mut entries: Entries = workspaces.into_iter().map(|w| w.id).zip(labels).collect();
+    let chats = chat_entries(saved, palette, picker_width());
+    entries.splice(with_work..with_work, chats);
+    Some(entries)
 }
 
 /// What `shoal resume` restores in a workspace, such as `stopped: claude,

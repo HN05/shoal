@@ -824,8 +824,8 @@ pub struct Chat {
     pub restore: Option<crate::state::ChatRestore>,
 }
 
-/// A space as it exists: a workspace or a running chat, which share one
-/// namespace of IDs and names.
+/// A space as it exists: a workspace or a chat, running or saved, which
+/// share one namespace of IDs and names.
 #[derive(Debug, Clone)]
 #[allow(
     clippy::large_enum_variant,
@@ -842,6 +842,37 @@ impl PresentSpace {
             Self::Workspace(workspace) => &workspace.name,
             Self::Chat(chat) => &chat.name,
         }
+    }
+
+    /// Whether it is a chat Shoal saved to restore, which does not run.
+    pub fn is_saved_chat(&self) -> bool {
+        matches!(self, Self::Chat(chat) if chat.restore.is_some())
+    }
+}
+
+/// The spaces a caller sees: its workspaces, and its chats, running or
+/// saved.
+#[derive(Debug, Clone, Default)]
+pub struct Spaces {
+    pub workspaces: Vec<Workspace>,
+    pub chats: Vec<Chat>,
+}
+
+impl Spaces {
+    /// The space `selector` names, by ID or name.
+    pub fn find(&self, selector: &str) -> Option<PresentSpace> {
+        let named = |id: &str, name: &str| id == selector || name == selector;
+        let workspace = self
+            .workspaces
+            .iter()
+            .find(|workspace| named(&workspace.id, &workspace.name));
+        if let Some(workspace) = workspace {
+            return Some(PresentSpace::Workspace(workspace.clone()));
+        }
+        self.chats
+            .iter()
+            .find(|chat| named(&chat.id, &chat.name))
+            .map(|chat| PresentSpace::Chat(chat.clone()))
     }
 }
 

@@ -25,27 +25,33 @@ pub struct ResumedAgent {
     pub reused: bool,
 }
 
-/// What a resume of several workspaces did.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// What a resume of several spaces did.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Resumed {
     pub commands: Vec<StoppedCommands>,
     pub agents: Vec<ResumedAgent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chats: Vec<RestoredChat>,
     pub failed: Vec<Failure>,
 }
 
-/// The executions a discard forgot.
+/// The executions and saved chats a discard forgot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscardedWork {
     pub discarded: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chats: Vec<Chat>,
     pub failed: Vec<Failure>,
 }
 
-/// The restores a resume queued, the commands it reported and the
-/// workspaces it failed for.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// The restores a resume queued, the commands it reported, the saved chats
+/// it restored at once and the spaces it failed for.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Queued {
     pub queued: Vec<QueueEntry>,
     pub commands: Vec<StoppedCommands>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chats: Vec<RestoredChat>,
     pub failed: Vec<Failure>,
 }
 
@@ -73,26 +79,4 @@ pub struct RestoredChat {
     pub place: Option<String>,
 }
 
-/// The saved chats a resume restored, and those it failed for.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RestoredChats {
-    pub restored: Vec<RestoredChat>,
-    pub failed: Vec<Failure>,
-}
-
-/// The saved chats a discard ended, and those it failed for.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DiscardedChats {
-    pub discarded: Vec<Chat>,
-    pub failed: Vec<Failure>,
-}
-
-outputs!(
-    StoppedCommands,
-    Resumed,
-    DiscardedWork,
-    Queued,
-    Reopened,
-    RestoredChats,
-    DiscardedChats
-);
+outputs!(StoppedCommands, Resumed, DiscardedWork, Queued, Reopened);

@@ -1,13 +1,12 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
-//! It queues restores unless asked to start them now.
-use crate::client::output::{
-    batch::Failure,
-    resume::{DiscardedWork, Queued, Resumed, ResumedAgent, StoppedCommands},
+//! It queues restores unless asked to start them now, and restores the
+//! chats Shoal saved at once.
+use crate::client::output::resume::{
+    DiscardedWork, Queued, Resumed, ResumedAgent, StoppedCommands,
 };
 use crate::{
     cli::{
-        args::WorkspaceTargets, client, commands::turns::Continuation, context::Context, terminal,
-        ui,
+        args::SpaceTargets, client, commands::turns::Continuation, context::Context, terminal, ui,
     },
     daemon::{
         recovery::{ReconcileOptions, Report},
@@ -17,7 +16,7 @@ use crate::{
         LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,
         consume, saved_at,
     },
-    model::{Inspection, QueueEntry, Workspace},
+    model::{Chat, Inspection, QueueEntry, Workspace},
     protocol::{AssignmentMethod, ConfigTarget, RecoveryMethod},
     sessions::HostName,
     state::{ExecutionState, QueueState},
@@ -27,13 +26,15 @@ use std::{
     ffi::OsString,
     path::{Path, PathBuf},
 };
+use targets::Selected;
 
-/// `shoal resume`: the selected workspaces, or every one for `--all` or when
-/// no workspace has stopped work. Their restores queue unless `now`, or
-/// `focus`, which restores one agent in this terminal.
+/// `shoal resume`: the selected spaces, or every one for `--all` or when no
+/// space has anything to resume. Saved chats restore at once; workspaces'
+/// restores queue unless `now`, or `focus`, which restores one agent or
+/// chat in this terminal.
 pub async fn select(
     ctx: &Context,
-    mut targets: WorkspaceTargets,
+    targets: SpaceTargets,
     execution: Option<String>,
     discard: bool,
     now: bool,
@@ -43,79 +44,109 @@ pub async fn select(
     if scoped {
         ensure_below(&targets, now || focus)?;
     }
-    // Named workspaces whose agents idle after an interrupt continue their
-    // turns instead, which a request that also resumes stopped work would
-    // report apart from it.
-    if !discard && execution.is_none() && !targets.workspace.is_empty() {
-        let named = ui::select_workspaces(ctx, targets.workspace).await?;
-        let (continuation, rest) = Continuation::plan(ctx, named).await?;
-        if !continuation.is_empty() {
-            ensure!(
-                rest.is_empty(),
-                "resume interrupted turns and stopped work separately"
-            );
-            return continuation.submit(ctx).await;
-        }
-        targets.workspace = rest;
+    let named = !targets.space.is_empty();
+    let mut selected = Selected::load(ctx, targets, scoped).await?;
+    if named
+        && !discard
+        && execution.is_none()
+        && let Some(code) = continue_turns(ctx, &mut selected).await?
+    {
+        return Ok(code);
     }
     if scoped && !discard {
-        return queue_below(ctx, targets.workspace, execution).await;
+        let workspaces = selected.workspaces.unwrap_or_default();
+        return queue_below(ctx, workspaces, execution).await;
     }
-    let selected = if targets.all {
-        None
-    } else {
-        ui::select_stopped_workspaces(ctx, targets.workspace).await?
-    };
-    if !(discard || now || focus) {
-        return queue_selected(ctx, selected, execution).await;
-    }
-    match selected.as_deref() {
-        None => run_all(ctx, None, discard).await,
-        Some([workspace]) => run(ctx, workspace.clone(), execution, discard, focus).await,
-        Some(workspaces) => {
+    match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
+        ([], Some([workspace])) if discard || now || focus => {
+            run(ctx, workspace.clone(), execution, discard, focus).await
+        }
+        ([], Some([workspace])) => queue_workspace(ctx, workspace.clone(), execution).await,
+        ([chat], Some([])) if focus && execution.is_none() => chats::restore_here(ctx, chat).await,
+        _ => {
             ensure!(
                 execution.is_none(),
                 "--execution selects a stopped execution of one workspace"
             );
-            ensure!(!focus, "--focus restores the agent of one workspace");
-            let workspaces = stopped_in(ctx, workspaces).await?;
-            run_all(ctx, Some(workspaces), discard).await
+            ensure!(
+                !focus,
+                "--focus restores the agent of one workspace or chat"
+            );
+            resume_each(ctx, selected, discard, now).await
         }
     }
+}
+
+/// Report that no space has anything to resume, as a resume that starts
+/// agents at once when `started`, otherwise as one that queues them.
+fn report_nothing(ctx: &Context, started: bool) -> Result<i32> {
+    let message = "No stopped agents, commands or saved chats";
+    match started {
+        true => ctx.emit(message, Resumed::default())?,
+        false => ctx.emit(message, Queued::default())?,
+    }
+    Ok(0)
+}
+
+/// Continue the turns an interrupt ended of the agents in the `selected`
+/// workspaces, which keeps the workspaces without one, refusing those and
+/// selected chats, which a request that also resumes stopped work would
+/// report apart from it. `None` when no turn ended so.
+async fn continue_turns(ctx: &Context, selected: &mut Selected) -> Result<Option<i32>> {
+    let Some(workspaces) = &mut selected.workspaces else {
+        return Ok(None);
+    };
+    let (continuation, rest) = Continuation::plan(ctx, std::mem::take(workspaces)).await?;
+    *workspaces = rest;
+    if continuation.is_empty() {
+        return Ok(None);
+    }
+    ensure!(
+        workspaces.is_empty() && selected.chats.is_empty(),
+        "resume interrupted turns and stopped work separately"
+    );
+    continuation.submit(ctx).await.map(Some)
 }
 
 /// Refuse a resume in a workspace process that does not name the workspaces
 /// below its own or restores in this terminal, `here`: it only queues the
 /// restores of the agents it stopped there, which the daemon starts, or
 /// discards their stopped work.
-fn ensure_below(targets: &WorkspaceTargets, here: bool) -> Result<()> {
+fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
     // The daemon checks that each workspace is below the caller's, which
     // needs the scope token: a process that cleared it stays refused.
     ensure!(
-        crate::env::is_scoped() && !targets.all && !targets.workspace.is_empty() && !here,
+        crate::env::is_scoped() && !targets.all && !targets.space.is_empty() && !here,
         "workspace processes resume only the workspaces below theirs, by name and without --now or --focus: shoal resume <workspace> [--discard]"
     );
     Ok(())
 }
 
-/// Queue the restores of the `selected` workspaces' stopped agents, of
-/// every workspace's for `None`.
-async fn queue_selected(
-    ctx: &Context,
-    selected: Option<Vec<String>>,
-    execution: Option<String>,
-) -> Result<i32> {
-    match selected.as_deref() {
-        None => queue::queue_all(ctx, stopped_work(ctx, false).await?).await,
-        Some([workspace]) => queue_workspace(ctx, workspace.clone(), execution).await,
-        Some(workspaces) => {
-            ensure!(
-                execution.is_none(),
-                "--execution selects a stopped execution of one workspace"
-            );
-            queue::queue_all(ctx, stopped_in(ctx, workspaces).await?).await
-        }
+/// Resume the `selected` spaces together, reporting them at once: restore
+/// the saved chats, or end them for `discard`, and queue the restores of
+/// the workspaces' stopped agents, start them for `now`, or forget the
+/// stopped work for `discard`.
+async fn resume_each(ctx: &Context, selected: Selected, discard: bool, now: bool) -> Result<i32> {
+    let stopped = match &selected.workspaces {
+        None => stopped_work(ctx, discard).await?,
+        Some(workspaces) => stopped_in(ctx, workspaces).await?,
+    };
+    if stopped.is_empty() && selected.chats.is_empty() {
+        return report_nothing(ctx, discard || now);
     }
+    if discard {
+        return discard_each(ctx, &stopped, &selected.chats).await;
+    }
+    let (chats, failed) = chats::restore_each(ctx, &selected.chats).await;
+    if now {
+        let resumed = Resumed {
+            chats,
+            failed,
+            ..Default::default()
+        };
+        return run_all(ctx, stopped, resumed).await;
+    }
+    queue::queue_all(ctx, stopped, chats, failed).await
 }
 
 /// Queue the restores of the stopped agents and last sessions of the
@@ -131,7 +162,7 @@ async fn queue_below(
     for selector in selectors {
         stopped.push(stopped_agents(ctx, selector, execution.as_deref()).await?);
     }
-    queue::queue_all(ctx, stopped).await
+    queue::queue_all(ctx, stopped, Vec::new(), Vec::new()).await
 }
 
 /// Executions stopped so their workspaces could move, by workspace.
@@ -199,7 +230,7 @@ async fn queue_workspace(
     if saved.agents.is_empty() && !saved.sessions.is_empty() {
         return continue_last_session(ctx, &workspace, saved, false).await;
     }
-    queue::queue_all(ctx, vec![(workspace, saved)]).await
+    queue::queue_all(ctx, vec![(workspace, saved)], Vec::new(), Vec::new()).await
 }
 
 /// Restore the stopped agent `execution` of the one workspace `targets`
@@ -207,7 +238,7 @@ async fn queue_workspace(
 /// agent takes over.
 pub async fn start_entry(
     ctx: &Context,
-    targets: WorkspaceTargets,
+    targets: SpaceTargets,
     execution: Option<String>,
     entry: String,
 ) -> Result<i32> {
@@ -215,7 +246,7 @@ pub async fn start_entry(
         !crate::env::inherits_scope(&ctx.paths.state),
         "resume agents outside scoped executions"
     );
-    let ([workspace], Some(execution)) = (targets.workspace.as_slice(), execution) else {
+    let ([workspace], Some(execution)) = (targets.space.as_slice(), execution) else {
         anyhow::bail!("a queued restore names one workspace and its stopped execution");
     };
     crate::env::launch_queue_entry(&entry);
@@ -261,16 +292,16 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
 
 /// Record the place this restore runs in, one `host` opened in the
 /// background for it, as the workspace's, before anything runs there.
-pub async fn record_place(ctx: &Context, host: HostName, targets: &WorkspaceTargets) {
-    if let [workspace] = targets.workspace.as_slice() {
+pub async fn record_place(ctx: &Context, host: HostName, targets: &SpaceTargets) {
+    if let [workspace] = targets.space.as_slice() {
         terminal::record_owned_here(ctx, host, workspace).await;
     }
 }
 
 /// Close the place this restore runs in, one `host` opened in the
 /// background for it, once the one workspace `targets` names is done.
-pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &WorkspaceTargets) {
-    if let [workspace] = targets.workspace.as_slice() {
+pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &SpaceTargets) {
+    if let [workspace] = targets.space.as_slice() {
         terminal::close_background_place_when_done(ctx, host, workspace).await;
     }
 }
@@ -321,7 +352,7 @@ pub async fn run(
     );
     if !here {
         let session = (workspace.clone(), selected_id, selected);
-        return start_sessions(ctx, vec![session], true, Vec::new(), Vec::new()).await;
+        return start_sessions(ctx, vec![session], true, Resumed::default()).await;
     }
     // The restore claims the commands it reports, which a restore started
     // elsewhere claims for itself.
@@ -348,6 +379,7 @@ async fn discard_work(ctx: &Context, workspace: String, execution: Option<String
     .await?;
     let forgotten = DiscardedWork {
         discarded: discarded.executions,
+        chats: Vec::new(),
         failed: Vec::new(),
     };
     ctx.show(&forgotten, |_| {
@@ -372,7 +404,7 @@ async fn continue_last_session(
     let (id, path) = select_agent(ctx, &saved.sessions, session_label)?;
     if !here {
         let session = (workspace.clone(), id, path);
-        return start_sessions(ctx, vec![session], true, Vec::new(), Vec::new()).await;
+        return start_sessions(ctx, vec![session], true, Resumed::default()).await;
     }
     let _claim = claim(&path)?;
     let last = LastSession::load(&path)?.context("last session was already continued")?;
@@ -615,43 +647,27 @@ async fn reconcile_stale_execution(
     Ok(())
 }
 
-/// Resume each workspace's stopped work. Commands without an agent are
-/// reported here. An agent resumes where it stopped when the terminal backend
-/// can reuse that place, otherwise in the backend's background; without a
-/// backend one agent resumes in this terminal and several are listed for
-/// their own terminals.
+/// Resume each workspace's stopped work, reporting it with what `resumed`
+/// holds already. Commands without an agent are reported here. An agent
+/// resumes where it stopped when the terminal backend can reuse that place,
+/// otherwise in the backend's background; without a backend one agent
+/// resumes in this terminal unless `resumed` reports chats or failures, and
+/// the others are listed for their own terminals.
 async fn run_all(
     ctx: &Context,
-    selected: Option<Vec<(Workspace, Saved)>>,
-    discard: bool,
+    stopped: Vec<(Workspace, Saved)>,
+    mut resumed: Resumed,
 ) -> Result<i32> {
-    let stopped = match selected {
-        Some(stopped) => stopped,
-        None => stopped_work(ctx, discard).await?,
-    };
-    if stopped.is_empty() {
-        ctx.emit(
-            "No stopped agents or commands",
-            Resumed {
-                commands: Vec::new(),
-                agents: Vec::new(),
-                failed: Vec::new(),
-            },
-        )?;
-        return Ok(0);
-    }
-    if discard {
-        return discard_each(ctx, &stopped).await;
-    }
-    let mut failed = Vec::new();
-    let mut commands = Vec::new();
     let mut sessions = Vec::new();
     for (workspace, mut saved) in stopped {
         if saved.agents.is_empty() && saved.sessions.is_empty() {
             let _claims = claim_commands(&mut saved.commands);
             match report_commands(ctx, &workspace, &saved.commands) {
-                Ok(report) => commands.push(report),
-                Err(error) => failed.push(ui::failure(ctx, "resume", &workspace.name, &error)),
+                Ok(report) => resumed.commands.push(report),
+                Err(error) => {
+                    let failure = ui::failure(ctx, "resume", &workspace.name, &error);
+                    resumed.failed.push(failure);
+                }
             }
         } else {
             sessions.extend(
@@ -663,23 +679,23 @@ async fn run_all(
             );
         }
     }
-    let single = sessions.len() == 1 && ctx.interactive();
-    start_sessions(ctx, sessions, single, commands, failed).await
+    // An agent restored here replaces this run's report, so it takes the
+    // terminal only when there is nothing else to report.
+    let alone = resumed.chats.is_empty() && resumed.failed.is_empty();
+    let single = sessions.len() == 1 && alone && ctx.interactive();
+    start_sessions(ctx, sessions, single, resumed).await
 }
 
 /// Start each of the stopped agents `sessions` lists, by workspace,
 /// execution and saved file, where it stopped or in the background; `single`
 /// resumes the only one in this terminal when neither is possible. Reports
-/// them with the stopped `commands` reported and the resumes already
-/// `failed`.
+/// them with what `output` holds already.
 async fn start_sessions(
     ctx: &Context,
     sessions: Vec<(Workspace, String, PathBuf)>,
     single: bool,
-    commands: Vec<StoppedCommands>,
-    mut failed: Vec<Failure>,
+    mut output: Resumed,
 ) -> Result<i32> {
-    let mut agents = Vec::new();
     let mut listed = Vec::new();
     let mut place = None;
     for (workspace, id, record) in &sessions {
@@ -691,7 +707,8 @@ async fn start_sessions(
             }
             Ok(Started::Elsewhere { reused, place }) => (reused, place),
             Err(error) => {
-                failed.push(ui::failure(ctx, "resume", &workspace.name, &error));
+                let failure = ui::failure(ctx, "resume", &workspace.name, &error);
+                output.failed.push(failure);
                 continue;
             }
         };
@@ -699,18 +716,13 @@ async fn start_sessions(
         if started.is_none() {
             listed.push((workspace, id));
         }
-        agents.push(ResumedAgent {
+        output.agents.push(ResumedAgent {
             workspace: workspace.name.clone(),
             execution: id.clone(),
             background: started.is_some(),
             reused,
         });
     }
-    let output = Resumed {
-        commands,
-        agents,
-        failed,
-    };
     ctx.show(&output, |output| {
         if let Some(place) = place {
             let started = output.agents.len() - listed.len();
@@ -777,12 +789,16 @@ async fn start_session(
     })
 }
 
-/// Forget every workspace's stopped agents and commands, going on after one
-/// fails.
-async fn discard_each(ctx: &Context, stopped: &[(Workspace, Saved)]) -> Result<i32> {
+/// End the saved `chats` and forget every workspace's stopped agents and
+/// commands, going on after one fails.
+async fn discard_each(
+    ctx: &Context,
+    stopped: &[(Workspace, Saved)],
+    chats: &[Chat],
+) -> Result<i32> {
+    let (chats, mut failed) = chats::discard_each(ctx, chats).await;
     let mut ids = Vec::new();
     let mut names = Vec::new();
-    let mut failed = Vec::new();
     for (workspace, saved) in stopped {
         match discard_saved(ctx, workspace, saved).await {
             Ok(executions) => {
@@ -794,6 +810,7 @@ async fn discard_each(ctx: &Context, stopped: &[(Workspace, Saved)]) -> Result<i
     }
     let discarded = DiscardedWork {
         discarded: ids,
+        chats,
         failed,
     };
     ctx.show(&discarded, |_| {
@@ -920,8 +937,9 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
     Some(text)
 }
 
-pub mod chats;
+mod chats;
 mod queue;
+mod targets;
 
 #[cfg(test)]
 mod tests;

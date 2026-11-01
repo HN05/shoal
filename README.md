@@ -192,7 +192,7 @@ shoal stop --leftovers        # Stop what this workspace's commands left running
 shoal stop --processes fix-login  # Stop its processes Shoal does not track; agents keep running
 shoal restart --all --agent claude  # Restart Claude agents in place, such as after an update
 shoal restart --all --sequential    # Restart one at a time, idle agents first
-shoal resume --all            # Queue the restore of stopped agents; report stopped commands
+shoal resume --all            # Queue the restore of stopped agents, restore saved chats; report stopped commands
 shoal resume fix-login        # Continue its stopped agent, or the turn shoal stop --interrupt ended
 shoal resume fix-login --now  # Restore its stopped agent at once in the background
 shoal resume fix-login --focus # Restore its stopped agent in this terminal

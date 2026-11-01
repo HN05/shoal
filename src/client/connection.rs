@@ -17,7 +17,7 @@ use tokio::{
 use crate::{
     client::{paths::Paths, processes::Identity},
     config::repo::ConfigLayers,
-    model::{Chat, Inspection, PresentSpace, Repository, Workspace},
+    model::{Chat, Inspection, PresentSpace, Repository, Spaces, Workspace},
     protocol::{
         self, Body, ChatMethod, DaemonMethod, DaemonStatus, ErrorCode, Exit, ItemMethod, Method,
         RepositoryMethod, Request, Response, WorkspaceMethod, timing,
@@ -456,24 +456,21 @@ pub async fn chats(daemon: &impl Daemon) -> Result<Vec<Chat>> {
 
 /// The workspace or running chat `selector` names, by ID or name.
 pub async fn present_space(daemon: &impl Daemon, selector: &str) -> Result<Option<PresentSpace>> {
-    let named = |id: &str, name: &str| id == selector || name == selector;
-    let workspace = workspaces(daemon)
-        .await?
-        .into_iter()
-        .find(|workspace| named(&workspace.id, &workspace.name));
-    if let Some(workspace) = workspace {
-        return Ok(Some(PresentSpace::Workspace(workspace)));
-    }
-    Ok(chats(daemon)
-        .await?
-        .into_iter()
-        .find(|chat| named(&chat.id, &chat.name))
-        .map(PresentSpace::Chat))
+    let space = spaces(daemon).await?.find(selector);
+    Ok(space.filter(|space| !space.is_saved_chat()))
 }
 
 /// Running chats and those Shoal saved to restore.
 pub async fn recorded_chats(daemon: &impl Daemon) -> Result<Vec<Chat>> {
     request(daemon, ChatMethod::ListChats).await
+}
+
+/// The workspaces and chats, running or saved, visible to this caller.
+pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
+    Ok(Spaces {
+        workspaces: workspaces(daemon).await?,
+        chats: recorded_chats(daemon).await?,
+    })
 }
 
 /// [`start_chat`], or for a start that `restores` a saved chat, by ID,

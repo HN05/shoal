@@ -83,3 +83,42 @@ fn linked_items_know_their_repository() {
     );
     assert!(!item(LinkKind::Issue, "https://github.com/them/tool/issues/3").in_repository(remote));
 }
+
+#[test]
+fn spaces_find_a_workspace_or_a_running_or_saved_chat_by_id_or_name() {
+    let workspace: Workspace = serde_json::from_value(serde_json::json!({
+        "id": "w1",
+        "repository_id": "repo",
+        "name": "worker",
+        "path": "/worker",
+        "branch": "worker",
+        "state": "ready",
+    }))
+    .unwrap();
+    let chat = |id: &str, name: &str, restore| Chat {
+        id: id.into(),
+        repository_id: "repo".into(),
+        name: name.into(),
+        agent: "claude".into(),
+        pid: 1,
+        started_at: 0,
+        origin: None,
+        tmp_dir: None,
+        session: None,
+        restore,
+    };
+    let spaces = Spaces {
+        workspaces: vec![workspace],
+        chats: vec![
+            chat("c1", "talk", None),
+            chat("c2", "saved", Some(crate::state::ChatRestore::Resume)),
+        ],
+    };
+    let found = |selector| spaces.find(selector).map(|space| space.name().to_owned());
+    assert_eq!(found("w1").as_deref(), Some("worker"));
+    assert_eq!(found("worker").as_deref(), Some("worker"));
+    assert_eq!(found("c1").as_deref(), Some("talk"));
+    assert!(!spaces.find("talk").unwrap().is_saved_chat());
+    assert!(spaces.find("saved").unwrap().is_saved_chat());
+    assert!(spaces.find("missing").is_none());
+}

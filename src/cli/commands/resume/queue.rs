@@ -3,7 +3,10 @@
 use anyhow::Result;
 
 use super::{claim_commands, reconcile_stale_execution, report_commands};
-use crate::client::output::resume::Queued;
+use crate::client::output::{
+    batch::Failure,
+    resume::{Queued, RestoredChat},
+};
 use crate::{
     cli::{client, context::Context, terminal, ui},
     execution::recovery::Saved,
@@ -12,20 +15,18 @@ use crate::{
 };
 
 /// Queue the restore of every agent and last session `stopped` saves, and
-/// report the commands of workspaces without one, going on after one fails.
-pub(super) async fn queue_all(ctx: &Context, stopped: Vec<(Workspace, Saved)>) -> Result<i32> {
-    if stopped.is_empty() {
-        ctx.emit(
-            "No stopped agents or commands",
-            Queued {
-                queued: Vec::new(),
-                commands: Vec::new(),
-                failed: Vec::new(),
-            },
-        )?;
-        return Ok(0);
-    }
-    let queued = queue_each(ctx, stopped).await;
+/// report the commands of workspaces without one, going on after one fails,
+/// with the saved `chats` restored and the resumes already `failed`.
+pub(super) async fn queue_all(
+    ctx: &Context,
+    stopped: Vec<(Workspace, Saved)>,
+    chats: Vec<RestoredChat>,
+    mut failed: Vec<Failure>,
+) -> Result<i32> {
+    let mut queued = queue_each(ctx, stopped).await;
+    queued.chats = chats;
+    failed.append(&mut queued.failed);
+    queued.failed = failed;
     ctx.show(&queued, |queued| {
         if let Some(summary) = queued.summary() {
             outln!("{summary}");
@@ -66,6 +67,7 @@ pub(super) async fn queue_each(ctx: &Context, stopped: Vec<(Workspace, Saved)>) 
     Queued {
         queued,
         commands,
+        chats: Vec::new(),
         failed,
     }
 }

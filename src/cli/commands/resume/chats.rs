@@ -2,88 +2,30 @@
 //! name, continuing its session, in a background place where a restored
 //! agent opens, or in this terminal with `--focus`; `--discard` ends it
 //! instead.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{
-        args::{SpaceTargets, WorkspaceTargets},
         client,
         commands::chat::{self, ChatPlace, Started},
         context::Context,
         ui,
     },
-    client::output::resume::{DiscardedChats, RestoredChat, RestoredChats},
+    client::output::{batch::Failure, resume::RestoredChat},
     model::Chat,
 };
 
-/// The saved chats `targets` name, by ID or name, and the targets left,
-/// which name workspaces. A workspace process, by its scope or its
-/// ancestry, has no chats to resume, which act with the user's authority.
-pub async fn split(ctx: &Context, targets: SpaceTargets) -> Result<(Vec<Chat>, WorkspaceTargets)> {
-    let SpaceTargets { space, all } = targets;
-    if space.is_empty() || crate::env::inherits_scope(&ctx.paths.state) {
-        return Ok((
-            Vec::new(),
-            WorkspaceTargets {
-                workspace: space,
-                all,
-            },
-        ));
-    }
-    let saved: Vec<Chat> = client::recorded_chats(&ctx.paths)
-        .await?
-        .into_iter()
-        .filter(|chat| chat.restore.is_some())
-        .collect();
-    let mut chats = Vec::new();
-    let mut workspace = Vec::new();
-    for selector in space {
-        match saved
-            .iter()
-            .find(|chat| chat.id == selector || chat.name == selector)
-        {
-            Some(chat) => chats.push(chat.clone()),
-            None => workspace.push(selector),
-        }
-    }
-    Ok((chats, WorkspaceTargets { workspace, all }))
-}
-
-/// Restore the saved `chats`, in this terminal for `focus`, or end them
-/// for `discard`. `others` are the other targets, which must name none.
-pub async fn resume(
-    ctx: &Context,
-    chats: Vec<Chat>,
-    others: &WorkspaceTargets,
-    execution: Option<&str>,
-    discard: bool,
-    focus: bool,
-) -> Result<i32> {
-    ensure!(
-        others.workspace.is_empty(),
-        "resume chats and workspaces separately"
-    );
-    ensure!(
-        execution.is_none(),
-        "--execution selects a stopped execution of a workspace"
-    );
-    if focus {
-        let [chat] = chats.as_slice() else {
-            anyhow::bail!("--focus restores one chat");
-        };
-        return match restore(ctx, chat, ChatPlace::Here).await? {
-            Started::Exited(code) => Ok(code),
-            Started::Background(_) => Ok(0),
-        };
-    }
-    match discard {
-        true => discard_each(ctx, &chats).await,
-        false => restore_each(ctx, &chats).await,
+/// Restore the saved `chat` in this terminal.
+pub(super) async fn restore_here(ctx: &Context, chat: &Chat) -> Result<i32> {
+    match restore(ctx, chat, ChatPlace::Here).await? {
+        Started::Exited(code) => Ok(code),
+        Started::Background(_) => Ok(0),
     }
 }
 
-/// End each of the saved `chats` without restoring it.
-async fn discard_each(ctx: &Context, chats: &[Chat]) -> Result<i32> {
+/// End each of the saved `chats` without restoring it, returning those it
+/// ended and those it failed for.
+pub(super) async fn discard_each(ctx: &Context, chats: &[Chat]) -> (Vec<Chat>, Vec<Failure>) {
     let mut report = ui::Report::new("discard");
     for chat in chats {
         match client::discard_chat(&ctx.paths, &chat.id).await {
@@ -95,14 +37,15 @@ async fn discard_each(ctx: &Context, chats: &[Chat]) -> Result<i32> {
             Err(error) => report.failed(ctx, &chat.name, &error),
         }
     }
-    report.finish(ctx, "", |discarded, failed| DiscardedChats {
-        discarded,
-        failed,
-    })
+    report.into_parts()
 }
 
-/// Restore each of the saved `chats` in the background.
-async fn restore_each(ctx: &Context, chats: &[Chat]) -> Result<i32> {
+/// Restore each of the saved `chats` in the background, returning those it
+/// restored and those it failed for.
+pub(super) async fn restore_each(
+    ctx: &Context,
+    chats: &[Chat],
+) -> (Vec<RestoredChat>, Vec<Failure>) {
     let mut report = ui::Report::new("restore");
     for chat in chats {
         match restore(ctx, chat, ChatPlace::Background).await {
@@ -117,10 +60,7 @@ async fn restore_each(ctx: &Context, chats: &[Chat]) -> Result<i32> {
             Err(error) => report.failed(ctx, &chat.name, &error),
         }
     }
-    report.finish(ctx, "", |restored, failed| RestoredChats {
-        restored,
-        failed,
-    })
+    report.into_parts()
 }
 
 /// What a resume reports of `chat`, which started as `started`.

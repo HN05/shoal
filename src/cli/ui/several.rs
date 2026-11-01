@@ -148,6 +148,12 @@ impl<T> Report<T> {
         (self.done.len(), self.failed.len())
     }
 
+    /// The items acted on and the failures, for a command that reports
+    /// them with others.
+    pub fn into_parts(self) -> (Vec<T>, Vec<Failure>) {
+        (self.done, self.failed)
+    }
+
     /// Print `summary` unless it is empty, or with `--json` what `output`
     /// makes of the items acted on and failed on, exiting 1 when any failed.
     pub fn finish<O: Output>(
