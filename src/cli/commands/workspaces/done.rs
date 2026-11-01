@@ -1,7 +1,7 @@
 //! Recording a workspace's assignment as done, and withdrawing that.
 use anyhow::Result;
-use serde_json::json;
 
+use crate::client::output::workspaces::Withdrawn;
 use crate::{
     cli::{
         client::request,
@@ -21,7 +21,7 @@ pub(in crate::cli::commands) async fn undone(
         request(&ctx.paths, AssignmentMethod::WorkspaceUndone { workspace }).await?;
     ctx.emit(
         "Completion withdrawn; run shoal done when finished.",
-        json!({ "withdrawn": withdrawn }),
+        Withdrawn { withdrawn },
     )?;
     Ok(0)
 }

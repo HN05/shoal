@@ -5,9 +5,9 @@
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
-use serde::Serialize;
 
 use super::listing::ListFilter;
+use crate::client::output::inbox::Item;
 use crate::{
     cli::{
         client::{self, request},
@@ -21,39 +21,10 @@ use crate::{
         questions::{Listing, Question},
     },
     demos::Running,
-    model::{ReviewMark, UntrackedWorktree, Workspace},
+    model::{UntrackedWorktree, Workspace},
     protocol::{ApprovalMethod, DemoMethod, QuestionMethod, WorkspaceMethod},
     state::WorkspaceState,
 };
-
-/// Something that needs the user.
-#[derive(Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub(in crate::cli) enum Item {
-    Question {
-        question: Question,
-    },
-    Approval {
-        request: ApprovalRequest,
-    },
-    NeedsInput {
-        workspace: Workspace,
-    },
-    Failed {
-        workspace: Workspace,
-    },
-    Ready {
-        workspace: Workspace,
-        mark: ReviewMark,
-    },
-    Demo {
-        demo: Running,
-    },
-    /// A worktree with no workspace, so it belongs to no listed one.
-    Untracked {
-        worktree: UntrackedWorktree,
-    },
-}
 
 /// The inbox's items in the order it lists them, and the workspaces they
 /// belong to.

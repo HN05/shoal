@@ -2,17 +2,10 @@
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
-use serde::Serialize;
 
 use super::selection::chosen;
+use crate::client::output::repositories::LocalConfig;
 use crate::{cli::client::request, cli::context::Context, protocol::RepositoryMethod};
-
-#[derive(Serialize)]
-struct LocalConfig {
-    path: PathBuf,
-    /// Unset while the file does not exist.
-    toml: Option<String>,
-}
 
 pub(super) async fn show(ctx: &Context, repository: Option<String>) -> Result<i32> {
     let repository = chosen(ctx, repository).await?;

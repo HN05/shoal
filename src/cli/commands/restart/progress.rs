@@ -4,9 +4,9 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use serde_json::{Value, json};
 
-use super::plan::{Restart, Skipped};
+use super::plan::Restart;
+use crate::client::output::agents::{Restarted, RestartedAgent, Skipped};
 use crate::{
     cli::{
         context::Context,
@@ -17,8 +17,8 @@ use crate::{
 };
 
 pub(super) struct Progress {
-    report: ui::Report,
-    skipped: Vec<Value>,
+    report: ui::Report<RestartedAgent>,
+    skipped: Vec<Skipped>,
     /// How many agents the run reported on so far, and how many it selected.
     position: usize,
     total: usize,
@@ -30,7 +30,7 @@ impl Progress {
     /// Progress of restarting `restarts` and skipping `skipped` more.
     pub(super) fn new(restarts: &[Restart], skipped: usize) -> Self {
         Self {
-            report: ui::Report::new("restarted", "restart"),
+            report: ui::Report::new("restart"),
             skipped: Vec::new(),
             position: 0,
             total: restarts.len() + skipped,
@@ -57,11 +57,7 @@ impl Progress {
             let message = format!("Skipped {} {place}: {}", skipped.workspace, skipped.reason);
             outln!("{}", Palette::stdout(false).paint(Style::Warning, &message));
         }
-        self.skipped.push(json!({
-            "workspace": skipped.workspace,
-            "agent": skipped.agent,
-            "reason": skipped.reason,
-        }));
+        self.skipped.push(skipped);
     }
 
     /// Report how the restart of `restart` ended.
@@ -72,7 +68,10 @@ impl Progress {
             Ok(()) => self.report.done(
                 ctx,
                 &format!("Restarted {name} {place}"),
-                json!({"workspace": name, "agent": restart.agent.agent}),
+                RestartedAgent {
+                    workspace: name.clone(),
+                    agent: restart.agent.agent.clone(),
+                },
             ),
             Err(error) => {
                 let message = match super::waits(&error) {
@@ -88,7 +87,7 @@ impl Progress {
     /// `agents` whose restart goes on without it and the command, selecting
     /// only `agent` agents as the run did, that reports on them; exit 130.
     pub(super) fn interrupted(
-        mut self,
+        self,
         ctx: &Context,
         agents: &[RunningAgent],
         agent: Option<&str>,
@@ -101,16 +100,26 @@ impl Progress {
         if !ctx.json {
             eprintln!("{}", interruption(&pending, agent));
         }
-        self.report.field("interrupted", true.into());
-        self.report.field("pending", pending.into());
-        self.finish(ctx)?;
+        self.report(ctx, true, pending)?;
         Ok(130)
     }
 
     /// Print the JSON object, exiting 1 when any restart failed.
-    pub(super) fn finish(mut self, ctx: &Context) -> Result<i32> {
-        self.report.field("skipped", self.skipped.into());
-        self.report.finish(ctx, "")
+    pub(super) fn finish(self, ctx: &Context) -> Result<i32> {
+        self.report(ctx, false, Vec::new())
+    }
+
+    /// Print the JSON object, of a run `interrupted` with the restarts of
+    /// `pending` going on without it.
+    fn report(self, ctx: &Context, interrupted: bool, pending: Vec<String>) -> Result<i32> {
+        let skipped = self.skipped;
+        self.report.finish(ctx, "", |restarted, failed| Restarted {
+            restarted,
+            failed,
+            skipped,
+            interrupted,
+            pending,
+        })
     }
 }
 

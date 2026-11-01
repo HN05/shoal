@@ -186,7 +186,7 @@ impl BranchOutcome {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RemovalResult {
     pub removed: bool,
     pub branch: Option<String>,

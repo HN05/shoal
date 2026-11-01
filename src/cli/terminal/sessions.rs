@@ -71,6 +71,15 @@ impl Session {
         }
     }
 
+    /// The session as commands print it.
+    pub fn output(self) -> crate::client::output::status::AgentSession {
+        crate::client::output::status::AgentSession {
+            name: self.name,
+            agent: self.agent,
+            clients: self.clients,
+        }
+    }
+
     /// The name, agent, and whether a terminal is attached.
     pub fn label(&self) -> String {
         let mut label = self.name.clone();

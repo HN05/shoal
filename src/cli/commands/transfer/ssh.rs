@@ -7,6 +7,7 @@ use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::Value;
 
 use super::export::{self, ExportDirectory, PlannedExport};
+use crate::client::output::transfer::{Imported, Moves};
 use crate::{
     cli::{args::transfer::SshArgs, client, context::Context, ui},
     model::Chat,
@@ -40,7 +41,7 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
     let operation = ("move", "move");
     let yes = args.confirmation.yes;
     let planned = export::check_exports(ctx, &spaces, &directory, yes, &heading, operation).await?;
-    let mut report = ui::Report::new("moved", "move");
+    let mut report = ui::Report::new("move");
     for planned in planned {
         let name = planned.name().to_owned();
         match move_one(ctx, &remote, planned, !args.no_resume).await {
@@ -61,20 +62,26 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
             remote.host
         ),
     };
-    report.finish(ctx, &summary)
+    report.finish(ctx, &summary, |moved, failed| Moves { moved, failed })
 }
 
 /// The report of moving `name` to `host`, where the import reported
 /// `imported`: a workspace, or a chat started in the background there.
-fn moved(name: &str, host: &str, imported: &Value) -> String {
+fn moved(name: &str, host: &str, imported: &Imported) -> String {
     let mut message = format!("Moved {name} to {host}");
-    if let Some(path) = imported["workspace"]["path"].as_str() {
-        message.push_str(&format!(" at {path}"));
-    }
-    if let Some(place) = imported["place"].as_str() {
-        message.push_str(&format!(". On {host}: {place}"));
-    }
-    let queued = imported["queued"]["queued"].as_array().map_or(0, Vec::len);
+    let queued = match imported {
+        Imported::Workspace(reopened) => {
+            message.push_str(&format!(" at {}", reopened.workspace.path.display()));
+            reopened
+                .queued
+                .as_ref()
+                .map_or(0, |queued| queued.queued.len())
+        }
+        Imported::Chat(chat) => {
+            message.push_str(&format!(". On {host}: {}", chat.place));
+            0
+        }
+    };
     match queued {
         0 => {}
         1 => message.push_str("; its agent continues there"),
@@ -90,7 +97,7 @@ async fn move_one(
     remote: &Remote,
     planned: PlannedExport,
     resume: bool,
-) -> Result<Value> {
+) -> Result<Imported> {
     let name = planned.name().to_owned();
     let chat = planned.chat().cloned();
     let file = planned.export(ctx).await?;
@@ -173,7 +180,7 @@ impl Remote {
 
     /// Import the export in `file` there, queueing its agents' restores when
     /// `resume`, and return what the import reported.
-    async fn import(&self, file: &Path, resume: bool) -> Result<Value> {
+    async fn import(&self, file: &Path, resume: bool) -> Result<Imported> {
         let mut args = vec!["move", "import"];
         if resume {
             args.push("--resume");

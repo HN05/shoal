@@ -1,3 +1,5 @@
+use serde_json::json;
+
 use super::*;
 use crate::{model::Workspace, sessions::HostName};
 
@@ -70,7 +72,7 @@ fn an_agent_outside_any_terminal_host_takes_no_keys() {
         ("claude in fix".to_owned(), "fix")
     );
     assert_eq!(
-        serde_json::to_value(&target).unwrap(),
+        serde_json::to_value(target.output()).unwrap(),
         json!({"workspace": "fix", "agent": "claude"})
     );
 }

@@ -2,8 +2,8 @@
 use std::{collections::BTreeMap, ffi::OsString};
 
 use anyhow::{Context as _, Result};
-use serde_json::json;
 
+use crate::client::output::workspaces::Revoked;
 use crate::{
     cli::{
         client::{self, request},
@@ -31,7 +31,7 @@ pub(in crate::cli::commands) async fn environment(
         ctx.emit_styled(
             Style::Success,
             "Workspace environment revoked",
-            json!({"revoked": true}),
+            Revoked { revoked: true },
         )?;
     } else {
         let values = request::<std::collections::BTreeMap<String, String>>(

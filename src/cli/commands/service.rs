@@ -2,8 +2,8 @@
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result, ensure};
-use serde_json::json;
 
+use crate::client::output::daemon::{ConfigInstalled, Installed, Reloaded, Running, Status};
 use crate::{
     cli::{args::service::DaemonCommand, client, context::Context, output::Style, terminal, ui},
     config::repo::ConfigLayers,
@@ -73,14 +73,14 @@ pub(super) async fn install(
     ctx.emit_styled(
         Style::Success,
         "Daemon service installed and running",
-        json!({
-            "running": true,
-            "service_file": service::file(&ctx.paths, platform),
-            "config": config,
-            "config_created": config_created,
-            "shell_init": shell::INIT_COMMAND,
-            "installed_terminal_hosts": hosts.installed,
-        }),
+        Installed {
+            running: true,
+            service_file: service::file(&ctx.paths, platform),
+            config: config.clone(),
+            config_created,
+            shell_init: shell::INIT_COMMAND.to_owned(),
+            installed_terminal_hosts: hosts.installed.clone(),
+        },
     )?;
     if !ctx.json {
         if config_created {
@@ -179,7 +179,12 @@ pub(super) async fn install_config(ctx: &Context, name: Option<String>) -> Resul
     let reloaded = super::configuration::reload_daemon(ctx).await;
     ctx.emit(
         &super::configuration::reload_message(message, reloaded),
-        json!({"name": name, "config": config, "backup": backup, "daemon_reloaded": reloaded}),
+        ConfigInstalled {
+            name: name.to_owned(),
+            config,
+            backup,
+            daemon_reloaded: reloaded,
+        },
     )?;
     Ok(0)
 }
@@ -219,7 +224,11 @@ pub(super) async fn run(
                     Style::Warning
                 },
                 &message,
-                json!({"running": running, "daemon": status, "socket": ctx.paths.socket}),
+                Status {
+                    running,
+                    daemon: status,
+                    socket: ctx.paths.socket.clone(),
+                },
             )?;
             return Ok(if running { 0 } else { 1 });
         }
@@ -233,7 +242,11 @@ pub(super) async fn run(
                 return install(&ctx, false, None).await;
             }
             start(&ctx).await?;
-            ctx.emit_styled(Style::Success, "Daemon started", json!({"running": true}))?;
+            let started = Running {
+                running: true,
+                stopped_work: None,
+            };
+            ctx.emit_styled(Style::Success, "Daemon started", started)?;
         }
         DaemonCommand::Stop => {
             ctx.progress("Stopping daemon", stop(&ctx.paths, Exit::Stop))
@@ -248,7 +261,7 @@ pub(super) async fn run(
             ctx.emit_styled(
                 Style::Success,
                 "Daemon reloaded the global config",
-                json!({"reloaded": true}),
+                Reloaded { reloaded: true },
             )?;
         }
         DaemonCommand::Restart => {
@@ -283,7 +296,10 @@ fn emit_stopped_work(ctx: &Context, message: &str, running: bool) -> Result<()> 
     ctx.emit_styled(
         Style::Success,
         &message,
-        json!({"running": running, "stopped_work": stopped}),
+        Running {
+            running,
+            stopped_work: Some(stopped),
+        },
     )
 }
 

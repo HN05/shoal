@@ -2,12 +2,12 @@
 //! where it reverts PRs, and otherwise from a new workspace whose branch
 //! reverts the merge with `git revert`.
 use anyhow::{Context as _, Result};
-use serde::Serialize;
 
 use super::{
     content::read_content,
     open::{print_warnings, publish, report_proposed},
 };
+use crate::client::output::items::Revert;
 use crate::{
     cli::{
         args::changes::{RevertArgs, RevertedPr},
@@ -22,7 +22,6 @@ use crate::{
         capability::Capability,
         items::{
             create::PullOptions,
-            item::Opened,
             revert::{MergedPull, revert_options},
         },
     },
@@ -32,15 +31,6 @@ use crate::{
     removal::{RemovalResult, UnsavedWork},
     repository::Selector,
 };
-
-/// The revert and, when Git made it, the workspace its branch is in.
-#[derive(Serialize)]
-struct Report<'a> {
-    #[serde(flatten)]
-    opened: &'a Opened,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    workspace: Option<&'a Workspace>,
-}
 
 pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs) -> Result<i32> {
     let options = revert_args(args)?;
@@ -212,9 +202,9 @@ fn report(ctx: &Context, outcome: OpenOutcome, workspace: Option<&Workspace>) ->
     };
     ctx.emit(
         &text,
-        Report {
-            opened: &opened,
-            workspace,
+        Revert {
+            opened,
+            workspace: workspace.cloned(),
         },
     )?;
     Ok(0)

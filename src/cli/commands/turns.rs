@@ -5,9 +5,8 @@
 //! Every target is resolved before Shoal types into any; a target Shoal then
 //! fails to type into does not keep it from the others.
 use anyhow::{Context as _, Result};
-use serde::Serialize;
-use serde_json::json;
 
+use crate::client::output::agents::{Agent, Continued, Interrupted};
 use crate::{
     cli::{
         agents,
@@ -30,14 +29,14 @@ pub(super) async fn interrupt(ctx: &Context, selected: Vec<String>) -> Result<i3
         super::stop::ensure_below(ctx, &selected).await?;
     }
     let interruptions = running_turns(ctx, selected).await?;
-    let mut report = ui::Report::new("interrupted", "interrupt");
+    let mut report = ui::Report::new("interrupt");
     for interruption in &interruptions {
         let target = &interruption.target;
         match interrupt_turn(ctx, interruption).await {
             Ok(()) => report.done(
                 ctx,
                 &format!("Interrupted the turn of {}", target.described()),
-                json!(target),
+                target.output(),
             ),
             Err(error) => report.failed(ctx, &target.workspace, &error),
         }
@@ -47,7 +46,10 @@ pub(super) async fn interrupt(ctx: &Context, selected: Vec<String>) -> Result<i3
     } else {
         ""
     };
-    report.finish(ctx, summary)
+    report.finish(ctx, summary, |interrupted, failed| Interrupted {
+        interrupted,
+        failed,
+    })
 }
 
 /// A running turn and the key that interrupts it.
@@ -119,18 +121,18 @@ impl Continuation {
 
     /// Submit the prompt that continues each turn, returning the exit code.
     pub(super) async fn submit(self, ctx: &Context) -> Result<i32> {
-        let mut report = ui::Report::new("continued", "continue");
+        let mut report = ui::Report::new("continue");
         for target in &self.0 {
             match terminal::submit_prompt(&target.place, terminal::CONTINUE_PROMPT).await {
                 Ok(()) => report.done(
                     ctx,
                     &format!("Continued the turn of {}", target.described()),
-                    json!(target),
+                    target.output(),
                 ),
                 Err(error) => report.failed(ctx, &target.workspace, &error),
             }
         }
-        report.finish(ctx, "")
+        report.finish(ctx, "", |continued, failed| Continued { continued, failed })
     }
 }
 
@@ -168,15 +170,12 @@ async fn settings(ctx: &Context, workspace: &Workspace) -> Result<Effective> {
 
 /// An agent Shoal types into, by workspace and name as output shows it, with
 /// its execution and the place it runs in.
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct Target {
     workspace: String,
     agent: String,
-    #[serde(skip)]
     workspace_id: String,
-    #[serde(skip)]
     execution: String,
-    #[serde(skip)]
     place: Origin,
 }
 
@@ -197,6 +196,14 @@ impl Target {
             execution: agent.execution,
             place,
         })
+    }
+
+    /// The agent as output names it.
+    fn output(&self) -> Agent {
+        Agent {
+            workspace: self.workspace.clone(),
+            agent: self.agent.clone(),
+        }
     }
 
     /// The agent and its workspace, as messages name them.

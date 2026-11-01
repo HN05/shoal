@@ -10,9 +10,9 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
-use serde_json::{Value, json};
 
 use super::{ChatLaunch, Integration, Launch};
+use crate::client::output::agents::{Delivery, DetachedChat, DetachedSession};
 use crate::{
     agent::ModelChoice,
     cli::{client, context::Context},
@@ -83,8 +83,8 @@ pub(in crate::cli) trait Prepared: Send + Sync {
 pub(in crate::cli) struct Delivered {
     /// The line the text ends with, if any.
     pub note: &'static str,
-    /// The object whose fields the JSON adds.
-    pub fields: Value,
+    /// What the JSON adds.
+    pub fields: Delivery,
 }
 
 /// Start `launch` as a session of `app`, detached from this terminal and
@@ -191,14 +191,14 @@ fn report_session(
     launch: &DetachedLaunch,
     delivered: Delivered,
 ) -> Result<()> {
-    let mut report = json!({
-        "workspace": workspace,
-        "agent": app.agent(),
-        "execution_id": launch.execution_id,
-        "pid": launch.pid,
-        "log": launch.log,
-    });
-    report_fields(&mut report, delivered.fields);
+    let report = DetachedSession {
+        workspace: workspace.clone(),
+        agent: app.agent().to_owned(),
+        execution_id: launch.execution_id.clone(),
+        pid: launch.pid,
+        log: launch.log.clone(),
+        delivery: delivered.fields,
+    };
     ctx.emit(
         &format!(
             "Started {} {} session in {} (execution {}, pid {})\nOutput: {}{}",
@@ -368,13 +368,6 @@ fn chat_dir_args(
     }
 }
 
-/// Add the fields of an app's object `fields` to the JSON `report`.
-fn report_fields(report: &mut Value, fields: Value) {
-    if let (Value::Object(report), Value::Object(fields)) = (report, fields) {
-        report.extend(fields);
-    }
-}
-
 /// Start `chat` as a session of `app`, agent `name`, in the repository's
 /// checkout, detached as workspace sessions are, since the user continues
 /// it in the app. It is no tracked execution: the chat lasts while the
@@ -491,11 +484,11 @@ fn report_chat(
     log: &Path,
     delivered: Delivered,
 ) -> Result<()> {
-    let mut report = json!({
-        "chat": chat,
-        "log": log,
-    });
-    report_fields(&mut report, delivered.fields);
+    let report = DetachedChat {
+        chat: chat.clone(),
+        log: log.to_owned(),
+        delivery: delivered.fields,
+    };
     ctx.emit(
         &format!(
             "Started {} {} chat {} for {} (pid {}); open it in {}\nOutput: {}{}",

@@ -1,12 +1,13 @@
 //! Review daemon-owned approval requests and render allocation decisions.
 use anyhow::{Context as _, Result, ensure};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 mod picker;
 
 pub(super) use picker::{decide_row, print_rows};
 
 use super::EXIT_BUSY;
+use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
         args::approvals::ApprovalsArgs,
@@ -419,7 +420,14 @@ pub(super) fn declined(ctx: &Context, request: &ApprovalRequest) -> Result<i32> 
     ctx.emit_styled(
         Style::Warning,
         &describe(request),
-        json!({"acquired": false, "code": code, "request": request}),
+        NotAcquired {
+            acquired: false,
+            code: Some(code.to_owned()),
+            message: None,
+            pool: None,
+            resource: None,
+            request: Some(Box::new(request.clone())),
+        },
     )?;
     Ok(EXIT_BUSY)
 }

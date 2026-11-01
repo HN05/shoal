@@ -9,8 +9,8 @@ use anyhow::{Context as _, Result};
 use clap::{CommandFactory, Parser};
 
 use crate::cli::args::Invocation;
-use serde::Serialize;
 
+use crate::client::output::configured::{BareName, CommandDefinition};
 use crate::{
     cli::{
         client::{self, request},
@@ -22,7 +22,7 @@ use crate::{
     config::{
         Config,
         named_commands::{self, Commands},
-        repo::{ConfigLayer, ConfigLayers},
+        repo::ConfigLayers,
         resolve::Stack,
     },
     execution,
@@ -30,21 +30,6 @@ use crate::{
     paths::Paths,
     protocol::{ConfigTarget, WorkspaceMethod},
 };
-
-#[derive(Debug, Serialize, PartialEq, Eq)]
-struct CommandDefinition {
-    name: String,
-    argv: Vec<String>,
-    layer: ConfigLayer,
-    bare_name: BareName,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-enum BareName {
-    Shorthand,
-    BuiltIn,
-}
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let global = Config::load(&ctx.paths)?;

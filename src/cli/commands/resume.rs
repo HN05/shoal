@@ -1,5 +1,9 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
 //! It queues restores unless asked to start them now.
+use crate::client::output::{
+    batch::Failure,
+    resume::{DiscardedWork, Queued, Resumed, ResumedAgent, StoppedCommands},
+};
 use crate::{
     cli::{
         args::WorkspaceTargets, client, commands::turns::Continuation, context::Context, terminal,
@@ -19,7 +23,6 @@ use crate::{
     state::{ExecutionState, QueueState},
 };
 use anyhow::{Context as _, Result, ensure};
-use serde_json::json;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -137,7 +140,7 @@ pub(super) type Stopped = std::collections::BTreeMap<String, std::collections::B
 /// Queue the restores of the agents among `stopped`; their workspaces'
 /// stopped commands go to them, and those of workspaces without one stay
 /// for `shoal resume`.
-pub(super) async fn queue_stopped(ctx: &Context, stopped: &Stopped) -> Result<queue::Queued> {
+pub(super) async fn queue_stopped(ctx: &Context, stopped: &Stopped) -> Result<Queued> {
     let mut queued = Vec::new();
     for (workspace, executions) in stopped {
         let workspace = client::inspect(&ctx.paths, workspace.clone())
@@ -343,7 +346,11 @@ async fn discard_work(ctx: &Context, workspace: String, execution: Option<String
         },
     )
     .await?;
-    ctx.show(&json!({"discarded": discarded.executions}), |_| {
+    let forgotten = DiscardedWork {
+        discarded: discarded.executions,
+        failed: Vec::new(),
+    };
+    ctx.show(&forgotten, |_| {
         outln!(
             "Discarded stopped agents and commands for {}",
             discarded.workspace
@@ -625,7 +632,11 @@ async fn run_all(
     if stopped.is_empty() {
         ctx.emit(
             "No stopped agents or commands",
-            json!({"commands": [], "agents": []}),
+            Resumed {
+                commands: Vec::new(),
+                agents: Vec::new(),
+                failed: Vec::new(),
+            },
         )?;
         return Ok(0);
     }
@@ -665,8 +676,8 @@ async fn start_sessions(
     ctx: &Context,
     sessions: Vec<(Workspace, String, PathBuf)>,
     single: bool,
-    commands: Vec<serde_json::Value>,
-    mut failed: Vec<serde_json::Value>,
+    commands: Vec<StoppedCommands>,
+    mut failed: Vec<Failure>,
 ) -> Result<i32> {
     let mut agents = Vec::new();
     let mut listed = Vec::new();
@@ -688,17 +699,21 @@ async fn start_sessions(
         if started.is_none() {
             listed.push((workspace, id));
         }
-        agents.push(json!({
-            "workspace": workspace.name,
-            "execution": id,
-            "background": started.is_some(),
-            "reused": reused,
-        }));
+        agents.push(ResumedAgent {
+            workspace: workspace.name.clone(),
+            execution: id.clone(),
+            background: started.is_some(),
+            reused,
+        });
     }
-    let output = json!({"commands": commands, "agents": agents, "failed": failed});
-    ctx.show(&output, |_| {
+    let output = Resumed {
+        commands,
+        agents,
+        failed,
+    };
+    ctx.show(&output, |output| {
         if let Some(place) = place {
-            let started = agents.len() - listed.len();
+            let started = output.agents.len() - listed.len();
             let noun = if started == 1 { "agent" } else { "agents" };
             outln!("Resuming {started} {noun} in {place}");
         }
@@ -717,7 +732,7 @@ async fn start_sessions(
             outln!("  {}", crate::shell::quote(&words));
         }
     })?;
-    Ok(if failed.is_empty() { 0 } else { 1 })
+    Ok(if output.failed.is_empty() { 0 } else { 1 })
 }
 
 /// Where a stopped agent resumes.
@@ -777,7 +792,11 @@ async fn discard_each(ctx: &Context, stopped: &[(Workspace, Saved)]) -> Result<i
             Err(error) => failed.push(ui::failure(ctx, "discard", &workspace.name, &error)),
         }
     }
-    ctx.show(&json!({"discarded": ids, "failed": failed}), |_| {
+    let discarded = DiscardedWork {
+        discarded: ids,
+        failed,
+    };
+    ctx.show(&discarded, |_| {
         if !names.is_empty() {
             outln!(
                 "Discarded stopped agents and commands for {}",
@@ -785,7 +804,7 @@ async fn discard_each(ctx: &Context, stopped: &[(Workspace, Saved)]) -> Result<i
             );
         }
     })?;
-    Ok(if failed.is_empty() { 0 } else { 1 })
+    Ok(if discarded.failed.is_empty() { 0 } else { 1 })
 }
 
 /// Forget `workspace`'s stopped records each by itself, leaving agents a
@@ -859,12 +878,14 @@ fn report_commands(
     ctx: &Context,
     workspace: &Workspace,
     commands: &[SavedCommand],
-) -> Result<serde_json::Value> {
-    let argv = commands
-        .iter()
-        .map(|command| &command.argv)
-        .collect::<Vec<_>>();
-    let report = json!({"workspace": workspace.name, "commands": argv});
+) -> Result<StoppedCommands> {
+    let report = StoppedCommands {
+        workspace: workspace.name.clone(),
+        commands: commands
+            .iter()
+            .map(|command| command.argv.clone())
+            .collect(),
+    };
     if !commands.is_empty() && !ctx.json {
         outln!("{}", command_list(workspace, commands));
     }
@@ -900,7 +921,6 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
 }
 
 mod queue;
-pub(super) use queue::Queued;
 
 #[cfg(test)]
 mod tests;

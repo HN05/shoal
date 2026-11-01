@@ -8,13 +8,13 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
-use serde_json::json;
 
 use super::{
     Integration, Options,
     detached::{App, Delivered, Prepared, Session},
     trust::TrustFile,
 };
+use crate::client::output::agents::Delivery;
 use crate::{
     ai::IntegrationKind,
     config,
@@ -131,12 +131,16 @@ impl Prepared for HappySession {
     fn deliver(self: Box<Self>) -> BoxFuture<'static, Delivered> {
         Box::pin(async move {
             let prompt_delivered = self.opening.deliver(self.prompt.as_deref()).await;
-            let fields = json!({
-                "prompt_file": self.opening.prompt_file,
-                "prompt_delivered": prompt_delivered,
-                "happy_session_id": self.opening.seeded.as_ref().map(|seeded| seeded.session.id.clone()),
-                "happy_daemon_recorded": self.daemon_recorded,
-            });
+            let fields = Delivery {
+                prompt_file: self.opening.prompt_file.clone(),
+                prompt_delivered: Some(prompt_delivered),
+                happy_session_id: self
+                    .opening
+                    .seeded
+                    .as_ref()
+                    .map(|seeded| seeded.session.id.clone()),
+                happy_daemon_recorded: Some(self.daemon_recorded),
+            };
             Delivered {
                 note: self.opening.delivery(prompt_delivered),
                 fields,

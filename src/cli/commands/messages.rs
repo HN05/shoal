@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 
+use crate::client::output::messages::Reached;
 use crate::{
     cli::{
         client::{self, request},
@@ -70,12 +71,6 @@ async fn send_to_workspace(
     .await?;
     ctx.emit("Message queued for the workspace's agents.", ())?;
     Ok(0)
-}
-
-/// The workspaces a repository-wide message reached, by name.
-#[derive(serde::Serialize)]
-struct Reached {
-    workspaces: Vec<String>,
 }
 
 async fn send_to_repository(

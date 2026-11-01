@@ -7,11 +7,10 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, bail, ensure};
-use serde_json::json;
 use sha2::{Digest as _, Sha256};
 use tokio::process::Command;
 
-use crate::{cli::context::Context, subprocess::Run, tools::Tool};
+use crate::{cli::context::Context, client::output::update::Update, subprocess::Run, tools::Tool};
 
 const RELEASES: &str = "https://github.com/HN05/shoal/releases";
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(600);
@@ -29,7 +28,13 @@ pub(super) async fn run(ctx: &Context) -> Result<i32> {
     if !newer(&release.version, current)? {
         ctx.emit(
             &format!("Shoal {current} is up to date"),
-            json!({"updated": false, "version": current, "latest": release.version, "path": target}),
+            Update {
+                updated: false,
+                previous: None,
+                version: current.to_owned(),
+                latest: Some(release.version.to_string()),
+                path: target,
+            },
         )?;
         return Ok(0);
     }
@@ -44,7 +49,13 @@ pub(super) async fn run(ctx: &Context) -> Result<i32> {
             release.version,
             target.display()
         ),
-        json!({"updated": true, "previous": current, "version": release.version, "path": target}),
+        Update {
+            updated: true,
+            previous: Some(current.to_owned()),
+            version: release.version.to_string(),
+            latest: None,
+            path: target,
+        },
     )?;
     Ok(0)
 }

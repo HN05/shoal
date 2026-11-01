@@ -2,10 +2,9 @@
 use std::fmt;
 
 use anyhow::{Context as _, Result, ensure};
-use serde::Serialize;
-use serde_json::json;
 
 use super::{ports, resources, resources::Members, secrets, simulators, workspace_overviews};
+use crate::client::output::leases::{Held, Leases, Releases};
 use crate::{
     cli::{
         args::{
@@ -20,9 +19,9 @@ use crate::{
     daemon::{
         approvals::{ApprovalRequest, Specification, Target},
         ports::PortRequest,
-        resources::{LockMode, Overview, ResourceKind, ResourceRequest},
+        resources::{LockMode, ResourceKind, ResourceRequest},
     },
-    model::{Inspection, PortOverview, Workspace},
+    model::{Inspection, PortOverview},
     protocol::{
         ApprovalMethod, Method, PortMethod, ResourceMethod, SecretMethod, SimulatorMethod,
         WorkspaceMethod,
@@ -133,18 +132,6 @@ fn resource_request(
     }
 }
 
-/// One lease or active approval request a workspace holds, named as its
-/// release request needs it.
-#[derive(Debug, PartialEq, Serialize)]
-#[serde(tag = "kind", rename_all = "lowercase")]
-enum Held {
-    Port { name: String },
-    Sim { name: String },
-    Resource { pool: String, name: String },
-    Repo { pool: String, name: String },
-    Secret { name: String },
-}
-
 impl fmt::Display for Held {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -179,7 +166,7 @@ pub(super) async fn release(
         .map(|held| format!("Released {held}"))
         .collect::<Vec<_>>()
         .join("\n");
-    ctx.emit_styled(Style::Success, &text, json!({ "released": selected }))?;
+    ctx.emit_styled(Style::Success, &text, Releases { released: selected })?;
     Ok(0)
 }
 
@@ -335,15 +322,6 @@ async fn release_one(ctx: &Context, workspace: &str, held: &Held) -> Result<()> 
         .into(),
     };
     client::request::<()>(&ctx.paths, method).await
-}
-
-/// Every kind's configuration and leases for one workspace.
-#[derive(Debug, Serialize)]
-struct Leases {
-    workspace: Workspace,
-    ports: PortOverview,
-    simulators: SimulatorOverview,
-    resources: Overview,
 }
 
 pub(super) async fn show(

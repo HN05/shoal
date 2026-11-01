@@ -7,6 +7,7 @@ use std::{
     os::fd::{AsFd, AsRawFd},
 };
 
+use crate::client::output::error::{CommandError, ErrorDetail};
 use crate::{
     cli::commands::operations::Failed,
     daemon::{
@@ -92,11 +93,16 @@ pub enum Style {
 /// A failure as JSON output reports it: under the daemon's code when it has a
 /// specific one, or the code of a refusal the CLI raised, otherwise
 /// `command_failed`.
-pub fn json_error(error: &anyhow::Error) -> serde_json::Value {
+pub fn json_error(error: &anyhow::Error) -> CommandError {
     let code = error_code(error)
         .filter(|code| *code != ErrorCode::OperationFailed)
         .map_or_else(|| "command_failed".to_owned(), |code| code.to_string());
-    serde_json::json!({"error": {"code": code, "message": format!("{error:#}")}})
+    CommandError {
+        error: ErrorDetail {
+            code,
+            message: format!("{error:#}"),
+        },
+    }
 }
 
 /// The specific code of `error`: the daemon's, an operation's failure, a

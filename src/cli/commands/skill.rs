@@ -1,6 +1,10 @@
 //! User-level skill delivery; no daemon, repository, or agent process is needed.
 mod record;
 
+use crate::client::output::{
+    self,
+    skill::{Installed, Skill, SkillFile},
+};
 use crate::fsutil::{self, Permissions, ReplaceOptions};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -10,7 +14,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use serde_json::json;
 
 use crate::{
     cli::{
@@ -52,7 +55,11 @@ pub(super) fn run(
             SkillName::Orchestrator => SKILLS[1],
         };
         if json_output {
-            outln!("{}", json!({"name": name, "skill": contents}));
+            let skill = Skill {
+                name: name.to_owned(),
+                skill: contents.to_owned(),
+            };
+            outln!("{}", output::json(&skill)?);
         } else {
             out!("{contents}");
         }
@@ -108,7 +115,11 @@ pub(super) fn run(
             if !json_output {
                 outln!("Installed skill {name} at {}", path.display());
             }
-            installed.push(json!({"agents": agents, "skill": name, "path": path}));
+            installed.push(SkillFile {
+                agents: agents.clone(),
+                skill: (*name).to_owned(),
+                path,
+            });
         }
         for name in &outcome.kept {
             let path = skill_file(directory, name);
@@ -118,11 +129,15 @@ pub(super) fn run(
                     path.display()
                 );
             }
-            kept.push(json!({"agents": agents, "skill": name, "path": path}));
+            kept.push(SkillFile {
+                agents: agents.clone(),
+                skill: name.clone(),
+                path,
+            });
         }
     }
     if json_output {
-        outln!("{}", json!({"installed": installed, "kept": kept}));
+        outln!("{}", output::json(&Installed { installed, kept })?);
     } else if agents.is_empty() {
         outln!("No skill directories found; run `shoal skill install <tool>` to create one");
     }

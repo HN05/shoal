@@ -1,5 +1,6 @@
 use anyhow::{Context as _, Result, ensure};
 
+use crate::client::output::config::{Edited, Reference};
 use crate::{
     cli::{
         client,
@@ -64,7 +65,11 @@ pub(super) async fn edit(
     let reloaded = reload_daemon(ctx).await;
     ctx.emit(
         &reload_message(format!("Updated {}", path.display()), reloaded),
-        serde_json::json!({"config": path, "backup": backup, "daemon_reloaded": reloaded}),
+        Edited {
+            config: path,
+            backup,
+            daemon_reloaded: reloaded,
+        },
     )?;
     Ok(0)
 }
@@ -123,9 +128,10 @@ pub(super) async fn show(
 }
 
 pub(super) fn reference(ctx: &Context) -> Result<i32> {
-    ctx.show(&serde_json::json!({"reference": REFERENCE}), |_| {
-        out!("{REFERENCE}")
-    })?;
+    let reference = Reference {
+        reference: REFERENCE.to_owned(),
+    };
+    ctx.show(&reference, |_| out!("{REFERENCE}"))?;
     Ok(0)
 }
 

@@ -2,7 +2,7 @@
 //! request that needs one the forge lacks is refused before anything is sent,
 //! with one error that names the forge and what it lacks.
 use anyhow::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::state::states;
 use crate::{
@@ -185,18 +185,18 @@ pub(crate) fn unsupported(
 }
 
 /// A repository's forge and whether it has each capability.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Capabilities {
-    pub forge: &'static str,
+    pub forge: String,
     pub capabilities: Vec<Entry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub capability: Capability,
     pub supported: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hint: Option<&'static str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
 impl ForgeRepo {
@@ -251,7 +251,7 @@ impl ForgeRepo {
 
     fn listed(&self, supports: impl IntoIterator<Item = (Capability, Support)>) -> Capabilities {
         Capabilities {
-            forge: self.kind.name(),
+            forge: self.kind.name().to_owned(),
             capabilities: supports
                 .into_iter()
                 .map(|(capability, support)| {
@@ -262,7 +262,7 @@ impl ForgeRepo {
                     Entry {
                         capability,
                         supported,
-                        hint,
+                        hint: hint.map(str::to_owned),
                     }
                 })
                 .collect(),

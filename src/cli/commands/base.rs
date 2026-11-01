@@ -1,7 +1,7 @@
 //! CLI access to a stacked workspace's base workspace.
 use anyhow::{Result, ensure};
-use serde_json::json;
 
+use crate::client::output::workspaces::Bases;
 use crate::{
     cli::{
         args::changes::BaseCommand,
@@ -40,10 +40,10 @@ pub(super) async fn run(
         }
         None => find(&client::workspaces(&ctx.paths).await?, &workspace)?.clone(),
     };
-    let value = json!({
-        "base_workspace": workspace.base_workspace,
-        "stacked_workspaces": workspace.stacked_workspaces,
-    });
+    let value = Bases {
+        base_workspace: workspace.base_workspace.clone(),
+        stacked_workspaces: workspace.stacked_workspaces.clone(),
+    };
     ctx.show(&value, |_| {
         if workspace.base_workspace.is_none() {
             outln!("No base workspace");

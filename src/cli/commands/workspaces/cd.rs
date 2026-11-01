@@ -1,7 +1,7 @@
 //! Moving the shell into a workspace.
 use anyhow::{Result, ensure};
-use serde_json::json;
 
+use crate::client::output::workspaces::Directory;
 use crate::{
     cli::{client, context::Context, recent, ui},
     shell,
@@ -24,6 +24,9 @@ pub(in crate::cli::commands) async fn cd(ctx: &Context, workspace: Option<String
 
 /// Report the destination and ask the shell wrapper to change directory.
 fn navigate(ctx: &Context, path: &std::path::Path) -> Result<()> {
-    ctx.emit(&path.display().to_string(), json!({"path": path}))?;
+    let directory = Directory {
+        path: path.to_owned(),
+    };
+    ctx.emit(&path.display().to_string(), directory)?;
     shell::navigate(path, ctx.json)
 }

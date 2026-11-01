@@ -88,7 +88,7 @@ fn render(capabilities: &Capabilities) {
         let line = format!(
             "{:width$}  {status:13}  {}",
             entry.capability.as_str(),
-            entry.hint.unwrap_or_default()
+            entry.hint.as_deref().unwrap_or_default()
         );
         outln!("{}", line.trim_end());
     }

@@ -4,8 +4,8 @@
 use std::{io::Write as _, path::Path};
 
 use anyhow::{Context as _, Result};
-use serde::Serialize;
 
+use crate::client::output::download::Written;
 use crate::{
     cli::{
         args::repository::DownloadArgs, client, commands::items::select_repo_context,
@@ -13,14 +13,6 @@ use crate::{
     },
     forge::download::Download,
 };
-
-/// Where a download was written, for `--json`.
-#[derive(Serialize)]
-struct Written {
-    path: std::path::PathBuf,
-    bytes: usize,
-    content_type: Option<String>,
-}
 
 pub(super) async fn download(ctx: &Context, args: DownloadArgs) -> Result<i32> {
     // Refuse a bad URL before the workspace picker asks for anything.

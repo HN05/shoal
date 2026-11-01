@@ -6,6 +6,7 @@ use std::{io::Read, path::Path};
 use anyhow::{Context as _, Result};
 use serde_json::Value;
 
+use crate::client::output::forge::ApiResponse;
 use crate::{
     cli::{
         args::repository::ApiArgs, client, commands::items::select_repo_context, context::Context,
@@ -34,7 +35,7 @@ pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
             client::forge_api(&ctx.paths, context, request, repository),
         )
         .await?;
-    ctx.show(&response, |response| {
+    ctx.show(&ApiResponse(response), |ApiResponse(response)| {
         outln!("{response:#}");
     })?;
     Ok(0)

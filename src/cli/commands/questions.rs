@@ -3,6 +3,7 @@ use std::ffi::OsString;
 
 use anyhow::{Context as _, Result, ensure};
 
+use crate::client::output::workspaces::InChat;
 use crate::{
     cli::{
         args::coordination::QuestionsArgs,
@@ -84,7 +85,7 @@ pub(super) async fn ask_in_chat(ctx: &Context, workspace: Option<String>) -> Res
     request::<()>(&ctx.paths, QuestionMethod::AskInChat { workspace }).await?;
     ctx.emit(
         "Ask your question as your final message and end your turn; it also reaches the user's questions.",
-        serde_json::json!({ "in_chat": true }),
+        InChat { in_chat: true },
     )?;
     Ok(0)
 }

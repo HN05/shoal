@@ -112,6 +112,7 @@ const REQUESTS: &[&str] = &[
     r#"{"acknowledge_chat_messages":{"chat":"c1","ids":[1]}}"#,
     // The agent queue.
     r#"{"queue_add":{"request":{"repository":"app","name":"fix","agent":"claude","issue_title":null,"plan":"{}","env":{},"now":false,"workspace":null,"after":[]}}}"#,
+    r#"{"queue_agent":{"workspace":"fix","agent":"claude","prompt":"Fix the build"}}"#,
     r#""list_queue""#,
     r#"{"queued_plan":{"entry":"q1"}}"#,
     r#"{"queue_remove":{"entry":"q1"}}"#,
@@ -205,6 +206,11 @@ const REQUESTS: &[&str] = &[
     r#"{"sim_acquire":{"workspace":"fix","request":{"request_id":"u1","clean":false,"name":"default","profile":null,"device":null,"runtime":null,"reason":null,"queue":false}}}"#,
     r#"{"sim_release":{"workspace":"fix","name":"default"}}"#,
     r#"{"sim_history":{"workspace":null,"limit":20,"before":null}}"#,
+    // Subscriptions.
+    r#"{"subscribe":{"topics":["workspaces","questions"]}}"#,
+    // Operations that create a workspace.
+    r#"{"start_workspace":{"repository":"app","name":"fix","issue":"42","agent":{"agent":"claude","prompt":null}}}"#,
+    r#"{"start_split":{"workspace":"fix","name":"part","base":"HEAD"}}"#,
 ];
 
 #[test]
@@ -252,6 +258,7 @@ fn every_request_has_its_json_above() {
         variants::<SecretMethod>(),
         variants::<ResourceMethod>(),
         variants::<SimulatorMethod>(),
+        variants::<SubscriptionMethod>(),
     ]
     .concat()
     .into_iter()

@@ -5,8 +5,8 @@
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
-use serde::Serialize;
 
+use crate::client::output::split::Child;
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
@@ -46,15 +46,6 @@ struct ChildAgent {
     agent: Agent,
     model: ModelChoice,
     fork: Option<String>,
-}
-
-/// The ready child and the queue entry of its agent, when one was started.
-#[derive(Serialize)]
-struct Report<'a> {
-    #[serde(flatten)]
-    workspace: &'a Workspace,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    agent: Option<&'a QueueEntry>,
 }
 
 pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) -> Result<i32> {
@@ -213,9 +204,9 @@ fn report(ctx: &Context, child: &Workspace, agent: Option<&QueueEntry>) -> Resul
     }
     ctx.emit(
         &text,
-        Report {
-            workspace: child,
-            agent,
+        Child {
+            workspace: child.clone(),
+            agent: agent.cloned(),
         },
     )?;
     if agent.is_none() && terminal::follows_caller(ctx) && !crate::env::is_scoped() {

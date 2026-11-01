@@ -3,9 +3,8 @@
 use std::{collections::BTreeMap, ffi::OsString, time::Duration};
 
 use anyhow::{Context as _, Result, bail, ensure};
-use serde::Serialize;
-use serde_json::json;
 
+use crate::client::output::demo::{Listing, Screen, Sent, Stopping};
 use crate::{
     cli::{
         args::sessions::DemoCommand,
@@ -325,7 +324,10 @@ async fn stop(ctx: &Context, workspace: Option<String>, name: Option<String>) ->
     ctx.emit_styled(
         Style::Success,
         &message,
-        json!({"stopping": true, "name": name}),
+        Stopping {
+            stopping: true,
+            name,
+        },
     )?;
     Ok(0)
 }
@@ -358,14 +360,6 @@ async fn stop_named(ctx: &Context, workspace: &Workspace, name: Option<String>) 
         },
     )
     .await
-}
-
-/// Configured and running demos, as `shoal demo ls --json` prints them.
-#[derive(Serialize)]
-struct Listing {
-    workspace: Option<String>,
-    configured: BTreeMap<String, Demo>,
-    running: Vec<Running>,
 }
 
 async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
@@ -505,14 +499,18 @@ async fn screen(ctx: &Context, workspace: Option<String>, name: &str, lines: usi
     let demo = named(ctx, workspace, name).await?;
     let screen = terminal::demo_screen(&demo.launch).await?;
     let text = last_lines(&screen, lines).unwrap_or_default();
-    ctx.show(&json!({"name": name, "screen": text}), |_| outln!("{text}"))?;
+    let shown = Screen {
+        name: name.to_owned(),
+        screen: text.clone(),
+    };
+    ctx.show(&shown, |_| outln!("{text}"))?;
     Ok(0)
 }
 
 async fn send(ctx: &Context, workspace: Option<String>, name: &str, keys: &str) -> Result<i32> {
     let demo = named(ctx, workspace, name).await?;
     terminal::send_demo_keys(&demo.launch, keys).await?;
-    ctx.emit(&format!("Sent to demo {name}"), json!({"sent": true}))?;
+    ctx.emit(&format!("Sent to demo {name}"), Sent { sent: true })?;
     Ok(0)
 }
 

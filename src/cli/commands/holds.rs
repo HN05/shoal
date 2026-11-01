@@ -1,8 +1,8 @@
 //! CLI access to workspace holds.
 use anyhow::{Result, ensure};
-use serde_json::json;
 
 use super::acquisition::Acquisition;
+use crate::client::output::acquisition::{NotAcquired, Released};
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -41,7 +41,7 @@ pub(super) async fn acquire(
                 &hold,
             )
         },
-        |message| json!({"acquired": false, "message": message}),
+        |message| NotAcquired::busy(None, message),
     )
 }
 
@@ -51,7 +51,7 @@ pub(super) async fn release(ctx: &Context, workspace: String, name: Option<Strin
         None => pick(ctx, &workspace).await?,
     };
     client::request::<()>(&ctx.paths, HoldMethod::HoldRelease { workspace, name }).await?;
-    ctx.emit_styled(Style::Success, "Hold released", json!({"released": true}))?;
+    ctx.emit_styled(Style::Success, "Hold released", Released { released: true })?;
     Ok(0)
 }
 

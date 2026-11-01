@@ -156,7 +156,8 @@ async fn run_commands(cli: Cli) {
         }
         Err(error) => {
             if json_output {
-                eprintln!("{}", cli::output::json_error(&error));
+                let printed = client::output::json(&cli::output::json_error(&error));
+                eprintln!("{}", printed.unwrap_or_default());
             } else {
                 eprintln!(
                     "{} {error:#}",

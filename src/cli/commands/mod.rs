@@ -72,9 +72,9 @@ pub(in crate::cli) use questions::summary as question_summary;
 use anyhow::{Result, ensure};
 use clap::CommandFactory;
 use futures_util::{StreamExt, stream};
-use serde::Serialize;
-use serde_json::json;
 
+use crate::client::output::{self, workspaces::Directory};
+use crate::client::output::{Output, overviews::WorkspaceOverviewResult};
 use crate::{
     cli::{
         Cli, Command,
@@ -94,16 +94,6 @@ use crate::{
     shell,
 };
 
-#[derive(Serialize)]
-#[serde(untagged)]
-enum WorkspaceOverviewResult<T> {
-    Ready(T),
-    Failed {
-        workspace: Box<crate::model::Workspace>,
-        error: String,
-    },
-}
-
 impl<T> WorkspaceOverviewResult<T> {
     fn failed(workspace: crate::model::Workspace, error: impl std::fmt::Display) -> Self {
         Self::Failed {
@@ -119,7 +109,7 @@ impl<T> WorkspaceOverviewResult<T> {
 
 /// Collect every workspace before reporting partial failures. Domains retain
 /// their successful JSON payload and resource-specific text rendering.
-async fn workspace_overviews<T: Serialize>(
+async fn workspace_overviews<T: Output + serde::de::DeserializeOwned>(
     ctx: &Context,
     request: impl AsyncFn(&Workspace) -> Result<T>,
     render: impl Fn(&T, Palette),
@@ -256,7 +246,8 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         let state = crate::paths::Paths::command_state_dir(cli.state_dir.clone())?;
         let destination = shell::recovery_directory(path, &state)?;
         if cli.json {
-            outln!("{}", json!({"path": destination}));
+            let directory = Directory { path: destination };
+            outln!("{}", output::json(&directory)?);
         } else {
             outln!("{}", destination.display());
         }

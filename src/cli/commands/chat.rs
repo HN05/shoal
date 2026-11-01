@@ -11,6 +11,7 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use super::{configured, listing::ListFilter};
+use crate::client::output::chat::BackgroundChat;
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
@@ -161,16 +162,6 @@ pub(super) enum Started {
     Exited(i32),
     /// It runs in a background place.
     Background(BackgroundChat),
-}
-
-/// A chat started in a background place.
-#[derive(Debug, serde::Serialize)]
-pub(super) struct BackgroundChat {
-    pub chat: String,
-    pub agent: String,
-    pub repository: String,
-    /// Where it runs and how to reach it, as the host that runs it says.
-    pub place: String,
 }
 
 /// Start a chat as [`begin`] does, reporting one started in the background

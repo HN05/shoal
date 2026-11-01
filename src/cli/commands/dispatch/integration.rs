@@ -1,6 +1,6 @@
 use anyhow::Result;
-use serde_json::json;
 
+use crate::client::output::shell::Script;
 use crate::{
     cli::{
         args::integration::{IntegrationCommand, ShellCommand},
@@ -25,13 +25,21 @@ pub(in crate::cli::commands) async fn run(
             command: ShellCommand::Completions { shell },
         } => {
             let script = shell::completions(shell)?;
-            ctx.emit(&script, json!({"script": script}))?;
+            ctx.emit(
+                &script,
+                Script {
+                    script: script.clone(),
+                },
+            )?;
             Ok(0)
         }
         IntegrationCommand::Shell {
             command: ShellCommand::Init,
         } => {
-            ctx.emit(shell::INIT, json!({"script": shell::INIT}))?;
+            let script = Script {
+                script: shell::INIT.to_owned(),
+            };
+            ctx.emit(shell::INIT, script)?;
             Ok(0)
         }
         IntegrationCommand::Shell {

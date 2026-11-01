@@ -4,7 +4,7 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{Context, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::repo::ConfigLayer as Layer;
@@ -45,15 +45,17 @@ pub enum Merge {
 }
 
 /// One effective value and the layer that supplied it.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Entry {
     pub key: String,
     pub value: Value,
     pub layer: Layer,
     /// The Markdown file the layer read a template from.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<PathBuf>,
 }
+
+crate::client::output::outputs!(Entry);
 
 pub fn key(prefix: &str, name: &str) -> String {
     if prefix.is_empty() {

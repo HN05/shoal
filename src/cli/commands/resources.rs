@@ -1,11 +1,11 @@
 //! CLI requests and rendering for cooperative resources.
 use anyhow::{Result, ensure};
-use serde_json::json;
 
 use super::{
     acquisition::{Acquisition, obtain},
     workspace_overviews,
 };
+use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -43,14 +43,10 @@ pub(super) async fn acquire(
     outcome.finish(
         ctx,
         |lease| ctx.emit(&describe(&lease, Palette::stdout(ctx.json)), &lease),
-        |message| {
-            json!({
-                "acquired": false,
-                "code": "resource_busy",
-                "pool": request.pool,
-                "resource": request.resource,
-                "message": message,
-            })
+        |message| NotAcquired {
+            pool: Some(request.pool.clone()),
+            resource: request.resource.clone(),
+            ..NotAcquired::busy(Some("resource_busy"), message)
         },
     )
 }

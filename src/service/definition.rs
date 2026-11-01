@@ -1,21 +1,15 @@
 //! Service definition paths, rendering and ownership checks.
 use super::{LABEL, Platform, UNIT, control::SERVICE_STOP_TIMEOUT};
+use crate::client::output::daemon::Definition;
 use crate::{
     fsutil::{self, Permissions, ReplaceOptions},
     paths::Paths,
 };
 use anyhow::{Context, Result, ensure};
-use serde::Serialize;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-
-#[derive(Serialize)]
-pub struct Definition {
-    pub path: PathBuf,
-    pub content: String,
-}
 
 pub fn file(paths: &Paths, platform: Platform) -> PathBuf {
     match platform {

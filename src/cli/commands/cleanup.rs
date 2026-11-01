@@ -1,7 +1,6 @@
 //! Removing what Shoal left behind: the workspaces idle or merged cleanup
 //! would remove, branches removal kept, and shared caches.
 use anyhow::{Result, ensure};
-use serde::Serialize;
 
 use crate::{
     cli::{
@@ -20,15 +19,7 @@ use crate::{
 };
 
 use super::branches;
-
-/// What a cleanup removed, or would remove in a dry run.
-#[derive(Serialize)]
-struct Report {
-    #[serde(flatten)]
-    cleanup: ManualCleanup,
-    /// Kept branches: those a dry run lists, or those deleted.
-    branches: Vec<KeptBranch>,
-}
+use crate::client::output::cleanup::Report;
 
 pub(super) async fn run(
     ctx: &Context,

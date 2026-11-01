@@ -10,10 +10,8 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 use clap::ValueEnum;
 
-use super::{
-    inbox::{Inbox, Item},
-    listing::ListFilter,
-};
+use super::{inbox::Inbox, listing::ListFilter};
+use crate::client::output::inbox::Item;
 use crate::{
     cli::{
         Command, agents,

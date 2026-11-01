@@ -1,7 +1,7 @@
 //! CLI port reservations and interactive conflict suggestions.
 use anyhow::{Result, ensure};
-use serde_json::json;
 
+use crate::client::output::leases::Suggested;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -42,8 +42,10 @@ pub(super) async fn acquire(
             Body::ApprovalRequest(request) => return super::approvals::declined(ctx, &request),
             Body::PortSuggestion(proposal) => {
                 if !ctx.interactive() {
-                    let mut value = serde_json::to_value(&proposal)?;
-                    value["reserved"] = json!(false);
+                    let suggested = Suggested {
+                        suggestion: proposal.clone(),
+                        reserved: false,
+                    };
                     ctx.emit_styled(
                         Style::Warning,
                         &format!(
@@ -53,7 +55,7 @@ pub(super) async fn acquire(
                             proposal.suggested_port,
                             proposal.suggested_port
                         ),
-                        value,
+                        suggested,
                     )?;
                     return Ok(super::EXIT_BUSY);
                 }

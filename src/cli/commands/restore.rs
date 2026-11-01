@@ -3,9 +3,9 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, ensure};
-use serde::Serialize;
 
-use super::resume::{Queued, Stopped};
+use super::resume::Stopped;
+use crate::client::output::resume::{Queued, Reopened};
 use crate::{
     cli::{
         client::{self, request},
@@ -14,10 +14,7 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
-    model::{
-        Checkpoint, CheckpointCause, RemovedWorkspace, RestoredCheckpoint, RestoredWorkspace,
-        Workspace,
-    },
+    model::{Checkpoint, CheckpointCause, RemovedWorkspace, RestoredCheckpoint, RestoredWorkspace},
     protocol::{RecoveryMethod, RemovalMethod},
     shell,
     state::WorkspaceState,
@@ -206,18 +203,6 @@ pub(super) async fn finish_reopen(
         super::workspaces::run_post_setup(ctx, &reopened.workspace).await?;
     }
     Ok(0)
-}
-
-/// A workspace opened again from a removal record, set up with its PRs
-/// linked.
-#[derive(Serialize)]
-pub(super) struct Reopened {
-    pub(super) workspace: Workspace,
-    removed: RemovedWorkspace,
-    warnings: Vec<String>,
-    /// The restores of its stopped agents, once queued.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    queued: Option<Queued>,
 }
 
 impl Reopened {

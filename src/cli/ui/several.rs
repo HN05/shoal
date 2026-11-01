@@ -2,12 +2,14 @@
 //! Ctrl-A all of them, one confirmation for all of them, and a report of
 //! what happened to each.
 use anyhow::{Result, ensure};
-use serde_json::{Value, json};
 
 use super::{Entries, confirm, entry_id, picker_output};
-use crate::cli::{
-    context::Context,
-    output::{Palette, Style},
+use crate::{
+    cli::{
+        context::Context,
+        output::{Palette, Style},
+    },
+    client::output::{Output, batch::Failure},
 };
 
 /// Tab selects an entry and moves on to the next, which the bottom-up list
@@ -78,7 +80,7 @@ fn losses_text(action: &str, losses: &[(String, Vec<String>)]) -> String {
 
 /// Print that the command, doing `verb`, failed on `workspace`, and return
 /// the failure as the JSON of a batch lists it.
-pub fn failure(ctx: &Context, verb: &str, workspace: &str, error: &anyhow::Error) -> Value {
+pub fn failure(ctx: &Context, verb: &str, workspace: &str, error: &anyhow::Error) -> Failure {
     eprintln!(
         "{} cannot {verb} {workspace}: {error:#}",
         Palette::stderr(ctx.json).paint(Style::Error, "error:")
@@ -86,35 +88,34 @@ pub fn failure(ctx: &Context, verb: &str, workspace: &str, error: &anyhow::Error
     failure_value(workspace, error)
 }
 
-fn failure_value(workspace: &str, error: &anyhow::Error) -> Value {
-    json!({"workspace": workspace, "error": format!("{error:#}")})
+fn failure_value(workspace: &str, error: &anyhow::Error) -> Failure {
+    Failure {
+        workspace: workspace.to_owned(),
+        error: format!("{error:#}"),
+    }
 }
 
 /// What a command did to each of several items: a line per item as it goes,
-/// then a summary, or with `--json` one object naming the items under
-/// `done_key` and the failures under `failed`.
-pub struct Report {
-    done_key: &'static str,
+/// then a summary, or with `--json` the output naming the items it acted on
+/// and those it failed on.
+pub struct Report<T> {
     /// What the command does, as in `cannot remove first`.
     verb: &'static str,
-    done: Vec<Value>,
-    failed: Vec<Value>,
-    fields: serde_json::Map<String, Value>,
+    done: Vec<T>,
+    failed: Vec<Failure>,
 }
 
-impl Report {
-    pub fn new(done_key: &'static str, verb: &'static str) -> Self {
+impl<T> Report<T> {
+    pub fn new(verb: &'static str) -> Self {
         Self {
-            done_key,
             verb,
             done: Vec::new(),
             failed: Vec::new(),
-            fields: serde_json::Map::new(),
         }
     }
 
     /// Record an item the command acted on, printing `message`.
-    pub fn done(&mut self, ctx: &Context, message: &str, value: Value) {
+    pub fn done(&mut self, ctx: &Context, message: &str, value: T) {
         if !ctx.json {
             outln!("{}", Palette::stdout(false).paint(Style::Success, message));
         }
@@ -147,20 +148,17 @@ impl Report {
         (self.done.len(), self.failed.len())
     }
 
-    /// Add `key` to the JSON object.
-    pub fn field(&mut self, key: &str, value: Value) {
-        self.fields.insert(key.to_owned(), value);
-    }
-
-    /// Print `summary` unless it is empty, or the JSON object, exiting 1 when
-    /// any item failed.
-    pub fn finish(mut self, ctx: &Context, summary: &str) -> Result<i32> {
+    /// Print `summary` unless it is empty, or with `--json` what `output`
+    /// makes of the items acted on and failed on, exiting 1 when any failed.
+    pub fn finish<O: Output>(
+        self,
+        ctx: &Context,
+        summary: &str,
+        output: impl FnOnce(Vec<T>, Vec<Failure>) -> O,
+    ) -> Result<i32> {
         let code = if self.failed.is_empty() { 0 } else { 1 };
-        self.fields
-            .insert(self.done_key.to_owned(), self.done.into());
-        self.fields.insert("failed".to_owned(), self.failed.into());
         if ctx.json {
-            outln!("{}", Value::Object(self.fields));
+            ctx.show(&output(self.done, self.failed), |_| {})?;
         } else if !summary.is_empty() {
             outln!("{summary}");
         }

@@ -1,8 +1,8 @@
 //! Removing workspaces after checking what each loses.
 use anyhow::{Result, ensure};
-use serde_json::json;
 
 use super::removal::{ensure_batch_removable, leaving};
+use crate::client::output::workspaces::{Removals, Removed};
 use crate::{
     cli::{client::request, commands::agent_queue, context::Context, output::Style, ui},
     protocol::RemovalMethod,
@@ -68,19 +68,15 @@ async fn check_removals(
 
 async fn remove_one(ctx: &Context, check: RemovalCheck) -> Result<i32> {
     let result = remove_checked(ctx, &check).await?;
-    let output = removal_output(&result, &check)?;
-    ctx.emit_styled(
-        Style::Success,
-        &removal_message("Workspace removed", &result),
-        &output,
-    )?;
+    let message = removal_message("Workspace removed", &result);
+    ctx.emit_styled(Style::Success, &message, removed(result, &check, None))?;
     Ok(0)
 }
 
 /// Remove each checked workspace, going on after one fails. One that a
 /// removal before it took as its child is not removed again.
 async fn remove_each(ctx: &Context, checks: Vec<RemovalCheck>) -> Result<i32> {
-    let mut report = ui::Report::new("removed", "remove");
+    let mut report = ui::Report::new("remove");
     let mut taken = Vec::new();
     for check in checks {
         let name = &check.workspace.name;
@@ -89,16 +85,14 @@ async fn remove_each(ctx: &Context, checks: Vec<RemovalCheck>) -> Result<i32> {
         }
         match remove_checked(ctx, &check).await {
             Ok(result) => {
-                let mut output = removal_output(&result, &check)?;
-                output["workspace"] = json!(name);
                 let message = removal_message(&format!("Removed {name}"), &result);
-                taken.extend(result.children);
-                report.done(ctx, &message, output);
+                taken.extend(result.children.iter().cloned());
+                report.done(ctx, &message, removed(result, &check, Some(name)));
             }
             Err(error) => report.failed(ctx, name, &error),
         }
     }
-    report.finish(ctx, "")
+    report.finish(ctx, "", |removed, failed| Removals { removed, failed })
 }
 
 /// Remove the workspace `check` inspected, deleting only the unsaved work it
@@ -120,11 +114,14 @@ async fn remove_checked(ctx: &Context, check: &RemovalCheck) -> Result<RemovalRe
     Ok(result)
 }
 
-/// What JSON reports for a removal: its result and the workspace's holds.
-fn removal_output(result: &RemovalResult, check: &RemovalCheck) -> Result<serde_json::Value> {
-    let mut output = serde_json::to_value(result)?;
-    output["holds"] = serde_json::to_value(&check.workspace.holds)?;
-    Ok(output)
+/// What JSON reports for a removal: its result and the holds of the
+/// workspace, which a removal of several names.
+fn removed(removal: RemovalResult, check: &RemovalCheck, name: Option<&str>) -> Removed {
+    Removed {
+        workspace: name.map(str::to_owned),
+        removal,
+        holds: check.workspace.holds.clone(),
+    }
 }
 
 /// Ask once before removing workspaces that would lose unsaved work or

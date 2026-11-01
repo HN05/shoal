@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result};
 
 use super::Chosen;
+use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
         client,
@@ -161,7 +162,7 @@ async fn lease_simulator(
         declined => Ok(Err(declined.finish(
             ctx,
             |_| Ok(()),
-            |message| serde_json::json!({"acquired": false, "code": "simulator_busy", "message": message}),
+            |message| NotAcquired::busy(Some("simulator_busy"), message),
         )?)),
     }
 }

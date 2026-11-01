@@ -130,7 +130,7 @@ fn json_errors_carry_the_specific_code_of_a_daemon_or_cli_refusal() {
     ] {
         let error = Err::<(), _>(error).context("caller context").unwrap_err();
         let printed = json_error(&error);
-        assert_eq!(printed["error"]["code"], code, "{error:#}");
-        assert_eq!(printed["error"]["message"], format!("{error:#}"));
+        assert_eq!(printed.error.code, code, "{error:#}");
+        assert_eq!(printed.error.message, format!("{error:#}"));
     }
 }

@@ -5,9 +5,9 @@ use std::time::Duration;
 use futures_util::{StreamExt, stream::FuturesUnordered};
 
 use anyhow::{Result, ensure};
-use serde_json::json;
 use tokio::time::{Instant, sleep, sleep_until};
 
+use crate::client::output::agents::Restarted;
 use crate::{
     agent::Agent,
     cli::{args::WorkspaceTargets, client::request, context::Context},
@@ -52,7 +52,13 @@ pub(super) async fn run(
         };
         ctx.emit(
             &message,
-            json!({"restarted": [], "failed": [], "skipped": []}),
+            Restarted {
+                restarted: Vec::new(),
+                failed: Vec::new(),
+                skipped: Vec::new(),
+                interrupted: false,
+                pending: Vec::new(),
+            },
         )?;
         return Ok(0);
     }

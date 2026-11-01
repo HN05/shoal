@@ -1,8 +1,8 @@
 //! Per-invocation CLI settings shared by every command handler.
 use std::io::{self, IsTerminal};
 
+use crate::client::output::{self, Output};
 use anyhow::Result;
-use serde::Serialize;
 
 use crate::{
     cli::{
@@ -96,9 +96,9 @@ impl Context {
     }
 
     /// Print a human-readable line, or `value` as one JSON line with `--json`.
-    pub fn emit(&self, message: &str, value: impl Serialize) -> Result<()> {
+    pub fn emit(&self, message: &str, value: impl Output) -> Result<()> {
         if self.json {
-            outln!("{}", serde_json::to_string(&value)?);
+            outln!("{}", output::json(&value)?);
         } else {
             outln!("{message}");
         }
@@ -106,14 +106,14 @@ impl Context {
     }
 
     /// Style a human-facing outcome without changing its machine-readable value.
-    pub fn emit_styled(&self, style: Style, message: &str, value: impl Serialize) -> Result<()> {
+    pub fn emit_styled(&self, style: Style, message: &str, value: impl Output) -> Result<()> {
         self.emit(&Palette::stdout(self.json).paint(style, message), value)
     }
 
     /// Print `value` as JSON with `--json`; otherwise render it with `text`.
-    pub fn show<T: Serialize>(&self, value: &T, text: impl FnOnce(&T)) -> Result<()> {
+    pub fn show<T: Output>(&self, value: &T, text: impl FnOnce(&T)) -> Result<()> {
         if self.json {
-            outln!("{}", serde_json::to_string(value)?);
+            outln!("{}", output::json(value)?);
         } else {
             text(value);
         }

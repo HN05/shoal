@@ -681,7 +681,7 @@ pub struct PortReservation {
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortSuggestion {
     pub workspace_id: String,
     pub name: String,

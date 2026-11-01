@@ -1,32 +1,18 @@
 //! What each lease kind offers: its configuration and available inventory.
 use anyhow::Result;
-use serde::Serialize;
 
 use super::{
     ports,
     resources::{self, Members},
     secrets, simulators,
 };
-use crate::{
-    cli::{
-        args::resources::CatalogKind,
-        context::Context,
-        output::{Palette, Style},
-        ui::{self, Fallback},
-    },
-    daemon::{resources::Catalog as ResourceCatalog, secrets::SecretCatalog},
-    model::PortCatalog,
-    sim::SimulatorCatalog,
+use crate::cli::{
+    args::resources::CatalogKind,
+    context::Context,
+    output::{Palette, Style},
+    ui::{self, Fallback},
 };
-
-/// Every kind's catalog for one workspace.
-#[derive(Debug, Serialize)]
-struct Catalog {
-    ports: PortCatalog,
-    simulators: SimulatorCatalog,
-    resources: ResourceCatalog,
-    secrets: SecretCatalog,
-}
+use crate::client::output::{Output, catalog::Catalog};
 
 pub(super) async fn show(
     ctx: &Context,
@@ -67,7 +53,7 @@ pub(super) async fn show(
     }
 }
 
-fn display<T: Serialize>(ctx: &Context, catalog: &T, render: fn(&T, Palette)) -> Result<i32> {
+fn display<T: Output>(ctx: &Context, catalog: &T, render: fn(&T, Palette)) -> Result<i32> {
     ctx.show(catalog, |catalog| {
         render(catalog, Palette::stdout(ctx.json))
     })?;

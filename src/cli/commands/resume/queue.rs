@@ -1,10 +1,9 @@
 //! `shoal resume` without `--now`: queue each stopped agent's restore, which
 //! the daemon starts as the agent limits allow.
 use anyhow::Result;
-use serde::Serialize;
-use serde_json::{Value, json};
 
 use super::{claim_commands, reconcile_stale_execution, report_commands};
+use crate::client::output::resume::Queued;
 use crate::{
     cli::{client, context::Context, terminal, ui},
     execution::recovery::Saved,
@@ -18,7 +17,11 @@ pub(super) async fn queue_all(ctx: &Context, stopped: Vec<(Workspace, Saved)>) -
     if stopped.is_empty() {
         ctx.emit(
             "No stopped agents or commands",
-            json!({"queued": [], "commands": []}),
+            Queued {
+                queued: Vec::new(),
+                commands: Vec::new(),
+                failed: Vec::new(),
+            },
         )?;
         return Ok(0);
     }
@@ -29,15 +32,6 @@ pub(super) async fn queue_all(ctx: &Context, stopped: Vec<(Workspace, Saved)>) -
         }
     })?;
     Ok(if queued.failed.is_empty() { 0 } else { 1 })
-}
-
-/// What [`queue_each`] did: the restores it queued, the commands it reported
-/// and the workspaces it failed for.
-#[derive(Serialize)]
-pub(in crate::cli::commands) struct Queued {
-    queued: Vec<QueueEntry>,
-    commands: Vec<Value>,
-    failed: Vec<Value>,
 }
 
 impl Queued {

@@ -4,6 +4,7 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result, bail, ensure};
 
 use super::workspaces::{self, AgentLaunch, Creation};
+use crate::client::output::workspaces::Registered;
 use crate::{
     agent::Agent,
     cli::{
@@ -217,7 +218,10 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
     .await?;
     ctx.emit(
         &link_outcome(kind, relation),
-        serde_json::json!({"registered": true, "relation": relation}),
+        Registered {
+            registered: true,
+            relation: Some(relation),
+        },
     )?;
     Ok(0)
 }
@@ -322,7 +326,11 @@ pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
         },
     )
     .await?;
-    ctx.emit("Items unlinked", serde_json::json!({"registered": false}))?;
+    let unlinked = Registered {
+        registered: false,
+        relation: None,
+    };
+    ctx.emit("Items unlinked", unlinked)?;
     Ok(0)
 }
 

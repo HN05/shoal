@@ -1,9 +1,8 @@
 //! Show issues, PRs and linked CI runs as the forge reports them.
 use anyhow::{Context as _, Result, ensure};
 
-use serde::Serialize;
-
 use super::{ci, links};
+use crate::client::output::view::{RunRead, Shown, ShownReview, ShownRun};
 use crate::{
     cli::{
         args::items::{ItemArgs, ViewArgs},
@@ -18,10 +17,7 @@ use crate::{
         ForgeRepo,
         account::Account,
         capability::Capability,
-        ci::{
-            checks::CheckLog,
-            run_view::{JobRef, RunView},
-        },
+        ci::{checks::CheckLog, run_view::JobRef},
         items::{
             link::{ItemKind, LinkKind, Selection},
             reaction::Reaction,
@@ -76,45 +72,13 @@ async fn view(
         let latest = super::review::show::latest(ctx, workspace).await;
         views.extend(latest.map(|review| {
             Shown::Review(ShownReview {
-                kind: "review",
+                kind: "review".into(),
                 review: Box::new(review),
             })
         }));
     }
     ctx.show(&views, |views| render_views(views, ctx.json))?;
     Ok(i32::from(views.iter().any(Shown::failed)))
-}
-
-/// What `shoal view` shows of one selected item.
-#[derive(Serialize)]
-#[serde(untagged)]
-enum Shown {
-    Item(Box<ItemView>),
-    Run(ShownRun),
-    Review(ShownReview),
-}
-
-/// The workspace's latest local review.
-#[derive(Serialize)]
-struct ShownReview {
-    kind: &'static str,
-    #[serde(flatten)]
-    review: Box<crate::reviews::Review>,
-}
-
-/// A linked CI run, as `view ci` shows it, or why it could not be read.
-#[derive(Serialize)]
-struct ShownRun {
-    kind: LinkKind,
-    #[serde(flatten)]
-    read: RunRead,
-}
-
-#[derive(Serialize)]
-#[serde(untagged)]
-enum RunRead {
-    Read(RunView),
-    Failed { url: String, errors: Vec<String> },
 }
 
 impl Shown {

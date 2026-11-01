@@ -3,8 +3,8 @@
 //! and with `--processes` or `--leftovers` those of a chat, stop for good.
 use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
-use serde_json::json;
 
+use crate::client::output::agents::{StoppedProcesses, StoppedWorkspaces, WorkspaceStopped};
 use crate::{
     cli::{
         args::SpaceTargets,
@@ -39,14 +39,7 @@ pub(super) async fn run(
         [workspace] => stop_one(ctx, workspace.clone(), yes).await,
         workspaces => {
             let workspaces = inspect_each(ctx, workspaces).await?;
-            stop_each(
-                ctx,
-                ui::Report::new("stopped", "stop"),
-                &workspaces,
-                "",
-                yes,
-            )
-            .await
+            stop_each(ctx, ui::Report::new("stop"), &workspaces, "", yes).await
         }
     }
 }
@@ -66,7 +59,11 @@ async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
     ctx.emit_styled(
         Style::Success,
         &message,
-        json!({"stopped": true, "saved": saved, "other_processes": other.processes}),
+        WorkspaceStopped {
+            stopped: true,
+            saved,
+            other_processes: other.processes,
+        },
     )?;
     Ok(0)
 }
@@ -88,17 +85,20 @@ pub(super) async fn processes(
     if selectors.len() > 1 {
         ensure_spaces(ctx, &selectors).await?;
     }
-    let mut report = ui::Report::new("stopped", "stop processes of");
+    let mut report = ui::Report::new("stop processes of");
     for selector in selectors {
         match stop_untracked(ctx, &selector, selection).await {
             Ok(stopped) => {
                 let message = stopped_message(&stopped, selection);
-                report.done(ctx, &message, json!(stopped));
+                report.done(ctx, &message, stopped);
             }
             Err(error) => report.failed(ctx, &selector, &error),
         }
     }
-    report.finish(ctx, "")
+    report.finish(ctx, "", |stopped, failed| StoppedProcesses {
+        stopped,
+        failed,
+    })
 }
 
 /// Refuse `selectors` before any stops when one names neither a running
@@ -271,12 +271,15 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
 /// restore is queued or requested, which stopping cancels; the daemon selects
 /// them while no restore can move between the queue and its agent.
 async fn stop_all(ctx: &Context) -> Result<i32> {
-    let report = ui::Report::new("stopped", "stop");
+    let report = ui::Report::new("stop");
     let running = request::<Vec<Workspace>>(&ctx.paths, RemovalMethod::StopTargets).await?;
     if running.is_empty() {
         ctx.emit(
             "No running agents or commands",
-            json!({"stopped": [], "failed": []}),
+            StoppedWorkspaces {
+                stopped: Vec::new(),
+                failed: Vec::new(),
+            },
         )?;
         return Ok(0);
     }
@@ -289,7 +292,7 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
 /// to continue them passes `shoal resume`; empty, it names each one.
 async fn stop_each(
     ctx: &Context,
-    mut report: ui::Report,
+    mut report: ui::Report<String>,
     workspaces: &[Workspace],
     resume: &str,
     acknowledge_unproven: bool,
@@ -315,7 +318,7 @@ async fn stop_each(
                     0 => format!("Stopped {name}"),
                     n => format!("Stopped {name} and {}", other_processes(n)),
                 };
-                report.done(ctx, &message, json!(name));
+                report.done(ctx, &message, name.to_owned());
                 if has_saved_work(ctx, workspace) {
                     resumable.push(name);
                 }
@@ -328,7 +331,10 @@ async fn stop_each(
         (false, true) => continue_hint(&resumable.join(" ")),
         (false, false) => continue_hint(resume),
     };
-    report.finish(ctx, &summary)
+    report.finish(ctx, &summary, |stopped, failed| StoppedWorkspaces {
+        stopped,
+        failed,
+    })
 }
 
 /// Whether `workspace` saved work for `shoal resume`, which refuses to

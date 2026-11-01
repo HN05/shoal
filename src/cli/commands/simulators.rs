@@ -1,8 +1,8 @@
 //! CLI simulator requests, retry policy, and audit rendering.
 use anyhow::Result;
-use serde_json::json;
 
 use super::acquisition::{Acquisition, obtain};
+use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -117,7 +117,7 @@ pub(super) async fn acquire(ctx: &Context, workspace: String, request: SimReques
     outcome.finish(
         ctx,
         |sim| ctx.emit_styled(Style::Success, &describe(&sim), &sim),
-        |message| json!({"acquired": false, "code": "simulator_busy", "message": message}),
+        |message| NotAcquired::busy(Some("simulator_busy"), message),
     )
 }
 

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
+pub(super) use crate::client::output::agents::Skipped;
 use crate::{
     cli::{args::WorkspaceTargets, client, context::Context, ui},
     model::{PendingRestart, RunningAgent, Workspace},
@@ -33,13 +34,6 @@ pub(super) struct Restart {
     /// The restart in progress when the run selected it, which the run
     /// waits for instead of starting another, even once it ends.
     pub(super) joins: Option<PendingRestart>,
-}
-
-/// A workspace whose agent cannot restart in place.
-pub(super) struct Skipped {
-    pub(super) workspace: String,
-    pub(super) agent: Option<String>,
-    pub(super) reason: String,
 }
 
 impl Restart {

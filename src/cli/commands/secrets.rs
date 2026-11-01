@@ -1,9 +1,9 @@
 //! Request access to approval-gated secrets; the value is fetched only where
 //! the secret is used.
 use anyhow::Result;
-use serde_json::json;
 
 use super::acquisition::{Acquisition, obtain};
+use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
         client,
@@ -38,7 +38,7 @@ pub(super) async fn acquire(
     outcome.finish(
         ctx,
         |grant| ctx.emit(&describe(&grant), &grant),
-        |message| json!({"acquired": false, "message": message}),
+        |message| NotAcquired::busy(None, message),
     )
 }
 

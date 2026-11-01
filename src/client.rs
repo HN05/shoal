@@ -19,6 +19,7 @@ pub mod links;
 pub mod list_status;
 pub mod model;
 pub mod notifications;
+pub mod output;
 pub mod paths;
 pub mod processes;
 pub(crate) mod profile;

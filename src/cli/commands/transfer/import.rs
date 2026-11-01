@@ -8,8 +8,12 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, ensure};
-use serde_json::json;
 
+use crate::client::output::chat::BackgroundChat;
+use crate::client::output::{
+    resume::Reopened,
+    transfer::{ImportFailure, Imported, Imports},
+};
 use crate::{
     cli::{
         agents::{self, SessionHome},
@@ -26,10 +30,7 @@ use crate::{
 };
 
 use super::{
-    super::{
-        chat::{self, BackgroundChat, ChatPlace, Started},
-        restore::Reopened,
-    },
+    super::chat::{self, ChatPlace, Started},
     STANDARD_STREAM,
 };
 
@@ -265,7 +266,7 @@ async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) 
             Space::Workspace(_) => import_workspace(ctx, file, package, options, &mut report).await,
             Space::Chat(_) => match package.start_chat(ctx, ChatPlace::Background).await {
                 Ok(Started::Background(chat)) => {
-                    report.imported(ctx, chat_message(&chat), json!(chat))
+                    report.imported(ctx, chat_message(&chat), Imported::Chat(chat))
                 }
                 Ok(Started::Exited(_)) => report.imported_quietly(),
                 Err(error) => report.failed(ctx, file, &error),
@@ -294,7 +295,8 @@ async fn import_workspace(
     if post_setup.is_ok() && options.resume {
         reopened.queue_agents(ctx).await;
     }
-    report.imported(ctx, reopened.message(ctx, "Imported"), json!(reopened));
+    let message = reopened.message(ctx, "Imported");
+    report.imported(ctx, message, Imported::Workspace(Box::new(reopened)));
     if let Err(error) = post_setup {
         let error = error.context(format!(
             "imported {}, but its hooks.post_setup failed",
@@ -316,14 +318,14 @@ async fn open_and_prepare(ctx: &Context, package: Package) -> Result<Reopened> {
 /// not import.
 #[derive(Default)]
 struct ImportReport {
-    imported: Vec<serde_json::Value>,
+    imported: Vec<Imported>,
     /// Spaces that reported themselves, such as a chat an app started.
     reported: usize,
-    failed: Vec<serde_json::Value>,
+    failed: Vec<ImportFailure>,
 }
 
 impl ImportReport {
-    fn imported(&mut self, ctx: &Context, message: String, value: serde_json::Value) {
+    fn imported(&mut self, ctx: &Context, message: String, value: Imported) {
         if !ctx.json {
             outln!("{message}");
         }
@@ -340,8 +342,10 @@ impl ImportReport {
             Palette::stderr(ctx.json).paint(Style::Error, "error:"),
             file.display()
         );
-        self.failed
-            .push(json!({"file": file, "error": format!("{error:#}")}));
+        self.failed.push(ImportFailure {
+            file: file.to_owned(),
+            error: format!("{error:#}"),
+        });
     }
 
     fn report(self, ctx: &Context) -> Result<i32> {
@@ -351,11 +355,15 @@ impl ImportReport {
         } else {
             format!("Imported {imported} spaces; {} failed", self.failed.len())
         };
+        let code = if self.failed.is_empty() { 0 } else { 1 };
         ctx.emit(
             &message,
-            json!({"imported": self.imported, "failed": self.failed}),
+            Imports {
+                imported: self.imported,
+                failed: self.failed,
+            },
         )?;
-        Ok(if self.failed.is_empty() { 0 } else { 1 })
+        Ok(code)
     }
 }
 

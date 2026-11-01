@@ -2,10 +2,10 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use serde_json::Value;
 use tokio::time::sleep;
 
 use super::{EXIT_BUSY, approvals};
+use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{context::Context, output::Style},
     daemon::approvals::{ApprovalRequest, DecisionStatus},
@@ -35,7 +35,7 @@ impl<T> Acquisition<T> {
         self,
         ctx: &Context,
         acquired: impl FnOnce(T) -> Result<()>,
-        busy: impl FnOnce(&str) -> Value,
+        busy: impl FnOnce(&str) -> NotAcquired,
     ) -> Result<i32> {
         match self {
             Self::Acquired(value) => {

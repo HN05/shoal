@@ -4,6 +4,7 @@ mod render;
 use anyhow::{Context as _, Result, ensure};
 
 use self::render::render_status;
+use crate::client::output::status::StatusView;
 use crate::{
     cli::{
         client::{self, request},
@@ -26,7 +27,7 @@ pub(in crate::cli::commands) async fn status(
 ) -> Result<i32> {
     let Some(target) = status_target(workspace.as_deref(), item)? else {
         let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-        let status = StatusView::request(ctx, workspace).await?;
+        let status = status_view(ctx, workspace).await?;
         ctx.show(&status, |status| render_status(status, ctx.json))?;
         return Ok(0);
     };
@@ -34,7 +35,7 @@ pub(in crate::cli::commands) async fn status(
         request::<Vec<Workspace>>(&ctx.paths, WorkspaceMethod::FindWorkspaces { target }).await?;
     let mut statuses = Vec::new();
     for workspace in workspaces {
-        statuses.push(StatusView::request(ctx, workspace.id).await?);
+        statuses.push(status_view(ctx, workspace.id).await?);
     }
     ctx.show(&statuses, |statuses| {
         for (index, status) in statuses.iter().enumerate() {
@@ -47,41 +48,29 @@ pub(in crate::cli::commands) async fn status(
     Ok(0)
 }
 
-/// The daemon's workspace status with the agent sessions the CLI finds.
-#[derive(serde::Serialize)]
-struct StatusView {
-    #[serde(flatten)]
-    status: WorkspaceStatus,
-    sessions: Vec<terminal::Session>,
-    /// Why sessions could not be listed; status still reports the rest.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    sessions_error: Option<String>,
-    /// How text names the workspace's chat; JSON gives its ID.
-    #[serde(skip)]
-    chat: Option<String>,
-}
-
-impl StatusView {
-    async fn request(ctx: &Context, workspace: String) -> Result<Self> {
-        // Listing chats first ends finished ones, returning their workspaces to the user.
-        let chats = client::chats(&ctx.paths).await?;
-        let status =
-            request::<WorkspaceStatus>(&ctx.paths, WorkspaceMethod::WorkspaceStatus { workspace })
-                .await?;
-        let chat = chat_name(&chats, &status.inspection.workspace);
-        let places = Recorded::workspace(&status.inspection);
-        let (sessions, sessions_error) =
-            match sessions(ctx, &status.inspection.workspace, &places).await {
-                Ok(sessions) => (sessions, None),
-                Err(error) => (Vec::new(), Some(format!("{error:#}"))),
-            };
-        Ok(Self {
-            status,
-            sessions,
-            sessions_error,
-            chat,
-        })
-    }
+/// The status of `workspace`, with the sessions its terminal hosts keep.
+async fn status_view(ctx: &Context, workspace: String) -> Result<StatusView> {
+    // Listing chats first ends finished ones, returning their workspaces to the user.
+    let chats = client::chats(&ctx.paths).await?;
+    let status =
+        request::<WorkspaceStatus>(&ctx.paths, WorkspaceMethod::WorkspaceStatus { workspace })
+            .await?;
+    let chat = chat_name(&chats, &status.inspection.workspace);
+    let places = Recorded::workspace(&status.inspection);
+    let (sessions, sessions_error) =
+        match sessions(ctx, &status.inspection.workspace, &places).await {
+            Ok(sessions) => (sessions, None),
+            Err(error) => (Vec::new(), Some(format!("{error:#}"))),
+        };
+    Ok(StatusView {
+        status,
+        sessions: sessions
+            .into_iter()
+            .map(terminal::Session::output)
+            .collect(),
+        sessions_error,
+        chat,
+    })
 }
 
 /// The agent sessions of `workspace`, in the hosts its settings enable and

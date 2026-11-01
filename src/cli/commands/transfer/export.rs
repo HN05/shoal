@@ -6,8 +6,8 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, ensure};
-use serde_json::json;
 
+use crate::client::output::transfer::{Exported, Exports};
 use crate::{
     cli::{
         client::{self, request},
@@ -204,7 +204,11 @@ impl Output {
                 "Exported {name} to {}; shoal move import opens it on another machine",
                 path.display()
             ),
-            json!({"file": path, "manifest": exported.manifest, "removal": exported.removal}),
+            Exported {
+                file: path.clone(),
+                manifest: exported.manifest.clone(),
+                removal: exported.removal.clone(),
+            },
         )?;
         Ok(0)
     }
@@ -590,7 +594,7 @@ async fn export_each(
     planned: Vec<PlannedExport>,
     directory: &ExportDirectory,
 ) -> Result<i32> {
-    let mut report = ui::Report::new("exported", "export");
+    let mut report = ui::Report::new("export");
     for PlannedExport { check, output } in planned {
         let name = check.name();
         match export_checked(ctx, &check, &output).await {
@@ -599,11 +603,11 @@ async fn export_each(
                     "Exported {name} to {}",
                     directory.shown_file(name).display()
                 );
-                let value = json!({
-                    "file": directory.file(name),
-                    "manifest": exported.manifest,
-                    "removal": exported.removal,
-                });
+                let value = Exported {
+                    file: directory.file(name),
+                    manifest: exported.manifest,
+                    removal: exported.removal,
+                };
                 report.done(ctx, &message, value);
             }
             Err(error) => report.failed(ctx, name, &error),
@@ -621,6 +625,9 @@ async fn export_each(
             exported + failed
         )
     };
-    report.field("directory", json!(directory.path));
-    report.finish(ctx, &summary)
+    report.finish(ctx, &summary, |exported, failed| Exports {
+        exported,
+        failed,
+        directory: directory.path.clone(),
+    })
 }
