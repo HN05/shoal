@@ -44,6 +44,12 @@ tools! {
 }
 
 impl Tool {
+    /// Whether the program is executable on this process's `PATH`.
+    pub fn installed(self) -> bool {
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        crate::fsutil::find_executable(std::ffi::OsStr::new(self.program()), &path).is_some()
+    }
+
     pub fn dependencies() -> impl Iterator<Item = (Self, Dependency)> {
         Self::ALL
             .iter()
