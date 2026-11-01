@@ -112,7 +112,7 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
         IssueCommand::List(args) => return list(ctx, ItemKind::Issue, args).await,
         IssueCommand::Open {
-            workspace,
+            space,
             repo,
             title,
             body,
@@ -131,7 +131,7 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
                 milestone,
                 attachments,
             };
-            return open_issue(ctx, workspace, issue, repo, link).await;
+            return open_issue(ctx, space, issue, repo, link).await;
         }
         IssueCommand::Edit { item, edit } => {
             (item, Action::edit(edit_fields(edit)?), "Issue updated")
@@ -190,9 +190,9 @@ async fn act(
     let item: Item = client::request(
         &ctx.paths,
         ItemMethod::ItemAction {
-            context: select_item_context(
+            context: select_space_item_context(
                 ctx,
-                selector.workspace,
+                selector.space,
                 selector.repo.name,
                 selector.item.as_deref(),
             )
@@ -214,9 +214,9 @@ async fn act(
 
 /// The PR `selector` names, or the workspace's linked ones.
 async fn select_prs(ctx: &Context, selector: &ItemSelector) -> Result<Selected> {
-    let context = select_item_context(
+    let context = select_space_item_context(
         ctx,
-        selector.workspace.clone(),
+        selector.space.clone(),
         selector.repo.name.clone(),
         selector.item.as_deref(),
     )

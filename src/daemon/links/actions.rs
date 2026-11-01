@@ -39,33 +39,32 @@ impl Manager {
     ) -> Result<Item> {
         action.validate(kind)?;
         match context {
-            ItemContext::Workspace(selector) => {
-                self.workspace_item_action(selector, kind, input, action)
-                    .await
+            ItemContext::Workspace(selector) | ItemContext::Chat(selector) => {
+                self.space_item_action(selector, kind, input, action).await
             }
-            ItemContext::Checkout(_) | ItemContext::Chat(_) => {
+            ItemContext::Checkout(selector) => {
                 let input = input.context(NOTHING_LINKED)?;
-                let checkout = self.context_checkout(context).await?;
-                self.checkout_item_action(&checkout.id, kind, &input, action)
+                self.checkout_item_action(selector, kind, &input, action)
                     .await
             }
         }
     }
 
-    /// Apply `action` for the workspace and record it as its own change.
-    async fn workspace_item_action(
+    /// Apply `action` for the workspace or chat and record it as its own
+    /// change.
+    async fn space_item_action(
         &self,
         selector: &str,
         kind: ItemKind,
         input: Option<String>,
         action: Action,
     ) -> Result<Item> {
-        let workspace = self.workspace(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        let forge = self.workspace_forge(&workspace).await?;
+        let space = self.link_space(selector).await?;
+        self.verify_space(&space).await?;
+        let forge = self.space_forge(&space).await?;
         let input = match input {
             Some(input) => input,
-            None => linked(&workspace, kind)?,
+            None => self.linked_item(space.id(), kind).await?,
         };
         let (number, url) = match kind {
             ItemKind::Issue => forge.issue(&input)?,
@@ -78,13 +77,23 @@ impl Manager {
         };
         // Held from before the change, so a poll that observes it records
         // it after the workspace's cursor knows it as its own.
-        let _gate = self.gates.lock_prs([&workspace.id]).await;
+        let _gate = self.gates.lock_prs([space.id()]).await;
         let target = Target { kind, number, url };
         let item = self
-            .apply_own(&workspace.id, &forge, &account, target, &action)
+            .apply_own(space.id(), &forge, &account, target, &action)
             .await?;
-        self.sync_after_merge(&workspace.repository_id, &action, &item);
+        self.sync_after_merge(space.repository_id(), &action, &item);
         Ok(item)
+    }
+
+    /// The one assigned item of `kind` of the space `id`.
+    pub(super) async fn linked_item(&self, id: &str, kind: ItemKind) -> Result<String> {
+        let id = id.to_owned();
+        let assigned = self
+            .store
+            .run(move |db| super::wait::linked_items(db, &id, Some(kind)))
+            .await?;
+        only_assigned(kind, assigned.into_iter().map(|(url, _)| url).collect())
     }
 
     /// Apply `action` from the repository's registered checkout, which no
@@ -371,7 +380,7 @@ impl Manager {
             item.url
         );
         let (linked, warning) = if created {
-            self.keep_created(&workspace, ItemKind::Pr, &item, true)
+            self.keep_created(&workspace.id, ItemKind::Pr, &item, true)
                 .await?
         } else {
             self.set_pr_gated(&workspace.id, watch(&item), super::pr::WatchCheck::Known)
@@ -433,12 +442,12 @@ impl Manager {
     /// linked, and the warning.
     pub(super) async fn keep_created(
         &self,
-        workspace: &Workspace,
+        space: &str,
         kind: ItemKind,
         item: &Item,
         link: bool,
     ) -> Result<(bool, Option<String>)> {
-        let (id, url, title) = (workspace.id.clone(), item.url.clone(), item.title.clone());
+        let (id, url, title) = (space.to_owned(), item.url.clone(), item.title.clone());
         let recorded = self
             .store
             .run(move |db| record_opened(db, &id, kind, &url, &title))
@@ -450,16 +459,16 @@ impl Manager {
         let linked = match kind {
             ItemKind::Issue => {
                 let title = Some(item.title.clone());
-                self.set_issue_gated(&workspace.id, &item.url, title).await
+                self.set_issue_gated(space, &item.url, title).await
             }
             ItemKind::Pr => {
                 let check = super::pr::WatchCheck::Known;
-                self.set_pr_gated(&workspace.id, watch(item), check).await
+                self.set_pr_gated(space, watch(item), check).await
             }
         };
         match linked {
             Ok(()) => Ok((true, None)),
-            Err(_) if !self.accepts_links(&workspace.id).await? => {
+            Err(_) if !self.accepts_links(space).await? => {
                 Ok((false, Some(removal_warning(&item.url))))
             }
             Err(error) => {
@@ -637,17 +646,20 @@ pub(super) const NOTHING_LINKED: &str =
     "outside a workspace, nothing is linked; pass a number or URL";
 
 pub(super) fn linked(workspace: &Workspace, kind: ItemKind) -> Result<String> {
-    match kind {
-        ItemKind::Issue => workspace
-            .links
-            .issue
-            .clone()
-            .context("no issue is linked; pass a number or URL"),
-        ItemKind::Pr => match workspace.links.prs.as_slice() {
-            [url] => Ok(url.clone()),
-            [] => bail!("no PR is linked; pass a number or URL"),
-            _ => bail!("several PRs are linked; pass a number or URL"),
-        },
+    let assigned = match kind {
+        ItemKind::Issue => workspace.links.issue.iter().cloned().collect(),
+        ItemKind::Pr => workspace.links.prs.clone(),
+    };
+    only_assigned(kind, assigned)
+}
+
+/// The one assigned item of `kind` among `assigned`.
+fn only_assigned(kind: ItemKind, assigned: Vec<String>) -> Result<String> {
+    match (kind, assigned.as_slice()) {
+        (_, [url]) => Ok(url.clone()),
+        (ItemKind::Issue, _) => bail!("no issue is linked; pass a number or URL"),
+        (ItemKind::Pr, []) => bail!("no PR is linked; pass a number or URL"),
+        (ItemKind::Pr, _) => bail!("several PRs are linked; pass a number or URL"),
     }
 }
 

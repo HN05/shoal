@@ -117,12 +117,12 @@ async fn push(ctx: &Context, workspace: &Workspace) -> Result<()> {
 
 pub(super) async fn open_issue(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     issue: NewIssue,
     repository: Option<String>,
     link: bool,
 ) -> Result<i32> {
-    let (context, repository) = select_open_context(ctx, workspace, repository).await?;
+    let (context, repository) = select_open_context(ctx, space, repository).await?;
     let outcome: OpenOutcome = client::request(
         &ctx.paths,
         ItemMethod::OpenIssue {

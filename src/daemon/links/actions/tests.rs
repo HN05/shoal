@@ -79,7 +79,7 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
 
     // A link failing for another reason still fails, after the record.
     let error = manager
-        .keep_created(&workspace, ItemKind::Issue, &item(1), true)
+        .keep_created(&workspace.id, ItemKind::Issue, &item(1), true)
         .await
         .unwrap_err();
     assert!(
@@ -119,7 +119,7 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
     // An item created after the check but before removal reserved the
     // workspace keeps its creation event and comes back with a warning.
     let (linked, warning) = manager
-        .keep_created(&workspace, ItemKind::Issue, &item(2), true)
+        .keep_created(&workspace.id, ItemKind::Issue, &item(2), true)
         .await
         .unwrap();
     assert!(!linked);

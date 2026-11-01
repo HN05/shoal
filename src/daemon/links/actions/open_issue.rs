@@ -1,6 +1,6 @@
-//! Opening an issue for a workspace or from a registered checkout, in its
-//! repository or another one, or recording it for the user's approval where
-//! the repository asks for that.
+//! Opening an issue for a workspace or a chat, or from a registered
+//! checkout, in its repository or another one, or recording it for the
+//! user's approval where the repository asks for that.
 use std::path::Path;
 
 use anyhow::{Result, bail};
@@ -24,9 +24,9 @@ use crate::{
     protocol::ItemContext,
 };
 
-/// Why `--link` is refused outside a workspace.
-const LINK_NEEDS_WORKSPACE: &str =
-    "--link needs a workspace to assign the issue to; run this in one or pass --workspace";
+/// Why `--link` is refused outside a workspace or chat.
+const LINK_NEEDS_SPACE: &str =
+    "--link needs a workspace or chat to assign the issue to; run this in one or pass --space";
 
 impl Manager {
     /// Open an issue as the agent account in the repository of `context`, or
@@ -46,13 +46,53 @@ impl Manager {
                 self.open_workspace_issue(selector, issue, repository, link, caller)
                     .await
             }
-            ItemContext::Checkout(_) | ItemContext::Chat(_) => {
-                anyhow::ensure!(!link, "{LINK_NEEDS_WORKSPACE}");
-                let checkout = self.context_checkout(context).await?;
-                self.open_checkout_issue(&checkout.id, issue, repository)
+            ItemContext::Chat(selector) => {
+                self.open_chat_issue(selector, issue, repository, link)
                     .await
             }
+            ItemContext::Checkout(selector) => {
+                anyhow::ensure!(!link, "{LINK_NEEDS_SPACE}");
+                self.open_checkout_issue(selector, issue, repository).await
+            }
         }
+    }
+
+    /// Open the issue from the chat's checkout as a checkout opens one, and
+    /// record it as opened by the chat, or assign it to the chat with `link`.
+    async fn open_chat_issue(
+        &self,
+        selector: &str,
+        issue: NewIssue,
+        repository: Option<String>,
+        link: bool,
+    ) -> Result<OpenOutcome> {
+        let space = self.link_space(selector).await?;
+        let checkout = self.context_checkout(&space.item_context()).await?;
+        // The chat's gate keeps a link meanwhile from taking its issue's place.
+        let _gate = self.gates.lock_prs([space.id()]).await;
+        if link {
+            anyhow::ensure!(
+                self.issue_registration(space.id()).await?.is_none(),
+                "the chat already has a linked issue; open the issue without --link"
+            );
+            let own = self.checkout_forge(&checkout).await?;
+            let destination = self.issue_destination(own, repository.as_deref()).await?;
+            anyhow::ensure!(
+                !destination.elsewhere,
+                "an issue in another repository cannot be linked; open it without --link"
+            );
+        }
+        let OpenOutcome::Opened(mut opened) =
+            (self.open_checkout_issue(&checkout.id, issue, repository)).await?
+        else {
+            bail!("a chat opens issues without a proposal");
+        };
+        let (linked, warning) = self
+            .keep_created(space.id(), ItemKind::Issue, &opened.item, link)
+            .await?;
+        opened.linked = linked;
+        opened.warnings.extend(warning);
+        Ok(OpenOutcome::Opened(opened))
     }
 
     /// Open the issue for the workspace and record it as opened there. A
@@ -105,7 +145,7 @@ impl Manager {
         }
         let Created { item, unfinished } = forge.create_issue(&account, &issue).await?;
         let (linked, warning) = self
-            .keep_created(&workspace, ItemKind::Issue, &item, link)
+            .keep_created(&workspace.id, ItemKind::Issue, &item, link)
             .await?;
         let checked = destination
             .warnings(&account, &workspace.path, &item, &issue, required)

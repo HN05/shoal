@@ -3197,15 +3197,19 @@ draft = false # Default: false
 required_labels = ["area/", "type/"] # Default: []
 ```
 
-`shoal pr` and `shoal issue` change an item of the workspace's repository: the
-number or URL given, otherwise the linked issue or the only linked PR. Outside a
-workspace, such as in a chat, they act on the repository of the registered
-checkout they run in, as its agent account, and take only a number or URL.
-`--repo`, instead of `--workspace`, names a registered repository by name, ID,
-path or remote URL to act on the same way from anywhere, so a client acting as
-the user needs no workspace; outside a workspace and a checkout, an issue or PR
-URL of a registered repository selects that repository too. Workspace processes
-act only from their own workspace, and `pr open` and `pr revert` need one.
+`shoal pr` and `shoal issue` change an item of the repository of the space they
+run in, a workspace or chat, or the one `--space` names: the number or URL given,
+otherwise the space's linked issue or only linked PR. A chat acts in its
+repository's registered checkout, and an issue it opens is recorded as opened
+there, or with `--link` assigned to it. Outside a space they act on the
+repository of the registered checkout they run in, as its agent account, and take
+only a number or URL. `--repo`, instead of `--space`, names a registered
+repository by name, ID, path or remote URL to act on the same way from anywhere,
+so a client acting as the user needs no workspace; outside a space and a
+checkout, an issue or PR URL of a registered repository selects that repository
+too. Workspace processes act only from their own workspace, `pr open` needs one,
+and `pr revert` needs a space; a chat's revert that the forge cannot open itself
+comes from a new workspace the chat opens.
 Outside all of them, a non-interactive call fails saying so. `edit`
 takes `--title`, `--body` or `--body-file`, and repeated `--add-label` and
 `--remove-label`; PRs also take `--base`, repeated `--add-reviewer` and
@@ -3350,10 +3354,11 @@ other item command reports. Bitbucket's `--author` matches a nickname.
 `issue open` takes `--title`, `--body` or `--body-file`, repeated `--label`,
 repeated `--assignee` and `--milestone TITLE`;
 the new issue is recorded as opened, and assigned only with `--link`, which fails
-while another issue is assigned. A workspace being removed refuses it. Outside
-a workspace, such as in a chat, it opens the issue in the repository of the
-registered checkout it runs in, under that repository's settings, records it
-nowhere, and refuses `--link`. Its JSON
+while another issue is assigned. A workspace being removed refuses it. A chat
+opens it in its repository's registered checkout, under that repository's
+settings, and records it the same way. Outside a space it opens the issue in the
+repository of the registered checkout it runs in, records it nowhere, and
+refuses `--link`. Its JSON
 adds `created` and `linked`, and `warnings`, on stderr too, with the
 [convention](#repository-conventions) warnings, a failure to label, assign, set
 the milestone, attach files or read the issue once the forge opened it, which

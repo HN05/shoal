@@ -112,22 +112,25 @@ async fn current_or_picked_repository(ctx: &Context) -> Result<ItemContext> {
     Ok(ItemContext::Checkout(picked))
 }
 
-/// [`select_repo_context`] for `issue open`, which also takes the workspace
-/// to open the issue from, and whose picker offers workspaces, since
-/// `--link` links the issue to one.
+/// [`select_repo_context`] for `issue open`, which also takes the space to
+/// open the issue from, a workspace or chat, and whose picker offers spaces,
+/// since `--link` assigns the issue to one.
 pub(in crate::cli::commands) async fn select_open_context(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     repo: Option<String>,
 ) -> Result<(ItemContext, Option<String>)> {
-    if workspace.is_none()
+    if space.is_none()
         && let Some(checkout) = registered_checkout(ctx, repo.as_deref()).await?
     {
         return Ok((checkout, None));
     }
-    // Refuse a bad repository before the workspace picker asks for anything.
+    // Refuse a bad repository before the picker asks for anything.
     repo.as_deref().map(ForgeRepo::check_named).transpose()?;
-    Ok((select_context(ctx, workspace, None).await?, repo))
+    Ok((
+        select_space_item_context(ctx, space, None, None).await?,
+        repo,
+    ))
 }
 
 /// The checkout of the registered repository `repo` names, where the user's

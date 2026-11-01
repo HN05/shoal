@@ -62,7 +62,7 @@ impl Manager {
         let revert = NewRevert::new(options, settings.pr.draft);
         let created = forge.revert_pull(&account, &current, &revert).await?;
         let (_, warning) = self
-            .keep_created(&workspace, ItemKind::Pr, &created.item, false)
+            .keep_created(&workspace.id, ItemKind::Pr, &created.item, false)
             .await?;
         let checked = conventions::warnings(
             &forge,

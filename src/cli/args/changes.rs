@@ -322,13 +322,14 @@ pub enum PrCommand {
 pub enum IssueCommand {
     /// List or search the issues of the workspace's repository or another one, newest first.
     List(ListArgs),
-    /// Open an issue in the workspace's repository or another one.
+    /// Open an issue in the space's repository or another one.
     Open {
-        /// Workspace to use; defaults to the current workspace or picker.
+        /// Space, a workspace or chat, that opens it; defaults to the current
+        /// chat or workspace, or a picker.
         #[arg(long)]
-        workspace: Option<String>,
-        /// Open it in another repository: OWNER/NAME on the workspace's
-        /// forge, or a repository URL on any forge.
+        space: Option<String>,
+        /// Open it in another repository: OWNER/NAME on the space's forge, or
+        /// a repository URL on any forge.
         #[arg(long, value_name = "REPOSITORY")]
         repo: Option<String>,
         /// Issue title.
@@ -347,7 +348,7 @@ pub enum IssueCommand {
         /// Set the milestone, by its title.
         #[arg(long, value_name = "TITLE")]
         milestone: Option<String>,
-        /// Link the new issue to the workspace.
+        /// Assign the new issue to the space.
         #[arg(long)]
         link: bool,
     },
@@ -429,16 +430,17 @@ pub struct ListArgs {
     pub limit: u16,
 }
 
-// An issue or PR of the repository of the workspace, or of the registered
-// repository --repo names.
+// An issue or PR of the repository of the space, a workspace or chat, or of
+// the registered repository --repo names.
 #[derive(Debug, Args)]
 pub struct ItemSelector {
     /// Number or URL; defaults to the linked one.
     #[arg(value_parser = item_reference)]
     pub item: Option<String>,
-    /// Workspace to use; defaults to the current workspace or picker.
+    /// Space, a workspace or chat, to use; defaults to the current chat or
+    /// workspace, or a picker.
     #[arg(long, conflicts_with = "repo")]
-    pub workspace: Option<String>,
+    pub space: Option<String>,
     #[command(flatten)]
     pub repo: RegisteredRepo,
 }

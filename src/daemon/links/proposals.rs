@@ -507,7 +507,7 @@ impl Manager {
         };
         let link = link && workspace.links.issue.is_none();
         match self
-            .keep_created(workspace, ItemKind::Issue, item, link)
+            .keep_created(&workspace.id, ItemKind::Issue, item, link)
             .await
         {
             Ok((linked, _)) => linked,
@@ -559,7 +559,7 @@ impl Manager {
             .finish_proposed(request, &forge, &account, ItemKind::Pr)
             .await?;
         let (linked, _) = self
-            .keep_created(workspace, ItemKind::Pr, &item, true)
+            .keep_created(&workspace.id, ItemKind::Pr, &item, true)
             .await?;
         Ok((item, linked))
     }

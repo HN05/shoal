@@ -419,7 +419,7 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
             {"name": "priority/high", "description": "", "exclusive": true},
         ])
     );
-    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--workspace", "topic"]);
+    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--space", "topic"]);
     assert_eq!(
         reviewers,
         json!([
@@ -443,7 +443,7 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
     fixture.respond(responses);
     let labels = fixture.ok_in_topic(&["repo", "labels"]);
     assert_eq!(labels.as_array().map(Vec::len), Some(1), "{labels}");
-    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--workspace", "topic"]);
+    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--space", "topic"]);
     assert_eq!(
         reviewers,
         json!([{"name": "kim", "display_name": "Kim Lee", "team": false}])
@@ -474,7 +474,7 @@ fn github_lists_assignable_users_and_an_organizations_teams_as_reviewers() {
             {"body": [{"slug": "core", "name": "Core"}]},
         "GET repos/team/project/pulls/8": {"body": pr},
     }));
-    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--workspace", "topic"]);
+    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--space", "topic"]);
     assert_eq!(
         reviewers,
         json!([
@@ -641,6 +641,70 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
 }
 
 #[test]
+fn a_chat_opens_issues_and_acts_on_its_linked_items() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .current_dir(fixture.root.path())
+        .spawn()
+        .unwrap();
+    let chat = fixture.request(json!({"start_chat": {"repository": repository,
+        "name": "planning", "agent": "claude", "pid": agent.id()}}));
+    let chat = chat["data"]["id"].as_str().unwrap().to_owned();
+    let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
+    fixture.respond(json!({
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": created},
+        "POST repos/team/project/issues/40/comments": {"body": {}},
+    }));
+    let in_chat = |args: &[&str]| {
+        let output = fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("SHOAL_CHAT", &chat)
+            .arg("--json")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    // The chat opens an issue and assigns it to itself, which records it as
+    // opened there too.
+    let opened = in_chat(&["issue", "open", "--title", "Flaky", "--link"]);
+    let url = format!("{}/issues/40", fixture.web);
+    assert_eq!(
+        (&opened["url"], &opened["linked"]),
+        (&json!(url), &json!(true))
+    );
+    let chats = fixture.request(json!("list_chats"));
+    let links = &chats["data"][0]["links"];
+    assert_eq!(links["issue"], json!(url), "{chats}");
+    assert_eq!(
+        links["opened"],
+        json!([{"kind": "issue", "url": url, "title": "Flaky"}]),
+        "{chats}"
+    );
+    // An action without an item acts on the chat's linked issue.
+    fixture.requests();
+    in_chat(&["issue", "comment", "--body", "Seen"]);
+    let posted: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request[0].as_str().unwrap().starts_with("POST"))
+        .map(|request| request[0].clone())
+        .collect();
+    assert_eq!(
+        posted,
+        [json!("POST repos/team/project/issues/40/comments")]
+    );
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn changes_use_the_agent_account_and_merges_the_users() {
     for forge in [Forge::GitHub, Forge::Forgejo] {
         let fixture = Fixture::new(forge, AGENT_TOKEN);
@@ -689,13 +753,7 @@ fn pr_update_takes_in_the_base_on_the_forge_for_workspace_processes_too() {
         format!("POST {endpoint}/update?style=merge"): {"body": null},
     }));
     let updated = fixture.ok(&[
-        "pr",
-        "update",
-        "8",
-        "--workspace",
-        "topic",
-        "--method",
-        "rebase",
+        "pr", "update", "8", "--space", "topic", "--method", "rebase",
     ]);
     assert_eq!(
         updated["url"],
@@ -832,7 +890,7 @@ fn pr_review_takes_line_comments_from_arguments_and_a_file_and_watches_skip_it()
     assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
     fixture.requests();
 
-    let unjudged = fixture.run(&["pr", "review", "--workspace", "topic", "--body", "Hm"]);
+    let unjudged = fixture.run(&["pr", "review", "--space", "topic", "--body", "Hm"]);
     assert!(!unjudged.status.success());
     assert!(String::from_utf8_lossy(&unjudged.stderr).contains("--comment"));
     let file = fixture.root.path().join("comments.json");
@@ -844,7 +902,7 @@ fn pr_review_takes_line_comments_from_arguments_and_a_file_and_watches_skip_it()
     let reviewed = fixture.ok(&[
         "pr",
         "review",
-        "--workspace",
+        "--space",
         "topic",
         "--comment",
         "--line",
@@ -900,14 +958,7 @@ fn watches_do_not_report_a_forgejo_reviewer_request_as_a_review() {
     let first = fixture.ok(&["watch", "pr", "--space", "topic"]);
     assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
 
-    fixture.ok(&[
-        "pr",
-        "edit",
-        "--workspace",
-        "topic",
-        "--add-reviewer",
-        "lead",
-    ]);
+    fixture.ok(&["pr", "edit", "--space", "topic", "--add-reviewer", "lead"]);
     // Forgejo records the request as a review with no body or comments.
     let request = json!([{"id": 3, "body": "", "state": "REQUEST_REVIEW",
         "comments_count": 0, "user": {"login": "lead"}}]);
@@ -936,7 +987,7 @@ fn review_threads_take_replies_and_ask_before_resolving_without_one() {
         "POST graphql": {"body": threads(json!([{"databaseId": 5}]))},
         format!("POST {endpoint}/comments/5/replies"): {"body": {}},
     }));
-    let pr = ["--workspace", "topic", "8"];
+    let pr = ["--space", "topic", "8"];
 
     // Without a reply, a non-interactive resolve asks for one or for --yes.
     let unanswered = fixture.run(&[&["pr", "resolve", "5"][..], &pr].concat());
@@ -1011,7 +1062,7 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
             "position": 4, "original_position": 0, "resolver": null}]},
         format!("POST {endpoint}/reviews/3/comments"): {"body": {}},
     }));
-    let pr = ["--workspace", "topic", "8"];
+    let pr = ["--space", "topic", "8"];
     fixture.ok(&[&["pr", "reply", "5", "--body", "Kept"][..], &pr].concat());
     assert!(fixture.requests().contains(&json!([
         format!("POST {endpoint}/reviews/3/comments"),
@@ -1271,7 +1322,7 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
         "DELETE repos/team/project/issues/comments/6/reactions/3": {"status": 204},
         "GET repos/team/project/issues/8/reactions?per_page=100&page=1": {"body": [own(4, "heart")]},
     }));
-    let pr = ["--workspace", "topic", "8"];
+    let pr = ["--space", "topic", "8"];
     let added = fixture.ok(&[&["pr", "react", "+1", "--comment", "5"][..], &pr].concat());
     assert_eq!(added["number"], 8, "{added}");
     fixture.ok(&[
@@ -1288,7 +1339,7 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
         String::from_utf8_lossy(&missing.stderr).contains("#8 has no comment 99"),
         "{missing:?}"
     );
-    let issue = ["issue", "react", "+1", "--workspace", "topic", "8"];
+    let issue = ["issue", "react", "+1", "--space", "topic", "8"];
     assert!(!fixture.run(&issue).status.success());
     let mut writes = writes(&fixture);
     // The PR's review threads are read by GraphQL.
@@ -1349,7 +1400,7 @@ fn forgejo_reactions_are_removed_by_content_and_left_when_already_as_asked() {
             {"body": [{"content": "heart", "user": {"login": "Me"}}]},
         "DELETE repos/team/project/issues/comments/9/reactions": {"body": null},
     }));
-    let target = ["--workspace", "topic", "3"];
+    let target = ["--space", "topic", "3"];
     fixture.ok(&[&["issue", "react", "eyes"][..], &target].concat());
     fixture.ok(&[
         &["issue", "react", "heart", "--comment", "9", "--remove"][..],
@@ -1398,14 +1449,7 @@ fn comment_edits_change_only_the_logins_own_comments_and_are_not_reported_back()
     fs::write(&note, "Fixed").unwrap();
     let edit = |comment: &str| {
         let body = note.to_str().unwrap();
-        let args = [
-            "issue",
-            "comment",
-            "--workspace",
-            "topic",
-            "--edit",
-            comment,
-        ];
+        let args = ["issue", "comment", "--space", "topic", "--edit", comment];
         fixture.run(&[&args[..], &["--body-file", body]].concat())
     };
     let edited = edit("2");
@@ -1471,15 +1515,7 @@ fn github_comment_edits_reach_inline_comments() {
         "PATCH repos/team/project/pulls/comments/5": {"body": {"id": 5, "body": "Why?"}},
     }));
     let edited = fixture.ok(&[
-        "pr",
-        "comment",
-        "--workspace",
-        "topic",
-        "8",
-        "--edit",
-        "5",
-        "--body",
-        "Why?",
+        "pr", "comment", "--space", "topic", "8", "--edit", "5", "--body", "Why?",
     ]);
     assert_eq!(edited["number"], 8, "{edited}");
     let mut writes = writes(&fixture);
@@ -1532,7 +1568,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         "pr",
         "comment",
         "8",
-        "--workspace",
+        "--space",
         "topic",
         "--body-file",
         &note,
@@ -1564,7 +1600,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         "pr",
         "comment",
         "8",
-        "--workspace",
+        "--space",
         "topic",
         "--attach",
         text.to_str().unwrap(),
@@ -1588,15 +1624,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
         ])
         .arg(&deleted)
         .arg(env!("CARGO_BIN_EXE_shoal"))
-        .args([
-            "pr",
-            "comment",
-            "8",
-            "--workspace",
-            "topic",
-            "--body",
-            "Done",
-        ])
+        .args(["pr", "comment", "8", "--space", "topic", "--body", "Done"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -1626,15 +1654,7 @@ fn gitlab_uploads_send_a_form_as_the_agent() {
         format!("POST {project}/uploads"): {"status": 201, "body": {"url": "/uploads/1/login.png"}},
         format!("POST {project}/merge_requests/8/notes"): {"status": 201, "body": {"id": 5}},
     }));
-    fixture.ok(&[
-        "pr",
-        "comment",
-        "8",
-        "--workspace",
-        "topic",
-        "--attach",
-        &image,
-    ]);
+    fixture.ok(&["pr", "comment", "8", "--space", "topic", "--attach", &image]);
     let sent: Vec<_> = fixture
         .requests()
         .into_iter()
@@ -1693,7 +1713,7 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
         "pr",
         "comment",
         "8",
-        "--workspace",
+        "--space",
         "topic",
         "--body-file",
         &note,
@@ -1746,15 +1766,7 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
 
     // An edit without a description adds the files after the current one.
     let alt = format!("{image}#Login screen");
-    fixture.ok(&[
-        "issue",
-        "edit",
-        "3",
-        "--workspace",
-        "topic",
-        "--attach",
-        &alt,
-    ]);
+    fixture.ok(&["issue", "edit", "3", "--space", "topic", "--attach", &alt]);
     let sent: Vec<_> = fixture
         .requests()
         .into_iter()
@@ -1772,15 +1784,7 @@ fn forgejo_attaches_files_to_the_comment_or_item_that_shows_them() {
     // A new issue opens naming its files, which then go into its description.
     let body = format!("Seen with ![]({image})");
     let opened = fixture.ok(&[
-        "issue",
-        "open",
-        "--workspace",
-        "topic",
-        "--title",
-        "Flaky",
-        "--body",
-        &body,
-        "--attach",
+        "issue", "open", "--space", "topic", "--title", "Flaky", "--body", &body, "--attach",
         &image,
     ]);
     assert_eq!(opened["created"], true);
@@ -1817,15 +1821,7 @@ fn forgejo_sends_a_comments_files_again_while_the_forge_is_busy() {
         format!("PATCH {comments}"): [{"status": 502, "body": "bad gateway"}, {"body": {}}],
     }));
     fixture.ok(&[
-        "pr",
-        "comment",
-        "8",
-        "--workspace",
-        "topic",
-        "--body",
-        "Seen",
-        "--attach",
-        &image,
+        "pr", "comment", "8", "--space", "topic", "--body", "Seen", "--attach", &image,
     ]);
     let sent: Vec<_> = fixture
         .requests()
@@ -1873,8 +1869,7 @@ fn forgejo_refuses_files_its_settings_refuse_before_posting() {
             &["pr", "comment", "8", "--body", "Seen"][..],
             &["issue", "open", "--title", "Flaky"],
         ] {
-            let refused =
-                fixture.run(&[args, &["--workspace", "topic", "--attach", file]].concat());
+            let refused = fixture.run(&[args, &["--space", "topic", "--attach", file]].concat());
             assert!(
                 String::from_utf8_lossy(&refused.stderr).contains(refusal),
                 "{refused:?}"
@@ -1970,14 +1965,7 @@ fn watches_do_not_report_the_agents_own_comments_back() {
     let note = fixture.root.path().join("note.md");
     fs::write(&note, "comment 2").unwrap();
     let body = note.to_str().unwrap();
-    fixture.ok(&[
-        "issue",
-        "comment",
-        "--workspace",
-        "topic",
-        "--body-file",
-        body,
-    ]);
+    fixture.ok(&["issue", "comment", "--space", "topic", "--body-file", body]);
     // A comment posted before attaching its files failed is the agent's too.
     let [_, image, _] = attachment_files(&fixture);
     fixture.respond(json!({
@@ -1987,14 +1975,7 @@ fn watches_do_not_report_the_agents_own_comments_back() {
         "POST repos/team/project/issues/comments/3/assets?name=login.png":
             {"status": 422, "body": {"message": "refused"}},
     }));
-    let failed = fixture.run(&[
-        "issue",
-        "comment",
-        "--workspace",
-        "topic",
-        "--attach",
-        &image,
-    ]);
+    let failed = fixture.run(&["issue", "comment", "--space", "topic", "--attach", &image]);
     let stderr = String::from_utf8_lossy(&failed.stderr);
     assert!(stderr.contains("attaching its files failed"), "{stderr}");
     // Closing in the web interface is someone else's change; the agent's own
@@ -2166,12 +2147,12 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
     fixture.ok(&["link", "pr", "8", "assigned", "--space", "topic"]);
     fixture.requests();
 
-    let nothing = fixture.run(&["pr", "edit", "--workspace", "topic"]);
+    let nothing = fixture.run(&["pr", "edit", "--space", "topic"]);
     assert!(String::from_utf8_lossy(&nothing.stderr).contains("nothing to change"));
     let edited = fixture.ok(&[
         "pr",
         "edit",
-        "--workspace",
+        "--space",
         "topic",
         "--title=-New",
         "--add-label",
@@ -2198,7 +2179,7 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
         "issue",
         "comment",
         "3",
-        "--workspace",
+        "--space",
         "topic",
         "--body-file",
         note.to_str().unwrap(),
@@ -2242,7 +2223,7 @@ fn issue_edits_set_assignees_and_milestones_that_views_show() {
         "issue",
         "edit",
         "3",
-        "--workspace",
+        "--space",
         "topic",
         "--add-assignee",
         "sam",
@@ -2279,7 +2260,7 @@ fn issue_edits_set_assignees_and_milestones_that_views_show() {
         "issue",
         "edit",
         "3",
-        "--workspace",
+        "--space",
         "topic",
         "--milestone",
         "v2",
@@ -2312,14 +2293,7 @@ fn issues_open_with_labels_and_link_on_request() {
             &[]
         };
         let open = [
-            "issue",
-            "open",
-            "--workspace",
-            "topic",
-            "--title",
-            "Flaky",
-            "--label",
-            "bug",
+            "issue", "open", "--space", "topic", "--title", "Flaky", "--label", "bug",
         ];
         let opened = fixture.ok(&[&open[..], link].concat());
         let url = format!("{}/issues/40", fixture.web);
@@ -2546,7 +2520,7 @@ fn an_unconfirmed_github_merge_fails_and_keeps_the_branch() {
         "pr",
         "merge",
         "8",
-        "--workspace",
+        "--space",
         "topic",
         "--method",
         "squash",
@@ -2589,7 +2563,7 @@ fn delete_branch_deletes_an_ended_prs_branch_unless_it_moved() {
     let branch = |commit: &str| json!({"body": {"commit": {"id": commit}}});
     let delete = |args: &[&str]| {
         let output =
-            fixture.run(&[&["pr", "delete-branch", "8", "--workspace", "topic"], args].concat());
+            fixture.run(&[&["pr", "delete-branch", "8", "--space", "topic"], args].concat());
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         (output.status.success(), stdout, stderr)
@@ -2678,7 +2652,7 @@ fn auto_merges_are_scheduled_and_cancelled_with_the_merge_command() {
     let open = json!({"body": pull(8, "open", "Fix", &[])});
     fixture.respond(responses(open.clone()));
     let merge = |args: &[&str]| {
-        let output = fixture.run(&[&["pr", "merge", "8", "--workspace", "topic"], args].concat());
+        let output = fixture.run(&[&["pr", "merge", "8", "--space", "topic"], args].concat());
         let text = String::from_utf8_lossy(&output.stdout).into_owned();
         (output.status.success(), text)
     };
@@ -2905,7 +2879,7 @@ fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
     let output = fixture.run(&[
         "issue",
         "open",
-        "--workspace",
+        "--space",
         "topic",
         "--title",
         "Follow-up",
@@ -4702,14 +4676,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     );
 
     // The user opens directly whatever the setting says.
-    let direct = fixture.ok(&[
-        "issue",
-        "open",
-        "--workspace",
-        "topic",
-        "--title",
-        "Flaky test",
-    ]);
+    let direct = fixture.ok(&["issue", "open", "--space", "topic", "--title", "Flaky test"]);
     assert_eq!(direct["created"], true);
 }
 
@@ -5467,15 +5434,7 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
         "repository is not registered",
     );
     refused(
-        &[
-            "issue",
-            "close",
-            "40",
-            "--repo",
-            "repo",
-            "--workspace",
-            "topic",
-        ],
+        &["issue", "close", "40", "--repo", "repo", "--space", "topic"],
         "cannot be used with",
     );
     // A workspace process acts only from its own workspace.
@@ -5618,7 +5577,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
         "{denied:?}"
     );
     assert!(writes(&fixture).is_empty());
-    let direct = fixture.ok(&[&open[..], &["--workspace", "topic"]].concat());
+    let direct = fixture.ok(&[&open[..], &["--space", "topic"]].concat());
     assert_eq!(direct["url"], url);
 }
 
