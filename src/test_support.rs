@@ -330,6 +330,34 @@ fn run_until_stopped() {
     std::thread::sleep(std::time::Duration::from_secs(300));
 }
 
+/// This test binary's `marked_child` helper, which waits 30 seconds, for a
+/// test to give its environment before [`spawn_marked_child`] starts it.
+pub fn marked_child() -> tokio::process::Command {
+    let mut command = tokio::process::Command::new(std::env::current_exe().unwrap());
+    command.args([
+        "--exact",
+        "process::identity::tests::marked_child",
+        "--ignored",
+    ]);
+    command
+}
+
+/// Start `command` from [`marked_child`] and return once the helper runs its
+/// own image. Linux resumes a `posix_spawn` caller before the child leaves
+/// the caller's memory, so until then the child's environment reads as the
+/// caller's. The helper prints libtest's header only after that.
+pub fn spawn_marked_child(command: &mut tokio::process::Command) -> tokio::process::Child {
+    use std::io::Read as _;
+    let mut child = command
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let stdout = child.stdout.take().unwrap().into_owned_fd().unwrap();
+    fs::File::from(stdout).read_exact(&mut [0]).unwrap();
+    child
+}
+
 /// A process a test started as the leader of its own process group.
 /// Dropping it kills the group, so neither the process nor what it started
 /// outlives a test that fails or times out.

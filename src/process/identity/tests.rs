@@ -706,22 +706,13 @@ fn an_exiting_or_exited_process_has_ended_its_image() {
 
 #[tokio::test]
 async fn spawned_process_environment_is_visible_until_it_exits() {
-    let mut child = tokio::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "process::identity::tests::marked_child",
-            "--ignored",
-        ])
-        .stdout(std::process::Stdio::null())
-        .env_clear()
-        .env("SHOAL_TEST_PROCESS", "1")
-        .kill_on_drop(true)
-        .spawn()
-        .unwrap();
+    let mut child = crate::test_support::spawn_marked_child(
+        crate::test_support::marked_child()
+            .env_clear()
+            .env("SHOAL_TEST_PROCESS", "1"),
+    );
     let identity = capture(child.id().unwrap()).unwrap().unwrap();
     let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-    // Spawning returns once exec is committed, possibly before the new
-    // environment is published.
     let Visibility::Environment(environment) = visibility(&identity, deadline).unwrap() else {
         panic!("spawned process environment is not visible");
     };
@@ -832,17 +823,9 @@ async fn settled_empty_environment_is_readable_and_has_no_execution_marker() {
 #[tokio::test]
 async fn discovers_marked_processes_and_rejects_changed_identity() {
     let id = uuid::Uuid::new_v4().to_string();
-    let mut child = tokio::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "process::identity::tests::marked_child",
-            "--ignored",
-        ])
-        .stdout(std::process::Stdio::null())
-        .env(crate::env::EXECUTION_ID, &id)
-        .kill_on_drop(true)
-        .spawn()
-        .unwrap();
+    let mut child = crate::test_support::spawn_marked_child(
+        crate::test_support::marked_child().env(crate::env::EXECUTION_ID, &id),
+    );
     let identity = capture(child.id().unwrap()).unwrap().unwrap();
     let inventory = scan(HashSet::from([id.clone()])).await.unwrap();
     assert!(

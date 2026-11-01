@@ -243,20 +243,12 @@ fn waiting_process(directory: &Path, execution: Option<&str>) -> tokio::process:
 /// given. It runs this test binary, whose environment the scan can read where
 /// a system binary's may be hidden.
 fn background_process(execution: Option<&str>) -> tokio::process::Child {
-    let mut command = tokio::process::Command::new(std::env::current_exe().unwrap());
-    command
-        .args([
-            "--exact",
-            "process::identity::tests::marked_child",
-            "--ignored",
-        ])
-        .stdout(std::process::Stdio::null())
-        .env_clear()
-        .env("SHOAL_TEST_PROCESS", "1");
+    let mut command = crate::test_support::marked_child();
+    command.env_clear().env("SHOAL_TEST_PROCESS", "1");
     if let Some(execution) = execution {
         command.env(crate::env::EXECUTION_ID, execution);
     }
-    command.process_group(0).kill_on_drop(true).spawn().unwrap()
+    crate::test_support::spawn_marked_child(command.process_group(0))
 }
 
 #[tokio::test]

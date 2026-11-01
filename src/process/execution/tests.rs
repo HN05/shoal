@@ -89,18 +89,12 @@ async fn unreadable_evidence_outside_the_workspace_does_not_block() -> anyhow::R
 async fn unreadable_evidence_settles_once_it_shows_no_marker() -> anyhow::Result<()> {
     use anyhow::Context;
     let workspace = tempfile::tempdir()?;
-    let mut child = tokio::process::Command::new(std::env::current_exe()?)
-        .args([
-            "--exact",
-            "process::identity::tests::marked_child",
-            "--ignored",
-        ])
-        .current_dir(workspace.path())
-        .stdout(std::process::Stdio::null())
-        .env_clear()
-        .env("SHOAL_TEST_PROCESS", "1")
-        .kill_on_drop(true)
-        .spawn()?;
+    let mut child = crate::test_support::spawn_marked_child(
+        crate::test_support::marked_child()
+            .current_dir(workspace.path())
+            .env_clear()
+            .env("SHOAL_TEST_PROCESS", "1"),
+    );
     let identity = process::capture(child.id().context("child PID")?)?.context("child")?;
     let execution = Execution {
         model: Default::default(),
@@ -211,18 +205,11 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
     assert!(!Processes::runs_outside_group(&execution, &marked("agent")));
 
     // An agent hook waiting for the next update does no work.
-    let mut hook = tokio::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "process::identity::tests::marked_child",
-            "--ignored",
-        ])
-        .stdout(std::process::Stdio::null())
-        .env(crate::env::WAITING_HOOK, "1")
-        .process_group(0)
-        .kill_on_drop(true)
-        .spawn()
-        .unwrap();
+    let mut hook = crate::test_support::spawn_marked_child(
+        crate::test_support::marked_child()
+            .env(crate::env::WAITING_HOOK, "1")
+            .process_group(0),
+    );
     let hook_identity = process::capture(hook.id().unwrap()).unwrap().unwrap();
     let waiting = process::Scan {
         processes: vec![process::OwnedProcess {

@@ -357,17 +357,9 @@ async fn readings_cover_the_processes_carrying_a_workspace_identity() {
     let id = uuid::Uuid::new_v4().to_string();
     // The test binary's own helper, since platform binaries such as
     // macOS's sh hide their environment.
-    let child = tokio::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "process::identity::tests::marked_child",
-            "--ignored",
-        ])
-        .stdout(std::process::Stdio::null())
-        .env(crate::env::WORKSPACE_ID, &id)
-        .kill_on_drop(true)
-        .spawn()
-        .unwrap();
+    let child = crate::test_support::spawn_marked_child(
+        crate::test_support::marked_child().env(crate::env::WORKSPACE_ID, &id),
+    );
     let processes = identity::scan_workspaces(HashSet::from([id.clone()]))
         .await
         .unwrap();
