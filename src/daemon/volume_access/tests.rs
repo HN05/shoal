@@ -55,6 +55,40 @@ async fn a_check_that_runs_out_stalls_its_volume_once_until_a_recheck_finishes()
 }
 
 #[tokio::test(start_paused = true)]
+async fn one_check_at_a_time_rechecks_a_stalled_volume() {
+    let access = VolumeAccess::default();
+    let (_, stall) = access.check(Path::new(WORKSPACE), never()).await;
+    assert!(stall.is_some());
+    tokio::time::advance(RECHECK_AFTER).await;
+
+    let recheck = access.check(Path::new(WORKSPACE), never());
+    let other = async {
+        // Past RECHECK_AFTER since the stall, while the recheck still runs.
+        tokio::time::advance(RECHECK_AFTER).await;
+        access
+            .check::<()>(Path::new(WORKSPACE), async {
+                panic!("a recheck runs already")
+            })
+            .await
+    };
+    let ((rechecked, _), (skipped, _)) = tokio::join!(recheck, other);
+    assert!(rechecked.is_err());
+    assert!(skipped.is_err());
+
+    // A recheck that was dropped unfinished lets the next one run.
+    tokio::time::advance(RECHECK_AFTER).await;
+    drop(
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            access.check(Path::new(WORKSPACE), never()),
+        )
+        .await,
+    );
+    let (result, _) = access.check(Path::new(WORKSPACE), async { Ok(()) }).await;
+    result.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
 async fn an_interrupted_check_stalls_its_volume_and_keeps_its_error() {
     let access = VolumeAccess::default();
     let (result, stall) = access

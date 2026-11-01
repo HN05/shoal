@@ -451,7 +451,8 @@ interrupted records its volume as stalled, which the daemon reports once as an
 alert and in `daemon status` until a check finishes. The volume is
 `/Volumes/<name>` from the path alone, since reading the filesystem could stall
 too, or else the path itself. Those checks skip a stalled volume until 20 seconds
-after its last check, so each sweep rechecks it once. Listings read HEAD for
+after its last check, and while another check rechecks it, so each sweep
+rechecks it once. Listings read HEAD for
 review marks within three seconds in all and skip stalled volumes, leaving
 staleness unknown, so `shoal attach` and `shoal work` answer from the daemon's
 state.

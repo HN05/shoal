@@ -21,7 +21,7 @@ use crate::protocol::VolumeStall;
 
 /// A check still running after this long counts as stalled. Git answers a
 /// check on a volume it can read within seconds, even under load.
-const LIMIT: Duration = Duration::from_secs(30);
+pub(crate) const LIMIT: Duration = Duration::from_secs(30);
 
 /// A stalled volume is checked again this long after its last check, so
 /// each cleanup sweep rechecks it once while its other checks skip it.
@@ -40,6 +40,22 @@ pub(crate) struct VolumeAccess {
 struct Stalled {
     report: VolumeStall,
     checked: Instant,
+    /// Whether a recheck runs now, which the volume's other checks leave to.
+    rechecking: bool,
+}
+
+/// A recheck of a stalled volume, which lets another start when dropped.
+struct Recheck<'a> {
+    access: &'a VolumeAccess,
+    volume: PathBuf,
+}
+
+impl Drop for Recheck<'_> {
+    fn drop(&mut self) {
+        if let Some(stalled) = lock(&self.access.stalls).get_mut(&self.volume) {
+            stalled.rechecking = false;
+        }
+    }
 }
 
 #[derive(Default)]
@@ -62,7 +78,8 @@ impl Drop for RunningCheck<'_> {
 
 impl VolumeAccess {
     /// Run `check` of `path` within [`LIMIT`], unless its volume stalled
-    /// within [`RECHECK_AFTER`]. A check that runs out or is interrupted
+    /// within [`RECHECK_AFTER`] or another check rechecks it. A check that
+    /// runs out or is interrupted
     /// fails with the stall; any other outcome shows the volume answers. The
     /// stall comes back too when the volume was not stalled before.
     async fn check<T>(
@@ -71,9 +88,10 @@ impl VolumeAccess {
         check: impl Future<Output = Result<T>>,
     ) -> (Result<T>, Option<VolumeStall>) {
         let volume = volume(path);
-        if let Some(stall) = self.recently_stalled(&volume) {
-            return (Err(stalled(&stall)), None);
-        }
+        let _recheck = match self.reserve(&volume) {
+            Ok(recheck) => recheck,
+            Err(stall) => return (Err(stalled(&stall)), None),
+        };
         let running = self.start(path);
         let outcome = tokio::time::timeout(LIMIT, check).await;
         drop(running);
@@ -120,11 +138,22 @@ impl VolumeAccess {
             .map(|(path, started)| (path.clone(), started.elapsed()))
     }
 
-    fn recently_stalled(&self, volume: &Path) -> Option<VolumeStall> {
-        lock(&self.stalls)
-            .get(volume)
-            .filter(|stalled| stalled.checked.elapsed() < RECHECK_AFTER)
-            .map(|stalled| stalled.report.clone())
+    /// Whether a check of `volume` may run: refused with the stall while the
+    /// volume stalled recently or another check rechecks it, and otherwise
+    /// the recheck of a stalled volume it reserves.
+    fn reserve(&self, volume: &Path) -> Result<Option<Recheck<'_>>, VolumeStall> {
+        let mut stalls = lock(&self.stalls);
+        let Some(stalled) = stalls.get_mut(volume) else {
+            return Ok(None);
+        };
+        if stalled.rechecking || stalled.checked.elapsed() < RECHECK_AFTER {
+            return Err(stalled.report.clone());
+        }
+        stalled.rechecking = true;
+        Ok(Some(Recheck {
+            access: self,
+            volume: volume.to_owned(),
+        }))
     }
 
     fn start(&self, path: &Path) -> RunningCheck<'_> {
@@ -156,6 +185,7 @@ impl VolumeAccess {
             Stalled {
                 report: report.clone(),
                 checked: Instant::now(),
+                rechecking: false,
             },
         );
         (report, true)
