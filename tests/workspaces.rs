@@ -26518,6 +26518,36 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
 }
 
 #[test]
+fn outside_a_checkout_issue_open_picks_a_workspace_and_repo_commands_a_repository() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("linked");
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    let offered = |args: &[&str]| {
+        // No row matches the choice, so the picker cancels.
+        let (_, rows) = fixture.pick(args, "none", "\n");
+        rows.lines()
+            .map(|row| row.split('\t').next().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    // `--link` links the new issue to the workspace picked.
+    assert_eq!(
+        offered(&["issue", "open", "--title", "Bug", "--link"]),
+        [workspace["id"].as_str().unwrap()]
+    );
+    for args in [
+        &["repo", "labels"][..],
+        &["issue", "list"],
+        &["forge", "reactions"],
+    ] {
+        assert_eq!(
+            offered(args),
+            [repository["id"].as_str().unwrap()],
+            "{args:?}"
+        );
+    }
+}
+
+#[test]
 fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     let fixture = Fixture::new();
     install_fake_agents(&fixture, &["claude", "happy"]);
