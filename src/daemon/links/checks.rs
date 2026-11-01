@@ -18,7 +18,13 @@ use crate::{
 impl Manager {
     /// Log failures stay on their CI update and never hide other activity;
     /// a check without a CI job gets no pointer to a log it does not have.
-    pub(crate) async fn summarize_failed_checks(&self, workspace: &str, updates: &mut [Update]) {
+    pub(crate) async fn summarize_failed_checks(&self, space: &str, updates: &mut [Update]) {
+        // Logs are read in the space's own context: a chat reads them from
+        // its repository's checkout.
+        let Ok(space) = self.link_space(space).await else {
+            return;
+        };
+        let context = space.item_context();
         for index in 0..updates.len() {
             let update = &updates[index];
             let Some(check) = &update.check else { continue };
@@ -34,7 +40,6 @@ impl Manager {
                 kind: Some(LinkKind::Pr),
                 input: Some(update.url.clone()),
             };
-            let context = ItemContext::Workspace(workspace.into());
             let log = self.check_log(&context, &selection, &check.name).await;
             let summary = match log {
                 Ok(log) => log

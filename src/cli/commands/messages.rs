@@ -490,7 +490,7 @@ impl Inbox {
             Self::Workspace(_) => ("New Shoal messages for this workspace:", "workspace"),
             Self::Chat(_) => ("New Shoal messages for this chat:", "chat"),
         };
-        let mut context = hook_context(heading, updates);
+        let mut context = hook_context(heading, space, updates);
         if !updates.leftovers.is_empty() {
             let notice = leftovers::notice(space, &updates.leftovers, crate::time::unix_seconds());
             context = [context, notice]
@@ -507,9 +507,14 @@ impl Inbox {
     async fn acknowledge(&self, ctx: &Context, updates: &Updates) -> Result<()> {
         match self {
             Self::Workspace(workspace) => acknowledge(ctx, workspace.clone(), updates).await,
-            Self::Chat(_) => {
-                self.delivered(ctx, &updates.messages, leftover_pids(updates))
-                    .await
+            Self::Chat(chat) => {
+                let method = ChatMethod::AcknowledgeChatMessages {
+                    chat: chat.clone(),
+                    ids: updates.messages.iter().map(|message| message.id).collect(),
+                    leftovers: leftover_pids(updates),
+                    deliveries: deliveries(updates),
+                };
+                request::<()>(&ctx.paths, method).await
             }
         }
     }
@@ -536,6 +541,7 @@ impl Inbox {
                 chat: chat.clone(),
                 ids,
                 leftovers,
+                deliveries: Vec::new(),
             }
             .into(),
         };
@@ -558,8 +564,9 @@ async fn wait_for_chat(ctx: &Context, chat: &str, restarted: bool) -> Result<Upd
 }
 
 /// What an agent hook tells the agent about `updates`, its messages under
-/// `heading`.
-fn hook_context(heading: &str, updates: &Updates) -> String {
+/// `heading` and the activity on the items of its `space`, a workspace or
+/// chat.
+fn hook_context(heading: &str, space: &str, updates: &Updates) -> String {
     let mut lines = Vec::new();
     if !updates.messages.is_empty() {
         lines.push(heading.to_owned());
@@ -571,7 +578,7 @@ fn hook_context(heading: &str, updates: &Updates) -> String {
         );
     }
     if !updates.updates.is_empty() {
-        lines.push("New activity on this workspace's issues and PRs:".to_owned());
+        lines.push(format!("New activity on this {space}'s issues and PRs:"));
         lines.extend(updates.updates.iter().map(|update| format!("- {update}")));
     }
     lines.join("\n")
@@ -634,16 +641,19 @@ async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Res
         &ctx.paths,
         AgentMethod::AcknowledgePrUpdates {
             space: workspace,
-            deliveries: updates
-                .updates
-                .iter()
-                .map(|update| update.delivery.clone())
-                .collect(),
+            deliveries: deliveries(updates),
             messages: updates.messages.iter().map(|message| message.id).collect(),
             leftovers: leftover_pids(updates),
         },
     )
     .await
+}
+
+/// The deliveries of the item updates `updates` tells about.
+fn deliveries(updates: &Updates) -> Vec<String> {
+    (updates.updates.iter())
+        .map(|update| update.delivery.clone())
+        .collect()
 }
 
 /// The PIDs of the leftovers `updates` tells about.

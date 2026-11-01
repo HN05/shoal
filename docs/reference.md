@@ -3672,8 +3672,8 @@ Assigned PRs accumulate without duplicates and must name the recorded workspace
 branch. Assigned items suppress idle cleanup.
 A chat links items the same way in its repository's registered checkout. It has
 no completion or cleanup, so its assigned items drive neither, and its assigned PRs
-name no branch; the activity Shoal polls for its items reaches its inbox as
-messages, which wake its agent as other chat messages do. Its links go with it
+name no branch; the activity Shoal polls for its items reaches its agent with its
+messages, through the chat's hooks, and wakes it as they do. Its links go with it
 when it ends. `shoal plan` assigns its chat the issue it plans.
 
 `shoal view` shows linked items as the forge reports them now: title, state,

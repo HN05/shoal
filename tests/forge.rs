@@ -3366,6 +3366,42 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
 }
 
 #[test]
+fn a_chats_watch_reports_the_failed_step_of_a_check() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .current_dir(fixture.root.path())
+        .spawn()
+        .unwrap();
+    let chat = fixture.request(json!({"start_chat": {"repository": repository,
+        "name": "planning", "agent": "claude", "pid": agent.id()}}));
+    assert_eq!(chat["type"], "chat", "{chat}");
+    let mut responses = failed_check_responses();
+    responses["GET repos/team/project/pulls/8"]["body"] = json!({
+        "number": 8, "title": "Fix crash", "state": "open",
+        "head": {"sha": "head", "ref": "topic", "repo": {"full_name": "team/project"}},
+        "base": {"ref": "main"}, "mergeable": true
+    });
+    responses["GET repos/team/project/commits/head/status?limit=50"] = json!({"body": {
+        "total_count": 1, "statuses": [{"context": "rust", "status": "failure"}]
+    }});
+    responses["GET repos/team/project/issues/8/comments?limit=50&page=1"] = json!({"body": []});
+    responses["GET repos/team/project/pulls/8/reviews?limit=50&page=1"] = json!({"body": []});
+    fixture.respond(responses);
+    // The chat reads the check's log from its repository's checkout.
+    let result = fixture.ok(&["watch", "pr", "8", "--space", "planning", "--timeout", "60"]);
+    let ci = (result["updates"].as_array().unwrap().iter())
+        .find(|update| update["kind"] == "ci_completed")
+        .unwrap_or_else(|| panic!("{result}"));
+    let message = ci["message"].as_str().unwrap();
+    assert!(message.contains("failed step: Main Test"), "{message}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn github_views_and_watches_read_timed_out_jobs_but_not_commit_statuses() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let job = "https://github.com/team/project/actions/runs/12/job/34";

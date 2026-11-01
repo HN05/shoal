@@ -120,7 +120,7 @@ files a finished workspace handed back. Answer what you can decide with
 `shoal questions`, write to an agent with `shoal messages send --space <name>`
 (`--attach FILE` hands it a file), and ask the user about the rest. Link the
 issues, PRs and CI runs you follow yourself with `shoal link <item> <relation>`:
-`shoal view` shows them, and their activity arrives as Shoal messages.
+`shoal view` shows them, and their activity arrives with your Shoal messages.
 
 To ask the user something in a chat, run `shoal questions ask --in-chat`, then
 write the question as your final message and end your turn: it also reaches

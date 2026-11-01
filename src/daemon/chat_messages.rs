@@ -140,39 +140,56 @@ impl Manager {
             .await
     }
 
-    /// What the chat's agent has not received, without waiting. Delivery
-    /// replaces a running wait, which would otherwise deliver them again.
+    /// What the chat's agent has not received, without waiting: its
+    /// messages, its leftovers, and the activity queued on its items.
+    /// Delivery replaces a running wait, which would otherwise deliver them
+    /// again.
     pub async fn chat_updates(&self, chat: &str) -> Result<Updates> {
         let delivery = self.chat_waits.start(chat);
         let messages = self.chat_messages(chat).await?;
+        // The messages, then the leftovers, share the response with the
+        // updates.
+        let messages_size = serde_json::to_vec(&messages)?.len();
+        let room = RESPONSE_LIMIT.saturating_sub(messages_size);
+        let leftovers = self.leftovers.undelivered(chat, room)?;
+        let reserved = messages_size + serde_json::to_vec(&leftovers)?.len();
+        let updates = self.queued_chat_updates(chat, reserved).await?;
         if !delivery.is_current() {
             return Ok(Updates::superseded());
         }
-        let room = RESPONSE_LIMIT.saturating_sub(serde_json::to_vec(&messages)?.len());
         Ok(Updates {
-            leftovers: self.leftovers.undelivered(chat, room)?,
+            updates,
+            leftovers,
             ..Updates::messages(messages)
         })
     }
 
-    /// The chat's next messages, once it has any, unless a newer wait or
-    /// delivery takes them first.
+    /// The chat's next messages or item activity, once it has any, unless a
+    /// newer wait or delivery takes them first.
     pub async fn wait_chat_messages(&self, chat: &str) -> Result<Updates> {
         let wait = self.chat_waits.start(chat);
-        // Subscribe before reading, so a message queued in between still wakes.
+        // Subscribe before reading, so what is queued in between still wakes.
         let mut queued = self.signals.watch_chat_messages();
-        let mut messages = self.chat_messages(chat).await?;
-        while messages.is_empty() {
+        let mut background = self.signals.watch_item_updates();
+        loop {
+            let messages = self.chat_messages(chat).await?;
+            let reserved = serde_json::to_vec(&messages)?.len();
+            let updates = self.queued_chat_updates(chat, reserved).await?;
+            if !messages.is_empty() || !updates.is_empty() {
+                if !wait.is_current() {
+                    return Ok(Updates::superseded());
+                }
+                return Ok(Updates {
+                    updates,
+                    ..Updates::messages(messages)
+                });
+            }
             tokio::select! {
                 changed = queued.changed() => changed?,
+                changed = background.changed() => changed?,
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
             }
-            messages = self.chat_messages(chat).await?;
         }
-        if !wait.is_current() {
-            return Ok(Updates::superseded());
-        }
-        Ok(Updates::messages(messages))
     }
 
     /// Delete exactly these messages once the chat's agent has received

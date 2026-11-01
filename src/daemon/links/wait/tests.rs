@@ -336,7 +336,7 @@ async fn background_activity_queues_for_the_agents_hooks() {
 }
 
 #[tokio::test]
-async fn a_chats_background_activity_reaches_its_inbox_once() {
+async fn a_chats_hooks_receive_the_activity_on_its_items() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
     let repo = manager
@@ -355,33 +355,40 @@ async fn a_chats_background_activity_reaches_its_inbox_once() {
         .await
         .unwrap();
     register_watch(&manager, &chat.id, "pr").await;
-    let queued = manager.signals.watch_chat_messages();
-    for comment in ["first", "second"] {
+    let manager = std::sync::Arc::new(manager);
+    // The chat's wake hook waits for the activity the poll queues.
+    let waiting = tokio::spawn({
+        let (manager, chat) = (manager.clone(), chat.id.clone());
+        async move { manager.wait_chat_messages(&chat).await }
+    });
+    manager
+        .queue_background_updates(
+            &chat.id,
+            vec![("pr".into(), snapshot("first"))],
+            crate::time::unix_seconds(),
+        )
+        .await
+        .unwrap();
+    let woken = waiting.await.unwrap().unwrap();
+    assert_eq!(woken.updates[0].kind, UpdateKind::Comment);
+    // A watch in the chat yields to its hook's delivery, which hands over
+    // the same update once acknowledged.
+    let watch = manager.chat_waits.start(&chat.id);
+    let delivered = manager.chat_updates(&chat.id).await.unwrap();
+    watch.superseded.notified().await;
+    assert_eq!(delivered.updates, woken.updates);
+    manager
+        .acknowledge_pr_updates(&chat.id, vec![delivered.updates[0].delivery.clone()])
+        .await
+        .unwrap();
+    assert!(
         manager
-            .queue_background_updates(
-                &chat.id,
-                vec![("pr".into(), snapshot(comment))],
-                crate::time::unix_seconds(),
-            )
+            .chat_updates(&chat.id)
             .await
-            .unwrap();
-        manager.hand_updates_to_chat(&chat.id).await.unwrap();
-    }
-    assert!(queued.has_changed().unwrap());
-    // Each change reaches the chat as a message, which leaves the cursor,
-    // so handing over again repeats nothing.
-    manager.hand_updates_to_chat(&chat.id).await.unwrap();
-    let messages = manager.chat_messages(&chat.id).await.unwrap();
-    let texts: Vec<_> = messages.iter().map(|message| &message.message).collect();
-    assert_eq!(
-        texts,
-        [
-            "pr [comment]: 1 new comment; read them with shoal view pr",
-            "pr [comment]: 1 edited comment; read them with shoal view pr"
-        ]
+            .unwrap()
+            .updates
+            .is_empty()
     );
-    let pending = manager.pending_activity(&chat.id, &["pr".into()]).await;
-    assert!(pending.unwrap().is_empty());
 }
 
 #[tokio::test]

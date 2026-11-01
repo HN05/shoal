@@ -2019,8 +2019,9 @@ since a checkout holds no links; workspace processes act from their workspace.
 A chat holds links as a workspace does: the link tables name the space, a
 workspace or chat, with IDs from their shared namespace, and go with it. Its
 assigned items drive no completion or cleanup, which a chat does not have, and
-the activity Shoal polls for them becomes messages in its inbox, so the chat's
-existing hooks deliver them and wake its agent.
+the activity Shoal polls for them waits on the chat's own cursor, which the
+chat's hooks deliver with its messages, waking its agent; a watch in the chat
+and those hooks share one delivery, so the newest takes what is pending.
 An unscoped client such as Quay names that repository with `--repo` instead of
 picking a workspace, whose worktree Shoal would check first: a registered
 repository's checkout is the place to act in, so it reaches PR, view and CI

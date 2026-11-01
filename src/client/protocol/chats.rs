@@ -90,6 +90,9 @@ pub enum ChatMethod {
         /// The PIDs of the leftovers the hook printed.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         leftovers: Vec<u32>,
+        /// The deliveries of the item updates the hook printed.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        deliveries: Vec<String>,
     },
 }
 

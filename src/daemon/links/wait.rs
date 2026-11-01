@@ -16,10 +16,7 @@ use super::{
     space::{LinkSpace, require_watchable},
 };
 use crate::{
-    daemon::{
-        agent_messages::AgentMessage, chat_messages, notifications::NotificationKind,
-        workspace::Manager,
-    },
+    daemon::{agent_messages::AgentMessage, notifications::NotificationKind, workspace::Manager},
     forge::{
         items::{
             item::ItemState,
@@ -467,14 +464,17 @@ impl Manager {
     /// The unread messages once one that wakes an idle agent is queued.
     /// [`Self::wait_items`] for the chat `id`: the activity of its items, or
     /// its next messages, which arrive as the user's messages to a chat do,
-    /// without settling.
+    /// without settling. It shares its delivery with the chat's hooks, so
+    /// the newest of them receives what is pending.
     async fn wait_chat_items(
         &self,
         id: &str,
         selection: &Selection,
         deadline: Option<tokio::time::Instant>,
     ) -> Result<Updates> {
-        let wait = self.item_waits.start(id);
+        // The chat's hooks deliver what a watch would, so the newest of them
+        // takes it.
+        let wait = self.chat_waits.start(id);
         // Subscribe before reading, so a message queued in between still wakes.
         let mut queued = self.signals.watch_chat_messages();
         let mut background = self.signals.watch_item_updates();
@@ -731,43 +731,28 @@ impl Manager {
             self.syncs.request(space.repository_id());
         }
         self.queue_background_updates(space.id(), observations, observed_at)
-            .await?;
-        if let LinkSpace::Chat { chat, .. } = space {
-            self.hand_updates_to_chat(&chat.id).await?;
-        }
-        Ok(())
+            .await
     }
 
-    /// Hand the updates queued on the chat's cursor to its inbox, as the
-    /// messages its hooks deliver and that wake its agent, taking them off
-    /// the cursor in the same transaction.
-    async fn hand_updates_to_chat(&self, chat: &str) -> Result<()> {
-        let _gate = self.gates.lock_prs([chat]).await;
+    /// The updates queued on the chat's cursor that fit one response beside
+    /// `reserved` bytes of its other content, unless an item change holds
+    /// its PR gate, when they wait for a later delivery.
+    pub(crate) async fn queued_chat_updates(
+        &self,
+        chat: &str,
+        reserved: usize,
+    ) -> Result<Vec<Update>> {
+        let Some(_gate) = self.gates.try_lock_prs([chat]) else {
+            return Ok(Vec::new());
+        };
         let id = chat.to_owned();
-        let queued = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let keys: Vec<String> = (followed_items(&tx, &id, None)?.into_iter())
-                    .map(|(url, _)| url)
-                    .collect();
-                let pending = pending_on_cursor(&tx, &id, &keys)?;
-                let mut queued = false;
-                for update in &pending {
-                    let message = update.to_string();
-                    queued |= chat_messages::insert_from_user(&tx, &id, &message)?.is_some();
-                }
-                let deliveries: Vec<String> =
-                    pending.into_iter().map(|update| update.delivery).collect();
-                acknowledge_deliveries(&tx, std::slice::from_ref(&id), &deliveries)?;
-                tx.commit()?;
-                Ok(queued)
-            })
-            .await?;
-        if queued {
-            self.signals.chat_message_queued();
-        }
-        Ok(())
+        let keys: Vec<String> = (self.store.run(move |db| followed_items(db, &id, None)))
+            .await?
+            .into_iter()
+            .map(|(url, _)| url)
+            .collect();
+        let pending = self.pending_activity(chat, &keys).await?;
+        self.fit_response(own_batch(chat, pending), reserved).await
     }
 
     /// Queue `observations` on the workspace's cursor, so its agent receives

@@ -68,7 +68,11 @@ pub(super) async fn handle(
             chat,
             ids,
             leftovers,
+            deliveries,
         } => {
+            // Item updates first: a failure then leaves both to be delivered
+            // again, while deleted messages could not be.
+            manager.acknowledge_pr_updates(&chat, deliveries).await?;
             manager.mark_chat_messages_delivered(&chat, ids).await?;
             manager.leftovers.delivered(&chat, &leftovers);
             Body::Ok
