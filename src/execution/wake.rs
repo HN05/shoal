@@ -57,9 +57,17 @@ pub(super) fn start(paths: &Paths, plan: &ExecutionPlan, wake: Wake) -> Waker {
     let workspace = plan.workspace.id.clone();
     let interrupted = (wake.when == PromptWake::AfterInterrupt).then(|| plan.id.clone());
     Waker(tokio::spawn(async move {
+        // A host that needs the instance refuses prompts without it.
+        let session = match wake.session.clone().pinned().await {
+            Ok(session) => session,
+            Err(error) => {
+                eprintln!("shoal: cannot tell the agent's session apart: {error:#}");
+                wake.session
+            }
+        };
         prompt_when_due(
             |due| await_wake(&paths, &workspace, due, interrupted.clone()),
-            || wake.session.submit(WAKE_PROMPT),
+            || session.submit(WAKE_PROMPT),
         )
         .await
     }))

@@ -5,7 +5,7 @@ fn the_rex_section_sets_windows_and_the_session_outside_rex() {
     let config = crate::config::Rex {
         enabled: false,
         new_window: false,
-        placement: crate::config::repo::RexPlacement::Window,
+        placement: crate::config::repo::Placement::Window,
         window_name: Some("{branch}".into()),
         session_name: "{repo}".into(),
         close_when_done: Some(false),
@@ -22,7 +22,7 @@ fn split_placement_opens_splits() {
     let config = crate::config::Rex {
         enabled: true,
         new_window: true,
-        placement: RexPlacement::Split,
+        placement: Placement::Split,
         window_name: None,
         session_name: "{repo}".into(),
         close_when_done: None,

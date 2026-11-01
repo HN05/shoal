@@ -61,9 +61,11 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(program);
     for (name, _) in std::env::vars_os() {
         if name.to_str().is_some_and(|name| {
-            ["SHOAL_", "XDG_", "HAPPY_", "GIT_", "HERDR_", "ZMX_", "REX_"]
-                .iter()
-                .any(|prefix| name.starts_with(prefix))
+            [
+                "SHOAL_", "XDG_", "HAPPY_", "GIT_", "HERDR_", "ZMX_", "REX_", "TMUX",
+            ]
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
                 || ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "BASH_ENV", "ENV"].contains(&name)
         }) {
             command.env_remove(name);
@@ -83,6 +85,9 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
         .env("SHOAL_STATE_DIR", root.join("state"))
         // A launch that reaches a real zmx must not use the user's sessions.
         .env("ZMX_DIR", root.join("zmx"))
+        // Nor a tmux one the user's server; the directory name stays short,
+        // since a socket path is.
+        .env("TMUX_TMPDIR", root.join("t"))
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("PATH", path);

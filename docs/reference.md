@@ -426,9 +426,9 @@ agent restores only when its workspace is named.
 in one workspace, use `--execution` or pick the agent by name, stop time, reason
 and whether it was interrupted mid-turn or idle on a terminal; an agent without
 turn reports counts as interrupted. In an
-interactive Herdr pane with `terminal.herdr.enabled` or Rex block with `terminal.rex.enabled`, it
-restores each agent in the pane or block it stopped in once that is back at its
-prompt. Otherwise it starts each in the background, as `shoal add` does: a tab
+interactive Herdr pane with `terminal.herdr.enabled`, Rex block with `terminal.rex.enabled` or
+tmux pane with `terminal.tmux.enabled`, it restores each agent in the pane or block it
+stopped in once that is back at its prompt. Otherwise it starts each in the background, as `shoal add` does: a tab
 per agent where `terminal.herdr.new_tab` allows, labelled as `shoal add` labels it, or a
 detached zmx session per agent on a terminal outside Herdr. Where nothing can
 start in the background, such as without a terminal, it restores a single agent
@@ -979,11 +979,12 @@ again. The tracked wrapper runs inside the session, so stop, resume, scope and
 cleanup treat the agent as before. When the session returns control, Shoal resets
 emulator input modes on the caller's terminal. zmx reports no exit status: these launches
 exit 0 once the agent exits or you detach. A launch without a terminal, inside a
-zmx session (`ZMX_SESSION` is set), in a Herdr pane with `terminal.herdr.enabled` or in a
-Rex block with `terminal.rex.enabled` runs in place. A launch that would start a zmx
-session refuses the agent when zmx is missing, as a missing agent executable does.
-`terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr) or
-[Rex](#rex) instead. With that host turned off they run in place, a queued
+zmx session (`ZMX_SESSION` is set), in a Herdr pane with `terminal.herdr.enabled`, in a
+Rex block with `terminal.rex.enabled` or in a tmux pane with `terminal.tmux.enabled` runs
+in place. A launch that would start a zmx session refuses the agent when zmx is missing,
+as a missing agent executable does.
+`terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),
+[Rex](#rex) or [tmux](#tmux) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.
 `--here` on `shoal add`, `contribute`, `chat`, `plan` and `repo setup --local`
 runs the launch in this terminal instead of a new tab or detached session,
@@ -1145,6 +1146,62 @@ in it, and to no workspace once a chat does. Rex reports
 no agent turn state, so an agent without turn hooks closes its block once its
 execution ends. Rex sends no push notifications to the phone, and a demo's
 screen of a full-screen program shows only its current screen.
+
+#### tmux
+
+[tmux](https://github.com/tmux/tmux) is opt-in. With `terminal.tmux.enabled`,
+inside a tmux pane (`TMUX` and `TMUX_PANE` are set) `shoal add`, chats,
+background resumes and demos open a new window in the session the pane started
+in, placed and labelled as a Herdr tab would be, and agents run in place in
+their pane; `placement = "split"` splits your pane instead, as in Rex. The tmux
+server keeps panes running without a client, so detaching (`prefix d`) or
+closing the terminal leaves the agent running. The new window runs the agent
+directly, with nothing typed on screen, then your login shell, which stays
+after the worker exits and enters the workspace as a Herdr tab's shell does. A zmx session, Herdr pane or Rex block inside tmux
+keeps its own behavior, since those hosts claim a terminal first.
+
+```toml
+[terminal.tmux]
+# enabled = true        # Unset: only when default_host = "tmux"
+new_window = true       # Open windows beside the caller
+placement = "window"    # "split" opens beside the caller's pane instead
+session_name = "{repo}" # The session for windows Shoal opens outside tmux
+# window_name = "{repo}: {branch}" # Customize the window name, as tab_name
+# close_when_done = true # Close after done keeps the workspace
+```
+
+With `[terminal] default_host = "tmux"`, which also turns `enabled` on, launches
+from a terminal no host serves open their windows in the `session_name` session
+on the default tmux server (`TMUX_TMPDIR` chooses its socket directory), which
+Shoal starts when needed; `{repo}` is the only placeholder, and Shoal reuses
+the first session with that name, `.` and `:` replaced by `_`, or creates it
+with a first window in your home directory. A
+focused start, a chat or an agent launch then attaches the terminal to that
+session until you detach. A start queued from tmux opens a background window
+in the session it was queued from, then falls back to the `session_name`
+session on the same server, then to `terminal.default_host`. Shoal needs tmux
+3.3 or later.
+
+`shoal attach` and `shoal status` find a workspace's or chat's pane by the place
+its agent was recorded in, named after its window: attach selects the pane and
+switches your tmux client to it, or attaches a client from outside tmux; a
+pane on another tmux server is refused inside tmux. A window is renamed only
+while the pane Shoal opened is alone in it. Shoal closes only the panes it
+created, as it closes Rex blocks, and never their window's other panes, other
+windows or sessions; a pane is recorded with its server's process and start
+time, so a pane under the same ID after the server restarts is never Shoal's.
+tmux reports no agent turn state, so an agent without turn hooks closes its
+pane once its execution ends. Prompts and `shoal demo send` leave copy mode
+first.
+
+tmux draws panes through its own terminal emulator rather than passing output
+through as zmx does, so terminal protocols work only as far as tmux supports
+them: inline images (Kitty graphics, iTerm2 images) and OSC 9 and 777
+notifications reach your terminal only with `set -g allow-passthrough on` and
+a program that wraps them for tmux, and an image does not survive a redraw or a
+reattach; OSC 52 clipboard writes from agents need `set -s set-clipboard on`,
+since the default `external` forwards only tmux's own copies. Attaching redraws tmux's
+own screen rather than replaying the output.
 
 Besides Claude and Codex, Shoal includes [opencode](https://opencode.ai)
 (`opencode --prompt {prompt} {args}`), [pi](https://github.com/badlogic/pi-mono)
@@ -1484,7 +1541,7 @@ of the current workspace, or of every workspace outside one, or the demo `NAME`.
 Opening runs the demo's `open` command in the workspace with the demo's
 variables, otherwise shows it where it runs: Herdr focuses its tab, attaching its Herdr session
 outside Herdr, Rex its
-window (or selects it in the Mac app), zmx attaches (Ctrl-\ detaches), and the
+window (or selects it in the Mac app), tmux its window, attaching outside tmux, zmx attaches (Ctrl-\ detaches), and the
 background follows its log. `shoal demo ls` lists the configured and
 running demos, with a running web demo's `url` in its JSON, `shoal demo screen NAME [--lines N]` prints the end of what it
 shows, and `shoal demo send NAME KEYS` types into it, so an agent sees and drives
@@ -1644,8 +1701,8 @@ branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
 starts, from the then-current default branch. The daemon starts waiting entries
 in order as slots free, passing over an entry whose repository is full, and
-records a `queue_started` notification. An entry queued from Herdr or Rex opens
-a background tab or window where it was queued; otherwise it runs where
+records a `queue_started` notification. An entry queued from Herdr, Rex or tmux
+opens a background tab or window where it was queued; otherwise it runs where
 `terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
 reaches. A start keeps its slot through setup until
 its agent registers; a start that fails, or whose launch ends without opening the

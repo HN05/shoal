@@ -14,7 +14,7 @@ use super::{
     typed::{self, Typed},
 };
 use crate::{
-    config::repo::RexPlacement,
+    config::repo::Placement,
     sessions::{
         HostName, Origin,
         rex::{Block, Rex as Server, Shell},
@@ -121,7 +121,12 @@ impl Places for Rex {
         true
     }
 
-    fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
+    fn rename_place<'a>(
+        &'a self,
+        place: &'a str,
+        _instance: Option<&'a str>,
+        label: &'a str,
+    ) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             if let Err(error) = rename_block(place, label).await {
                 eprintln!("warning: cannot rename Rex block {place}: {error:#}");
@@ -186,7 +191,7 @@ pub(super) fn options(config: &crate::config::Rex) -> super::Options {
     super::Options {
         enabled: config.enabled,
         opens_places: config.new_window,
-        opens_splits: config.placement == RexPlacement::Split,
+        opens_splits: config.placement == Placement::Split,
         name_template: config.window_name.clone(),
         group_template: Some(config.session_name.clone()),
         close_when_done: config.close_when_done,

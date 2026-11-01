@@ -81,7 +81,7 @@ pub(in crate::cli) async fn host_workspace(
                     .await?;
             }
             if let Some(places) = place.host.places() {
-                places.rename_place(&place.id, label).await;
+                places.rename_place(&place.id, None, label).await;
             }
             record_owned_in(ctx, place.host, &workspace.id).await;
             if place.closes_when_done {

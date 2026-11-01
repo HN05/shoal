@@ -25,14 +25,25 @@ fn a_place_command_runs_the_launch_in_the_foreground_then_the_login_shell() {
         Some("/tmp/a b"),
     );
     assert_eq!(
-        place_command(&line, false),
+        place_command(&line, &[], false),
         [
             "/bin/sh",
             "-c",
             "set -m; export SHOAL_SHELL_DIRECTIVE='/tmp/a b'; /opt/shoal launch; exec \"${SHELL:-/bin/sh}\" -l"
         ]
     );
-    assert_eq!(place_command(&line, true)[2], format!("set -m; {line}"));
+    assert_eq!(
+        place_command(&line, &[], true)[2],
+        format!("set -m; {line}")
+    );
+}
+
+#[test]
+fn a_place_command_runs_the_launch_and_the_shell_without_cleared_variables() {
+    assert_eq!(
+        place_command("/opt/shoal launch", &["HERDR_ENV", "ZMX_SESSION"], false)[2],
+        "set -m; unset HERDR_ENV ZMX_SESSION; /opt/shoal launch; exec \"${SHELL:-/bin/sh}\" -l"
+    );
 }
 
 #[test]
@@ -51,6 +62,22 @@ fn the_launch_file_carries_the_command_and_goes_once_read() {
     assert_eq!(launch.argv, ["/opt/shoal", "a b"]);
     assert_eq!(launch.env["SHOAL_ADD_PLAN"], "{\"secret\":1}");
     assert!(!file.exists());
+}
+
+#[test]
+fn the_launch_file_names_what_the_command_runs_without() {
+    let typed = Typed::clearing(
+        Path::new("/state"),
+        &["/opt/shoal".into()],
+        &[],
+        &["HERDR_ENV"],
+        true,
+    )
+    .unwrap();
+    assert!(!typed.command()[2].contains("exec"));
+    let file = typed.file.to_path_buf();
+    typed.hand_over().unwrap();
+    assert_eq!(read(&file).unwrap().clear, ["HERDR_ENV"]);
 }
 
 #[test]

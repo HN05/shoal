@@ -12,6 +12,7 @@ git_profile = 'work'\n\
 [terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
 [terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\
 [terminal.rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
+[terminal.tmux]\nenabled = true\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
 [terminal.happy]\nenabled = true\n\
 [setup]\ncommand = 'setup'\ncopy_ignored = false\npresets = ['cargo']\n[setup.seed]\ncommand = 'scripts/seed'\npaths = ['target']\n\
 [hooks]\npre_setup = 'pre-setup'\npost_remove = 'post-remove'\npost_done = 'post-done'\npost_ready = 'post-ready'\npost_agent_exit = 'agent-exit'\n\
@@ -254,7 +255,7 @@ fn rex_defaults_and_options_resolve_independently() {
     );
     let rex = defaults.terminal.rex;
     assert!(rex.enabled && rex.new_window);
-    assert_eq!(rex.placement, config::repo::RexPlacement::Window);
+    assert_eq!(rex.placement, config::repo::Placement::Window);
     assert_eq!(rex.session_name, "{repo}");
     assert_eq!((rex.window_name, rex.close_when_done), (None, None));
     let settings = stack(
@@ -272,7 +273,7 @@ fn rex_defaults_and_options_resolve_independently() {
     assert_eq!(settings.terminal.rex.session_name, "work");
     assert_eq!(
         settings.terminal.rex.placement,
-        config::repo::RexPlacement::Split
+        config::repo::Placement::Split
     );
     assert_eq!(settings.terminal.rex.close_when_done, Some(false));
     let herdr = stack("terminal.default_host = 'herdr'\n", "", "")
@@ -282,7 +283,7 @@ fn rex_defaults_and_options_resolve_independently() {
         herdr.terminal.default_host,
         crate::sessions::HostName::Herdr
     );
-    assert!(Config::from_toml("terminal.default_host = 'tmux'\n").is_err());
+    assert!(Config::from_toml("terminal.default_host = 'screen'\n").is_err());
     assert!(Config::from_toml("terminal.default_host = 'terminal'\n").is_err());
     assert!(Config::from_toml("[terminal.rex]\nplacement = 'tab'\n").is_err());
 }

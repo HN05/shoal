@@ -28,7 +28,7 @@ use crate::paths::Paths;
 pub use machine::Machine;
 pub use repo::{
     AutoCleanup, Cleanup, Happy, Herdr, Issue, MergedCleanup, Ports, Restore, Rex, Settings,
-    Simulators,
+    Simulators, Tmux,
 };
 use repo::{ConfigLayers, RepoConfig};
 pub use resolve::Effective;

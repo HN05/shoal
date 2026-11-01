@@ -34,6 +34,9 @@ pub(in crate::cli) struct Typed {
 struct Launch {
     argv: Vec<String>,
     env: BTreeMap<String, String>,
+    /// Variables the place may carry that the command runs without.
+    #[serde(default)]
+    clear: Vec<String>,
 }
 
 impl Typed {
@@ -41,19 +44,23 @@ impl Typed {
     /// for the state directory `state`, that runs them from it. The shell
     /// stays once it ends.
     pub fn new(state: &Path, argv: &[OsString], env: &[(&str, String)]) -> Result<Self> {
-        Self::write(state, argv, env, false)
+        Self::clearing(state, argv, env, &[], false)
     }
 
     /// [`Typed::new`] for a command whose end also ends the shell, closing
     /// its place, as a demo's does.
     pub fn ending_shell(state: &Path, argv: &[OsString], env: &[(&str, String)]) -> Result<Self> {
-        Self::write(state, argv, env, true)
+        Self::clearing(state, argv, env, &[], true)
     }
 
-    fn write(
+    /// [`Typed::new`], or [`Typed::ending_shell`] when `ends_shell`, for a
+    /// place whose environment may carry the variables `clear`, which the
+    /// command runs without.
+    pub fn clearing(
         state: &Path,
         argv: &[OsString],
         env: &[(&str, String)],
+        clear: &[&str],
         ends_shell: bool,
     ) -> Result<Self> {
         let launch = Launch {
@@ -66,6 +73,7 @@ impl Typed {
                 .iter()
                 .map(|(name, value)| ((*name).to_owned(), value.clone()))
                 .collect(),
+            clear: clear.iter().map(|name| (*name).to_owned()).collect(),
         };
         let mut file = tempfile::Builder::new()
             .prefix("shoal-launch.")
@@ -80,7 +88,7 @@ impl Typed {
         let line = shell_line(&launch_argv(state, &file)?, directive);
         Ok(Self {
             text: typed_text(&line, ends_shell),
-            command: place_command(&line, ends_shell),
+            command: place_command(&line, clear, ends_shell),
             file,
         })
     }
@@ -135,10 +143,16 @@ fn typed_text(line: &str, ends_shell: bool) -> String {
 }
 
 /// A place's command that runs `line`, then the user's login shell unless it
-/// `ends_shell`. Job control gives the launched command the terminal's
-/// foreground, as a shell at its prompt does, so the place does not read as
-/// idle at a shell until the user's shell starts.
-fn place_command(line: &str, ends_shell: bool) -> [String; 3] {
+/// `ends_shell`, both without the variables `clear`. Job control gives the
+/// launched command the terminal's foreground, as a shell at its prompt does,
+/// so the place does not read as idle at a shell until the user's shell
+/// starts.
+fn place_command(line: &str, clear: &[&str], ends_shell: bool) -> [String; 3] {
+    let unset = if clear.is_empty() {
+        String::new()
+    } else {
+        format!("unset {}; ", crate::shell::quote(clear))
+    };
     let shell = if ends_shell {
         ""
     } else {
@@ -147,7 +161,7 @@ fn place_command(line: &str, ends_shell: bool) -> [String; 3] {
     [
         "/bin/sh".into(),
         "-c".into(),
-        format!("set -m; {line}{shell}"),
+        format!("set -m; {unset}{line}{shell}"),
     ]
 }
 
@@ -176,10 +190,12 @@ pub(in crate::cli) fn run(file: &Path) -> Result<i32> {
         .argv
         .split_first()
         .context("the launch file names no command")?;
-    let error = std::process::Command::new(program)
-        .args(args)
-        .envs(&launch.env)
-        .exec();
+    let mut command = std::process::Command::new(program);
+    command.args(args);
+    for name in &launch.clear {
+        command.env_remove(name);
+    }
+    let error = command.envs(&launch.env).exec();
     Err(error).with_context(|| format!("run {program}"))
 }
 

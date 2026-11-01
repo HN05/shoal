@@ -19,7 +19,7 @@ link to `Shoal.app/Contents/MacOS/shoal`, on your `PATH`. macOS keeps the bare
 binary's privacy grants only while it stays at the same path.
 Homebrew installs the additional tools for workspace management and interactive
 menus, but not zmx, the default terminal host: install it with
-`brew install neurosnap/tap/zmx`, or use [Herdr or Rex](docs/reference.md#herdr)
+`brew install neurosnap/tap/zmx`, or use [Herdr, Rex or tmux](docs/reference.md#herdr)
 instead. For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal daemon install`.
 `shoal daemon install` starts the per-user
@@ -33,8 +33,8 @@ On macOS, when workspaces or `root_dir` are on an external volume, allow Shoal
 access to removable volumes when macOS asks, or grant Shoal Full Disk Access or
 Removable Volumes under System Settings > Privacy & Security, then run
 `shoal daemon restart`. The grant survives upgrades and covers the agents Shoal
-starts through zmx, Herdr or Rex or in the background, with the commands they
-run.
+starts through zmx, Herdr, Rex or tmux or in the background, with the commands
+they run.
 
 For directory navigation and tab completion, add this to your `.zshrc` or
 `.bashrc`, then run it in your current shell:
@@ -105,10 +105,12 @@ Inside Herdr, `add` opens a new tab after your choices; use `--here`
 to run in the current pane, `--focus` to switch to the new tab, or
 `terminal.herdr.enabled = false` to treat Herdr as a plain terminal. Inside
 [Rex](https://www.superlogical.com/rex), `add` opens a window in the current
-session instead. `[terminal] default_host = "herdr"` or `"rex"` sends launches from other
+session instead, and inside tmux with `terminal.tmux.enabled` a tmux window.
+`[terminal] default_host = "herdr"`, `"rex"` or `"tmux"` sends launches from other
 terminals there too. Elsewhere, an agent that starts with an issue or arguments
 runs in a detached zmx session that `shoal attach` reaches. See
-[Herdr settings](docs/reference.md#herdr) and [Rex settings](docs/reference.md#rex).
+[Herdr settings](docs/reference.md#herdr), [Rex settings](docs/reference.md#rex) and
+[tmux settings](docs/reference.md#tmux).
 
 Use `--agent claude` for Claude Code, `opencode`, `pi` or `grok` for those
 tools, or `--agent happy-claude`/`happy-codex` for

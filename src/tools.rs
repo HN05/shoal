@@ -35,6 +35,7 @@ tools! {
     // feature-specific and platform tools are diagnosed when invoked.
     Zmx => ("zmx", None),
     Xcrun => ("xcrun", None),
+    Tmux => ("tmux", None),
     Curl => (programs::CURL, None),
     Tar => ("tar", None),
     Diff => ("diff", None),

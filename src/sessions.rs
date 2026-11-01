@@ -4,6 +4,7 @@ pub(crate) mod herdr;
 mod locking;
 mod origin;
 pub(crate) mod rex;
+pub(crate) mod tmux;
 pub(crate) mod zmx;
 
 pub(crate) use origin::{HostName, Origin};
@@ -102,6 +103,7 @@ fn host(name: HostName) -> Option<Arc<dyn Host>> {
         HostName::Herdr => Some(Arc::new(herdr::Cleanup)),
         HostName::Rex => Some(Arc::new(rex::Cleanup)),
         HostName::Zmx => Some(Arc::new(zmx::Zmx)),
+        HostName::Tmux => Some(Arc::new(tmux::Cleanup)),
         HostName::Terminal => None,
     }
 }

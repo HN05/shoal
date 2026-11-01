@@ -1,6 +1,7 @@
 """A development build of Shoal in a sandbox directory: its own home, state
-directory, zmx directory and Git config, without the caller's Shoal, Git, host
-or agent settings, so nothing reaches the user's own daemon or sessions."""
+directory, zmx and tmux directories and Git config, without the caller's Shoal,
+Git, host or agent settings, so nothing reaches the user's own daemon or
+sessions."""
 import json
 import os
 import shutil
@@ -15,7 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 IDENTITY = {f"GIT_{role}_{field}": value for role in ("AUTHOR", "COMMITTER")
             for field, value in (("NAME", "Shoal Demo"), ("EMAIL", "demo@example.invalid"))}
 # Variables that would reach the user's agents, terminal hosts or daemon.
-LEAKING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "SHOAL_", "HERDR_", "ZMX_", "HAPPY_", "REX_")
+LEAKING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "SHOAL_", "HERDR_", "ZMX_", "HAPPY_", "REX_",
+           "TMUX")
 DAEMON_START_SECONDS = 60
 
 
@@ -33,10 +35,12 @@ def build():
 
 def environment(sandbox, bin_dir):
     """The caller's environment without its Git, Shoal, host or agent settings,
-    with the sandbox's home, state and zmx directory and `bin_dir` first on PATH."""
+    with the sandbox's home, state, zmx and tmux directories and `bin_dir` first
+    on PATH."""
     env = isolated_git.environment(sandbox / "home", **IDENTITY)
     env = {name: value for name, value in env.items() if not name.startswith(LEAKING)}
     env.update(SHOAL_STATE_DIR=str(sandbox / "state"), ZMX_DIR=str(sandbox / "zmx"),
+               TMUX_TMPDIR=str(sandbox / "tmux"),
                PATH=os.pathsep.join([str(bin_dir), env.get("PATH", "")]))
     return env
 
@@ -76,6 +80,7 @@ class Sandbox:
         self.bin_dir.mkdir(parents=True)
         home = self.path / "home"
         home.mkdir()
+        (self.path / "tmux").mkdir()
         # An empty home would start zsh's first-run wizard instead of a prompt.
         (home / ".zshrc").write_text(f"PROMPT='{prompt} %1~ %# '\n")
         (home / ".bashrc").write_text(f"PS1='{prompt} \\W \\$ '\n")

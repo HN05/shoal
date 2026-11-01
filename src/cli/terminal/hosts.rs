@@ -6,7 +6,7 @@ use std::io::IsTerminal;
 use super::{
     herdr,
     host::{Host, Places},
-    rex, zmx,
+    rex, tmux, zmx,
 };
 use crate::{
     cli::context::Context,
@@ -35,6 +35,12 @@ fn registration(name: HostName) -> Option<Registered> {
         HostName::Zmx => Registered {
             host: &zmx::Zmx,
             options: |_| Options::DEFAULT,
+        },
+        HostName::Tmux => Registered {
+            host: &tmux::Tmux,
+            options: |settings| {
+                tmux::options(&settings.terminal.tmux, settings.terminal.default_host)
+            },
         },
         HostName::Terminal => return None,
     })

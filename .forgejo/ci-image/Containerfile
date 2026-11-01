@@ -12,7 +12,8 @@ FROM docker.io/library/rust:${RUST}-trixie
 
 # The daemon and workspace tests spawn these: git and Worktrunk for worktrees,
 # lsof for port checks, zsh and bash as user shells, python3 for the xcrun
-# fixture and the release scripts. curl and jq serve the label gate in ci.yml,
+# fixture and the release scripts, tmux for the tmux host's tests against an
+# isolated server. curl and jq serve the label gate in ci.yml,
 # deps.yml and the Zig download below; xz-utils unpacks it. pkg-config and
 # libssl-dev build cargo-outdated, which links the cargo crate.
 RUN rustup component add rustfmt clippy \
@@ -23,6 +24,7 @@ RUN rustup component add rustfmt clippy \
       lsof \
       zsh \
       python3 \
+      tmux \
       curl \
       jq \
       xz-utils \

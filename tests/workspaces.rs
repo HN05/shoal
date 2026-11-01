@@ -4,6 +4,9 @@ mod terminal_sessions;
 #[path = "workspaces/rex.rs"]
 mod rex;
 
+#[path = "workspaces/tmux.rs"]
+mod tmux;
+
 #[path = "workspaces/herdr_default.rs"]
 mod herdr_default;
 

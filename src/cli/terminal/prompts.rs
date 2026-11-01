@@ -1,7 +1,11 @@
 //! Typing into the places hosts keep, such as a prompt for the agent there.
 use anyhow::{Context as _, Result};
 
-use super::{here::current_origin, hosts::named, launch::keeps_agents_in_sessions};
+use super::{
+    here::{current_origin, with_instance},
+    hosts::named,
+    launch::keeps_agents_in_sessions,
+};
 use crate::{config::Effective, sessions::Origin};
 
 /// What an agent's wrapper submits to wake the agent with new updates,
@@ -51,6 +55,14 @@ impl PromptSession {
         let place = current_origin().filter(|place| place.place.is_some())?;
         named(place.host).types()?;
         Some(Self { place })
+    }
+
+    /// The session with what tells its place apart from a later place under
+    /// its ID, read while this process still runs in it, so its prompts
+    /// never reach a place a restarted host gave the ID.
+    pub(crate) async fn pinned(mut self) -> Result<Self> {
+        self.place = with_instance(named(self.place.host), self.place).await?;
+        Ok(self)
     }
 
     /// Submit `text` as a prompt in the session.

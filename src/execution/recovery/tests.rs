@@ -329,7 +329,7 @@ fn a_pane_recorded_before_origins_is_a_herdr_place() {
         serde_json::json!({"host": "herdr", "place": "w1:p2"})
     );
     assert_eq!(serde_json::from_value::<Record>(saved).unwrap(), record);
-    let unknown = serde_json::json!({"agent": "codex", "origin": {"host": "tmux"}});
+    let unknown = serde_json::json!({"agent": "codex", "origin": {"host": "screen"}});
     assert!(serde_json::from_value::<Record>(unknown).is_err());
 }
 

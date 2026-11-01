@@ -49,7 +49,7 @@ pub(crate) async fn current_place() -> Option<Origin> {
 
 /// `place` of `host` with what tells it apart from a later place under its
 /// ID, for a host that reuses IDs.
-async fn with_instance(host: &dyn Host, mut place: Origin) -> Result<Origin> {
+pub(super) async fn with_instance(host: &dyn Host, mut place: Origin) -> Result<Origin> {
     if let Some(watches) = host.watches() {
         place.instance = watches.place_instance(place.id()).await?;
     }

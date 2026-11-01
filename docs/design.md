@@ -886,9 +886,9 @@ from the caller's own place passes it to the host, so queued starts and starts
 without one open windows. A block beside others carries its own label, and
 Shoal renames a window only while the block it opened is alone there, so a
 split never renames the user's window. A terminal no host
-serves goes to `terminal.default_host`, zmx unless set to Herdr or Rex, whose places
-then join the group the host's config names, `terminal.herdr.workspace_name` or
-`terminal.rex.session_name`; generic code reads the setting and renders the name, and a
+serves goes to `terminal.default_host`, zmx unless set to another host, whose places
+then join the group the host's config names, such as `terminal.herdr.workspace_name`;
+generic code reads the setting and renders the name, and a
 host only finds or creates a group by label. A host opens a place for a
 start and shows a place; generic code decides the rest: whether a start stays
 in this terminal, whether an agent runs in place, which host takes a queued
@@ -939,14 +939,43 @@ blocks in its window and panes in its tab; Herdr closes a tab with its last
 pane. Rex's own
 `own_block` arbitrates terminal size between clients and is not ownership.
 
+tmux is an opt-in host for users who already work in it, so agents run in their
+tmux panes without a zmx session nested inside one. tmux draws panes through its
+own emulator, so images and notifications reach the outer terminal only through
+its passthrough, off by default, and an attach redraws tmux's screen; Shoal
+documents these limits rather than working around them. `terminal.tmux.enabled`
+lets tmux serve its panes and, unset, follows whether `terminal.default_host`
+names tmux, so choosing the default host opts in everywhere and tmux users who
+set neither keep zmx. Inherited variables cannot tell which of nested hosts is
+innermost, so hosts claim a terminal in a fixed order, tmux last: a zmx session,
+Herdr pane or Rex block inside tmux keeps its own behavior. A tmux session is a
+group and a pane a place, as a Rex session and block are: Shoal opens a window
+in the session the caller's pane started in, or splits that pane, runs agents in
+place, and outside tmux opens windows in a configured session of the default
+server and attaches the terminal to show one. tmux starts a pane with a
+command, so a new window runs the launch step, which reads the command and its
+variables from a private file and drops other hosts' place variables the
+server's environment may carry, then the user's login shell; nothing is typed
+on screen. A demo, whose worker needs its pane, replaces the window's shell
+with it. Only a resume in an existing pane types the launch step at its prompt.
+A server Shoal starts gets none of Shoal's own variables. A queued start carries
+the caller's `TMUX` and socket directory, empty when unset, so a daemon started
+inside tmux never sends it to the daemon's own server, and a start queued from a
+pane reaches its origin's server through the socket its origin records.
+tmux numbers panes afresh when its server restarts, so a place records the
+server's socket and instance, its process and start time, beside the pane ID,
+and a recorded pane is Shoal's only on that instance. Panes carry no ownership
+marks, so the daemon's records prove ownership as for Rex blocks, and a close
+kills only that pane, leaving the user's other panes, windows and sessions.
+
 Terminal agent launches run in zmx sessions so agents outlive the terminal:
 detaching or closing it leaves the agent running, and `attach` reattaches. zmx
 passes output through unchanged while attached and restores the screen from its
-own terminal state on attach, so terminal protocols such as images keep working;
-multiplexers that re-render output through their own emulator, like tmux, were
-rejected for breaking them. zmx is the default host. The daemon requires
-whichever host `terminal.default_host` names, so a user who sets another one
-need not install zmx. The tracked wrapper
+own terminal state on attach, so terminal protocols such as images keep working,
+which multiplexers that re-render output through their own emulator, like tmux,
+break; zmx therefore stays the default host. The daemon requires whichever host
+`terminal.default_host` names, so a user who sets another one need not install
+zmx. The tracked wrapper
 runs inside the session's pty, so tracking, scope, stop and recovery are
 unchanged and the daemon still never touches terminal I/O. A failed detached
 handoff closes its session only while its process and creation time still match.
@@ -1320,7 +1349,7 @@ creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Claude and Codex apps, T3) provide no
 tracking or scope. A host runs Shoal's tracked agents, chats and demos and shows
-them, as zmx, Herdr and Rex do; an external app, such as Quay, is a UI that is
+them, as zmx, Herdr, Rex and tmux do; an external app, such as Quay, is a UI that is
 not a host and reads and acts on Shoal's state through the client API. It holds
 a workspace while it shows it and queues agents, which the daemon starts
 detached in `terminal.default_host`, which never names an external app.

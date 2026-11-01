@@ -140,8 +140,14 @@ pub(in crate::cli) trait Places: Sync {
     }
 
     /// Show `label` as the name of `place`, one this host opened, where its
-    /// places show names.
-    fn rename_place<'a>(&'a self, _place: &'a str, _label: &'a str) -> BoxFuture<'a, ()> {
+    /// places show names; with `instance`, only while the place is still
+    /// on the server instance it records.
+    fn rename_place<'a>(
+        &'a self,
+        _place: &'a str,
+        _instance: Option<&'a str>,
+        _label: &'a str,
+    ) -> BoxFuture<'a, ()> {
         Box::pin(async {})
     }
 

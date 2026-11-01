@@ -18,6 +18,8 @@ fn a_queued_start_keeps_every_server_variable_set_or_not() {
     // The daemon's socket must not stand in for the session the caller chose.
     assert_eq!(selection["HERDR_SOCKET_PATH"], "");
     assert_eq!(selection["REX_SERVER"], "");
+    assert_eq!(selection["TMUX"], "");
+    assert_eq!(selection["TMUX_TMPDIR"], "");
 }
 
 #[test]

@@ -20,6 +20,7 @@ mod naming;
 mod prompts;
 mod rex;
 mod sessions;
+mod tmux;
 mod typed;
 mod zmx;
 

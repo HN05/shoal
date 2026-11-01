@@ -179,9 +179,9 @@ default_mode = "cli"
 # Close the Herdr tab or zmx session Shoal opened for a workspace once the
 # workspace is removed, or once `done` keeps it and the agent finishes its turn.
 close_when_done = true
-# Where launches from a terminal outside Herdr and Rex run: detached zmx
-# sessions ("zmx"), tabs on the local Herdr server ("herdr"), or windows on the
-# local Rex server ("rex").
+# Where launches from a terminal no host serves run: detached zmx sessions
+# ("zmx"), tabs on the local Herdr server ("herdr"), windows on the local Rex
+# server ("rex"), or windows on the default tmux server ("tmux").
 default_host = "zmx"
 
 [terminal.herdr]
@@ -206,6 +206,21 @@ placement = "window"
 # The session for windows Shoal opens outside a Rex session.
 session_name = "{repo}"
 # Override [terminal] close_when_done for Rex windows.
+# close_when_done = true
+# window_name = "{repo}: {branch}"
+
+[terminal.tmux]
+# Use tmux windows and panes inside tmux; unset, only when default_host is
+# "tmux". false runs as in a plain terminal.
+# enabled = true
+# Run issue/add in a new window inside tmux, after interactive choices.
+new_window = true
+# Open that place as a new window ("window") or a split beside the caller's
+# pane ("split").
+placement = "window"
+# The session for windows Shoal opens outside tmux.
+session_name = "{repo}"
+# Override [terminal] close_when_done for tmux windows.
 # close_when_done = true
 # window_name = "{repo}: {branch}"
 

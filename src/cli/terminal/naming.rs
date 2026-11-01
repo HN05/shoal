@@ -180,7 +180,9 @@ pub(in crate::cli) async fn relabel_places(ctx: &Context, workspace: &Workspace)
         let template = configured.options.name_template.clone();
         let label = workspace_label(ctx, template, configured.host, workspace).await;
         for place in reachable {
-            host_places.rename_place(place.id(), &label).await;
+            host_places
+                .rename_place(place.id(), place.instance.as_deref(), &label)
+                .await;
         }
     }
     Ok(())

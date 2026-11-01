@@ -15,6 +15,7 @@ states!(
         Herdr => "herdr",
         Rex => "rex",
         Zmx => "zmx",
+        Tmux => "tmux",
         Terminal => "terminal",
     }
 );

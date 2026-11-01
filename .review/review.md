@@ -481,7 +481,7 @@ configured command for another agent, plus proven child
   give the entire command process group a shared grace period, even after its leader exits.
   Terminal agent launches put the tracked wrapper inside a zmx session, never a
   terminal emulator between agent and terminal; launches without a terminal, inside
-  zmx, or in an enabled Herdr pane or Rex block run in place. Shoal closes only zmx sessions
+  zmx, or in an enabled Herdr pane, Rex block or tmux pane run in place. Shoal closes only zmx sessions
   it created, labelled `shoal.created=1` at creation and never by relabelling;
   sessions the user opened stay theirs even after an agent ran in them, and
   sessions without the label have unknown origin and are never closed. Removal
@@ -494,6 +494,9 @@ configured command for another agent, plus proven child
   place Herdr records. Rex
   blocks carry no labels: only blocks the daemon recorded Shoal creating close,
   through the same removal, sweep and retry path, and a close ends only that block.
+  tmux is opt-in and claims a terminal after the other hosts; its panes carry no
+  labels either, and a recorded pane is Shoal's only on the server instance (process
+  and start time) the record names, since tmux reuses pane IDs after a restart.
   Places are host-neutral origin records whose host data generic code never reads.
   Attach, status and attach completion find sessions of every host only through
   the places the daemon recorded for executions, chats and the places Shoal

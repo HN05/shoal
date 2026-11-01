@@ -175,6 +175,8 @@ pub struct TerminalConfig {
     #[option(section)]
     pub rex: RexConfig,
     #[option(section)]
+    pub tmux: TmuxConfig,
+    #[option(section)]
     pub happy: HappyConfig,
 }
 
@@ -753,8 +755,8 @@ pub struct RexConfig {
     pub enabled: Option<bool>,
     #[option(default = true)]
     pub new_window: Option<bool>,
-    #[option(default = RexPlacement::default())]
-    pub placement: Option<RexPlacement>,
+    #[option(default = Placement::default())]
+    pub placement: Option<Placement>,
     pub window_name: Option<String>,
     /// The session Shoal opens windows in when it has none of its own;
     /// `{repo}` is the repository's name.
@@ -764,11 +766,30 @@ pub struct RexConfig {
     pub close_when_done: Option<bool>,
 }
 
+/// tmux is opt-in: unset, `enabled` follows whether `default_host` names it.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = Tmux)]
+pub struct TmuxConfig {
+    pub enabled: Option<bool>,
+    #[option(default = true)]
+    pub new_window: Option<bool>,
+    #[option(default = Placement::default())]
+    pub placement: Option<Placement>,
+    pub window_name: Option<String>,
+    /// The session Shoal opens windows in when it has none of its own;
+    /// `{repo}` is the repository's name.
+    #[option(default = "{repo}".into())]
+    pub session_name: Option<String>,
+    /// Overrides the top-level `close_when_done` for tmux windows.
+    pub close_when_done: Option<bool>,
+}
+
 states!(
     #[derive(Default)]
-    /// Where Rex opens a place beside the caller's block: a new window, or a
-    /// split of that block.
-    RexPlacement {
+    /// Where a host opens a place beside the caller's: a new window, or a
+    /// split of the caller's place.
+    Placement {
         #[default]
         Window => "window",
         Split => "split",
