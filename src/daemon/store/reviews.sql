@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS reviews (
     waits_for_recovery INTEGER NOT NULL DEFAULT 0,
     CHECK((state='failed') = (failure IS NOT NULL))
 );
+-- A workspace's latest review, which every read of the workspace shows.
+CREATE INDEX IF NOT EXISTS reviews_workspace ON reviews(workspace_id, id);
 -- At most one review of a workspace is queued or running.
 CREATE UNIQUE INDEX IF NOT EXISTS reviews_active ON reviews(workspace_id)
     WHERE state IN ('queued','running');

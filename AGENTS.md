@@ -98,6 +98,9 @@ when behavior changes, distinguishing decisions from proposals.
   in other repositories as `[permissions] issue_other_repositories` allows, rerunning
   or cancelling their CI jobs, starting, rerunning or cancelling CI runs of their own branch and reading the own repository's, and GET requests to any repository's forge API, or
   other methods to the own repository's where `[permissions] api_writes` allows them, are allowed, except merging a PR, deleting its branch, approving or requesting changes on one, or approving CI runs.
+  Scoped callers may run, view, cancel and answer the reviews of their own workspace and those below it;
+  with `[review] require_for_pr` or `require_for_ready`, a workspace process's new-PR `pr open` and its
+  ready mark are refused until a finished review covers HEAD with every finding resolved.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
   decides (busy resources, port conflicts, agent-shortcut exits, its own
