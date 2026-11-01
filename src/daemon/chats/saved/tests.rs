@@ -663,6 +663,8 @@ async fn a_stop_after_the_agent_exited_ends_what_carries_the_chat() {
         .await
         .unwrap();
     // The agent starts a child with the chat's identity once it is recorded.
+    // The child writes its own PID, once it runs with that identity: before,
+    // where only its environment finds it, as on Linux, no stop could.
     let id_file = root.path().join("chat-id");
     let started = root.path().join("child");
     let mut leader = ProcessGroup::spawn(
@@ -670,7 +672,7 @@ async fn a_stop_after_the_agent_exited_ends_what_carries_the_chat() {
             .arg("-c")
             .arg(
                 "while [ ! -s \"$0\" ]; do sleep 0.1; done; \
-                 SHOAL_CHAT=$(cat \"$0\") sleep 600 & echo $! > \"$1\"; wait",
+                 SHOAL_CHAT=$(cat \"$0\") sh -c 'echo $$ > \"$0\"; exec sleep 600' \"$1\" & wait",
             )
             .arg(&id_file)
             .arg(&started),
