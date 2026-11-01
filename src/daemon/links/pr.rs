@@ -245,7 +245,7 @@ impl Manager {
     }
 
     async fn sweep_listed_prs(&self, listed: &Workspace) -> Result<()> {
-        if self.access_stalled(&listed.path) {
+        if self.sweep_skips(&listed.path).await {
             return Ok(());
         }
         match self.lock_for_pr_sweep(listed).await? {

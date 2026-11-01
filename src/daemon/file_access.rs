@@ -215,11 +215,16 @@ impl Manager {
         result
     }
 
-    /// Whether file access in `path`'s directory stalled and no check there
-    /// has finished since. The cleanup sweep's phases skip a workspace there,
-    /// leaving the recheck to branch observation and the startup audit's
-    /// recheck, which run before them.
-    pub(crate) fn access_stalled(&self, path: &Path) -> bool {
+    /// Whether the cleanup sweep skips `path`: file access in its directory
+    /// stalled, and reading HEAD there, as a recheck when one is due, does
+    /// not show it answers. A worktree deleted meanwhile answers with Git's
+    /// error, so its cleanup goes on.
+    pub(crate) async fn sweep_skips(&self, path: &Path) -> bool {
+        if self.file_access.stalled(path).is_none() {
+            return false;
+        }
+        let head = crate::git::revision(path, "HEAD", crate::git::run);
+        let _ = self.check_access(path, head).await;
         self.file_access.stalled(path).is_some()
     }
 }

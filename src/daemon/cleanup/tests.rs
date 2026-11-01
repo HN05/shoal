@@ -826,3 +826,34 @@ async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_ot
         .collect();
     assert_eq!(failures, Vec::<String>::new());
 }
+
+#[tokio::test]
+async fn a_sweep_rechecks_a_stalled_worktree_deleted_since_and_forgets_it() {
+    use crate::test_support::{manager, repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "deleted".into(), None, None, None)
+        .await
+        .unwrap();
+    // Paused only around the stall, since real Git would let the clock run
+    // out its time limit.
+    tokio::time::pause();
+    let stalled = manager
+        .check_access(&workspace.path, std::future::pending::<Result<()>>())
+        .await;
+    tokio::time::advance(file_access::RECHECK_AFTER).await;
+    tokio::time::resume();
+    assert!(stalled.is_err());
+    // Branch observation reads only worktrees that are there.
+    fs::remove_dir_all(&workspace.path).unwrap();
+
+    sweep(&manager, &mut Timers::default()).await.unwrap();
+
+    assert_eq!(manager.file_access.stalls(), []);
+    assert!(manager.list_workspaces().await.unwrap().is_empty());
+}

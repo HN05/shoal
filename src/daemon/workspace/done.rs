@@ -236,7 +236,7 @@ impl Manager {
 
     /// Remove `listed` for its own completion or a completed ancestor's.
     async fn sweep_completed_workspace(&self, listed: &Workspace) -> Result<()> {
-        if self.access_stalled(&listed.path) {
+        if self.sweep_skips(&listed.path).await {
             return Ok(());
         }
         // An ancestor's completion that takes the workspace changes under

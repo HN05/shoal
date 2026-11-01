@@ -245,7 +245,7 @@ async fn sweep_workspace(
     workspace: &Workspace,
 ) -> Result<()> {
     // Its idle timer stays for the pass after a check there finishes.
-    if manager.access_stalled(&workspace.path) {
+    if manager.sweep_skips(&workspace.path).await {
         return Ok(());
     }
     // Only a worktree that existed (identity recorded) can have been deleted;

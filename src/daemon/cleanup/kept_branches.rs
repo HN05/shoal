@@ -7,7 +7,7 @@ use tokio::time::Instant;
 
 use crate::{
     daemon::{log, workspace::Manager},
-    git::{self, RemoteHead},
+    git::RemoteHead,
 };
 
 /// Ask a repository's remotes for their branches at most this often.
@@ -86,14 +86,8 @@ pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
 }
 
 /// Whether the repository's checkout, where its kept branches' Git runs,
-/// answers. One in a directory whose file access stalled is checked again
-/// when due, since nothing else may once its workspaces are gone, and
-/// skipped meanwhile.
+/// answers, as [`Manager::sweep_skips`] tells.
 async fn checkout_answers(manager: &Manager, repository_id: &str) -> Result<bool> {
     let repo = manager.repository(repository_id).await?;
-    if !manager.access_stalled(&repo.path) {
-        return Ok(true);
-    }
-    let head = git::revision(&repo.path, "HEAD", git::run);
-    Ok(manager.check_access(&repo.path, head).await.is_ok())
+    Ok(!manager.sweep_skips(&repo.path).await)
 }
