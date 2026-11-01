@@ -555,7 +555,7 @@ fn review_run_selects_a_workspace_or_a_pr() {
     use crate::cli::args::changes::ReviewCommand;
     let review = Cli::try_parse_from(["shoal", "review", "run", "--pr", "7", "--agent", "claude"]);
     assert!(matches!(review.unwrap().command,
-            Some(Command::Changes(ChangesCommand::Review { command: ReviewCommand::Run { workspace: None, pr: Some(pr), agent: Some(agent), .. } })) if pr == "7" && agent.name() == "claude"));
+            Some(Command::Changes(ChangesCommand::Review { command: ReviewCommand::Run { space: None, pr: Some(pr), agent: Some(agent), .. } })) if pr == "7" && agent.name() == "claude"));
     for args in [
         vec![
             "shoal", "review", "run", "--pr", "7", "--manual", "--agent", "claude",

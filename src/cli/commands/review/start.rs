@@ -17,7 +17,7 @@ use crate::{
         items::link::{ItemKind, Link, LinkTarget},
     },
     git,
-    model::{Repository, Workspace},
+    model::{Chat, Repository, Workspace},
     protocol::{ConfigTarget, ReviewMethod, WorkspaceMethod},
     reviews::{Review, ReviewTarget},
 };
@@ -38,7 +38,11 @@ pub(super) enum Reviewer {
 
 /// What `shoal review` reviews.
 pub(super) enum Target {
-    Workspace(Option<String>),
+    /// A workspace's changes, or a chat's linked PR, which `post` applies to.
+    Space {
+        space: Option<String>,
+        post: Option<bool>,
+    },
     Pull {
         input: String,
         repository: Option<String>,
@@ -69,16 +73,12 @@ impl Target {
                     LinkTarget::Run | LinkTarget::Branch(_) => bail!("expected a PR URL"),
                 }
             }
-            (None, workspace) => {
+            (None, space) => {
                 ensure!(
                     repository.is_none(),
                     "--repo selects the repository of a PR; pass --pr or a URL"
                 );
-                ensure!(
-                    post.is_none(),
-                    "--post and --no-post apply to PR reviews; workspace reviews stay local"
-                );
-                return Ok(Target::Workspace(workspace));
+                return Ok(Target::Space { space, post });
             }
         };
         Ok(Target::Pull {
@@ -113,9 +113,22 @@ pub(super) async fn start(
         "{FORWARDED_ARGS}"
     );
     match target {
-        Target::Workspace(workspace) => {
-            run(ctx, workspace, reviewer, Subject::Changes, model, args).await
-        }
+        Target::Space { space, post } => match super::select(ctx, space).await? {
+            // A chat has no changes of its own, so it reviews its linked PR.
+            super::Space::Chat(chat) => {
+                let (repo, url) = chat_pull(ctx, &chat).await?;
+                check_reviewer(ctx, &repo, &reviewer, post, &model).await?;
+                pull_request(ctx, &repo, &url, reviewer, post, model, args).await
+            }
+            super::Space::Workspace(workspace) => {
+                ensure!(
+                    post.is_none(),
+                    "--post and --no-post apply to PR reviews; workspace reviews stay local"
+                );
+                let subject = Subject::Changes;
+                run(ctx, Some(workspace), reviewer, subject, model, args).await
+            }
+        },
         Target::Pull {
             input,
             repository,
@@ -133,6 +146,19 @@ pub(super) async fn start(
             pull_request(ctx, &repo, &input, reviewer, post, model, args).await
         }
     }
+}
+
+/// The chat's one linked PR, with the chat's repository.
+async fn chat_pull(ctx: &Context, chat: &Chat) -> Result<(Repository, String)> {
+    let url = match chat.links.prs.as_slice() {
+        [url] => url.clone(),
+        [] => bail!("{} links no PR; pass --pr or a PR URL", chat.name),
+        _ => bail!("{} links several PRs; pass --pr or a PR URL", chat.name),
+    };
+    let repo = (client::repositories(&ctx.paths).await?.into_iter())
+        .find(|repo| repo.id == chat.repository_id)
+        .with_context(|| format!("{}'s repository is not registered", chat.name))?;
+    Ok((repo, url))
 }
 
 /// Refuse an agent reviewer that could not review before a PR's workspace
@@ -165,7 +191,10 @@ impl Reviewer {
     fn chosen_agent(&self, target: &Target) -> bool {
         match self {
             Reviewer::Agent(_) => true,
-            Reviewer::Ask => matches!(target, Target::Pull { post: Some(_), .. }),
+            Reviewer::Ask => matches!(
+                target,
+                Target::Pull { post: Some(_), .. } | Target::Space { post: Some(_), .. }
+            ),
             Reviewer::Manual => false,
         }
     }
@@ -302,10 +331,6 @@ async fn run(
     model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    ensure!(
-        workspace.is_some() || crate::env::chat().is_none(),
-        "a chat has no changes to review; name a workspace"
-    );
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let post = match &subject {

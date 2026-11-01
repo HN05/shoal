@@ -14,13 +14,20 @@ use crate::{
     reviews::{Finding, Posted, Review, ReviewState, ReviewTarget, Severity},
 };
 
-/// List the reviews of the workspace, else the repository's, else every
-/// one, newest first.
+/// List the reviews of the space, a chat's those of its linked PRs, else
+/// the repository's, else every one, newest first.
 pub(in crate::cli::commands) async fn list(
     ctx: &Context,
     workspace: Option<String>,
     repository: Option<String>,
 ) -> Result<i32> {
+    if repository.is_none()
+        && let Some(chat) = super::chat(ctx, workspace.as_deref()).await?
+    {
+        let reviews = super::chat_reviews(ctx, &chat).await?;
+        ctx.show(&reviews, |reviews| render_list(reviews, ctx.json))?;
+        return Ok(0);
+    }
     let workspace = match (workspace, &repository) {
         (Some(workspace), _) => Some(workspace),
         (None, Some(_)) => None,

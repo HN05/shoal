@@ -4247,6 +4247,74 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
 }
 
 #[test]
+fn a_chat_reviews_its_linked_pr_and_lists_and_cancels_that_review() {
+    let fixture = Fixture::with_config(Some(
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n",
+    ));
+    let author = forge_origin(&fixture);
+    git(&author, &["switch", "-c", "fix"]);
+    fs::write(author.join("fix"), "change\n").unwrap();
+    git(&author, &["add", "fix"]);
+    git(
+        &author,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "fix",
+        ],
+    );
+    git(&author, &["push", "origin", "fix"]);
+    let bin = fixture.root.path().join("bin");
+    install_api_curl(&bin);
+    let mut pull = forgejo_pull(7, "open", "fix", &"7".repeat(40));
+    pull["head"]["repo"]["full_name"] = "team/project".into();
+    script_api(fixture.root.path(), "repos/team/project/pulls/7", &pull);
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let (mut agent, _) = start_test_chat(&fixture, "planning");
+    let run = |args: &[&str]| {
+        fixture
+            .command()
+            .arg("--json")
+            .args(args)
+            .current_dir(&fixture.repo)
+            .env("PATH", &path)
+            .output()
+            .unwrap()
+    };
+    // Nothing linked: nothing to review.
+    let output = run(&["review", "run", "planning", "--agent", "reviewer"]);
+    assert!(!output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("planning links no PR"),
+        "{output:?}"
+    );
+    let output = run(&["link", "pr", "7", "assigned", "--space", "planning"]);
+    assert!(output.status.success(), "{output:?}");
+    // The linked PR is reviewed in the workspace that owns its head, and
+    // posting applies to it.
+    let output = run(&["review", "run", "planning", "--no-post"]);
+    assert!(output.status.success(), "{output:?}");
+    let ended = fixture.ok(&["watch", "review", "1"]);
+    let url = "https://forge.example/team/project/pulls/7";
+    assert_eq!(ended["target"]["url"], url, "{ended}");
+    assert_eq!(ended["target"]["post"], false, "{ended}");
+    let listed = fixture.ok(&["review", "list", "planning"]);
+    assert_eq!(listed[0]["id"], 1, "{listed}");
+    let output = run(&["review", "cancel", "--space", "planning"]);
+    assert!(!output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("no review of planning's PRs"),
+        "{output:?}"
+    );
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let fixture = Fixture::with_config(Some(
         "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n",

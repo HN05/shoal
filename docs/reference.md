@@ -864,7 +864,7 @@ review = ["tuicr", "-r", "{diff_base}..HEAD"]
 review-worktree = ["tuicr", "-w"]
 ```
 
-`shoal review run [workspace]` asks whether to review with the `review` command or
+`shoal review run [space]` asks whether to review with the `review` command or
 an agent (see [local reviews](#local-reviews)); `--manual` or `--agent <name>` skips
 the question, which is required without a terminal. Manual review runs the `review`
 command (`shoal run review` also does) with the arguments after `--`; without one,
@@ -877,7 +877,7 @@ Shoal tracks execution; the review tool owns sessions, exports, and forge access
 
 ### Local reviews
 
-`shoal review run [workspace]` queues a review of the workspace's committed HEAD
+`shoal review run [space]` queues a review of the workspace's committed HEAD
 against [`shoal diff`](#diff)'s base. An agent reviews it once in the
 background, read-only, in a detached checkout of that commit outside the
 workspace, so uncommitted edits and later commits stay out; no session opens and
@@ -943,10 +943,10 @@ coordinating the workspace hears one line, such as `fix-login: review 17
 finished: 1 blocker, 2 should-fix`.
 
 ```sh
-shoal review list [workspace]   # Newest first; --repo R for a repository's
+shoal review list [space]       # Newest first; --repo R for a repository's
 shoal view review [ID]          # One review in full; default: the workspace's latest
 shoal watch review [ID]         # Wait until it ends, then show it
-shoal review cancel [ID]        # Default: the workspace's queued or running review
+shoal review cancel [ID]        # Default: the space's queued or running review; --space S
 shoal review reply 17.2 'It only happens on empty input'  # or --body-file F
 shoal review resolve 17.2 false-positive --reason 'The caller checks the length'
 shoal review resolve 17.2 --undo
@@ -1006,6 +1006,12 @@ or requests changes. When the PR's head moved while the reviewer ran, the review
 still posted for the commit it covered, with every finding in the body.
 `--post` or `--no-post` overrides the setting for one review and selects an agent
 reviewer. Workspace reviews are never posted, even with a linked PR.
+
+A [chat](#chats) has no changes of its own, so `review run` from a chat, or
+naming one, reviews the chat's one linked PR as `--pr` would. A chat's reviews
+are those of its linked PRs: `review list` lists them, and `review cancel`
+cancels the one queued or running. `review reply` and `review resolve` name the
+finding, so they work from a chat as from anywhere else.
 
 ```toml
 [review]

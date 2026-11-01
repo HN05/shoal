@@ -106,10 +106,10 @@ pub enum ReviewCommand {
     /// The reviewer runs once in the background, read-only, and its findings
     /// arrive as a message.
     Run {
-        /// Workspace to review, or a PR URL.
-        workspace: Option<String>,
+        /// Space to review, a workspace's changes or a chat's linked PR, or a PR URL.
+        space: Option<String>,
         /// Review this PR in the workspace that owns its head branch, opening one when none does.
-        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "workspace", value_parser = item_reference)]
+        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "space", value_parser = item_reference)]
         pr: Option<String>,
         /// Registered repository of the PR; defaults to the URL's repository or the current checkout/workspace.
         #[arg(long = "repo")]
@@ -134,19 +134,22 @@ pub enum ReviewCommand {
     },
     /// List reviews with their state and unresolved findings, newest first.
     List {
-        /// Workspace whose reviews to list; defaults to the current workspace, else every one.
-        workspace: Option<String>,
+        /// Space whose reviews to list, a workspace or a chat, whose reviews
+        /// are those of its linked PRs; defaults to the current chat or
+        /// workspace, else every review.
+        space: Option<String>,
         /// List the reviews of this registered repository's workspaces.
-        #[arg(long = "repo", conflicts_with = "workspace")]
+        #[arg(long = "repo", conflicts_with = "space")]
         repository: Option<String>,
     },
-    /// Cancel a queued or running review; defaults to the workspace's.
+    /// Cancel a queued or running review; defaults to the space's.
     Cancel {
         /// Review ID.
         id: Option<i64>,
-        /// Workspace whose review to cancel; defaults to the current workspace or picker.
+        /// Space, a workspace or chat, whose review to cancel; defaults to
+        /// the current chat or workspace, or a picker.
         #[arg(long, conflicts_with = "id")]
-        workspace: Option<String>,
+        space: Option<String>,
     },
     /// Reply to a finding without resolving it.
     Reply {

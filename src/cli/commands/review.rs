@@ -2,7 +2,17 @@
 //! them, and answer their findings.
 use anyhow::Result;
 
-use crate::cli::{args::changes::ReviewCommand, context::Context};
+use crate::{
+    cli::{
+        args::changes::ReviewCommand,
+        client,
+        context::Context,
+        ui::{self, Fallback},
+    },
+    model::{Chat, PresentSpace},
+    protocol::ReviewMethod,
+    reviews::{Review, ReviewTarget},
+};
 
 mod answer;
 pub(super) mod show;
@@ -13,7 +23,7 @@ pub(super) use start::fetch_pull_branch;
 pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
     match command {
         ReviewCommand::Run {
-            workspace,
+            space,
             pr,
             repository,
             post,
@@ -24,16 +34,13 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
             args,
         } => {
             let post = (post || no_post).then_some(post);
-            let target = start::Target::new(workspace, pr, repository, post)?;
+            let target = start::Target::new(space, pr, repository, post)?;
             let model = model.into();
             let reviewer = start::Reviewer::new(manual, agent, &model);
             start::start(ctx, target, reviewer, model, args).await
         }
-        ReviewCommand::List {
-            workspace,
-            repository,
-        } => show::list(ctx, workspace, repository).await,
-        ReviewCommand::Cancel { id, workspace } => answer::cancel(ctx, id, workspace).await,
+        ReviewCommand::List { space, repository } => show::list(ctx, space, repository).await,
+        ReviewCommand::Cancel { id, space } => answer::cancel(ctx, id, space).await,
         ReviewCommand::Reply {
             finding,
             reply,
@@ -54,4 +61,52 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
             answer::resolve(ctx, finding, outcome).await
         }
     }
+}
+
+/// A space a review command acts on.
+enum Space {
+    Chat(Box<Chat>),
+    Workspace(String),
+}
+
+/// The space `space` names, else the chat this runs in or the current
+/// workspace, else one the user picks.
+async fn select(ctx: &Context, space: Option<String>) -> Result<Space> {
+    let selected = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    Ok(match client::present_space(&ctx.paths, &selected).await? {
+        Some(PresentSpace::Chat(chat)) => Space::Chat(Box::new(chat)),
+        _ => Space::Workspace(selected),
+    })
+}
+
+/// The running chat `space` names, else the chat this runs in when `space`
+/// names nothing.
+async fn chat(ctx: &Context, space: Option<&str>) -> Result<Option<Chat>> {
+    let Some(named) = space.map(str::to_owned).or_else(crate::env::chat) else {
+        return Ok(None);
+    };
+    Ok(match client::present_space(&ctx.paths, &named).await? {
+        Some(PresentSpace::Chat(chat)) => Some(chat),
+        _ => None,
+    })
+}
+
+/// A chat's reviews: those of its linked PRs, which run in the workspaces
+/// that own their head branches, newest first.
+async fn chat_reviews(ctx: &Context, chat: &Chat) -> Result<Vec<Review>> {
+    let reviews: Vec<Review> = client::reviews(
+        &ctx.paths,
+        ReviewMethod::ListReviews {
+            workspace: None,
+            repository: Some(chat.repository_id.clone().into()),
+        },
+    )
+    .await?;
+    Ok(reviews
+        .into_iter()
+        .filter(|review| match &review.target {
+            ReviewTarget::Pr { url, .. } => chat.links.prs.contains(url),
+            ReviewTarget::Workspace => false,
+        })
+        .collect())
 }

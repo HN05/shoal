@@ -5,24 +5,27 @@ use std::path::PathBuf;
 use anyhow::{Context as _, Result};
 
 use crate::{
-    cli::{
-        client,
-        context::Context,
-        ui::{self, Fallback},
-    },
+    cli::{client, context::Context},
     protocol::ReviewMethod,
     reviews::{FindingId, Outcome, Review},
 };
 
-/// Cancel review `id`, else the workspace's queued or running one.
-pub(super) async fn cancel(
-    ctx: &Context,
-    id: Option<i64>,
-    workspace: Option<String>,
-) -> Result<i32> {
-    let workspace = match id {
-        Some(_) => None,
-        None => Some(ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?),
+/// Cancel review `id`, else the space's queued or running one: a chat's is
+/// that of one of its linked PRs.
+pub(super) async fn cancel(ctx: &Context, id: Option<i64>, space: Option<String>) -> Result<i32> {
+    let (workspace, id) = match id {
+        Some(id) => (None, Some(id)),
+        None => match super::select(ctx, space).await? {
+            super::Space::Chat(chat) => {
+                let active = (super::chat_reviews(ctx, &chat).await?.into_iter())
+                    .find(|review| review.state.is_active())
+                    .with_context(|| {
+                        format!("no review of {}'s PRs is queued or running", chat.name)
+                    })?;
+                (None, Some(active.id))
+            }
+            super::Space::Workspace(workspace) => (Some(workspace), None),
+        },
     };
     let review: Review =
         client::reviews(&ctx.paths, ReviewMethod::CancelReview { workspace, id }).await?;

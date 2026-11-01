@@ -126,7 +126,9 @@ marks your linked PRs at their heads, or the chat itself when nothing is
 linked, and `shoal ready --undo` withdraws the marks. `shoal ci list`,
 `ci rerun`, `ci cancel` and `ci approve` act on the runs of your linked PR, and
 `shoal ci run <workflow>` starts one on the default branch or `--branch`, which
-your watch then follows.
+your watch then follows. `shoal review run` from the chat reviews your linked
+PR in the workspace that owns its branch, and `shoal review list` lists your
+linked PRs' reviews.
 
 To ask the user something in a chat, run `shoal questions ask --in-chat`, then
 write the question as your final message and end your turn: it also reaches

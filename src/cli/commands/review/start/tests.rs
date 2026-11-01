@@ -28,9 +28,16 @@ fn urls_and_the_pr_flag_select_a_pr_and_forge_options_require_one() {
     assert!(Target::new(Some(branch.into()), None, None, None).is_err());
     assert!(matches!(
         Target::new(Some("fix-login".into()), None, None, None).unwrap(),
-        Target::Workspace(Some(name)) if name == "fix-login"
+        Target::Space { space: Some(name), post: None } if name == "fix-login"
     ));
-    for (repository, post) in [(Some("repo".into()), None), (None, Some(true))] {
-        assert!(Target::new(Some("fix-login".into()), None, repository, post).is_err());
-    }
+    assert!(Target::new(Some("fix-login".into()), None, Some("repo".into()), None).is_err());
+    // A space may be a chat, which reviews its linked PR, so posting stays
+    // until the space is known.
+    assert!(matches!(
+        Target::new(Some("planning".into()), None, None, Some(true)).unwrap(),
+        Target::Space {
+            post: Some(true),
+            ..
+        }
+    ));
 }
