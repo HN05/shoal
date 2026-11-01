@@ -944,7 +944,8 @@ detaching or closing it leaves the agent running, and `attach` reattaches. zmx
 passes output through unchanged while attached and restores the screen from its
 own terminal state on attach, so terminal protocols such as images keep working;
 multiplexers that re-render output through their own emulator, like tmux, were
-rejected for breaking them. zmx is a required dependency. The tracked wrapper
+rejected for breaking them. zmx is the default host, required only while it
+is: a user who sets another default host need not install it. The tracked wrapper
 runs inside the session's pty, so tracking, scope, stop and recovery are
 unchanged and the daemon still never touches terminal I/O. A failed detached
 handoff closes its session only while its process and creation time still match.

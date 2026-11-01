@@ -7,7 +7,9 @@ use std::{ffi::OsStr, path::PathBuf};
 use anyhow::Result;
 
 use crate::{
+    config::repo::DefaultHost,
     daemon::{log, notifications::NotificationKind, workspace::Manager},
+    sessions::HostName,
     tools::{Dependency, Tool},
 };
 
@@ -33,24 +35,46 @@ impl Check {
     }
 }
 
-fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
+fn dependencies(path: Option<&OsStr>, default_host: HostName) -> Vec<Check> {
     Tool::dependencies()
-        .map(|(tool, dependency)| {
+        .filter_map(|(tool, dependency)| {
+            let (status, reason) = when_missing(dependency, default_host)?;
             let program = tool.program();
             let executable = path.and_then(|path| crate::fsutil::find_executable(OsStr::new(program), path));
-            let (status, message) = match executable {
-                Some(path) => (CheckStatus::Ok, format!("{} on the daemon's PATH", path.display())),
-                None => (
-                    match dependency { Dependency::Required => CheckStatus::Error, Dependency::Optional(_) => CheckStatus::Warning },
-                    format!(
-                        "{program} is missing or not executable on the daemon's PATH{}; install it and restart the daemon with the updated PATH",
-                        match dependency { Dependency::Required => String::new(), Dependency::Optional(reason) => format!(" ({reason})") }
-                    ),
+            Some(match executable {
+                Some(path) => Check::new(CheckStatus::Ok, format!("{} on the daemon's PATH", path.display())),
+                None => Check::new(
+                    status,
+                    format!("{program} is missing or not executable on the daemon's PATH{reason}; install it and restart the daemon with the updated PATH"),
                 ),
-            };
-            Check::new(status, message)
+            })
         })
         .collect()
+}
+
+/// How `dependency` fails the check when missing, with why Shoal needs it;
+/// none for the program of a terminal host other than `default_host`.
+fn when_missing(dependency: Dependency, default_host: HostName) -> Option<(CheckStatus, String)> {
+    match dependency {
+        Dependency::Required => Some((CheckStatus::Error, String::new())),
+        Dependency::Optional(reason) => Some((CheckStatus::Warning, format!(" ({reason})"))),
+        Dependency::Host(host) if host == default_host => Some((
+            CheckStatus::Error,
+            " (the default terminal host; terminal.default_host can name another)".to_owned(),
+        )),
+        Dependency::Host(_) => None,
+    }
+}
+
+/// The default terminal host the global config sets, which a config that
+/// does not load leaves at its default; its own check reports that.
+fn default_host(config: &crate::config::Config) -> HostName {
+    config
+        .resolve(&crate::config::repo::ConfigLayers::default())
+        .map_or_else(
+            |_| DefaultHost::default().into(),
+            |settings| settings.terminal.default_host,
+        )
 }
 
 /// Whether Git can use the working tree of a registered checkout.
@@ -130,13 +154,14 @@ impl Manager {
         Ok(())
     }
 
-    /// Record an alert for each problem with the daemon's tools, `root_dir`,
-    /// registered checkouts and the global config, and for each recorded host
-    /// that now serves another forge, as the daemon starts or reloads its
-    /// config. A missing optional tool only disables what needs it, so it
+    /// Record an alert for each problem with the daemon's tools, the default
+    /// terminal host's among them, `root_dir`, registered checkouts and the
+    /// global config, and for each recorded host that now serves another
+    /// forge, as the daemon starts or reloads its config. A missing optional tool only disables what needs it, so it
     /// alerts nobody. Identical unread alerts collapse into one.
     pub async fn report_environment(&self) {
-        let mut checks: Vec<_> = dependencies(std::env::var_os("PATH").as_deref())
+        let default_host = default_host(&self.config());
+        let mut checks: Vec<_> = dependencies(std::env::var_os("PATH").as_deref(), default_host)
             .into_iter()
             .filter(|check| check.status == CheckStatus::Error)
             .collect();
