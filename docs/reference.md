@@ -764,9 +764,9 @@ and each watched PR as the forge reports it now: open, merged or closed, merge
 conflicts, each CI check's result, the CI runs on an open PR's head that
 [wait for approval](#ci-runs) in `waiting_runs`, and a review state from each
 reviewer's latest approval or change request. A failed lookup reports its error
-on that item without failing the command. When the
-daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
-status says so in `cleanup_error`. Status also
+on that item without failing the command. When a step
+of the daemon's automatic cleanup fails in the workspace, status says so in
+`cleanup_error`. Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
 open questions, a pending PR proposal, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. `--json`

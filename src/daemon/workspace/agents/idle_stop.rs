@@ -3,7 +3,7 @@
 //! since restoring one rewrites its cache.
 use std::collections::HashMap;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::{Manager, Protection, StoppedAgent, Turn, still_idle};
 use crate::state::AgentState;
@@ -34,7 +34,7 @@ impl Manager {
         let turns = self.reported_turns().await?;
         let now = i64::try_from(crate::time::unix_seconds())?;
         let mut chosen = HashMap::new();
-        let mut failed = Vec::new();
+        let mut failed = crate::daemon::cleanup::WorkspaceFailures::default();
         for candidate in self.idle_candidates(&turns, now).await {
             match self.idle_stop(&candidate).await {
                 Ok(Some(protection)) => {
@@ -46,7 +46,7 @@ impl Manager {
                     chosen.insert(candidate.execution, stop);
                 }
                 Ok(None) => {}
-                Err(error) => failed.push(format!("{}: {error:#}", candidate.workspace)),
+                Err(error) => failed.push(&candidate.workspace_id, &candidate.workspace, &error),
             }
         }
         if !chosen.is_empty() {
@@ -54,8 +54,7 @@ impl Manager {
             let now = i64::try_from(crate::time::unix_seconds())?;
             self.stop_idle(turns, chosen, now).await;
         }
-        ensure!(failed.is_empty(), "{}", failed.join("; "));
-        Ok(())
+        failed.into_result()
     }
 
     /// The running agents with a restore command that `turns` shows idle

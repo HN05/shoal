@@ -179,7 +179,9 @@ async fn failed_step_does_not_skip_later_steps_and_is_named() {
             since: Instant::now() - Duration::from_secs(3600),
         },
     );
-    let error = sweep(&manager, &mut timers).await.unwrap_err().to_string();
+    let failed = sweep(&manager, &mut timers).await.unwrap_err();
+    assert_eq!(failed.general(), None);
+    let error = failed.workspace(&done.id).unwrap();
     assert!(
         error.starts_with("completion cleanup: ") && error.contains("disk is full"),
         "{error}"

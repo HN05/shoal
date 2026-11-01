@@ -25,11 +25,13 @@ use crate::{
     state::WorkspaceState,
 };
 
+mod failures;
 mod grace;
 mod health;
 mod kept_branches;
 mod merged;
 
+pub(crate) use failures::{SweepFailures, WorkspaceFailures};
 pub(crate) use health::CleanupHealth;
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
@@ -157,15 +159,12 @@ pub fn fingerprint(root: &Path) -> Result<u64> {
 }
 
 /// One pass of every automatic cleanup. A failed step does not skip the
-/// steps after it; the error names each step that failed.
-pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
+/// steps after it; the error names each step that failed, in the workspace
+/// it failed in where it concerns one.
+pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFailures> {
     manager.cleanup_orphan_sessions().await;
-    let mut failed = Vec::new();
-    let mut step = |name: &str, result: Result<()>| {
-        if let Err(error) = result {
-            failed.push(format!("{name}: {error:#}"));
-        }
-    };
+    let mut failed = SweepFailures::default();
+    let mut step = |name: &str, result: Result<()>| failed.step(name, result);
     step(
         "ownership recheck",
         manager.recheck_startup_failures().await,
@@ -195,8 +194,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
     step("temporary directories", manager.sweep_tmp_dirs().await);
     step("leftovers", manager.find_leftovers().await);
     step("grace periods", manager.end_unclaimed_grace().await);
-    ensure!(failed.is_empty(), "{}", failed.join("; "));
-    Ok(())
+    failed.into_result()
 }
 
 async fn observe_branches(manager: &Manager) -> Result<()> {
@@ -233,14 +231,13 @@ async fn sweep_idle(manager: &Manager, timers: &mut Timers) -> Result<()> {
     timers
         .idle
         .retain(|id, _| workspaces.iter().any(|workspace| &workspace.id == id));
-    let mut failed = Vec::new();
+    let mut failed = WorkspaceFailures::default();
     for workspace in workspaces {
         if let Err(error) = sweep_workspace(manager, timers, &workspace).await {
-            failed.push(format!("{}: {error:#}", workspace.name));
+            failed.push(&workspace.id, &workspace.name, &error);
         }
     }
-    ensure!(failed.is_empty(), "{}", failed.join("; "));
-    Ok(())
+    failed.into_result()
 }
 
 async fn sweep_workspace(
@@ -619,8 +616,8 @@ pub async fn run(manager: Arc<Manager>) {
         {
             let _operation = manager.gates.operation().await;
             let result = sweep(&manager, &mut timers).await;
-            if let Err(error) = &result {
-                log!("auto cleanup: {error:#}");
+            if let Err(failed) = &result {
+                log!("auto cleanup: {failed}");
             }
             manager.record_sweep(result).await;
         }

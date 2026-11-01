@@ -790,6 +790,10 @@ pub struct DaemonStatus {
     /// Directories whose file access stalls now.
     #[serde(default)]
     pub access_stalls: Vec<AccessStall>,
+    /// Why automatic cleanup is failing other than in a workspace, or has
+    /// stalled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup_error: Option<String>,
 }
 
 /// A directory whose file access stalled, as while macOS waits for an answer

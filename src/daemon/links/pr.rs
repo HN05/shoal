@@ -179,14 +179,23 @@ impl Manager {
     /// Watches survive restarts. A failed lookup never counts as a merge and a
     /// failed removal keeps its registration and ownership records for retry.
     /// Each workspace's PR gate, and those of the workspaces stacked on it,
-    /// are held only while that workspace is handled.
+    /// are held only while that workspace is handled. A failure in one
+    /// workspace does not skip the others.
     pub async fn sweep_prs(&self) -> Result<()> {
+        let mut failed = crate::daemon::cleanup::WorkspaceFailures::default();
         for listed in self.list_workspaces().await? {
-            if let Some((workspace, _guard)) = self.lock_for_pr_sweep(&listed).await? {
-                self.sweep_workspace_prs(&workspace).await?;
+            if let Err(error) = self.sweep_listed_prs(&listed).await {
+                failed.push(&listed.id, &listed.name, &error);
             }
         }
-        Ok(())
+        failed.into_result()
+    }
+
+    async fn sweep_listed_prs(&self, listed: &Workspace) -> Result<()> {
+        match self.lock_for_pr_sweep(listed).await? {
+            Some((workspace, _guard)) => self.sweep_workspace_prs(&workspace).await,
+            None => Ok(()),
+        }
     }
 
     /// The `listed` workspace, read again under its PR gate and those of the

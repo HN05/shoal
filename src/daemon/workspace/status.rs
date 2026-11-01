@@ -41,6 +41,7 @@ impl Manager {
         let unread_notifications = self
             .unread_workspace_notifications(&inspection.workspace.id)
             .await?;
+        let cleanup_error = self.workspace_cleanup_problem(&inspection.workspace.id);
         let cleanup_reason = self.cleanup_reason(&inspection.workspace).await;
         let cleanup_at = self.cleanup_at(&inspection.workspace.id).await?;
         let workspace_id = inspection.workspace.id.clone();
@@ -65,7 +66,7 @@ impl Manager {
             diff,
             diff_error,
             unread_notifications,
-            cleanup_error: self.cleanup_problem(),
+            cleanup_error,
             cleanup_reason,
             cleanup_at,
             prs,

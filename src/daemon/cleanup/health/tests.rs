@@ -1,4 +1,29 @@
 use super::*;
+use crate::daemon::cleanup::WorkspaceFailures;
+
+/// A pass whose `step` failed with `error`, in the workspace `id` named
+/// after it when one is given.
+fn failed(step: &str, workspace: Option<&str>, error: &str) -> Result<(), SweepFailures> {
+    let error = anyhow::anyhow!("{error}");
+    let result = match workspace {
+        Some(id) => {
+            let mut failures = WorkspaceFailures::default();
+            failures.push(id, id, &error);
+            failures.into_result()
+        }
+        None => Err(error),
+    };
+    let mut failed = SweepFailures::default();
+    failed.step(step, result);
+    failed.into_result()
+}
+
+fn unreported(workspace: Option<&str>, error: &str) -> Unreported {
+    Unreported {
+        workspace: workspace.map(|id| (id.to_owned(), id.to_owned())),
+        error: error.to_owned(),
+    }
+}
 
 #[test]
 fn health_reports_failing_and_stalled_cleanup() {
@@ -19,33 +44,61 @@ fn health_reports_failing_and_stalled_cleanup() {
             .contains("since the daemon started")
     );
 
-    assert_eq!(health.record(moment(30, 0), &Ok(())), None);
-    assert_eq!(health.record(moment(60, 3600), &Ok(())), None);
+    assert_eq!(health.record(moment(30, 0), &Ok(())), []);
+    assert_eq!(health.record(moment(60, 3600), &Ok(())), []);
     assert_eq!(health.problem(after(90)), None);
 
-    let failed = Err(anyhow::anyhow!("completion cleanup: disk is full"));
+    let failed = failed("completion cleanup", None, "disk is full");
+    let error = "completion cleanup: disk is full";
     assert_eq!(
-        health.record(moment(90, 3600), &failed).as_deref(),
-        Some("completion cleanup: disk is full")
+        health.record(moment(90, 3600), &failed),
+        [unreported(None, error)]
     );
     assert_eq!(
-        health.record(moment(120, 3600), &failed).as_deref(),
-        Some("completion cleanup: disk is full"),
+        health.record(moment(120, 3600), &failed),
+        [unreported(None, error)],
         "an unrecorded notification is retried"
     );
     health.failure.as_mut().unwrap().notified = true;
-    assert_eq!(health.record(moment(150, 3600), &failed), None);
+    assert_eq!(health.record(moment(150, 3600), &failed), []);
     let problem = health.problem(after(150)).unwrap();
     assert!(problem.contains("failed 3 consecutive passes"), "{problem}");
-    assert!(problem.ends_with("completion cleanup: disk is full"));
+    assert!(problem.ends_with(error));
 
-    assert_eq!(health.record(moment(180, 3600), &Ok(())), None);
+    assert_eq!(health.record(moment(180, 3600), &Ok(())), []);
     assert_eq!(health.problem(after(180)), None);
     assert!(health.problem(after(180) + STALLED_AFTER).is_some());
 }
 
+#[test]
+fn health_keeps_workspace_failures_to_their_workspace() {
+    let mut health = Health::default();
+    let start = health.started;
+    let moment = |seconds| Moment {
+        at: start.at + Duration::from_secs(seconds),
+        unix: start.unix + seconds,
+    };
+    let failed = failed("idle agents", Some("quay"), "bad config");
+    let error = "idle agents: bad config";
+    assert_eq!(
+        health.record(moment(30), &failed),
+        [unreported(Some("quay"), error)]
+    );
+    health.workspaces.get_mut("quay").unwrap().notified = true;
+    assert_eq!(health.record(moment(60), &failed), []);
+
+    assert_eq!(health.problem(moment(60).at), None);
+    assert_eq!(health.workspace_problem("other"), None);
+    let problem = health.workspace_problem("quay").unwrap();
+    assert!(problem.contains("failed 2 consecutive passes"), "{problem}");
+    assert!(problem.ends_with(error), "{problem}");
+
+    assert_eq!(health.record(moment(90), &Ok(())), []);
+    assert_eq!(health.workspace_problem("quay"), None);
+}
+
 #[tokio::test]
-async fn failing_passes_notify_once_and_show_in_status() {
+async fn failing_passes_notify_once_and_show_where_they_belong() {
     use crate::test_support::{manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -53,32 +106,66 @@ async fn failing_passes_notify_once_and_show_in_status() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let workspace = manager
-        .create_workspace(&repo.id, "done".into(), None, None, None)
-        .await
-        .unwrap();
+    let mut workspaces = Vec::new();
+    for name in ["failing", "other"] {
+        let workspace = manager
+            .create_workspace(&repo.id, name.into(), None, None, None)
+            .await
+            .unwrap();
+        workspaces.push(workspace);
+    }
+    let (failing, other) = (&workspaces[0], &workspaces[1]);
+    let pass = || {
+        let mut failures = WorkspaceFailures::default();
+        failures.push(&failing.id, &failing.name, &anyhow::anyhow!("bad config"));
+        let mut failed = SweepFailures::default();
+        failed.step("result expiry", Err(anyhow::anyhow!("disk is full")));
+        failed.step("idle agents", failures.into_result());
+        failed.into_result()
+    };
     for _ in 0..2 {
-        manager
-            .record_sweep(Err(anyhow::anyhow!("completion cleanup: disk is full")))
-            .await;
+        manager.record_sweep(pass()).await;
     }
     let notifications = manager.notifications(true, 100).await.unwrap();
-    assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].workspace, None);
-    assert_eq!(notifications[0].kind, NotificationKind::CleanupFailed);
+    let cleanup: Vec<_> = (notifications.iter())
+        .filter(|notification| notification.kind == NotificationKind::CleanupFailed)
+        .map(|notification| {
+            (
+                notification.workspace.as_deref(),
+                notification.message.as_str(),
+            )
+        })
+        .collect();
     assert_eq!(
-        notifications[0].message,
-        "automatic cleanup failed: completion cleanup: disk is full"
+        cleanup,
+        [
+            (
+                None,
+                "automatic cleanup failed: result expiry: disk is full"
+            ),
+            (
+                Some("failing"),
+                "automatic cleanup failed: idle agents: bad config"
+            ),
+        ]
     );
-    let status = manager.workspace_status(&workspace.id).await.unwrap();
+    let problem = manager.cleanup_problem().unwrap();
     assert!(
-        status
-            .cleanup_error
-            .unwrap()
-            .contains("failed 2 consecutive passes since")
+        problem.ends_with("result expiry: disk is full"),
+        "{problem}"
     );
+    let status = manager.workspace_status(&failing.id).await.unwrap();
+    let error = status.cleanup_error.unwrap();
+    assert!(
+        error.contains("failed 2 consecutive passes since"),
+        "{error}"
+    );
+    assert!(error.ends_with("idle agents: bad config"), "{error}");
+    let status = manager.workspace_status(&other.id).await.unwrap();
+    assert_eq!(status.cleanup_error, None);
 
     manager.record_sweep(Ok(())).await;
-    let status = manager.workspace_status(&workspace.id).await.unwrap();
+    assert_eq!(manager.cleanup_problem(), None);
+    let status = manager.workspace_status(&failing.id).await.unwrap();
     assert_eq!(status.cleanup_error, None);
 }

@@ -46,6 +46,7 @@ async fn status(server: &Server) -> Result<DaemonStatus> {
         managed: server.managed,
         unread_notifications: server.manager.unread_notifications().await?,
         access_stalls: server.manager.file_access.stalls(),
+        cleanup_error: server.manager.cleanup_problem(),
     })
 }
 

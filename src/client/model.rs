@@ -515,8 +515,7 @@ pub struct WorkspaceStatus {
     pub diff_error: Option<String>,
     /// Unread notifications about this workspace.
     pub unread_notifications: u64,
-    /// Why the daemon's automatic cleanup, which removes this workspace when
-    /// it qualifies, is failing or stalled.
+    /// Why the daemon's automatic cleanup fails in this workspace.
     #[serde(default)]
     pub cleanup_error: Option<String>,
     /// Why automatic cleanup keeps this workspace now.

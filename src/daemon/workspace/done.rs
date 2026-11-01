@@ -225,14 +225,13 @@ impl Manager {
     pub async fn sweep_completed(&self) -> Result<()> {
         // A failure in one workspace, such as an unreadable completion of
         // its ancestor, does not skip the others.
-        let mut failed = Vec::new();
+        let mut failed = crate::daemon::cleanup::WorkspaceFailures::default();
         for listed in self.list_workspaces().await? {
             if let Err(error) = self.sweep_completed_workspace(&listed).await {
-                failed.push(format!("{}: {error:#}", listed.name));
+                failed.push(&listed.id, &listed.name, &error);
             }
         }
-        ensure!(failed.is_empty(), "{}", failed.join("; "));
-        Ok(())
+        failed.into_result()
     }
 
     /// Remove `listed` for its own completion or a completed ancestor's.

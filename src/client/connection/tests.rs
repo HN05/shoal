@@ -115,6 +115,7 @@ async fn typed_requests_extract_payloads_and_acknowledgements() {
         managed: false,
         unread_notifications: 3,
         access_stalls: Vec::new(),
+        cleanup_error: None,
     };
     let status: DaemonStatus = reply(Response::new(1, Body::Status(status))).await.unwrap();
     assert_eq!(status.pid, 42);

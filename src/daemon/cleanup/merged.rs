@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 use tokio::time::Instant;
 
 use super::Snapshot;
@@ -87,17 +87,16 @@ async fn sweep_at(manager: &Manager, state: &mut State, now: u64) -> Result<()> 
     state
         .retained
         .retain(|id, _| workspaces.iter().any(|workspace| &workspace.id == id));
-    let mut failed = Vec::new();
+    let mut failed = super::WorkspaceFailures::default();
     for workspace in workspaces {
         if workspace.state != WorkspaceState::Ready {
             continue;
         }
         if let Err(error) = sweep_workspace(manager, state, &workspace, now).await {
-            failed.push(format!("{}: {error:#}", workspace.name));
+            failed.push(&workspace.id, &workspace.name, &error);
         }
     }
-    ensure!(failed.is_empty(), "{}", failed.join("; "));
-    Ok(())
+    failed.into_result()
 }
 
 async fn sweep_workspace(
