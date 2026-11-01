@@ -563,10 +563,10 @@ impl Manager {
     }
 
     /// Why automatic cleanup keeps the workspace, or its idle delay when
-    /// nothing does, inspected as a check of its volume; a failed inspection
-    /// is reported as the reason.
+    /// nothing does, inspected under [`Manager::check_access`]; a failed
+    /// inspection is reported as the reason.
     pub async fn cleanup_reason(&self, workspace: &Workspace) -> CleanupReason {
-        self.check_volume(&workspace.path, self.inspect_cleanup(workspace))
+        self.check_access(&workspace.path, self.inspect_cleanup(workspace))
             .await
             .unwrap_or_else(|error| CleanupReason::InspectionFailed {
                 error: format!("{error:#}"),

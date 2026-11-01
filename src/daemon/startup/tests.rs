@@ -90,11 +90,11 @@ async fn a_client_that_never_sends_its_request_does_not_hold_up_serving() {
 #[tokio::test(start_paused = true)]
 async fn status_names_the_file_access_a_step_waits_on() {
     let (root, manager) = manager().await;
-    let access = &manager.volume_access;
+    let access = &manager.file_access;
     assert_eq!(waiting(access), None);
     let path = root.path().join("workspace");
     let (started, finish) = (tokio::sync::Notify::new(), tokio::sync::Notify::new());
-    let check = manager.check_volume(&path, async {
+    let check = manager.check_access(&path, async {
         started.notify_one();
         finish.notified().await;
         Ok(())
@@ -120,14 +120,14 @@ async fn status_names_the_file_access_a_step_waits_on() {
     );
 
     let stalled = manager
-        .check_volume(&path, std::future::pending::<anyhow::Result<()>>())
+        .check_access(&path, std::future::pending::<anyhow::Result<()>>())
         .await;
     assert!(stalled.is_err());
     assert_eq!(
         waiting(access).as_deref(),
         Some(&*format!(
-            "file access on {} stalled; a macOS privacy prompt may be waiting for an answer",
-            path.display()
+            "file access in {} stalled; a macOS privacy prompt may be waiting for an answer",
+            root.path().display()
         ))
     );
 }

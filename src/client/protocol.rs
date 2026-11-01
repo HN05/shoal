@@ -787,18 +787,18 @@ pub struct DaemonStatus {
     pub uptime_secs: u64,
     pub managed: bool,
     pub unread_notifications: u64,
-    /// Volumes whose file access stalls now.
+    /// Directories whose file access stalls now.
     #[serde(default)]
-    pub volume_stalls: Vec<VolumeStall>,
+    pub access_stalls: Vec<AccessStall>,
 }
 
-/// A volume whose file access stalled, as while macOS waits for an answer to
-/// a privacy prompt for it, until a later check of it finishes.
+/// A directory whose file access stalled, as while macOS waits for an answer
+/// to a privacy prompt, until a later check there finishes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VolumeStall {
-    /// The volume, such as `/Volumes/SSD`, or the checked path itself when it
-    /// is not on a mounted volume.
-    pub volume: std::path::PathBuf,
+pub struct AccessStall {
+    /// The directory holding the checked path, whose other paths' checks
+    /// skip it meanwhile.
+    pub directory: std::path::PathBuf,
     /// The path whose check stalled first.
     pub path: std::path::PathBuf,
     /// Unix seconds.
@@ -807,17 +807,13 @@ pub struct VolumeStall {
     pub reason: String,
 }
 
-impl VolumeStall {
+impl AccessStall {
     /// What the user reads about the stall.
     pub fn message(&self) -> String {
-        let of = if self.path == self.volume {
-            String::new()
-        } else {
-            format!(" of {}", self.path.display())
-        };
         format!(
-            "File access on {} stalled: a check{of} {}. A macOS privacy prompt may be waiting for an answer.",
-            self.volume.display(),
+            "File access in {} stalled: a check of {} {}. A macOS privacy prompt may be waiting for an answer.",
+            self.directory.display(),
+            self.path.display(),
             self.reason
         )
     }

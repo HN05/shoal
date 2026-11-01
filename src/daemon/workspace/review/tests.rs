@@ -562,7 +562,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
 }
 
 #[tokio::test]
-async fn listings_leave_staleness_unknown_on_a_volume_whose_access_stalls() {
+async fn listings_leave_staleness_unknown_where_file_access_stalls() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -582,7 +582,7 @@ async fn listings_leave_staleness_unknown_on_a_volume_whose_access_stalls() {
 
     tokio::time::pause();
     let stalled = manager
-        .check_volume(&workspace.path, std::future::pending::<Result<()>>())
+        .check_access(&workspace.path, std::future::pending::<Result<()>>())
         .await;
     tokio::time::resume();
     assert!(stalled.is_err());

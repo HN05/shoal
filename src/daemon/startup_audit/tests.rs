@@ -50,7 +50,7 @@ async fn recheck_readies_only_workspaces_the_audit_failed_once_they_verify() {
 }
 
 #[tokio::test]
-async fn the_audit_fails_workspaces_on_a_stalled_volume_until_a_recheck_finishes() {
+async fn the_audit_fails_workspaces_whose_file_access_stalls_until_a_recheck_finishes() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -65,7 +65,7 @@ async fn the_audit_fails_workspaces_on_a_stalled_volume_until_a_recheck_finishes
     // run out its time limit.
     tokio::time::pause();
     let stalled = manager
-        .check_volume(&workspace.path, std::future::pending::<Result<()>>())
+        .check_access(&workspace.path, std::future::pending::<Result<()>>())
         .await;
     tokio::time::resume();
     assert!(stalled.is_err());
@@ -80,15 +80,15 @@ async fn the_audit_fails_workspaces_on_a_stalled_volume_until_a_recheck_finishes
         "{error}"
     );
 
-    // The recheck skips the volume until it is due to check it again.
+    // The recheck skips the directory until it is due to check it again.
     manager.recheck_startup_failures().await.unwrap();
     let skipped = manager.workspace(&workspace.id).await.unwrap();
     assert_eq!(skipped.state, WorkspaceState::Failed);
     tokio::time::pause();
-    tokio::time::advance(crate::daemon::volume_access::RECHECK_AFTER).await;
+    tokio::time::advance(crate::daemon::file_access::RECHECK_AFTER).await;
     tokio::time::resume();
     manager.recheck_startup_failures().await.unwrap();
     let ready = manager.workspace(&workspace.id).await.unwrap();
     assert_eq!(ready.state, WorkspaceState::Ready);
-    assert_eq!(manager.volume_access.stalls(), []);
+    assert_eq!(manager.file_access.stalls(), []);
 }

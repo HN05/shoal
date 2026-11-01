@@ -141,8 +141,8 @@ pub struct Manager {
     pub(crate) oneshot_runs: crate::daemon::oneshot::Runs,
     /// The retry each proxied execution's proxy waits to make.
     proxy_retries: std::sync::Mutex<std::collections::HashMap<String, proxy_retries::ProxyRetry>>,
-    /// Volumes whose file access stalls, shared with startup's status answer.
-    pub(crate) volume_access: Arc<crate::daemon::volume_access::VolumeAccess>,
+    /// Directories whose file access stalls, shared with startup's status answer.
+    pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
 }
 
 impl Manager {
@@ -177,7 +177,7 @@ impl Manager {
             reviews: Default::default(),
             oneshot_runs: Default::default(),
             proxy_retries: Default::default(),
-            volume_access: Default::default(),
+            file_access: Default::default(),
         }))
     }
 

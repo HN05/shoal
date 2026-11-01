@@ -20,7 +20,7 @@ use crate::{
 };
 
 /// How long a listing waits for its review checks before it leaves their
-/// staleness unknown, so a volume whose access stalls cannot hold up the
+/// staleness unknown, so stalled file access cannot hold up the
 /// reply.
 const CHECK_LIMIT: Duration = Duration::from_secs(3);
 
@@ -292,7 +292,7 @@ impl Manager {
     }
 
     /// Say whether each mark still describes HEAD. HEAD that cannot be read
-    /// by `deadline`, or is on a volume whose access stalls, leaves staleness
+    /// by `deadline`, or is in a directory whose file access stalls, leaves staleness
     /// unknown rather than failing or holding up a listing.
     pub async fn annotate_review(&self, workspace: &mut Workspace, deadline: tokio::time::Instant) {
         if workspace.review.is_empty() {
@@ -309,7 +309,7 @@ impl Manager {
         workspace: &Workspace,
         deadline: tokio::time::Instant,
     ) -> Option<String> {
-        if self.volume_access.stalled(&workspace.path).is_some() {
+        if self.file_access.stalled(&workspace.path).is_some() {
             return None;
         }
         tokio::time::timeout_at(deadline, current_head(workspace))

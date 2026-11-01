@@ -7,35 +7,40 @@ fn never() -> impl Future<Output = Result<()>> {
 }
 
 #[test]
-fn a_path_under_volumes_stands_for_its_volume_and_any_other_for_itself() {
-    assert_eq!(volume(Path::new(WORKSPACE)), Path::new("/Volumes/SSD"));
+fn a_path_stands_for_the_directory_holding_it() {
     assert_eq!(
-        volume(Path::new("/Users/me/shoal/repo")),
+        directory(Path::new(WORKSPACE)),
+        Path::new("/Volumes/SSD/shoal/repo")
+    );
+    assert_eq!(
+        directory(Path::new("/Users/me/shoal/repo/feature")),
         Path::new("/Users/me/shoal/repo")
     );
-    assert_eq!(volume(Path::new("/Volumes")), Path::new("/Volumes"));
+    assert_eq!(directory(Path::new("/")), Path::new("/"));
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_check_that_runs_out_stalls_its_volume_once_until_a_recheck_finishes() {
-    let access = VolumeAccess::default();
+async fn a_check_that_runs_out_stalls_its_directory_once_until_a_recheck_finishes() {
+    let access = FileAccess::default();
 
     let (result, stall) = access.check(Path::new(WORKSPACE), never()).await;
     let error = format!("{:#}", result.unwrap_err());
     assert!(
-        error.contains("file access on /Volumes/SSD stalled; a macOS privacy prompt"),
+        error.contains("file access in /Volumes/SSD/shoal/repo stalled; a macOS privacy prompt"),
         "{error}"
     );
     let stall = stall.expect("the first stall is new");
-    assert_eq!(stall.volume, Path::new("/Volumes/SSD"));
+    assert_eq!(stall.directory, Path::new("/Volumes/SSD/shoal/repo"));
     assert_eq!(stall.path, Path::new(WORKSPACE));
     assert_eq!(stall.reason, "did not finish within 30s");
     assert_eq!(access.stalls(), std::slice::from_ref(&stall));
 
-    // Another path on the volume skips its check meanwhile.
+    // Another path in the directory skips its check meanwhile.
     let other = Path::new("/Volumes/SSD/shoal/repo/other");
     let (result, again) = access
-        .check::<()>(other, async { panic!("a stalled volume skips its checks") })
+        .check::<()>(other, async {
+            panic!("a stalled directory skips its checks")
+        })
         .await;
     assert!(result.is_err());
     assert_eq!(again, None);
@@ -55,8 +60,8 @@ async fn a_check_that_runs_out_stalls_its_volume_once_until_a_recheck_finishes()
 }
 
 #[tokio::test(start_paused = true)]
-async fn one_check_at_a_time_rechecks_a_stalled_volume() {
-    let access = VolumeAccess::default();
+async fn one_check_at_a_time_rechecks_a_stalled_directory() {
+    let access = FileAccess::default();
     let (_, stall) = access.check(Path::new(WORKSPACE), never()).await;
     assert!(stall.is_some());
     tokio::time::advance(RECHECK_AFTER).await;
@@ -89,8 +94,8 @@ async fn one_check_at_a_time_rechecks_a_stalled_volume() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn an_interrupted_check_stalls_its_volume_and_keeps_its_error() {
-    let access = VolumeAccess::default();
+async fn an_interrupted_check_stalls_its_directory_and_keeps_its_error() {
+    let access = FileAccess::default();
     let (result, stall) = access
         .check(Path::new(WORKSPACE), async {
             Err::<(), _>(anyhow!(
@@ -100,13 +105,13 @@ async fn an_interrupted_check_stalls_its_volume_and_keeps_its_error() {
         .await;
     let error = format!("{:#}", result.unwrap_err());
     assert!(
-        error.starts_with("file access on /Volumes/SSD stalled"),
+        error.starts_with("file access in /Volumes/SSD/shoal/repo stalled"),
         "{error}"
     );
     assert!(error.ends_with("Interrupted system call"), "{error}");
     assert_eq!(stall.unwrap().reason, "was interrupted");
 
-    let access = VolumeAccess::default();
+    let access = FileAccess::default();
     let (_, stall) = access
         .check(Path::new(WORKSPACE), async {
             Err::<(), _>(io::Error::from(io::ErrorKind::Interrupted).into())
@@ -116,8 +121,8 @@ async fn an_interrupted_check_stalls_its_volume_and_keeps_its_error() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_check_that_fails_otherwise_leaves_the_volume_answering() {
-    let access = VolumeAccess::default();
+async fn a_check_that_fails_otherwise_leaves_the_directory_answering() {
+    let access = FileAccess::default();
     let (result, stall) = access
         .check(Path::new(WORKSPACE), async {
             Err::<(), _>(anyhow!("fatal: not a git repository"))
@@ -133,7 +138,7 @@ async fn a_check_that_fails_otherwise_leaves_the_volume_answering() {
 
 #[tokio::test(start_paused = true)]
 async fn waiting_names_the_check_that_has_run_longest() {
-    let access = VolumeAccess::default();
+    let access = FileAccess::default();
     assert_eq!(access.waiting(), None);
     let started = tokio::sync::Notify::new();
     let (finish, finished) = tokio::sync::oneshot::channel::<()>();
@@ -159,13 +164,13 @@ async fn waiting_names_the_check_that_has_run_longest() {
 }
 
 #[tokio::test]
-async fn the_daemon_alerts_once_while_a_volume_stays_stalled() {
+async fn the_daemon_alerts_once_while_a_directory_stays_stalled() {
     let (temp, manager) = crate::test_support::manager().await;
     let path = temp.path().join("workspace");
     tokio::time::pause();
     for _ in 0..2 {
         tokio::time::advance(RECHECK_AFTER).await;
-        let result = manager.check_volume(&path, never()).await;
+        let result = manager.check_access(&path, never()).await;
         assert!(result.is_err());
     }
     tokio::time::resume();
@@ -174,13 +179,14 @@ async fn the_daemon_alerts_once_while_a_volume_stays_stalled() {
     let [alert] = alerts.as_slice() else {
         panic!("expected one alert: {alerts:?}");
     };
-    assert_eq!(alert.kind, NotificationKind::VolumeStalled);
+    assert_eq!(alert.kind, NotificationKind::AccessStalled);
     assert_eq!(
         alert.message,
         format!(
-            "File access on {} stalled: a check did not finish within 30s. A macOS privacy prompt may be waiting for an answer.",
+            "File access in {} stalled: a check of {} did not finish within 30s. A macOS privacy prompt may be waiting for an answer.",
+            temp.path().display(),
             path.display()
         )
     );
-    assert_eq!(manager.volume_access.stalls().len(), 1);
+    assert_eq!(manager.file_access.stalls().len(), 1);
 }

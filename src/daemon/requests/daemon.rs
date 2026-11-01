@@ -45,7 +45,7 @@ async fn status(server: &Server) -> Result<DaemonStatus> {
         uptime_secs: server.started.elapsed().as_secs(),
         managed: server.managed,
         unread_notifications: server.manager.unread_notifications().await?,
-        volume_stalls: server.manager.volume_access.stalls(),
+        access_stalls: server.manager.file_access.stalls(),
     })
 }
 

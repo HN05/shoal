@@ -24,13 +24,13 @@ impl Manager {
     pub async fn workspace_status(&self, selector: &str) -> Result<WorkspaceStatus> {
         let mut inspection = self.inspect_workspace(selector).await?;
         let path = inspection.workspace.path.clone();
-        let diff = self.check_volume(&path, self.diff_summary(&inspection.workspace));
+        let diff = self.check_access(&path, self.diff_summary(&inspection.workspace));
         let (diff, diff_error) = match diff.await {
             Ok(diff) => (Some(diff), None),
             Err(error) => (None, Some(format!("{error:#}"))),
         };
         let remote = self
-            .check_volume(&path, repository::remote_url_from_path(&path))
+            .check_access(&path, repository::remote_url_from_path(&path))
             .await;
         let account = self.user_account();
         let hosts = self.forge_hosts();

@@ -440,22 +440,24 @@ Before registration, workspace creation or an export writes a directory, the
 daemon creates a file there itself under a time limit: its file access can
 differ from the terminal's, and on macOS opening a file on a volume it lacks
 access to can wait for a permission prompt no one sees.
-While macOS waits for an answer to a privacy prompt for a volume, whichever
-process it is for, every new process that opens a file there waits until the
-prompt is answered or the kernel interrupts it (`Interrupted system call`), so
-each Git the daemon starts does. Shoal cannot end the wait, only keep it from
-holding up unrelated work. The startup audit, its recheck, the sweep's branch
-observation and the Git reads of `shoal status` check a worktree within 30
-seconds, a status reporting what it could not read; one that runs out or is
-interrupted records its volume as stalled, which the daemon reports once as an
-alert and in `daemon status` until a check finishes. The volume is
-`/Volumes/<name>` from the path alone, since reading the filesystem could stall
-too, or else the path itself. Those checks skip a stalled volume until 20 seconds
-after its last check, and while another check rechecks it, so each sweep
-rechecks it once. Listings read HEAD for
-review marks within three seconds in all and skip stalled volumes, leaving
-staleness unknown, so `shoal attach` and `shoal work` answer from the daemon's
-state.
+File access in a worktree can wait without end: while macOS waits for an
+answer to a privacy prompt, whichever process it is for, every new process that
+opens a file in the protected location waits until the prompt is answered or the
+kernel interrupts it (`Interrupted system call`), so each Git the daemon starts
+does. Shoal cannot end the wait, only keep it from holding up unrelated work,
+and does not depend on where the worktree is or which permission it waits on.
+The startup audit, its recheck, the sweep's branch observation and the Git reads
+of `shoal status` check a worktree within 30 seconds, a status reporting what it
+could not read; one that runs out or is interrupted records the directory
+holding the worktree as stalled, which the daemon reports once as an alert and
+in `daemon status` until a check there finishes. The directory comes from the
+path alone, since reading the filesystem could stall too, and groups a
+repository's workspaces, which a prompt for their location holds together.
+Those checks skip a stalled directory until 20 seconds after its last check, and
+while another check rechecks it, so each sweep rechecks it once. Listings read
+HEAD for review marks within three seconds in all and skip stalled directories,
+leaving staleness unknown, so `shoal attach` and `shoal work` answer from the
+daemon's state.
 Repository roots and explicit workspace paths resolve existing symlinks and lexical
 `..` before boundary checks and creation, even when trailing components are missing.
 An explicit workspace path overrides the destination for one creation, without
@@ -2339,7 +2341,7 @@ auditing, serving requests, or cleanup; failure aborts startup and leaves commit
 migrations available for retry. The daemon binds its socket before this work:
 until it ends, requests wait, except that a request its client sends again is
 closed unanswered and a status request still waiting after two seconds is refused
-with the running step, how long it has run, and a stalled volume or a check that
+with the running step, how long it has run, and a stalled directory or a check that
 has waited five seconds; a step that runs past a minute is logged. Startup
 audits but never deletes, kills or releases leases, and clears an unknown
 execution only when stopped-agent reconciliation proves it ended. The cleanup sweep rechecks only the workspaces the

@@ -18,7 +18,7 @@ pub(crate) use crate::client::cleanup::{
 };
 use crate::{
     daemon::{
-        caches::Emptying, events::EventCause, log, notifications::NotificationKind, volume_access,
+        caches::Emptying, events::EventCause, file_access, log, notifications::NotificationKind,
         workspace::Manager,
     },
     model::{CleanupReason, Workspace},
@@ -355,7 +355,7 @@ async fn observe_branches(manager: &Manager) -> Result<()> {
             continue;
         }
         let observed = manager.observe_workspace_branch(&workspace);
-        if let Err(error) = manager.check_volume(&workspace.path, observed).await {
+        if let Err(error) = manager.check_access(&workspace.path, observed).await {
             log!("branch observation skipped {}: {error:#}", workspace.name);
         }
     }
@@ -363,14 +363,14 @@ async fn observe_branches(manager: &Manager) -> Result<()> {
 }
 
 /// Whether `path` is a directory, read off the runtime's threads and within
-/// a check's time limit, since a stalled volume can hold the read. The daemon's
+/// a check's time limit, since stalled file access can hold the read. The daemon's
 /// own read says nothing about the processes it starts there, so it records
 /// no stall.
 async fn is_dir(path: &std::path::Path) -> bool {
     let path = path.to_owned();
     let read = tokio::task::spawn_blocking(move || path.is_dir());
     matches!(
-        tokio::time::timeout(volume_access::LIMIT, read).await,
+        tokio::time::timeout(file_access::LIMIT, read).await,
         Ok(Ok(true))
     )
 }

@@ -16,7 +16,7 @@ use tokio::{
     time::Instant,
 };
 
-use super::{Server, connections, log, read_request, serve_request, volume_access::VolumeAccess};
+use super::{Server, connections, file_access::FileAccess, log, read_request, serve_request};
 use crate::protocol::{self, Body, DaemonMethod, ErrorCode, Method, Operation, Response, timing};
 
 /// A check of a path that has run this long is named in a status answer.
@@ -34,7 +34,7 @@ pub(super) struct Startup {
 struct Progress {
     step: Mutex<Step>,
     /// The file access the steps wait on, once the state is open.
-    access: OnceLock<Arc<VolumeAccess>>,
+    access: OnceLock<Arc<FileAccess>>,
 }
 
 #[derive(Clone, Copy)]
@@ -63,7 +63,7 @@ impl Startup {
     }
 
     /// Name the checks of `access` that wait long in status answers.
-    pub(super) fn follow(&self, access: Arc<VolumeAccess>) {
+    pub(super) fn follow(&self, access: Arc<FileAccess>) {
         let _ = self.progress.access.set(access);
     }
 
@@ -169,11 +169,11 @@ async fn answer_step(mut stream: UnixStream, request_id: u64, progress: &Progres
     let _ = protocol::write(&mut stream, &response).await;
 }
 
-/// The stalled volume, or else the check that has run longer than
+/// The stalled directory, or else the check that has run longer than
 /// [`SLOW_ACCESS`], with the permission it may wait on.
-fn waiting(access: &VolumeAccess) -> Option<String> {
+fn waiting(access: &FileAccess) -> Option<String> {
     let waiting = match access.stalls().first() {
-        Some(stall) => format!("file access on {} stalled", stall.volume.display()),
+        Some(stall) => format!("file access in {} stalled", stall.directory.display()),
         None => {
             let (path, waited) = access
                 .waiting()

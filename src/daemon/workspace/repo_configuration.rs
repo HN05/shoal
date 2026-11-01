@@ -293,8 +293,8 @@ async fn load_worktree_file(
     off_runtime(move || config::repo::load(&path)).await
 }
 
-/// Run the blocking file `read` on the blocking pool, so a volume whose
-/// access stalls holds no runtime thread and a caller's time limit applies.
+/// Run the blocking file `read` on the blocking pool, so file access that
+/// stalls holds no runtime thread and a caller's time limit applies.
 async fn off_runtime<T: Send + 'static>(
     read: impl FnOnce() -> Result<T> + Send + 'static,
 ) -> Result<T> {

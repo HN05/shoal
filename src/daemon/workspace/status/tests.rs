@@ -14,7 +14,7 @@ fn numstat_rejects_incomplete_records() {
 }
 
 #[tokio::test]
-async fn status_reports_git_checks_on_a_stalled_volume_as_unavailable() {
+async fn status_reports_git_checks_that_stall_as_unavailable() {
     let (temp, manager) = crate::test_support::manager().await;
     let checkout = crate::test_support::repository(temp.path(), "repo");
     let repo = manager
@@ -30,7 +30,7 @@ async fn status_reports_git_checks_on_a_stalled_volume_as_unavailable() {
 
     tokio::time::pause();
     let stalled = manager
-        .check_volume(&workspace.path, std::future::pending::<Result<()>>())
+        .check_access(&workspace.path, std::future::pending::<Result<()>>())
         .await;
     tokio::time::resume();
     assert!(stalled.is_err());

@@ -18,6 +18,7 @@ pub mod environment;
 pub mod events;
 mod execution_connection;
 mod execution_recovery;
+pub(crate) mod file_access;
 mod file_copies;
 pub(crate) mod forge_hosts;
 pub(crate) mod handoff;
@@ -55,7 +56,6 @@ mod subscriptions;
 pub(crate) mod test_daemon;
 mod tmp_dirs;
 mod untracked;
-pub(crate) mod volume_access;
 mod warnings;
 pub mod workspace;
 pub mod workspace_files;
@@ -240,7 +240,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     let manager = startup
         .step("opening the state database", Manager::open(paths.clone()))
         .await?;
-    startup.follow(manager.volume_access.clone());
+    startup.follow(manager.file_access.clone());
     startup
         .step(
             "quarantining interrupted operations",
