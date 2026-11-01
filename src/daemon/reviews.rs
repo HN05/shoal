@@ -245,22 +245,45 @@ impl Manager {
     }
 
     /// Resolve `finding` with `outcome`, or reopen it, and keep it among its
-    /// repository's false positives only while it is resolved as one.
+    /// repository's false positives only while it is resolved as one. When
+    /// the false positives cannot be kept, the finding keeps its outcome.
     pub async fn resolve_finding(
         &self,
         finding: FindingId,
         outcome: Option<Outcome>,
     ) -> Result<Review> {
-        let reason = match &outcome {
-            Some(Outcome::FalsePositive { reason }) => Some(reason.clone()),
-            _ => None,
-        };
+        // Moves and removal take this gate too. Holding it over both steps
+        // keeps concurrent resolves in one order in the outcome and the file.
+        let registry = self.gates.lock_registry().await;
+        let resolved = self.stored_review(finding.review).await?;
+        let previous = resolved
+            .findings
+            .iter()
+            .find(|listed| listed.id == finding)
+            .and_then(|listed| listed.outcome.clone());
+        self.record_outcome(finding, outcome.clone()).await?;
+        if let Err(error) = self
+            .keep_false_positive(&resolved, finding, outcome.as_ref())
+            .await
+        {
+            self.record_outcome(finding, previous).await?;
+            return Err(error);
+        }
+        drop(registry);
+        self.review(finding.review).await
+    }
+
+    /// Store `outcome` as `finding`'s, or reopen it without one.
+    async fn record_outcome(&self, finding: FindingId, outcome: Option<Outcome>) -> Result<()> {
         self.store
             .run(move |db| store::resolve(db, finding, outcome.as_ref()))
-            .await?;
-        let review = self.review(finding.review).await?;
-        self.keep_false_positive(&review, finding, reason).await?;
-        Ok(review)
+            .await
+    }
+
+    /// Review `id` as stored, without what its workspace says of it.
+    async fn stored_review(&self, id: i64) -> Result<Review> {
+        let review = self.store.run(move |db| store::load(db, id)).await?;
+        review.with_context(|| format!("review {id} does not exist"))
     }
 
     /// The workspace review `id` is of.

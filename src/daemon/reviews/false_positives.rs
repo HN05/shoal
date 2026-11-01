@@ -10,7 +10,7 @@ use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 use super::super::workspace::Manager;
 use crate::{
     fsutil::{self, Permissions, ReplaceOptions},
-    reviews::{FindingId, Review},
+    reviews::{FindingId, Outcome, Review},
 };
 
 /// What a new file starts with.
@@ -45,20 +45,21 @@ impl Manager {
         tokio::task::spawn_blocking(move || read(&path)).await?
     }
 
-    /// Keep `finding` of `review` in its repository's false positives with
-    /// `reason`, or drop it from them without one.
+    /// Keep `finding` of `review` in its repository's false positives while
+    /// `outcome` is one, or drop it from them. The caller holds the registry
+    /// gate, which moves and removal take, so the file stays where it was
+    /// found.
     pub(super) async fn keep_false_positive(
         &self,
         review: &Review,
         finding: FindingId,
-        reason: Option<String>,
+        outcome: Option<&Outcome>,
     ) -> Result<()> {
-        let entry = reason
-            .map(|reason| entry(review, finding, reason))
-            .transpose()?;
+        let entry = match outcome {
+            Some(Outcome::FalsePositive { reason }) => Some(entry(review, finding, reason)?),
+            _ => None,
+        };
         let repository_id = self.workspace(&review.workspace_id).await?.repository_id;
-        // Moves and removal take this gate, so the file stays where it was found.
-        let _registry = self.gates.lock_registry().await;
         let Some(path) = self.false_positives_path(&repository_id).await? else {
             return Ok(());
         };
@@ -67,7 +68,7 @@ impl Manager {
 }
 
 /// `finding` of `review` as a false positive for `reason`.
-fn entry(review: &Review, finding: FindingId, reason: String) -> Result<FalsePositive> {
+fn entry(review: &Review, finding: FindingId, reason: &str) -> Result<FalsePositive> {
     let resolved = review
         .findings
         .iter()
@@ -77,7 +78,7 @@ fn entry(review: &Review, finding: FindingId, reason: String) -> Result<FalsePos
         finding: Some(finding),
         claim: resolved.title.clone(),
         path: resolved.path.clone(),
-        reason,
+        reason: reason.to_owned(),
     })
 }
 
@@ -93,26 +94,36 @@ fn read(path: &Path) -> Result<Vec<FalsePositive>> {
 }
 
 /// Replace the entry of `finding` in the file at `path` with `entry`, or
-/// drop it without one, keeping the file's comments and layout. A missing
-/// file is created only for an entry.
+/// drop it without one. A missing file is created only for an entry.
 fn record(path: &Path, finding: FindingId, entry: Option<FalsePositive>) -> Result<()> {
     let text = load(path)?;
-    let mut document: DocumentMut = text
-        .as_deref()
-        .unwrap_or(HEADER)
-        .parse()
-        .with_context(|| format!("parse {}", path.display()))?;
-    let removed = without_finding(&mut document, finding)
+    let edited = with_entry(text.as_deref(), finding, entry.as_ref())
         .with_context(|| format!("edit {}", path.display()))?;
-    if let Some(entry) = &entry {
+    match edited {
+        Some(edited) => store(path, &edited, text.is_some()),
+        None => Ok(()),
+    }
+}
+
+/// `text`, or a new file without it, with the entry of `finding` replaced
+/// by `entry` or dropped without one, keeping its comments and layout;
+/// none when nothing changes. Refuses an invalid result.
+fn with_entry(
+    text: Option<&str>,
+    finding: FindingId,
+    entry: Option<&FalsePositive>,
+) -> Result<Option<String>> {
+    let mut document: DocumentMut = text.unwrap_or(HEADER).parse()?;
+    let removed = without_finding(&mut document, finding)?;
+    if let Some(entry) = entry {
         append(&mut document, entry);
     }
     if !removed && entry.is_none() {
-        return Ok(());
+        return Ok(None);
     }
     let edited = document.to_string();
-    parse(&edited).with_context(|| format!("parse {}", path.display()))?;
-    store(path, &edited, text.is_some())
+    parse(&edited)?;
+    Ok(Some(edited))
 }
 
 /// Remove the entries of `finding` from `document`, saying whether there

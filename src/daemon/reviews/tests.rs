@@ -523,6 +523,33 @@ async fn later_reviews_receive_a_false_positive_until_it_is_reopened() {
 }
 
 #[tokio::test]
+async fn a_finding_keeps_its_outcome_when_its_false_positive_cannot_be_kept() {
+    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let finding = fixture.review().await.findings[0].id;
+    let repository = &fixture.workspace.repository_id;
+    let path = fixture
+        .manager
+        .false_positives_path(repository)
+        .await
+        .unwrap()
+        .unwrap();
+    // A directory where the file belongs can be neither read nor replaced.
+    std::fs::create_dir_all(&path).unwrap();
+    let reason = "The field's type names it.".to_owned();
+    let error = fixture
+        .manager
+        .resolve_finding(finding, Some(Outcome::FalsePositive { reason }))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("false-positives.toml"),
+        "{error:#}"
+    );
+    let review = fixture.manager.review(finding.review).await.unwrap();
+    assert_eq!(review.findings[0].outcome, None);
+}
+
+#[tokio::test]
 async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
     let slow = until_tests_end();
     let fixture = fixture(
