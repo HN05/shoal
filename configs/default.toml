@@ -181,7 +181,8 @@ default_mode = "cli"
 close_when_done = true
 # Where launches from a terminal no host serves run: detached zmx sessions
 # ("zmx"), tabs on the local Herdr server ("herdr"), windows on the local Rex
-# server ("rex"), or windows on the default tmux server ("tmux").
+# server ("rex"), windows on the default tmux server ("tmux"), or Zellij
+# sessions of their own ("zellij").
 default_host = "zmx"
 
 [terminal.herdr]
@@ -223,6 +224,19 @@ session_name = "{repo}"
 # Override [terminal] close_when_done for tmux windows.
 # close_when_done = true
 # window_name = "{repo}: {branch}"
+
+[terminal.zellij]
+# Use Zellij tabs and panes inside Zellij; unset, only when default_host is
+# "zellij". false runs as in a plain terminal.
+# enabled = true
+# Run issue/add in a new tab inside Zellij, after interactive choices.
+new_tab = true
+# Open that place as a new tab ("tab") or a split beside the caller's pane
+# ("split").
+placement = "tab"
+# Override [terminal] close_when_done for Zellij tabs.
+# close_when_done = true
+# tab_name = "{repo}: {branch}"
 
 [terminal.happy]
 # Offer happy-claude and happy-codex, which start detached Happy sessions.

@@ -13,6 +13,7 @@ git_profile = 'work'\n\
 [terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\
 [terminal.rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
 [terminal.tmux]\nenabled = true\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
+[terminal.zellij]\nenabled = true\nnew_tab = false\nplacement = 'split'\ntab_name = '{branch}'\nclose_when_done = false\n\
 [terminal.happy]\nenabled = true\n\
 [setup]\ncommand = 'setup'\ncopy_ignored = false\npresets = ['cargo']\n[setup.seed]\ncommand = 'scripts/seed'\npaths = ['target']\n\
 [hooks]\npre_setup = 'pre-setup'\npost_remove = 'post-remove'\npost_done = 'post-done'\npost_ready = 'post-ready'\npost_agent_exit = 'agent-exit'\n\

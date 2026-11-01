@@ -177,6 +177,8 @@ pub struct TerminalConfig {
     #[option(section)]
     pub tmux: TmuxConfig,
     #[option(section)]
+    pub zellij: ZellijConfig,
+    #[option(section)]
     pub happy: HappyConfig,
 }
 
@@ -799,6 +801,32 @@ pub struct TmuxConfig {
     /// Overrides the top-level `close_when_done` for tmux windows.
     pub close_when_done: Option<bool>,
 }
+
+/// Zellij is opt-in: unset, `enabled` follows whether `default_host` names it.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = Zellij)]
+pub struct ZellijConfig {
+    pub enabled: Option<bool>,
+    #[option(default = true)]
+    pub new_tab: Option<bool>,
+    #[option(default = TabPlacement::default())]
+    pub placement: Option<TabPlacement>,
+    pub tab_name: Option<String>,
+    /// Overrides the top-level `close_when_done` for Zellij tabs.
+    pub close_when_done: Option<bool>,
+}
+
+states!(
+    #[derive(Default)]
+    /// Where a host with tabs opens a place beside the caller's: a new tab,
+    /// or a split of the caller's pane.
+    TabPlacement {
+        #[default]
+        Tab => "tab",
+        Split => "split",
+    }
+);
 
 states!(
     #[derive(Default)]
