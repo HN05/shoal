@@ -60,7 +60,7 @@ async fn current_or_picked_repository(ctx: &Context) -> Result<ItemContext> {
     }
     ensure!(ctx.interactive(), "{NO_REPOSITORY}");
     let repos = client::repositories(&ctx.paths).await?;
-    let picked = ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)?;
+    let picked = ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)?;
     Ok(ItemContext::Checkout(picked))
 }
 
