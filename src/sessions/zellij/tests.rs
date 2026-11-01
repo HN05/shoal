@@ -45,7 +45,7 @@ fn servers_are_this_users_zellij_serving_the_session() {
 #[test]
 fn panes_list_terminals_without_plugins() {
     let listed = r#"[
-        {"id": 0, "is_plugin": true, "tab_id": 0, "tab_name": "Tab #1", "exited": false},
+        {"id": 0, "is_plugin": true, "tab_id": 0, "tab_name": "Tab #1", "plugin_url": "tab-bar"},
         {"id": 2, "is_plugin": false, "tab_id": 1, "tab_name": "work", "exited": true,
          "pane_command": "/bin/zsh -l", "pane_cwd": "/work"}
     ]"#;
@@ -60,6 +60,24 @@ fn panes_list_terminals_without_plugins() {
         }]
     );
     assert!(parse_panes("").unwrap().is_empty());
+}
+
+#[test]
+fn the_users_plugins_are_panes_but_layout_bars_are_not() {
+    let listed = r#"[
+        {"id": 1, "is_plugin": true, "tab_id": 0, "plugin_url": "tab-bar"},
+        {"id": 2, "is_plugin": true, "tab_id": 0, "plugin_url": "zellij:status-bar"},
+        {"id": 0, "is_plugin": true, "tab_id": 0, "plugin_url": "zellij:link", "is_suppressed": true},
+        {"id": 4, "is_plugin": true, "tab_id": 0, "plugin_url": "zellij:strider"},
+        {"id": 3, "is_plugin": false, "tab_id": 0}
+    ]"#;
+    let panes = parse_panes(listed).unwrap();
+    let ids: Vec<&str> = panes.iter().map(|pane| pane.id.as_str()).collect();
+    assert_eq!(ids, ["plugin_4", "terminal_3"]);
+    assert!(!panes[0].is_terminal() && panes[1].is_terminal());
+    // The plugin keeps the tab from closing with the terminal.
+    assert!(!alone_in_tab(&panes[1], &panes));
+    assert!(alone_in_tab(&panes[1], &panes[1..]));
 }
 
 #[test]
@@ -277,7 +295,6 @@ async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
         .open_tab(server.session, &server.shell(&command))
         .await
         .unwrap();
-    assert!(!opened.own_session);
     assert_eq!(Some(opened.socket_dir.as_path()), zellij.socket_dir());
     let place = PaneRef {
         session: &opened.session,
@@ -299,14 +316,11 @@ async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
         "the user's pane, the tab's and its split"
     );
 
-    zellij.close(place, Some("1:1"), false).await.unwrap();
-    zellij.close(place, None, false).await.unwrap();
+    zellij.close(place, Some("1:1")).await.unwrap();
+    zellij.close(place, None).await.unwrap();
     assert!(zellij.pane(place, None).await.unwrap().is_some());
 
-    zellij
-        .close(place, Some(&opened.instance), false)
-        .await
-        .unwrap();
+    zellij.close(place, Some(&opened.instance)).await.unwrap();
     wait_until_gone(zellij, place).await;
     let split = PaneRef {
         session: &split.session,
@@ -314,10 +328,7 @@ async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
     };
     assert!(zellij.pane(split, None).await.unwrap().is_some());
     assert_eq!(zellij.panes(server.session).await.unwrap().len(), 2);
-    zellij
-        .close(place, Some(&opened.instance), false)
-        .await
-        .unwrap();
+    zellij.close(place, Some(&opened.instance)).await.unwrap();
 }
 
 #[tokio::test]

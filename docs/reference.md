@@ -1299,8 +1299,9 @@ its agent was recorded in, named after its tab: attach selects the tab and pane
 and switches your Zellij client to its session, or attaches a client from
 outside Zellij. A tab is renamed only while the pane Shoal opened is alone in
 it. Shoal closes only the panes it created, as it closes Rex blocks, and never
-their tab's other panes, other tabs or sessions; it ends a session it created
-for a place once no other pane is left there. A pane is recorded with its
+their tab's other panes or plugins, other tabs or sessions; it closes a tab
+with the last pane there, and ends a session with the last pane there, as
+Zellij does while a client shows the session. A pane is recorded with its
 session and its server's process and start time, so a pane under the same ID
 after the session restarts is never Shoal's. Zellij takes no condition with a
 command, so Shoal checks the server just before each command on a recorded

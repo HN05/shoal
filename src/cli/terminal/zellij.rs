@@ -135,7 +135,7 @@ impl Places for Zellij {
             if instance.is_none() && here.as_deref() != Some(place) {
                 return;
             }
-            let renamed = rename_alone(&Server::here(), place, instance, None, label).await;
+            let renamed = rename_alone(Server::here(), place, instance, None, label).await;
             if let Err(error) = renamed {
                 eprintln!("warning: cannot rename the Zellij tab of {place}: {error:#}");
             }
@@ -155,7 +155,7 @@ impl Places for Zellij {
                 return Ok(());
             };
             let server = Server::recorded(&place.data);
-            rename_alone(&server, place.id(), Some(instance), Some(old), new).await
+            rename_alone(server, place.id(), Some(instance), Some(old), new).await
         })
     }
 }
@@ -170,7 +170,8 @@ impl Watches for Zellij {
             let Some(pane) = parse_place(&place.id) else {
                 return Ok(PlaceState::Gone);
             };
-            let pane = Server::here().pane(pane, place.instance.as_deref()).await?;
+            let server = Server::here().reaching(pane.session).await?;
+            let pane = server.pane(pane, place.instance.as_deref()).await?;
             Ok(match pane {
                 Some(_) => PlaceState::Open(None),
                 None => PlaceState::Gone,
@@ -195,10 +196,10 @@ impl Sessions for Zellij {
     /// instance it was recorded on; none for a place recorded without one.
     fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
         Box::pin(async move {
-            let (Ok(instance), Some(pane)) = (instance_of(place), parse_place(place.id())) else {
+            let (Ok(instance), Ok((server, pane))) = (instance_of(place), reach(place).await)
+            else {
                 return Ok(None);
             };
-            let server = Server::recorded(&place.data);
             let Some(open) = server.pane(pane, Some(instance)).await? else {
                 return Ok(None);
             };
@@ -215,8 +216,9 @@ impl Demos for Zellij {
 
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
         Box::pin(async move {
-            Server::recorded(&place.data)
-                .capture(pane_of(place)?, instance_of(place)?, SCREEN_LINES)
+            let (server, pane) = reach(place).await?;
+            server
+                .capture(pane, instance_of(place)?, SCREEN_LINES)
                 .await
         })
     }
@@ -225,9 +227,8 @@ impl Demos for Zellij {
 impl Types for Zellij {
     fn send_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            Server::recorded(&place.data)
-                .write(pane_of(place)?, instance_of(place)?, keys)
-                .await
+            let (server, pane) = reach(place).await?;
+            server.write(pane, instance_of(place)?, keys).await
         })
     }
 }
@@ -257,7 +258,7 @@ fn origin() -> Option<Origin> {
     let pane = pane_of_number(&var(PANE_VAR)?)?;
     let data = Server::here()
         .socket_dir()
-        .map(|dir| Server::data(dir, false))
+        .map(Server::data)
         .unwrap_or_default();
     Some(Origin {
         host: HostName::Zellij,
@@ -269,10 +270,24 @@ fn origin() -> Option<Origin> {
     })
 }
 
-/// The sessions of `origin`'s socket directory, or the ones this process
-/// reaches.
-fn server_of(origin: Option<&Origin>) -> Server {
-    origin.map_or_else(Server::here, |origin| Server::recorded(&origin.data))
+/// The sessions of `origin`'s session, or the ones this process reaches.
+async fn server_for(origin: Option<&Origin>) -> Result<Server> {
+    let Some(origin) = origin else {
+        return Ok(Server::here());
+    };
+    let server = Server::recorded(&origin.data);
+    match &origin.group {
+        Some(session) => server.reaching(session).await,
+        None => Ok(server),
+    }
+}
+
+/// The sessions holding the pane `place` names, by the socket directory
+/// its record names or where its session's server listens, and the pane.
+async fn reach(place: &Origin) -> Result<(Server, PaneRef<'_>)> {
+    let pane = pane_of(place)?;
+    let server = Server::recorded(&place.data).reaching(pane.session).await?;
+    Ok((server, pane))
 }
 
 /// The pane `place` names.
@@ -312,7 +327,7 @@ async fn open_place(
     split: Option<&str>,
     shell: &Shell<'_>,
 ) -> Result<Origin> {
-    let server = server_of(origin);
+    let server = server_for(origin).await?;
     server.ensure_supported().await?;
     let opened = match shown_session(&server, origin).await? {
         Some(session) => match split.and_then(parse_place) {
@@ -338,7 +353,7 @@ fn opened_place(opened: Opened) -> Origin {
     Origin {
         host: HostName::Zellij,
         place: Some(place_id(&opened.session, &opened.pane)),
-        data: Server::data(&opened.socket_dir, opened.own_session),
+        data: Server::data(&opened.socket_dir),
         group: Some(opened.session),
         owned: true,
         instance: Some(opened.instance),
@@ -369,10 +384,9 @@ async fn run_at_prompt(
     argv: &[OsString],
     env: &[(&str, String)],
 ) -> Result<bool> {
-    let (Ok(instance), Some(pane)) = (instance_of(place), parse_place(place.id())) else {
+    let (Ok(instance), Ok((server, pane))) = (instance_of(place), reach(place).await) else {
         return Ok(false);
     };
-    let server = Server::recorded(&place.data);
     let Some(open) = server.pane(pane, Some(instance)).await? else {
         return Ok(false);
     };
@@ -443,8 +457,7 @@ async fn await_prompt(server: &Server, pane: PaneRef<'_>, instance: &str) {
 /// the pane's session, or by a client this terminal attaches from outside
 /// Zellij.
 async fn reveal(place: &Origin) -> Result<()> {
-    let server = Server::recorded(&place.data);
-    let pane = pane_of(place)?;
+    let (server, pane) = reach(place).await?;
     let open = server
         .pane(pane, Some(instance_of(place)?))
         .await?
@@ -477,13 +490,14 @@ async fn clients_on_tab(server: &Server, session: &str, tab: u64) -> Result<u32>
 /// user's tab its name, and a pane that is gone, or under its ID on a
 /// server instance other than `instance`, leaves nothing to rename.
 async fn rename_alone(
-    server: &Server,
+    server: Server,
     place: &str,
     instance: Option<&str>,
     old: Option<&str>,
     label: &str,
 ) -> Result<()> {
     let pane = parse_place(place).context("invalid Zellij place")?;
+    let server = server.reaching(pane.session).await?;
     let Some(open) = server.pane(pane, instance).await? else {
         return Ok(());
     };

@@ -389,6 +389,42 @@ fn removal_leaves_a_pane_recorded_on_an_earlier_server() {
 }
 
 #[test]
+fn additions_outside_zellij_open_sessions_that_removal_ends() {
+    let fixture = Fixture::with_config(Some(&format!(
+        "machine.max_agents = 'none'\n[terminal]\ndefault_host = 'zellij'\n{AGENT}"
+    )));
+    let Some(zellij) = ZellijServer::start(&fixture) else {
+        return;
+    };
+    let repo = fixture.repo.to_str().unwrap();
+    thread::scope(|scope| {
+        // The launch attaches this terminal to the new session until it ends.
+        let added = scope.spawn(|| {
+            fixture.terminal_command(
+                zellij.reaching(
+                    fixture
+                        .command()
+                        .current_dir(&fixture.repo)
+                        .args(["add", repo, "outside", "--agent", "pi"]),
+                ),
+                "",
+                true,
+            )
+        });
+        wait_for_agent(&fixture, "outside");
+        assert!(zellij.sessions().contains(&"outside".to_owned()));
+        assert_eq!(sessions(&fixture, "outside"), ["outside"]);
+        fixture.ok(&["rm", "outside", "--yes"]);
+        wait_until("the session Shoal opened to end", || {
+            !zellij.sessions().contains(&"outside".to_owned())
+        });
+        let (_, transcript) = added.join().unwrap();
+        assert!(transcript.contains("outside"), "{transcript}");
+    });
+    assert!(zellij.pane_open("caller", USERS));
+}
+
+#[test]
 fn demos_open_in_sessions_of_their_own_outside_zellij_and_take_input() {
     let fixture = Fixture::with_config(Some("[terminal]\ndefault_host = 'zellij'\n"));
     let Some(zellij) = ZellijServer::start(&fixture) else {

@@ -1016,9 +1016,12 @@ one, since only it can tell whether a client shows a session. Zellij runs a
 server per session and numbers panes per server, so a place's ID names its
 session and pane, it records the socket directory, and its instance is the
 server's process and birth; Zellij takes no condition with a command, so the
-host checks the instance just before each command on a recorded pane. A close
-of a pane in a session Shoal created for it alone ends that session once no
-other pane is left, so no empty session outlives its place.
+host checks the instance just before each command on a recorded pane. Zellij
+closes a tab or session with its last pane only while a client shows the
+session, so a close ends either along with the last pane there, as an attached
+client would see it, leaving no empty tab or session; the pane records nothing
+of how its session began, since the place records itself from its own
+environment.
 
 Terminal agent launches run in zmx sessions so agents outlive the terminal:
 detaching or closing it leaves the agent running, and `attach` reattaches. zmx

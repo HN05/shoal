@@ -22,9 +22,9 @@ use crate::{env, subprocess::Run, tools::Tool};
 /// What a Zellij origin's data records: the socket directory of its
 /// session's server.
 const SOCKET_DIR: &str = "socket_dir";
-/// What a Zellij origin's data records for a session Shoal created for the
-/// place alone.
-const OWN_SESSION: &str = "own_session";
+/// The plugins Zellij's layouts put in every tab, which are no pane of the
+/// user's.
+const LAYOUT_PLUGINS: &[&str] = &["tab-bar", "status-bar", "compact-bar"];
 /// The oldest Zellij Shoal supports, the first that opens tabs and panes
 /// without focusing them.
 const OLDEST: (u32, u32) = (0, 45);
@@ -68,9 +68,10 @@ pub(crate) struct PaneRef<'a> {
     pub pane: &'a str,
 }
 
-/// A pane and where it sits now.
+/// A pane and where it sits now: a terminal, or a plugin the user opened.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Pane {
+    /// Such as `terminal_3` or `plugin_2`.
     pub id: String,
     pub tab: u64,
     pub tab_name: String,
@@ -88,8 +89,6 @@ pub(crate) struct Opened {
     pub pane: String,
     pub instance: String,
     pub socket_dir: PathBuf,
-    /// Whether Shoal created the session for this pane alone.
-    pub own_session: bool,
 }
 
 /// A pane to open: in a tab of its own, beside a pane, or in a session of
@@ -115,6 +114,10 @@ struct Server {
 struct Listed {
     id: u64,
     is_plugin: bool,
+    #[serde(default)]
+    is_suppressed: bool,
+    #[serde(default)]
+    plugin_url: Option<String>,
     tab_id: u64,
     #[serde(default)]
     tab_name: String,
@@ -122,6 +125,13 @@ struct Listed {
     exited: bool,
     #[serde(default)]
     pane_command: Option<String>,
+}
+
+impl Pane {
+    /// Whether the pane is a terminal rather than a plugin.
+    pub fn is_terminal(&self) -> bool {
+        self.id.starts_with("terminal_")
+    }
 }
 
 impl Zellij {
@@ -143,28 +153,33 @@ impl Zellij {
         }
     }
 
-    /// What an origin records to reach a session in `socket_dir`, and
-    /// whether Shoal created that session for the place alone.
-    pub fn data(socket_dir: &Path, own_session: bool) -> BTreeMap<String, String> {
-        let mut data = BTreeMap::from([(
+    /// What an origin records to reach a session in `socket_dir`.
+    pub fn data(socket_dir: &Path) -> BTreeMap<String, String> {
+        BTreeMap::from([(
             SOCKET_DIR.to_owned(),
             socket_dir.to_string_lossy().into_owned(),
-        )]);
-        if own_session {
-            data.insert(OWN_SESSION.to_owned(), "1".to_owned());
+        )])
+    }
+
+    /// These sessions, in the socket directory of the server of `session`
+    /// where none was chosen, so commands on a place recorded without one
+    /// reach its server whatever this process's default directory.
+    pub async fn reaching(self, session: &str) -> Result<Self> {
+        if self.socket_dir.is_some() {
+            return Ok(self);
         }
-        data
+        Ok(match self.server(session).await? {
+            Some(server) => Self {
+                socket_dir: Some(server.socket_dir),
+            },
+            None => self,
+        })
     }
 
     /// The socket directory these sessions listen in, where the caller or
     /// a record chose one.
     pub fn socket_dir(&self) -> Option<&Path> {
         self.socket_dir.as_deref()
-    }
-
-    /// Whether `data` records a session Shoal created for its place alone.
-    pub fn own_session(data: &BTreeMap<String, String>) -> bool {
-        data.contains_key(OWN_SESSION)
     }
 
     /// A `zellij` command for these sessions, without the variables that
@@ -303,24 +318,40 @@ impl Zellij {
     /// Open `shell` in a new tab of `session`, which a client shows: Zellij
     /// drops tabs opened in a session no client shows.
     pub async fn open_tab(&self, session: &str, shell: &Shell<'_>) -> Result<Opened> {
-        let mut open = self.action(session);
-        open.args(["new-tab", "--name"])
-            .arg(shell.label)
-            .arg("--cwd")
-            .arg(shell.cwd);
-        if !shell.focus {
-            open.arg("--no-focus");
-        }
-        if !shell.command.is_empty() {
-            open.arg("--close-on-exit").arg("--").args(shell.command);
-        }
-        let tab = run(open).await.context("open a Zellij tab")?;
+        let tab = run(self.new_tab(session, shell))
+            .await
+            .context("open a Zellij tab")?;
         let tab: u64 = tab.trim().parse().context("invalid Zellij tab")?;
         let pane = self
-            .new_pane(session, |pane| pane.tab == tab)
+            .new_pane(session, |pane| pane.is_terminal() && pane.tab == tab)
             .await
             .with_context(|| format!("the Zellij tab {tab} shows no pane"))?;
-        self.opened(session, pane.id, false).await
+        self.opened(session, pane.id).await
+    }
+
+    /// Open `shell` in a pane splitting `beside`, in its tab.
+    pub async fn open_split(&self, beside: PaneRef<'_>, shell: &Shell<'_>) -> Result<Opened> {
+        let pane = run(self.new_split(beside, shell)?)
+            .await
+            .context("open a Zellij pane")?;
+        self.opened(beside.session, pane.trim().to_owned()).await
+    }
+
+    /// Open `shell` as the first pane of a new background session, named
+    /// after its label and none other, exited ones included, in a tab that
+    /// shows the label.
+    pub async fn open_session(&self, shell: &Shell<'_>) -> Result<Opened> {
+        let taken = self.session_names().await?;
+        let session = free_session_name(shell.label, self.name_room(), &taken);
+        run(self.new_session(&session, shell))
+            .await
+            .with_context(|| format!("create Zellij session {session}"))?;
+        let pane = self
+            .new_pane(&session, Pane::is_terminal)
+            .await
+            .with_context(|| format!("the Zellij session {session} shows no pane"))?;
+        self.rename_tab(&session, &pane, shell.label).await?;
+        self.opened(&session, pane.id).await
     }
 
     /// The first pane of `session` that is `new`, which Shoal just opened,
@@ -336,8 +367,23 @@ impl Zellij {
         bail!("Zellij lists no new pane")
     }
 
-    /// Open `shell` in a pane splitting `beside`, in its tab.
-    pub async fn open_split(&self, beside: PaneRef<'_>, shell: &Shell<'_>) -> Result<Opened> {
+    /// The command that opens `shell` in a new tab of `session`.
+    fn new_tab(&self, session: &str, shell: &Shell<'_>) -> Command {
+        let mut open = self.action(session);
+        open.args(["new-tab", "--name"])
+            .arg(shell.label)
+            .arg("--cwd")
+            .arg(shell.cwd);
+        if !shell.focus {
+            open.arg("--no-focus");
+        }
+        open.args(pane_command(shell));
+        open
+    }
+
+    /// The command that opens `shell` in a pane splitting `beside`, which
+    /// Zellij takes as the pane the command runs in.
+    fn new_split(&self, beside: PaneRef<'_>, shell: &Shell<'_>) -> Result<Command> {
         let mut open = self.action(beside.session);
         open.env(PANE_VAR, pane_number(beside.pane)?)
             .args(["new-pane", "--near-current-pane", "--direction", "right"])
@@ -348,43 +394,25 @@ impl Zellij {
         if !shell.focus {
             open.arg("--no-focus");
         }
-        if !shell.command.is_empty() {
-            open.arg("--close-on-exit").arg("--").args(shell.command);
-        }
-        let pane = run(open).await.context("open a Zellij pane")?;
-        self.opened(beside.session, pane.trim().to_owned(), false)
-            .await
+        open.args(pane_command(shell));
+        Ok(open)
     }
 
-    /// Open `shell` as the first pane of a new background session, named
-    /// after its label and none other, exited ones included, in a tab that
-    /// shows the label. Shoal's variables stay out of the session, whose
-    /// every pane inherits its environment.
-    pub async fn open_session(&self, shell: &Shell<'_>) -> Result<Opened> {
-        let room = self.name_room();
-        let session = free_session_name(shell.label, room, &self.session_names().await?);
+    /// The command that creates `session` in the background with `shell` as
+    /// its first pane. Shoal's variables stay out of the session, whose every
+    /// pane inherits its environment.
+    fn new_session(&self, session: &str, shell: &Shell<'_>) -> Command {
         let mut create = self.command();
         create
-            .args(["attach", "--create-background"])
-            .arg(&session)
+            .args(["attach", "--create-background", session])
+            .args(pane_command(shell))
             .current_dir(shell.cwd);
-        if !shell.command.is_empty() {
-            create.arg("--close-on-exit").arg("--").args(shell.command);
-        }
         for (variable, _) in std::env::vars_os() {
             if variable.to_string_lossy().starts_with(env::PREFIX) {
                 create.env_remove(variable);
             }
         }
-        run(create)
-            .await
-            .with_context(|| format!("create Zellij session {session}"))?;
-        let pane = self
-            .new_pane(&session, |_| true)
-            .await
-            .with_context(|| format!("the Zellij session {session} shows no pane"))?;
-        self.rename_tab(&session, &pane, shell.label).await?;
-        self.opened(&session, pane.id, true).await
+        create
     }
 
     /// How long a session's name may be: [`MAX_SESSION_LEN`], or less in a
@@ -399,9 +427,8 @@ impl Zellij {
             .clamp(1, MAX_SESSION_LEN)
     }
 
-    /// `pane` of `session`, which Shoal just opened, with its server, in a
-    /// session Shoal created for it when `own_session`.
-    async fn opened(&self, session: &str, pane: String, own_session: bool) -> Result<Opened> {
+    /// `pane` of `session`, which Shoal just opened, with its server.
+    async fn opened(&self, session: &str, pane: String) -> Result<Opened> {
         let (instance, socket_dir) = self
             .instance(session)
             .await?
@@ -411,7 +438,6 @@ impl Zellij {
             pane,
             instance,
             socket_dir,
-            own_session,
         })
     }
 
@@ -490,16 +516,12 @@ impl Zellij {
     }
 
     /// Close `place` on the server instance `instance` and nothing else, so
-    /// the user's other panes and tabs stay; a session Shoal created for the
-    /// place alone ends with it while no other pane is there. A pane
-    /// already gone, or under its ID on a later instance, is closed; without
-    /// `instance` nothing tells the pane apart from a later one, so it stays.
-    pub async fn close(
-        &self,
-        place: PaneRef<'_>,
-        instance: Option<&str>,
-        own_session: bool,
-    ) -> Result<()> {
+    /// the user's other panes and tabs stay. A session left with no pane
+    /// ends, as Zellij ends a session whose last pane a client saw close. A
+    /// pane already gone, or under its ID on a later instance, is closed;
+    /// without `instance` nothing tells the pane apart from a later one, so
+    /// it stays.
+    pub async fn close(&self, place: PaneRef<'_>, instance: Option<&str>) -> Result<()> {
         let Some(instance) = instance else {
             return Ok(());
         };
@@ -507,25 +529,21 @@ impl Zellij {
             return Ok(());
         }
         let panes = self.panes(place.session).await?;
-        let others = panes.iter().any(|pane| pane.id != place.pane);
-        if own_session && !others {
-            return self.end_session(place.session).await;
+        if let Some(pane) = panes.iter().find(|pane| pane.id == place.pane) {
+            self.close_pane(place.session, pane, &panes).await?;
         }
-        match panes.iter().find(|pane| pane.id == place.pane) {
-            Some(pane) => self.close_pane(place.session, pane, &panes).await,
-            None => Ok(()),
+        if panes.iter().all(|pane| pane.id == place.pane) {
+            self.end_session(place.session).await?;
         }
+        Ok(())
     }
 
     /// Close `pane` of `session`, whose panes are `panes`, with its tab
     /// when no other pane is there: Zellij leaves a tab whose last pane
     /// closed while no client showed the session.
     async fn close_pane(&self, session: &str, pane: &Pane, panes: &[Pane]) -> Result<()> {
-        let alone = panes
-            .iter()
-            .all(|other| other.id == pane.id || other.tab != pane.tab);
         let mut close = self.action(session);
-        if alone {
+        if alone_in_tab(pane, panes) {
             close.args(["close-tab-by-id", &pane.tab.to_string()]);
         } else {
             close.args(["close-pane", "--pane-id", &pane.id]);
@@ -536,19 +554,26 @@ impl Zellij {
         Ok(())
     }
 
-    /// End `session` and forget it, so Zellij offers no exited session to
-    /// resurrect.
+    /// End `session`, which holds no pane, unless it ended already.
     async fn end_session(&self, session: &str) -> Result<()> {
         let mut kill = self.command();
         kill.args(["kill-session", session]);
-        run(kill)
+        listing(kill)
             .await
             .with_context(|| format!("end Zellij session {session}"))?;
-        let mut delete = self.command();
-        delete.args(["delete-session", session]);
-        let _ = Run::new(delete).capture().await;
         Ok(())
     }
+}
+
+/// The arguments that run `shell`'s command in a new pane, which closes
+/// once it ends; none for the default shell.
+fn pane_command<'a>(shell: &Shell<'a>) -> Vec<&'a str> {
+    if shell.command.is_empty() {
+        return Vec::new();
+    }
+    let mut args = vec!["--close-on-exit", "--"];
+    args.extend(shell.command.iter().map(String::as_str));
+    args
 }
 
 /// What `command` prints, failing when it fails.
@@ -634,6 +659,8 @@ fn parse_server(line: &str, uid: u32, session: &str) -> Option<Server> {
     })
 }
 
+/// The terminals and the user's plugins `list-panes --json` lists, without
+/// the plugins Zellij shows in every tab or keeps hidden.
 fn parse_panes(listed: &str) -> Result<Vec<Pane>> {
     if listed.trim().is_empty() {
         return Ok(Vec::new());
@@ -641,15 +668,33 @@ fn parse_panes(listed: &str) -> Result<Vec<Pane>> {
     let listed: Vec<Listed> = serde_json::from_str(listed).context("invalid Zellij panes")?;
     Ok(listed
         .into_iter()
-        .filter(|pane| !pane.is_plugin)
+        .filter(|pane| !pane.is_plugin || !(pane.is_suppressed || in_layout(pane)))
         .map(|pane| Pane {
-            id: format!("terminal_{}", pane.id),
+            id: format!(
+                "{}_{}",
+                if pane.is_plugin { "plugin" } else { "terminal" },
+                pane.id
+            ),
             tab: pane.tab_id,
             tab_name: pane.tab_name,
             command: pane.pane_command,
             exited: pane.exited,
         })
         .collect())
+}
+
+/// Whether `pane` is the only one of `panes` in its tab.
+fn alone_in_tab(pane: &Pane, panes: &[Pane]) -> bool {
+    panes
+        .iter()
+        .all(|other| other.id == pane.id || other.tab != pane.tab)
+}
+
+/// Whether the plugin `pane` is one Zellij's layouts put in every tab.
+fn in_layout(pane: &Listed) -> bool {
+    pane.plugin_url
+        .as_deref()
+        .is_some_and(|url| LAYOUT_PLUGINS.contains(&url.strip_prefix("zellij:").unwrap_or(url)))
 }
 
 /// The pane each listed client shows, after the header.
@@ -769,11 +814,9 @@ impl super::Host for Cleanup {
             let pane = parse_place(place.id())
                 .with_context(|| format!("invalid Zellij place {}", place.id()))?;
             Zellij::recorded(&place.data)
-                .close(
-                    pane,
-                    place.instance.as_deref(),
-                    Zellij::own_session(&place.data),
-                )
+                .reaching(pane.session)
+                .await?
+                .close(pane, place.instance.as_deref())
                 .await
         })
     }

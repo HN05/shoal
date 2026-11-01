@@ -499,7 +499,8 @@ configured command for another agent, plus proven child
   and start time) the record names, since tmux reuses pane IDs after a restart.
   Zellij follows tmux's rules, with a place naming its session and pane and its
   instance the session server's process and birth, checked before each command on
-  a recorded pane; a session Shoal created for a place ends with its last pane.
+  a recorded pane; a close ends a tab or session along with the last pane there,
+  user plugin panes included among the panes that keep it.
   Places are host-neutral origin records whose host data generic code never reads.
   Attach, status and attach completion find sessions of every host only through
   the places the daemon recorded for executions, chats and the places Shoal
