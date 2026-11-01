@@ -303,7 +303,10 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
         .await
         .unwrap();
     recording.kill();
-    let ended = finished(recorded);
+    let ended: Vec<_> = finished(recorded)
+        .into_iter()
+        .map(|(id, process)| (id, Over::Exited(process)))
+        .collect();
     assert_eq!(ended.len(), 1);
     // ...while the chat moves to its session's process.
     let moved = manager

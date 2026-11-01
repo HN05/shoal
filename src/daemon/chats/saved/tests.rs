@@ -49,7 +49,7 @@ async fn chat_events(manager: &Manager) -> Vec<String> {
 }
 
 #[tokio::test]
-async fn a_saved_chat_keeps_its_record() {
+async fn a_saved_chat_keeps_its_record_until_it_is_restored() {
     let (root, manager) = manager().await;
     let (repo, chat, mut process) = running_chat(root.path(), &manager).await;
     let workspace = manager
@@ -80,9 +80,52 @@ async fn a_saved_chat_keeps_its_record() {
         "kept"
     );
 
+    let restored = manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            restored.id.as_str(),
+            restored.name.as_str(),
+            restored.restore
+        ),
+        (chat.id.as_str(), "talk", None)
+    );
+    assert_eq!(restored.tmp_dir.as_deref(), Some(tmp_dir.as_path()));
+    assert_eq!(manager.chats().await.unwrap(), [restored]);
+    assert_eq!(
+        std::fs::read_to_string(tmp_dir.join("notes")).unwrap(),
+        "kept"
+    );
+    let error = manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("no saved chat"), "{error:#}");
     assert_eq!(
         chat_events(&manager).await,
-        ["chat_started talk", "chat_saved talk"]
+        ["chat_started talk", "chat_saved talk", "chat_restored talk"]
+    );
+}
+
+#[tokio::test]
+async fn a_discarded_saved_chat_ends() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, _process) = running_chat(root.path(), &manager).await;
+    let error = manager.discard_saved_chat("talk").await.unwrap_err();
+    assert!(error.to_string().contains("no saved chat"), "{error:#}");
+
+    manager.save_chats(ChatRestore::Resume).await;
+    let discarded = manager.discard_saved_chat("talk").await.unwrap();
+
+    assert_eq!(discarded.id, chat.id);
+    assert!(manager.chats().await.unwrap().is_empty());
+    assert!(!chat.tmp_dir.unwrap().exists());
+    manager.check_chat_name("talk".into()).await.unwrap();
+    assert_eq!(
+        chat_events(&manager).await,
+        ["chat_started talk", "chat_saved talk", "chat_ended talk"]
     );
 }
 

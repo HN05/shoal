@@ -34,6 +34,13 @@ pub(super) async fn handle(
                 .start_chat(repository, name, agent, pid, origin, hands_over)
                 .await?,
         ),
+        ChatMethod::RestoreChat {
+            chat,
+            pid,
+            origin,
+            hands_over,
+        } => Body::Chat(manager.restore_chat(&chat, pid, origin, hands_over).await?),
+        ChatMethod::DiscardChat { chat } => Body::Chat(manager.discard_saved_chat(&chat).await?),
         ChatMethod::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
         ChatMethod::RenameChat { chat, name } => Body::Chat(manager.rename_chat(chat, name).await?),
@@ -65,6 +72,8 @@ impl Scoped for ChatMethod {
             ChatMethod::ListChats => None,
             ChatMethod::StartChat { .. }
             | ChatMethod::MoveChat { .. }
+            | ChatMethod::RestoreChat { .. }
+            | ChatMethod::DiscardChat { .. }
             | ChatMethod::RenameChat { .. }
             | ChatMethod::SendChatMessage { .. }
             | ChatMethod::CheckChatName { .. }

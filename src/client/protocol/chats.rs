@@ -20,6 +20,16 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         hands_over: bool,
     },
+    /// Run the saved chat `chat`, by ID, again as process `pid`, as
+    /// [`Self::StartChat`] records a new one.
+    RestoreChat {
+        chat: String,
+        pid: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        origin: Option<crate::sessions::Origin>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        hands_over: bool,
+    },
     /// Record that `chat`'s agent now runs as process `pid`, for an agent
     /// started detached instead of in place of the recording process.
     MoveChat {
@@ -27,6 +37,10 @@ pub enum ChatMethod {
         pid: u32,
     },
     ListChats,
+    /// End the saved chat `chat`, by ID or name, without restoring it.
+    DiscardChat {
+        chat: String,
+    },
     /// Give the running chat `chat`, by ID or name, the name `name`.
     RenameChat {
         chat: String,

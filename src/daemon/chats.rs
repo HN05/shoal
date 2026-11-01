@@ -95,7 +95,8 @@ impl Manager {
                 Ok(chat)
             }
             Err(error) => {
-                self.end_chats(vec![(chat.id, process)]).await?;
+                self.end_chats(vec![(chat.id, Over::Exited(process))])
+                    .await?;
                 Err(error)
             }
         }
@@ -222,16 +223,19 @@ impl Manager {
 
     /// End running chats whose process has exited.
     pub(crate) async fn end_finished_chats(&self) -> Result<()> {
-        let ended = finished(self.store.run(|db| recorded_processes(db)).await?);
+        let ended = finished(self.store.run(|db| recorded_processes(db)).await?)
+            .into_iter()
+            .map(|(id, process)| (id, Over::Exited(process)))
+            .collect();
         self.end_chats(ended).await
     }
 
-    /// End the running chats still recorded with the process found ended:
-    /// return their workspaces to the user along with the messages the chats
-    /// had not received, keep their attached files for the retention period,
-    /// and delete their records and temporary directories. A chat moved to
-    /// another process or saved since keeps its record.
-    async fn end_chats(&self, ended: Vec<(String, Identity)>) -> Result<()> {
+    /// End the chats still recorded as `ended` found them: return their
+    /// workspaces to the user along with the messages the chats had not
+    /// received, keep their attached files for the retention period, and
+    /// delete their records and temporary directories. A chat moved to
+    /// another process, saved or restored since keeps its record.
+    async fn end_chats(&self, ended: Vec<(String, Over)>) -> Result<()> {
         if ended.is_empty() {
             return Ok(());
         }
@@ -253,7 +257,7 @@ impl Manager {
 
     /// When the attached files of each chat in `ended` expire if it ends
     /// now, by its repository's retention.
-    async fn files_expiries(&self, ended: &[(String, Identity)]) -> Result<HashMap<String, i64>> {
+    async fn files_expiries(&self, ended: &[(String, Over)]) -> Result<HashMap<String, i64>> {
         let ids: Vec<String> = ended.iter().map(|(id, _)| id.clone()).collect();
         let repositories = self.store.run(move |db| repositories(db, &ids)).await?;
         let mut expiries = HashMap::new();
@@ -317,12 +321,7 @@ impl Manager {
 /// starting until it is moved when it `hands_over`.
 fn insert(db: &mut Connection, chat: Chat, birth: &str, hands_over: bool) -> Result<Chat> {
     let tx = db.transaction()?;
-    anyhow::ensure!(
-        !store::repository_removing(&tx, &chat.repository_id)?,
-        "the repository is being removed"
-    );
-    // A chat edits the checkout, which a move may be copying.
-    store::ensure_repository_not_moving(&tx, &chat.repository_id)?;
+    ensure_checkout_free(&tx, &chat.repository_id)?;
     store::ensure_name_available(&tx, &chat.name, None)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting)
@@ -344,6 +343,17 @@ fn insert(db: &mut Connection, chat: Chat, birth: &str, hands_over: bool) -> Res
     )?;
     tx.commit()?;
     Ok(chat)
+}
+
+/// Refuse a chat in the repository `repository_id` while it is being
+/// removed or moved.
+fn ensure_checkout_free(tx: &rusqlite::Transaction<'_>, repository_id: &str) -> Result<()> {
+    ensure!(
+        !store::repository_removing(tx, repository_id)?,
+        "the repository is being removed"
+    );
+    // A chat edits the checkout, which a move may be copying.
+    store::ensure_repository_not_moving(tx, repository_id)
 }
 
 /// The first of `base`, `base-2`, `base-3`, ... that nothing holds, each cut
@@ -531,33 +541,52 @@ fn repositories(db: &mut Connection, ids: &[String]) -> Result<Vec<(String, Stri
     Ok(repositories)
 }
 
-/// Delete the records of the running chats still recorded with the process
-/// found ended, giving the user their unread messages and keeping their
-/// attached files until `expiries` says, by chat.
+/// How a chat to end was found over.
+enum Over {
+    /// The process it ran as exited.
+    Exited(Identity),
+    /// It was saved, and is not to be restored.
+    Discarded,
+}
+
+impl Over {
+    /// The repository of the chat `id` while it is still recorded as `self`
+    /// found it.
+    fn repository(&self, tx: &rusqlite::Transaction<'_>, id: &str) -> Result<Option<String>> {
+        let repository = match self {
+            Self::Exited(process) => tx.query_row(
+                "SELECT repository_id FROM chats
+                 WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
+                params![id, process.pid, process.birth],
+                |row| row.get(0),
+            ),
+            Self::Discarded => tx.query_row(
+                "SELECT repository_id FROM chats WHERE id=?1 AND restore IS NOT NULL",
+                [id],
+                |row| row.get(0),
+            ),
+        };
+        Ok(repository.optional()?)
+    }
+}
+
+/// Delete the records of the chats still recorded as `ended` found them,
+/// giving the user their unread messages and keeping their attached files
+/// until `expiries` says, by chat.
 fn delete(
     db: &mut Connection,
-    ended: &[(String, Identity)],
+    ended: &[(String, Over)],
     expiries: &HashMap<String, i64>,
 ) -> Result<Deleted> {
     let tx = db.transaction()?;
     let mut last = None;
     let mut deleted = Vec::new();
-    for (id, process) in ended {
-        let repository_id: Option<String> = tx
-            .query_row(
-                "SELECT repository_id FROM chats
-                 WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
-                params![id, process.pid, process.birth],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let Some(repository_id) = repository_id else {
+    for (id, over) in ended {
+        let Some(repository_id) = over.repository(&tx, id)? else {
             continue;
         };
-        last = chat_messages::hand_to_user(&tx, id)?.or(last);
         let expires_at = expiries.get(id).copied().unwrap_or_default();
-        workspace_files::keep_ended_chat(&tx, id, expires_at)?;
-        tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
+        last = end_record(&tx, id, expires_at)?.or(last);
         deleted.push((repository_id, id.clone()));
     }
     tx.commit()?;
@@ -565,6 +594,16 @@ fn delete(
         notification: last,
         chats: deleted,
     })
+}
+
+/// Delete the record of the chat `id`, giving the user its unread messages
+/// and keeping its attached files until `expires_at`. Returns the last
+/// notification recorded.
+fn end_record(tx: &rusqlite::Transaction<'_>, id: &str, expires_at: i64) -> Result<Option<i64>> {
+    let last = chat_messages::hand_to_user(tx, id)?;
+    workspace_files::keep_ended_chat(tx, id, expires_at)?;
+    tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
+    Ok(last)
 }
 
 /// An unknown chat leaves the workspace to the user.

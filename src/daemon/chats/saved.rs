@@ -1,15 +1,17 @@
 //! Chats Shoal stops with their sessions saved, as a shutdown, a logout or
 //! `shoal daemon stop` stops a workspace's agent. A saved chat keeps its
 //! record, and with it its name, files, messages, workspaces and temporary
-//! directory.
-use anyhow::Result;
+//! directory, until a start restores it in a new process or it is discarded.
+use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
 use rusqlite::{Connection, params};
 
-use super::processes::ChatProcesses;
+use super::{Over, ensure_checkout_free, processes::ChatProcesses, recorded};
 use crate::{
     daemon::{log, workspace::Manager},
-    process::identity::Identity,
+    model::Chat,
+    process::identity::{self, Identity},
+    sessions::Origin,
     state::ChatRestore,
 };
 
@@ -48,6 +50,54 @@ impl Manager {
             None => Ok(()),
         }
     }
+
+    /// Run the saved chat `id` again as process `pid`, at `origin` in a
+    /// terminal host when it runs in one, or when `hands_over`, in a session
+    /// `pid` starts and [`Self::move_chat`] names, as
+    /// [`Self::start_chat`] records a new chat. It keeps its ID, name,
+    /// agent and start time.
+    pub async fn restore_chat(
+        &self,
+        id: &str,
+        pid: u32,
+        origin: Option<Origin>,
+        hands_over: bool,
+    ) -> Result<Chat> {
+        let process = identity::capture(pid)?.context("the chat process is not running")?;
+        let saved = self
+            .recorded_chat(id)
+            .await?
+            .filter(|chat| chat.restore.is_some())
+            .with_context(|| format!("no saved chat {id}"))?;
+        let repository = self
+            .reserve_repository_directory(&saved.repository_id)
+            .await?;
+        if let Some(origin) = &origin {
+            self.release_place(origin).await?;
+        }
+        let restored = Restored {
+            id: saved.id,
+            repository: saved.repository_id,
+            process: process.clone(),
+            origin,
+            hands_over,
+        };
+        let chat = self.store.run(move |db| restore(db, &restored)).await?;
+        self.give_tmp_dir(chat, &repository, process).await
+    }
+
+    /// End the saved chat `selector` names, by ID or name, without
+    /// restoring it, as if its process had exited.
+    pub(crate) async fn discard_saved_chat(&self, selector: &str) -> Result<Chat> {
+        let chat = self
+            .recorded_chat(selector)
+            .await?
+            .filter(|chat| chat.restore.is_some())
+            .with_context(|| format!("no saved chat {selector}"))?;
+        self.end_chats(vec![(chat.id.clone(), Over::Discarded)])
+            .await?;
+        Ok(chat)
+    }
 }
 
 /// Mark every running chat saved to come back as `restore` says, returning
@@ -70,6 +120,45 @@ fn unsave(db: &mut Connection, id: &str, process: &Identity) -> Result<()> {
         params![id, process.pid, process.birth],
     )?;
     Ok(())
+}
+
+/// A saved chat that runs again.
+struct Restored {
+    id: String,
+    repository: String,
+    /// The process it runs as, or that hands it to a session it starts.
+    process: Identity,
+    origin: Option<Origin>,
+    hands_over: bool,
+}
+
+/// Record that the saved chat `restored` names runs again, starting until it
+/// is moved when it hands over, unless a restore took it first.
+fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
+    let tx = db.transaction()?;
+    ensure_checkout_free(&tx, &restored.repository)?;
+    let updated = tx.execute(
+        "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL
+         WHERE id=?1 AND restore IS NOT NULL",
+        params![
+            restored.id,
+            restored.process.pid,
+            restored.process.birth,
+            restored
+                .origin
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?,
+            restored.hands_over
+        ],
+    )?;
+    ensure!(updated == 1, "the chat is no longer saved");
+    let chat = recorded(&tx)?
+        .into_iter()
+        .find(|chat| chat.id == restored.id)
+        .context("the chat ended")?;
+    tx.commit()?;
+    Ok(chat)
 }
 
 #[cfg(test)]

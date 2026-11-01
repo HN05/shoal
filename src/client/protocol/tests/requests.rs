@@ -101,8 +101,10 @@ const REQUESTS: &[&str] = &[
     r#"{"restart_agent":{"execution":"e1"}}"#,
     // Chats.
     r#"{"start_chat":{"repository":"app","name":"app-chat","agent":"claude","pid":4}}"#,
+    r#"{"restore_chat":{"chat":"c1","pid":5}}"#,
     r#"{"move_chat":{"chat":"c1","pid":5}}"#,
     r#""list_chats""#,
+    r#"{"discard_chat":{"chat":"app-chat"}}"#,
     r#"{"rename_chat":{"chat":"app-chat","name":"topic"}}"#,
     r#"{"send_chat_message":{"chat":"app-chat","message":"Rebase onto main"}}"#,
     r#"{"check_chat_name":{"name":"app-chat"}}"#,
