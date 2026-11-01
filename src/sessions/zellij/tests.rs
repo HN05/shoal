@@ -232,7 +232,8 @@ impl Isolated {
                 &mut slave,
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
-                &mut size,
+                // macOS takes the size mutably and Linux does not.
+                &raw mut size,
             )
         };
         assert_eq!(opened, 0);
