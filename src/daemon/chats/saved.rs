@@ -70,13 +70,18 @@ impl Manager {
         }
     }
 
-    /// Stop the processes of the chat `id`, saved as running as `process`.
+    /// Stop the processes of the chat `id`, saved as running as `process`:
+    /// those it owns while that process runs, otherwise what it left
+    /// running, found as a restore finds it.
     async fn stop_saved(&self, id: &str, process: &Identity) -> Result<()> {
         let wrappers = self.execution_wrappers().await?;
-        match ChatProcesses::of(id, process, wrappers)? {
-            Some(processes) => processes.stop().await,
-            None => Ok(()),
+        if let Some(processes) = ChatProcesses::of(id, process, wrappers.clone())? {
+            return processes.stop().await;
         }
+        let chat = id.to_owned();
+        let recorded = self.store.run(move |db| saved_process(db, &chat)).await?;
+        let survivors = processes::survivors(id, &recorded, &wrappers).await?;
+        identity::stop_verified(&survivors).await
     }
 
     /// Run the saved chat `id` again as process `pid`, at `origin` in a
