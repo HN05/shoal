@@ -193,6 +193,8 @@ async fn protocol_mismatch_precedes_payload_extraction() {
 
 #[tokio::test]
 async fn a_daemon_that_owns_the_state_directory_without_answering_is_unresponsive() -> Result<()> {
+    // The shoal command tells an unresponsive daemon apart; apps do not.
+    supervise(&crate::cli::client::Command);
     let temp = tempfile::tempdir_in("/tmp")?;
     let paths = Paths::for_test(temp.path());
     paths.prepare()?;

@@ -13,6 +13,7 @@ pub fn enabled() -> bool {
 }
 
 /// Time every subprocess run from now on, when profiling.
+#[cfg(feature = "cli")]
 pub fn start() {
     if enabled() {
         crate::subprocess::observe(|command, elapsed| line("run", elapsed, command));

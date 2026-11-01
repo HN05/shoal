@@ -41,8 +41,6 @@ mod presets;
 #[cfg(feature = "cli")]
 mod process;
 #[cfg(feature = "cli")]
-mod profile;
-#[cfg(feature = "cli")]
 mod proxy;
 #[cfg(feature = "cli")]
 mod removal;
@@ -73,7 +71,7 @@ mod transfer;
 use cli::Cli;
 use client::{agent, ai, config, demos, model, reviews, state, validate};
 #[cfg(feature = "cli")]
-use client::{protocol, time};
+use client::{profile, protocol, time};
 use shoal_forge as forge;
 #[cfg(feature = "cli")]
 use shoal_subprocess as subprocess;
@@ -120,6 +118,7 @@ pub fn main() {
     // SAFETY: as above; only this process's own launch ends its session.
     unsafe { env::take_session_end() };
     profile::start();
+    client::connection::supervise(&cli::client::Command);
     run_cli(cli);
 }
 
