@@ -1028,7 +1028,7 @@ impl Selected {
     /// The kind of the selected item numbered `number` in the repository
     /// `remote` names, when one is selected; an issue and a PR that share the
     /// number are ambiguous.
-    pub(crate) fn kind_of(
+    pub fn kind_of(
         &self,
         remote: &str,
         number: u64,

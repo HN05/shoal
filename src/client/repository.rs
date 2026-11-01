@@ -106,7 +106,7 @@ pub fn is_remote_url(source: &str) -> bool {
 }
 
 /// Normalize equivalent transports of one remote to a comparable key.
-pub(crate) fn url_key(url: &str) -> String {
+pub fn url_key(url: &str) -> String {
     RemoteUrl::parse(url)
         .map(|remote| remote.registration_key())
         .unwrap_or_else(|| url.to_owned())

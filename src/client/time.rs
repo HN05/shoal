@@ -2,7 +2,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Whole Unix seconds, or zero when the clock is before the epoch.
-pub(crate) fn unix_seconds() -> u64 {
+pub fn unix_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -10,19 +10,19 @@ pub(crate) fn unix_seconds() -> u64 {
 }
 
 /// `YYYY-MM-DD HH:MM` in the local time zone.
-pub(crate) fn local_minutes(unix_seconds: i64) -> String {
+pub fn local_minutes(unix_seconds: i64) -> String {
     local(unix_seconds, false)
 }
 
 /// `YYYY-MM-DD HH:MM:SS` in the local time zone.
-pub(crate) fn local_seconds(unix_seconds: i64) -> String {
+pub fn local_seconds(unix_seconds: i64) -> String {
     local(unix_seconds, true)
 }
 
 /// When something happened, read at `now`: `HH:MM` on the same local day,
 /// otherwise the whole days, weeks, months or years since that day, such as
 /// `1 day ago` or `3 weeks ago`. A time after `now` shows its time.
-pub(crate) fn local_ago(unix_seconds: i64, now: i64) -> String {
+pub fn local_ago(unix_seconds: i64, now: i64) -> String {
     let (Some(then), Some(today)) = (local_tm(unix_seconds), local_tm(now)) else {
         return unix_seconds.to_string();
     };

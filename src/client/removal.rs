@@ -42,6 +42,7 @@ pub struct RemovalCheck {
     ///
     /// This is daemon state used to keep the removal decision consistent with
     /// the inspection; it is not part of the CLI protocol response.
+    #[cfg(feature = "cli")]
     #[serde(skip)]
     pub(crate) default_branch: Option<String>,
     /// The workspaces below it, which removal takes first, each after those
@@ -50,19 +51,9 @@ pub struct RemovalCheck {
     pub children: Vec<crate::model::WorkspaceRef>,
     /// The restores of idle agents, which `running_commands` and
     /// `processes` leave out; daemon state like `default_branch`.
+    #[cfg(feature = "cli")]
     #[serde(skip)]
-    pub(crate) idle_restores: Vec<IdleRestore>,
-}
-
-/// A queued restore of an agent stopped between turns with every process,
-/// waiting for an update that has not arrived: nothing runs for it until
-/// then, so it keeps the workspace from no cleanup.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct IdleRestore {
-    pub execution: String,
-    /// The wrapper waiting to restore the agent, which may use the
-    /// workspace directory; none when the daemon starts the restore.
-    pub wrapper: Option<u32>,
+    pub(crate) idle_restores: Vec<crate::removal::IdleRestore>,
 }
 
 /// What a manual removal may delete that neither a branch nor a remote

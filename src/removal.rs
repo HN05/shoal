@@ -2,12 +2,23 @@
 use anyhow::Result;
 
 pub(crate) use crate::client::removal::{
-    BranchOutcome, IdleRestore, NOTHING, RemovalCheck, RemovalResult, UnsavedWork,
+    BranchOutcome, NOTHING, RemovalCheck, RemovalResult, UnsavedWork,
 };
 use crate::{git, model::Workspace, process};
 
 #[cfg(test)]
 mod tests;
+
+/// A queued restore of an agent stopped between turns with every process,
+/// waiting for an update that has not arrived: nothing runs for it until
+/// then, so it keeps the workspace from no cleanup.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct IdleRestore {
+    pub execution: String,
+    /// The wrapper waiting to restore the agent, which may use the
+    /// workspace directory; none when the daemon starts the restore.
+    pub wrapper: Option<u32>,
+}
 
 impl RemovalCheck {
     pub async fn load_changed_files(&mut self) -> Result<()> {

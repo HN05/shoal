@@ -71,8 +71,11 @@ mod transfer;
 
 #[cfg(feature = "cli")]
 use cli::Cli;
-use client::{agent, ai, config, demos, model, protocol, reviews, state, time, validate};
+use client::{agent, ai, config, demos, model, reviews, state, validate};
+#[cfg(feature = "cli")]
+use client::{protocol, time};
 use shoal_forge as forge;
+#[cfg(feature = "cli")]
 use shoal_subprocess as subprocess;
 
 /// The `shoal` command.
