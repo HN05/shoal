@@ -513,6 +513,7 @@ pub struct WorkspaceStatus {
     pub setup_finished: bool,
     pub diff: Option<DiffSummary>,
     pub diff_error: Option<String>,
+    /// Unread notifications about this workspace.
     pub unread_notifications: u64,
     /// Why the daemon's automatic cleanup, which removes this workspace when
     /// it qualifies, is failing or stalled.

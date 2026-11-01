@@ -38,7 +38,9 @@ impl Manager {
             pr::watched(&hosts, &account, &remote, inspection.pr_cleanup.as_ref()),
             issue_status(&hosts, &account, &remote, &inspection)
         );
-        let unread_notifications = self.unread_notifications().await?;
+        let unread_notifications = self
+            .unread_workspace_notifications(&inspection.workspace.id)
+            .await?;
         let cleanup_reason = self.cleanup_reason(&inspection.workspace).await;
         let cleanup_at = self.cleanup_at(&inspection.workspace.id).await?;
         let workspace_id = inspection.workspace.id.clone();

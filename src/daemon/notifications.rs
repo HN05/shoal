@@ -379,6 +379,21 @@ impl Manager {
             .await
     }
 
+    /// Unread notifications about the workspace `workspace_id`.
+    pub async fn unread_workspace_notifications(&self, workspace_id: &str) -> Result<u64> {
+        let workspace_id = workspace_id.to_owned();
+        self.store
+            .run(move |db| {
+                let count: i64 = db.query_row(
+                    "SELECT COUNT(*) FROM notifications WHERE read=0 AND workspace_id=?1",
+                    [workspace_id],
+                    |row| row.get(0),
+                )?;
+                Ok(u64::try_from(count)?)
+            })
+            .await
+    }
+
     /// Mark exactly these notifications as shown.
     pub async fn mark_notifications_read(&self, ids: Vec<i64>) -> Result<()> {
         self.store
