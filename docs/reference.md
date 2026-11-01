@@ -144,9 +144,9 @@ How the daemon exits decides what becomes of tracked agents and commands:
   incompatible daemon, an update, and a crash leave them running.
 - `shoal daemon stop` stops them as `shoal stop --all` does, so agents stay down
   until `shoal resume`, saves and stops running [chats](#chats) for
-  `shoal resume` too, then stops the daemon. It leaves the
-  [agent queue](#agent-queue) as it is, launches in existing workspaces
-  included, for the next daemon to start.
+  `shoal resume` too, then stops the daemon. Unlike `shoal stop`, it keeps
+  agents waiting in the [agent queue](#agent-queue) to start in existing
+  workspaces, which the next daemon starts.
 - SIGTERM or SIGINT, as a shutdown, a logout or a service manager's stop sends,
   stops them as the daemon does before a system shutdown: each wrapper saves its
   agent first, and restores that need no user wait in the agent queue; running

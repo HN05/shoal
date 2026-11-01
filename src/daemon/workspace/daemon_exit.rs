@@ -1,6 +1,6 @@
 //! What becomes of tracked work as the daemon exits: a restart or an update
 //! leaves it running, `shoal daemon stop` stops it as `shoal stop --all` does
-//! but leaves the agent queue to the next daemon, and a signal stops it saved
+//! but leaves queued launches to the next daemon, and a signal stops it saved
 //! first, since it may come from a shutdown.
 use super::{Manager, shutdown_stop::Shutdown};
 use crate::{

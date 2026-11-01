@@ -143,8 +143,8 @@ all work with the save-first shutdown stop below, and the service commands
 instead ask the daemon over its socket how to exit: `shoal daemon restart` and
 an install that replaces an incompatible daemon ask it to detach its wrappers,
 and `shoal daemon stop` to stop work as `shoal stop --all` does, so agents stay
-down until `shoal resume`, except that the agent queue stays for the next
-daemon, launches in existing workspaces included. The request is permanent like reattachment and
+down until `shoal resume`, except that queued launches in existing workspaces
+stay for the next daemon to start. The request is permanent like reattachment and
 answered before the protocol check, since restarting is how an upgrade reaches
 a daemon of another release; a daemon that does not answer gets SIGTERM.
 
