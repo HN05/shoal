@@ -194,7 +194,10 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "DROP TRIGGER workspace_chat_changed; DROP INDEX workspaces_chat;
          ALTER TABLE workspaces DROP COLUMN chat_id; DROP TABLE chats;",
     )?;
-    db.execute_batch("DROP TABLE workspace_review; DROP TABLE workspace_agent_state;")?;
+    db.execute_batch(
+        "DROP TRIGGER workspace_review_removed; DROP TABLE space_review;
+         DROP TABLE workspace_agent_state;",
+    )?;
     for trigger in [
         "workspace_events_retention",
         "workspace_created",

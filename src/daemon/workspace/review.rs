@@ -32,8 +32,8 @@ pub(super) fn check_deadline() -> tokio::time::Instant {
 pub(crate) fn list(db: &Connection, id: &str) -> Result<Vec<ReviewMark>> {
     Ok(db
         .prepare(
-            "SELECT url,kind,head,created_at FROM workspace_review
-             WHERE workspace_id=?1 ORDER BY created_at,url",
+            "SELECT url,kind,head,created_at FROM space_review
+             WHERE space_id=?1 ORDER BY created_at,url",
         )?
         .query_map([id], |row| {
             let url: String = row.get(0)?;
@@ -52,7 +52,7 @@ pub(crate) fn list(db: &Connection, id: &str) -> Result<Vec<ReviewMark>> {
 /// Unlinking an item withdraws its mark in the same transaction.
 pub(crate) fn forget(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
     db.execute(
-        "DELETE FROM workspace_review WHERE workspace_id=?1
+        "DELETE FROM space_review WHERE space_id=?1
          AND url IN (SELECT value FROM json_each(?2))",
         params![id, serde_json::to_string(urls)?],
     )?;
@@ -178,16 +178,16 @@ impl Manager {
                 // Linked-item marks replace a mark made while nothing was linked.
                 if items.iter().any(|(url, _)| url.is_some()) {
                     tx.execute(
-                        "DELETE FROM workspace_review WHERE workspace_id=?1 AND url=''",
+                        "DELETE FROM space_review WHERE space_id=?1 AND url=''",
                         [&id],
                     )?;
                 }
                 let mut marks = Vec::new();
                 for (url, kind) in items {
                     tx.execute(
-                        "INSERT INTO workspace_review(workspace_id,url,kind,head,created_at)
+                        "INSERT INTO space_review(space_id,url,kind,head,created_at)
                          VALUES (?1,?2,?3,?4,?5)
-                         ON CONFLICT(workspace_id,url) DO UPDATE
+                         ON CONFLICT(space_id,url) DO UPDATE
                          SET head=excluded.head,created_at=excluded.created_at",
                         params![id, url.as_deref().unwrap_or(""), kind, head, created_at],
                     )?;
@@ -281,7 +281,7 @@ impl Manager {
                 let tx = db.transaction()?;
                 for url in &urls {
                     tx.execute(
-                        "DELETE FROM workspace_review WHERE workspace_id=?1 AND url=?2",
+                        "DELETE FROM space_review WHERE space_id=?1 AND url=?2",
                         params![id, url],
                     )?;
                 }
