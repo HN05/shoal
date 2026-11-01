@@ -59,6 +59,12 @@ impl Manager {
         // Its temporary directory goes in the repository's directory.
         let repository = self.reserve_repository_directory(&repository).await?;
         let process = identity::capture(pid)?.context("the chat process is not running")?;
+        // A save under way would miss it, and a shutdown's would not come again.
+        let _saving = self.chat_saves.lock().await;
+        ensure!(
+            !self.agent_queue.suspended(),
+            "Shoal is stopping work for a shutdown or a daemon stop; start the chat once it is over"
+        );
         let started_at = i64::try_from(crate::time::unix_seconds())?;
         self.end_finished_chats().await?;
         // A place Shoal created for a workspace is the chat's now.
