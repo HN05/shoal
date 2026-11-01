@@ -7313,6 +7313,18 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     let id = chat["id"].as_str().unwrap();
     let tmp_dir = PathBuf::from(fs::read_to_string(home.join("chat-tmpdir")).unwrap().trim());
 
+    // A workspace process neither restores nor discards it, even with its
+    // scope token cleared.
+    fixture.add("worker");
+    let output = fixture
+        .command()
+        .args(["run", "--workspace", "worker", "--", "sh", "-c"])
+        .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" resume talk --discard; exit $?"#)
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+
     let saved = fixture.ok(&["work", "--chats"]);
     assert_eq!(saved[0]["id"], id, "{saved}");
     assert_eq!(saved[0]["name"], "talk", "{saved}");

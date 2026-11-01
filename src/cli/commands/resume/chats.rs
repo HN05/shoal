@@ -17,10 +17,11 @@ use crate::{
 };
 
 /// The saved chats `targets` name, by ID or name, and the targets left,
-/// which name workspaces. Workspace processes see no chats.
+/// which name workspaces. A workspace process, by its scope or its
+/// ancestry, has no chats to resume, which act with the user's authority.
 pub async fn split(ctx: &Context, targets: SpaceTargets) -> Result<(Vec<Chat>, WorkspaceTargets)> {
     let SpaceTargets { space, all } = targets;
-    if space.is_empty() {
+    if space.is_empty() || crate::env::inherits_scope(&ctx.paths.state) {
         return Ok((
             Vec::new(),
             WorkspaceTargets {
