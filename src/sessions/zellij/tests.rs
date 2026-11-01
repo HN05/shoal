@@ -98,6 +98,8 @@ fn session_names_are_free_short_and_without_slashes() {
     assert_eq!(long, "a very long reposito");
     assert_eq!(free_session_name("ééééééééééé", 20, &[]).len(), 20);
     assert_eq!(free_session_name("login-fix", 5, &[]), "login");
+    let taken = ["login".to_owned()];
+    assert_eq!(free_session_name("login-fix", 5, &taken), "log-2");
 }
 
 #[test]

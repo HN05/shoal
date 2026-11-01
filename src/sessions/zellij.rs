@@ -718,27 +718,26 @@ fn parse_sessions(listed: &str) -> Vec<String> {
 }
 
 /// A session name for `label` that none of `taken` has: what Zellij keeps,
-/// without `/`, up to `room` bytes for its socket path, suffixed while taken.
+/// without `/`, up to `room` bytes for its socket path with the `-2`, `-3`
+/// it takes while taken.
 fn free_session_name(label: &str, room: usize, taken: &[String]) -> String {
-    let mut base: String = label.replace('/', "_");
-    if base.len() > room {
-        let mut end = room;
-        while !base.is_char_boundary(end) {
+    let label = label.replace('/', "_");
+    let named = |n: u32| {
+        let suffix = if n == 1 {
+            String::new()
+        } else {
+            format!("-{n}")
+        };
+        let mut end = room.saturating_sub(suffix.len()).min(label.len());
+        while !label.is_char_boundary(end) {
             end -= 1;
         }
-        base.truncate(end);
-    }
-    let base = base.trim_end().to_owned();
+        format!("{}{suffix}", label[..end].trim_end())
+    };
     (1..)
-        .map(|n| {
-            if n == 1 {
-                base.clone()
-            } else {
-                format!("{base}-{n}")
-            }
-        })
+        .map(named)
         .find(|name| !taken.contains(name))
-        .unwrap_or(base)
+        .unwrap_or_else(|| named(1))
 }
 
 /// The last `lines` lines of `screen`, without the blank lines below what
