@@ -1032,7 +1032,9 @@ server's process and birth; Zellij takes no condition with a command, so the
 host checks the instance just before each command on a recorded pane. Zellij
 closes a tab or session with its last pane only while a client shows the
 session, so a close ends either along with the last pane there, as an attached
-client would see it, leaving no empty tab or session; the pane records nothing
+client would see it, leaving no empty tab or session. A session's last pane
+closes by ending the session, never its tab, since a `zellij action` whose
+server ends before answering never returns; the pane records nothing
 of how its session began, since the place records itself from its own
 environment.
 
