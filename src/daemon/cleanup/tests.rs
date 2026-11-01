@@ -971,3 +971,28 @@ async fn deleted_parent_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
     assert_eq!(remaining.len(), 2, "{remaining:?}");
     assert!(child.path.exists());
 }
+
+#[tokio::test]
+async fn pr_cleanup_skips_a_base_whose_stacked_workspace_elsewhere_stalled() {
+    let (_temp, manager, base, stacked) = split_across_directories(true).await;
+    let id = base.id.clone();
+    let registration = serde_json::json!({ "url": "https://example.invalid/o/r/pulls/1" });
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
+                rusqlite::params![id, registration.to_string()],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.file_access.stall_rechecking(&stacked.path);
+
+    manager.sweep_prs().await.unwrap();
+
+    // Restacking never looked the PR up, so no lookup failure is recorded.
+    let registration = manager.pr_registration(&base.id).await.unwrap().unwrap();
+    assert_eq!(registration.error, None);
+}
