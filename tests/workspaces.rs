@@ -21140,6 +21140,47 @@ fn start_test_chat(fixture: &Fixture, name: &str) -> (std::process::Child, Strin
 }
 
 #[test]
+fn the_inbox_acts_on_a_chats_ready_row_as_a_chat() {
+    let fixture = Fixture::new();
+    let (mut agent, _) = start_test_chat(&fixture, "planning");
+    fixture.ok(&["ready", "--space", "planning"]);
+    // Presses $KEY on the first row whose ID starts with $PICK.
+    install_test_script(
+        fixture.root.path().join("bin/fzf"),
+        r#"#!/bin/sh
+cat > "$HOME/picker-input"
+printf '%s\n' "$KEY"
+awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker-input"
+"#,
+    );
+    let press = |key: &str| {
+        let mut command = fixture.command();
+        command.arg("inbox").env("PICK", "ready:").env("KEY", key);
+        fixture.terminal_command(&mut command, "", true)
+    };
+    // Keys that act only on workspaces say so instead of failing to find one.
+    let (output, transcript) = press("ctrl-o");
+    assert!(!output.status.success(), "{transcript}");
+    assert!(
+        transcript.contains("this action acts only on workspaces"),
+        "{transcript}"
+    );
+    // Viewing reads the chat's own links.
+    let (output, transcript) = press("ctrl-v");
+    assert!(!output.status.success(), "{transcript}");
+    assert!(
+        transcript.contains("the chat links no issue or PR"),
+        "{transcript}"
+    );
+    // Enter attaches to the chat, whose agent says what is ready.
+    let (_, transcript) = press("");
+    assert!(!transcript.contains("unknown workspace"), "{transcript}");
+    assert!(!transcript.contains("no workspace"), "{transcript}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn messages_reach_a_chat_with_their_files() {
     let fixture = Fixture::new();
     fixture.add("worker");

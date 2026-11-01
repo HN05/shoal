@@ -41,7 +41,7 @@ use crate::{
     },
     env,
     forge::items::link,
-    model::LinkedItem,
+    model::{LinkedItem, PresentSpace},
     protocol::{ConfigTarget, NotificationMethod},
 };
 
@@ -596,9 +596,38 @@ async fn command(ctx: &Context, key: Key, row: Row) -> Result<Choice> {
     }
     let workspace = row.workspace().map(str::to_owned);
     ensure!(workspace.is_some(), "select a workspace for this action");
+    if let Some(chat) = chat_name(ctx, workspace.as_deref()).await? {
+        return Ok(Choice::Run(Box::new(chat_command(ctx, key, chat).await?)));
+    }
     Ok(Choice::Run(Box::new(
         workspace_command(ctx, key, workspace).await?,
     )))
+}
+
+/// The name of the running chat the space `id` names, if it is one, whose
+/// inbox rows only some keys act on.
+async fn chat_name(ctx: &Context, id: Option<&str>) -> Result<Option<String>> {
+    let Some(id) = id else {
+        return Ok(None);
+    };
+    Ok(match client::present_space(&ctx.paths, id).await? {
+        Some(PresentSpace::Chat(chat)) => Some(chat.name),
+        _ => None,
+    })
+}
+
+/// What `key` does to the chat `chat`: only attaching and viewing its items
+/// act on a chat.
+async fn chat_command(ctx: &Context, key: Key, chat: String) -> Result<Command> {
+    let chat = Some(chat);
+    Ok(match key {
+        Key::Attach => Command::Sessions(SessionsCommand::Attach {
+            target: chat,
+            session: None,
+        }),
+        Key::View => view_command(ctx, chat).await?,
+        _ => anyhow::bail!("this action acts only on workspaces"),
+    })
 }
 
 /// Answer a question, decide an approval as it was listed, attach to an
@@ -645,10 +674,17 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
         Row::Ready {
             workspace,
             url: None,
-        } => Command::Workspace(WorkspaceCommand::Status {
-            workspace: Some(workspace),
-            item: None,
-        }),
+        } => match chat_name(ctx, Some(&workspace)).await? {
+            // A chat marked itself, so its agent says what is ready.
+            Some(chat) => Command::Sessions(SessionsCommand::Attach {
+                target: Some(chat),
+                session: None,
+            }),
+            None => Command::Workspace(WorkspaceCommand::Status {
+                workspace: Some(workspace),
+                item: None,
+            }),
+        },
         Row::Demo { workspace, name } => Command::Sessions(SessionsCommand::Demo {
             command: None,
             name: Some(name),
@@ -740,12 +776,12 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
     })
 }
 
-/// View one of the issues and PRs `workspace` links, or open it in the
-/// browser, as chosen.
+/// View one of the issues and PRs the space `workspace` names links, or
+/// open it in the browser, as chosen.
 async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
     let workspace = workspace.context("select a workspace to view its issues and PRs")?;
-    let items = linked_items(ctx, &workspace).await?;
-    ensure!(!items.is_empty(), "the workspace links no issue or PR");
+    let (items, kind) = linked_items(ctx, &workspace).await?;
+    ensure!(!items.is_empty(), "the {kind} links no issue or PR");
     let (url, web) = pick_linked(ctx, &items)?;
     Ok(Command::Items(ItemsCommand::View(ViewArgs {
         items: ItemArgs {
@@ -762,25 +798,33 @@ async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Comman
     })))
 }
 
-/// The issues and PRs `workspace` links in its own repository, the only
-/// ones `shoal view` reads for it.
-async fn linked_items(ctx: &Context, workspace: &str) -> Result<Vec<LinkedItem>> {
-    let record = client::workspaces(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|record| record.id == workspace)
-        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown workspace: {workspace}")))?;
-    let items = record.links.items();
+/// The issues and PRs the space `space` links in its own repository, the
+/// only ones `shoal view` reads for it: a workspace's worktree's, or a chat's
+/// registered checkout's; with the space's kind.
+async fn linked_items(ctx: &Context, space: &str) -> Result<(Vec<LinkedItem>, &'static str)> {
+    let unknown = || Refusal::new(Reason::NotFound, format!("unknown workspace: {space}"));
+    let (links, path, kind) = match client::present_space(&ctx.paths, space).await? {
+        Some(PresentSpace::Workspace(workspace)) => (workspace.links, workspace.path, "workspace"),
+        Some(PresentSpace::Chat(chat)) => {
+            let repos = client::repositories(&ctx.paths).await?;
+            let checkout = (repos.into_iter())
+                .find(|repo| repo.id == chat.repository_id)
+                .ok_or_else(unknown)?;
+            (chat.links, checkout.path, "chat")
+        }
+        None => return Err(unknown().into()),
+    };
+    let items = links.items();
     if items.is_empty() {
-        return Ok(items);
+        return Ok((items, kind));
     }
-    let remote = crate::repository::remote_url_from_path(&record.path)
+    let remote = crate::repository::remote_url_from_path(&path)
         .await?
         .context("item lookup needs an origin remote")?;
-    Ok(items
-        .into_iter()
+    let items = (items.into_iter())
         .filter(|item| item.in_repository(&remote))
-        .collect())
+        .collect();
+    Ok((items, kind))
 }
 
 /// The URL of one of `items` and whether to open it in the browser, which
