@@ -68,13 +68,17 @@ impl Manager {
         if *finished {
             return;
         }
-        let stopped = self
-            .stop_every_target(shutdown.moment(), |workspace| async move {
+        // Chats save beside the workspaces' stops, not after them, so a
+        // shutdown that outlasts those still finds them saved; the held
+        // queue keeps them from coming back meanwhile.
+        self.agent_queue.suspend(true).await;
+        let (stopped, ()) = tokio::join!(
+            self.stop_every_target(shutdown.moment(), |workspace| async move {
                 self.stop_keeping_restores(&workspace, shutdown.request())
                     .await
-            })
-            .await;
-        self.save_chats(ChatRestore::Automatic).await;
+            }),
+            self.save_chats(ChatRestore::Automatic)
+        );
         self.notify_shutdown_stop(shutdown, &stopped).await;
         *finished = true;
     }
