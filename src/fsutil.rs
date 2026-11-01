@@ -150,8 +150,14 @@ pub fn set_inherited(fd: std::os::fd::RawFd, inherited: bool) -> anyhow::Result<
 /// The absolute path this process was started through. Unlike `current_exe`
 /// on Linux, it keeps an installation symlink instead of resolving into a
 /// versioned directory, so a later run of it reaches an upgraded binary.
+/// Once that path names another binary, it is the file this process runs.
 pub fn invoked_executable() -> io::Result<PathBuf> {
-    let current = std::env::current_exe()?;
+    // macOS's `current_exe` is the path as started, so it would follow a
+    // replaced symlink too; the kernel's path for the image does not.
+    let current = match crate::process::identity::executable(std::process::id()) {
+        Some(path) => path,
+        None => std::env::current_exe()?,
+    };
     Ok(invoked_path(
         std::env::args_os().next(),
         &std::env::var_os("PATH").unwrap_or_default(),

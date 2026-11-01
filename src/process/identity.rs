@@ -1078,7 +1078,7 @@ fn working_directory(pid: u32) -> Option<PathBuf> {
 
 /// The file `pid` runs, which macOS shows for a platform binary too.
 #[cfg(target_os = "macos")]
-fn executable(pid: u32) -> Option<PathBuf> {
+pub(crate) fn executable(pid: u32) -> Option<PathBuf> {
     use std::os::unix::ffi::OsStringExt as _;
     let mut path = vec![0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
     let len =
@@ -1278,7 +1278,7 @@ fn working_directory(pid: u32) -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "linux")]
-fn executable(pid: u32) -> Option<PathBuf> {
+pub(crate) fn executable(pid: u32) -> Option<PathBuf> {
     std::fs::read_link(format!("/proc/{pid}/exe")).ok()
 }
 
