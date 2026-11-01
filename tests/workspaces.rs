@@ -2653,7 +2653,9 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         status["pr_cleanup"]["url"],
         "https://forge.example/team/repo/pulls/7"
     );
-    assert_eq!(status["unread_notifications"], 1);
+    // The busy signing permit notified about the waiter, not this workspace.
+    assert_eq!(status["unread_notifications"], 0);
+    assert_eq!(fixture.ok(&["status", "waiter"])["unread_notifications"], 1);
     assert_eq!(status["prs"][0]["state"], Value::Null);
     assert!(
         status["prs"][0]["errors"][0]
@@ -2716,7 +2718,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         "Resources:     2",
         "PR watch:      https://forge.example/team/repo/pulls/7\n  State:       open, merge conflicts\n  Checks:      2\n    ci / rust: success\n    review: pending\n  reviews lookup failed",
         "Cleanup:       Waiting for watched PRs to merge",
-        "Notifications: 1 unread",
+        "Notifications: 0 unread",
     ] {
         assert!(text.contains(expected), "missing {expected:?} in {text:?}");
     }
