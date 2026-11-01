@@ -1,13 +1,12 @@
-//! The daemon's checks of its environment: the tools on its `PATH`,
-//! `root_dir`, registered checkouts, the global config and the forges
-//! recorded hosts serve. It reports the
+//! The daemon's checks of its environment: the tools on its `PATH`, the
+//! default terminal host, `root_dir`, registered checkouts, the global config
+//! and the forges recorded hosts serve. It reports the
 //! problems they find as alerts when it starts and when its config reloads.
 use std::{ffi::OsStr, path::PathBuf};
 
 use anyhow::Result;
 
 use crate::{
-    config::repo::DefaultHost,
     daemon::{log, notifications::NotificationKind, workspace::Manager},
     sessions::HostName,
     tools::{Dependency, Tool},
@@ -35,46 +34,50 @@ impl Check {
     }
 }
 
-fn dependencies(path: Option<&OsStr>, default_host: HostName) -> Vec<Check> {
+fn dependencies(path: Option<&OsStr>) -> Vec<Check> {
     Tool::dependencies()
-        .filter_map(|(tool, dependency)| {
-            let (status, reason) = when_missing(dependency, default_host)?;
+        .map(|(tool, dependency)| {
             let program = tool.program();
             let executable = path.and_then(|path| crate::fsutil::find_executable(OsStr::new(program), path));
-            Some(match executable {
-                Some(path) => Check::new(CheckStatus::Ok, format!("{} on the daemon's PATH", path.display())),
-                None => Check::new(
-                    status,
-                    format!("{program} is missing or not executable on the daemon's PATH{reason}; install it and restart the daemon with the updated PATH"),
+            let (status, message) = match executable {
+                Some(path) => (CheckStatus::Ok, format!("{} on the daemon's PATH", path.display())),
+                None => (
+                    match dependency { Dependency::Required => CheckStatus::Error, Dependency::Optional(_) => CheckStatus::Warning },
+                    format!(
+                        "{program} is missing or not executable on the daemon's PATH{}; install it and restart the daemon with the updated PATH",
+                        match dependency { Dependency::Required => String::new(), Dependency::Optional(reason) => format!(" ({reason})") }
+                    ),
                 ),
-            })
+            };
+            Check::new(status, message)
         })
         .collect()
 }
 
-/// How `dependency` fails the check when missing, with why Shoal needs it;
-/// none for the program of a terminal host other than `default_host`.
-fn when_missing(dependency: Dependency, default_host: HostName) -> Option<(CheckStatus, String)> {
-    match dependency {
-        Dependency::Required => Some((CheckStatus::Error, String::new())),
-        Dependency::Optional(reason) => Some((CheckStatus::Warning, format!(" ({reason})"))),
-        Dependency::Host(host) if host == default_host => Some((
+/// Whether the terminal host `default` names is installed, as `installed`
+/// tells, since terminal launches and the daemon's queued starts go there.
+fn default_host(default: HostName, installed: impl FnOnce(HostName) -> Result<()>) -> Check {
+    match installed(default) {
+        Ok(()) => Check::new(
+            CheckStatus::Ok,
+            format!("{default}, the default terminal host, is installed"),
+        ),
+        Err(error) => Check::new(
             CheckStatus::Error,
-            " (the default terminal host; terminal.default_host can name another)".to_owned(),
-        )),
-        Dependency::Host(_) => None,
+            format!(
+                "The default terminal host is missing: {error:#}; install it and restart the daemon with the updated PATH, or set terminal.default_host to another host"
+            ),
+        ),
     }
 }
 
-/// The default terminal host the global config sets, which a config that
-/// does not load leaves at its default; its own check reports that.
-fn default_host(config: &crate::config::Config) -> HostName {
+/// The default terminal host the global config sets; a config that does not
+/// load has its own check.
+fn configured_default_host(config: &crate::config::Config) -> Option<HostName> {
     config
         .resolve(&crate::config::repo::ConfigLayers::default())
-        .map_or_else(
-            |_| DefaultHost::default().into(),
-            |settings| settings.terminal.default_host,
-        )
+        .ok()
+        .map(|settings| settings.terminal.default_host)
 }
 
 /// Whether Git can use the working tree of a registered checkout.
@@ -155,16 +158,19 @@ impl Manager {
     }
 
     /// Record an alert for each problem with the daemon's tools, the default
-    /// terminal host's among them, `root_dir`, registered checkouts and the
-    /// global config, and for each recorded host that now serves another
-    /// forge, as the daemon starts or reloads its config. A missing optional tool only disables what needs it, so it
-    /// alerts nobody. Identical unread alerts collapse into one.
+    /// terminal host, `root_dir`, registered checkouts and the global
+    /// config, and for each recorded host that now serves another forge, as
+    /// the daemon starts or reloads its config. A missing optional tool only
+    /// disables what needs it, so it alerts nobody. Identical unread alerts
+    /// collapse into one.
     pub async fn report_environment(&self) {
-        let default_host = default_host(&self.config());
-        let mut checks: Vec<_> = dependencies(std::env::var_os("PATH").as_deref(), default_host)
+        let mut checks: Vec<_> = dependencies(std::env::var_os("PATH").as_deref())
             .into_iter()
             .filter(|check| check.status == CheckStatus::Error)
             .collect();
+        if let Some(host) = configured_default_host(&self.config()) {
+            checks.push(default_host(host, crate::sessions::ensure_installed));
+        }
         checks.push(root_dir(self.config().root_dir(&self.paths)).await);
         checks.push(global_config_check(&self.paths));
         match self.repositories().await {

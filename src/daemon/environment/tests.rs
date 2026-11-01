@@ -29,32 +29,39 @@ fn dependencies_require_executable_files_on_the_supplied_path() {
     install_test_script(&root.path().join("git"), "#!/bin/sh\n");
     fs::write(root.path().join("wt"), "not executable").unwrap();
     fs::create_dir(root.path().join("lsof")).unwrap();
-    let checks = dependencies(Some(root.path().as_os_str()), HostName::Zmx);
+    let checks = dependencies(Some(root.path().as_os_str()));
     assert_eq!(checks[0].status, CheckStatus::Ok);
     assert_eq!(checks[1].status, CheckStatus::Error);
     assert_eq!(checks[2].status, CheckStatus::Error);
-    assert_eq!(checks[3].status, CheckStatus::Error);
+    assert_eq!(checks[3].status, CheckStatus::Warning);
     assert!(
-        checks[3].message.contains("terminal.default_host"),
-        "{}",
-        checks[3].message
-    );
-    assert_eq!(checks[4].status, CheckStatus::Warning);
-    assert!(
-        dependencies(None, HostName::Zmx)
+        dependencies(None)
             .iter()
             .all(|c| c.status != CheckStatus::Ok)
+    );
+    assert!(
+        dependencies(None)
+            .iter()
+            .all(|check| !check.message.starts_with("zmx ")),
+        "zmx is required whatever the default host"
     );
 }
 
 #[test]
-fn only_the_default_terminal_host_is_required() {
-    let checks = dependencies(None, HostName::Herdr);
-    assert!(
-        checks
-            .iter()
-            .all(|check| !check.message.starts_with("zmx ")),
-        "zmx is checked although Herdr is the default host"
+fn a_missing_default_terminal_host_is_an_error() {
+    let check = default_host(HostName::Rex, |host| {
+        assert_eq!(host, HostName::Rex);
+        Ok(())
+    });
+    assert_eq!(check.status, CheckStatus::Ok);
+    let check = default_host(HostName::Herdr, |_| {
+        anyhow::bail!("herdr is not installed or not on PATH")
+    });
+    assert_eq!(check.status, CheckStatus::Error);
+    assert_eq!(
+        check.message,
+        "The default terminal host is missing: herdr is not installed or not on PATH; \
+         install it and restart the daemon with the updated PATH, or set terminal.default_host \
+         to another host"
     );
-    assert_eq!(checks.len(), dependencies(None, HostName::Zmx).len() - 1);
 }

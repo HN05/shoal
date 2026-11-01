@@ -130,6 +130,11 @@ impl super::Host for Zmx {
     fn name(&self) -> super::HostName {
         super::HostName::Zmx
     }
+
+    fn ensure_installed(&self) -> Result<()> {
+        anyhow::ensure!(Tool::Zmx.installed(), "zmx is not installed or not on PATH");
+        Ok(())
+    }
     fn sessions<'a>(
         &'a self,
         state: &'a Path,

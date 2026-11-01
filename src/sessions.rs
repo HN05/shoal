@@ -61,6 +61,8 @@ pub enum PlaceClose {
 /// Verified closes must exclude ownership replacement in the native namespace.
 pub(crate) trait Host: Send + Sync {
     fn name(&self) -> HostName;
+    /// Refuse when the program this host runs is missing.
+    fn ensure_installed(&self) -> Result<()>;
     /// What names the server holding a place among this host's servers, as
     /// the place's `data` records it; empty for a host with one server.
     fn server(&self, _data: &BTreeMap<String, String>) -> String {
@@ -85,6 +87,12 @@ pub(crate) fn hosts() -> Vec<Arc<dyn Host>> {
     } else {
         HostName::ALL.iter().copied().filter_map(host).collect()
     }
+}
+
+/// Refuse when the program of host `name` is missing; the plain terminal
+/// needs none.
+pub(crate) fn ensure_installed(name: HostName) -> Result<()> {
+    host(name).map_or(Ok(()), |host| host.ensure_installed())
 }
 
 /// The host named `name`, for its sessions and what it reads from its

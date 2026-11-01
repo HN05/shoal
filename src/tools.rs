@@ -1,12 +1,10 @@
 //! Executable names and the dependencies checked by doctor on every installation.
-use crate::{forge::transport::programs, sessions::HostName};
+use crate::forge::transport::programs;
 
 #[derive(Clone, Copy)]
 pub enum Dependency {
     Required,
     Optional(&'static str),
-    /// The program of a terminal host, required while it is the default.
-    Host(HostName),
 }
 
 macro_rules! tools {
@@ -32,9 +30,10 @@ tools! {
     Git => ("git", Some(Dependency::Required)),
     Worktrunk => ("wt", Some(Dependency::Required)),
     Lsof => ("lsof", Some(Dependency::Required)),
-    Zmx => ("zmx", Some(Dependency::Host(HostName::Zmx))),
     Fzf => ("fzf", Some(Dependency::Optional("needed for interactive pickers"))),
-    // Feature-specific and platform tools are diagnosed when invoked.
+    // The default terminal host's program is checked as that host's;
+    // feature-specific and platform tools are diagnosed when invoked.
+    Zmx => ("zmx", None),
     Xcrun => ("xcrun", None),
     Curl => (programs::CURL, None),
     Tar => ("tar", None),

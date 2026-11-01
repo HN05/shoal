@@ -53,6 +53,9 @@ impl Host for FakeHost {
     fn name(&self) -> HostName {
         self.name.unwrap_or(HostName::Zmx)
     }
+    fn ensure_installed(&self) -> Result<()> {
+        Ok(())
+    }
     fn sessions<'a>(&'a self, _: &'a Path) -> BoxFuture<'a, Result<Vec<Session>>> {
         Box::pin(async {
             // Herdr labels no panes, so discovery finds none.

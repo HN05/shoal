@@ -95,6 +95,13 @@ impl super::Host for Cleanup {
         super::HostName::Herdr
     }
 
+    fn ensure_installed(&self) -> Result<()> {
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        crate::fsutil::find_executable(std::ffi::OsStr::new("herdr"), &path)
+            .context("herdr is not installed or not on PATH")?;
+        Ok(())
+    }
+
     fn server(&self, data: &BTreeMap<String, String>) -> String {
         server(data)
     }

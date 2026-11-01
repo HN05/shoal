@@ -417,6 +417,10 @@ impl super::Host for Cleanup {
         super::HostName::Rex
     }
 
+    fn ensure_installed(&self) -> Result<()> {
+        program(var("REX_BIN_DIR").map(PathBuf::from)).map(drop)
+    }
+
     fn server(&self, data: &BTreeMap<String, String>) -> String {
         server(data)
     }

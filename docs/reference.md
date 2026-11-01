@@ -4176,8 +4176,8 @@ shoal work adopt <path>             # Reclaim a worktree at its recorded path af
 
 Each problem shows where you look and names the command that resolves it. When
 the daemon starts and when `daemon reload` rereads its config, it checks that
-`git`, `wt`, `lsof` and, while the global `terminal.default_host` is zmx, `zmx`
-are executable on its PATH, that it can create a
+`git`, `wt` and `lsof` are executable on its PATH, that the host the global
+`terminal.default_host` names is installed, that it can create a
 file in `root_dir`, which registered checkouts set `core.bare` although they have
 a working tree, whether the global worker template repeats Shoal's guidance, and which forge each
 recorded host serves, asking it again unless `[machine.forges]` sets its type. Each
