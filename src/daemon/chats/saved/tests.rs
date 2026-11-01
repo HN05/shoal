@@ -8,11 +8,20 @@ use crate::{
     test_support::{ProcessGroup, manager, repository},
 };
 
-/// A registered repository and a chat running in it as a process that
-/// lives until stopped.
-async fn running_chat(
+/// A registered repository and the chat `talk` running in it as a process
+/// that lives until stopped.
+pub(in crate::daemon::chats) async fn running_chat(
     root: &std::path::Path,
     manager: &Manager,
+) -> (Repository, Chat, ProcessGroup) {
+    named_chat(root, manager, "talk").await
+}
+
+/// [`running_chat`] named `name`.
+pub(in crate::daemon::chats) async fn named_chat(
+    root: &std::path::Path,
+    manager: &Manager,
+    name: &str,
 ) -> (Repository, Chat, ProcessGroup) {
     let checkout = repository(root, "repo");
     let repo = manager
@@ -23,7 +32,7 @@ async fn running_chat(
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
-            "talk".into(),
+            name.into(),
             "claude".into(),
             process.id(),
             None,

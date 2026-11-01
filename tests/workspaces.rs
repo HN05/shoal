@@ -7249,15 +7249,13 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
     );
 }
 
-#[test]
-fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
-    let mut fixture = Fixture::with_config(Some(
+/// A fixture whose Claude chat agent reports its session as Claude Code's
+/// hook does, writes to its temporary directory, then talks until a signal
+/// ends it; resumed, it only records how it ran.
+fn chat_session_fixture() -> Fixture {
+    let fixture = Fixture::with_config(Some(
         "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n",
     ));
-    let home = fixture.root.path().to_owned();
-    // The agent reports its session as Claude Code's hook does, writes to
-    // its temporary directory, then talks until a signal ends it; resumed,
-    // it only records how it ran.
     fs::write(
         fixture.repo.join("chat-agent.sh"),
         format!(
@@ -7272,6 +7270,14 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
         ),
     )
     .unwrap();
+    fixture
+}
+
+/// Run the chat `talk` of a [`chat_session_fixture`] here until `stop`,
+/// given the fixture, ends the daemon, which saves and stops it. Returns the
+/// chat as listed while it ran.
+fn save_running_chat(fixture: &Fixture, stop: impl FnOnce(&Fixture)) -> Value {
+    let home = fixture.root.path();
     let chat = std::thread::scope(|scope| {
         let chat = scope.spawn(|| {
             fixture.interactive_command(
@@ -7284,13 +7290,23 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
         });
         wait_until("chat started", || home.join("chat-started").exists());
         let chats = fixture.ok(&["work", "--chats"]);
-        // `shoal daemon stop` saves the chat for `shoal resume`, stopping
-        // its agent.
-        let output = fixture.run(&["daemon", "stop"]);
-        assert!(output.status.success(), "{output:?}");
+        stop(fixture);
         let (output, transcript) = chat.join().unwrap();
         assert!(output.status.success(), "{output:?}\n{transcript}");
         chats[0].clone()
+    });
+    assert_eq!(chat["name"], "talk", "{chat}");
+    chat
+}
+
+#[test]
+fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
+    let mut fixture = chat_session_fixture();
+    let home = fixture.root.path().to_owned();
+    // `shoal daemon stop` saves the chat for `shoal resume`.
+    let chat = save_running_chat(&fixture, |fixture| {
+        let output = fixture.run(&["daemon", "stop"]);
+        assert!(output.status.success(), "{output:?}");
     });
     assert!(fixture.daemon.child.wait().unwrap().success());
     fixture.restart();
@@ -7331,6 +7347,42 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     // The resumed agent exited, which ends the chat at last.
     assert_eq!(fixture.ok(&["work", "--chats"]), Value::Array(vec![]));
     assert!(!tmp_dir.exists());
+}
+
+#[test]
+fn a_chat_a_signal_saved_comes_back_on_its_own() {
+    let mut fixture = chat_session_fixture();
+    let home = fixture.root.path().to_owned();
+    // A signal, as a shutdown or a logout sends, saves the chat to come back.
+    let chat = save_running_chat(&fixture, |fixture| {
+        assert_eq!(
+            unsafe { libc::kill(fixture.daemon.child.id() as i32, libc::SIGTERM) },
+            0
+        );
+    });
+    assert!(fixture.daemon.child.wait().unwrap().success());
+    fs::remove_file(home.join("chat-args")).unwrap();
+    // The next daemon opens the chat in a zmx session, which runs it.
+    install_test_script(home.join("daemon-bin").join("zmx"), PASSTHROUGH_ZMX);
+    fixture.restart();
+
+    wait_until("chat restored", || home.join("chat-args").exists());
+    let args = fs::read_to_string(home.join("chat-args")).unwrap();
+    assert!(args.contains("--resume\nchat-session\n"), "{args}");
+    wait_until("chat-id rewritten", || {
+        fs::read_to_string(home.join("chat-id"))
+            .is_ok_and(|id| id.trim() == chat["id"].as_str().unwrap())
+    });
+    let kinds: Vec<Value> = journal(&fixture)
+        .into_iter()
+        .filter(|event| event["type"] == "chat")
+        .map(|event| event["kind"].clone())
+        .collect();
+    assert_eq!(
+        kinds[..3],
+        ["chat_started", "chat_saved", "chat_restored"],
+        "{kinds:?}"
+    );
 }
 
 #[test]

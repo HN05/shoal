@@ -24,7 +24,8 @@ use crate::{
     tmp_dirs,
 };
 
-/// How soon a chat's end reaches the journal when nothing lists chats.
+/// How soon a chat's end reaches the journal when nothing lists chats, and
+/// a saved chat comes back once agents may start.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(5);
 
 pub(super) async fn run(manager: Arc<Manager>) {
@@ -32,6 +33,9 @@ pub(super) async fn run(manager: Arc<Manager>) {
         tokio::time::sleep(SWEEP_INTERVAL).await;
         let _operation = manager.gates.operation().await;
         if let Err(error) = manager.end_finished_chats().await {
+            log!("chats: {error:#}");
+        }
+        if let Err(error) = restores::restore_automatic(&manager).await.map(drop) {
             log!("chats: {error:#}");
         }
     }
@@ -616,6 +620,7 @@ fn assign(db: &mut Connection, workspace: &str, chat: Option<&str>) -> Result<()
 }
 
 mod processes;
+mod restores;
 mod saved;
 
 #[cfg(test)]

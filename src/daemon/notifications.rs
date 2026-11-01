@@ -43,6 +43,7 @@ impl NotificationKind {
                 | Self::HookFailed
                 | Self::QueueStarted
                 | Self::QueueFailed
+                | Self::ChatRestoreFailed
         )
     }
 }

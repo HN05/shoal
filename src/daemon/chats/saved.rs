@@ -162,4 +162,4 @@ fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

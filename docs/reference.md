@@ -148,7 +148,7 @@ How the daemon exits decides what becomes of tracked agents and commands:
 - SIGTERM or SIGINT, as a shutdown, a logout or a service manager's stop sends,
   stops them as the daemon does before a system shutdown: each wrapper saves its
   agent first, and restores that need no user wait in the agent queue; running
-  chats are saved and stopped. The
+  chats are saved and stopped, and come back on their own. The
   service definition's `ExitTimeOut` (launchd) or `TimeoutStopSec` (systemd)
   gives the stop time before the service manager kills the daemon.
 
@@ -1632,9 +1632,11 @@ pressure. The daemon records each chat under its
 name while its agent process runs, with the session the agent's session-start
 hook last reported, which [`shoal move`](#move-a-space-to-another-machine)
 continues on another machine. A chat running when the daemon stops for a
-shutdown, a logout, a signal or `shoal daemon stop` is saved and stopped, and
-waits for `shoal resume <chat>`, which restores it under its name, continuing
-its session. A saved chat keeps its files, messages,
+shutdown, a logout or a signal is saved and stopped, and comes back on its own
+once the daemon runs again: under its name, in a background place where a
+restored agent opens, continuing its session. One `shoal daemon stop` saved
+waits for `shoal resume <chat>`, as does one whose restore failed, which records
+a `chat_restore_failed` notification. A saved chat keeps its files, messages,
 workspaces and `TMPDIR`, `shoal work` lists it as `stopped`, and
 `shoal resume <chat> --discard` ends it. Workspaces and chats share one set of names across
 repositories: a chat cannot take a workspace's name or a name an unfinished

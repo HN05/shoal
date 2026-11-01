@@ -41,6 +41,8 @@ states!(NotificationKind {
     QueueStarted => "queue_started",
     /// A queued agent could not start.
     QueueFailed => "queue_failed",
+    /// A chat Shoal saved could not come back on its own.
+    ChatRestoreFailed => "chat_restore_failed",
     /// A seed build failed, or a new workspace could not start from it.
     SeedFailed => "seed_failed",
     /// Disk space cleanup emptied a repository's shared caches.
