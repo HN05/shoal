@@ -25,7 +25,8 @@ impl Received {
 pub type Reply = (u16, Vec<String>, Vec<u8>);
 
 /// A forge on a loopback port that answers each request with what `reply`
-/// returns for it, and keeps every request it received.
+/// returns for it, each connection on its own thread, and keeps every
+/// request it received.
 pub struct Server {
     /// `127.0.0.1:<port>`.
     pub host: String,
@@ -33,29 +34,17 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn start(reply: impl Fn(&Received) -> Reply + Send + 'static) -> Self {
+    pub fn start(reply: impl Fn(&Received) -> Reply + Send + Sync + 'static) -> Self {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let host = listener.local_addr().unwrap().to_string();
         let received = std::sync::Arc::<std::sync::Mutex<Vec<Received>>>::default();
         let log = received.clone();
+        let reply = std::sync::Arc::new(reply);
         std::thread::spawn(move || {
             for stream in listener.incoming() {
-                let Ok(mut stream) = stream else { return };
-                let Some(request) = read_request(&mut stream) else {
-                    continue;
-                };
-                let (status, headers, body) = reply(&request);
-                log.lock().unwrap().push(request);
-                let mut head = format!(
-                    "HTTP/1.1 {status} Scripted\r\nContent-Length: {}\r\nConnection: close\r\n",
-                    body.len()
-                );
-                for header in headers {
-                    head += &format!("{header}\r\n");
-                }
-                let _ = stream
-                    .write_all(format!("{head}\r\n").as_bytes())
-                    .and_then(|()| stream.write_all(&body));
+                let Ok(stream) = stream else { return };
+                let (log, reply) = (log.clone(), reply.clone());
+                std::thread::spawn(move || answer(stream, &*reply, &log));
             }
         });
         Self { host, received }
@@ -65,6 +54,29 @@ impl Server {
     pub fn received(&self) -> Vec<Received> {
         self.received.lock().unwrap().clone()
     }
+}
+
+/// Answer the request on `stream` with what `reply` returns, logging it.
+fn answer(
+    mut stream: std::net::TcpStream,
+    reply: &(impl Fn(&Received) -> Reply + ?Sized),
+    log: &std::sync::Mutex<Vec<Received>>,
+) {
+    let Some(request) = read_request(&mut stream) else {
+        return;
+    };
+    let (status, headers, body) = reply(&request);
+    log.lock().unwrap().push(request);
+    let mut head = format!(
+        "HTTP/1.1 {status} Scripted\r\nContent-Length: {}\r\nConnection: close\r\n",
+        body.len()
+    );
+    for header in headers {
+        head += &format!("{header}\r\n");
+    }
+    let _ = stream
+        .write_all(format!("{head}\r\n").as_bytes())
+        .and_then(|()| stream.write_all(&body));
 }
 
 fn read_request(stream: &mut std::net::TcpStream) -> Option<Received> {

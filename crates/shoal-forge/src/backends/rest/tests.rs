@@ -85,3 +85,46 @@ fn fingerprints_key_items_by_id_and_ignore_other_fields() {
     assert_ne!(read(comment).unwrap(), edited);
     assert!(read(json!({"body": "hi"})).is_err());
 }
+
+/// A check that holds each caller until `parts` callers are waiting, and
+/// says whether they all arrived before a generous hang guard ran out.
+fn together(parts: usize) -> impl Fn() -> bool + Send + Sync {
+    let arrivals = std::sync::Arc::new((std::sync::Mutex::new(0), std::sync::Condvar::new()));
+    move || {
+        let (count, arrived) = &*arrivals;
+        let mut count = count.lock().unwrap();
+        *count += 1;
+        arrived.notify_all();
+        let guard = std::time::Duration::from_secs(60);
+        let wait = arrived.wait_timeout_while(count, guard, |count| *count < parts);
+        !wait.unwrap().1.timed_out()
+    }
+}
+
+#[tokio::test]
+async fn a_prs_discussion_reviews_and_checks_are_read_together() {
+    use crate::{
+        backends::ForgeKind,
+        test_support::{Server, agent_on, repo_on},
+        transport::memory::Memory,
+    };
+    let arrived = together(3);
+    let server = Server::start(move |request| {
+        let body = if request.line == "GET /api/v1/repos/team/repo/pulls/7" {
+            json!({"number": 7, "title": "Fix", "state": "open", "mergeable": true,
+                "head": {"ref": "topic", "sha": "abc"}, "base": {"ref": "main"}})
+        } else if !arrived() {
+            return (500, Vec::new(), Vec::new());
+        } else if request.line.contains("/status") {
+            json!({"statuses": [], "total_count": 0})
+        } else {
+            json!([])
+        };
+        (200, Vec::new(), body.to_string().into())
+    });
+    let account = agent_on(&server, "agent").remembering(Memory::default());
+    let forgejo = repo_on(&server, ForgeKind::Forgejo, "team/repo");
+    let snapshot = forgejo.activity(&account, 7, Some("topic")).await.unwrap();
+    assert!(snapshot.errors.is_empty(), "{:?}", snapshot.errors);
+    assert_eq!(server.received().len(), 4);
+}
