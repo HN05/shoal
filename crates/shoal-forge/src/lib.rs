@@ -244,8 +244,17 @@ pub struct PullRequest {
     pub number: u64,
     pub title: String,
     pub url: String,
+    /// Its head branch, in this repository or in `fork`.
     pub head: String,
     pub base: String,
+    /// The commit its head branch points to.
+    pub head_commit: String,
+    /// Whether its head branch is in another repository, or in one that was
+    /// deleted, so this repository has no branch of it.
+    pub fork: bool,
+    /// The ref this repository serves its head under, where the forge has
+    /// one, from which a fork's head is fetched.
+    pub head_ref: Option<String>,
 }
 
 impl ForgeRepo {
@@ -261,24 +270,44 @@ impl ForgeRepo {
         Self::resolve(ItemRoute::discover(url, PULL_ROUTES)?.0, hosts).await
     }
 
-    /// Only PRs whose head branch lives in this repository can be checked out.
+    /// The PR `input` names, with where its head is.
     pub async fn pull_request(
         &self,
         account: &account::Account,
         input: &str,
     ) -> Result<PullRequest> {
         let (number, url) = self.pull(input)?;
-        let (title, head, base) = self.kind.pull_details(self, account, number).await?;
+        let pull = self.kind.pull_details(self, account, number).await?;
+        self.checkout_details(number, url, pull)
+    }
+
+    /// The PR `pull`, read as `number` at `url`, with where its head is.
+    fn checkout_details(
+        &self,
+        number: u64,
+        url: String,
+        pull: items::item::Current,
+    ) -> Result<PullRequest> {
+        let pr = pull.item.pr.context("not a PR")?;
         ensure!(
-            !head.is_empty() && !base.is_empty(),
+            !pr.head.is_empty() && !pr.base.is_empty(),
             "PR #{number} has no head or base branch"
         );
+        // A deleted fork leaves no head repository.
+        let fork = !pull
+            .head_repository
+            .is_some_and(|repository| repository.eq_ignore_ascii_case(&self.path));
         Ok(PullRequest {
             number,
-            title,
+            title: pull.item.title,
             url,
-            head,
-            base,
+            head: pr.head,
+            base: pr.base,
+            head_commit: pull
+                .head_sha
+                .with_context(|| format!("PR #{number} has no head commit"))?,
+            fork,
+            head_ref: self.kind.pull_head_ref(number),
         })
     }
 }

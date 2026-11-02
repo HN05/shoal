@@ -198,16 +198,6 @@ pub(crate) async fn branch_pull(
     Ok(pull)
 }
 
-/// Title, head and base of a PR whose head branch is in this repository.
-pub(crate) async fn pull_details(
-    repo: &ForgeRepo,
-    account: &Account,
-    number: u64,
-) -> Result<(String, String, String)> {
-    let pull = repo.read(account, ItemKind::Pr, number).await?;
-    branches(repo, pull)
-}
-
 /// Up to `search.limit` items of `kind` that a list endpoint under the
 /// repository returns, keeping those in a state the search asks for.
 pub(crate) async fn list_items(
@@ -311,18 +301,6 @@ pub(crate) async fn issue_details(
         .hint_login(&repo.kind)?;
     require_open(issue.item.state)?;
     Ok((issue.item.title, issue.body))
-}
-
-fn branches(repo: &ForgeRepo, pull: Current) -> Result<(String, String, String)> {
-    let number = pull.item.number;
-    // A deleted fork leaves no head repository.
-    ensure!(
-        pull.head_repository
-            .is_some_and(|repository| repository.eq_ignore_ascii_case(&repo.path)),
-        "PR #{number} comes from a fork; only branches in this repository can be opened"
-    );
-    let pr = pull.item.pr.context("not a PR")?;
-    Ok((pull.item.title, pr.head, pr.base))
 }
 
 /// Full commit IDs, refusing anything else so cleanup never matches a prefix.

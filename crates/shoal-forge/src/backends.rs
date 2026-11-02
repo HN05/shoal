@@ -238,14 +238,14 @@ pub(crate) trait Backend {
         Ok(Vec::new())
     }
 
-    /// Title, head and base of a PR whose head branch is in the repository.
+    /// The PR `number`, for checking out its head.
     async fn pull_details(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-    ) -> Result<(String, String, String)> {
-        rest::pull_details(repo, account, number)
+    ) -> Result<Current> {
+        repo.read(account, ItemKind::Pr, number)
             .await
             .hint_login(self)
     }
@@ -1010,7 +1010,7 @@ impl Backend for ForgeKind {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-    ) -> Result<(String, String, String)> {
+    ) -> Result<Current> {
         dispatch!(self, backend => backend.pull_details(repo, account, number).await)
     }
 

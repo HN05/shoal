@@ -1,52 +1,5 @@
 use super::*;
-use crate::items::item::PrSummary;
 use serde_json::json;
-
-fn pull(head_repository: Option<&str>) -> Current {
-    Current {
-        item: Item {
-            kind: ItemKind::Pr,
-            number: 7,
-            url: String::new(),
-            title: "Fix".into(),
-            state: ItemState::Open,
-            labels: Vec::new(),
-            assignees: Vec::new(),
-            milestone: None,
-            pr: Some(PrSummary {
-                head: "topic".into(),
-                base: "main".into(),
-                draft: false,
-            }),
-        },
-        node_id: None,
-        head_repository: head_repository.map(str::to_owned),
-        body: String::new(),
-        author: None,
-        head_sha: None,
-        base_sha: None,
-        merge_commit: None,
-        conflict: None,
-        merges_now: false,
-        reviewers: Vec::new(),
-        user_ids: Default::default(),
-        milestone_id: None,
-        replaced_labels: Vec::new(),
-    }
-}
-
-#[test]
-fn only_branches_of_this_repository_can_be_opened() {
-    let forge = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
-    assert_eq!(
-        branches(&forge, pull(Some("Team/Repo"))).unwrap(),
-        ("Fix".into(), "topic".into(), "main".into())
-    );
-    for fork in [Some("someone/repo"), None] {
-        let error = branches(&forge, pull(fork)).unwrap_err();
-        assert!(error.to_string().contains("fork"), "{error}");
-    }
-}
 
 #[test]
 fn merged_commits_need_full_ids_and_lists_need_numbers() {

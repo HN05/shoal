@@ -229,6 +229,11 @@ async fn pull_request(
         .await?
         .pull_request(&ctx.forge_account()?, input)
         .await?;
+    ensure!(
+        !pull.fork,
+        "PR #{} comes from a fork; only branches in this repository can be opened",
+        pull.number
+    );
     let owner = client::workspaces(&ctx.paths)
         .await?
         .into_iter()

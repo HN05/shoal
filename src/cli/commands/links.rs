@@ -555,6 +555,11 @@ pub(super) async fn pull_creation(
     pull: PullRequest,
     creation: &mut Creation,
 ) -> Result<()> {
+    ensure!(
+        !pull.fork,
+        "PR #{} comes from a fork; only branches in this repository can be opened",
+        pull.number
+    );
     let owned = client::workspaces(&ctx.paths)
         .await?
         .iter()

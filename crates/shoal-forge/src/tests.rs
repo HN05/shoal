@@ -1,4 +1,65 @@
 use super::*;
+use crate::items::{
+    item::{Current, Item, ItemState, PrSummary},
+    link::ItemKind,
+};
+
+fn pull(head_repository: Option<&str>) -> Current {
+    Current {
+        item: Item {
+            kind: ItemKind::Pr,
+            number: 7,
+            url: String::new(),
+            title: "Fix".into(),
+            state: ItemState::Open,
+            labels: Vec::new(),
+            assignees: Vec::new(),
+            milestone: None,
+            pr: Some(PrSummary {
+                head: "topic".into(),
+                base: "main".into(),
+                draft: false,
+            }),
+        },
+        node_id: None,
+        head_repository: head_repository.map(str::to_owned),
+        body: String::new(),
+        author: None,
+        head_sha: Some("a".repeat(40)),
+        base_sha: None,
+        merge_commit: None,
+        conflict: None,
+        merges_now: false,
+        reviewers: Vec::new(),
+        user_ids: Default::default(),
+        milestone_id: None,
+        replaced_labels: Vec::new(),
+    }
+}
+
+#[test]
+fn a_prs_head_is_in_a_fork_unless_this_repository_has_it() {
+    let forge = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+    let details = |repository| {
+        forge
+            .checkout_details(
+                7,
+                "https://forge.example/team/repo/pulls/7".into(),
+                pull(repository),
+            )
+            .unwrap()
+    };
+    let own = details(Some("Team/Repo"));
+    assert_eq!(
+        (own.head.as_str(), own.base.as_str(), own.fork),
+        ("topic", "main", false)
+    );
+    assert_eq!(own.head_commit, "a".repeat(40));
+    // A deleted fork leaves no head repository.
+    for fork in [Some("someone/repo"), None] {
+        assert!(details(fork).fork);
+    }
+}
 
 #[test]
 fn issue_input_classification_defers_validation_until_lookup() {
