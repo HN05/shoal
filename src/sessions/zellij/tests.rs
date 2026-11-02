@@ -403,6 +403,8 @@ async fn a_place_recorded_without_its_directory_reaches_its_server() {
     let Some(server) = Isolated::start() else {
         return;
     };
+    // The pane exists once the client shows the session.
+    server.shown().await;
     let recorded = Zellij::recorded(&BTreeMap::new());
     assert_eq!(recorded.socket_dir(), None);
     let reached = recorded.reaching(&server.session).await.unwrap();
