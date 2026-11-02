@@ -75,22 +75,22 @@ impl Manager {
     async fn recorded_for_pull(&self, url: String) -> Result<Vec<ChangedOnBothSides>> {
         self.store
             .run(move |db| {
-                let ids = db
-                    .prepare("SELECT workspace_id FROM changed_on_both_sides")?
-                    .query_map([], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
                 let mut found = Vec::new();
-                for id in ids {
-                    let links = super::wait::linked_items(db, &id, Some(ItemKind::Pr))?;
-                    if !links.iter().any(|(linked, _)| *linked == url) {
-                        continue;
+                for (id, record) in recorded::listing_files(db)? {
+                    if links_pull(db, &id, &url)? {
+                        found.push(record);
                     }
-                    found.extend(recorded::get(db, &id)?.filter(|r| !r.files.is_empty()));
                 }
                 Ok(found)
             })
             .await
     }
+}
+
+/// Whether the workspace `id` links the PR at `url`.
+fn links_pull(db: &rusqlite::Connection, id: &str, url: &str) -> Result<bool> {
+    let links = super::wait::linked_items(db, id, Some(ItemKind::Pr))?;
+    Ok(links.iter().any(|(linked, _)| linked == url))
 }
 
 /// The warning for merging `subject` at `head`, from the first of `recorded`
