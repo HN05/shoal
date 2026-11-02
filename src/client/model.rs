@@ -561,8 +561,8 @@ pub struct WorkspaceStatus {
     /// once the daemon has tried it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sync: Option<CheckoutSync>,
-    /// The last check against the default conflict target, once one ran;
-    /// boxed to keep the response small.
+    /// The last check against the default conflict target, when it checked
+    /// the committed HEAD; boxed to keep the response small.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub changed_on_both_sides: Option<Box<ChangedOnBothSides>>,
 }

@@ -47,6 +47,19 @@ impl Manager {
         self.store.run(move |db| recorded::get(db, &id)).await
     }
 
+    /// The last check against the workspace's default target, when it
+    /// checked the committed HEAD.
+    pub(crate) async fn current_changed_on_both_sides(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<Option<ChangedOnBothSides>> {
+        let Some(recorded) = self.recorded_changed_on_both_sides(&workspace.id).await? else {
+            return Ok(None);
+        };
+        let head = git::resolve_commit(&workspace.path, "HEAD", git::run_isolated).await?;
+        Ok((recorded.head == head).then_some(recorded))
+    }
+
     async fn record_changed_on_both_sides(&self, check: &ConflictCheck) -> Result<()> {
         let check = check.clone();
         self.store.run(move |db| recorded::save(db, &check)).await

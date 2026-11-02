@@ -61,9 +61,13 @@ impl Manager {
         });
         let (leftover_count, leftovers) = self.leftovers.of(&inspection.workspace.id);
         let sync = self.checkout_sync(&inspection.workspace.repository_id);
+        // A worktree Git cannot read shows none, as `diff_error` says why.
+        let changed = self.current_changed_on_both_sides(&inspection.workspace);
         let changed_on_both_sides = self
-            .recorded_changed_on_both_sides(&inspection.workspace.id)
-            .await?
+            .check_access(&path, changed)
+            .await
+            .ok()
+            .flatten()
             .map(Box::new);
         Ok(WorkspaceStatus {
             inspection,

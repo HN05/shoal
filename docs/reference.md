@@ -776,7 +776,7 @@ of the daemon's automatic cleanup fails in the workspace, status says so in
 `cleanup_error`. `Last sync` shows when the repository's
 default branch last [synced](#repositories) and why the syncs since then failed,
 in `sync` (`synced_at`, `failing_since` and `error`). It lists the files the
-last check against the default target found
+last check of HEAD against the default target found
 [changed on both sides](#conflicts), from a watch or `shoal conflicts`, in
 `changed_on_both_sides` (`target`, `target_commit`, `head` and `files`). Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
