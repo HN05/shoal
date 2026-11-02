@@ -54,8 +54,10 @@ def binaries():
     found = []
     for line in output.splitlines():
         message = json.loads(line)
+        # A proc-macro's tests need the toolchain's libraries, which only
+        # cargo puts on the library path; they have none here.
         if (message.get("reason") == "compiler-artifact" and message.get("executable")
-                and message["profile"]["test"]):
+                and message["profile"]["test"] and message["target"]["kind"] != ["proc-macro"]):
             target = message["target"]
             name = target["name"] if target["kind"] == ["test"] else f"{target['name']} ({target['kind'][0]})"
             found.append((name, message["executable"], str(Path(message["manifest_path"]).parent)))

@@ -32,7 +32,7 @@ jobs:
           cargo clean --workspace
           cargo test --locked --no-run -q
           nproc; uptime; ps -e | wc -l
-          python3 scripts/profile_tests.py suite
+          # suite measured in run 13923
           uptime
           python3 scripts/profile_tests.py tests --jobs "$(nproc)"
           uptime; ps -e | wc -l
