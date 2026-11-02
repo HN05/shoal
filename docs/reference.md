@@ -2858,6 +2858,14 @@ first, or with `--yes`. Large previews show an omitted-entry count; use
 `git status` for the full list. Every removal of an existing worktree first keeps
 them, with HEAD, in a [checkpoint](#checkpoints-and-restore).
 
+`--disposable` on `shoal add` and `shoal split` creates a workspace that holds
+nothing worth keeping, such as one a CI job runs in: every removal, `shoal rm`,
+its parent's removal and idle or other cleanup, deletes it without inspecting its
+unsaved work or asking, keeps no checkpoint, and deletes its branch whatever
+commits only it has. Holds, open questions and running commands keep it from
+unattended removal as they keep any workspace. `status` shows `Disposable: yes`
+and `--json` `disposable`.
+
 Removal stops tracked commands, then the workspace's
 [untracked processes](#untracked-processes) as `shoal stop --processes` does,
 including those hooks and `shoal work env` exports started. Automatic cleanup

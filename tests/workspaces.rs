@@ -29801,3 +29801,33 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
     fixture.ok(&["rm", "later", "--yes"]);
     assert_eq!(ran("pre-remove"), "later\n");
 }
+
+#[test]
+fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
+    let fixture = Fixture::new();
+    let repo = fixture.repo.to_str().unwrap();
+    let workspace = fixture.ok(&["add", repo, "scratch", "--disposable"]);
+    assert_eq!(workspace["disposable"], true);
+    let path = PathBuf::from(workspace["path"].as_str().unwrap());
+    fs::write(path.join("tracked"), "changed\n").unwrap();
+    git(&path, &["commit", "-qam", "unpushed"]);
+    fs::write(path.join("untracked"), "draft\n").unwrap();
+    let child = fixture.ok(&[
+        "split",
+        "--no-branch",
+        "--workspace",
+        "scratch",
+        "--disposable",
+    ]);
+    let child_path = PathBuf::from(child["path"].as_str().unwrap());
+    fs::write(child_path.join("untracked"), "draft\n").unwrap();
+    let status = fixture.run(&["status", "scratch"]);
+    assert!(String::from_utf8_lossy(&status.stdout).contains("Disposable:    yes"));
+
+    // No confirmation: nothing in it is worth keeping.
+    let removed = fixture.ok(&["rm", "scratch"]);
+    assert_eq!(removed["branch_deleted"], true, "{removed}");
+    assert!(!path.exists() && !child_path.exists());
+    assert!(git(&fixture.repo, &["branch", "--list", "scratch"]).is_empty());
+    assert_eq!(fixture.ok(&["work", "restore"]), serde_json::json!([]));
+}

@@ -44,6 +44,7 @@ impl Manager {
             base_commit: Some(start.at.commit.clone()),
             at: Some(start.at),
             setup_skipped: options.skip_setup,
+            disposable: options.disposable,
             ..Workspace::new_record(repo.id.clone(), name, path, None, WorkspaceState::Preparing)
         };
         self.insert_workspace(workspace.clone(), None, parent)

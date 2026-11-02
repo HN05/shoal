@@ -239,22 +239,27 @@ fn confirm_removals(
 
 /// What removing the workspace `check` inspected loses: the workspaces
 /// below it, its unsaved work, with the changed files on a terminal, and its
-/// holds.
+/// holds. Nothing in a disposable workspace counts.
 fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
     let mut lines = Vec::new();
     let unsaved = check.unsaved_work();
-    if unsaved.is_empty() && check.workspace.holds.is_empty() && check.children.is_empty() {
+    let holds = match check.workspace.disposable {
+        true => &[][..],
+        false => &check.workspace.holds[..],
+    };
+    let children: Vec<_> = check
+        .children
+        .iter()
+        .filter(|child| !check.disposable_children.contains(&child.id))
+        .map(|child| child.name.as_str())
+        .collect();
+    if unsaved.is_empty() && holds.is_empty() && children.is_empty() {
         return lines;
     }
-    if !check.children.is_empty() {
+    if !children.is_empty() {
         lines.push(format!(
             "Removes the workspaces split from it first, whatever their work or holds; shoal work restore brings each back: {}",
-            check
-                .children
-                .iter()
-                .map(|child| child.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
+            children.join(", ")
         ));
     }
     for work in &unsaved {
@@ -267,9 +272,9 @@ fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
             "The checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule), so they cannot be restored.".into()
         });
     }
-    if !check.workspace.holds.is_empty() {
+    if !holds.is_empty() {
         lines.push("Holds:".into());
-        for hold in &check.workspace.holds {
+        for hold in holds {
             let reason = crate::cli::context::optional(hold.reason.as_deref(), |reason| {
                 format!(" ({reason})")
             });

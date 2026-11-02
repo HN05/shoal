@@ -535,6 +535,7 @@ impl Manager {
         let path = self.new_workspace_path(repo, &name, path).await?;
         let workspace = Workspace {
             setup_skipped: options.skip_setup,
+            disposable: options.disposable,
             ..Workspace::new_record(
                 repo.id.clone(),
                 name,
@@ -627,7 +628,7 @@ impl Manager {
                     tree::ensure_parent(&tx, &record.repository_id, parent)?;
                 }
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,parent_workspace_id,start_commit,made_for,setup_skipped) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15,?16)",
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,parent_workspace_id,start_commit,made_for,setup_skipped,disposable) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15,?16,?17)",
                     params![
                         record.id,
                         record.repository_id,
@@ -645,6 +646,7 @@ impl Manager {
                         record.at.as_ref().map(|at| &at.commit),
                         record.at.as_ref().and_then(|at| at.made_for.as_ref()).map(serde_json::to_string).transpose()?,
                         record.setup_skipped,
+                        record.disposable,
                     ],
                 )?;
                 tx.execute(

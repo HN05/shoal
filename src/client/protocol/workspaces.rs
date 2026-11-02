@@ -192,6 +192,10 @@ pub struct CreationOptions {
     /// still happens.
     #[serde(default)]
     pub skip_setup: bool,
+    /// Nothing in it is worth keeping: every removal deletes it whatever it
+    /// holds, without asking or keeping a checkpoint, and deletes its branch.
+    #[serde(default)]
+    pub disposable: bool,
 }
 
 /// Where a workspace at a commit starts.

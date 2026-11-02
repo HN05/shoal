@@ -92,6 +92,7 @@ pub(crate) async fn inspect(
         running_commands,
         idle_restores,
         children: vec![],
+        disposable_children: vec![],
         processes: vec![],
         dirty: false,
         changed_files: vec![],
@@ -105,6 +106,17 @@ pub(crate) async fn inspect(
         default_branch: default_branch.map(str::to_owned),
     };
     if !off_runtime::exists(&check.workspace.path).await? {
+        return Ok(check);
+    }
+    // Nothing in a disposable workspace is worth keeping, so nothing is
+    // inspected for unsaved work; whether it is in use still is.
+    if check.workspace.disposable {
+        check.branch = check.workspace.branch.clone();
+        if policy == InspectionPolicy::IncludeDirectoryProcesses {
+            check
+                .load_directory_processes(&process::DirectoryUsers::default())
+                .await?;
+        }
         return Ok(check);
     }
     let path = &check.workspace.path;

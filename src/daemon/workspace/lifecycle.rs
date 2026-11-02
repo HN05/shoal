@@ -425,6 +425,9 @@ impl Manager {
             .rev()
         {
             let child = self.workspace(&id).await?;
+            if child.disposable {
+                check.disposable_children.push(child.id.clone());
+            }
             check.children.push(crate::model::WorkspaceRef {
                 id: child.id,
                 name: child.name,
@@ -1313,14 +1316,20 @@ impl Manager {
             .await?;
         // The final inspection decides what goes.
         let (files, branch) = worktrunk_removal_options(&check, removal.unsaved());
-        let record = self.save_removal_record(workspace, removal.cause()).await?;
+        // A disposable workspace keeps nothing to restore.
+        let record = match workspace.disposable {
+            true => None,
+            false => Some(self.save_removal_record(workspace, removal.cause()).await?),
+        };
         let removed = async {
             if check.dirty
                 && (removal.discards_archived_files()
                     || removal.unsaved().promises_restorable_files())
             {
                 ensure!(
-                    !record.checkpoint.files_omitted,
+                    record
+                        .as_ref()
+                        .is_some_and(|record| !record.checkpoint.files_omitted),
                     "a checkpoint cannot keep the unsaved files; retaining the workspace"
                 );
             }
@@ -1582,9 +1591,10 @@ impl Manager {
 }
 
 /// Worktrunk's options for the inspected worktree. A branch goes when its
-/// commits are all preserved, except the default branch, which an
-/// unresolved default branch could be; files go by force only once the
-/// removal may discard unsaved work.
+/// commits are all preserved, as a disposable workspace's always count,
+/// except the default branch, which an unresolved default branch could be;
+/// files go by force only once the removal may discard unsaved work, as it
+/// always may in a disposable workspace.
 fn worktrunk_removal_options(
     check: &RemovalCheck,
     unsaved: &UnsavedWork,
@@ -1599,7 +1609,7 @@ fn worktrunk_removal_options(
     } else {
         BranchRemoval::Keep
     };
-    let files = if unsaved.deletes_unsaved() {
+    let files = if check.workspace.disposable || unsaved.deletes_unsaved() {
         FileRemoval::Force
     } else {
         FileRemoval::CleanOnly

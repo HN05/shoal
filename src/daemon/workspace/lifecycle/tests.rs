@@ -1281,3 +1281,39 @@ async fn a_clean_confirmation_naming_children_removes_clean_only() {
     let (files, _) = worktrunk_removal_options(&check, &UnsavedWork::All);
     assert!(matches!(files, FileRemoval::Force));
 }
+
+#[tokio::test]
+async fn idle_cleanup_takes_a_disposable_workspace_whatever_it_holds() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let new = |disposable| super::super::NewWorkspace {
+        options: crate::protocol::CreationOptions {
+            disposable,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let disposable = manager
+        .create_workspace_with(&repo.id, "scratch".into(), None, new(true))
+        .await
+        .unwrap();
+    let kept = manager
+        .create_workspace_with(&repo.id, "kept".into(), None, new(false))
+        .await
+        .unwrap();
+    for workspace in [&disposable, &kept] {
+        fs::write(workspace.path.join("draft"), "unsaved").unwrap();
+    }
+    assert!(matches!(
+        manager.cleanup_reason(&disposable).await,
+        CleanupReason::Idle { .. }
+    ));
+    assert!(!matches!(
+        manager.cleanup_reason(&kept).await,
+        CleanupReason::Idle { .. }
+    ));
+}

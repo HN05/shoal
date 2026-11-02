@@ -47,6 +47,9 @@ fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
             (false, false) => "in progress",
         }
     );
+    if workspace.disposable {
+        outln!("Disposable:    yes");
+    }
     match &status.diff {
         Some(diff) => outln!(
             "Changes:       {} file{}, +{} -{}",

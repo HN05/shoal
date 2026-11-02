@@ -108,6 +108,10 @@ pub struct Workspace {
     /// Whether it was created without setup, which `shoal work setup` runs.
     #[serde(default)]
     pub setup_skipped: bool,
+    /// Whether every removal deletes it whatever it holds, keeping no
+    /// checkpoint.
+    #[serde(default)]
+    pub disposable: bool,
     /// The workspace whose branch this one's branch builds on.
     #[serde(default)]
     pub base_workspace: Option<WorkspaceRef>,
@@ -469,6 +473,7 @@ impl Workspace {
             running: false,
             done: false,
             setup_skipped: false,
+            disposable: false,
             usage: None,
         }
     }

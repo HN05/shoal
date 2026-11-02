@@ -294,7 +294,8 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch(
         "ALTER TABLE workspaces DROP COLUMN start_commit;
          ALTER TABLE workspaces DROP COLUMN made_for;
-         ALTER TABLE workspaces DROP COLUMN setup_skipped;",
+         ALTER TABLE workspaces DROP COLUMN setup_skipped;
+         ALTER TABLE workspaces DROP COLUMN disposable;",
     )?;
     Ok(())
 }

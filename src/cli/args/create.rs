@@ -122,12 +122,17 @@ pub struct CreationArgs {
     /// and the removal hooks; `shoal work setup` runs the setup later.
     #[arg(long)]
     pub skip_setup: bool,
+    /// Nothing in it is worth keeping: every removal deletes it whatever it
+    /// holds, without asking or keeping a checkpoint, and deletes its branch.
+    #[arg(long)]
+    pub disposable: bool,
 }
 
 impl From<CreationArgs> for crate::protocol::CreationOptions {
     fn from(args: CreationArgs) -> Self {
         Self {
             skip_setup: args.skip_setup,
+            disposable: args.disposable,
         }
     }
 }

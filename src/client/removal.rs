@@ -49,6 +49,10 @@ pub struct RemovalCheck {
     /// below it; filled in for a manual removal's check.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<crate::model::WorkspaceRef>,
+    /// The IDs of the `children` that are disposable, which removal takes
+    /// without asking.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disposable_children: Vec<String>,
     /// The restores of idle agents, which `running_commands` and
     /// `processes` leave out; daemon state like `default_branch`.
     #[cfg(feature = "cli")]
