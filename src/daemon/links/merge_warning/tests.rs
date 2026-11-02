@@ -117,6 +117,12 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
         .unwrap();
     let recorded = manager.recorded_for_pull(url).await.unwrap();
     let head = recorded[0].head.clone();
-    let warning = warning("PR #7".into(), recorded, &head).unwrap();
-    assert_eq!(warning.to_string(), "PR #7 and main both changed version");
+    let into = |target: &str| Merged {
+        head: head.clone(),
+        target: target.into(),
+    };
+    let found = warning("PR #7".into(), recorded.clone(), &into("main")).unwrap();
+    assert_eq!(found.to_string(), "PR #7 and main both changed version");
+    // A PR into another branch merges nothing the check of main found.
+    assert!(warning("PR #7".into(), recorded, &into("release")).is_none());
 }

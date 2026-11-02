@@ -15,7 +15,7 @@ use crate::{
 impl Manager {
     /// The warning for merging the PR `input` names in the repository of
     /// `context`, or the space's linked PR, as the workspaces that link it
-    /// last checked its head.
+    /// last checked its head against its base branch.
     pub async fn merge_warning(
         &self,
         context: &ItemContext,
@@ -29,7 +29,9 @@ impl Manager {
         let account = self.user_account();
         let current = forge.read(&account, ItemKind::Pr, number).await?;
         let head = current.head_sha.context("the forge names no PR head")?;
-        Ok(warning(format!("PR #{number}"), recorded, &head))
+        let base = current.item.pr.context("the forge names no PR base")?.base;
+        let merged = Merged { head, target: base };
+        Ok(warning(format!("PR #{number}"), recorded, &merged))
     }
 
     /// The warning for landing the workspace's HEAD in the default branch,
@@ -42,12 +44,10 @@ impl Manager {
             return Ok(None);
         };
         let repo = self.repository(&workspace.repository_id).await?;
-        let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached);
-        if recorded.target != default.await? {
-            return Ok(None);
-        }
+        let target = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
         let head = git::resolve_commit(&workspace.path, "HEAD", git::run_isolated).await?;
-        Ok(warning(workspace.branch, vec![recorded], &head))
+        let merged = Merged { head, target };
+        Ok(warning(workspace.branch, vec![recorded], &merged))
     }
 
     /// The forge, number and URL of the PR `input` names in the repository
@@ -99,12 +99,22 @@ fn links_pull(db: &rusqlite::Connection, id: &str, url: &str) -> Result<bool> {
     Ok(links.iter().any(|(linked, _)| linked == url))
 }
 
-/// The warning for merging `subject` at `head`, from the first of `recorded`
-/// that the check made at that head.
-fn warning(subject: String, recorded: Vec<ChangedOnBothSides>, head: &str) -> Option<MergeWarning> {
+/// What a merge brings together: a head and the branch it merges into.
+struct Merged {
+    head: String,
+    target: String,
+}
+
+/// The warning for merging `subject` as `merged`, from the first of
+/// `recorded` that checked that head against that branch.
+fn warning(
+    subject: String,
+    recorded: Vec<ChangedOnBothSides>,
+    merged: &Merged,
+) -> Option<MergeWarning> {
     let recorded = recorded
         .into_iter()
-        .find(|recorded| recorded.head == head)?;
+        .find(|recorded| recorded.head == merged.head && recorded.target == merged.target)?;
     Some(MergeWarning {
         subject,
         target: recorded.target,

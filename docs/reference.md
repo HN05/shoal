@@ -3334,7 +3334,8 @@ succeed. GitHub deletes the branch of an automatic merge only as the
 repository's settings say, so it refuses `--delete-branch` with `--auto`, and
 Bitbucket cannot merge later. `--cancel-auto` withdraws the automatic merge.
 When the last check of a workspace that links the PR found files
-[changed on both sides](#conflicts) at the PR's head, `merge` and `merge --auto`
+[changed on both sides](#conflicts) at the PR's head with its base branch,
+`merge` and `merge --auto`
 name them and ask before merging, such as `PR #12 and main both changed
 src/version.rs.`; `--yes` merges without asking, and without a terminal they
 refuse and name it. They read only that record, so a PR without one, a record
