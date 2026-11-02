@@ -373,23 +373,10 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
     assert_eq!(woken.updates[0].kind, UpdateKind::Comment);
     // A watch in the chat yields to its hook's delivery, which hands over
     // the same update once acknowledged.
-    let watching = tokio::spawn({
-        let (manager, chat) = (manager.clone(), chat.id.clone());
-        async move {
-            let selection = Selection {
-                kind: Some(LinkKind::Pr),
-                input: None,
-            };
-            manager.wait_items(&chat, &selection, Some(600)).await
-        }
-    });
-    // A hang guard only: the watch registers before it polls.
-    while !manager.chat_waits.is_waiting(&chat.id) {
-        tokio::task::yield_now().await;
-    }
+    let watch = manager.chat_waits.start(&chat.id);
     let delivered = manager.chat_updates(&chat.id).await.unwrap();
-    let watched = watching.await.unwrap().unwrap();
-    assert!(watched.superseded, "{watched:?}");
+    watch.superseded.notified().await;
+    assert!(!watch.is_current());
     assert_eq!(delivered.updates, woken.updates);
     manager
         .acknowledge_pr_updates(&chat.id, vec![delivered.updates[0].delivery.clone()])
@@ -403,6 +390,56 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
             .updates
             .is_empty()
     );
+}
+
+#[tokio::test]
+async fn a_chats_wait_takes_activity_an_item_change_held_back() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    register_watch(&manager, &chat.id, "pr").await;
+    let manager = std::sync::Arc::new(manager);
+    // Activity queues, signalling before the wait starts, and then an item
+    // change holds the chat's PR gate, so the wait finds nothing it may
+    // take yet and no signal is left to wake it.
+    manager
+        .queue_background_updates(
+            &chat.id,
+            vec![("pr".into(), snapshot("first"))],
+            crate::time::unix_seconds(),
+        )
+        .await
+        .unwrap();
+    let gate = manager.gates.lock_prs([&chat.id]).await;
+    let waiting = tokio::spawn({
+        let (manager, chat) = (manager.clone(), chat.id.clone());
+        async move { manager.wait_chat_messages(&chat).await }
+    });
+    // The change ends without a signal; the wait looks again by itself.
+    while !manager.chat_waits.is_waiting(&chat.id) {
+        tokio::task::yield_now().await;
+    }
+    drop(gate);
+    let woken = tokio::time::timeout(std::time::Duration::from_secs(10), waiting)
+        .await
+        .expect("the wait slept past the released gate")
+        .unwrap()
+        .unwrap();
+    assert_eq!(woken.updates[0].kind, UpdateKind::Comment);
 }
 
 #[tokio::test]

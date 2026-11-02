@@ -15,6 +15,10 @@ use crate::daemon::{
     workspace_files::{self, Attacher, NewFile, layout::Copy},
 };
 
+/// How soon a chat's wait looks again at item activity an item change held
+/// back under its PR gate.
+const GATE_RETRY: std::time::Duration = std::time::Duration::from_millis(500);
+
 impl Manager {
     /// Queue a message from the user for the running chat `chat` names by ID
     /// or name, with copies of `attachments`, which the chat's attached files
@@ -153,7 +157,7 @@ impl Manager {
         let room = RESPONSE_LIMIT.saturating_sub(messages_size);
         let leftovers = self.leftovers.undelivered(chat, room)?;
         let reserved = messages_size + serde_json::to_vec(&leftovers)?.len();
-        let updates = self.queued_chat_updates(chat, reserved).await?;
+        let updates = (self.queued_chat_updates(chat, reserved).await?).unwrap_or_default();
         if !delivery.is_current() {
             return Ok(Updates::superseded());
         }
@@ -174,7 +178,11 @@ impl Manager {
         loop {
             let messages = self.chat_messages(chat).await?;
             let reserved = serde_json::to_vec(&messages)?.len();
-            let updates = self.queued_chat_updates(chat, reserved).await?;
+            let queued_updates = self.queued_chat_updates(chat, reserved).await?;
+            // Releasing the PR gate signals nothing, so a held one is
+            // checked again shortly.
+            let gated = queued_updates.is_none();
+            let updates = queued_updates.unwrap_or_default();
             if !messages.is_empty() || !updates.is_empty() {
                 if !wait.is_current() {
                     return Ok(Updates::superseded());
@@ -187,6 +195,7 @@ impl Manager {
             tokio::select! {
                 changed = queued.changed() => changed?,
                 changed = background.changed() => changed?,
+                () = tokio::time::sleep(GATE_RETRY), if gated => {}
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
             }
         }

@@ -735,15 +735,15 @@ impl Manager {
     }
 
     /// The updates queued on the chat's cursor that fit one response beside
-    /// `reserved` bytes of its other content, unless an item change holds
-    /// its PR gate, when they wait for a later delivery.
+    /// `reserved` bytes of its other content, or `None` while an item change
+    /// holds its PR gate, when they wait for a later delivery.
     pub(crate) async fn queued_chat_updates(
         &self,
         chat: &str,
         reserved: usize,
-    ) -> Result<Vec<Update>> {
+    ) -> Result<Option<Vec<Update>>> {
         let Some(_gate) = self.gates.try_lock_prs([chat]) else {
-            return Ok(Vec::new());
+            return Ok(None);
         };
         let id = chat.to_owned();
         let keys: Vec<String> = (self.store.run(move |db| followed_items(db, &id, None)))
@@ -752,7 +752,10 @@ impl Manager {
             .map(|(url, _)| url)
             .collect();
         let pending = self.pending_activity(chat, &keys).await?;
-        self.fit_response(own_batch(chat, pending), reserved).await
+        Ok(Some(
+            self.fit_response(own_batch(chat, pending), reserved)
+                .await?,
+        ))
     }
 
     /// Queue `observations` on the workspace's cursor, so its agent receives
