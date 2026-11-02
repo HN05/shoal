@@ -2530,29 +2530,6 @@ repository refuses other changes until the next `move root` or daemon start
 completes it. Agent trust for the old paths is removed, and the new paths are
 trusted for the agents their workspaces keep for `shoal resume`.
 
-### Merge into your workspace branch
-
-```sh
-shoal merge main                           # Any local branch: fast-forwarded from upstream first
-shoal merge feature/api                    # Local, or discover a remote-only branch
-shoal merge feature/api --local            # Merge the local branch as it is, no refresh
-shoal merge feature/api --remote origin    # Fetch explicitly, even if local exists
-shoal merge origin/feature/api fix-login   # Qualified source, named destination
-```
-
-The destination must be the workspace's recorded branch. Local branches take
-precedence. Unless `--local`, a local branch with an upstream is fetched and
-fast-forwarded first; a dirty checkout, divergence, or failed fetch blocks the
-merge, while an ahead branch is preserved. A local branch without an upstream,
-or checked out in a managed workspace, is merged as it is. Otherwise Shoal
-queries configured remotes and fetches the branch only when the local ref is
-absent; a failed ref or commit lookup stops the merge.
-Several matches or an unreachable remote require `--remote`. Qualified remote
-sources and full `refs/…` names always fetch fresh data. Git fast-forwards or
-creates a merge commit; conflicts stay in the worktree for `git commit` or `git
-merge --abort`, and `--json` reports `success`, `exit_code`, commits, and Git
-output. Nothing is stashed, reset, or pushed.
-
 ### Merge into the default branch
 
 `shoal merge [workspace]` merges the workspace's recorded branch into the
@@ -2562,8 +2539,9 @@ preserving an ahead branch and refusing divergence or a failed fetch. The defaul
 branch cannot be held by a managed workspace, and any other checkout of it must be
 clean. The workspace must be clean and on its recorded branch. Git fast-forwards or
 creates a merge commit in the default checkout. A merge that does not apply cleanly
-is aborted: run `shoal merge <default>` in the workspace, resolve there, and merge
-again. Merged commits count as pushed for `rm` and automatic cleanup. As
+is aborted: merge the default branch into the workspace with Git (`git merge
+main`), resolve the conflicts there, and run `shoal merge` again.
+Merged commits count as pushed for `rm` and automatic cleanup. As
 [`pr merge`](#issue-and-pr-actions) does, `merge` asks before merging a HEAD whose last check found
 files [changed on both sides](#conflicts) with the default branch, and `--yes`
 merges without asking. An agent's merge that needs approval names those files
