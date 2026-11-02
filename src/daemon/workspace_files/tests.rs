@@ -1146,6 +1146,10 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TABLE changed_on_both_sides;
     DROP TRIGGER chat_restored;
     ALTER TABLE chats DROP COLUMN restore;
     ALTER TABLE chats DROP COLUMN unique_id;
+    ALTER TABLE workspaces DROP COLUMN start_commit;
+    ALTER TABLE workspaces DROP COLUMN made_for;
+    ALTER TABLE workspaces DROP COLUMN setup_skipped;
+    ALTER TABLE workspaces DROP COLUMN disposable;
     PRAGMA user_version=87;";
 
 /// Start a chat named `name` in the repository of `workspace` whose process
