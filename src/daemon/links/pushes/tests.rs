@@ -13,6 +13,18 @@ async fn setup() -> (
     Workspace,
     Caller,
 ) {
+    setup_with("propose").await
+}
+
+/// A workspace whose repository sets `[permissions] push` to `push`.
+async fn setup_with(
+    push: &str,
+) -> (
+    tempfile::TempDir,
+    std::sync::Arc<Manager>,
+    Workspace,
+    Caller,
+) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -25,7 +37,7 @@ async fn setup() -> (
         .unwrap();
     std::fs::write(
         workspace.path.join(".shoal.toml"),
-        "[permissions]\npush = 'propose'\n",
+        format!("[permissions]\npush = '{push}'\n"),
     )
     .unwrap();
     commit(&workspace.path, ".shoal.toml");
@@ -274,4 +286,33 @@ async fn denying_a_push_tells_the_agent_not_to_push_it_another_way() {
             .any(|message| message.message.contains("Do not push it another way")),
         "{messages:?}"
     );
+}
+
+#[tokio::test]
+async fn deny_refuses_scoped_pushes_and_lets_the_user_push() {
+    let (root, manager, workspace, caller) = setup_with("deny").await;
+    let remote = root.path().join("remote.git");
+    crate::test_support::git(root.path(), &["init", "-q", "--bare", "remote.git"]);
+    crate::test_support::git(
+        &workspace.path,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    let push = branch(&workspace).await;
+    let error = manager
+        .request_push(&workspace.id, push.clone(), Some(&caller))
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("cannot push"), "{error:#}");
+    let error = manager
+        .branch_push_held(&workspace.id, Some(&caller))
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("cannot push"), "{error:#}");
+    let outcome = manager
+        .request_push(&workspace.id, push, None)
+        .await
+        .unwrap();
+    assert!(matches!(outcome, PushOutcome::Direct));
+    assert!(!manager.branch_push_held(&workspace.id, None).await.unwrap());
+    assert!(manager.approval_requests(None).await.unwrap().is_empty());
 }

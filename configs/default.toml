@@ -340,8 +340,8 @@ pr_open = "direct"
 issue_other_repositories = "propose"
 # shoal land: "propose" or "direct".
 land = "propose"
-# Pushes to the repository's remotes, by shoal pr open or git push: "direct" or
-# "propose". With "propose", shoal land needs your approval too.
+# Pushes to the repository's remotes, by shoal pr open or git push: "direct",
+# "propose" or "deny". Unless "direct", shoal land needs your approval too.
 push = "direct"
 # Requests through shoal forge api that are not reads, which you may always
 # send: "deny" or "direct".

@@ -181,6 +181,7 @@ instead of the PR delivery guidance below.
   plain `git push`, records a request bound to the ref and commit instead;
   approval pushes exactly that, with no agent present, and a branch that moved
   outdates it. Nothing decides, withdraws or replaces a request while its push runs.
+  `"deny"` refuses those pushes and records nothing.
   `[permissions] issue_other_repositories` governs a scoped issue in another repository the same
   way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. This is cooperative,
   not a security boundary, so judge it as such.

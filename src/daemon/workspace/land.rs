@@ -97,10 +97,10 @@ impl Manager {
     /// holds the repository Git gate, so the approved commit is the one that
     /// lands.
     pub(super) async fn authorize_scoped_land(&self, plan: &LandPlan) -> Result<()> {
-        use crate::config::repo::Opening;
+        use crate::config::repo::{Opening, Pushes};
         let settings = self.workspace_settings(&plan.workspace).await?;
         let permissions = &settings.permissions;
-        if permissions.land == Opening::Direct && permissions.push == Opening::Direct {
+        if permissions.land == Opening::Direct && permissions.push == Pushes::Direct {
             return Ok(());
         }
         match self.request_land_approval(land_request(plan)).await? {

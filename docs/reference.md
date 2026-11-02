@@ -1938,8 +1938,8 @@ ordinary executions keep their settings. When the profile sets `user.name` or
 `user.email`, inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` variables for that
 field are dropped. Push credentials follow profile settings such as
 `core.sshCommand`. An undefined profile fails before the agent starts. Where
-[`[permissions] push`](#approval-for-agent-pushes) is `"propose"`, the same
-variables carry the rewrites that hold the agent's pushes for your approval.
+[`[permissions] push`](#approval-for-agent-pushes) is `"propose"` or `"deny"`,
+the same variables carry the rewrites that hold or refuse the agent's pushes.
 
 ### Agent secrets
 
@@ -3401,7 +3401,7 @@ A proposed `issue open` records every option it was given, with the workspace,
 branch, commit and agent; running it again unchanged returns the same request.
 The request belongs to the repository, so it stays when the workspace is removed.
 A proposed `pr open` pushes the branch as usual, unless
-[`[permissions] push`](#approval-for-agent-pushes) holds the push back, links the branch's open PR if
+[`[permissions] push`](#approval-for-agent-pushes) holds the push back or refuses it, links the branch's open PR if
 there is one, and otherwise records the PR it would open, with its defaults
 filled in, at the branch's current commit. Running it again at the same commit
 returns that request; at a newer commit it replaces it, and the old one stays
@@ -3449,13 +3449,19 @@ the opened item.
 A proposed PR still shows its branch and commits on the forge before you
 decide, and an agent can push with plain `git push` at any time. `[permissions]
 push = "propose"` keeps an agent's pushes to the workspace repository's remotes
-off the forge until you approve them; `"direct"`, the default, pushes at once.
-Unscoped callers always push directly.
+off the forge until you approve them; `"deny"` refuses them, so agents never
+push; `"direct"`, the default, pushes at once. Unscoped callers always push
+directly.
 
 ```toml
 [permissions]
-push = "propose" # Default: "direct"
+push = "propose" # Default: "direct"; or "deny"
 ```
+
+With `"deny"`, `shoal pr open` from a workspace process fails while the remote
+lacks the branch's commit and opens or links the PR once you have pushed it,
+and the agent's `git push` reports each ref as rejected with the reason. No
+approval request is recorded. The rest of this section describes `"propose"`.
 
 `shoal pr open` from a workspace process then pushes nothing while the remote
 lacks the branch's commit. Without an open PR it records the PR it would open as
@@ -3508,7 +3514,7 @@ its PR as when approving any proposal. A failed push leaves the request pending
 and notifies you; approve it again to retry. While the push runs, denying or
 withdrawing the request, and new push requests and PR proposals from the
 workspace, are refused until it ends. The agent hears the outcome as an
-[agent message](#agent-messages). With `push = "propose"`, a scoped
+[agent message](#agent-messages). Unless `push` is `"direct"`, a scoped
 `shoal land` also needs your approval, since it may push the default branch, and
 `shoal pr revert` through the forge is refused, since the forge pushes its
 branch at once.

@@ -5,7 +5,7 @@ use anyhow::{Result, bail, ensure};
 
 use super::{proposals::OpenOutcome, space::LinkSpace};
 use crate::{
-    config::repo::Opening,
+    config::repo::{Opening, Pushes},
     daemon::{scope::Caller, workspace::Manager},
     forge::{
         conventions,
@@ -56,9 +56,9 @@ impl Manager {
                     "[permissions] pr_open needs the user's approval for new PRs, and a forge's revert cannot wait for it; ask the user to run shoal pr revert"
                 );
             }
-            if settings.permissions.push == Opening::Propose {
+            if settings.permissions.push != Pushes::Direct {
                 bail!(
-                    "[permissions] push needs the user's approval for pushes, and a forge's revert pushes its branch at once; ask the user to run shoal pr revert"
+                    "[permissions] push holds back or refuses agents' pushes, and a forge's revert pushes its branch at once; ask the user to run shoal pr revert"
                 );
             }
         }

@@ -113,7 +113,9 @@ commit as you normally would, and do not push another way. On approval Shoal
 pushes the commit the user approved, without you, and opens the PR that waited
 for it; the message says so. A new commit outdates the request, so push again,
 or run `pr open` again for a proposed PR, to request the current commit. A
-pending push keeps your workspace.
+pending push keeps your workspace. Where the repository refuses your pushes
+instead (`push = "deny"`), `pr open` and `git push` fail with the reason:
+commit your work, ask the user to push it, and run `pr open` once it is pushed.
 
 Every link names its relation last: `assigned` for the work you are doing,
 `opened` for an item you created another way, `related` for one the work relates to.

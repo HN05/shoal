@@ -2030,7 +2030,8 @@ stay direct.
 A proposed PR still publishes its branch, and agents push with plain Git too, so
 `[permissions] push = "propose"` holds a scoped caller's pushes to the workspace
 repository's remotes for the user (`"direct"` is the default; unscoped callers
-always push). A push request is a proposal, decided only by the user, and binds
+always push); `"deny"` refuses them outright for repositories where agents never
+push, through the same helper and `pr open` check, recording nothing. A push request is a proposal, decided only by the user, and binds
 exactly what the push changes: the remote and, where it has several, the push
 URL, the ref, the object, and for a forced push or a deletion what it replaces,
 so approval cannot push something the user did not see. A newer push to the
@@ -2047,7 +2048,7 @@ leave those pushes unheld. Approval runs the push without the agent, in an
 operation whose end decides the request, with the agent's Git profile as
 `pr open`'s push has. Nothing decides, withdraws or replaces a request while its
 push runs, since the push lands regardless. Pushes Shoal authorized itself run
-without the rewrites. With `push = "propose"`, a scoped `land` needs approval
+without the rewrites. Unless `push` is `"direct"`, a scoped `land` needs approval
 whatever `[permissions] land` says, since it may push the default branch, and a
 forge's `pr revert`, which pushes at once, is refused for scoped callers. A
 pending push request keeps the workspace from unattended removal. Approving a land

@@ -24,7 +24,7 @@ use crate::{
         client,
         internal::{Worker, internal_command},
     },
-    config::repo::Opening,
+    config::repo::Pushes,
     daemon::approvals::Undecided,
     env,
     model::ExecutionPlan,
@@ -546,7 +546,7 @@ async fn prepare_agent_launch(
         None => None,
     };
     let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;
-    let push_gate = match has_agent && settings.permissions.push == Opening::Propose {
+    let push_gate = match has_agent && settings.permissions.push != Pushes::Direct {
         true => prepare_push_gate(paths, workspace).await?,
         false => Default::default(),
     };
