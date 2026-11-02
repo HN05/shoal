@@ -11,7 +11,11 @@ use super::super::{
 };
 use crate::protocol::{self, Body, NotificationMethod, Response};
 
-pub(super) async fn handle(manager: &Arc<Manager>, method: NotificationMethod) -> Result<Answer> {
+pub(super) async fn handle(
+    manager: &Arc<Manager>,
+    method: NotificationMethod,
+    caller: Option<&Caller>,
+) -> Result<Answer> {
     Ok(Answer::Body(match method {
         NotificationMethod::WatchNotifications { keep_unread, after } => {
             let manager = manager.clone();
@@ -25,8 +29,15 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: NotificationMethod) -
             let listed = manager.notifications(unread_only, limit).await;
             return Ok(Answer::pages(listed, Body::Notifications));
         }
-        NotificationMethod::SendMessage { space, message } => {
-            Body::Sent(manager.send_message(&space, message).await?)
+        NotificationMethod::SendMessage {
+            space,
+            message,
+            attachments,
+            sender_chat,
+        } => {
+            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
+            let sent = manager.send_message(&space, message, attachments, &attacher);
+            Body::Sent(sent.await?)
         }
         NotificationMethod::WithdrawMessage { space, id } => {
             Body::Notification(manager.withdraw_message(&space, id).await?)

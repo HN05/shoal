@@ -14,7 +14,17 @@ states!(FileSource {
     /// Handed back with `shoal done`; kept after the workspace's removal for
     /// as long as its removal record.
     Result => "result",
+    /// Sent to the user with `shoal alerts send`; kept as results are.
+    Alert => "alert",
+    /// Sent to the user with `shoal questions ask`; kept as results are.
+    Question => "question",
 });
+
+impl FileSource {
+    /// The sources whose files a workspace hands the user, which stay after
+    /// its removal for as long as its removal record.
+    pub const KEPT: [Self; 3] = [Self::Result, Self::Alert, Self::Question];
+}
 
 /// Who attached a file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +101,20 @@ impl NewFile {
             .as_deref()
             .map_or(Ok(()), crate::validate::file_title)
     }
+}
+
+/// A file an agent sent the user with an alert or a question: the record of
+/// Shoal's copy, which `shoal files` lists, and where the copy is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SentFile {
+    pub id: i64,
+    /// The attached file's name.
+    pub name: String,
+    /// What the file is, when the agent said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Shoal's copy.
+    pub path: PathBuf,
 }
 
 /// A file attached to a workspace or chat: Shoal's copy and how it came.

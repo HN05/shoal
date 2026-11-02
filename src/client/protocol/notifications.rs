@@ -26,6 +26,12 @@ pub enum NotificationMethod {
     SendMessage {
         space: String,
         message: String,
+        /// Files to send with it by absolute path, which the daemon copies.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<crate::client::files::NewFile>,
+        /// The chat whose agent sends the message, which attaches its files.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sender_chat: Option<String>,
     },
     /// Delete the unread message `id` the space sent the user.
     WithdrawMessage {

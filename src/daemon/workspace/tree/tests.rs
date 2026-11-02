@@ -712,7 +712,7 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .unwrap();
     // Without an agent above, the user hears the child's agent.
     manager
-        .send_message(&child.id, "first".into())
+        .send_message(&child.id, "first".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     assert_eq!(user().await, ["first"]);
@@ -722,12 +722,17 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .await
         .unwrap();
     manager
-        .send_message(&child.id, "second".into())
+        .send_message(&child.id, "second".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     // A child without an agent of its own is the coordinator's own work.
     manager
-        .send_message(&helper.id, "from the parent".into())
+        .send_message(
+            &helper.id,
+            "from the parent".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // The daemon's events about a child's agent reach the coordinator.
@@ -875,7 +880,12 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         connections.push(started.stop);
     }
     manager
-        .send_message(&child.id, "done with the API".into())
+        .send_message(
+            &child.id,
+            "done with the API".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let received = manager.agent_messages(&parent.id).await.unwrap();

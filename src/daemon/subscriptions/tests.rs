@@ -191,7 +191,12 @@ mod streams {
         })
         .await;
         manager
-            .send_message(&workspace.id, "Ready for review".into())
+            .send_message(
+                &workspace.id,
+                "Ready for review".into(),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
         until(&mut subscription, |update| {

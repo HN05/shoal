@@ -4178,6 +4178,7 @@ shoal alerts --follow   # Keep printing, and raise terminal notifications
 shoal alerts --keep-unread  # Show without marking read, also with --follow
 shoal alerts clear      # Delete all of them, including unread ones
 shoal alerts send "PR #12 is ready to merge" [--space S]  # Add one for a workspace or chat
+shoal alerts send "New layout" --attach shot.png  # Send a file with it
 shoal alerts withdraw <number> [--space S]   # Take back an unread one send added
 ```
 
@@ -4191,13 +4192,18 @@ stalled, and, when the daemon starts or
 reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
 a checkout with `core.bare` set, or a global worker template repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a space, a workspace or chat, which the entry names;
-agents use it to ask for attention without marking the assignment done. It
+agents use it to ask for attention without marking the assignment done.
+`--attach FILE`, repeated for more, sends files with it, such as a
+screenshot, kept as [attached files](#attached-files); a coordinating agent
+receives them with the message. It
 prints the notification's number, or that a
 [coordinating agent](#child-workspaces) received the message instead; the
 space may withdraw its message by that number until it is shown. Each line shows when it came in, the workspace, and the message: the local
 time for today's, otherwise whole days, weeks, months or years ago, such as
-`1 day ago` or `2 weeks ago`;
-`--json` returns records with `kind`, `created_at`, and `read`. On a terminal,
+`1 day ago` or `2 weeks ago`, followed by an `Attached file:` line with the
+path of each file sent with it;
+`--json` returns records with `kind`, `created_at`, `read`, and `files`, each
+with its record's `id`, `name`, `title` and `path`, when there are any. On a terminal,
 `--follow` also sends each entry as an OSC 9 terminal notification, which iTerm2,
 Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 `allow-passthrough`); other terminals ignore it. Repeated

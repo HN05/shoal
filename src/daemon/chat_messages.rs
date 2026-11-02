@@ -40,7 +40,7 @@ impl Manager {
             .with_context(|| format!("no running chat {chat}"))?;
         if attachments.is_empty() {
             return self
-                .queue_chat_message(&chat.id, None, None, None, message)
+                .queue_chat_message(&chat.id, None, None, None, message, Vec::new())
                 .await;
         }
         let id = chat.id.clone();
@@ -81,7 +81,8 @@ impl Manager {
     }
 
     /// Queue `message` for the chat, about the workspace named `workspace`
-    /// it coordinates, if any. `kind` is the notification the user receives
+    /// it coordinates, if any, with Shoal's copies `attachments` of the files
+    /// that workspace sent. `kind` is the notification the user receives
     /// instead if the chat ends first; without one the message is dropped
     /// then. An identical unread message is not repeated.
     pub(crate) async fn queue_chat_message(
@@ -91,6 +92,7 @@ impl Manager {
         workspace_id: Option<&str>,
         kind: Option<NotificationKind>,
         message: String,
+        attachments: Vec<PathBuf>,
     ) -> Result<()> {
         let (chat, workspace) = (chat.to_owned(), workspace.map(str::to_owned));
         let workspace_id = workspace_id.map(str::to_owned);
@@ -103,7 +105,7 @@ impl Manager {
                     id: workspace_id,
                     subject: None,
                 };
-                let queued = insert(&tx, &chat, &about, kind, &message, &[])?.is_some();
+                let queued = insert(&tx, &chat, &about, kind, &message, &attachments)?.is_some();
                 tx.commit()?;
                 Ok(queued)
             })
@@ -291,12 +293,13 @@ fn insert(
 }
 
 /// Give the user the notifications that the ended chat's unread messages
-/// stand for, in the transaction that deletes the chat and with it the
-/// messages. Returns the last notification recorded.
+/// stand for, with the files they attach, in the transaction that deletes
+/// the chat and with it the messages. Returns the last notification
+/// recorded.
 pub(super) fn hand_to_user(tx: &Transaction<'_>, chat: &str) -> Result<Option<i64>> {
     let unread = tx
         .prepare(
-            "SELECT workspace,workspace_id,kind,message FROM chat_messages
+            "SELECT workspace,workspace_id,kind,message,attachments FROM chat_messages
                 WHERE chat_id=?1 AND kind IS NOT NULL ORDER BY id",
         )?
         .query_map([chat], |row| {
@@ -305,12 +308,15 @@ pub(super) fn hand_to_user(tx: &Transaction<'_>, chat: &str) -> Result<Option<i6
                 id: row.get(1)?,
                 subject: None,
             };
-            Ok((about, row.get(2)?, row.get(3)?))
+            let attachments: Vec<PathBuf> =
+                crate::daemon::store::json_column(row, "attachments")?.unwrap_or_default();
+            Ok((about, row.get(2)?, row.get(3)?, attachments))
         })?
-        .collect::<rusqlite::Result<Vec<(About, NotificationKind, String)>>>()?;
+        .collect::<rusqlite::Result<Vec<(About, NotificationKind, String, Vec<PathBuf>)>>>()?;
     let mut last = None;
-    for (about, kind, message) in unread {
-        let recorded = notifications::insert(tx, &about, kind, &message)?;
+    for (about, kind, message, attachments) in unread {
+        let files = workspace_files::ids_at(tx, &attachments)?;
+        let recorded = notifications::insert(tx, &about, kind, &message, &files)?;
         if recorded.new {
             last = Some(recorded.id);
         }

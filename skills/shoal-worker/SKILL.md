@@ -201,7 +201,8 @@ HEAD for the user's integrations and takes a linked draft PR out of draft
 unless `[pr] undraft_on_ready = false`. When something new needs fixing, run
 `shoal ready --undo` before fixing it (`--draft` also returns the PR to draft), and
 `shoal ready` again once it is fixed. To tell the user about status without
-finishing, run `shoal alerts send "<one-line message>"`; if it stops applying before
+finishing, run `shoal alerts send "<one-line message>"`, adding `--attach FILE`
+for a screenshot or other file to show with it; if it stops applying before
 the user reads it, withdraw it with
 `shoal alerts withdraw <number>`, using the number it printed. Neither
 affects completion or cleanup. Ask for decisions with `shoal questions ask` instead (see

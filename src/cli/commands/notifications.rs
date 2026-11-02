@@ -29,8 +29,9 @@ pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32
     ctx.show(&notifications, |notifications| {
         let now = crate::time::unix_seconds() as i64;
         let rows = notifications.iter().map(|n| cells(n, now)).collect();
-        for line in ui::aligned(rows, Palette::stdout(ctx.json)) {
-            outln!("{line}");
+        let lines = ui::aligned(rows, Palette::stdout(ctx.json));
+        for (line, notification) in lines.iter().zip(notifications) {
+            outln!("{}", with_files(line, notification));
         }
         if notifications.is_empty() {
             outln!("No {}notifications", if all { "" } else { "new " });
@@ -93,11 +94,22 @@ pub(super) async fn withdraw(ctx: &Context, space: Option<String>, id: i64) -> R
     Ok(0)
 }
 
-pub(super) async fn send(ctx: &Context, space: Option<String>, message: String) -> Result<i32> {
+pub(super) async fn send(
+    ctx: &Context,
+    space: Option<String>,
+    message: String,
+    attach: Vec<String>,
+) -> Result<i32> {
+    let attachments = super::messages::attachments(&attach)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let sent = request::<Sent>(
         &ctx.paths,
-        NotificationMethod::SendMessage { space, message },
+        NotificationMethod::SendMessage {
+            space,
+            message,
+            attachments,
+            sender_chat: crate::env::chat(),
+        },
     )
     .await?;
     let text = match sent.notification {
@@ -169,7 +181,20 @@ fn terminal_notification(notification: &Notification) -> String {
 }
 
 fn render(notification: &Notification, palette: Palette, now: i64) -> String {
-    ui::aligned(vec![cells(notification, now)], palette).concat()
+    let line = ui::aligned(vec![cells(notification, now)], palette).concat();
+    with_files(&line, notification)
+}
+
+/// The notification's row `line`, then a line for each file its space sent
+/// with it.
+fn with_files(line: &str, notification: &Notification) -> String {
+    std::iter::once(line.to_owned())
+        .chain(
+            (notification.files.iter())
+                .map(|file| format!("  Attached file: {}", file.path.display())),
+        )
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// When, read at `now`, the workspace, and the message.

@@ -1130,6 +1130,8 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_pending_updates_remo
     ALTER TABLE executions DROP COLUMN agent_execution;
     ALTER TABLE executions DROP COLUMN asks_in_chat;
     ALTER TABLE questions DROP COLUMN in_chat;
+    ALTER TABLE questions DROP COLUMN files;
+    ALTER TABLE notifications DROP COLUMN files;
     ALTER TABLE executions DROP COLUMN model;
     ALTER TABLE executions DROP COLUMN effort;
     ALTER TABLE chats DROP COLUMN completion;

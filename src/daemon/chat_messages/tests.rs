@@ -63,7 +63,7 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
     // Without an agent of its own, the worker is the chat's or the user's
     // own work, which the user hears about.
     manager
-        .send_message(&worker.id, "first".into())
+        .send_message(&worker.id, "first".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     manager
@@ -75,12 +75,17 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .await
         .unwrap();
     manager
-        .send_message(&worker.id, "second".into())
+        .send_message(&worker.id, "second".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     // The worker's agent coordinates the helper below it, not the chat.
     manager
-        .send_message(&helper.id, "to the worker".into())
+        .send_message(
+            &helper.id,
+            "to the worker".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(received(&manager, &chat).await, ["worker: second"]);
@@ -110,7 +115,12 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .await
         .unwrap();
     manager
-        .send_message(&helper.id, "to the chat".into())
+        .send_message(
+            &helper.id,
+            "to the chat".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -134,7 +144,12 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         async move { manager.wait_chat_messages(&chat).await }
     });
     manager
-        .send_message(&worker.id, "done with the tests".into())
+        .send_message(
+            &worker.id,
+            "done with the tests".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let woken = waiting.await.unwrap().unwrap();
@@ -167,7 +182,7 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
     );
     assert!(waiting.await.unwrap().unwrap().superseded);
     manager
-        .send_message(&worker.id, "next".into())
+        .send_message(&worker.id, "next".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let delivered = manager.chat_updates(&chat.id).await.unwrap();
@@ -245,7 +260,7 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     manager
-        .send_message(&worker.id, "unread".into())
+        .send_message(&worker.id, "unread".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     // Ready marks reach only a coordinator, never the user.
@@ -256,6 +271,7 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
                 Some(&worker.id),
                 None,
                 "marked ready".into(),
+                Vec::new(),
                 Source::Agent,
             )
             .await
@@ -277,7 +293,7 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
     assert_eq!(user(&manager).await, std::slice::from_ref(&unread));
     // The worker is the user's again.
     manager
-        .send_message(&worker.id, "later".into())
+        .send_message(&worker.id, "later".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     assert_eq!(
@@ -319,7 +335,7 @@ async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
     manager
-        .send_message(&worker.id, "unread".into())
+        .send_message(&worker.id, "unread".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     // The worker is renamed and a new workspace takes its name before the

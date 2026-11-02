@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 113;
+const SCHEMA_VERSION: i64 = 114;
 
 #[cfg(test)]
 mod benchmark;
@@ -456,7 +456,13 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (111, CHAT_COMPLETION, None),
     (112, include_str!("store/pending_updates.sql"), None),
     (113, REVIEW_REPLY_LOOKUPS, None),
+    (114, SENT_FILES, None),
 ];
+
+/// The JSON array of the record IDs of the files an agent sent the user with
+/// an alert or a question.
+const SENT_FILES: &str = "ALTER TABLE notifications ADD COLUMN files TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE questions ADD COLUMN files TEXT NOT NULL DEFAULT '[]';";
 
 /// The replies to a review's findings, which every read of the review loads.
 const REVIEW_REPLY_LOOKUPS: &str =

@@ -1081,7 +1081,9 @@ impl Manager {
     /// looked up without ending one that exited, which would take the gate.
     async fn tell_agent(&self, space: &str, message: String) -> bool {
         let queued = match self.recorded_running_chat(space).await {
-            Ok(Some(chat)) => (self.queue_chat_message(&chat.id, None, None, None, message)).await,
+            Ok(Some(chat)) => {
+                (self.queue_chat_message(&chat.id, None, None, None, message, Vec::new())).await
+            }
             _ => self.queue_agent_message(space, message).await,
         };
         match queued {

@@ -296,6 +296,31 @@ impl Manager {
             .await
     }
 
+    /// Queue `message` with Shoal's copies `attachments` of files another
+    /// space's files already keep, such as those a workspace sent its
+    /// coordinator.
+    pub(crate) async fn queue_agent_message_attached(
+        &self,
+        workspace_id: &str,
+        message: String,
+        attachments: Vec<PathBuf>,
+    ) -> Result<()> {
+        let workspace_id = workspace_id.to_owned();
+        let queued = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let queued = insert(&tx, &workspace_id, &message, &attachments)?;
+                tx.commit()?;
+                Ok(queued.is_some())
+            })
+            .await?;
+        if queued {
+            self.signals.agent_message_queued();
+        }
+        Ok(())
+    }
+
     pub(crate) async fn queue_agent_message_delivered(
         &self,
         workspace_id: &str,

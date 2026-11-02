@@ -19,12 +19,14 @@ pub(crate) mod layout;
 mod records;
 mod retention;
 
-pub(crate) use records::{forget_removed, keep_ended_chat, rebase, record};
+pub(crate) use records::{
+    forget_removed, ids_at, keep_ended_chat, rebase, record, sent_files, sent_ids,
+};
 
 use layout::{Kept, Layout};
 
 pub(crate) use crate::client::files::{
-    AttachedFile, Attacher, FileSource, NewFile, check_results, missing_selection,
+    AttachedFile, Attacher, FileSource, NewFile, SentFile, check_results, missing_selection,
 };
 #[cfg(test)]
 mod tests;
@@ -206,15 +208,8 @@ impl Manager {
         results: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Vec<HandedBack>> {
-        if results.is_empty() {
-            return Ok(Vec::new());
-        }
-        let (layout, _files) = self.lock_files(space).await?;
-        let id = space.id.clone();
-        let kept =
-            tokio::task::spawn_blocking(move || layout.keep_results(&id, &results)).await??;
         let records = self
-            .record_or_discard(&space.id, FileSource::Result, attacher, kept)
+            .keep_for_user(space, FileSource::Result, "shoal done", results, attacher)
             .await?;
         Ok(records
             .into_iter()
@@ -223,6 +218,52 @@ impl Manager {
                 name: file.name,
             })
             .collect())
+    }
+
+    /// Copies of the files `files` that `space` sends the user with
+    /// `message`, an alert or a question, recorded as coming from `source`
+    /// and attached by `attacher`, which outlive its removal.
+    pub(crate) async fn keep_sent(
+        &self,
+        space: &Space,
+        source: FileSource,
+        message: &str,
+        files: Vec<NewFile>,
+        attacher: &Attacher,
+    ) -> Result<Vec<SentFile>> {
+        let records = (self.keep_for_user(space, source, message, files, attacher)).await?;
+        Ok(records
+            .into_iter()
+            .map(|file| SentFile {
+                id: file.id,
+                name: file.name,
+                title: file.title,
+                path: file.path,
+            })
+            .collect())
+    }
+
+    /// Copies of the files `files` that `space` hands the user with
+    /// `message`, recorded as coming from `source` and attached by
+    /// `attacher`, kept apart from its other files since they outlive its
+    /// removal.
+    async fn keep_for_user(
+        &self,
+        space: &Space,
+        source: FileSource,
+        message: &str,
+        files: Vec<NewFile>,
+        attacher: &Attacher,
+    ) -> Result<Vec<AttachedFile>> {
+        if files.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (layout, _files) = self.lock_files(space).await?;
+        let (id, message) = (space.id.clone(), message.to_owned());
+        let kept = tokio::task::spawn_blocking(move || layout.keep_results(&id, &message, &files))
+            .await??;
+        self.record_or_discard(&space.id, source, attacher, kept)
+            .await
     }
 
     /// Delete the files attached to the workspace or chat `selector` names,

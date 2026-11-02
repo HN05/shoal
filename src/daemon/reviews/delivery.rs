@@ -42,6 +42,7 @@ impl Manager {
             Some(&review.workspace_id),
             None,
             notice(&review),
+            Vec::new(),
             Source::Daemon,
         )
         .await;

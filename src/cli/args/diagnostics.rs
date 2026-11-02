@@ -34,6 +34,10 @@ pub enum AlertsCommand {
     Send {
         /// One line of text, such as "PR #12 is ready to merge".
         message: String,
+        /// Send a file with it, such as a screenshot, as PATH or PATH#TITLE;
+        /// repeat for more. shoal files lists it, after cleanup too.
+        #[arg(long = "attach", value_name = "FILE")]
+        attach: Vec<String>,
         /// Space, a workspace or chat, the notification names; defaults to
         /// the current chat or workspace, or a picker.
         #[arg(long)]

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use super::{AttachedFile, Attacher, FileSource, Space, layout::Copy};
+use super::{AttachedFile, Attacher, FileSource, SentFile, Space, layout::Copy};
 
 const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached_by,
     COALESCE((SELECT expires_at FROM removed_workspaces r
@@ -19,6 +19,44 @@ const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached
 /// The owners of attached files that are gone.
 const GONE: &str = "space_id NOT IN (SELECT id FROM workspaces)
     AND space_id NOT IN (SELECT id FROM chats)";
+
+/// SQL for a `files` column with the files whose record IDs the JSON array
+/// in `$column` lists, in its order, as a JSON array of [`SentFile`]s; a file
+/// whose record is gone, as after `shoal files rm`, drops out.
+macro_rules! sent_files {
+    ($column:literal) => {
+        concat!(
+            "(SELECT json_group_array(json(file)) FROM (
+                SELECT json_object('id',f.id,'name',f.name,'title',f.title,'path',f.path) AS file
+                FROM json_each(",
+            $column,
+            ") j JOIN workspace_files f ON f.id=j.value ORDER BY j.key)) AS files"
+        )
+    };
+}
+pub(crate) use sent_files;
+
+/// The record IDs of `files`, as a column [`sent_files`] reads stores them.
+pub(crate) fn sent_ids(files: &[SentFile]) -> Result<String> {
+    let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
+    Ok(serde_json::to_string(&ids)?)
+}
+
+/// The record IDs of Shoal's copies at `paths`, in their order, as a column
+/// [`sent_files`] reads stores them; a path no record has is left out.
+pub(crate) fn ids_at(db: &Connection, paths: &[PathBuf]) -> Result<String> {
+    let mut statement = db.prepare("SELECT id FROM workspace_files WHERE path=?1")?;
+    let mut ids = Vec::new();
+    for path in paths {
+        if let Some(id) = statement
+            .query_row([path.to_string_lossy()], |row| row.get::<_, i64>(0))
+            .optional()?
+        {
+            ids.push(id);
+        }
+    }
+    Ok(serde_json::to_string(&ids)?)
+}
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
     let space: String = row.get(1)?;
@@ -242,13 +280,15 @@ pub(super) fn forget_expired_chats(db: &mut Connection) -> Result<()> {
     Ok(())
 }
 
-/// Forget the records of the workspace `workspace_id` but its results,
-/// which keep its last name, and move the results it was the parent of to
-/// its own parent, in the transaction that deletes it, before its row goes.
+/// Forget the records of the workspace `workspace_id` but those of the files
+/// it handed the user, which keep its last name, and move those it was the
+/// parent of to its own parent, in the transaction that deletes it, before
+/// its row goes.
 pub(crate) fn forget_removed(tx: &Transaction<'_>, workspace_id: &str) -> Result<()> {
+    let [result, alert, question] = FileSource::KEPT;
     tx.execute(
-        "DELETE FROM workspace_files WHERE space_id=?1 AND source!=?2",
-        params![workspace_id, FileSource::Result],
+        "DELETE FROM workspace_files WHERE space_id=?1 AND source NOT IN (?2,?3,?4)",
+        params![workspace_id, result, alert, question],
     )?;
     tx.execute(
         "UPDATE workspace_files SET space=(SELECT name FROM workspaces WHERE id=?1)

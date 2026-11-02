@@ -1,12 +1,15 @@
 //! Events the daemon records for the user: conflicts it saw, agents that
 //! finished, workspaces it removed. Recording never fails the operation that
 //! caused the event; the CLI shows them and marks them read.
+use std::path::PathBuf;
+
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
 pub(crate) use crate::client::notifications::{Cleared, Notification, NotificationKind, Sent};
 use crate::daemon::log;
 use crate::daemon::workspace::{Manager, Source};
+use crate::daemon::workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files};
 
 /// Rows kept before older read notifications are pruned; unread ones stay.
 const RETAINED: usize = 500;
@@ -104,20 +107,23 @@ impl About {
     }
 }
 
-/// Record an event for the user in the caller's transaction. Callers wake
-/// watchers with `notifications_changed` after committing a new one.
+/// Record an event for the user in the caller's transaction, with the files
+/// whose record IDs the JSON array `files` lists. Callers wake watchers with
+/// `notifications_changed` after committing a new one.
 pub(crate) fn insert(
     tx: &rusqlite::Transaction<'_>,
     about: &About,
     kind: NotificationKind,
     message: &str,
+    files: &str,
 ) -> Result<Recorded> {
     if kind.collapses() {
         let pending: Option<i64> = tx
             .query_row(
                 "SELECT id FROM notifications WHERE read=0 AND workspace IS ?1
-                    AND workspace_id IS ?2 AND subject IS ?3 AND kind=?4 AND message=?5",
-                params![about.name, about.id, about.subject, kind, message],
+                    AND workspace_id IS ?2 AND subject IS ?3 AND kind=?4 AND message=?5
+                    AND files=?6",
+                params![about.name, about.id, about.subject, kind, message, files],
                 |row| row.get(0),
             )
             .optional()?;
@@ -126,15 +132,16 @@ pub(crate) fn insert(
         }
     }
     tx.execute(
-        "INSERT INTO notifications(created_at,workspace,workspace_id,subject,kind,message)
-            VALUES (?1,?2,?3,?4,?5,?6)",
+        "INSERT INTO notifications(created_at,workspace,workspace_id,subject,kind,message,files)
+            VALUES (?1,?2,?3,?4,?5,?6,?7)",
         params![
             i64::try_from(crate::time::unix_seconds())?,
             about.name,
             about.id,
             about.subject,
             kind,
-            message
+            message,
+            files
         ],
     )?;
     let id = tx.last_insert_rowid();
@@ -210,10 +217,14 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Notification> {
         kind: row.get(3)?,
         message: row.get(4)?,
         read: row.get(5)?,
+        files: crate::daemon::store::json_column(row, "files")?.unwrap_or_default(),
     })
 }
 
-const COLUMNS: &str = "id,created_at,workspace,kind,message,read";
+const COLUMNS: &str = concat!(
+    "id,created_at,workspace,kind,message,read,",
+    sent_files!("notifications.files")
+);
 
 impl Manager {
     /// Record an event and wake watchers. Failures are logged, never returned:
@@ -231,19 +242,47 @@ impl Manager {
     /// [`Manager::notify`] about a workspace whose identity the caller holds,
     /// so a rename meanwhile cannot attribute the event to another one.
     pub(crate) async fn notify_about(&self, about: About, kind: NotificationKind, message: String) {
-        if let Err(error) = self.record_notification(about, kind, message).await {
+        self.notify_with_files(about, kind, message, &[]).await;
+    }
+
+    /// [`Manager::notify_about`] with the files the space sent the user.
+    pub(crate) async fn notify_with_files(
+        &self,
+        about: About,
+        kind: NotificationKind,
+        message: String,
+        files: &[SentFile],
+    ) {
+        if let Err(error) = self.record_sent(about, kind, message, files).await {
             log!("notification not recorded: {error:#}");
         }
     }
 
-    /// Record a message a space's agent sends the user, naming the space.
+    /// Record a message a space's agent sends the user, naming the space,
+    /// with copies of the files `attachments`, which the space's attached
+    /// files keep as attached by `attacher` for as long as its results.
     /// Unlike daemon events, the message is the whole operation, so failures
     /// are returned.
-    pub async fn send_message(&self, selector: &str, message: String) -> Result<Sent> {
+    pub async fn send_message(
+        &self,
+        selector: &str,
+        message: String,
+        attachments: Vec<NewFile>,
+        attacher: &Attacher,
+    ) -> Result<Sent> {
         crate::validate::message(&message)?;
-        let about = self.space_about(selector).await?;
+        let space = self.present_space(selector).await?;
+        let about = About::workspace(space.name(), space.id());
+        let files = (self.keep_sent(
+            &space.into(),
+            FileSource::Alert,
+            &message,
+            attachments,
+            attacher,
+        ))
+        .await?;
         let notification = self
-            .record_notification(about, NotificationKind::AgentMessage, message)
+            .record_sent(about, NotificationKind::AgentMessage, message, &files)
             .await?;
         Ok(Sent { notification })
     }
@@ -292,38 +331,51 @@ impl Manager {
         kind: NotificationKind,
         message: impl Into<String>,
     ) -> Result<Option<i64>> {
-        let message = message.into();
-        if let (Some(source), Some(name)) = (kind.coordination(), &about.name)
-            && self
-                .tell_coordinator(
-                    name,
-                    about.id.as_deref(),
-                    Some(kind),
-                    message.clone(),
-                    source,
-                )
+        self.record_sent(about, kind, message.into(), &[]).await
+    }
+
+    /// [`Manager::record_notification`] with the files the space sent the
+    /// user, which a coordinating agent receives as the message's attached
+    /// files.
+    async fn record_sent(
+        &self,
+        about: About,
+        kind: NotificationKind,
+        message: String,
+        files: &[SentFile],
+    ) -> Result<Option<i64>> {
+        if let (Some(source), Some(name)) = (kind.coordination(), &about.name) {
+            let paths: Vec<PathBuf> = files.iter().map(|file| file.path.clone()).collect();
+            let (id, message) = (about.id.as_deref(), message.clone());
+            if self
+                .tell_coordinator(name, id, Some(kind), message, paths, source)
                 .await
-        {
-            return Ok(None);
+            {
+                return Ok(None);
+            }
         }
-        let id = self.record_user_notification(about, kind, message).await?;
+        let files = workspace_files::sent_ids(files)?;
+        let id = self
+            .record_user_notification(about, kind, message, files)
+            .await?;
         Ok(Some(id))
     }
 
-    /// Record an event for the user, wake watchers when it is new, and return
-    /// its ID.
+    /// Record an event for the user with the files whose record IDs the JSON
+    /// array `files` lists, wake watchers when it is new, and return its ID.
     async fn record_user_notification(
         &self,
         about: About,
         kind: NotificationKind,
         message: String,
+        files: String,
     ) -> Result<i64> {
         let recorded = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 let about = about.resolve(&tx)?;
-                let recorded = insert(&tx, &about, kind, &message)?;
+                let recorded = insert(&tx, &about, kind, &message, &files)?;
                 tx.commit()?;
                 Ok(recorded)
             })

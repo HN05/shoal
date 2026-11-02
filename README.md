@@ -178,6 +178,7 @@ shoal diff fix-login           # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
 shoal alerts                  # Conflicts, finished agents, and removals you missed
 shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
+shoal alerts send "New layout" --attach shot.png  # Send the user a file with it
 shoal messages send "Stop the dev server" --space fix-login  # Message the agents of a workspace or chat
 shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
 shoal messages send --all "Rebase onto main"  # Message every running agent of the repository

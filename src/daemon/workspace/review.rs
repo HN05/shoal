@@ -126,6 +126,7 @@ impl Manager {
             Some(&workspace.id),
             None,
             ready_notice(&marks),
+            Vec::new(),
             super::Source::Agent,
         )
         .await;
