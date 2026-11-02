@@ -51,8 +51,36 @@ async fn landing_warns_only_at_the_checked_head() {
     let warning = manager.land_warning(&workspace.id).await.unwrap().unwrap();
     assert_eq!(warning.to_string(), "topic and main both changed version");
 
+    let current = manager.current_changed_on_both_sides(&workspace).await;
+    assert!(current.unwrap().is_some());
+
     fs::write(workspace.path.join("feature"), "newer\n").unwrap();
     commit(&workspace.path, "feature");
+    assert!(manager.land_warning(&workspace.id).await.unwrap().is_none());
+    let current = manager.current_changed_on_both_sides(&workspace).await;
+    assert!(
+        current.unwrap().is_none(),
+        "status shows no check of an earlier head"
+    );
+}
+
+#[tokio::test]
+async fn landing_ignores_a_check_against_a_base_workspaces_branch() {
+    let (_root, manager, workspace) = changed_on_both_sides().await;
+    let repo_id = workspace.repository_id.clone();
+    let base = manager
+        .create_workspace(&repo_id, "base".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .set_base_workspace(&workspace.id, Some(base.name.clone()))
+        .await
+        .unwrap();
+    fs::write(base.path.join("version"), "3\n").unwrap();
+    commit(&base.path, "version");
+    let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
+    assert_eq!(check.target, base.branch);
+    assert_eq!(check.changed_on_both_sides, ["version"]);
     assert!(manager.land_warning(&workspace.id).await.unwrap().is_none());
 }
 

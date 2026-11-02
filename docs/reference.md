@@ -2512,7 +2512,8 @@ creates a merge commit in the default checkout. A merge that does not apply clea
 is aborted: run `shoal merge <default>` in the workspace, resolve there, and land
 again. Landed commits count as pushed for `rm` and automatic cleanup. As
 [`pr merge`](#issue-and-pr-actions) does, `land` asks before landing a HEAD whose last check found
-files [changed on both sides](#conflicts), and `--yes` lands without asking.
+files [changed on both sides](#conflicts) with the default branch, and `--yes`
+lands without asking.
 
 An agent's scoped `shoal land` needs the user's approval for the branch at its
 current commit unless `[permissions] land = "direct"` and

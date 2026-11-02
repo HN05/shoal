@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use crate::{
     daemon::workspace::{Manager, conflicts::recorded},
     forge::{ForgeRepo, items::link::ItemKind},
-    git,
+    git::{self, default_branch::DefaultBranchLookup},
     model::{ChangedOnBothSides, MergeWarning},
     protocol::ItemContext,
 };
@@ -32,14 +32,20 @@ impl Manager {
         Ok(warning(format!("PR #{number}"), recorded, &head))
     }
 
-    /// The warning for landing the workspace's HEAD, as its last check found
-    /// it.
+    /// The warning for landing the workspace's HEAD in the default branch,
+    /// as its last check against that branch found it; a stacked
+    /// workspace's check is against its base's branch instead.
     pub async fn land_warning(&self, selector: &str) -> Result<Option<MergeWarning>> {
         let workspace = self.workspace(selector).await?;
         let recorded = self.recorded_changed_on_both_sides(&workspace.id).await?;
         let Some(recorded) = recorded.filter(|recorded| !recorded.files.is_empty()) else {
             return Ok(None);
         };
+        let repo = self.repository(&workspace.repository_id).await?;
+        let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached);
+        if recorded.target != default.await? {
+            return Ok(None);
+        }
         let head = git::resolve_commit(&workspace.path, "HEAD", git::run_isolated).await?;
         Ok(warning(workspace.branch, vec![recorded], &head))
     }
