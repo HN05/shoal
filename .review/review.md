@@ -579,7 +579,9 @@ configured command for another agent, plus proven child
   runner speed, and a wait must observe the awaited event itself, not a proxy
   that can hold first.
 - Documentation: usage lives in README.md, behavior in docs/reference.md,
-  decisions in docs/design.md, contributor rules in AGENTS.md. Flag behavior
+  decisions in docs/design.md, contributor rules in AGENTS.md. The skills under
+  `skills/` say only how to work with Shoal; flag any rule there about
+  something else, such as how to write or structure code. Flag behavior
   changes without the matching sentence edit, text that restates code or
   history, and sentences that list or count what a rule covers instead of
   stating the rule; an overstated rule is narrowed, not annotated with its
