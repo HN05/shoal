@@ -68,7 +68,7 @@ async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
         .await
         .unwrap();
     let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
-    assert_eq!(check.target, base.branch);
+    assert_eq!(Some(&check.target), base.branch.as_ref());
     assert_eq!(
         check.target_commit,
         git(&base.path, &["rev-parse", "HEAD"]).trim()

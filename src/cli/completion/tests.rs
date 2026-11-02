@@ -220,7 +220,7 @@ fn attach_workspaces(root: &std::path::Path) -> Vec<Workspace> {
             "repo".into(),
             name.into(),
             root.join(name),
-            name.into(),
+            Some(name.into()),
             WorkspaceState::Ready,
         );
         workspace.id = id.into();

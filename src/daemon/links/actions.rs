@@ -355,7 +355,7 @@ fn ensure_branch_head(workspace: &Workspace, item: &Item) -> Result<()> {
     anyhow::ensure!(
         item.pr
             .as_ref()
-            .is_some_and(|pr| pr.head == workspace.branch),
+            .is_some_and(|pr| workspace.branch.as_ref() == Some(&pr.head)),
         "{} does not have the workspace branch as its head",
         item.url
     );
@@ -381,6 +381,7 @@ impl Manager {
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the PR and linking it.
         let (workspace, _gate) = self.lock_pr_gate(selector).await?;
+        let branch = workspace.require_branch("shoal pr open")?.to_owned();
         self.verify_worktree(&workspace).await?;
         let head = super::pr::current_head(&workspace).await?;
         let push = match push_held {
@@ -397,9 +398,9 @@ impl Manager {
         let settings = self.workspace_settings(&workspace).await?;
         let required = &settings.pr.required_labels;
         let (forge, account) = self.workspace_forge_account(&workspace).await?;
-        let head_repository = head_repository(&workspace.path, &workspace.branch, &forge).await?;
+        let head_repository = head_repository(&workspace.path, &branch, &forge).await?;
         let existing = forge
-            .open_pull_for(&account, &workspace.branch, head_repository.as_deref())
+            .open_pull_for(&account, &branch, head_repository.as_deref())
             .await?;
         let (item, body, unfinished) = match existing {
             Some(number) => {
@@ -482,6 +483,9 @@ impl Manager {
     /// that its review gate refuses; checked before anything is pushed.
     pub(crate) async fn check_pr_review_gate(&self, selector: &str) -> Result<()> {
         let workspace = self.workspace(selector).await?;
+        let Some(branch) = workspace.branch.clone() else {
+            return Ok(());
+        };
         if !self
             .workspace_settings(&workspace)
             .await?
@@ -491,9 +495,9 @@ impl Manager {
             return Ok(());
         }
         let (forge, account) = self.workspace_forge_account(&workspace).await?;
-        let head_repository = head_repository(&workspace.path, &workspace.branch, &forge).await?;
+        let head_repository = head_repository(&workspace.path, &branch, &forge).await?;
         let existing = forge
-            .open_pull_for(&account, &workspace.branch, head_repository.as_deref())
+            .open_pull_for(&account, &branch, head_repository.as_deref())
             .await?;
         match existing {
             Some(_) => Ok(()),
@@ -637,9 +641,13 @@ async fn new_pull(
             .trim()
             .to_owned(),
     };
-    let base = match (options.base, &workspace.base_workspace) {
+    let base_branch = workspace
+        .base_workspace
+        .as_ref()
+        .and_then(|base| base.branch.clone());
+    let base = match (options.base, base_branch) {
         (Some(base), _) => base,
-        (None, Some(base)) => base.branch.clone(),
+        (None, Some(branch)) => branch,
         (None, None) => {
             crate::git::default_branch::resolve(
                 &workspace.path,
@@ -651,7 +659,7 @@ async fn new_pull(
     Ok(NewPull {
         title,
         body: description(options.body, issue),
-        head: workspace.branch.clone(),
+        head: workspace.require_branch("shoal pr open")?.to_owned(),
         head_repository: None,
         base,
         draft: options.draft.unwrap_or(default_draft),

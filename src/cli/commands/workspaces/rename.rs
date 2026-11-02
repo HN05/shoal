@@ -26,7 +26,7 @@ pub(in crate::cli::commands) async fn rename(
         outln!(
             "Renamed workspace to {} ({})",
             workspace.name,
-            workspace.branch
+            workspace.branch_or_name()
         )
     })?;
     Ok(0)

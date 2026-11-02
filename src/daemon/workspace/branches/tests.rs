@@ -89,8 +89,8 @@ impl Fixture {
 #[tokio::test]
 async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     let f = Fixture::new().await;
-    assert_eq!(f.add("plain").await.branch, "plain");
-    assert_eq!(f.add("HEAD").await.branch, "HEAD-2");
+    assert_eq!(f.add("plain").await.branch.as_deref(), Some("plain"));
+    assert_eq!(f.add("HEAD").await.branch.as_deref(), Some("HEAD-2"));
     git(&f.repo, &["branch", "feature"]);
     git(&f.repo, &["branch", "feature-2"]);
     git(
@@ -99,9 +99,9 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     );
     git(&f.repo, &["branch", "feature-4/nested"]);
     let workspace = f.add("feature").await;
-    assert_eq!(workspace.branch, "feature-5");
+    assert_eq!(workspace.branch.as_deref(), Some("feature-5"));
     assert_eq!(workspace.path.file_name().unwrap(), "feature");
-    assert_eq!(f.add("main").await.branch, "main-2");
+    assert_eq!(f.add("main").await.branch.as_deref(), Some("main-2"));
     // Unpushed work keeps the branch, and with it the suffix.
     fs::write(workspace.path.join("work"), "work\n").unwrap();
     commit(&workspace.path, "work");
@@ -113,7 +113,7 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
         )
         .await
         .unwrap();
-    assert_eq!(f.add("feature").await.branch, "feature-6");
+    assert_eq!(f.add("feature").await.branch.as_deref(), Some("feature-6"));
     git(&f.repo, &["branch", "concurrent"]);
     let (first, second) = tokio::join!(f.add("concurrent"), f.add("concurrent-2"));
     assert_ne!(first.branch, second.branch);
@@ -276,13 +276,16 @@ async fn nested_branch_conflicts_suffix_the_blocked_component() {
     );
     let workspace = f.add("henrik/topic").await;
     assert_eq!(workspace.name, "henrik-topic");
-    assert_eq!(workspace.branch, "henrik-3/topic-3");
+    assert_eq!(workspace.branch.as_deref(), Some("henrik-3/topic-3"));
     assert_eq!(
         git(&workspace.path, &["symbolic-ref", "HEAD"]).trim(),
         "refs/heads/henrik-3/topic-3"
     );
     // A sibling can share an existing namespace without renaming its prefix.
-    assert_eq!(f.add("henrik-3/other").await.branch, "henrik-3/other");
+    assert_eq!(
+        f.add("henrik-3/other").await.branch.as_deref(),
+        Some("henrik-3/other")
+    );
 }
 
 #[tokio::test]
@@ -467,7 +470,7 @@ async fn branch_compatibility_preserves_allocation_and_existing_branch_policies(
         } else {
             name.clone()
         };
-        assert_eq!(allocated.branch, expected);
+        assert_eq!(allocated.branch.as_deref(), Some(expected.as_str()));
         assert_eq!(allocated.name, workspace_name);
         assert_eq!(
             allocated.path.file_name().unwrap().to_str().unwrap(),
@@ -502,7 +505,7 @@ async fn branch_compatibility_preserves_allocation_and_existing_branch_policies(
             assert!(f.manager.list_workspaces().await.unwrap().is_empty());
         } else {
             let workspace = opened.unwrap().workspace;
-            assert_eq!(workspace.branch, name);
+            assert_eq!(workspace.branch.as_deref(), Some(name.as_str()));
             assert_eq!(workspace.name, workspace_name);
             assert_eq!(workspace.path, allocated.path);
             assert_eq!(
@@ -551,7 +554,7 @@ async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
         .await
         .unwrap();
     assert!(!opened.reused);
-    assert_eq!(opened.workspace.branch, "coworker/topic");
+    assert_eq!(opened.workspace.branch.as_deref(), Some("coworker/topic"));
     assert_eq!(opened.workspace.name, "coworker-topic");
     assert_eq!(
         opened.workspace.base_ref.as_deref(),
@@ -647,7 +650,7 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
         .open_branch(&f.repo_id, "main", None, None, None)
         .await
         .unwrap();
-    assert_eq!(main.workspace.branch, "main");
+    assert_eq!(main.workspace.branch.as_deref(), Some("main"));
     f.manager
         .remove_workspace(
             &main.workspace.id,
@@ -916,7 +919,7 @@ async fn existing_remote_branch_discovers_fetches_and_tracks_new_heads() {
         .open_branch(&f.repo_id, "origin/coworker/topic", None, None, None)
         .await
         .unwrap();
-    assert_eq!(opened.workspace.branch, "coworker/topic");
+    assert_eq!(opened.workspace.branch.as_deref(), Some("coworker/topic"));
     assert_eq!(
         git(&opened.workspace.path, &["rev-parse", "HEAD"]),
         git(&author, &["rev-parse", "HEAD"])
@@ -1796,7 +1799,7 @@ async fn copy_adoption_records_ownership_and_finishes_ready() {
         .await
         .unwrap();
 
-    assert_eq!(copied.branch, "source-2");
+    assert_eq!(copied.branch.as_deref(), Some("source-2"));
     assert_eq!(copied.state, crate::state::WorkspaceState::Ready);
     assert_eq!(
         fs::read_to_string(copied.path.join("copied")).unwrap(),

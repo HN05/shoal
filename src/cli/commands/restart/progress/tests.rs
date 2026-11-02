@@ -6,7 +6,7 @@ fn restart(name: &str) -> Restart {
         "repository".into(),
         name.into(),
         name.into(),
-        name.into(),
+        Some(name.into()),
         WorkspaceState::Ready,
     );
     Restart {

@@ -181,7 +181,7 @@ impl AddPlan {
         Self {
             repository: workspace.repository_id.as_str().into(),
             creation: Creation {
-                existing: Some(workspace.branch.clone()),
+                existing: workspace.branch.clone(),
                 ..Default::default()
             },
             place_name: None,
@@ -207,7 +207,8 @@ impl AddPlan {
             && self.repository.value() == workspace.repository_id
             && self.creation.branch.is_none()
             && self.creation.path.is_none()
-            && self.creation.existing.as_deref() == Some(workspace.branch.as_str())
+            && workspace.branch.is_some()
+            && self.creation.existing == workspace.branch
     }
 
     /// The agent's name, when the addition starts one.

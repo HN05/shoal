@@ -252,13 +252,13 @@ pub(crate) trait Backend {
 
     /// Fail closed on changed output: only commits the merged PR lists can
     /// authorize cleanup, including squash and rebase merges. None while the
-    /// PR, which must have `branch` as its head, is unmerged.
+    /// PR, which must have a given `branch` as its head, is unmerged.
     async fn merged_commits(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        branch: &str,
+        branch: Option<&str>,
     ) -> Result<Option<Vec<String>>> {
         rest::merged_commits(repo, account, number, branch)
             .await
@@ -1019,7 +1019,7 @@ impl Backend for ForgeKind {
         repo: &ForgeRepo,
         account: &Account,
         number: u64,
-        branch: &str,
+        branch: Option<&str>,
     ) -> Result<Option<Vec<String>>> {
         dispatch!(self, backend => backend.merged_commits(repo, account, number, branch).await)
     }

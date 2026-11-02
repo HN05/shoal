@@ -425,7 +425,13 @@ async fn a_replaced_checkout_is_not_reviewed() {
     crate::test_support::git(&repository.path, &["worktree", "remove", "--force", path]);
     crate::test_support::git(
         &repository.path,
-        &["worktree", "add", "-q", path, &fixture.workspace.branch],
+        &[
+            "worktree",
+            "add",
+            "-q",
+            path,
+            fixture.workspace.branch.as_deref().unwrap(),
+        ],
     );
     let review = fixture.review().await;
     assert_eq!(review.state, ReviewState::Failed, "{review:?}");

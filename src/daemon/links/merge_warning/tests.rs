@@ -82,7 +82,7 @@ async fn landing_ignores_a_check_against_a_base_workspaces_branch() {
     fs::write(base.path.join("version"), "3\n").unwrap();
     commit(&base.path, "version");
     let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
-    assert_eq!(check.target, base.branch);
+    assert_eq!(Some(check.target), base.branch);
     assert_eq!(check.changed_on_both_sides, ["version"]);
     assert!(manager.land_warning(&workspace.id).await.unwrap().is_none());
 }

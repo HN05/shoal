@@ -156,11 +156,11 @@ async fn start_branch_retains_head(
 /// otherwise the local branch its recorded base names; never its own.
 fn start_branch(workspace: &Workspace) -> Option<&str> {
     let branch = match &workspace.base_workspace {
-        Some(base) => base.branch.as_str(),
+        Some(base) => base.branch.as_deref()?,
         None => workspace
             .base_ref
             .as_deref()?
             .strip_prefix(git::LOCAL_REFS)?,
     };
-    (branch != workspace.branch).then_some(branch)
+    (workspace.branch.as_deref() != Some(branch)).then_some(branch)
 }

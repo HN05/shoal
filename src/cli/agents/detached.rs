@@ -127,7 +127,7 @@ pub(super) async fn start(
     let session = Session {
         paths: &ctx.paths,
         directory: &workspace.path,
-        branch: Some(&workspace.branch),
+        branch: workspace.branch.as_deref(),
         files: &files,
         prompt,
         args,

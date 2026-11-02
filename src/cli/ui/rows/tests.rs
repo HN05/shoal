@@ -6,7 +6,7 @@ fn workspace(repository: &str, name: &str, branch: &str, state: WorkspaceState) 
         repository.into(),
         name.into(),
         format!("/work/{name}").into(),
-        branch.into(),
+        Some(branch.into()),
         state,
     )
 }
@@ -116,7 +116,7 @@ fn tree_rows_list_children_below_their_parent() {
     workspaces[2].parent_workspace = Some(crate::model::WorkspaceRef {
         id: "unlisted".into(),
         name: "unlisted".into(),
-        branch: "unlisted".into(),
+        branch: Some("unlisted".into()),
     });
     let rows = workspace_tree_rows(&workspaces, &[], &HashSet::new(), plain, None);
     let expected = ["○ orphan ", "○ parent ", "○ └ child ", "○   └ grandchild "];

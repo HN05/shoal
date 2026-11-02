@@ -56,7 +56,7 @@ fn a_workspace_session_gets_the_workspace_directories_before_its_own_arguments()
         "repo".into(),
         "feature".into(),
         PathBuf::from("/root/repo/feature"),
-        "feature".into(),
+        Some("feature".into()),
         crate::state::WorkspaceState::Ready,
     );
     let happy = &super::super::happy::CLAUDE;

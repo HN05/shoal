@@ -200,7 +200,7 @@ pub fn instructions(
         &template,
         &[
             ("{workspace}", &workspace.name),
-            ("{branch}", &workspace.branch),
+            ("{branch}", workspace.branch.as_deref().unwrap_or_default()),
             ("{path}", &workspace.path.to_string_lossy()),
             ("{updates}", delivery.instruction()),
         ],

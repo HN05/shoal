@@ -597,7 +597,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         }),
         BranchReport::ChangedOnBothSides,
     );
-    let observation = vec![(child.branch.clone(), changed)];
+    let observation = vec![(child.branch.clone().unwrap(), changed)];
     let now = crate::time::unix_seconds();
     let queued = manager.queue_background_updates(&child.id, observation, now);
     queued.await.unwrap();
@@ -610,7 +610,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     assert_eq!(
         received,
         [
-            (Some("child"), child.branch.as_str()),
+            (Some("child"), child.branch.as_deref().unwrap()),
             (Some("child"), "child-pr"),
             (Some("grandchild"), "grandchild-pr")
         ]
@@ -1851,7 +1851,7 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         }),
         BranchReport::Conflicts,
     );
-    let observation = vec![(workspace.branch.clone(), conflicting)];
+    let observation = vec![(workspace.branch.clone().unwrap(), conflicting)];
     let recorded = manager.record_activity(&workspace.id, observation, &all);
     assert!(recorded.await.unwrap().is_empty());
     manager
@@ -1867,7 +1867,7 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
     }
     let updates = poll().await.unwrap();
     assert_eq!(updates.len(), 1);
-    assert_eq!(updates[0].url, workspace.branch);
+    assert_eq!(Some(&updates[0].url), workspace.branch.as_ref());
     assert_eq!(updates[0].kind, UpdateKind::MergeConflict);
     assert_eq!(updates[0].message, "Conflicts with main: tracked");
     assert_eq!(
@@ -1911,7 +1911,10 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
     crate::test_support::commit(&workspace.path, "other");
     let previous = manager.record_activity(
         &workspace.id,
-        vec![(workspace.branch.clone(), resolved_branch(&workspace.id))],
+        vec![(
+            workspace.branch.clone().unwrap(),
+            resolved_branch(&workspace.id),
+        )],
         &all,
     );
     assert!(previous.await.unwrap().is_empty());
@@ -1969,7 +1972,7 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
     assert!(polled.is_err(), "the PR lookup fails");
     let queued = manager.queued_updates(linked.clone()).await.unwrap();
     assert_eq!(queued.len(), 1);
-    assert_eq!(queued[0].url, linked.branch);
+    assert_eq!(Some(&queued[0].url), linked.branch.as_ref());
     assert_eq!(queued[0].kind, UpdateKind::MergeConflict);
     assert_eq!(
         queued[0].message,
@@ -2006,7 +2009,9 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
     let polled = manager.poll_space_item_activity(&space).await;
     assert!(polled.is_err(), "the PR lookup fails");
     let queued = manager.queued_updates(workspace.clone()).await.unwrap();
-    let stall = queued.iter().find(|update| update.url == workspace.branch);
+    let stall = queued
+        .iter()
+        .find(|update| Some(&update.url) == workspace.branch.as_ref());
     let stall = stall.unwrap_or_else(|| panic!("no branch update in {queued:?}"));
     assert_eq!(stall.kind, UpdateKind::LookupFailed);
     assert!(stall.message.contains("stalled"), "{}", stall.message);

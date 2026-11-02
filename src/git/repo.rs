@@ -148,13 +148,14 @@ pub async fn finish_land(plan: LandPlan, push: bool) -> Result<LandedBranch> {
 async fn merge_land(plan: LandPlan) -> Result<LandedBranch> {
     let LandPlan {
         workspace,
+        branch,
         repo,
         source,
         checkout,
         merge_temporaries: _,
         default_refresh,
     } = plan;
-    let branch = workspace.branch.as_str();
+    let branch = branch.as_str();
     let default = default_refresh.branch.clone();
     let default_ref = git::local_ref(&default);
     clean_branch(&workspace.path, branch).await?;

@@ -145,11 +145,11 @@ pub(super) async fn workspace_label(
             None => None,
         };
         let name = PlaceName::new(template, repo, issue.as_ref());
-        anyhow::Ok(name.render(&workspace.branch, workspace.title.as_deref()))
+        anyhow::Ok(name.render(workspace.branch_or_name(), workspace.title.as_deref()))
     };
     labelled.await.unwrap_or_else(|error| {
         eprintln!("warning: cannot name the {} place: {error:#}", host.name());
-        workspace.branch.clone()
+        workspace.branch_or_name().to_owned()
     })
 }
 

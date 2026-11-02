@@ -295,12 +295,9 @@ impl Manager {
             .branch
             .clone()
             .unwrap_or_else(|| removed.name.clone());
-        if let Some(workspace) = self
-            .list_workspaces()
-            .await?
-            .into_iter()
-            .find(|workspace| workspace.repository_id == repo.id && workspace.branch == branch)
-        {
+        if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
+            workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&branch)
+        }) {
             bail!("workspace {} already uses branch {branch}", workspace.name);
         }
         let local = git::local_ref(&branch);

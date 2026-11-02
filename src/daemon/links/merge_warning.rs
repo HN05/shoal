@@ -51,7 +51,8 @@ impl Manager {
         let target = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
         let head = git::resolve_commit(&workspace.path, "HEAD", git::run_isolated).await?;
         let merged = Merged { head, target };
-        Ok(warning(workspace.branch, vec![recorded], &merged))
+        let branch = workspace.require_branch("landing")?.to_owned();
+        Ok(warning(branch, vec![recorded], &merged))
     }
 
     /// The forge, number and URL of the PR `input` names in the repository

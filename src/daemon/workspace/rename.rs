@@ -29,6 +29,7 @@ impl Manager {
         let workspace = self
             .finish_pending_rename(workspace, caller_execution)
             .await?;
+        let current = workspace.require_branch("renaming a branch")?.to_owned();
         self.verify_rename_source(&workspace, &repo.path).await?;
         ensure!(
             self.pr_registration(&workspace.id).await?.is_none(),
@@ -39,7 +40,7 @@ impl Manager {
             !git::worktrunk::is_reserved_branch_name(branch),
             "branch name is incompatible with Worktrunk: {branch}"
         );
-        if branch == workspace.branch {
+        if branch == current {
             return Ok(workspace);
         }
         ensure!(
@@ -51,7 +52,7 @@ impl Manager {
         );
         self.reserve_workspace_rename(&workspace, branch, caller_execution)
             .await?;
-        let result = git::branch::rename(&workspace.path, &workspace.branch, branch).await;
+        let result = git::branch::rename(&workspace.path, &current, branch).await;
         // Git may have completed even if capturing its output failed. Inspect
         // the owned worktree instead of blindly rolling back a ref mutation.
         if let Err(error) = self.finish_workspace_rename(&workspace, false).await {
@@ -82,9 +83,10 @@ impl Manager {
             Refusal::new(Reason::NotReady, "workspace is not ready")
         );
         self.verify_worktree(workspace).await?;
+        let recorded = workspace.require_branch("renaming a branch")?;
         let actual = git::head_branch(&workspace.path, true, git::run_isolated).await?;
         ensure!(
-            actual.as_deref() == Some(&workspace.branch),
+            actual.as_deref() == Some(recorded),
             "worktree is not on its recorded branch"
         );
         let default = git::default_branch::resolve(
@@ -93,14 +95,14 @@ impl Manager {
         )
         .await?;
         ensure!(
-            workspace.branch != default,
+            recorded != default,
             "cannot rename the repository default branch"
         );
         ensure!(
             !git::worktrees(checkout, git::run_isolated)
                 .await?
                 .iter()
-                .any(|tree| tree.is_branch(&workspace.branch) && tree.path != workspace.path),
+                .any(|tree| tree.is_branch(recorded) && tree.path != workspace.path),
             "branch is also checked out in another worktree"
         );
         Ok(())
@@ -134,7 +136,7 @@ impl Manager {
                     &tx,
                     &workspace.repository_id,
                     &intent.name,
-                    &intent.branch,
+                    Some(&intent.branch),
                     Some(&workspace.id),
                 )?;
                 intent.record(&tx, &workspace.id)?;
@@ -227,13 +229,13 @@ impl Manager {
         let Some(intent) = self.rename_intent(&workspace.id).await? else {
             return Ok(false);
         };
+        let recorded = workspace.require_branch("renaming a branch")?;
         let actual = git::head_branch(&workspace.path, true, git::run_isolated)
             .await?
-            .filter(|actual| *actual == workspace.branch || *actual == intent.branch);
+            .filter(|actual| actual == recorded || *actual == intent.branch);
         let Some(actual) = actual else {
             bail!(
-                "unfinished rename expected branch {} or {}; check out one of them, then retry",
-                workspace.branch,
+                "unfinished rename expected branch {recorded} or {}; check out one of them, then retry",
                 intent.branch
             );
         };
@@ -245,7 +247,7 @@ impl Manager {
                 workspace.path.display()
             );
             let candidate = Workspace {
-                branch: actual.clone(),
+                branch: Some(actual.clone()),
                 ..workspace.clone()
             };
             self.reclaim_worktree(&candidate).await?;

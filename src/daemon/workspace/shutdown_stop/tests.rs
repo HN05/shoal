@@ -179,7 +179,7 @@ fn workspace(root: &std::path::Path, name: &str, done: bool) -> Workspace {
         "repo".into(),
         name.into(),
         root.join(name),
-        name.into(),
+        Some(name.into()),
         crate::state::WorkspaceState::Ready,
     );
     workspace.done = done;

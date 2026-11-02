@@ -175,8 +175,12 @@ impl Manager {
     }
 
     async fn conflict_target(&self, workspace: &Workspace) -> Result<String> {
-        if let Some(base) = &workspace.base_workspace {
-            return Ok(base.branch.clone());
+        if let Some(branch) = workspace
+            .base_workspace
+            .as_ref()
+            .and_then(|base| base.branch.clone())
+        {
+            return Ok(branch);
         }
         let repo = self.repository(workspace.repository_id.as_str()).await?;
         git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await

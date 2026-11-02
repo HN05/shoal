@@ -9,7 +9,7 @@ fn workspace(name: &str) -> Workspace {
         "repository".into(),
         name.into(),
         name.into(),
-        name.into(),
+        Some(name.into()),
         WorkspaceState::Ready,
     )
 }

@@ -6,7 +6,7 @@ fn plan(args: &[&str]) -> AddPlan {
         "repo".into(),
         "topic".into(),
         "/work/topic".into(),
-        "topic".into(),
+        Some("topic".into()),
         WorkspaceState::Ready,
     );
     let agent = "claude".parse().expect("claude is a built-in agent");

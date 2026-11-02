@@ -975,7 +975,7 @@ async fn removal_deletes_a_branch_a_remote_has_and_keeps_unpushed_work() {
     git(&repo.path, &["push", "-q", "origin", "main"]);
     git(&repo.path, &["remote", "set-head", "origin", "main"]);
     for workspace in [&unpushed, &pushed] {
-        fs::write(workspace.path.join("work"), &workspace.branch).unwrap();
+        fs::write(workspace.path.join("work"), workspace.branch_or_name()).unwrap();
         crate::test_support::commit(&workspace.path, "work");
     }
     // Pushed without an upstream and never merged.
@@ -991,8 +991,16 @@ async fn removal_deletes_a_branch_a_remote_has_and_keeps_unpushed_work() {
             .await
             .unwrap();
         assert_eq!(removed.branch_outcome.is_deleted(), deleted);
-        let branch = git(&repo.path, &["branch", "--list", &workspace.branch]);
-        assert_eq!(branch.trim().is_empty(), deleted, "{}", workspace.branch);
+        let branch = git(
+            &repo.path,
+            &["branch", "--list", workspace.branch_or_name()],
+        );
+        assert_eq!(
+            branch.trim().is_empty(),
+            deleted,
+            "{}",
+            workspace.branch_or_name()
+        );
     }
 }
 
@@ -1001,8 +1009,8 @@ async fn branch_removal_uses_the_inspected_default_branch() {
     let (_root, manager, workspace) = fixture().await;
     let repo = manager.repository(&workspace.repository_id).await.unwrap();
     for (inspected_default, later_default, delete) in [
-        ("main", workspace.branch.as_str(), true),
-        (workspace.branch.as_str(), "main", false),
+        ("main", workspace.branch.as_deref().unwrap(), true),
+        (workspace.branch.as_deref().unwrap(), "main", false),
     ] {
         git(
             &repo.path,

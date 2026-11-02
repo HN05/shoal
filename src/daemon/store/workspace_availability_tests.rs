@@ -29,22 +29,27 @@ fn creation_and_rename_share_global_names_and_repository_branches() -> Result<()
                     "workspace name is reserved by an unfinished rename: reserved",
                 ),
             ] {
-                let error =
-                    ensure_name_and_branch_available(&tx, repository_id, name, "unused", except_id)
-                        .unwrap_err();
+                let error = ensure_name_and_branch_available(
+                    &tx,
+                    repository_id,
+                    name,
+                    Some("unused"),
+                    except_id,
+                )
+                .unwrap_err();
                 assert_eq!(error.to_string(), diagnostic);
                 assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
             }
         }
-        let error =
-            ensure_name_and_branch_available(&tx, "repo", "free", "topic", except_id).unwrap_err();
+        let error = ensure_name_and_branch_available(&tx, "repo", "free", Some("topic"), except_id)
+            .unwrap_err();
         assert_eq!(
             error.to_string(),
             "branch is already owned by workspace worker"
         );
         assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
-        ensure_name_and_branch_available(&tx, "other", "free", "topic", except_id)?;
-        ensure_name_and_branch_available(&tx, "repo", "free", "unused", except_id)?;
+        ensure_name_and_branch_available(&tx, "other", "free", Some("topic"), except_id)?;
+        ensure_name_and_branch_available(&tx, "repo", "free", Some("unused"), except_id)?;
     }
     Ok(())
 }
@@ -54,8 +59,8 @@ fn rename_can_retain_its_own_name_and_branch() -> Result<()> {
     let mut db = database()?;
     let tx = db.transaction()?;
     for (name, branch) in [("worker", "topic"), ("worker", "new"), ("new", "topic")] {
-        ensure_name_and_branch_available(&tx, "repo", name, branch, Some("owner"))?;
-        assert!(ensure_name_and_branch_available(&tx, "repo", name, branch, None).is_err());
+        ensure_name_and_branch_available(&tx, "repo", name, Some(branch), Some("owner"))?;
+        assert!(ensure_name_and_branch_available(&tx, "repo", name, Some(branch), None).is_err());
     }
     Ok(())
 }

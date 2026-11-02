@@ -56,10 +56,11 @@ impl Manager {
             .find(|w| w.path == path)
         {
             ensure!(
-                workspace.repository_id == repo.id && workspace.branch == branch,
+                workspace.repository_id == repo.id && workspace.branch.as_deref() == Some(branch),
                 "worktree no longer matches its recorded repository or branch"
             );
-            self.reopen_owned_workspace(&workspace, branch).await?;
+            self.reopen_owned_workspace(&workspace, Some(branch))
+                .await?;
             return Ok(workspace);
         }
         let git_dir = git::git_dir(&path).await?;
@@ -75,7 +76,7 @@ impl Manager {
                 repo.id.clone(),
                 derive_workspace_name(branch),
                 path,
-                branch.into(),
+                Some(branch.into()),
                 WorkspaceState::Ready,
             )
         };
@@ -114,7 +115,7 @@ impl Manager {
             repo.id.clone(),
             name,
             destination,
-            branch,
+            Some(branch),
             WorkspaceState::Preparing,
         );
         // Reserve the branch and destination before Worktrunk can mutate Git.
@@ -158,7 +159,7 @@ impl Manager {
             &repo.path,
             &self.paths.worktrunk_config(),
             &workspace.path,
-            &workspace.branch,
+            workspace.require_branch("copying a worktree")?,
             Some(&commit),
         )
         .await
@@ -196,7 +197,7 @@ impl Manager {
         repo: &crate::model::Repository,
         workspace: &Workspace,
     ) -> Result<()> {
-        let base = existing_base(repo, &workspace.branch).await?;
+        let base = existing_base(repo, workspace.require_branch("adoption")?).await?;
         let (commit, reference) = recorded_base(repo, &base).await?;
         let git_dir = git::git_dir(&workspace.path).await?;
         let identity = git_dir_identity(&git_dir).await?;

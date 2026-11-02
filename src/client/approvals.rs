@@ -265,7 +265,8 @@ pub struct IssueSpecification {
     pub repository: Option<String>,
     /// Whether approval also assigns the issue to the workspace.
     pub link: bool,
-    pub branch: String,
+    /// The proposing workspace's branch; `None` for one at a commit.
+    pub branch: Option<String>,
     pub commit: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,

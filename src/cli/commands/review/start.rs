@@ -232,7 +232,9 @@ async fn pull_request(
     let owner = client::workspaces(&ctx.paths)
         .await?
         .into_iter()
-        .find(|workspace| workspace.repository_id == repo.id && workspace.branch == pull.head);
+        .find(|workspace| {
+            workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&pull.head)
+        });
     let workspace = match owner {
         Some(workspace) => {
             fetch_pull_branch(&repo.path, "base", &pull.base).await?;
@@ -276,7 +278,8 @@ async fn pull_request(
                 .await?
                 .into_iter()
                 .find(|workspace| {
-                    workspace.repository_id == repo.id && workspace.branch == pull.head
+                    workspace.repository_id == repo.id
+                        && workspace.branch.as_ref() == Some(&pull.head)
                 })
                 .context("the opened PR workspace is missing")?
                 .id

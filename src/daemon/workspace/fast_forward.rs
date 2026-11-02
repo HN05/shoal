@@ -34,14 +34,14 @@ impl Manager {
             "workspace {} is {state}; inspect or set it up before updating it",
             workspace.name
         );
+        let recorded = workspace.require_branch("fast-forwarding")?;
         ensure!(
-            workspace.branch == branch,
-            "workspace {} is recorded on {}, not {branch}",
+            recorded == branch,
+            "workspace {} is recorded on {recorded}, not {branch}",
             workspace.name,
-            workspace.branch
         );
         let _git = self.gates.lock_git(&workspace.repository_id).await;
-        self.verify_checkout(workspace, branch).await?;
+        self.verify_checkout(workspace, Some(branch)).await?;
         let (path, target) = (&workspace.path, git::remote_ref("origin", branch));
         if git::is_ancestor(path, &target, "HEAD", git::isolated_command).await? {
             return Ok(false);

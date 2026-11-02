@@ -163,9 +163,9 @@ pub(crate) async fn merged_commits(
     repo: &ForgeRepo,
     account: &Account,
     number: u64,
-    branch: &str,
+    branch: Option<&str>,
 ) -> Result<Option<Vec<String>>> {
-    let pull = branch_pull(repo, account, number, Some(branch)).await?;
+    let pull = branch_pull(repo, account, number, branch).await?;
     if pull.item.state != ItemState::Merged {
         return Ok(None);
     }

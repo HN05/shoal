@@ -217,10 +217,13 @@ pub fn ensure_name_and_branch_available(
     db: &Connection,
     repository_id: &str,
     name: &str,
-    branch: &str,
+    branch: Option<&str>,
     except_id: Option<&str>,
 ) -> Result<()> {
     ensure_name_available(db, name, except_id)?;
+    let Some(branch) = branch else {
+        return Ok(());
+    };
     let owner: Option<String> = db
         .query_row(
             "SELECT name FROM workspaces WHERE repository_id=?1 AND branch=?2
@@ -361,8 +364,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
     })
 }
 
-pub const WORKSPACE_COLUMNS: &str =
-    "id,repository_id,name,title,path,branch,state,error,base_commit,base_ref,git_dir,git_dir_id";
+pub const WORKSPACE_COLUMNS: &str = "id,repository_id,name,title,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id";
 
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -385,6 +387,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         title: row.get("title")?,
         path: PathBuf::from(row.get::<_, String>("path")?),
         branch: row.get("branch")?,
+        at: starting_commit(row)?,
         state: row.get("state")?,
         error: row.get("error")?,
         base_commit: row.get("base_commit")?,
@@ -392,6 +395,20 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         git_dir: row.get::<_, Option<String>>("git_dir")?.map(PathBuf::from),
         git_dir_id: row.get("git_dir_id")?,
     })
+}
+
+/// Where a workspace without a branch started, from its row.
+fn starting_commit(row: &Row<'_>) -> rusqlite::Result<Option<crate::model::StartingCommit>> {
+    let Some(commit) = row.get::<_, Option<String>>("start_commit")? else {
+        return Ok(None);
+    };
+    let made_for = match row.get::<_, Option<String>>("made_for")? {
+        Some(json) => Some(serde_json::from_str(&json).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, error.into())
+        })?),
+        None => None,
+    };
+    Ok(Some(crate::model::StartingCommit { commit, made_for }))
 }
 
 /// Read canonical links while keeping malformed legacy PR records out of list output.

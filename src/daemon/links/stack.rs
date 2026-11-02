@@ -80,7 +80,11 @@ impl Manager {
     async fn base_pr_commits(&self, base: &Workspace, url: &str) -> Result<Option<Vec<String>>> {
         let (forge, number, _) = self.pr_forge(&base.path, url).await?;
         forge
-            .merged_commits(&self.user_account(), number, &base.branch)
+            .merged_commits(
+                &self.user_account(),
+                number,
+                Some(base.require_branch("restacking")?),
+            )
             .await
     }
 
@@ -91,6 +95,7 @@ impl Manager {
         target: &str,
         head: &str,
     ) -> Result<()> {
+        let base_branch = base.require_branch("restacking")?;
         let workspace = self.workspace(&stacked.id).await?;
         self.verify_checked(&workspace).await?;
         let id = workspace.id.clone();
@@ -109,7 +114,7 @@ impl Manager {
                 ItemKind::Issue => None,
             };
             if matches!(outcome, Some(Retarget::Done)) {
-                retargeted.push((url.clone(), Edited::retarget(&base.branch, target)));
+                retargeted.push((url.clone(), Edited::retarget(base_branch, target)));
             }
             updates.push(base_merged_update(url, base, target, head, outcome));
         }
@@ -134,7 +139,9 @@ impl Manager {
         let lookup = async {
             let (forge, number, _) = self.pr_forge(&workspace.path, url).await?;
             let current = forge.pull_request(&self.user_account(), url).await?.base;
-            Ok::<_, anyhow::Error>((current == base.branch).then_some((forge, number)))
+            Ok::<_, anyhow::Error>(
+                (base.branch.as_ref() == Some(&current)).then_some((forge, number)),
+            )
         }
         .await;
         let (forge, number) = match lookup {

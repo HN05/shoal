@@ -6,7 +6,7 @@ fn a_launch_in_a_workspace_opens_only_that_workspace() {
             repository.into(),
             branch.into(),
             format!("/work/{branch}").into(),
-            branch.into(),
+            Some(branch.into()),
             WorkspaceState::Ready,
         )
     };

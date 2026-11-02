@@ -1559,7 +1559,7 @@ impl Manager {
         } else {
             Ok(RemovalResult {
                 removed: true,
-                branch: Some(workspace.branch.clone()),
+                branch: workspace.branch.clone(),
                 branch_outcome: BranchOutcome::Retained,
                 hook_error: None,
                 children: Vec::new(),

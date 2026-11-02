@@ -558,7 +558,9 @@ pub(super) async fn pull_creation(
     let owned = client::workspaces(&ctx.paths)
         .await?
         .iter()
-        .any(|workspace| workspace.repository_id == repo.id && workspace.branch == pull.head);
+        .any(|workspace| {
+            workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&pull.head)
+        });
     if owned {
         creation.existing = Some(pull.head);
     } else {

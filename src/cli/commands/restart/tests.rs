@@ -10,7 +10,7 @@ fn a_joined_restart_stays_joined_once_it_ends() {
         "repository".into(),
         "api".into(),
         "api".into(),
-        "api".into(),
+        Some("api".into()),
         WorkspaceState::Ready,
     );
     let agent = RunningAgent {
@@ -49,7 +49,7 @@ fn an_agent_another_command_of_the_run_restarted_is_skipped() {
         "repository".into(),
         "web".into(),
         "web".into(),
-        "web".into(),
+        Some("web".into()),
         WorkspaceState::Ready,
     );
     let agent = RunningAgent {

@@ -45,14 +45,14 @@ pub(in crate::cli::commands) async fn adopt(
     .await?;
     ctx.emit(
         &format!(
-            "{} {} on branch {} at {} (normal cleanup applies)",
+            "{} {} {} at {} (normal cleanup applies)",
             if copy {
                 "Copied and adopted"
             } else {
                 "Adopted"
             },
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            workspace.branch,
+            super::checkout_phrase(&workspace),
             workspace.path.display()
         ),
         &workspace,

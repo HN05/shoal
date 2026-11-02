@@ -507,7 +507,7 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
             &[
                 "for-each-ref",
                 "--format=%(refname)",
-                &format!("refs/heads/{}", workspace.branch)
+                &format!("refs/heads/{}", workspace.branch.as_deref().unwrap())
             ],
         )
         .await

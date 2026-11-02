@@ -80,7 +80,7 @@ async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     manager.dispatch_queue().await.unwrap();
     assert!(started(&ui.id));
     let ui = entry(&manager, &ui.id).await;
-    assert_eq!(ui.base.as_deref(), Some(api.branch.as_str()));
+    assert_eq!(ui.base.as_deref(), Some(api.branch.as_deref().unwrap()));
     assert!(ui.waiting_for.is_empty());
 }
 
@@ -157,7 +157,7 @@ async fn issue_dependencies_wait_for_closure_or_a_done_workspace_linking_them() 
     assert!(started(&launch.id));
     assert_eq!(
         entry(&manager, &launch.id).await.base.as_deref(),
-        Some(fix.branch.as_str())
+        Some(fix.branch.as_deref().unwrap())
     );
 }
 
@@ -175,13 +175,7 @@ async fn done_dependencies_build_on_the_one_that_contains_the_others() {
         commit(&workspace.path, &workspace.name);
     }
     let upper = manager
-        .create_workspace(
-            &repo.id,
-            "upper".into(),
-            Some(lower.branch.clone()),
-            None,
-            None,
-        )
+        .create_workspace(&repo.id, "upper".into(), lower.branch.clone(), None, None)
         .await
         .unwrap();
     std::fs::write(upper.path.join("upper"), "work\n").unwrap();
@@ -210,7 +204,7 @@ async fn done_dependencies_build_on_the_one_that_contains_the_others() {
     assert!(stacked.start);
     assert_eq!(
         stacked.entry.unwrap().base.as_deref(),
-        Some(upper.branch.as_str())
+        Some(upper.branch.as_deref().unwrap())
     );
     manager.dispatch_queue().await.unwrap();
     // Separate branches wait until all but one have merged and gone.

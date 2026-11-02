@@ -32,7 +32,11 @@ fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
         palette.workspace_state(workspace.state)
     );
     outln!("Path:          {}", workspace.path.display());
-    outln!("Branch:        {}", workspace.branch);
+    match (&workspace.branch, &workspace.at) {
+        (Some(branch), _) => outln!("Branch:        {branch}"),
+        (None, Some(at)) => outln!("At:            {}", super::super::commit_label(at)),
+        (None, None) => {}
+    }
     base::render(workspace);
     split::render(workspace);
     outln!(

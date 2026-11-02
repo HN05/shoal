@@ -383,6 +383,10 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 116 {
         db.execute_batch(include_str!("space_cleanup.sql"))?;
     }
+    if version >= 117 {
+        db.execute_batch(WORKSPACE_COMMITS)?;
+        allow_branchless_workspaces(&db)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1355,6 +1359,24 @@ fn reviews_keep_their_findings_replies_and_ids_when_they_can_fail_for_false_posi
         [],
     )?;
     assert_eq!(db.last_insert_rowid(), 3);
+    Ok(())
+}
+
+#[test]
+fn workspaces_may_have_no_branch_once_migrated_and_keep_what_references_them() -> Result<()> {
+    let mut db = historical_database(116)?;
+    migrate(&mut db)?;
+    db.execute(
+        "INSERT INTO workspaces(id,repository_id,name,path,state,start_commit)
+            VALUES ('detached','repo','main-3f2a9c1','/detached','ready','3f2a9c1')",
+        [],
+    )?;
+    let branches: Vec<Option<String>> = db
+        .prepare("SELECT branch FROM workspaces ORDER BY name")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(branches, [None, Some("worker".to_owned())]);
+    assert_eq!(executions(&db, "workspace")?.len(), 1);
     Ok(())
 }
 

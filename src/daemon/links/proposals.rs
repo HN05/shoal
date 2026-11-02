@@ -578,7 +578,11 @@ impl Manager {
             }
             let head_repository = proposed.pull.head_repository.as_deref();
             if let Some(number) = forge
-                .open_pull_for(&account, &workspace.branch, head_repository)
+                .open_pull_for(
+                    &account,
+                    workspace.require_branch("opening a PR")?,
+                    head_repository,
+                )
                 .await?
             {
                 return self
@@ -814,12 +818,10 @@ async fn ensure_pull_head(
         .context("the proposal has no opened PR")?;
     let (number, _) = forge.pull(url)?;
     let item = forge.read(account, ItemKind::Pr, number).await?.item;
+    let branch = workspace.require_branch("opening a PR")?;
     ensure!(
-        item.pr
-            .as_ref()
-            .is_some_and(|pr| pr.head == workspace.branch),
-        "{url} does not have the workspace branch {} as its head",
-        workspace.branch
+        item.pr.as_ref().is_some_and(|pr| pr.head == branch),
+        "{url} does not have the workspace branch {branch} as its head"
     );
     Ok(())
 }
@@ -834,13 +836,14 @@ async fn pull_current(
     account: &Account,
     proposed: &PullSpecification,
 ) -> Result<bool> {
-    if proposed.pull.head != workspace.branch
-        || super::pr::current_head(workspace).await? != proposed.commit
+    let Some(branch) = workspace.branch.as_deref() else {
+        return Ok(false);
+    };
+    if proposed.pull.head != branch || super::pr::current_head(workspace).await? != proposed.commit
     {
         return Ok(false);
     }
-    let head_repository =
-        super::actions::head_repository(&workspace.path, &workspace.branch, forge).await?;
+    let head_repository = super::actions::head_repository(&workspace.path, branch, forge).await?;
     if head_repository != proposed.pull.head_repository {
         return Ok(false);
     }
@@ -856,16 +859,15 @@ async fn head_commit(
     account: &Account,
     head_repository: Option<&str>,
 ) -> Result<Option<String>> {
+    let branch = workspace.require_branch("opening a PR")?;
     match head_repository {
         Some(fork) => {
             let fork = forge.sibling(fork);
-            fork.branch_commit(account, &workspace.branch)
-                .await
-                .map(Some)
+            fork.branch_commit(account, branch).await.map(Some)
         }
         None => {
-            let remote = crate::git::push_remote(&workspace.path, &workspace.branch).await?;
-            crate::git::pushed_commit(&workspace.path, &remote, &workspace.branch).await
+            let remote = crate::git::push_remote(&workspace.path, branch).await?;
+            crate::git::pushed_commit(&workspace.path, &remote, branch).await
         }
     }
 }

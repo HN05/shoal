@@ -446,7 +446,9 @@ impl Manager {
             }
             (None, Some(selector)) => match self.open_target(&repo, selector, options).await? {
                 branches::OpenTarget::Reopen(workspace) => {
-                    return self.check_reopen(&workspace, &workspace.branch).await;
+                    return self
+                        .check_reopen(&workspace, workspace.branch.as_deref())
+                        .await;
                 }
                 branches::OpenTarget::Create(branch) => (Some(branch.name.clone()), Some(branch)),
             },
@@ -504,7 +506,7 @@ impl Manager {
             repo.id.clone(),
             name,
             path,
-            branch,
+            Some(branch),
             WorkspaceState::Preparing,
         );
         self.insert_workspace(workspace.clone(), base_branch, parent)
@@ -552,7 +554,7 @@ impl Manager {
                     &tx,
                     &record.repository_id,
                     &record.name,
-                    &record.branch,
+                    record.branch.as_deref(),
                     None,
                 )?;
                 store::ensure_path_unrecorded(&tx, &record.path)?;
@@ -581,7 +583,7 @@ impl Manager {
                     tree::ensure_parent(&tx, &record.repository_id, parent)?;
                 }
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,parent_workspace_id) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13)",
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,parent_workspace_id,start_commit,made_for) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15)",
                     params![
                         record.id,
                         record.repository_id,
@@ -596,6 +598,8 @@ impl Manager {
                         record.state == WorkspaceState::Ready,
                         base_workspace,
                         parent,
+                        record.at.as_ref().map(|at| &at.commit),
+                        record.at.as_ref().and_then(|at| at.made_for.as_ref()).map(serde_json::to_string).transpose()?,
                     ],
                 )?;
                 tx.execute(
@@ -626,7 +630,7 @@ impl Manager {
             &repo.path,
             &self.paths.worktrunk_config(),
             &workspace.path,
-            &workspace.branch,
+            workspace.require_branch("creating a branch worktree")?,
             matches!(&source, WorkspaceSource::New { .. }).then_some(commit.as_str()),
         )
         .await?;
@@ -656,8 +660,12 @@ impl Manager {
     ) -> Result<String> {
         match source {
             WorkspaceSource::Existing { base, .. } => {
-                self.existing_branch_base(repo, &workspace.branch, base.as_deref())
-                    .await
+                self.existing_branch_base(
+                    repo,
+                    workspace.require_branch("opening a branch")?,
+                    base.as_deref(),
+                )
+                .await
             }
             WorkspaceSource::New { base, .. } => self.new_branch_base(repo, base.as_deref()).await,
         }

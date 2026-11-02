@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 116;
+pub(super) const SCHEMA_VERSION: i64 = 117;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -379,7 +379,39 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (114, SENT_FILES, None),
     (115, include_str!("changed_on_both_sides.sql"), None),
     (116, include_str!("space_cleanup.sql"), None),
+    (117, WORKSPACE_COMMITS, Some(allow_branchless_workspaces)),
 ];
+
+/// Where a workspace without a branch started, and the tag, branch or PR it
+/// was created for as JSON.
+pub(super) const WORKSPACE_COMMITS: &str = "ALTER TABLE workspaces ADD COLUMN start_commit TEXT;
+ALTER TABLE workspaces ADD COLUMN made_for TEXT;";
+
+/// Drop the `NOT NULL` constraint on `workspaces.branch` in place, as SQLite
+/// documents for removing a constraint: rebuilding the table would delete
+/// the rows of every table that references it.
+pub(super) fn allow_branchless_workspaces(db: &Connection) -> Result<()> {
+    let sql: String = db.query_row(
+        "SELECT sql FROM sqlite_schema WHERE type='table' AND name='workspaces'",
+        [],
+        |row| row.get(0),
+    )?;
+    const CONSTRAINED: &str = "branch TEXT NOT NULL";
+    match sql.matches(CONSTRAINED).count() {
+        0 => return Ok(()),
+        1 => {}
+        _ => anyhow::bail!("unexpected workspaces table definition"),
+    }
+    let version: i64 = db.query_row("PRAGMA schema_version", [], |row| row.get(0))?;
+    db.pragma_update(None, "writable_schema", true)?;
+    db.execute(
+        "UPDATE sqlite_schema SET sql=?1 WHERE type='table' AND name='workspaces'",
+        [sql.replacen(CONSTRAINED, "branch TEXT", 1)],
+    )?;
+    db.pragma_update(None, "schema_version", version + 1)?;
+    db.pragma_update(None, "writable_schema", false)?;
+    Ok(())
+}
 
 /// The JSON array of the record IDs of the files an agent sent the user with
 /// an alert or a question.

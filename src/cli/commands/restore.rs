@@ -236,9 +236,9 @@ impl Reopened {
             ),
         };
         format!(
-            "{action} {} on branch {} at {}{files}{agents}",
+            "{action} {} {} at {}{files}{agents}",
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            workspace.branch,
+            super::workspaces::checkout_phrase(workspace),
             workspace.path.display()
         )
     }

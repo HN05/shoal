@@ -160,7 +160,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
     let path = &restored.opened.workspace.path;
     assert!(path.starts_with(target_repo.path.parent().unwrap()));
-    assert_eq!(restored.opened.workspace.branch, "topic");
+    assert_eq!(restored.opened.workspace.branch.as_deref(), Some("topic"));
     assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
     assert_eq!(git(path, &["status", "--porcelain"]), status);
     assert_eq!(fs::read_to_string(path.join("scratch")).unwrap(), "notes\n");

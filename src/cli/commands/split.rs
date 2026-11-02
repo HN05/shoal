@@ -187,9 +187,9 @@ async fn start_agent(
 fn report(ctx: &Context, child: &Workspace, agent: Option<&QueueEntry>) -> Result<()> {
     let palette = Palette::stdout(ctx.json);
     let mut text = format!(
-        "Created {} on branch {} at {}",
+        "Created {} {} at {}",
         palette.paint(Style::Heading, &child.name),
-        child.branch,
+        super::workspaces::checkout_phrase(child),
         child.path.display()
     );
     if let Some(entry) = agent {

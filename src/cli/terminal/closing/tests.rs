@@ -360,7 +360,7 @@ async fn inspect(
             "repo".into(),
             "workspace".into(),
             "/workspace".into(),
-            "topic".into(),
+            Some("topic".into()),
             WorkspaceState::Ready,
         );
         workspace.agent_state = turn.map(|state| AgentStatus {

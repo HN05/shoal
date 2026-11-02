@@ -10,7 +10,7 @@ fn workspace() -> Workspace {
         "repository".into(),
         "workspace".into(),
         PathBuf::from("/workspace"),
-        "branch".into(),
+        Some("branch".into()),
         WorkspaceState::Ready,
     )
 }

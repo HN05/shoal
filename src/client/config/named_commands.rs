@@ -56,7 +56,10 @@ pub fn workspace_fields<'a>(
 ) -> Vec<(&'static str, &'a OsStr)> {
     let mut fields = vec![
         ("{workspace}", OsStr::new(&workspace.name)),
-        ("{branch}", OsStr::new(&workspace.branch)),
+        (
+            "{branch}",
+            OsStr::new(workspace.branch.as_deref().unwrap_or_default()),
+        ),
         ("{path}", workspace.path.as_os_str()),
     ];
     if let Some(base) = diff_base {

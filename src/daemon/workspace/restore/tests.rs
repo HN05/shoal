@@ -287,7 +287,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
     let path = &restored.opened.workspace.path;
     assert!(!restored.opened.reused);
-    assert_eq!(restored.opened.workspace.branch, "topic");
+    assert_eq!(restored.opened.workspace.branch.as_deref(), Some("topic"));
     assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
     assert_eq!(git(path, &["status", "--porcelain"]), status);
     assert_eq!(fs::read_to_string(path.join("scratch")).unwrap(), "notes\n");

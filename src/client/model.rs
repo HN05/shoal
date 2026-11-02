@@ -75,7 +75,11 @@ pub struct Workspace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     pub path: PathBuf,
-    pub branch: String,
+    /// Its branch; `None` for a workspace at a commit, which `at` describes.
+    pub branch: Option<String>,
+    /// Where a workspace without a branch was created.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<StartingCommit>,
     pub state: WorkspaceState,
     pub error: Option<String>,
     pub base_commit: Option<String>,
@@ -133,12 +137,39 @@ pub struct WorkspaceUsage {
     pub processes: usize,
 }
 
+/// The commit a workspace without a branch started at, and what named it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StartingCommit {
+    pub commit: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub made_for: Option<MadeFor>,
+}
+
+/// What a workspace at a commit was created for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MadeFor {
+    /// A branch or tag, by the name it was given.
+    Ref(String),
+    /// A PR's head, by its number.
+    Pr(u64),
+}
+
+impl std::fmt::Display for MadeFor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ref(name) => f.write_str(name),
+            Self::Pr(number) => write!(f, "PR #{number}"),
+        }
+    }
+}
+
 /// Another workspace a record refers to, with its current name and branch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceRef {
     pub id: String,
     pub name: String,
-    pub branch: String,
+    pub branch: Option<String>,
 }
 
 /// Canonical issue and pull-request links associated with a space, a
@@ -405,7 +436,7 @@ impl Workspace {
         repository_id: String,
         name: String,
         path: PathBuf,
-        branch: String,
+        branch: Option<String>,
         state: WorkspaceState,
     ) -> Self {
         Self {
@@ -415,6 +446,7 @@ impl Workspace {
             title: None,
             path,
             branch,
+            at: None,
             state,
             error: None,
             base_commit: None,
@@ -437,6 +469,20 @@ impl Workspace {
         }
     }
 
+    /// Its branch, refusing a workspace at a commit for `action`, which
+    /// needs one.
+    pub fn require_branch(&self, action: &str) -> anyhow::Result<&str> {
+        self.branch
+            .as_deref()
+            .ok_or_else(|| no_branch(&self.name, action))
+    }
+
+    /// What names its work where a branch would: its branch, or the name
+    /// of a workspace at a commit.
+    pub fn branch_or_name(&self) -> &str {
+        self.branch.as_deref().unwrap_or(&self.name)
+    }
+
     /// True when `path` (canonical) lies inside this worktree.
     pub fn contains(&self, path: &Path) -> bool {
         std::fs::canonicalize(&self.path).is_ok_and(|root| path.starts_with(root))
@@ -449,6 +495,12 @@ impl Workspace {
             .filter(|w| w.contains(path))
             .max_by_key(|w| w.path.components().count())
     }
+}
+
+/// The refusal of `action` in the workspace `name`, which is at a commit and
+/// has no branch.
+pub fn no_branch(name: &str, action: &str) -> anyhow::Error {
+    anyhow::anyhow!("workspace {name} is at a commit and has no branch; {action} needs a branch")
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -888,6 +940,8 @@ pub struct LandedBranch {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LandPlan {
     pub workspace: Workspace,
+    /// The workspace's branch, which lands.
+    pub branch: String,
     pub repo: Repository,
     pub source: String,
     pub checkout: Option<PathBuf>,

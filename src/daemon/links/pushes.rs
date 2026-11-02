@@ -41,7 +41,12 @@ impl Manager {
             return Ok(false);
         }
         let push = branch_push(&workspace, None).await?;
-        let pushed = git::pushed_commit(&workspace.path, &push.remote, &workspace.branch).await?;
+        let pushed = git::pushed_commit(
+            &workspace.path,
+            &push.remote,
+            workspace.require_branch("pushing")?,
+        )
+        .await?;
         if pushed == push.commit {
             return Ok(false);
         }
@@ -294,10 +299,11 @@ impl Manager {
 /// The push of the workspace branch's current commit to where it pushes,
 /// as `shoal pr open` runs it.
 async fn branch_push(workspace: &Workspace, agent: Option<String>) -> Result<PushSpecification> {
+    let branch = workspace.require_branch("pushing")?;
     Ok(PushSpecification {
-        remote: git::push_remote(&workspace.path, &workspace.branch).await?,
+        remote: git::push_remote(&workspace.path, branch).await?,
         url: None,
-        destination: git::local_ref(&workspace.branch),
+        destination: git::local_ref(branch),
         commit: Some(super::pr::current_head(workspace).await?),
         replaces: None,
         agent,
@@ -310,13 +316,16 @@ async fn push_current(workspace: &Workspace, request: &ApprovalRequest) -> Resul
     let Some(push) = request.pending_push() else {
         return Ok(false);
     };
+    let Some(branch) = workspace.branch.as_deref() else {
+        return Ok(false);
+    };
     if let Some(pull) = request.proposed_pull()
-        && pull.pull.head != workspace.branch
+        && pull.pull.head != branch
     {
         return Ok(false);
     }
     match &push.commit {
-        Some(commit) if push.destination == git::local_ref(&workspace.branch) => {
+        Some(commit) if push.destination == git::local_ref(branch) => {
             Ok(super::pr::current_head(workspace).await? == *commit)
         }
         _ => Ok(true),
@@ -327,13 +336,14 @@ async fn push_current(workspace: &Workspace, request: &ApprovalRequest) -> Resul
 /// upstream, as `git push --set-upstream` would have, when it has none.
 /// Failure only logs; the push is done.
 async fn track_pushed_branch(workspace: &Workspace, push: &PushSpecification) {
-    if push.commit.is_none() || push.destination != git::local_ref(&workspace.branch) {
+    let Some(branch) = workspace.branch.as_deref() else {
+        return;
+    };
+    if push.commit.is_none() || push.destination != git::local_ref(branch) {
         return;
     }
-    if let Err(error) =
-        git::track_pushed_branch(&workspace.path, &workspace.branch, &push.remote).await
-    {
-        log!("upstream of {} not set: {error:#}", workspace.branch);
+    if let Err(error) = git::track_pushed_branch(&workspace.path, branch, &push.remote).await {
+        log!("upstream of {branch} not set: {error:#}");
     }
 }
 

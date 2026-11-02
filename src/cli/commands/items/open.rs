@@ -84,6 +84,7 @@ pub(in crate::cli::commands) async fn push_and_open(
         },
     )
     .await?;
+    workspace.require_branch("shoal pr open")?;
     let gate = ReviewMethod::CheckPrGate {
         workspace: workspace.id.clone(),
     };
@@ -111,18 +112,16 @@ pub(in crate::cli::commands) async fn push_and_open(
 /// Push to the branch's push remote as a tracked command under the agent
 /// account, with the user's Git configuration and hooks.
 async fn push(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    let remote = git::push_remote(&workspace.path, &workspace.branch).await?;
+    let branch = workspace.require_branch("shoal pr open")?;
+    let remote = git::push_remote(&workspace.path, branch).await?;
     let code = crate::execution::publish(
         &ctx.paths,
         workspace.id.clone(),
-        git::push_command(&remote, &workspace.branch),
+        git::push_command(&remote, branch),
     )
     .await?;
     if code != 0 {
-        let message = format!(
-            "git push of {} to {remote} failed (exit {code})",
-            workspace.branch
-        );
+        let message = format!("git push of {branch} to {remote} failed (exit {code})");
         return Err(Failed(Failure::PushFailed { message }).into());
     }
     Ok(())

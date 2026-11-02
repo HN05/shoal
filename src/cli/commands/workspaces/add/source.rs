@@ -135,17 +135,20 @@ async fn issue_creation(
                 workspace.name,
                 workspace.state
             );
-            associated = Some(workspace.branch.clone());
+            associated = Some(
+                workspace
+                    .require_branch("reopening for an issue")?
+                    .to_owned(),
+            );
         }
     }
     if let Some(branch) = associated {
         creation.existing = Some(branch);
         return Ok(creation);
     }
-    if let Some(workspace) = workspaces
-        .into_iter()
-        .find(|workspace| workspace.repository_id == repo.id && workspace.branch == name)
-    {
+    if let Some(workspace) = workspaces.into_iter().find(|workspace| {
+        workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&name)
+    }) {
         ensure!(
             workspace.state == WorkspaceState::Ready,
             "workspace {} is {}; inspect or set it up before reopening",
@@ -181,7 +184,7 @@ async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
             };
             let label = match workspaces
                 .iter()
-                .find(|w| w.repository_id == repo.id && w.branch == b.name)
+                .find(|w| w.repository_id == repo.id && w.branch.as_ref() == Some(&b.name))
             {
                 Some(w) => format!("{label}  [workspace: {}]", w.name),
                 None => label,

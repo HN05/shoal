@@ -350,7 +350,7 @@ impl Manager {
             Some(&settings.agent.templates.review),
             &templates::ReviewFields {
                 workspace: &workspace.name,
-                branch: &workspace.branch,
+                branch: workspace.branch.as_deref().unwrap_or_default(),
                 path: &checkout.to_string_lossy(),
                 base: &commits.base,
             },

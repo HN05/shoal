@@ -41,7 +41,7 @@ pub(super) async fn start(
         }
     };
     eprintln!("Setting up Shoal in workspace {}", workspace.name);
-    let prompt = prompt(repository::name(repo), &workspace.branch);
+    let prompt = prompt(repository::name(repo), BRANCH);
     agents::launch_agent(
         ctx,
         agent,
@@ -61,7 +61,9 @@ async fn setup_workspace(ctx: &Context, repo: &Repository) -> Result<Option<Work
     Ok(client::workspaces(&ctx.paths)
         .await?
         .into_iter()
-        .find(|workspace| workspace.repository_id == repo.id && workspace.branch == BRANCH))
+        .find(|workspace| {
+            workspace.repository_id == repo.id && workspace.branch.as_deref() == Some(BRANCH)
+        }))
 }
 
 /// Open a workspace on the setup branch, reusing the branch an earlier setup left.

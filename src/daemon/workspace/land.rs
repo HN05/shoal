@@ -34,7 +34,8 @@ impl Manager {
         self.verify_worktree(&workspace).await?;
         let default =
             crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
-        let branch = workspace.branch.as_str();
+        let branch = workspace.require_branch("landing")?.to_owned();
+        let branch = branch.as_str();
         ensure!(
             branch != default,
             "workspace {} is on the default branch {default}; nothing to land",
@@ -82,6 +83,7 @@ impl Manager {
             .transpose()?
             .unwrap_or_default();
         Ok(LandPlan {
+            branch: branch.to_owned(),
             workspace,
             repo,
             source,
@@ -126,7 +128,9 @@ impl Manager {
         let head = git::status::local_branch_commit(&workspace.path, &land.branch)
             .await
             .with_context(|| format!("could not check {} for approval", land.branch))?;
-        if workspace.branch == land.branch && head.as_deref() == Some(land.head.as_str()) {
+        if workspace.branch.as_ref() == Some(&land.branch)
+            && head.as_deref() == Some(land.head.as_str())
+        {
             return Ok(());
         }
         self.retire_stale_land_request(request).await?;
@@ -170,7 +174,7 @@ impl Manager {
 /// The land request a scoped landing of `plan` asks the user to decide,
 /// with its `warning` in the reason.
 fn land_request(plan: &LandPlan, warning: Option<MergeWarning>) -> ApprovalRequest {
-    let branch = &plan.workspace.branch;
+    let branch = &plan.branch;
     let mut reason = format!("merge {branch} into {}", plan.default_refresh.branch);
     if let Some(warning) = warning {
         reason.push_str(&format!("; {}", warning.phrase()));

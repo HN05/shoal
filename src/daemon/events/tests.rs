@@ -155,8 +155,13 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
     git(&workspace.path, &["checkout", "--detach"]);
     manager.observe_workspace_branch(&workspace).await.unwrap();
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().branch,
-        "worker"
+        manager
+            .workspace(&workspace.id)
+            .await
+            .unwrap()
+            .branch
+            .as_deref(),
+        Some("worker")
     );
     let events = manager.workspace_events(None, 100).await.unwrap();
     let changed: Vec<_> = events

@@ -85,7 +85,7 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
             "repo".into(),
             "workspace".into(),
             "/workspace".into(),
-            "topic".into(),
+            Some("topic".into()),
             crate::state::WorkspaceState::Ready,
         ),
         executions: vec![
@@ -165,7 +165,7 @@ fn a_workspace_records_where_a_stopped_agent_waits() {
             "repo".into(),
             "workspace".into(),
             "/workspace".into(),
-            "topic".into(),
+            Some("topic".into()),
             crate::state::WorkspaceState::Ready,
         ),
         executions: vec![execution],

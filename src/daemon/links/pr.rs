@@ -164,7 +164,7 @@ impl Manager {
         // Detect missing tools/login, wrong branches and invalid PRs now.
         if check == WatchCheck::Lookup {
             forge
-                .merged_commits(&self.user_account(), number, &workspace.branch)
+                .merged_commits(&self.user_account(), number, workspace.branch.as_deref())
                 .await?;
         }
         self.adding_pr_watch(&workspace.id, url).await
@@ -460,7 +460,7 @@ impl Manager {
         for url in urls {
             let (forge, number, _) = self.pr_forge(&workspace.path, url).await?;
             let Some(commits) = forge
-                .merged_commits(&self.user_account(), number, &workspace.branch)
+                .merged_commits(&self.user_account(), number, workspace.branch.as_deref())
                 .await?
             else {
                 return Ok(false);
@@ -557,14 +557,23 @@ fn store_registration(
     Ok(())
 }
 
+/// The workspace's HEAD: its branch's commit, checking it is still on the
+/// branch, or for a workspace at a commit its detached HEAD, checking it is
+/// still detached.
 pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
     let (head, branch) = git::head_and_branch(&workspace.path)
         .await
         .context("cannot check the workspace's branch")?;
-    ensure!(
-        branch.as_deref() == Some(workspace.branch.as_str()),
-        "workspace is not on its recorded branch"
-    );
+    match &workspace.branch {
+        Some(recorded) => ensure!(
+            branch.as_ref() == Some(recorded),
+            "workspace is not on its recorded branch"
+        ),
+        None => ensure!(
+            branch.is_none(),
+            "workspace is at a commit but its worktree is on a branch"
+        ),
+    }
     Ok(head)
 }
 

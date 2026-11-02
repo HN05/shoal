@@ -59,7 +59,7 @@ impl Plan {
             repo.id.clone(),
             ".seed".into(),
             layout.worktree(),
-            branch.clone(),
+            Some(branch.clone()),
             WorkspaceState::Ready,
         );
         Ok(Some(Self {

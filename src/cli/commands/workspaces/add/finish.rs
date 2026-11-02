@@ -81,12 +81,12 @@ async fn add_planned(
     if let Some(entry) = &queue_entry {
         agent_queue::attach(ctx, entry, &opened.workspace).await?;
     }
-    let (branch, title) = (&opened.workspace.branch, &opened.workspace.title);
+    let (branch, title) = (opened.workspace.branch_or_name(), &opened.workspace.title);
     let label = match (place_name, &issue, title) {
         (Some(name), _, title) => name.render(branch, title.as_deref()),
         (None, _, Some(title)) => title.clone(),
         (None, Some(issue), None) => issue.tab_label(target.repository(ctx).await?),
-        (None, None, None) => branch.clone(),
+        (None, None, None) => branch.to_owned(),
     };
     let agent_name = agent.agent.clone().map(String::from);
     terminal::host_workspace(ctx, &opened.workspace, agent_name.is_some(), &label).await?;
@@ -222,10 +222,10 @@ async fn finish_add_workspace(
     }
     ctx.emit(
         &format!(
-            "{} {} on branch {} at {}",
+            "{} {} {} at {}",
             if reused { "Opened" } else { "Created" },
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            workspace.branch,
+            super::super::checkout_phrase(&workspace),
             workspace.path.display()
         ),
         &workspace,

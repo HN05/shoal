@@ -52,7 +52,7 @@ impl Manager {
     ) -> Result<()> {
         let id = workspace.id.clone();
         let repository_id = workspace.repository_id.clone();
-        let old_base = git::local_ref(&workspace.branch);
+        let old_base = git::local_ref(workspace.require_branch("renaming a branch")?);
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;

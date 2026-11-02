@@ -40,3 +40,23 @@ pub(super) use setup::{copy_ignored_worker, run_post_setup, setup, setup_workspa
 pub(super) use status::status;
 pub(super) use title::{request_title, title};
 pub(super) use watch::watch_items;
+
+/// Where the workspace's worktree is, for messages: `on branch <branch>`, or
+/// `at <commit>` with what a workspace at a commit was made for.
+pub(super) fn checkout_phrase(workspace: &crate::model::Workspace) -> String {
+    match (&workspace.branch, &workspace.at) {
+        (Some(branch), _) => format!("on branch {branch}"),
+        (None, Some(at)) => format!("at {}", commit_label(at)),
+        (None, None) => "at a commit".to_owned(),
+    }
+}
+
+/// A starting commit as `3f2a9c1`, or `3f2a9c1 (v1.4.0)` with what it was
+/// made for.
+pub(super) fn commit_label(at: &crate::model::StartingCommit) -> String {
+    let short = &at.commit[..at.commit.len().min(7)];
+    match &at.made_for {
+        Some(made_for) => format!("{short} ({made_for})"),
+        None => short.to_owned(),
+    }
+}

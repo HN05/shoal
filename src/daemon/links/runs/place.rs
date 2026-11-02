@@ -52,7 +52,9 @@ impl RunPlace {
             return Ok(branch);
         }
         match self.own_workspace() {
-            Some(workspace) => Ok(workspace.branch.clone()),
+            Some(workspace) => Ok(workspace
+                .require_branch("a CI run without --branch")?
+                .to_owned()),
             None => (self.forge.default_branch(&self.account).await).with_context(|| {
                 format!(
                     "could not read the default branch of {}; name one with --branch",

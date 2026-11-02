@@ -235,7 +235,7 @@ fn started_link(forge: &ForgeRepo, started: &StartedRun) -> Option<LinkedItem> {
 /// repository.
 fn on_own_branch_name(workspace: Option<&Workspace>, branch: &str) -> Result<()> {
     ensure!(
-        workspace.is_some_and(|workspace| workspace.branch == branch),
+        workspace.is_some_and(|workspace| workspace.branch.as_deref() == Some(branch)),
         "workspace processes start CI runs only on their workspace's branch"
     );
     Ok(())
@@ -244,7 +244,7 @@ fn on_own_branch_name(workspace: Option<&Workspace>, branch: &str) -> Result<()>
 /// Refuse a run on any branch but the workspace's, or of another repository.
 fn on_own_branch(workspace: Option<&Workspace>, run: &Run) -> Result<()> {
     ensure!(
-        workspace.is_some_and(|workspace| run.branch.as_deref() == Some(&workspace.branch)),
+        workspace.is_some_and(|workspace| run.branch.is_some() && run.branch == workspace.branch),
         "workspace processes act only on CI runs of their workspace's branch; \
          use --pr for a PR's checks"
     );

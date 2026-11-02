@@ -65,7 +65,7 @@ impl Manager {
         let (_repo, _guard) = self.lock_repository(&workspace.repository_id).await?;
         // The workspace may have gone while waiting for the repository.
         let workspace = self.workspace(&workspace.id).await?;
-        self.reopen_owned_workspace(&workspace, &workspace.branch)
+        self.reopen_owned_workspace(&workspace, workspace.branch.as_deref())
             .await?;
         Ok(crate::model::OpenedWorkspace {
             workspace,
@@ -76,7 +76,7 @@ impl Manager {
     pub(crate) async fn reopen_owned_workspace(
         &self,
         workspace: &Workspace,
-        expected_branch: &str,
+        expected_branch: Option<&str>,
     ) -> Result<()> {
         self.check_reopen(workspace, expected_branch).await?;
         self.touch(&workspace.id).await;
@@ -88,7 +88,7 @@ impl Manager {
     pub(crate) async fn check_reopen(
         &self,
         workspace: &Workspace,
-        expected_branch: &str,
+        expected_branch: Option<&str>,
     ) -> Result<()> {
         ensure!(
             workspace.state == WorkspaceState::Ready,
@@ -100,13 +100,22 @@ impl Manager {
     }
 
     /// Refuse a worktree that is no longer the recorded one or is off
-    /// `expected_branch`.
+    /// `expected_branch`; `None` expects a detached HEAD.
     pub(crate) async fn verify_checkout(
         &self,
         workspace: &Workspace,
-        expected_branch: &str,
+        expected_branch: Option<&str>,
     ) -> Result<()> {
         self.verify_worktree(workspace).await?;
+        let Some(expected_branch) = expected_branch else {
+            let (_, branch) = git::head_and_branch(&workspace.path).await?;
+            ensure!(
+                branch.is_none(),
+                "workspace {} is at a commit but its worktree is on a branch",
+                workspace.name
+            );
+            return Ok(());
+        };
         let actual = git::head_branch(&workspace.path, false, git::run_isolated).await?;
         ensure!(
             actual.as_deref() == Some(expected_branch),
@@ -166,14 +175,18 @@ impl Manager {
     /// branch, and no other workspace may own it.
     pub(crate) async fn reclaim_worktree(&self, workspace: &Workspace) -> Result<()> {
         let git_dir = self.linked_git_dir(workspace).await?;
-        let branch = git::head_branch(&workspace.path, true, git::run)
-            .await
-            .context("worktree HEAD must be on the recorded branch")?;
-        ensure!(
-            branch.as_deref() == Some(workspace.branch.as_str()),
-            "worktree is not on its recorded branch {}; check it out before reclaiming",
-            workspace.branch
-        );
+        match &workspace.branch {
+            Some(recorded) => {
+                let branch = git::head_branch(&workspace.path, true, git::run)
+                    .await
+                    .context("worktree HEAD must be on the recorded branch")?;
+                ensure!(
+                    branch.as_deref() == Some(recorded.as_str()),
+                    "worktree is not on its recorded branch {recorded}; check it out before reclaiming"
+                );
+            }
+            None => self.verify_checkout(workspace, None).await?,
+        }
         self.release_stale_owner(&git_dir, &workspace.id).await?;
         self.record_worktree_identity(workspace).await?;
         self.verify_worktree(&self.workspace(&workspace.id).await?)
@@ -271,8 +284,11 @@ impl Manager {
         }
         // Older records cannot prove identity after a move; a branch match at
         // another existing path is enough to block forgetting the workspace.
+        // Every workspace without a branch records its Git directory.
+        let Some(branch) = workspace.branch.clone() else {
+            return Ok(None);
+        };
         let trees = git::worktrees(&repo.path, git::run).await?;
-        let branch = workspace.branch.clone();
         off_runtime::run(move || {
             Ok(trees
                 .into_iter()

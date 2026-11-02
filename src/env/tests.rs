@@ -71,7 +71,7 @@ fn configured_values_render_identity_and_only_reserved_ports_once() {
         "repo".into(),
         "task-{branch}".into(),
         PathBuf::from("/tmp/{repo}/$(false) 日本語"),
-        "feature/session".into(),
+        Some("feature/session".into()),
         crate::state::WorkspaceState::Ready,
     );
     let ports = vec![PortReservation {
@@ -127,7 +127,7 @@ fn the_temporary_directory_is_tmpdir_unless_env_sets_it() {
         "repo".into(),
         "worker".into(),
         PathBuf::from("/work"),
-        "worker".into(),
+        Some("worker".into()),
         crate::state::WorkspaceState::Ready,
     );
     let tmp_dir = Path::new("/root/repo/.tmp/id");
@@ -153,7 +153,7 @@ fn configured_paths_preserve_non_utf8_bytes() {
         "repo".into(),
         "worker".into(),
         PathBuf::from(OsString::from_vec(b"/tmp/\xff".to_vec())),
-        "worker".into(),
+        Some("worker".into()),
         crate::state::WorkspaceState::Ready,
     );
     let values = BTreeMap::from([("PROFILE".into(), "{workspace_path}/profile".into())]);

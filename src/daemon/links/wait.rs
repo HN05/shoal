@@ -324,7 +324,7 @@ impl Manager {
                 .await?
                 .into_iter()
                 .map(|(url, _)| url)
-                .chain(kind.is_none().then(|| child.branch.clone()))
+                .chain(kind.is_none().then(|| child.branch.clone()).flatten())
                 .collect::<Vec<_>>();
             let pending = self.pending_activity(&child.id, &keys).await?;
             updates.extend(pending.into_iter().map(|mut update| {
@@ -345,7 +345,7 @@ impl Manager {
         let keys = items
             .into_iter()
             .map(|(url, _)| url)
-            .chain(Some(workspace.branch))
+            .chain(workspace.branch)
             .collect::<Vec<_>>();
         self.pending_activity(&workspace.id, &keys).await
     }
@@ -1184,13 +1184,15 @@ fn recorded_urls(
     ))
 }
 
-/// The branch of the workspace `id`; a chat has none.
+/// The branch of the workspace `id`; a chat or a workspace at a commit has
+/// none.
 fn workspace_branch(db: &rusqlite::Connection, id: &str) -> Result<Option<String>> {
     Ok(db
         .query_row("SELECT branch FROM workspaces WHERE id=?1", [id], |row| {
-            row.get(0)
+            row.get::<_, Option<String>>(0)
         })
-        .optional()?)
+        .optional()?
+        .flatten())
 }
 
 /// The IDs of workspace `id` and of `children`, whose activity its agent

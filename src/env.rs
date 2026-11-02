@@ -49,7 +49,10 @@ pub fn render_configured_environment(
         ("{workspace_path}", workspace.path.as_os_str()),
         ("{path}", workspace.path.as_os_str()),
         ("{repo}", std::ffi::OsStr::new(repository_name)),
-        ("{branch}", std::ffi::OsStr::new(&workspace.branch)),
+        (
+            "{branch}",
+            std::ffi::OsStr::new(workspace.branch.as_deref().unwrap_or_default()),
+        ),
     ];
     let mut port_values = Vec::new();
     for port in ports {

@@ -291,6 +291,10 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch("ALTER TABLE agent_messages DROP COLUMN wakes;")?;
     db.execute_batch("DROP TABLE workspace_files; DROP TABLE ended_chats;")?;
     db.execute_batch("DROP TABLE earlier_attached_files;")?;
+    db.execute_batch(
+        "ALTER TABLE workspaces DROP COLUMN start_commit;
+         ALTER TABLE workspaces DROP COLUMN made_for;",
+    )?;
     Ok(())
 }
 

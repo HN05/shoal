@@ -15,7 +15,7 @@ fn workspaces(count: usize) -> Vec<Workspace> {
                 "repo".into(),
                 index.to_string(),
                 "/unused".into(),
-                index.to_string(),
+                Some(index.to_string()),
                 crate::state::WorkspaceState::Ready,
             )
         })

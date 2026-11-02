@@ -305,7 +305,7 @@ impl Manager {
             .await?
             .into_iter()
             .filter(|workspace| workspace.repository_id == repository_id)
-            .map(|workspace| workspace.branch)
+            .filter_map(|workspace| workspace.branch)
             .collect())
     }
 }

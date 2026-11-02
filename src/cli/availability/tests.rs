@@ -46,7 +46,7 @@ fn workspace(state: WorkspaceState) -> Workspace {
         "repository".into(),
         "work".into(),
         std::env::temp_dir(),
-        "work".into(),
+        Some("work".into()),
         state,
     )
 }

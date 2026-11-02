@@ -232,13 +232,17 @@ impl Manager {
 
     /// A workspace is done while its completion holds at its current HEAD.
     async fn workspace_progress(&self, workspace: Workspace) -> Result<Progress> {
-        let Some(completion) = self.completion(&workspace.id).await? else {
+        // Only a workspace on a branch records completions.
+        let (Some(completion), Some(branch)) = (
+            self.completion(&workspace.id).await?,
+            workspace.branch.clone(),
+        ) else {
             return Ok(Progress::Waiting(workspace.name));
         };
         match current_head(&workspace).await {
             Ok(head) if head == completion.head => Ok(Progress::Done(Done {
                 name: workspace.name,
-                branch: workspace.branch,
+                branch,
                 path: workspace.path,
                 head,
             })),
