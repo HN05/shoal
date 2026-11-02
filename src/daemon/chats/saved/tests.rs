@@ -807,3 +807,34 @@ pub(in crate::daemon::chats) fn unmarked(program: &str) -> std::process::Command
         .env_remove(crate::env::CHAT);
     command
 }
+
+#[tokio::test]
+async fn a_chat_a_removal_holds_is_not_restored() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, _process) = running_chat(root.path(), &manager).await;
+    manager.save_chats(ChatRestore::Resume).await;
+    // As while a removal takes the workspaces below it.
+    let reservation = manager.chat_removals.reserve(&chat.id).unwrap();
+    assert!(manager.chat_removals.reserve(&chat.id).is_err());
+    let error = manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("is being removed"), "{error:#}");
+    assert!(
+        manager
+            .recorded_chat(&chat.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .restore
+            .is_some()
+    );
+    // Once the removal gives up, the chat runs again.
+    drop(reservation);
+    let restored = manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap();
+    assert!(restored.restore.is_none());
+}

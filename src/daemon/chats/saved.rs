@@ -108,6 +108,11 @@ impl Manager {
     ) -> Result<Chat> {
         let _saving = self.chat_saves.lock().await;
         let saved = self.saved_chat(id).await?;
+        ensure!(
+            !self.chat_removals.reserved(&saved.id),
+            "chat {} is being removed",
+            saved.name
+        );
         self.run_again(&saved, pid, origin, hands_over).await
     }
 

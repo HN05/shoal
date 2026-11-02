@@ -623,11 +623,13 @@ fn assign(db: &mut Connection, workspace: &str, chat: Option<&str>) -> Result<()
 mod done;
 mod processes;
 mod removal;
+mod removing;
 mod restores;
 mod saved;
 mod stopped;
 mod stopping;
 
+pub(crate) use removing::Removing;
 pub(crate) use stopping::Stopping;
 
 #[cfg(test)]

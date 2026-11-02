@@ -169,24 +169,38 @@ impl Manager {
         chat: &Chat,
         removal: Removal<'_>,
     ) -> Result<Vec<String>> {
-        self.check_chat_removal(chat, removal).await?;
+        // Reserved under the lock a restore holds, and checked again, so no
+        // restore runs it while the spaces below it go.
+        let reservation = {
+            let _saving = self.chat_saves.lock().await;
+            let reservation = self.chat_removals.reserve(&chat.id)?;
+            self.recheck_chat(&chat.id, removal).await?;
+            reservation
+        };
         let below = self.chat_children(&chat.id).await?;
         self.ensure_none_stalled_below(below.clone(), removal)
             .await?;
         let children = self.remove_children(&chat.name, below, removal).await?;
         // A save or restore under way would run the agent the removal stops.
         let _saving = self.chat_saves.lock().await;
-        let chat = self
-            .recorded_chat(&chat.id)
-            .await?
-            .context("the chat was removed meanwhile")?;
-        self.check_chat_removal(&chat, removal).await?;
+        let chat = self.recheck_chat(&chat.id, removal).await?;
         if chat.restore.is_none() {
             self.stop_chat(&chat.id).await?;
         }
         self.ensure_ended(&chat, std::process::id()).await?;
         self.delete_chat(&chat).await?;
+        drop(reservation);
         Ok(children)
+    }
+
+    /// The chat `id` as recorded now, once `removal` still applies to it.
+    async fn recheck_chat(&self, id: &str, removal: Removal<'_>) -> Result<Chat> {
+        let chat = self
+            .recorded_chat(id)
+            .await?
+            .context("the chat was removed meanwhile")?;
+        self.check_chat_removal(&chat, removal).await?;
+        Ok(chat)
     }
 
     /// Refuse `removal` of `chat` as it is now: an unattended one while
