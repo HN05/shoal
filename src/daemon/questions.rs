@@ -698,14 +698,7 @@ impl Manager {
     /// The ID of the workspace or chat `selector` names, whose questions a
     /// listing keeps: a stopped chat keeps its open questions too.
     async fn asking_space(&self, selector: &str) -> Result<String> {
-        let error = match self.present_space(selector).await {
-            Ok(space) => return Ok(space.id().to_owned()),
-            Err(error) => error,
-        };
-        match self.recorded_chat(selector).await? {
-            Some(chat) => Ok(chat.id),
-            None => Err(error),
-        }
+        Ok(self.present_space(selector).await?.id().to_owned())
     }
 
     /// Every open question, oldest first, which subscription snapshots page.
