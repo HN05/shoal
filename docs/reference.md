@@ -3879,7 +3879,10 @@ An unfiltered `shoal watch` without a linked PR also returns when the workspace
 branch newly conflicts with the default target of `shoal conflicts`, naming the
 branch and the conflicted paths, unless that target already has HEAD's changes as
 [removal](#remove-a-workspace) decides merges or the assignment is done at HEAD
-with `--integrated`; with nothing linked, it waits for that alone.
+with `--integrated`; with nothing linked, it waits for that alone. With a linked
+PR, whose forge reports its conflicts, the watch and the agent's deliveries
+report only the files [changed on both sides](#conflicts), such as
+`Changed on both sides with main: src/version.rs`.
 A new [agent message](#agent-messages) ends a watch at once, ahead of item
 activity, even when the watch would otherwise fail for lack of linked items.
 Each update includes its item URL, kind and message; a comment update counts the

@@ -742,7 +742,14 @@ and skips hooks; post-remove events are not durably queued or replayed.
 commits stay fixed) with native Git settings, so advancing the base is never shown
 as work. `conflicts` asks `git merge-tree` whether committed HEAD merges cleanly
 into a target, by default the base workspace's branch, otherwise the local default
-branch, which the daemon keeps current; it writes only objects. Every minute, after a
+branch, which the daemon keeps current; it writes only objects. Git merges two
+branches that pick the same migration or protocol version cleanly, since their
+edits agree, so a repository lists the files that hold such numbers as
+`[conflicts] sensitive` paths and globs, without value patterns, and `conflicts`
+also lists each one that HEAD and the target both changed since their merge base
+as changed on both sides, left out like conflicts once the target has HEAD's
+changes. Ordinary changes rarely break the default branch this way, so Shoal has
+no merge queue. Every minute, after a
 PR of the repository merges, and on `sync`, the daemon fetches the default branch's remotes under a fetch gate of its own,
 which moving or removing the repository also takes, and only then fast-forwards
 the local default branch to what it fetched under the repository's Git gate, so
@@ -2472,7 +2479,11 @@ cursor item named by the branch, so work without a PR still learns of conflicts.
 leaves out conflicts with a target that already has HEAD's changes, as merged cleanup
 decides, since merging could only repeat them, and those of a completion marked
 integrated at HEAD; `conflicts` still reports them. A
-linked PR leaves them to the forge, avoiding duplicate reports. Forgejo reads
+linked PR leaves ordinary conflicts to the forge, avoiding duplicate reports, and
+the watch and the background poll check the branch beside it only for files
+changed on both sides, which no forge reports, and only where the repository
+lists sensitive files. Each check against the default target is kept per
+workspace with its head and target commits. Forgejo reads
 come from its REST API and work anonymously for public repositories. The watch shares a
 persistent cursor per workspace and item, reporting existing activity on the first
 wait and changes between waits thereafter; cancelling the watch discards that cursor.

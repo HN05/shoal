@@ -308,8 +308,8 @@ impl Manager {
     }
 
     /// The updates queued on the cursors of `children`, child workspaces
-    /// whose activity an agent receives, for their items of `kind` or every
-    /// kind, each naming its workspace.
+    /// whose activity an agent receives, for their items of `kind`, or every
+    /// kind and their branches, each naming its workspace.
     async fn delegated_pending(
         &self,
         children: &[WorkspaceRef],
@@ -324,6 +324,7 @@ impl Manager {
                 .await?
                 .into_iter()
                 .map(|(url, _)| url)
+                .chain(kind.is_none().then(|| child.branch.clone()))
                 .collect::<Vec<_>>();
             let pending = self.pending_activity(&child.id, &keys).await?;
             updates.extend(pending.into_iter().map(|mut update| {
@@ -341,7 +342,7 @@ impl Manager {
             .store
             .run(move |db| followed_items(db, &id, None))
             .await?;
-        let branch = watches_branch(&Selection::default(), &items).then_some(workspace.branch);
+        let branch = watches_branch(&Selection::default()).then_some(workspace.branch);
         let keys = items
             .into_iter()
             .map(|(url, _)| url)
@@ -552,7 +553,8 @@ impl Manager {
         let guard = self.gates.lock_prs(receiving(id, &children)).await;
         let space = self.link_space(id).await?;
         let items = self.watched_items(&space, selection).await?;
-        let branch = watches_branch(selection, &items).then(|| space.branch().map(str::to_owned));
+        let report = branch_report(&items);
+        let branch = watches_branch(selection).then(|| space.branch().map(str::to_owned));
         let branch = branch.flatten();
         let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
         keys.extend(branch.clone());
@@ -571,14 +573,13 @@ impl Manager {
         let items = self.item_activity(&space, items, selection).await;
         let mut observations = Vec::new();
         if let Some(branch) = branch {
-            let check = self.watched_conflicts(id).await;
-            observations.push((branch, branch_conflicts(check)));
+            observations.extend(self.branch_observation(id, branch, report).await);
         }
         match items {
             Ok(items) => {
                 observations.splice(0..0, items);
                 let mut updates = self
-                    .deliver_observed(id, observations, selection, observed_at)
+                    .deliver_observed(id, observations, selection, report, observed_at)
                     .await?;
                 self.summarize_failed_checks(id, &mut updates).await;
                 Ok(updates)
@@ -586,7 +587,7 @@ impl Manager {
             // A failed item lookup must not hold back the branch's conflicts.
             Err(error) => {
                 let updates = self
-                    .deliver_observed(id, observations, selection, observed_at)
+                    .deliver_observed(id, observations, selection, report, observed_at)
                     .await?;
                 if updates.is_empty() {
                     self.notify_rate_limit(&error).await;
@@ -604,12 +605,27 @@ impl Manager {
         id: &str,
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
+        report: BranchReport,
         observed_at: u64,
     ) -> Result<Vec<Update>> {
         let updates = self
-            .record_observed(id, observations, selection, observed_at)
+            .record_observed(id, observations, selection, report, observed_at)
             .await?;
         self.fit_response(own_batch(id, updates), 0).await
+    }
+
+    /// The local check of the workspace `id`'s `branch` as `report` keeps
+    /// it, or none when it could report nothing: a linked PR leaves conflicts
+    /// to the forge, and the repository lists no sensitive files.
+    async fn branch_observation(
+        &self,
+        id: &str,
+        branch: String,
+        report: BranchReport,
+    ) -> Option<(String, Snapshot)> {
+        let only_sensitive = report == BranchReport::ChangedOnBothSides;
+        let check = self.watched_conflicts(id, only_sensitive).await;
+        Some((branch, branch_conflicts(check.transpose()?, report)))
     }
 
     /// The `items` whose activity is still to come: a merged PR has none,
@@ -747,19 +763,56 @@ impl Manager {
             return Ok(());
         }
         let observed_at = crate::time::unix_seconds();
+        let report = branch_report(&items);
         let items = self.items_to_look_up(space, items).await?;
-        let observations = self
+        let activity = self
             .item_activity(space, items, &Selection::default())
+            .await;
+        let mut observations = Vec::new();
+        observations.extend(self.background_branch_observation(space, report).await);
+        // A failed item lookup must not hold back the branch's changes.
+        let looked_up = match activity {
+            Ok(activity) => {
+                self.record_merges(space, activity.clone()).await?;
+                observations.splice(0..0, activity);
+                Ok(())
+            }
+            Err(error) => Err(error),
+        };
+        self.queue_background_updates(space.id(), observations, observed_at)
             .await?;
-        let merged = self
-            .record_background_activity(space.id(), observations.clone())
-            .await?;
-        // Other workspaces' conflict checks read the default branch the merge changed.
-        if merged {
+        looked_up
+    }
+
+    /// The background poll's check of `space`'s branch, made only beside a
+    /// linked PR: without one, a watch checks the branch.
+    async fn background_branch_observation(
+        &self,
+        space: &LinkSpace,
+        report: BranchReport,
+    ) -> Option<(String, Snapshot)> {
+        let branch = space
+            .branch()
+            .filter(|_| report == BranchReport::ChangedOnBothSides)?;
+        self.branch_observation(space.id(), branch.to_owned(), report)
+            .await
+    }
+
+    /// Record the background `activity` of `space`'s items, and sync the
+    /// default branch once one of them merged, since other workspaces'
+    /// conflict checks read it.
+    async fn record_merges(
+        &self,
+        space: &LinkSpace,
+        activity: Vec<(String, Snapshot)>,
+    ) -> Result<()> {
+        if self
+            .record_background_activity(space.id(), activity)
+            .await?
+        {
             self.syncs.request(space.repository_id());
         }
-        self.queue_background_updates(space.id(), observations, observed_at)
-            .await
+        Ok(())
     }
 
     /// The updates queued on the chat's cursor that fit one response beside
@@ -794,8 +847,11 @@ impl Manager {
         observations: Vec<(String, Snapshot)>,
         observed_at: u64,
     ) -> Result<()> {
+        let all = Selection::default();
+        // A background poll checks the branch only beside a linked PR.
+        let report = BranchReport::ChangedOnBothSides;
         let updates = self
-            .record_observed(id, observations, &Selection::default(), observed_at)
+            .record_observed(id, observations, &all, report, observed_at)
             .await?;
         if !updates.is_empty() {
             self.signals.item_updates_queued();
@@ -964,26 +1020,32 @@ impl Manager {
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
     ) -> Result<Vec<Update>> {
-        self.record_observed(id, observations, selection, crate::time::unix_seconds())
+        let report = BranchReport::Conflicts;
+        let now = crate::time::unix_seconds();
+        self.record_observed(id, observations, selection, report, now)
             .await
     }
 
-    /// Record `observations` from a poll that started at `observed_at`.
+    /// Record `observations` from a poll that started at `observed_at`,
+    /// which checked the branch for `report`.
     async fn record_observed(
         &self,
         id: &str,
         observations: Vec<(String, Snapshot)>,
         selection: &Selection,
+        report: BranchReport,
         observed_at: u64,
     ) -> Result<Vec<Update>> {
-        let selection = selection.clone();
+        let poll = Poll {
+            selection: selection.clone(),
+            report,
+            observed_at,
+        };
         let _guard = self.gates.lock_prs([id]).await;
         let id = id.to_owned();
         let agents = self.tracked_agents().await;
         self.store
-            .run(move |db| {
-                record_observations(db, &id, observations, &selection, &agents, observed_at)
-            })
+            .run(move |db| record_observations(db, &id, observations, &poll, &agents))
             .await
     }
 
@@ -1047,21 +1109,29 @@ impl Manager {
     }
 }
 
-/// Record `observations` from a poll that started at `observed_at` on the
-/// cursor of the space `id` in one transaction, and return the updates its
-/// watch reports. Observations of items the watch no longer follows are
-/// dropped.
+/// What a poll whose observations a watch records looked at.
+struct Poll {
+    selection: Selection,
+    /// What the poll's check of the workspace branch reports.
+    report: BranchReport,
+    /// Unix seconds when the poll started.
+    observed_at: u64,
+}
+
+/// Record `observations` from `poll` on the cursor of the space `id` in one
+/// transaction, and return the updates its watch reports. Observations of
+/// items the watch no longer follows are dropped.
 fn record_observations(
     db: &mut rusqlite::Connection,
     id: &str,
     observations: Vec<(String, Snapshot)>,
-    selection: &Selection,
+    poll: &Poll,
     agents: &crate::daemon::workspace::TrackedAgents,
-    observed_at: u64,
 ) -> Result<Vec<Update>> {
+    let observed_at = poll.observed_at;
     let tx = db.transaction()?;
     require_ready_space(&tx, id)?;
-    let followed = recorded_urls(&tx, id, selection, agents)?;
+    let followed = recorded_urls(&tx, id, poll, agents)?;
     let mut updates = Vec::new();
     for (url, snapshot) in observations {
         if followed
@@ -1078,16 +1148,17 @@ fn record_observations(
     Ok(updates)
 }
 
-/// The URLs whose observations a watch of `selection` records on the cursor
-/// of the space `id`: the items it follows, and the workspace branch when it
-/// watches that. `None` for a watch of an explicit item, which records every
-/// observation.
+/// The URLs whose observations a watch of `poll`'s selection records on the
+/// cursor of the space `id`: the items it follows, and the workspace branch
+/// when it watches that. `None` for a watch of an explicit item, which
+/// records every observation.
 fn recorded_urls(
     db: &rusqlite::Connection,
     id: &str,
-    selection: &Selection,
+    poll: &Poll,
     agents: &crate::daemon::workspace::TrackedAgents,
 ) -> Result<Option<Vec<String>>> {
+    let selection = &poll.selection;
     if selection.input.is_some() {
         return Ok(None);
     }
@@ -1098,9 +1169,9 @@ fn recorded_urls(
             "{NO_LINKED_ITEMS}"
         );
     }
-    // A PR linked since the poll takes over conflict reports from the
-    // branch; a chat works on none.
-    let branch = if watches_branch(selection, &items) {
+    // A PR linked or unlinked since the poll changes what the branch
+    // reports; a chat works on none.
+    let branch = if watches_branch(selection) && branch_report(&items) == poll.report {
         workspace_branch(db, id)?
     } else {
         None
@@ -1283,25 +1354,55 @@ fn redeliver_after(
     Ok(())
 }
 
-/// A workspace branch's local merge check, observed like PR mergeability.
-fn branch_conflicts(check: Result<ConflictCheck>) -> Snapshot {
+/// What a workspace branch's local check reports: every conflict, or only
+/// sensitive files changed on both sides while a linked PR's forge reports
+/// its conflicts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BranchReport {
+    Conflicts,
+    ChangedOnBothSides,
+}
+
+/// What the branch of a space following `items` reports.
+fn branch_report(items: &[(String, LinkKind)]) -> BranchReport {
+    if items.iter().any(|(_, kind)| *kind == LinkKind::Pr) {
+        BranchReport::ChangedOnBothSides
+    } else {
+        BranchReport::Conflicts
+    }
+}
+
+/// A workspace branch's local merge check as `report` keeps it, observed
+/// like PR mergeability.
+fn branch_conflicts(check: Result<ConflictCheck>, report: BranchReport) -> Snapshot {
     Snapshot::merge_check(check.map(|check| MergeCheck {
-        conflict: check.conflicts.then(|| conflict_message(&check)),
+        conflict: conflict_message(&check, report),
         head: check.head,
         base: check.target_commit,
     }))
 }
 
-/// The conflict with the check's target, naming the first conflicted paths.
-fn conflict_message(check: &ConflictCheck) -> String {
-    let mut files = check.files[..check.files.len().min(MAX_LISTED_FILES)].join(", ");
-    if check.files.len() > MAX_LISTED_FILES {
-        files.push_str(&format!(
-            " and {} more",
-            check.files.len() - MAX_LISTED_FILES
-        ));
+/// The conflicts `report` keeps of the check, naming the first paths of
+/// each kind; `None` when there are none.
+fn conflict_message(check: &ConflictCheck, report: BranchReport) -> Option<String> {
+    let conflicts = (report == BranchReport::Conflicts && check.conflicts)
+        .then(|| format!("Conflicts with {}: {}", check.target, listed(&check.files)));
+    let changed = &check.changed_on_both_sides;
+    let both = (!changed.is_empty()).then(|| {
+        let target = &check.target;
+        format!("Changed on both sides with {target}: {}", listed(changed))
+    });
+    let parts: Vec<String> = conflicts.into_iter().chain(both).collect();
+    (!parts.is_empty()).then(|| parts.join("; "))
+}
+
+/// The first of `files`, and how many more there are.
+fn listed(files: &[String]) -> String {
+    let mut listed = files[..files.len().min(MAX_LISTED_FILES)].join(", ");
+    if files.len() > MAX_LISTED_FILES {
+        listed.push_str(&format!(" and {} more", files.len() - MAX_LISTED_FILES));
     }
-    format!("Conflicts with {}: {files}", check.target)
+    listed
 }
 
 /// Whether the workspace, or a child workspace whose activity its agent
@@ -1558,12 +1659,9 @@ fn with_unread_messages(mut updates: Updates, messages: Vec<AgentMessage>) -> Re
 }
 
 /// Whether a wait also reports the workspace branch's local conflicts with
-/// its base: only an unfiltered wait without a linked PR, whose forge would
-/// report them otherwise.
-fn watches_branch(selection: &Selection, items: &[(String, LinkKind)]) -> bool {
-    selection.input.is_none()
-        && selection.kind.is_none()
-        && !items.iter().any(|(_, kind)| *kind == LinkKind::Pr)
+/// its base, as [`branch_report`] decides: only an unfiltered wait.
+fn watches_branch(selection: &Selection) -> bool {
+    selection.input.is_none() && selection.kind.is_none()
 }
 
 /// Whether unread messages, of which one `wakes` the agent and which settle

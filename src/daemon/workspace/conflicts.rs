@@ -31,6 +31,12 @@ impl Manager {
         Ok(check)
     }
 
+    /// Whether the workspace's repository lists sensitive files.
+    async fn lists_sensitive_files(&self, workspace: &Workspace) -> Result<bool> {
+        let settings = self.workspace_settings(workspace).await?;
+        Ok(!settings.conflicts.sensitive.is_empty())
+    }
+
     /// The paths the last check against the workspace's default target
     /// found changed on both sides.
     pub(crate) async fn recorded_changed_on_both_sides(
@@ -48,9 +54,29 @@ impl Manager {
 
     /// The conflicts a workspace watch reports: those of
     /// [`Self::check_conflicts`] with the default target, unless the target
-    /// already has HEAD's changes as [`Self::conflicts_settled`] decides.
-    pub(crate) async fn watched_conflicts(&self, selector: &str) -> Result<ConflictCheck> {
+    /// already has HEAD's changes as [`Self::conflicts_settled`] decides; or
+    /// none when `only_sensitive` and the repository lists no sensitive
+    /// files. Every read of the worktree, its configuration included, runs
+    /// under the file-access guard, so a stalled worktree fails at once.
+    pub(crate) async fn watched_conflicts(
+        &self,
+        selector: &str,
+        only_sensitive: bool,
+    ) -> Result<Option<ConflictCheck>> {
         let workspace = self.workspace(selector).await?;
+        let path = workspace.path.clone();
+        let check = self.watched_check(workspace, only_sensitive);
+        self.check_access(&path, check).await
+    }
+
+    async fn watched_check(
+        &self,
+        workspace: Workspace,
+        only_sensitive: bool,
+    ) -> Result<Option<ConflictCheck>> {
+        if only_sensitive && !self.lists_sensitive_files(&workspace).await? {
+            return Ok(None);
+        }
         self.verify_worktree(&workspace).await?;
         let mut check = self.conflicts_with(&workspace, None).await?;
         self.record_changed_on_both_sides(&check).await?;
@@ -62,7 +88,7 @@ impl Manager {
             check.conflicts = false;
             check.files.clear();
         }
-        Ok(check)
+        Ok(Some(check))
     }
 
     /// Whether `target_commit` already has `head`'s changes and a merge could

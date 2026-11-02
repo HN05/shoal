@@ -584,6 +584,23 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
             .await
             .unwrap();
     }
+    // The child's branch reports files changed on both sides beside its PR.
+    let changed = branch_conflicts(
+        Ok(crate::model::ConflictCheck {
+            workspace_id: child.id.clone(),
+            target: "main".into(),
+            target_commit: "main".into(),
+            head: "head".into(),
+            conflicts: false,
+            files: Vec::new(),
+            changed_on_both_sides: vec!["version".into()],
+        }),
+        BranchReport::ChangedOnBothSides,
+    );
+    let observation = vec![(child.branch.clone(), changed)];
+    let now = crate::time::unix_seconds();
+    let queued = manager.queue_background_updates(&child.id, observation, now);
+    queued.await.unwrap();
     let delivered = manager.agent_updates(&parent.id).await.unwrap();
     let received: Vec<_> = delivered
         .updates
@@ -593,18 +610,20 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     assert_eq!(
         received,
         [
+            (Some("child"), child.branch.as_str()),
             (Some("child"), "child-pr"),
             (Some("grandchild"), "grandchild-pr")
         ]
     );
     assert!(
-        delivered.updates[0]
+        delivered.updates[1]
             .to_string()
             .starts_with("child: child-pr [comment]:")
     );
-    // An unfiltered watch of the parent reports them as well.
+    // An unfiltered watch of the parent reports them as well; one of PRs
+    // leaves out the branch.
     let unfiltered = watch(Selection::default()).await.unwrap();
-    assert_eq!(unfiltered.updates.len(), 2);
+    assert_eq!(unfiltered.updates.len(), 3);
     let filtered = watch(prs.clone()).await.unwrap();
     assert_eq!(filtered.updates.len(), 2);
 
@@ -624,9 +643,10 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     let refused = watch(prs.clone()).await;
     assert!(format!("{:#}", refused.unwrap_err()).contains("no linked items"));
     let own = manager.agent_updates(&child.id).await.unwrap();
-    assert_eq!(own.updates.len(), 2);
+    assert_eq!(own.updates.len(), 3);
     assert_eq!(own.updates[0].workspace, None);
-    assert_eq!(own.updates[1].workspace.as_deref(), Some("grandchild"));
+    assert_eq!(own.updates[1].workspace, None);
+    assert_eq!(own.updates[2].workspace.as_deref(), Some("grandchild"));
     manager
         .acknowledge_pr_updates(
             &child.id,
@@ -1154,7 +1174,9 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
             "checks": {}, "conflict": null, "state": "open", "errors": {}}))
     .unwrap();
     let all = Selection::default();
-    let before = manager.record_observed(&workspace.id, vec![("pr".into(), stale)], &all, 0);
+    let report = BranchReport::Conflicts;
+    let before =
+        manager.record_observed(&workspace.id, vec![("pr".into(), stale)], &all, report, 0);
     assert!(before.await.unwrap().is_empty());
     let own = json!({"discussion:1": "theirs", "discussion:2": "mine"});
     assert!(observe(own, "closed").await.unwrap().is_empty());
@@ -1187,7 +1209,14 @@ async fn edits_are_reported_except_the_workspaces_own() {
     };
     let all = Selection::default();
     let observe = |snapshot: Snapshot, at: u64| {
-        manager.record_observed(&workspace.id, vec![("pr".into(), snapshot)], &all, at)
+        let observation = vec![("pr".into(), snapshot)];
+        manager.record_observed(
+            &workspace.id,
+            observation,
+            &all,
+            BranchReport::Conflicts,
+            at,
+        )
     };
     let now = crate::time::unix_seconds();
     assert!(
@@ -1810,15 +1839,18 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
 
     // A linked PR's forge reports conflicts instead.
     register_watch(&manager, &workspace.id, "pr").await;
-    let conflicting = branch_conflicts(Ok(crate::model::ConflictCheck {
-        workspace_id: workspace.id.clone(),
-        target: "main".into(),
-        target_commit: String::new(),
-        head: String::new(),
-        conflicts: true,
-        files: vec!["tracked".into()],
-        changed_on_both_sides: Vec::new(),
-    }));
+    let conflicting = branch_conflicts(
+        Ok(crate::model::ConflictCheck {
+            workspace_id: workspace.id.clone(),
+            target: "main".into(),
+            target_commit: String::new(),
+            head: String::new(),
+            conflicts: true,
+            files: vec!["tracked".into()],
+            changed_on_both_sides: Vec::new(),
+        }),
+        BranchReport::Conflicts,
+    );
     let observation = vec![(workspace.branch.clone(), conflicting)];
     let recorded = manager.record_activity(&workspace.id, observation, &all);
     assert!(recorded.await.unwrap().is_empty());
@@ -1886,6 +1918,98 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
     let updates = poll().await.unwrap();
     assert_eq!(updates.len(), 1);
     assert_eq!(updates[0].message, "Conflicts with main: other, tracked");
+}
+
+#[tokio::test]
+async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    std::fs::write(
+        repo_path.join(".shoal.toml"),
+        "[conflicts]\nsensitive = ['version']\n",
+    )
+    .unwrap();
+    crate::test_support::commit(&repo_path, ".shoal.toml");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut workspaces = Vec::new();
+    for name in ["solo", "linked"] {
+        let workspace = manager
+            .create_workspace(&repo.id, name.into(), None, None, None)
+            .await
+            .unwrap();
+        for (file, content) in [("version", "2\n"), ("tracked", "workspace\n")] {
+            std::fs::write(workspace.path.join(file), content).unwrap();
+        }
+        crate::test_support::commit(&workspace.path, ".");
+        workspaces.push(workspace);
+    }
+    for (file, content) in [("version", "2\n"), ("tracked", "main\n")] {
+        std::fs::write(repo_path.join(file), content).unwrap();
+    }
+    crate::test_support::commit(&repo_path, ".");
+    let all = Selection::default();
+
+    let updates = manager.poll_item_activity(&workspaces[0].id, &all).await;
+    let updates = updates.unwrap();
+    assert_eq!(updates.len(), 1);
+    assert_eq!(
+        updates[0].message,
+        "Conflicts with main: tracked; Changed on both sides with main: version"
+    );
+
+    // The forge reports the PR's conflicts, so the branch reports the rest,
+    // from a watch and from the background poll.
+    let linked = &workspaces[1];
+    register_watch(&manager, &linked.id, "pr").await;
+    let space = manager.link_space(&linked.id).await.unwrap();
+    let polled = manager.poll_space_item_activity(&space).await;
+    assert!(polled.is_err(), "the PR lookup fails");
+    let queued = manager.queued_updates(linked.clone()).await.unwrap();
+    assert_eq!(queued.len(), 1);
+    assert_eq!(queued[0].url, linked.branch);
+    assert_eq!(queued[0].kind, UpdateKind::MergeConflict);
+    assert_eq!(
+        queued[0].message,
+        "Changed on both sides with main: version"
+    );
+    let updates = manager.poll_item_activity(&linked.id, &all).await;
+    assert_eq!(updates.unwrap(), queued, "the watch reports it once");
+    let recorded = manager.recorded_changed_on_both_sides(&linked.id).await;
+    assert_eq!(recorded.unwrap().unwrap().files, ["version"]);
+}
+
+#[tokio::test]
+async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "stalled".into(), None, None, None)
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, "pr").await;
+    tokio::time::pause();
+    let stalled = manager
+        .check_access(&workspace.path, std::future::pending::<Result<()>>())
+        .await;
+    tokio::time::resume();
+    assert!(stalled.is_err());
+
+    // Even reading which files the repository lists waits for the worktree.
+    let space = manager.link_space(&workspace.id).await.unwrap();
+    let polled = manager.poll_space_item_activity(&space).await;
+    assert!(polled.is_err(), "the PR lookup fails");
+    let queued = manager.queued_updates(workspace.clone()).await.unwrap();
+    let stall = queued.iter().find(|update| update.url == workspace.branch);
+    let stall = stall.unwrap_or_else(|| panic!("no branch update in {queued:?}"));
+    assert_eq!(stall.kind, UpdateKind::LookupFailed);
+    assert!(stall.message.contains("stalled"), "{}", stall.message);
 }
 
 #[tokio::test]
@@ -1970,15 +2094,18 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
 }
 
 fn resolved_branch(workspace_id: &str) -> Snapshot {
-    branch_conflicts(Ok(crate::model::ConflictCheck {
-        workspace_id: workspace_id.into(),
-        target: "main".into(),
-        target_commit: String::new(),
-        head: String::new(),
-        conflicts: false,
-        files: Vec::new(),
-        changed_on_both_sides: Vec::new(),
-    }))
+    branch_conflicts(
+        Ok(crate::model::ConflictCheck {
+            workspace_id: workspace_id.into(),
+            target: "main".into(),
+            target_commit: String::new(),
+            head: String::new(),
+            conflicts: false,
+            files: Vec::new(),
+            changed_on_both_sides: Vec::new(),
+        }),
+        BranchReport::Conflicts,
+    )
 }
 
 /// A run in `state`, as a poll observes it.
