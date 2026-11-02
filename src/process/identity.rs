@@ -1387,8 +1387,8 @@ pub async fn group_exited(group: u32) -> Result<()> {
 }
 
 /// Whether a live process of this user remains in process group `group`.
-/// Zombies, which can no longer clean up, do not count. It reads only the
-/// group's members, so frequent checks stay cheap.
+/// Zombies, which can no longer clean up, do not count. It lists processes
+/// natively instead of running `ps`, so frequent checks stay cheap.
 pub async fn group_alive(group: u32) -> Result<bool> {
     ensure!(
         group > 1 && group <= i32::MAX as u32,
