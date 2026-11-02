@@ -136,7 +136,7 @@ pub(crate) async fn inspect(
         check.unpushed_commits = git::status::unretained_commits(
             path,
             "HEAD",
-            &kept_refs(&check.workspace, &default_refs),
+            &kept_refs(&check.workspace, check.branch.is_none(), &default_refs),
         )
         .await?;
         check.integrated = check.unpushed_commits > 0
@@ -158,14 +158,21 @@ async fn checked_out_branch(path: &std::path::Path) -> Result<Option<String>> {
 }
 
 /// What keeps a workspace's commits besides the remotes: the local default
-/// branch, and for a workspace at a commit the commit it started at, such as
-/// a fork PR's head or a local commit no remote has.
-fn kept_refs<'a>(workspace: &'a Workspace, default_refs: &'a [String]) -> Vec<&'a str> {
+/// branch, and for a workspace at a commit that is still `detached` the
+/// commit it started at, such as a fork PR's head or a local commit no
+/// remote has. Once its worktree is on a branch, that branch's commits need
+/// the usual proof.
+fn kept_refs<'a>(
+    workspace: &'a Workspace,
+    detached: bool,
+    default_refs: &'a [String],
+) -> Vec<&'a str> {
+    let start = workspace.at.as_ref().filter(|_| detached);
     default_refs
         .first()
         .map(String::as_str)
         .into_iter()
-        .chain(workspace.at.as_ref().map(|at| at.commit.as_str()))
+        .chain(start.map(|at| at.commit.as_str()))
         .collect()
 }
 

@@ -418,3 +418,42 @@ async fn a_chat_owns_its_top_level_workspace_at_a_commit_but_not_a_child() {
     let child = create(Some(parent.name.clone())).await.unwrap();
     assert_eq!(child.chat, None);
 }
+
+#[tokio::test]
+async fn removing_one_switched_onto_a_branch_leaves_that_branch() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    git(&checkout, &["switch", "-q", "-c", "topic"]);
+    std::fs::write(checkout.join("topic"), "topic\n").unwrap();
+    commit(&checkout, "topic");
+    git(&checkout, &["switch", "-q", "main"]);
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = create(
+        &manager,
+        &repo.id,
+        None,
+        CommitStart::Revision(Some("topic".into())),
+    )
+    .await
+    .unwrap();
+    git(&workspace.path, &["switch", "-q", "topic"]);
+    let check = manager
+        .check_removal(&workspace.id, crate::removal::InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    // On a branch, its starting commit no longer counts as kept.
+    assert_eq!(check.unpushed_commits, 1, "{check:?}");
+    let removed = manager
+        .remove_workspace(
+            &workspace.id,
+            crate::removal::UnsavedWork::All,
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!removed.branch_outcome.is_deleted(), "{removed:?}");
+    assert!(!git(&checkout, &["branch", "--list", "topic"]).is_empty());
+}
