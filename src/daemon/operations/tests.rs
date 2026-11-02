@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use super::{Entry, fake};
+use super::{Entry, RETAIN, fake};
 use crate::{
     daemon::workspace::Manager,
     model::{Repository, Workspace},
@@ -136,6 +136,35 @@ async fn an_interrupted_worker_that_exits_without_a_report_fails_the_operation()
         panic!("expected a failure");
     };
     assert!(message.contains("status 3"), "{message}");
+}
+
+#[tokio::test]
+async fn an_ended_operation_is_forgotten_once_its_retention_passes_without_a_new_one() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let workspace = workspace(&manager, &repository, "api").await;
+    let id = manager
+        .start_operation(setup(&workspace), None, None)
+        .await
+        .unwrap();
+    let mut worker = fake::take(&id);
+    let entry = manager.operation(&id, None).await.unwrap();
+    worker.stdout("installing").await;
+    worker.exit(0);
+    until(&entry, |_, ended| ended).await;
+    tokio::time::pause();
+    tokio::time::sleep(RETAIN - Duration::from_secs(1)).await;
+    assert!(manager.operation(&id, None).await.is_ok(), "still retained");
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    tokio::task::yield_now().await;
+    assert!(manager.operation(&id, None).await.is_err(), "forgotten");
+    let (events, ended) = entry.since(0);
+    assert!(ended.is_some(), "a follower keeps what it holds");
+    assert!(
+        events
+            .iter()
+            .any(|event| event.progress == output(Stream::Stdout, "installing"))
+    );
 }
 
 #[tokio::test]
