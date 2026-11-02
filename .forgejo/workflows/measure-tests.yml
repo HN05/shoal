@@ -28,4 +28,6 @@ jobs:
 
       - name: Measure
         run: |
-          python3 scripts/bench_inventory.py
+          . .forgejo/scripts/lock-target-dir.sh
+          cargo clean --workspace
+          python3 scripts/profile_tests.py suite

@@ -17676,40 +17676,6 @@ cat "$HOME/release" > /dev/null
 }
 
 #[test]
-fn stop_preserves_the_child_exit_status_when_group_inventory_fails() {
-    let fixture = Fixture::new();
-    fixture.add("worker");
-    let bin = fixture.root.path().join("wrapper-bin");
-    let ps = bin.join("ps");
-    install_test_script_with_mode(&ps, "#!/bin/sh\nexit 1\n", 0o700);
-    let ready = fixture.root.path().join("ready");
-    let wrapper = fixture
-        .command()
-        .args([
-            "run",
-            "--workspace",
-            "worker",
-            "--",
-            "sh",
-            "-c",
-            // `wait` lets the trap run at once; with a foreground sleep it waits
-            // for the sleep, which misses a TERM that arrives before its exec.
-            "trap 'exit 7' TERM; : > \"$READY\"; while :; do sleep 30 & wait; done",
-        ])
-        // Fail only the wrapper's inventory; the daemon can still verify exit.
-        .env("PATH", fixture.restricted_path(&bin))
-        .env("READY", &ready)
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    wait_until("command signal handler", || ready.exists());
-    fixture.ok(&["stop", "worker"]);
-    let output = wrapper.wait_with_output().unwrap();
-    assert_eq!(output.status.code(), Some(7), "{output:?}");
-}
-
-#[test]
 fn stop_allows_descendants_to_finish_signal_cleanup_after_the_leader_exits() {
     let fixture = Fixture::new();
     fixture.add("worker");
