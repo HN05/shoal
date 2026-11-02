@@ -7278,7 +7278,7 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
             .args(["claude", "stopped"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .unwrap();
         wait_until("agent to start", || path.join("agent-started").exists());
@@ -7297,11 +7297,12 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
     };
     // `shoal daemon stop` stops the agent as `shoal stop` does, so it stays
     // down until `shoal resume`.
-    let mut agent = start(&fixture);
+    let agent = start(&fixture);
     let output = fixture.run(&["daemon", "stop"]);
     assert!(output.status.success(), "{output:?}");
     assert!(fixture.daemon.child.wait().unwrap().success());
-    assert!(agent.wait().unwrap().success());
+    let output = agent.wait_with_output().unwrap();
+    assert!(output.status.success(), "{output:?}");
     let stopped = saved();
     assert!(
         !stopped.is_empty()
@@ -7312,13 +7313,14 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
     );
     // A signal stops the agent saved first, as a system shutdown does.
     fixture.restart();
-    let mut agent = start(&fixture);
+    let agent = start(&fixture);
     assert_eq!(
         unsafe { libc::kill(fixture.daemon.child.id() as i32, libc::SIGTERM) },
         0
     );
     assert!(fixture.daemon.child.wait().unwrap().success());
-    assert!(agent.wait().unwrap().success());
+    let output = agent.wait_with_output().unwrap();
+    assert!(output.status.success(), "{output:?}");
     let saved = saved();
     assert!(
         saved
