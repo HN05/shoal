@@ -51,7 +51,7 @@ const REQUESTS: &[&str] = &[
     r#"{"fast_forward_workspace":{"workspace":"fix","branch":"main"}}"#,
     r#"{"workspace_env":{"workspace":"fix"}}"#,
     r#"{"revoke_workspace_env":{"workspace":"fix","token":"t1"}}"#,
-    r#"{"workspace_status":{"workspace":"fix"}}"#,
+    r#"{"space_status":{"space":"fix"}}"#,
     r#"{"diff_base":{"workspace":"fix"}}"#,
     r#"{"conflicts":{"workspace":"fix","target":null}}"#,
     r#"{"land_warning":{"workspace":"fix"}}"#,

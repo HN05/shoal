@@ -27,7 +27,7 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
         .unwrap();
     // A saved conflict check makes status read HEAD.
     manager.check_conflicts(&workspace.id, None).await.unwrap();
-    let status = manager.workspace_status(&workspace.id).await.unwrap();
+    let status = manager.worktree_status(&workspace.id).await.unwrap().0;
     assert!(status.diff.is_some(), "{:?}", status.diff_error);
     assert!(status.changed_on_both_sides.is_some());
 
@@ -38,7 +38,7 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
     tokio::time::resume();
     assert!(stalled.is_err());
 
-    let status = manager.workspace_status(&workspace.id).await.unwrap();
+    let status = manager.worktree_status(&workspace.id).await.unwrap().0;
     assert!(status.diff.is_none());
     assert!(status.changed_on_both_sides.is_none());
     let stall = "stalled; a macOS privacy prompt may be waiting for an answer";
@@ -48,35 +48,4 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
         panic!("expected a failed inspection: {:?}", status.cleanup_reason);
     };
     assert!(error.contains(stall), "{error}");
-}
-
-#[tokio::test]
-async fn status_counts_only_the_workspaces_own_unread_notifications() {
-    use crate::daemon::notifications::NotificationKind;
-    let (temp, manager) = crate::test_support::manager().await;
-    let checkout = crate::test_support::repository(temp.path(), "repo");
-    let repo = manager
-        .register_repository(checkout.to_str().unwrap().into(), None, None)
-        .await
-        .unwrap();
-    for name in ["own", "other"] {
-        manager
-            .create_workspace(&repo.id, name.into(), None, None, None)
-            .await
-            .unwrap();
-    }
-    let unread = |status: WorkspaceStatus| status.unread_notifications;
-    let before = unread(manager.workspace_status("own").await.unwrap());
-
-    for (workspace, message) in [
-        (Some("own"), "own"),
-        (Some("other"), "other"),
-        (None, "daemon"),
-    ] {
-        manager
-            .notify(workspace, NotificationKind::CleanupFailed, message)
-            .await;
-    }
-    let status = manager.workspace_status("own").await.unwrap();
-    assert_eq!(unread(status), before + 1);
 }

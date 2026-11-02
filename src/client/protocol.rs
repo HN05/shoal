@@ -17,8 +17,7 @@ use crate::{
     config::repo::ConfigLayers,
     model::{
         ConflictCheck, DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation,
-        PortSuggestion, Repository, RepositoryRemoval, SyncedRepository, Workspace,
-        WorkspaceStatus,
+        PortSuggestion, Repository, RepositoryRemoval, SpaceStatus, SyncedRepository, Workspace,
     },
 };
 
@@ -595,7 +594,7 @@ response_bodies! {
     AgentStatus(crate::model::AgentStatus),
     WokenTurn(WokenTurn),
     AgentSession(crate::model::AgentSession),
-    WorkspaceStatus(WorkspaceStatus),
+    SpaceStatus(Box<SpaceStatus>),
     SelectedItems(crate::model::Selected),
     MergedPull(crate::forge::items::revert::MergedPull),
     CheckLog(crate::forge::ci::checks::CheckLog),
@@ -612,7 +611,7 @@ response_bodies! {
     AgentEnvironments(Vec<std::collections::BTreeMap<String, String>>),
     KeptBranches(Vec<crate::model::KeptBranch>),
     UntrackedWorktrees(Vec<crate::model::UntrackedWorktree>),
-    RestoredWorkspace(crate::model::RestoredWorkspace),
+    RestoredWorkspace(Box<crate::model::RestoredWorkspace>),
     Checkpoint(crate::model::Checkpoint),
     Checkpoints(Option<Vec<crate::model::Checkpoint>>),
     RestoredCheckpoint(crate::model::RestoredCheckpoint),

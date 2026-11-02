@@ -140,8 +140,9 @@ pub enum WorkspaceMethod {
         workspace: String,
         token: String,
     },
-    WorkspaceStatus {
-        workspace: String,
+    /// The status of a workspace or chat, running or stopped.
+    SpaceStatus {
+        space: String,
     },
     DiffBase {
         workspace: String,

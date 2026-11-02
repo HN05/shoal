@@ -347,7 +347,7 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         .write_local_config(&repo.id, Some("[cleanup.auto]\nenabled = false\n".into()))
         .await
         .unwrap();
-    let status = manager.workspace_status(&workspace.id).await.unwrap();
+    let status = manager.worktree_status(&workspace.id).await.unwrap().0;
     assert_eq!(status.cleanup_reason, CleanupReason::IdleDisabled);
 }
 

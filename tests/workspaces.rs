@@ -2749,7 +2749,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     }
     let missing = fixture.run(&["status"]);
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("missing workspace; pass <target>"));
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("missing space; pass <target>"));
 
     for target in [
         vec!["pr", "7"],
@@ -7887,7 +7887,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
             "missing workspace; pass --workspace <workspace>",
         ),
         (&["rm"], "missing spaces; pass <space>"),
-        (&["status"], "missing workspace; pass <target>"),
+        (&["status"], "missing space; pass <target>"),
         (&["stop"], "missing workspaces; pass <space>"),
         (&["diff"], workspace),
         (&["view", "pr", "12"], "pass --space or --repo"),
@@ -21325,6 +21325,52 @@ fn start_test_chat(fixture: &Fixture, name: &str) -> (std::process::Child, Strin
     assert_eq!(response["type"], "chat", "{response}");
     let chat = response["data"]["id"].as_str().unwrap().to_owned();
     (agent, chat)
+}
+
+/// Status names a chat in the namespace it shares with workspaces and
+/// leaves out what needs a worktree; workspace processes see neither the
+/// chat nor another workspace.
+#[test]
+fn status_shows_a_chat_without_the_parts_a_worktree_has() {
+    let fixture = Fixture::new();
+    let own = fixture.add("own");
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
+
+    let status = fixture.ok(&["status", "planning"]);
+    assert_eq!(status["kind"], "chat", "{status}");
+    assert_eq!(status["chat"]["id"], chat.as_str(), "{status}");
+    assert_eq!(status["sessions"], serde_json::json!([]), "{status}");
+    for worktree in ["workspace", "executions", "ports", "diff", "cleanup_reason"] {
+        assert_eq!(status.get(worktree), None, "{worktree}: {status}");
+    }
+    let output = fixture.run(&["status", "planning"]);
+    assert!(output.status.success(), "{output:?}");
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.starts_with("planning  "), "{text}");
+    assert!(text.contains("\nAgent:         claude\n"), "{text}");
+    assert!(text.contains("\nNotifications: 0 unread\n"), "{text}");
+    assert!(!text.contains("Branch:"), "{text}");
+
+    let status = fixture.ok(&["status", "own"]);
+    assert_eq!(status["kind"], "workspace", "{status}");
+    assert_eq!(status["workspace"]["id"], own["id"], "{status}");
+    assert_eq!(status["setup_finished"], true, "{status}");
+
+    fixture.add("other");
+    for other in ["planning", "other"] {
+        let output = fixture.run(&[
+            "run",
+            "--workspace",
+            "own",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "status",
+            other,
+        ]);
+        assert!(!output.status.success(), "{other}: {output:?}");
+    }
+    agent.kill().unwrap();
+    agent.wait().unwrap();
 }
 
 #[test]

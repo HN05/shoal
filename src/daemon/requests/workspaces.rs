@@ -170,8 +170,8 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
-        WorkspaceMethod::WorkspaceStatus { workspace } => {
-            Body::WorkspaceStatus(manager.workspace_status(&workspace).await?)
+        WorkspaceMethod::SpaceStatus { space } => {
+            Body::SpaceStatus(Box::new(manager.space_status(&space).await?))
         }
         WorkspaceMethod::FindWorkspaces { target } => {
             Body::Workspaces(manager.find_visible_workspaces(&target, caller).await?)
@@ -249,7 +249,6 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::InspectWorkspace { workspace }
             | WorkspaceMethod::VerifyWorkspace { workspace, .. }
             | WorkspaceMethod::FastForwardWorkspace { workspace, .. }
-            | WorkspaceMethod::WorkspaceStatus { workspace }
             | WorkspaceMethod::DiffBase { workspace }
             | WorkspaceMethod::Conflicts { workspace, .. }
             | WorkspaceMethod::LandWarning { workspace }
@@ -261,6 +260,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Workspace(workspace),
             } => Some(workspace),
+            WorkspaceMethod::SpaceStatus { space } => Some(space),
             WorkspaceMethod::OpenBranch { .. }
             | WorkspaceMethod::CreateWorkspace { .. }
             | WorkspaceMethod::CreateCommitWorkspace { parent: None, .. }

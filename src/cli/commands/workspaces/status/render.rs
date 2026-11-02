@@ -1,31 +1,39 @@
-//! How text shows a workspace's status.
+//! How text shows a space's status: a workspace's adds what needs its
+//! worktree.
 use super::StatusView;
 use crate::{
     cli::{
         commands::{base, ci, links, resources, split},
+        list_status::ListStatus,
         output::{Palette, Style},
         ui,
     },
     daemon::links::pr::RegistrationKind,
     forge::review::status::PrStatus,
-    model::{Inspection, WorkspaceStatus},
+    model::{Chat, SpaceDetail, SpaceStatus, WorktreeStatus},
 };
 
 pub(super) fn render_status(view: &StatusView, json: bool) {
     let palette = Palette::stdout(json);
     let status = &view.status;
-    render_workspace(status, palette);
+    match &status.space {
+        SpaceDetail::Workspace(worktree) => render_workspace(worktree, palette),
+        SpaceDetail::Chat { chat } => render_chat(chat, palette),
+    }
     render_activity(view, palette);
-    render_leases(&status.inspection, palette);
+    if let Some(worktree) = status.space.worktree() {
+        render_leases(worktree, palette);
+    }
     render_assignment(status, palette);
-    render_cleanup(status, palette);
+    if let Some(worktree) = status.space.worktree() {
+        render_cleanup(worktree, palette);
+    }
     render_attention(status);
 }
 
 /// The workspace, its branch, setup, changes and holds.
-fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
-    let inspection = &status.inspection;
-    let workspace = &inspection.workspace;
+fn render_workspace(status: &WorktreeStatus, palette: Palette) {
+    let workspace = &status.workspace;
     outln!(
         "{}  {}",
         palette.paint(Style::Heading, &workspace.name),
@@ -70,8 +78,8 @@ fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
     if let Some(error) = &workspace.error {
         outln!("Error:         {}", palette.paint(Style::Error, error));
     }
-    outln!("Holds:         {}", inspection.workspace.holds.len());
-    for hold in &inspection.workspace.holds {
+    outln!("Holds:         {}", workspace.holds.len());
+    for hold in &workspace.holds {
         outln!(
             "  {}{}",
             hold.name,
@@ -83,7 +91,7 @@ fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
 }
 
 /// The sensitive paths the last conflict check found changed on both sides.
-fn render_changed_on_both_sides(status: &WorkspaceStatus, palette: Palette) {
+fn render_changed_on_both_sides(status: &WorktreeStatus, palette: Palette) {
     let changed = status.changed_on_both_sides.as_ref();
     let Some(changed) = changed.filter(|changed| !changed.files.is_empty()) else {
         return;
@@ -96,9 +104,20 @@ fn render_changed_on_both_sides(status: &WorkspaceStatus, palette: Palette) {
     outln!("  {}", palette.paint(Style::Warning, &line));
 }
 
+/// The chat, its status as listings show it, and its agent.
+fn render_chat(chat: &Chat, palette: Palette) {
+    let status = ListStatus::of_chat(chat);
+    outln!(
+        "{}  {}",
+        palette.paint(Style::Heading, &chat.name),
+        palette.paint(status.style(), status.label())
+    );
+    outln!("Agent:         {}", chat.agent);
+}
+
 /// When the repository's default branch last synced with its remote, and
 /// why the syncs since then failed.
-fn render_sync(status: &WorkspaceStatus, palette: Palette) {
+fn render_sync(status: &WorktreeStatus, palette: Palette) {
     let Some(sync) = &status.sync else {
         return;
     };
@@ -115,13 +134,29 @@ fn render_sync(status: &WorkspaceStatus, palette: Palette) {
     }
 }
 
-/// What runs in the workspace: its executions, sessions and agent.
+/// What runs in the space: a workspace's executions and agent, and the
+/// sessions of either.
 fn render_activity(view: &StatusView, palette: Palette) {
-    let status = &view.status;
-    let inspection = &status.inspection;
-    let workspace = &inspection.workspace;
-    outln!("Executions:    {}", inspection.executions.len());
-    for execution in &inspection.executions {
+    if let Some(worktree) = view.status.space.worktree() {
+        render_processes(worktree, palette);
+    }
+    outln!("Sessions:      {}", view.sessions.len());
+    for session in &view.sessions {
+        outln!("  {}", session.label());
+    }
+    if let Some(error) = &view.sessions_error {
+        outln!("  {}", palette.paint(Style::Warning, error));
+    }
+    if let Some(worktree) = view.status.space.worktree() {
+        render_agent(worktree);
+        outln!("Chat:          {}", view.chat.as_deref().unwrap_or("none"));
+    }
+}
+
+/// The workspace's executions, what its processes use, and those left over.
+fn render_processes(status: &WorktreeStatus, palette: Palette) {
+    outln!("Executions:    {}", status.executions.len());
+    for execution in &status.executions {
         let pid = execution
             .child
             .as_ref()
@@ -136,7 +171,7 @@ fn render_activity(view: &StatusView, palette: Palette) {
         );
     }
 
-    match &workspace.usage {
+    match &status.workspace.usage {
         Some(usage) => outln!(
             "Usage:         {}, {} process{}",
             ui::usage_label(usage),
@@ -154,25 +189,16 @@ fn render_activity(view: &StatusView, palette: Palette) {
     {
         outln!("  and {more} more");
     }
+}
 
-    outln!("Sessions:      {}", view.sessions.len());
-    for session in &view.sessions {
-        outln!("  {}", session.label());
-    }
-    if let Some(error) = &view.sessions_error {
-        outln!("  {}", palette.paint(Style::Warning, error));
-    }
-
+/// The turn state the workspace's agent reported, and its retries.
+fn render_agent(status: &WorktreeStatus) {
+    let agent_state = status.workspace.agent_state;
     outln!(
         "Agent state:   {}",
-        workspace
-            .agent_state
-            .map_or("none", |status| { ui::agent_state_label(status.state) })
+        agent_state.map_or("none", |status| { ui::agent_state_label(status.state) })
     );
-    if let Some(expires_at) = workspace
-        .agent_state
-        .and_then(|status| status.prompt_cache_expires_at)
-    {
+    if let Some(expires_at) = agent_state.and_then(|status| status.prompt_cache_expires_at) {
         outln!("Prompt cache:  {}", prompt_cache_label(expires_at));
     }
     if let Some(retry) = &status.proxy_retry {
@@ -181,11 +207,10 @@ fn render_activity(view: &StatusView, palette: Palette) {
     if let Some(retry) = &status.turn_retry {
         outln!("Turn retry:    {}", turn_retry_label(retry));
     }
-    outln!("Chat:          {}", view.chat.as_deref().unwrap_or("none"));
 }
 
 /// The ports, simulators and resources the workspace holds.
-fn render_leases(inspection: &Inspection, palette: Palette) {
+fn render_leases(inspection: &WorktreeStatus, palette: Palette) {
     outln!("Ports:         {}", inspection.ports.len());
     for port in &inspection.ports {
         outln!("  {}={} ({})", port.name, port.port, port.env_var);
@@ -216,11 +241,9 @@ fn render_leases(inspection: &Inspection, palette: Palette) {
     }
 }
 
-/// The workspace's issue, completion and PRs.
-fn render_assignment(status: &WorkspaceStatus, palette: Palette) {
-    let inspection = &status.inspection;
-    let workspace = &inspection.workspace;
-    if let Some(issue) = &inspection.issue {
+/// The space's issue, completion and PRs.
+fn render_assignment(status: &SpaceStatus, palette: Palette) {
+    if let Some(issue) = &status.issue {
         outln!("Issue:         {}", issue.url);
         if let Some(state) = status.issue_status.as_ref().and_then(|s| s.state.as_ref()) {
             outln!("  State:       {state}");
@@ -230,7 +253,7 @@ fn render_assignment(status: &WorkspaceStatus, palette: Palette) {
             outln!("  {}", palette.paint(Style::Warning, error));
         }
     }
-    if let Some(completion) = &inspection.completion {
+    if let Some(completion) = &status.completion {
         let choice = if completion.cleanup {
             "cleanup requested"
         } else {
@@ -255,12 +278,13 @@ fn render_assignment(status: &WorkspaceStatus, palette: Palette) {
         }
     }
     render_pr_watch(status, palette);
-    render_recorded("Opened:", &workspace.links.opened);
-    render_recorded("Related:", &workspace.links.related);
+    let links = status.space.links();
+    render_recorded("Opened:", &links.opened);
+    render_recorded("Related:", &links.related);
 }
 
-fn render_pr_watch(status: &WorkspaceStatus, palette: Palette) {
-    match &status.inspection.pr_cleanup {
+fn render_pr_watch(status: &SpaceStatus, palette: Palette) {
+    match &status.pr_cleanup {
         Some(registration) => {
             match &registration.kind {
                 RegistrationKind::Watch { urls, .. } => {
@@ -282,7 +306,7 @@ fn render_pr_watch(status: &WorkspaceStatus, palette: Palette) {
 }
 
 /// When and why cleanup removes the workspace.
-fn render_cleanup(status: &WorkspaceStatus, palette: Palette) {
+fn render_cleanup(status: &WorktreeStatus, palette: Palette) {
     outln!("Cleanup:       {}", status.cleanup_reason);
     if let Some(at) = status.cleanup_at {
         outln!(
@@ -296,13 +320,13 @@ fn render_cleanup(status: &WorkspaceStatus, palette: Palette) {
 }
 
 /// What awaits the user: the review mark and unread notifications.
-fn render_attention(status: &WorkspaceStatus) {
-    let workspace = &status.inspection.workspace;
-    if workspace.review.is_empty() {
+fn render_attention(status: &SpaceStatus) {
+    let review = status.space.review();
+    if review.is_empty() {
         outln!("Review:        none");
     } else {
         outln!("Review:        ready for review");
-        outln!("{}", links::review_lines(&workspace.review, "workspace"));
+        outln!("{}", links::review_lines(review, status.space.kind()));
     }
     outln!("Notifications: {} unread", status.unread_notifications);
 }

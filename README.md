@@ -150,7 +150,7 @@ shoal queue                   # Agents waiting for a slot under the agent limits
 shoal work --chats            # Running chats
 shoal work --repo my-project  # Only one repository's workspaces, chats and queued agents
 shoal work --status needs-input,failed  # Only rows with these statuses
-shoal status fix-login        # Workspace activity, changes, resources, issue and PR state
+shoal status fix-login        # A workspace's or chat's activity, issue and PR state; a workspace's changes and resources
 shoal status pr 12            # Workspaces that link PR 12; also issue, ci or resource
 shoal config show fix-login   # Effective settings and the source of each value
 shoal config reference        # This release's command and configuration reference
@@ -470,7 +470,7 @@ enabled = false
 
 When something looks wrong, `shoal inbox` and `shoal alerts` show what Shoal
 found and the command that fixes it, and `shoal status <name>` shows one
-workspace; see [cleanup](docs/reference.md#automatic-cleanup) and
+workspace or chat; see [cleanup](docs/reference.md#automatic-cleanup) and
 [recovery](docs/reference.md#recovery) for details.
 
 ## Update

@@ -1,18 +1,18 @@
 //! What `shoal status` prints.
 use serde::{Deserialize, Serialize};
 
-use crate::{client::output::outputs, model::WorkspaceStatus};
+use crate::{client::output::outputs, model::SpaceStatus};
 
-/// The daemon's workspace status with the agent sessions the CLI finds.
+/// The daemon's space status with the agent sessions the CLI finds.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusView {
     #[serde(flatten)]
-    pub status: WorkspaceStatus,
+    pub status: SpaceStatus,
     pub sessions: Vec<AgentSession>,
     /// Why sessions could not be listed; status still reports the rest.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sessions_error: Option<String>,
-    /// How text names the workspace's chat; JSON gives its ID.
+    /// How text names the chat that opened a workspace; JSON gives its ID.
     #[serde(skip)]
     pub chat: Option<String>,
 }

@@ -663,6 +663,7 @@ shoal codex fix-login --app              # Codex desktop app
 shoal happy codex fix-login              # Detached Happy session for the Happy app
 shoal t3 fix-login                       # Running T3 Code desktop app
 shoal status fix-login                   # Activity, changes, held resources, issue and PR state
+shoal status planning                    # A chat's agent, sessions, issue and PR state
 shoal status pr 12                       # Workspaces that link PR 12
 shoal status ci 2765                     # Workspaces that link CI run 2765
 shoal status resource devices            # Workspaces that hold a devices lease
@@ -775,8 +776,10 @@ chosen issue or PR opens as its link would. Noninteractive and JSON calls never 
 management commands support JSON output, while executed commands keep their
 own stdin, stdout, stderr, and exit code.
 
-`shoal status [target]` summarizes one workspace's current state, changes
-since its fork point, what it holds, its agent sessions, whether its linked issue is open or closed,
+`shoal status [target]` summarizes one space, a workspace or a [chat](#chats),
+running or stopped, which the target names, else the current one: its state, a
+workspace's changes since its fork point and what it holds, its agent sessions,
+whether its linked issue is open or closed,
 and each watched PR as the forge reports it now: open, merged or closed, merge
 conflicts, each CI check's result, the CI runs on an open PR's head that
 [wait for approval](#ci-runs) in `waiting_runs`, and a review state from each
@@ -791,8 +794,10 @@ last check of HEAD against the default target found
 `changed_on_both_sides` (`target`, `target_commit`, `head` and `files`). Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
 open questions, a pending PR proposal or push request, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
-when nothing does, in `cleanup_reason`. `--json`
-returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
+when nothing does, in `cleanup_reason`. A chat's status leaves out what needs a worktree: its
+branch, changes, setup, executions, leases, sync and cleanup. `--json`
+returns the same data, with `kind` (`workspace` or `chat`) and the space's
+record in `workspace` or `chat`, PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`. Workspace records from `work --json` and `status --json` include
 the assigned issue in `links.issue`, assigned PR URLs in `links.prs`, and items
 recorded as opened or related in `links.opened` and `links.related`, each with

@@ -665,7 +665,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             session: None,
         }),
         Row::Failed(workspace) => Command::Workspace(WorkspaceCommand::Status {
-            workspace: Some(workspace),
+            space: Some(workspace),
             item: None,
         }),
         Row::Ready {
@@ -691,7 +691,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
                 session: None,
             }),
             None => Command::Workspace(WorkspaceCommand::Status {
-                workspace: Some(space),
+                space: Some(space),
                 item: None,
             }),
         },
@@ -762,7 +762,7 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
             confirmation: ConfirmationArgs::default(),
         }),
         Key::Status => Command::Workspace(WorkspaceCommand::Status {
-            workspace,
+            space: workspace,
             item: None,
         }),
         Key::Stop => Command::Lifecycle(LifecycleCommand::Stop {

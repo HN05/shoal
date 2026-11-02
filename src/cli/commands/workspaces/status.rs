@@ -1,4 +1,4 @@
-//! A workspace's status: what the daemon reports and the sessions the CLI finds.
+//! A space's status: what the daemon reports and the sessions the CLI finds.
 mod render;
 
 use anyhow::{Context as _, Result, ensure};
@@ -13,18 +13,18 @@ use crate::{
         ui::{self, Fallback},
     },
     forge::{IssueInput, items::link::Selection},
-    model::{Chat, Workspace, WorkspaceStatus, WorkspaceTarget},
+    model::{Chat, SpaceDetail, SpaceStatus, Workspace, WorkspaceTarget},
     protocol::{ConfigTarget, WorkspaceMethod},
 };
 
 pub(in crate::cli::commands) async fn status(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     item: Option<String>,
 ) -> Result<i32> {
-    let Some(target) = status_target(workspace.as_deref(), item)? else {
-        let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-        let status = status_view(ctx, workspace).await?;
+    let Some(target) = status_target(space.as_deref(), item)? else {
+        let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+        let status = status_view(ctx, space).await?;
         ctx.show(&status, |status| render_status(status, ctx.json))?;
         return Ok(0);
     };
@@ -45,20 +45,20 @@ pub(in crate::cli::commands) async fn status(
     Ok(0)
 }
 
-/// The status of `workspace`, with the sessions its terminal hosts keep.
-async fn status_view(ctx: &Context, workspace: String) -> Result<StatusView> {
+/// The status of `space`, with the sessions its terminal hosts keep.
+async fn status_view(ctx: &Context, space: String) -> Result<StatusView> {
     // Listing chats first ends finished ones, returning their workspaces to the user.
     let chats = client::recorded_chats(&ctx.paths).await?;
     let status =
-        request::<WorkspaceStatus>(&ctx.paths, WorkspaceMethod::WorkspaceStatus { workspace })
-            .await?;
-    let chat = chat_name(&chats, &status.inspection.workspace);
-    let places = Recorded::workspace(&status.inspection.executions, &status.inspection.places);
-    let (sessions, sessions_error) =
-        match sessions(ctx, &status.inspection.workspace, &places).await {
-            Ok(sessions) => (sessions, None),
-            Err(error) => (Vec::new(), Some(format!("{error:#}"))),
-        };
+        *request::<Box<SpaceStatus>>(&ctx.paths, WorkspaceMethod::SpaceStatus { space }).await?;
+    let chat = status
+        .space
+        .worktree()
+        .and_then(|worktree| chat_name(&chats, &worktree.workspace));
+    let (sessions, sessions_error) = match sessions(ctx, &status.space).await {
+        Ok(sessions) => (sessions, None),
+        Err(error) => (Vec::new(), Some(format!("{error:#}"))),
+    };
     Ok(StatusView {
         status,
         sessions: sessions
@@ -70,16 +70,21 @@ async fn status_view(ctx: &Context, workspace: String) -> Result<StatusView> {
     })
 }
 
-/// The agent sessions of `workspace`, in the hosts its settings enable and
-/// at the `places` its executions were recorded running in.
-async fn sessions(
-    ctx: &Context,
-    workspace: &Workspace,
-    places: &[Recorded<'_>],
-) -> Result<Vec<terminal::Session>> {
-    let target = ConfigTarget::Workspace(workspace.id.clone());
+/// The agent sessions of `space`, in the hosts its settings enable and at
+/// the places the daemon recorded it running in.
+async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<terminal::Session>> {
+    let (target, places) = match space {
+        SpaceDetail::Workspace(status) => (
+            ConfigTarget::Workspace(status.workspace.id.clone()),
+            Recorded::workspace(&status.executions, &status.places),
+        ),
+        SpaceDetail::Chat { chat } => (
+            ConfigTarget::Repository(chat.repository_id.clone().into()),
+            Recorded::chat(chat),
+        ),
+    };
     let settings = client::settings(&ctx.paths, target).await?;
-    terminal::sessions(&settings, places).await
+    terminal::sessions(&settings, &places).await
 }
 
 /// The listed chat that opened `workspace` with its agent, else its ID, which

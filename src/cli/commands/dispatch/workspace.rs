@@ -32,9 +32,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
             }
             workspaces::list(&ctx, &filter).await
         }
-        WorkspaceCommand::Status { workspace, item } => {
-            workspaces::status(&ctx, workspace, item).await
-        }
+        WorkspaceCommand::Status { space, item } => workspaces::status(&ctx, space, item).await,
         WorkspaceCommand::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         WorkspaceCommand::Edit { workspace, args } => workspaces::edit(&ctx, workspace, args).await,
     }

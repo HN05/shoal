@@ -146,9 +146,10 @@ impl Package {
         let restored = ctx
             .progress(
                 "Importing workspace",
-                request::<RestoredWorkspace>(&ctx.paths, self.import_method(packaged)),
+                request::<Box<RestoredWorkspace>>(&ctx.paths, self.import_method(packaged)),
             )
-            .await;
+            .await
+            .map(|restored| *restored);
         // A workspace recorded but not opened keeps its sessions for `shoal
         // work restore`.
         let home = match &restored {

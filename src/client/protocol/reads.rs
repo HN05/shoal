@@ -66,7 +66,7 @@ impl Operation {
                         | WorkspaceMethod::UntrackedWorktrees
                         | WorkspaceMethod::FindWorkspaces { .. }
                         | WorkspaceMethod::InspectWorkspace { .. }
-                        | WorkspaceMethod::WorkspaceStatus { .. }
+                        | WorkspaceMethod::SpaceStatus { .. }
                         | WorkspaceMethod::DiffBase { .. }
                         | WorkspaceMethod::Conflicts { .. }
                         | WorkspaceMethod::LayeredConfig { .. }

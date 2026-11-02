@@ -585,15 +585,90 @@ pub struct DiffSummary {
     pub deletions: u64,
 }
 
+/// A space's status: what every space has, and under `kind` the space's
+/// own record with what only its kind has.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct WorkspaceStatus {
+pub struct SpaceStatus {
     #[serde(flatten)]
-    pub inspection: Inspection,
+    pub space: SpaceDetail,
+    pub issue: Option<crate::client::links::issue::Registration>,
+    pub completion: Option<Completion>,
+    pub pr_cleanup: Option<crate::client::links::pr::Registration>,
+    /// Unread notifications about this space.
+    pub unread_notifications: u64,
+    /// The current state of each watched PR.
+    #[serde(default)]
+    pub prs: Vec<crate::forge::review::status::PrStatus>,
+    /// The linked issue's current state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue_status: Option<IssueStatus>,
+}
+
+/// The space a status describes: a workspace with what its worktree adds,
+/// or a chat.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SpaceDetail {
+    Workspace(Box<WorktreeStatus>),
+    Chat { chat: Box<Chat> },
+}
+
+impl SpaceDetail {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Workspace(status) => &status.workspace.id,
+            Self::Chat { chat } => &chat.id,
+        }
+    }
+
+    /// What user-facing text calls it: `workspace` or `chat`.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Workspace(_) => "workspace",
+            Self::Chat { .. } => "chat",
+        }
+    }
+
+    /// The workspace and what its worktree adds; a chat has none.
+    pub fn worktree(&self) -> Option<&WorktreeStatus> {
+        match self {
+            Self::Workspace(status) => Some(status),
+            Self::Chat { .. } => None,
+        }
+    }
+
+    /// The issues, PRs and CI runs it links.
+    pub fn links(&self) -> &SpaceLinks {
+        match self {
+            Self::Workspace(status) => &status.workspace.links,
+            Self::Chat { chat } => &chat.links,
+        }
+    }
+
+    /// Its ready-for-review marks.
+    pub fn review(&self) -> &[ReviewMark] {
+        match self {
+            Self::Workspace(status) => &status.workspace.review,
+            Self::Chat { chat } => &chat.review,
+        }
+    }
+}
+
+/// A workspace's status that needs its worktree, with its record.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WorktreeStatus {
+    pub workspace: Workspace,
+    pub executions: Vec<Execution>,
+    /// The places Shoal created for the workspace, such as a session whose
+    /// launch failed and left its shell.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub places: Vec<crate::client::sessions::Origin>,
+    pub ports: Vec<PortReservation>,
+    pub resources: Vec<ResourceLease>,
+    pub simulators: Vec<Simulator>,
     pub setup_finished: bool,
     pub diff: Option<DiffSummary>,
     pub diff_error: Option<String>,
-    /// Unread notifications about this workspace.
-    pub unread_notifications: u64,
     /// Why the daemon's automatic cleanup fails in this workspace.
     #[serde(default)]
     pub cleanup_error: Option<String>,
@@ -603,12 +678,6 @@ pub struct WorkspaceStatus {
     /// grace period runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cleanup_at: Option<u64>,
-    /// The current state of each watched PR.
-    #[serde(default)]
-    pub prs: Vec<crate::forge::review::status::PrStatus>,
-    /// The linked issue's current state.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub issue_status: Option<IssueStatus>,
     /// The retry of the agent's turn an API failure ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_retry: Option<crate::client::executions::TurnRetry>,

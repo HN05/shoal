@@ -172,10 +172,13 @@ async fn reopen(ctx: &Context, workspace: String) -> Result<i32> {
     let restored = ctx
         .progress(
             "Restoring workspace",
-            request::<RestoredWorkspace>(&ctx.paths, RemovalMethod::RestoreWorkspace { workspace }),
+            request::<Box<RestoredWorkspace>>(
+                &ctx.paths,
+                RemovalMethod::RestoreWorkspace { workspace },
+            ),
         )
         .await?;
-    finish_reopen(ctx, restored, "Restored", false).await
+    finish_reopen(ctx, *restored, "Restored", false).await
 }
 
 /// Set up a workspace the daemon opened again from a removal record, and

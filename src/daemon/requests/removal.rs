@@ -83,7 +83,7 @@ pub(super) async fn handle(
             Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
         }
         RemovalMethod::RestoreWorkspace { workspace } => {
-            Body::RestoredWorkspace(manager.restore_workspace(&workspace).await?)
+            Body::RestoredWorkspace(Box::new(manager.restore_workspace(&workspace).await?))
         }
         RemovalMethod::ExportSpace {
             space,
@@ -99,7 +99,7 @@ pub(super) async fn handle(
             bundle,
             prerequisite,
             workspace,
-        } => Body::RestoredWorkspace(
+        } => Body::RestoredWorkspace(Box::new(
             manager
                 .import_workspace(
                     &repository,
@@ -108,7 +108,7 @@ pub(super) async fn handle(
                     *workspace,
                 )
                 .await?,
-        ),
+        )),
     }))
 }
 

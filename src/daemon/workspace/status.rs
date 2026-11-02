@@ -2,40 +2,40 @@ use anyhow::{Context, Result};
 
 use super::Manager;
 use crate::{
-    daemon::{forge_hosts::ForgeHosts, links::pr, store},
-    forge::{ForgeRepo, IssueInput, account::Account, items::link},
+    daemon::{spaces::status::Records, store},
+    forge::{IssueInput, items::link},
     git,
-    model::{
-        DiffSummary, Inspection, IssueStatus, Selected, SelectedItem, Workspace, WorkspaceStatus,
-    },
+    model::{DiffSummary, Inspection, Selected, SelectedItem, Workspace, WorktreeStatus},
     repository,
 };
 
 impl Manager {
-    pub async fn workspace_status(&self, selector: &str) -> Result<WorkspaceStatus> {
-        let mut inspection = self.inspect_workspace(selector).await?;
-        let path = inspection.workspace.path.clone();
-        let diff = self.check_access(&path, self.diff_summary(&inspection.workspace));
+    /// What the status of the workspace `selector` names shows for its
+    /// worktree, and what the workspace records about its links and work.
+    pub(crate) async fn worktree_status(
+        &self,
+        selector: &str,
+    ) -> Result<(WorktreeStatus, Records)> {
+        let Inspection {
+            issue,
+            completion,
+            pr_cleanup,
+            mut workspace,
+            executions,
+            places,
+            ports,
+            resources,
+            mut simulators,
+        } = self.inspect_workspace(selector).await?;
+        let diff = self.check_access(&workspace.path, self.diff_summary(&workspace));
         let (diff, diff_error) = match diff.await {
             Ok(diff) => (Some(diff), None),
             Err(error) => (None, Some(format!("{error:#}"))),
         };
-        let remote = self
-            .check_access(&path, repository::remote_url_from_path(&path))
-            .await;
-        let account = self.user_account();
-        let hosts = self.forge_hosts();
-        let (prs, issue_status) = tokio::join!(
-            pr::watched(&hosts, &account, &remote, inspection.pr_cleanup.as_ref()),
-            issue_status(&hosts, &account, &remote, &inspection)
-        );
-        let unread_notifications = self
-            .unread_workspace_notifications(&inspection.workspace.id)
-            .await?;
-        let cleanup_error = self.workspace_cleanup_problem(&inspection.workspace.id);
-        let cleanup_reason = self.cleanup_reason(&inspection.workspace).await;
-        let cleanup_at = self.cleanup_at(&inspection.workspace.id).await?;
-        let workspace_id = inspection.workspace.id.clone();
+        let cleanup_error = self.workspace_cleanup_problem(&workspace.id);
+        let cleanup_reason = self.cleanup_reason(&workspace).await;
+        let cleanup_at = self.cleanup_at(&workspace.id).await?;
+        let workspace_id = workspace.id.clone();
         let (setup_finished, turn_retry) = self
             .store
             .run(move |db| {
@@ -45,39 +45,46 @@ impl Manager {
                 ))
             })
             .await?;
-        inspection.workspace.usage = self.workspace_usage(&inspection.workspace.id);
-        let proxy_retry = self.proxy_retry(&inspection.executions);
-        inspection.simulators.retain(|simulator| {
-            simulator.workspace_id.as_deref() == Some(inspection.workspace.id.as_str())
-        });
-        let (leftover_count, leftovers) = self.leftovers.of(&inspection.workspace.id);
-        let sync = self.checkout_sync(&inspection.workspace.repository_id);
+        workspace.usage = self.workspace_usage(&workspace.id);
+        let proxy_retry = self.proxy_retry(&executions);
+        simulators
+            .retain(|simulator| simulator.workspace_id.as_deref() == Some(workspace.id.as_str()));
+        let (leftover_count, leftovers) = self.leftovers.of(&workspace.id);
+        let sync = self.checkout_sync(&workspace.repository_id);
         // A worktree Git cannot read shows none, as `diff_error` says why.
-        let changed = self.current_changed_on_both_sides(&inspection.workspace);
+        let changed = self.current_changed_on_both_sides(&workspace);
         let changed_on_both_sides = self
-            .check_access(&path, changed)
+            .check_access(&workspace.path, changed)
             .await
             .ok()
             .flatten()
             .map(Box::new);
-        Ok(WorkspaceStatus {
-            inspection,
+        let status = WorktreeStatus {
+            workspace,
+            executions,
+            places,
+            ports,
+            resources,
+            simulators,
             setup_finished,
             diff,
             diff_error,
-            unread_notifications,
             cleanup_error,
             cleanup_reason,
             cleanup_at,
-            prs,
-            issue_status,
             turn_retry,
             proxy_retry,
             leftover_count,
             leftovers,
             sync,
             changed_on_both_sides,
-        })
+        };
+        let records = Records {
+            issue,
+            pr_cleanup,
+            completion,
+        };
+        Ok((status, records))
     }
 }
 
@@ -89,33 +96,6 @@ impl Manager {
         let numstat = git::diff::numstat(&workspace.path, &base.commit).await?;
         parse_numstat(&numstat)
     }
-}
-
-/// `remote` is the workspace's origin remote, as read from its worktree.
-async fn issue_status(
-    hosts: &ForgeHosts<'_>,
-    account: &Account,
-    remote: &Result<Option<String>>,
-    inspection: &Inspection,
-) -> Option<IssueStatus> {
-    let url = &inspection.issue.as_ref()?.url;
-    let closed = async {
-        let remote = pr::origin(remote, "issue lookup needs an origin remote")?;
-        let forge = ForgeRepo::resolve(remote, hosts).await?;
-        let (number, _) = forge.issue(url)?;
-        forge.issue_closed(account, number).await
-    }
-    .await;
-    Some(match closed {
-        Ok(closed) => IssueStatus {
-            state: Some(if closed { "closed" } else { "open" }.into()),
-            error: None,
-        },
-        Err(error) => IssueStatus {
-            state: None,
-            error: Some(format!("{error:#}")),
-        },
-    })
 }
 
 impl Manager {
