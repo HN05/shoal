@@ -28242,6 +28242,45 @@ fn attach_previous_returns_to_a_session_an_agent_launch_left_running() {
 }
 
 #[test]
+fn attach_previous_returns_to_a_herdr_tab_an_agent_launch_left_open() {
+    let fixture = Fixture::with_config(Some("[terminal]\ndefault_host = 'herdr'\n"));
+    install_fake_herdr(&fixture);
+    install_fake_agents(&fixture, &["claude"]);
+    fixture.add("shown");
+    fixture.add("other");
+    let record = |workspace: &str, place: &str| {
+        let recorded = fixture.request(serde_json::json!({"record_owned_place": {
+            "workspace": workspace,
+            "origin": {"host": "herdr", "group": "w1", "place": place,
+                       "data": {"HERDR_SESSION": "work"}},
+        }}));
+        assert!(recorded.get("error").is_none(), "{recorded}");
+    };
+    record("other", "w1:p4");
+    let (output, transcript) = fixture.interactive(&["attach", "other"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let previous = || {
+        let before = herdr_calls(&fixture).len();
+        let (output, transcript) = fixture.interactive(&["attach", "-"], "");
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+        herdr_calls(&fixture)[before..]
+            .iter()
+            .find(|call| call[..2] == ["tab", "focus"])
+            .unwrap()[2]
+            .clone()
+    };
+    assert_eq!(previous(), "w1:t4");
+    // Outside Herdr, an agent launch opens a tab and attaches its session.
+    let mut launch = fixture.command();
+    launch.args(["claude", "shown"]);
+    let (output, transcript) = fixture.terminal_command(&mut launch, "", true);
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    // The fake Herdr runs no worker to record the tab it opened.
+    record("shown", "w1:p9");
+    assert_eq!(previous(), "w1:t9");
+}
+
+#[test]
 fn attach_previous_returns_to_a_herdr_tab_after_its_client_detaches() {
     let fixture = Fixture::new();
     install_fake_herdr(&fixture);
