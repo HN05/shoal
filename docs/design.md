@@ -2067,7 +2067,8 @@ what it opens as a workspace does: a new issue is linked as opened, or assigned
 with `--link`, and its item actions default to its linked items.
 A chat holds links as a workspace does: the link tables name the space, a
 workspace or chat, with IDs from their shared namespace, and go with it. Its
-assigned items drive no completion or cleanup, which a chat does not have, and
+assigned items neither complete a chat nor clean it up: only its own `done`
+records completion, and a chat has no cleanup; and
 the activity Shoal polls for them waits on the chat's own cursor, which the
 chat's hooks deliver with its messages, waking its agent; a watch in the chat
 and those hooks share one delivery, so the newest takes what is pending.
