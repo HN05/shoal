@@ -29,9 +29,9 @@ jobs:
       - name: Measure
         run: |
           . .forgejo/scripts/lock-target-dir.sh
-          cargo clean --workspace
-          cargo test --locked --no-run -q
-          zombies() { echo "processes: $(ps -e --no-headers | wc -l), zombies: $(ps -e -o stat= | grep -c '^Z')"; }
-          nproc; uptime; zombies; ps -p 1 -o args=
-          .forgejo/scripts/reap.py python3 scripts/profile_tests.py suite
-          uptime; zombies
+          true
+          true
+          id; cat /proc/self/status | grep -i cap
+          for args in "--pid --fork --mount-proc" "--user --map-root-user --pid --fork --mount-proc" "--map-current-user --user --pid --fork --mount-proc"; do
+            echo "== unshare $args"; unshare $args sh -c 'echo pid $$; id; ps -e' 2>&1 | head -8 || true
+          done
