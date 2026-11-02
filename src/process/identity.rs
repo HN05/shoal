@@ -1363,15 +1363,26 @@ pub(super) fn stat_fields(stat: &str) -> Result<Vec<&str>> {
         .collect())
 }
 
-/// A `/proc` record of a process, whose name may be any bytes.
+/// A `/proc` record of a process, whose name may be any bytes; `None` once
+/// the process has exited or when `/proc` hides it.
 #[cfg(target_os = "linux")]
 pub(super) fn read_process_stat(path: &str) -> Result<Option<String>> {
     match std::fs::read(path) {
         Ok(stat) => Ok(Some(String::from_utf8_lossy(&stat).into_owned())),
-        // Linux returns ESRCH if the process exits between open and read.
-        Err(error) if matches!(error.raw_os_error(), Some(libc::ENOENT | libc::ESRCH)) => Ok(None),
+        Err(error) if process_record_unavailable(error.raw_os_error()) => Ok(None),
         Err(error) => Err(error.into()),
     }
+}
+
+#[cfg(target_os = "linux")]
+fn process_record_unavailable(errno: Option<i32>) -> bool {
+    // Linux returns ESRCH if the process exits between open and read. A
+    // `hidepid` mount shows another user's PID but refuses its records, as
+    // `ps` finds; this user's own are never refused.
+    matches!(
+        errno,
+        Some(libc::ENOENT | libc::ESRCH | libc::EACCES | libc::EPERM)
+    )
 }
 
 #[cfg(target_os = "linux")]

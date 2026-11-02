@@ -732,6 +732,16 @@ async fn stat_read_after_process_exit_is_not_an_inventory_failure() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn a_hidden_or_exited_process_record_is_unavailable_not_an_error() {
+    for errno in [libc::ENOENT, libc::ESRCH, libc::EACCES, libc::EPERM] {
+        assert!(process_record_unavailable(Some(errno)), "{errno}");
+    }
+    assert!(!process_record_unavailable(Some(libc::EIO)));
+    assert!(!process_record_unavailable(None));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn a_process_named_with_invalid_utf8_is_listed_and_identified() -> Result<()> {
     let dir = tempfile::tempdir()?;
     // The kernel names a process after the file it executed.
