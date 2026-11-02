@@ -732,6 +732,26 @@ async fn stat_read_after_process_exit_is_not_an_inventory_failure() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn a_process_named_with_invalid_utf8_is_listed_and_identified() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    // The kernel names a process after the file it executed.
+    let program = dir.path().join(OsStr::from_bytes(b"sh\xff"));
+    std::os::unix::fs::symlink("/bin/sh", &program)?;
+    let mut child = std::process::Command::new(&program)
+        .args(["-c", "read line"])
+        .stdin(std::process::Stdio::piped())
+        .spawn()?;
+    let listed = same_user_processes();
+    let identity = capture(child.id());
+    drop(child.stdin.take());
+    child.wait()?;
+    assert!(listed?.iter().any(|(pid, _, _)| *pid == child.id()));
+    assert!(identity?.is_some());
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn empty_environment_waits_only_for_a_loading_image() {
     let stat = |flags: u64, env_end: u64| {
         let mut fields = vec![0; 50];

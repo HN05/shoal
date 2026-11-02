@@ -1379,10 +1379,11 @@ pub(super) fn stat_fields(stat: &str) -> Result<Vec<&str>> {
         .collect())
 }
 
+/// A `/proc` record of a process, whose name may be any bytes.
 #[cfg(target_os = "linux")]
 pub(super) fn read_process_stat(path: &str) -> Result<Option<String>> {
-    match std::fs::read_to_string(path) {
-        Ok(stat) => Ok(Some(stat)),
+    match std::fs::read(path) {
+        Ok(stat) => Ok(Some(String::from_utf8_lossy(&stat).into_owned())),
         // Linux returns ESRCH if the process exits between open and read.
         Err(error) if matches!(error.raw_os_error(), Some(libc::ENOENT | libc::ESRCH)) => Ok(None),
         Err(error) => Err(error.into()),
