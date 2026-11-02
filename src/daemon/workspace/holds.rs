@@ -50,19 +50,7 @@ impl Manager {
         let id = workspace.id.clone();
         let hold = self
             .store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                store::require_ready(&tx, &id)?;
-                authority.ensure(&tx, &id, &name)?;
-                insert(&tx, &id, &name, reason.as_deref(), placed_by)?;
-                let hold = tx.query_row(
-                    &format!("{COLUMNS} WHERE workspace_id=?1 AND name=?2"),
-                    params![id, name],
-                    row,
-                )?;
-                tx.commit()?;
-                Ok(hold)
-            })
+            .run(move |db| place(db, &id, &name, reason.as_deref(), placed_by, authority))
             .await?;
         self.touch(&workspace.id).await;
         Ok(hold)
@@ -158,28 +146,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let id = workspace.id.clone();
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let placed_by: Option<HoldPlacer> = tx
-                    .query_row(
-                        "SELECT placed_by FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
-                        params![id, name],
-                        |row| row.get(0),
-                    )
-                    .optional()?;
-                ensure!(
-                    released_by == HoldPlacer::User || placed_by != Some(HoldPlacer::User),
-                    "hold {name} is the user's; workspace processes release only the holds agents placed"
-                );
-                tx.execute(
-                    "DELETE FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
-                    params![id, name],
-                )?;
-                // Holding it again needs another approval.
-                approvals::release(&tx, &id, &Target::Hold(name.clone()), &name)?;
-                tx.commit()?;
-                Ok(())
-            })
+            .run(move |db| release(db, &id, &name, released_by))
             .await?;
         self.touch(&workspace.id).await;
         self.signals.wake_cleanup();
@@ -233,6 +200,54 @@ impl Authority {
         );
         Ok(())
     }
+}
+
+/// Place the hold once `authority` allows it, in a ready workspace, and
+/// return it as it stands: a held name keeps the hold as it was placed.
+fn place(
+    db: &mut Connection,
+    id: &str,
+    name: &str,
+    reason: Option<&str>,
+    placed_by: HoldPlacer,
+    authority: Authority,
+) -> Result<WorkspaceHold> {
+    let tx = db.transaction()?;
+    store::require_ready(&tx, id)?;
+    authority.ensure(&tx, id, name)?;
+    insert(&tx, id, name, reason, placed_by)?;
+    let hold = tx.query_row(
+        &format!("{COLUMNS} WHERE workspace_id=?1 AND name=?2"),
+        params![id, name],
+        row,
+    )?;
+    tx.commit()?;
+    Ok(hold)
+}
+
+/// Delete the hold for `released_by`, who as an agent releases only the
+/// holds agents placed, and end its approval, so holding it again needs
+/// another.
+fn release(db: &mut Connection, id: &str, name: &str, released_by: HoldPlacer) -> Result<()> {
+    let tx = db.transaction()?;
+    let placed_by: Option<HoldPlacer> = tx
+        .query_row(
+            "SELECT placed_by FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
+            params![id, name],
+            |row| row.get(0),
+        )
+        .optional()?;
+    ensure!(
+        released_by == HoldPlacer::User || placed_by != Some(HoldPlacer::User),
+        "hold {name} is the user's; workspace processes release only the holds agents placed"
+    );
+    tx.execute(
+        "DELETE FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
+        params![id, name],
+    )?;
+    approvals::release(&tx, id, &Target::Hold(name.to_owned()), name)?;
+    tx.commit()?;
+    Ok(())
 }
 
 /// Place, in the transaction that approved it, the hold `request` asks for:
