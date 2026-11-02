@@ -890,8 +890,8 @@ worktree verifies as the workspace's. A queued review takes the
 workspace's HEAD when it starts. A workspace has at most one queued or running
 review: running the command again returns the queued one, and is refused while one
 runs. A review waits in the [agent queue](#agent-queue) for a slot, ahead of every
-launch, and holds it while its reviewer runs; `shoal queue` does not list it. A chat
-has no changes of its own, so name a workspace there.
+launch, and holds it while its reviewer runs; `shoal queue` does not list it. A
+chat has no changes of its own; see [chat reviews](#chat-reviews) below.
 
 The reviewer is `--agent`, else `[review] agent`, else `agent.default`, else one you
 pick, and needs a [`review` template](#agents). It runs with `--model` and `--effort`
@@ -1007,7 +1007,7 @@ still posted for the commit it covered, with every finding in the body.
 `--post` or `--no-post` overrides the setting for one review and selects an agent
 reviewer. Workspace reviews are never posted, even with a linked PR.
 
-A [chat](#chats) has no changes of its own, so `review run` from a chat, or
+<a id="chat-reviews"></a>A [chat](#chats) has no changes of its own, so `review run` from a chat, or
 naming one, reviews the chat's one linked PR as `--pr` would. A chat's reviews
 are those of its linked PRs: `review list` lists them, and `review cancel`
 cancels the one queued or running. `review reply` and `review resolve` name the

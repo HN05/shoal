@@ -6,6 +6,7 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{client, context::Context},
+    model::Chat,
     protocol::ReviewMethod,
     reviews::{FindingId, Outcome, Review},
 };
@@ -15,22 +16,31 @@ use crate::{
 pub(super) async fn cancel(ctx: &Context, id: Option<i64>, space: Option<String>) -> Result<i32> {
     let (workspace, id) = match id {
         Some(id) => (None, Some(id)),
-        None => match super::select(ctx, space).await? {
-            super::Space::Chat(chat) => {
-                let active = (super::chat_reviews(ctx, &chat).await?.into_iter())
-                    .find(|review| review.state.is_active())
-                    .with_context(|| {
-                        format!("no review of {}'s PRs is queued or running", chat.name)
-                    })?;
-                (None, Some(active.id))
-            }
-            super::Space::Workspace(workspace) => (Some(workspace), None),
-        },
+        None => cancelled(ctx, space).await?,
     };
     let review: Review =
         client::reviews(&ctx.paths, ReviewMethod::CancelReview { workspace, id }).await?;
     ctx.emit(&format!("Review {} cancelled.", review.id), &review)?;
     Ok(0)
+}
+
+/// What a cancellation without an ID names: a workspace, whose queued or
+/// running review the daemon finds, or the queued or running review of a
+/// chat's linked PRs.
+async fn cancelled(ctx: &Context, space: Option<String>) -> Result<(Option<String>, Option<i64>)> {
+    Ok(match super::select(ctx, space).await? {
+        super::Space::Chat(chat) => (None, Some(active_review(ctx, &chat).await?)),
+        super::Space::Workspace(workspace) => (Some(workspace), None),
+    })
+}
+
+/// The ID of the queued or running review of the chat's linked PRs.
+async fn active_review(ctx: &Context, chat: &Chat) -> Result<i64> {
+    let reviews = super::chat_reviews(ctx, chat).await?;
+    let active = (reviews.into_iter())
+        .find(|review| review.state.is_active())
+        .with_context(|| format!("no review of {}'s PRs is queued or running", chat.name))?;
+    Ok(active.id)
 }
 
 pub(super) async fn reply(
