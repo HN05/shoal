@@ -1480,7 +1480,9 @@ daemon keeps a separate activity snapshot for each item and appends an
 conflict, closure, merge, reopen, or lookup failure. The first observation
 establishes the baseline, and watch acknowledgements do not affect this stream.
 The same poll queues each change on the workspace's watch cursor, holding
-passing checks as the watch below describes, and wakes a running watch, so an agent receives activity without watching for it. Polls
+passing checks as the watch below describes, and wakes a running watch, so an agent receives activity without watching for it. A
+poll reads a few spaces at once, a few items of each, and the parts of an item that do
+not depend on each other together, so one slow forge does not hold back the rest. Polls
 read through the forge crate's shared request layer, which remembers each
 account's last response per URL in daemon memory and repeats the read as a
 conditional request, so an unchanged item costs a `304 Not Modified`, which

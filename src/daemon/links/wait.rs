@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
+use futures_util::{StreamExt, TryStreamExt, stream};
 use rusqlite::{OptionalExtension, params};
 use tokio::sync::Notify;
 
@@ -19,6 +20,7 @@ use super::{
 use crate::{
     daemon::{agent_messages::AgentMessage, notifications::NotificationKind, workspace::Manager},
     forge::{
+        account::Account,
         items::{
             item::ItemState,
             link::{ItemKind, LinkKind, Selection},
@@ -36,6 +38,12 @@ mod cursor;
 mod held;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
+
+/// How many spaces the background poll reads at once, and how many of one
+/// space's items: each read runs forge CLI or curl processes, and a slow
+/// forge must not hold back every other space's poll.
+const POLLED_SPACES_AT_ONCE: usize = 4;
+const ITEMS_READ_AT_ONCE: usize = 4;
 
 /// The bytes a response's updates and messages may take, leaving room for
 /// its other fields.
@@ -611,60 +619,70 @@ impl Manager {
         items: Vec<(String, LinkKind)>,
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
-        let account = self.user_account();
-        let mut observations = Vec::new();
-        for (url, kind) in items {
-            let snapshot = match kind {
-                LinkKind::Issue => {
-                    let forge = self.issue_url_forge(&url).await?;
-                    let (number, _) = forge.issue(&url)?;
-                    forge.issue_activity(&account, number).await?
-                }
-                LinkKind::Pr => {
-                    let forge = self.pull_forge(&url).await?;
-                    let (number, _) = forge.pull(&url)?;
-                    let branch = selection.input.is_none().then(|| space.branch());
-                    let branch = branch.flatten();
-                    forge.activity(&account, number, branch).await?
-                }
-                LinkKind::Ci => {
-                    let forge = self.run_url_forge(&url).await?;
-                    forge.run_activity(&account, &url).await?
-                }
-            };
-            observations.push((url, snapshot));
+        let account = &self.user_account();
+        let branch = selection.input.is_none().then(|| space.branch());
+        let branch = branch.flatten();
+        stream::iter(items)
+            .map(|(url, kind)| async move {
+                let snapshot = self.read_item_activity(account, &url, kind, branch).await?;
+                Ok((url, snapshot))
+            })
+            .buffered(ITEMS_READ_AT_ONCE)
+            .try_collect()
+            .await
+    }
+
+    /// The activity of the item at `url`, a PR only while its head is
+    /// `branch` when one is given.
+    async fn read_item_activity(
+        &self,
+        account: &Account,
+        url: &str,
+        kind: LinkKind,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
+        match kind {
+            LinkKind::Issue => {
+                let forge = self.issue_url_forge(url).await?;
+                let (number, _) = forge.issue(url)?;
+                forge.issue_activity(account, number).await
+            }
+            LinkKind::Pr => {
+                let forge = self.pull_forge(url).await?;
+                let (number, _) = forge.pull(url)?;
+                forge.activity(account, number, branch).await
+            }
+            LinkKind::Ci => {
+                let forge = self.run_url_forge(url).await?;
+                forge.run_activity(account, url).await
+            }
         }
-        Ok(observations)
     }
 
     /// Poll linked items for integrations, with their own baseline, and queue
     /// the changes on each ready workspace's cursor, or hand them to each
     /// running chat's inbox.
     pub(crate) async fn poll_linked_item_activity(&self) -> Result<()> {
+        let mut polls = stream::iter(self.polled_spaces().await?)
+            .map(|space| async move {
+                let result = self.poll_space_item_activity(&space).await;
+                (space, result)
+            })
+            .buffer_unordered(POLLED_SPACES_AT_ONCE);
         let mut failure = None;
-        for space in self.polled_spaces().await? {
-            let id = space.id().to_owned();
-            let items = self.store.run(move |db| polled_items(db, &id)).await?;
-            if items.is_empty() {
-                continue;
-            }
-            let Err(error) = self.poll_space_item_activity(&space, items).await else {
+        while let Some((space, result)) = polls.next().await {
+            let Err(error) = result else {
                 continue;
             };
             // The limit is the forge's, not the space's; a later poll retries.
             if self.notify_rate_limit(&error).await {
                 continue;
             }
-            if failure.is_none() {
-                failure =
-                    Some(error.context(format!("background item activity for {}", space.name())));
-            }
+            failure.get_or_insert_with(|| {
+                error.context(format!("background item activity for {}", space.name()))
+            });
         }
-        if let Some(error) = failure {
-            Err(error)
-        } else {
-            Ok(())
-        }
+        failure.map_or(Ok(()), Err)
     }
 
     /// Tell the user when `error` is a forge's rate limit, and whether it is.
@@ -697,11 +715,14 @@ impl Manager {
         Ok(spaces)
     }
 
-    async fn poll_space_item_activity(
-        &self,
-        space: &LinkSpace,
-        items: Vec<(String, LinkKind)>,
-    ) -> Result<()> {
+    /// Read the activity of the space's polled items, and record and queue
+    /// what changed.
+    async fn poll_space_item_activity(&self, space: &LinkSpace) -> Result<()> {
+        let id = space.id().to_owned();
+        let items = self.store.run(move |db| polled_items(db, &id)).await?;
+        if items.is_empty() {
+            return Ok(());
+        }
         let observed_at = crate::time::unix_seconds();
         let items = self.items_to_look_up(space, items).await?;
         let observations = self
