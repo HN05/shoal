@@ -962,36 +962,49 @@ fn cleanup_removes_idle_candidates_on_request() {
     let denied = fixture.run(&["run", "--workspace", "dirty", "--", binary, "cleanup"]);
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("cannot administer Shoal"));
+    // Chats are spaces too: one whose agent stopped goes, a running one stays.
+    let (mut talking, _) = start_test_chat(&fixture, "talk");
+    let (mut parked, _) = start_test_chat(&fixture, "parked");
+    parked.kill().unwrap();
+    parked.wait().unwrap();
     let preview = fixture.ok(&["cleanup", "--dry-run"]);
-    assert_eq!(preview["removed"], serde_json::json!(["clean"]));
+    assert_eq!(preview["removed"], serde_json::json!(["clean", "parked"]));
     assert_eq!(
         preview["kept"],
-        serde_json::json!([{"workspace": "dirty", "reason": {"reason": "dirty"}}])
+        serde_json::json!([
+            {"space": "dirty", "reason": {"reason": "dirty"}},
+            {"space": "talk", "reason": {"reason": "agent_running"}},
+        ])
     );
     let text = fixture.run(&["cleanup", "--dry-run"]);
     let text = String::from_utf8(text.stdout).unwrap();
     assert_eq!(
         text,
-        "Workspaces to remove:\n  clean\nKept workspaces:\n  dirty  Uncommitted or untracked changes\n"
+        "Spaces to remove:\n  clean\n  parked\nKept spaces:\n  dirty  Uncommitted or untracked changes\n  talk   Agent running\n"
     );
     // Without a terminal, cleanup without a kind only lists.
     assert_eq!(fixture.ok(&["cleanup"])["dry_run"], true);
     assert!(Path::new(clean["path"].as_str().unwrap()).exists());
     // A named workspace that stays says why.
-    let named = fixture.ok(&["cleanup", "workspaces", "dirty"]);
+    let named = fixture.ok(&["cleanup", "spaces", "dirty"]);
     assert_eq!(named["removed"], serde_json::json!([]));
-    assert_eq!(named["kept"][0]["workspace"], "dirty");
+    assert_eq!(named["kept"][0]["space"], "dirty");
     assert!(
         !fixture
-            .run(&["cleanup", "workspaces", "missing"])
+            .run(&["cleanup", "spaces", "missing"])
             .status
             .success()
     );
-    let report = fixture.ok(&["cleanup", "workspaces"]);
-    assert_eq!(report["removed"], serde_json::json!(["clean"]));
+    let report = fixture.ok(&["cleanup", "spaces"]);
+    assert_eq!(report["removed"], serde_json::json!(["clean", "parked"]));
     assert_eq!(report["retained"], serde_json::json!([]));
     assert_eq!(report["kept"], serde_json::json!([]));
     assert!(!Path::new(clean["path"].as_str().unwrap()).exists());
+    let chats = fixture.ok(&["work", "--chats"]);
+    assert_eq!(chats.as_array().unwrap().len(), 1, "{chats}");
+    assert_eq!(chats[0]["name"], "talk", "{chats}");
+    talking.kill().unwrap();
+    talking.wait().unwrap();
     let names: Vec<_> = fixture
         .ok(&["work"])
         .as_array()
@@ -3577,7 +3590,7 @@ fn kept_branches_are_listed_and_deleted_on_request() {
     let text = fixture.run(&["cleanup", "--dry-run"]);
     let text = String::from_utf8(text.stdout).unwrap();
     assert!(
-        text.starts_with("Workspaces to remove:\n  idle\nKept branches:\n"),
+        text.starts_with("Spaces to remove:\n  idle\nKept branches:\n"),
         "{text:?}"
     );
     let branch_exists = |name: &str| {
@@ -3616,7 +3629,7 @@ fn kept_branches_are_listed_and_deleted_on_request() {
     let picker = fixture.root.path().join("bin/fzf");
     install_test_script(
         &picker,
-        "#!/bin/sh\nawk -F '\\t' '$2 ~ /(first|second) |workspace  idle/'\n",
+        "#!/bin/sh\nawk -F '\\t' '$2 ~ /(first|second) |space      idle/'\n",
     );
     let (output, transcript) = fixture.interactive(&["cleanup"], "y\n");
     assert!(output.status.success(), "{transcript}");
@@ -21435,19 +21448,17 @@ fn completion_cleanup_removes_a_done_chat_with_the_workspaces_below_it() {
 
     let completion = fixture.ok(&["done", "planning"]);
     assert_eq!(completion["cleanup"], true, "{completion}");
+    // The user hears once the removal finished.
     wait_until("completion cleanup to remove the chat", || {
-        fixture.ok(&["work", "--chats"]) == serde_json::json!([])
+        let alerts = fixture.ok(&["alerts", "--all"]);
+        alerts
+            .to_string()
+            .contains("chat removed by completion cleanup")
     });
+    assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
     // The workspace below it went first, and its agent stopped.
     assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
     assert!(!agent.wait().unwrap().success());
-    let alerts = fixture.ok(&["alerts", "--all"]);
-    assert!(
-        alerts
-            .to_string()
-            .contains("chat removed by completion cleanup"),
-        "{alerts}"
-    );
 }
 
 #[test]
@@ -25775,11 +25786,11 @@ fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
         "{alerts}"
     );
     fs::remove_file(unreachable).unwrap();
-    fixture.ok(&["cleanup", "workspaces"]);
+    fixture.ok(&["cleanup", "spaces"]);
     assert!(!recorded(&fixture));
     // The pane is closed and forgotten; a later sweep leaves it alone.
     let closed = closes(&fixture);
-    fixture.ok(&["cleanup", "workspaces"]);
+    fixture.ok(&["cleanup", "spaces"]);
     assert_eq!(closes(&fixture), closed);
 }
 
@@ -25842,7 +25853,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     // which needs a default branch it can fetch.
     git(&fixture.repo, &["remote", "remove", "origin"]);
     assert_eq!(
-        fixture.ok(&["cleanup", "workspaces"])["removed"],
+        fixture.ok(&["cleanup", "spaces"])["removed"],
         serde_json::json!(["issue-work"])
     );
 }

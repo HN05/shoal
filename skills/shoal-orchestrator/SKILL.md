@@ -164,9 +164,9 @@ to a checkpoint. To move a workspace to another machine, run
 `shoal move ssh <host> <workspace> --yes`, which queues its stopped agents there;
 they continue their sessions as that host's agent limits allow. Over another
 medium, pipe `shoal move export <workspace> --yes` into `shoal move import --resume`
-on the other machine. `shoal cleanup workspaces` removes every workspace automatic
+on the other machine. `shoal cleanup spaces` removes every space automatic
 cleanup would remove without waiting for its idle delay; `shoal cleanup --dry-run`
-lists those, kept branches and shared caches, and why it keeps each other workspace,
+lists those, kept branches and shared caches, and why it keeps each other space,
 as `status` gives in `cleanup_reason`; `shoal cleanup caches` empties shared tool
 caches nothing is using. When the repository has no remote, `shoal land <workspace>`
 merges a finished branch into the default branch; an agent's own `shoal land`

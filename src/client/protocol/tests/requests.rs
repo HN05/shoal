@@ -71,7 +71,7 @@ const REQUESTS: &[&str] = &[
     r#"{"stop_processes":{"space":"fix","selection":"leftovers","requester":42}}"#,
     r#"{"check_removal":{"workspace":"fix","include_changes":true}}"#,
     r#"{"remove_workspace":{"workspace":"fix","unsaved":"all"}}"#,
-    r#"{"cleanup":{"dry_run":true,"workspaces":"all","caches":"none"}}"#,
+    r#"{"cleanup":{"dry_run":true,"spaces":"all","caches":"none"}}"#,
     r#""removed_workspaces""#,
     r#"{"restore_workspace":{"workspace":"fix"}}"#,
     r#"{"export_space":{"space":"fix","unsaved":{"confirmed":{"files":true,"detached_head":null,"files_restorable":false}},"file":"/work/fix.shoal"}}"#,

@@ -568,12 +568,12 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
         report
             .retained
             .iter()
-            .map(|retained| retained.workspace.clone())
+            .map(|retained| retained.space.clone())
             .collect::<Vec<_>>()
     };
 
     let all = Selection {
-        workspaces: Pick::All,
+        spaces: Pick::All,
         ..Selection::default()
     };
     let preview = on_request(&manager, true, &all).await.unwrap();
@@ -582,7 +582,7 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
     let kept = preview
         .kept
         .iter()
-        .map(|kept| (kept.workspace.as_str(), kept.reason.clone()))
+        .map(|kept| (kept.space.as_str(), kept.reason.clone()))
         .collect::<Vec<_>>();
     assert_eq!(
         kept,
@@ -595,7 +595,7 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
 
     // Named workspaces say why they stay; others are left out.
     let named = Selection {
-        workspaces: Pick::Only(vec!["dirty".into(), "held".into()]),
+        spaces: Pick::Only(vec!["dirty".into(), "held".into()]),
         ..Selection::default()
     };
     let report = on_request(&manager, false, &named).await.unwrap();
@@ -604,12 +604,12 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
         report
             .kept
             .iter()
-            .map(|kept| kept.workspace.as_str())
+            .map(|kept| kept.space.as_str())
             .collect::<Vec<_>>(),
         ["dirty", "held"]
     );
     let unknown = Selection {
-        workspaces: Pick::Only(vec!["missing".into()]),
+        spaces: Pick::Only(vec!["missing".into()]),
         ..Selection::default()
     };
     assert!(on_request(&manager, false, &unknown).await.is_err());

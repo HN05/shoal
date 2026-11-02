@@ -458,12 +458,20 @@ fn skip_failed<T>(workspace: &Workspace, observed: Result<Option<T>>) -> Option<
 }
 
 impl ManualCleanup {
-    /// A dry run lists why it keeps each workspace, and a request naming
-    /// workspaces says why it kept those.
-    fn keep(&mut self, workspace: String, reason: CleanupReason, named: bool) {
+    /// A dry run lists why it keeps each space, and a request naming spaces
+    /// says why it kept those.
+    fn keep(&mut self, space: String, reason: CleanupReason, named: bool) {
         if self.dry_run || named {
-            self.kept.push(Kept { workspace, reason });
+            self.kept.push(Kept { space, reason });
         }
+    }
+
+    /// Record that removing the space `space` failed with `error`.
+    fn retain(&mut self, space: String, error: &anyhow::Error) {
+        self.retained.push(Retained {
+            space,
+            error: format!("{error:#}"),
+        });
     }
 }
 
@@ -487,7 +495,7 @@ impl Pick {
                     items
                         .clone()
                         .any(|(name, id)| selector == name || selector == id),
-                    "{selector} is not a workspace or repository this cleanup covers"
+                    "{selector} is not a space or repository this cleanup covers"
                 );
             }
         }
@@ -495,8 +503,8 @@ impl Pick {
     }
 }
 
-/// Remove the selected workspaces idle or merged cleanup would remove, now:
-/// the user's request replaces their idle periods and applies where they are
+/// Remove the selected spaces idle or merged cleanup would remove, now: the
+/// user's request replaces their idle periods and applies where they are
 /// disabled. Then empty the selected shared caches nothing is using.
 pub async fn on_request(
     manager: &Manager,
@@ -511,21 +519,17 @@ pub async fn on_request(
         dry_run,
         ..ManualCleanup::default()
     };
-    remove_on_request(
-        manager,
-        &mut report,
-        targets.workspaces,
-        &selection.workspaces,
-    )
-    .await?;
+    remove_on_request(manager, &mut report, targets.workspaces, &selection.spaces).await?;
+    remove_chats_on_request(manager, &mut report, targets.chats, &selection.spaces).await?;
     report.caches =
         empty_caches_on_request(manager, dry_run, targets.repositories, &selection.caches).await?;
     Ok(report)
 }
 
-/// The workspaces and repositories a cleanup request can reach.
+/// The spaces and repositories a cleanup request can reach.
 struct Targets {
     workspaces: Vec<Workspace>,
+    chats: Vec<Chat>,
     repositories: Vec<crate::model::Repository>,
 }
 
@@ -545,6 +549,9 @@ impl Targets {
                 .into_iter()
                 .filter(|workspace| within(&workspace.repository_id))
                 .collect(),
+            chats: (manager.chats().await?.into_iter())
+                .filter(|chat| within(&chat.repository_id))
+                .collect(),
             repositories: manager
                 .repositories()
                 .await?
@@ -552,12 +559,9 @@ impl Targets {
                 .filter(|repo| within(&repo.id))
                 .collect(),
         };
-        selection.workspaces.ensure_known(
-            targets
-                .workspaces
-                .iter()
-                .map(|w| (w.name.as_str(), w.id.as_str())),
-        )?;
+        let workspaces = (targets.workspaces.iter()).map(|w| (w.name.as_str(), w.id.as_str()));
+        let chats = (targets.chats.iter()).map(|chat| (chat.name.as_str(), chat.id.as_str()));
+        selection.spaces.ensure_known(workspaces.chain(chats))?;
         selection.caches.ensure_known(
             targets
                 .repositories
@@ -625,10 +629,7 @@ async fn remove_on_request(
             }
             Err(error) => {
                 log!("manual cleanup skipped {}: {error:#}", workspace.name);
-                report.retained.push(Retained {
-                    workspace: workspace.name,
-                    error: format!("{error:#}"),
-                });
+                report.retain(workspace.name, &error);
                 continue;
             }
         };
@@ -646,10 +647,49 @@ async fn remove_on_request(
                     .record_retained(&workspace.id, EventCause::Manual, &error)
                     .await?;
                 log!("manual cleanup retained {}: {error:#}", workspace.name);
-                report.retained.push(Retained {
-                    workspace: workspace.name,
-                    error: format!("{error:#}"),
-                });
+                report.retain(workspace.name, &error);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Remove the selected chats idle or merged cleanup would remove, now.
+async fn remove_chats_on_request(
+    manager: &Manager,
+    report: &mut ManualCleanup,
+    chats: Vec<Chat>,
+    pick: &Pick,
+) -> Result<()> {
+    let named = matches!(pick, Pick::Only(_));
+    for chat in chats {
+        if !pick.covers(&chat.name, &chat.id) {
+            continue;
+        }
+        let snapshot = match manager.requested_chat_candidacy(&chat).await {
+            Ok(Ok(snapshot)) => snapshot,
+            Ok(Err(reason)) => {
+                report.keep(chat.name, reason, named);
+                continue;
+            }
+            Err(error) => {
+                log!("manual cleanup skipped chat {}: {error:#}", chat.name);
+                report.retain(chat.name, &error);
+                continue;
+            }
+        };
+        if report.dry_run {
+            report.removed.push(chat.name);
+            continue;
+        }
+        match (manager.remove_unused_chat(&chat, snapshot, EventCause::Manual)).await {
+            Ok(_) => {
+                log!("manual cleanup removed chat {}", chat.name);
+                report.removed.push(chat.name);
+            }
+            Err(error) => {
+                log!("manual cleanup retained chat {}: {error:#}", chat.name);
+                report.retain(chat.name, &error);
             }
         }
     }

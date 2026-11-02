@@ -24,7 +24,7 @@ pub enum Pick {
     #[default]
     None,
     All,
-    /// Workspaces, or the repositories whose caches to empty, by name or ID.
+    /// Spaces, or the repositories whose caches to empty, by name or ID.
     Only(Vec<String>),
 }
 
@@ -32,23 +32,23 @@ pub enum Pick {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Selection {
     #[serde(default)]
-    pub workspaces: Pick,
+    pub spaces: Pick,
     #[serde(default)]
     pub caches: Pick,
-    /// Only this repository's workspaces and caches, by any repository selector.
+    /// Only this repository's spaces and caches, by any repository selector.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Retained {
-    pub workspace: String,
+    pub space: String,
     pub error: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Kept {
-    pub workspace: String,
+    pub space: String,
     pub reason: CleanupReason,
 }
 

@@ -598,6 +598,8 @@ pub enum CleanupReason {
     PushRequest,
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
+    /// A chat's agent runs.
+    AgentRunning,
     PrWatch,
     /// An ancestor finished its assignment with cleanup, which takes this
     /// workspace too.
@@ -640,6 +642,7 @@ impl std::fmt::Display for CleanupReason {
             Self::PrProposal => f.write_str("PR proposal waiting for approval"),
             Self::PushRequest => f.write_str("Push waiting for approval"),
             Self::QueuedAgent => f.write_str("Queued agent"),
+            Self::AgentRunning => f.write_str("Agent running"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
             Self::AncestorCompleted { workspace } => {
                 write!(f, "{workspace} done; completion cleanup pending")

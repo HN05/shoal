@@ -436,10 +436,10 @@ Automatic cleanup removes idle, clean, pushed or landed workspaces after 10 minu
 merged workspaces after 4 idle hours whether or not their agent ran `shoal done`,
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
 A chat whose agent stopped goes by the same rules.
-`shoal cleanup` lists what Shoal left behind: those workspaces, kept branches, and
-shared caches nothing is using, with why it keeps the other workspaces. On a terminal
+`shoal cleanup` lists what Shoal left behind: those spaces, kept branches, and
+shared caches nothing is using, with why it keeps the other spaces. On a terminal
 it opens a picker, where Tab selects several, and removes what you pick.
-`shoal cleanup workspaces`, `branches` or `caches` acts on one kind, and `shoal status`
+`shoal cleanup spaces`, `branches` or `caches` acts on one kind, and `shoal status`
 shows why it keeps one workspace.
 Every workspace removal can be undone for 30 days: `shoal work restore` picks a removed workspace,
 and `shoal work restore <workspace>` opens one again with its uncommitted files and links;

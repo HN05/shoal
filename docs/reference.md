@@ -4135,22 +4135,22 @@ idle_minutes = 240
 
 ```sh
 shoal cleanup                        # Pick what to remove; Tab selects several
-shoal cleanup --dry-run              # List what is left behind, and why other workspaces stay
-shoal cleanup workspaces             # Remove every idle and merged workspace now
-shoal cleanup workspaces fix-login   # Remove one, or report why it stays
+shoal cleanup --dry-run              # List what is left behind, and why other spaces stay
+shoal cleanup spaces                 # Remove every idle and merged space now
+shoal cleanup spaces fix-login       # Remove one, or report why it stays
 shoal cleanup caches --repo project  # Empty one repository's shared caches
 ```
 
 `shoal cleanup` lists what Shoal left behind: in `removed`, the idle and merged
-workspaces it would remove now, without their idle periods and also where those
+spaces it would remove now, without their idle periods and also where those
 rules are disabled; in `branches`, [kept branches](#kept-branches); and in `caches`,
 [shared caches](#shared-caches), each repository's with the `outcome` `emptied`,
-`busy` or `failed`. `kept` gives the reason `status` gives for keeping each other
-workspace. Without a terminal, or with `--dry-run`, it stops there. On a terminal,
-a picker offers the workspaces, kept branches and caches nothing is using, with
+`busy` or `failed`. `kept` gives, by `space`, the reason `status` gives for keeping each other
+space, `agent_running` for a running chat. Without a terminal, or with `--dry-run`, it stops there. On a terminal,
+a picker offers the spaces, kept branches and caches nothing is using, with
 nothing selected; Tab selects several, and deleting kept branches asks first unless
-`--yes` is given. `shoal cleanup workspaces`, `branches` and `caches` act on one
-kind alone, where only `branches` without names or `--all` opens a picker; named workspaces that stay are reported in `kept`, and
+`--yes` is given. `shoal cleanup spaces`, `branches` and `caches` act on one
+kind alone, where only `branches` without names or `--all` opens a picker; named spaces that stay are reported in `kept`, and
 any it retained in `retained`. `--repo` limits each kind to one repository.
 Removals record the `manual` event cause. Workspace processes cannot run it.
 

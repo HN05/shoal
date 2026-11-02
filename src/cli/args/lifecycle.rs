@@ -53,7 +53,7 @@ pub enum LifecycleCommand {
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },
-    /// Remove what Shoal left behind: workspaces cleanup would remove, kept branches and caches.
+    /// Remove what Shoal left behind: spaces cleanup would remove, kept branches and caches.
     ///
     /// Without a kind, lists them; on a terminal, a picker offers them, where Tab selects several
     /// and nothing starts selected.
@@ -73,13 +73,13 @@ pub enum LifecycleCommand {
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum CleanupKind {
-    /// Remove the workspaces idle or merged cleanup would remove, without waiting for their idle
-    /// periods.
+    /// Remove the spaces, workspaces and chats, idle or merged cleanup would remove, without
+    /// waiting for their idle periods.
     ///
-    /// Applies where those rules are disabled; held, busy, unpushed or unmerged dirty workspaces are
-    /// kept, and the unsaved files of merged ones go into their checkpoints. Names limit it to those
-    /// workspaces.
-    Workspaces { names: Vec<String> },
+    /// Applies where those rules are disabled; held, busy, unpushed or unmerged dirty workspaces and
+    /// running chats are kept, and the unsaved files of merged ones go into their checkpoints. Names
+    /// limit it to those spaces.
+    Spaces { names: Vec<String> },
     /// Delete branches Shoal kept when it removed their workspaces, with the commits only they have.
     ///
     /// Removal keeps a branch only while some of its commits are on no remote and not on the
@@ -101,7 +101,7 @@ pub struct CleanupArgs {
     /// List what would be removed without removing anything.
     #[arg(long, global = true)]
     pub dry_run: bool,
-    /// Only this repository's workspaces, kept branches and caches, by name or ID.
+    /// Only this repository's spaces, kept branches and caches, by name or ID.
     #[arg(long, global = true)]
     pub repo: Option<String>,
     /// Delete kept branches without asking.

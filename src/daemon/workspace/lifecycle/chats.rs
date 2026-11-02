@@ -12,7 +12,7 @@ use crate::{
         events::EventCause,
         workspace::Manager,
     },
-    model::{Chat, Completion},
+    model::{Chat, CleanupReason, Completion},
     removal::{InspectionPolicy, UnsavedWork},
     state::ChatRestore,
 };
@@ -47,34 +47,73 @@ impl Manager {
     }
 
     /// What idle or merged cleanup, by `rule`, must see unchanged before
-    /// removing `chat`, or `None` when the rule does not take it: its agent
-    /// stopped and waits for no restore, nothing keeps it, and for idle
-    /// cleanup, it has no assignment state.
+    /// removing `chat`, or `None` when the rule does not take it.
     pub(crate) async fn chat_cleanup_snapshot(
         &self,
         chat: &Chat,
         rule: Rule,
     ) -> Result<Option<Snapshot>> {
-        if chat.restore != Some(ChatRestore::Resume) || self.keep_reason(&chat.id).await?.is_some()
+        Ok(self.chat_cleanup_candidacy(chat, rule).await?.ok())
+    }
+
+    /// [`Self::chat_cleanup_snapshot`], or why `rule` does not take `chat`:
+    /// its agent runs or waits to, something keeps it, or for idle cleanup,
+    /// it has assignment state.
+    pub(crate) async fn chat_cleanup_candidacy(
+        &self,
+        chat: &Chat,
+        rule: Rule,
+    ) -> Result<Result<Snapshot, CleanupReason>> {
+        match chat.restore {
+            None => return Ok(Err(CleanupReason::AgentRunning)),
+            Some(ChatRestore::Automatic) => return Ok(Err(CleanupReason::QueuedAgent)),
+            Some(ChatRestore::Resume) => {}
+        }
+        if let Some(retention) = self.keep_reason(&chat.id).await? {
+            return Ok(Err(retention.into()));
+        }
+        if rule == Rule::Idle
+            && let Some(reason) = self.chat_assignment_reason(chat).await?
         {
-            return Ok(None);
+            return Ok(Err(reason));
         }
-        if rule == Rule::Idle && self.chat_assigned(chat).await? {
-            return Ok(None);
-        }
-        Ok(Some(Snapshot {
+        Ok(Ok(Snapshot {
             rule,
             signals: crate::daemon::cleanup::signals("", self.usage.activity(&chat.id)),
             tree: 0,
         }))
     }
 
-    /// Whether `chat` has assignment state, whose own cleanup decides its
-    /// removal: a completion, or a PR or issue it watches.
-    async fn chat_assigned(&self, chat: &Chat) -> Result<bool> {
-        Ok(chat.completion.is_some()
-            || self.pr_registration(&chat.id).await?.is_some()
-            || self.issue_registration(&chat.id).await?.is_some())
+    /// The assignment state of `chat` whose own cleanup decides its removal:
+    /// a completion, or a PR or issue it watches.
+    async fn chat_assignment_reason(&self, chat: &Chat) -> Result<Option<CleanupReason>> {
+        Ok(if self.pr_registration(&chat.id).await?.is_some() {
+            Some(CleanupReason::PrWatch)
+        } else if let Some(completion) = &chat.completion {
+            Some(CleanupReason::Completed {
+                integrated: completion.integrated,
+            })
+        } else if self.issue_registration(&chat.id).await?.is_some() {
+            Some(CleanupReason::Issue)
+        } else {
+            None
+        })
+    }
+
+    /// The snapshot of `chat` as a candidate of idle cleanup, else of merged
+    /// cleanup, which a request to clean up takes without waiting, or why
+    /// idle cleanup keeps it.
+    pub(crate) async fn requested_chat_candidacy(
+        &self,
+        chat: &Chat,
+    ) -> Result<Result<Snapshot, CleanupReason>> {
+        match self.chat_cleanup_candidacy(chat, Rule::Idle).await? {
+            Ok(snapshot) => Ok(Ok(snapshot)),
+            Err(reason) => Ok(self
+                .chat_cleanup_snapshot(chat, Rule::Merged)
+                .await?
+                .ok_or(reason)),
+        }
     }
 
     /// Remove `chat`, which idle or merged cleanup found unchanged as

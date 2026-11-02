@@ -635,7 +635,7 @@ fn cleanup_commands_are_administrative() {
     for args in [
         vec!["shoal", "cleanup"],
         vec!["shoal", "cleanup", "--dry-run"],
-        vec!["shoal", "cleanup", "workspaces", "--repo", "project"],
+        vec!["shoal", "cleanup", "spaces", "--repo", "project"],
         vec!["shoal", "cleanup", "branches", "--all", "--yes"],
         vec!["shoal", "cleanup", "caches", "--dry-run"],
     ] {

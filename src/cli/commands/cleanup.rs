@@ -1,5 +1,5 @@
-//! Removing what Shoal left behind: the workspaces idle or merged cleanup
-//! would remove, branches removal kept, and shared caches.
+//! Removing what Shoal left behind: the spaces idle or merged cleanup would
+//! remove, branches removal kept, and shared caches.
 use anyhow::{Result, ensure};
 
 use crate::{
@@ -28,13 +28,13 @@ pub(super) async fn run(
 ) -> Result<i32> {
     let report = match kind {
         None => everything(ctx, &args).await?,
-        Some(CleanupKind::Workspaces { names }) => {
-            let workspaces = if names.is_empty() {
+        Some(CleanupKind::Spaces { names }) => {
+            let spaces = if names.is_empty() {
                 Pick::All
             } else {
                 Pick::Only(names)
             };
-            let selection = selection(&args, workspaces, Pick::None);
+            let selection = selection(&args, spaces, Pick::None);
             Report {
                 cleanup: clean(ctx, args.dry_run, selection).await?,
                 branches: Vec::new(),
@@ -54,9 +54,9 @@ pub(super) async fn run(
     show(ctx, &report)
 }
 
-fn selection(args: &CleanupArgs, workspaces: Pick, caches: Pick) -> Selection {
+fn selection(args: &CleanupArgs, spaces: Pick, caches: Pick) -> Selection {
     Selection {
-        workspaces,
+        spaces,
         caches,
         repository: args.repo.clone(),
     }
@@ -84,14 +84,10 @@ async fn everything(ctx: &Context, args: &CleanupArgs) -> Result<Report> {
     ensure!(!ids.is_empty(), "nothing selected");
     let picked = Picked::resolve(&ids, listing.branches);
     branches::confirm(ctx, &picked.branches, args.yes)?;
-    let cleanup = if picked.workspaces.is_empty() && picked.caches.is_empty() {
+    let cleanup = if picked.spaces.is_empty() && picked.caches.is_empty() {
         ManualCleanup::default()
     } else {
-        let selection = selection(
-            args,
-            Pick::Only(picked.workspaces),
-            Pick::Only(picked.caches),
-        );
+        let selection = selection(args, Pick::Only(picked.spaces), Pick::Only(picked.caches));
         clean(ctx, false, selection).await?
     };
     Ok(Report {
@@ -100,10 +96,10 @@ async fn everything(ctx: &Context, args: &CleanupArgs) -> Result<Report> {
     })
 }
 
-/// What the user picked: workspace names, the IDs of repositories whose
-/// caches to empty, and kept branches.
+/// What the user picked: space names, the IDs of repositories whose caches
+/// to empty, and kept branches.
 struct Picked {
-    workspaces: Vec<String>,
+    spaces: Vec<String>,
     caches: Vec<String>,
     branches: Vec<KeptBranch>,
 }
@@ -120,7 +116,7 @@ impl Picked {
         };
         let branches = chosen(BRANCH);
         Self {
-            workspaces: chosen(WORKSPACE),
+            spaces: chosen(SPACE),
             caches: chosen(CACHES),
             branches: kept
                 .into_iter()
@@ -159,19 +155,19 @@ async fn delete_branches(
     })
 }
 
-const WORKSPACE: &str = "workspace:";
+const SPACE: &str = "space:";
 const BRANCH: &str = "branch:";
 const CACHES: &str = "caches:";
 
-/// The picker's rows: the workspaces to remove, kept branches, and caches
+/// The picker's rows: the spaces to remove, kept branches, and caches
 /// nothing is using, each labelled with its kind. Caches go by repository ID,
 /// and a repository name another listed one shares carries its ID too.
 fn choices(listing: &Report) -> Vec<(String, String)> {
-    let workspaces = listing
+    let spaces = listing
         .cleanup
         .removed
         .iter()
-        .map(|name| (format!("{WORKSPACE}{name}"), format!("workspace  {name}")));
+        .map(|name| (format!("{SPACE}{name}"), format!("space      {name}")));
     let branches = branches::lines(&listing.branches)
         .into_iter()
         .enumerate()
@@ -197,7 +193,7 @@ fn choices(listing: &Report) -> Vec<(String, String)> {
             format!("caches     {label}  {}", caches.join(", ")),
         ))
     });
-    workspaces.chain(branches).chain(caches).collect()
+    spaces.chain(branches).chain(caches).collect()
 }
 
 fn show(ctx: &Context, report: &Report) -> Result<i32> {
@@ -219,7 +215,7 @@ fn show(ctx: &Context, report: &Report) -> Result<i32> {
                 "{}",
                 palette.paint(
                     Style::Error,
-                    format!("Retained {}: {}", retained.workspace, retained.error)
+                    format!("Retained {}: {}", retained.space, retained.error)
                 )
             );
         }
@@ -258,7 +254,7 @@ fn show_listing(report: &Report) {
             .collect()
     };
     let groups = [
-        ("Workspaces to remove", cleanup.removed.clone()),
+        ("Spaces to remove", cleanup.removed.clone()),
         ("Kept branches", branches::lines(&report.branches)),
         ("Caches to empty", caches(false)),
         ("Caches in use", caches(true)),
@@ -322,19 +318,19 @@ fn show_outcome(report: &Report, json: bool) {
     }
 }
 
-/// The workspaces cleanup kept, with why.
+/// The spaces cleanup kept, with why.
 fn show_kept(cleanup: &ManualCleanup) {
     if cleanup.kept.is_empty() {
         return;
     }
-    outln!("Kept workspaces:");
+    outln!("Kept spaces:");
     let width = cleanup
         .kept
         .iter()
-        .map(|kept| kept.workspace.chars().count())
+        .map(|kept| kept.space.chars().count())
         .max()
         .unwrap_or(0);
     for kept in &cleanup.kept {
-        outln!("  {:width$}  {}", kept.workspace, kept.reason);
+        outln!("  {:width$}  {}", kept.space, kept.reason);
     }
 }

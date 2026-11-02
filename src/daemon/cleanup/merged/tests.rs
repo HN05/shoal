@@ -162,7 +162,7 @@ async fn saved_work_keeps_idle_and_unmerged_workspaces_only() {
             &f.manager,
             true,
             &super::super::Selection {
-                workspaces: super::super::Pick::All,
+                spaces: super::super::Pick::All,
                 ..Default::default()
             },
         )
