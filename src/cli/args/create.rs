@@ -118,7 +118,8 @@ pub enum CreateCommand {
     },
 }
 
-/// What a new workspace leaves out.
+// What a new workspace leaves out. A doc comment here would replace the
+// description of every command that flattens it.
 #[derive(Debug, Default, Args)]
 pub struct CreationArgs {
     /// Skip setup.command, hooks.pre_setup, setup.copy_ignored, hooks.post_setup
