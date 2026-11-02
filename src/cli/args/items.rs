@@ -31,13 +31,9 @@ pub enum ItemsCommand {
         #[arg(long, value_parser = clap::value_parser!(u64).range(1..=3600))]
         timeout: Option<u64>,
         /// The workspace the wait of an earlier release names when an upgrade
-        /// hands it over to this one.
-        #[arg(
-            long = "workspace",
-            hide = true,
-            conflicts_with = "space",
-            requires = "resume"
-        )]
+        /// hands it over to this one: an item watch with `--resume`, a
+        /// review watch with its arguments unchanged.
+        #[arg(long = "workspace", hide = true, conflicts_with = "space")]
         handed_over: Option<String>,
         /// Continue a wait across a daemon restart, as the installed release
         /// does after an upgrade restarted the daemon.

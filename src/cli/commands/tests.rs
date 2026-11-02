@@ -197,7 +197,31 @@ fn a_resumed_watch_names_its_space_or_an_earlier_releases_workspace() {
         parse(&["--resume", "--workspace", "work"]).unwrap(),
         (None, Some("work".to_owned()))
     );
-    assert!(parse(&["--workspace", "work"]).is_err());
+    assert!(parse(&["--resume", "--workspace", "work", "--space", "other"]).is_err());
+}
+
+#[test]
+fn an_earlier_releases_review_watch_hands_over_its_workspace_unchanged() {
+    let cli = <Cli as clap::Parser>::try_parse_from([
+        "shoal",
+        "watch",
+        "review",
+        "7",
+        "--workspace",
+        "work",
+    ])
+    .unwrap();
+    let Some(Command::Items(ItemsCommand::Watch {
+        items,
+        handed_over,
+        resume,
+        ..
+    })) = cli.command
+    else {
+        panic!("expected watch command");
+    };
+    assert!(items.selects_review() && !resume);
+    assert_eq!(handed_over.as_deref(), Some("work"));
 }
 
 #[test]

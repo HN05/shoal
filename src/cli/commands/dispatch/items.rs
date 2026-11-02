@@ -12,12 +12,19 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ItemsCommand) -
         ItemsCommand::Unlink { items } => links::unlink(&ctx, items).await,
         ItemsCommand::View(args) if args.items.selects_review() => view_review(&ctx, args).await,
         ItemsCommand::View(args) => view::show(&ctx, args).await,
-        ItemsCommand::Watch { items, timeout, .. } if items.selects_review() => {
+        ItemsCommand::Watch {
+            items,
+            timeout,
+            handed_over,
+            ..
+        } if items.selects_review() => {
             ensure!(
                 timeout.is_none(),
                 "watch review waits until the review ends; --timeout bounds PR and issue watches"
             );
-            review::show::watch(&ctx, items.review_id()?, items.space).await
+            // An earlier release reruns a review watch unchanged.
+            let space = items.space.clone().or(handed_over);
+            review::show::watch(&ctx, items.review_id()?, space).await
         }
         ItemsCommand::Watch {
             mut items,
@@ -25,6 +32,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ItemsCommand) -
             handed_over,
             resume,
         } => {
+            ensure!(
+                handed_over.is_none() || resume,
+                "watch takes the space to watch with --space"
+            );
             items.space = items.space.or(handed_over);
             links::watch(&ctx, items, timeout, resume).await
         }
@@ -52,7 +63,7 @@ async fn view_review(ctx: &Context, args: ViewArgs) -> Result<i32> {
             && args.job_id.is_none()
             && !args.web
             && args.repo.name.is_none(),
-        "view review takes a review ID and --workspace only"
+        "view review takes a review ID and --space only"
     );
     review::show::view(ctx, args.items.review_id()?, args.items.space).await
 }
