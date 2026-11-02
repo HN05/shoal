@@ -612,6 +612,9 @@ impl Manager {
             true => Some(self.gates.lock_prs([workspace_id]).await),
             false => None,
         };
+        if let Some(current) = self.approval_by_key(&selected.key).await? {
+            self.ensure_not_pushing(&current)?;
+        }
         let _announcement = self.gates.lock_announcements().await;
         let (request, retracted) = self.record_withdrawal(selected).await?;
         if request.target.is_proposal() {

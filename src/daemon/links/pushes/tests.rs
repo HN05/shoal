@@ -159,10 +159,31 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
     let running = approve().await.unwrap();
     assert_eq!(running.status, DecisionStatus::Pending);
     assert!(running.operation.is_some());
-    let error = approve().await.unwrap_err();
-    assert!(
-        format!("{error:#}").contains("pushing already"),
-        "{error:#}"
+    // The push lands whatever happens to the request, so nothing else
+    // decides, withdraws or replaces it while the push runs.
+    let pushing = |error: anyhow::Error| {
+        assert!(format!("{error:#}").contains("is pushing"), "{error:#}");
+    };
+    pushing(approve().await.unwrap_err());
+    pushing(
+        manager
+            .decide_approval(request.id, false, None, Default::default(), None)
+            .await
+            .unwrap_err(),
+    );
+    pushing(
+        manager
+            .withdraw_approval(&workspace.id, request.id)
+            .await
+            .unwrap_err(),
+    );
+    std::fs::write(workspace.path.join("tracked"), "changed\n").unwrap();
+    commit(&workspace.path, "tracked");
+    pushing(
+        manager
+            .request_push(&workspace.id, branch(&workspace).await, Some(&caller))
+            .await
+            .unwrap_err(),
     );
 
     // A failed push leaves the request to approve again.

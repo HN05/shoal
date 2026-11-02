@@ -232,6 +232,7 @@ impl Manager {
             .lock_prs(changed.chain([&request.workspace_id]))
             .await;
         let request = self.pending_proposal(request).await?;
+        self.ensure_not_pushing(&request)?;
         let workspace = self.find_workspace(&request.workspace_id).await?;
         // A PR an earlier approval posted was pushed already.
         if approve && request.pending_push().is_some() && request.url.is_none() {

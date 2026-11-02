@@ -78,10 +78,11 @@ impl Manager {
         push: PushSpecification,
         caller: Option<&Caller>,
     ) -> Result<PushOutcome> {
-        let workspace = self.workspace(selector).await?;
+        let (workspace, _gate) = self.lock_pr_gate(selector).await?;
         if !self.holds_pushes(&workspace, caller).await? {
             return Ok(PushOutcome::Direct);
         }
+        self.ensure_workspace_not_pushing(&workspace).await?;
         anyhow::ensure!(
             push.destination.starts_with("refs/"),
             "a push names the full ref it updates, not {}",
@@ -95,6 +96,32 @@ impl Manager {
         Ok(PushOutcome::Proposed(
             self.propose_push(&workspace, push).await?,
         ))
+    }
+
+    /// Refuse to decide, withdraw or replace `request` while the push its
+    /// approval started runs: the push lands whatever happens to the
+    /// request, and its end decides it.
+    pub(crate) fn ensure_not_pushing(&self, request: &ApprovalRequest) -> Result<()> {
+        if let Some(operation) = &request.operation
+            && self.operation_running(operation)
+        {
+            bail!(
+                "approval request {} is pushing; wait for the push to end",
+                request.id
+            );
+        }
+        Ok(())
+    }
+
+    /// Refuse a new proposal from the workspace, which could replace a
+    /// request whose push runs. The caller holds the workspace's PR gate,
+    /// under which approved pushes start.
+    pub(super) async fn ensure_workspace_not_pushing(&self, workspace: &Workspace) -> Result<()> {
+        let requests = self.approval_requests(Some(&workspace.id)).await?;
+        requests
+            .iter()
+            .filter(|request| request.status == DecisionStatus::Pending)
+            .try_for_each(|request| self.ensure_not_pushing(request))
     }
 
     /// Record `push` for the user's approval.
@@ -122,14 +149,6 @@ impl Manager {
         env: Option<BTreeMap<String, String>>,
     ) -> Result<ApprovalRequest> {
         let workspace = workspace.context("the workspace that asked for the push is gone")?;
-        if let Some(operation) = &request.operation
-            && self.operation_running(operation)
-        {
-            bail!(
-                "approval request {} is pushing already; the push decides it",
-                request.id
-            );
-        }
         self.verify_worktree(workspace).await?;
         if !push_current(workspace, &request).await? {
             return Err(self.outdate_push(&request).await);

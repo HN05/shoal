@@ -163,8 +163,8 @@ instead of the PR delivery guidance below.
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
   requires preserved commits without a PR registration, honors existing merge
   checks, and rechecks its recorded HEAD; a completion without cleanup blocks idle
-  and PR cleanup. Holds, open questions, a pending PR proposal and queued agent
-  launches block every unattended removal, rechecked after the removal reserves the workspace; a split needs a ready
+  and PR cleanup. Holds, open questions, pending PR proposals and push requests, and queued
+  agent launches block every unattended removal, rechecked after the removal reserves the workspace; a split needs a ready
   parent, checked when the child is recorded; `done` closes the workspace's open
   questions for good. Children never keep their parent: every removal kind first
   removes the subtree, deepest first, through the shared path whatever keeps it,
@@ -172,11 +172,15 @@ instead of the PR delivery guidance below.
   removes the workspaces below it that nothing of their own keeps, whatever
   their work, after the grace period. A scoped land
   is an approval request bound to the branch HEAD unless `[permissions] land`
-  is `"direct"`; approval never skips a landing check and lands only the approved commit.
+  and `[permissions] push` are both `"direct"`; approval never skips a landing check and lands only the approved commit.
   Under `[permissions] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
   `pr open` records a proposal instead of opening; approval opens it as the agent
   account through the normal open path, a PR only at its recorded commit, and an
   issue proposal belongs to the repository and outlives its workspace.
+  Under `[permissions] push = "propose"`, a scoped push, through `pr open` or
+  plain `git push`, records a request bound to the ref and commit instead;
+  approval pushes exactly that, with no agent present, and a branch that moved
+  outdates it. Nothing decides, withdraws or replaces a request while its push runs.
   `[permissions] issue_other_repositories` governs a scoped issue in another repository the same
   way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. This is cooperative,
   not a security boundary, so judge it as such.
@@ -442,7 +446,8 @@ configured command for another agent, plus proven child
 - Shoal runs no forge CLI, reads no CLI's saved login, and never switches the
   user's login. Forge changes for a workspace use the agent account except
   merging, which uses the user's. The agent Git profile
-  reaches only a tracked agent's environment and the push of `shoal pr open`;
+  reaches only a tracked agent's environment, the push of `shoal pr open` and
+  approved pushes;
   it never writes Git config.
 - Git profiles apply only to newly created worktrees, before setup, using
   per-worktree config; other worktrees keep their settings.

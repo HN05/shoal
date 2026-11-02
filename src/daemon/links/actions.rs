@@ -367,6 +367,7 @@ impl Manager {
                 self.set_pr_gated(&workspace.id, watch, super::pr::WatchCheck::Known)
                     .await
                     .with_context(|| format!("{url} is open, but linking it failed"))?;
+                self.ensure_workspace_not_pushing(&workspace).await?;
                 let proposed = self.propose_push(&workspace, push).await?;
                 return Ok(OpenOutcome::Proposed(proposed));
             }
@@ -390,6 +391,7 @@ impl Manager {
                     .filter(|_| push.is_some() || settings.permissions.pr_open == Opening::Propose)
                 {
                     forge.check_uploads(&account, &pull.attachments).await?;
+                    self.ensure_workspace_not_pushing(&workspace).await?;
                     let proposed = self
                         .propose_pull(&workspace, pull, head, push, proposer)
                         .await?;

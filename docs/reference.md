@@ -773,7 +773,7 @@ of the daemon's automatic cleanup fails in the workspace, status says so in
 default branch last [synced](#repositories) and why the syncs since then failed,
 in `sync` (`synced_at`, `failing_since` and `error`). Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
-open questions, a pending PR proposal, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
+open questions, a pending PR proposal or push request, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. `--json`
 returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`. Workspace records from `work --json` and `status --json` include
@@ -2162,7 +2162,7 @@ refused; `export --all` exports each.
 While a parent's `done` with cleanup stands at its HEAD, each workspace below it
 has `cleanup_reason` `ancestor_completed` and goes after the grace period,
 whatever its own work, with the cause `parent_completion`; a hold, open
-question, pending PR proposal or queued agent launch of its own keeps it, as do
+question, pending PR proposal or push request, or queued agent launch of its own keeps it, as do
 workspaces still below it until they go. `undone`, a commit after `done`, or a
 `done` without cleanup leaves the children. A child's own `done` follows the
 usual rules. `work` lists children indented below their parent;
@@ -3043,7 +3043,7 @@ When cleanup removes the worktree, shell integration returns to the repository's
 
 Holds are caller-named claims of workspace use, independent of assignment completion.
 They persist across command exits and daemon restarts and block automatic removal
-while the worktree exists, as open questions, pending PR proposals and queued agent launches do; releasing the last hold lets cleanup recheck its usual
+while the worktree exists, as open questions, pending PR proposals and push requests, and queued agent launches do; releasing the last hold lets cleanup recheck its usual
 conditions. Idle cleanup restarts its
 timer after release. Removal releases holds, a parent's removal those below it too;
 a hold never keeps the workspace's parent.
@@ -3504,7 +3504,9 @@ told to push again. `approvals --approve` follows the push and returns once it
 has decided the request. When it pushed the workspace branch to a configured
 remote, the branch gets that upstream unless it has one. A PR proposal then opens
 its PR as when approving any proposal. A failed push leaves the request pending
-and notifies you; approve it again to retry. The agent hears the outcome as an
+and notifies you; approve it again to retry. While the push runs, denying or
+withdrawing the request, and new push requests and PR proposals from the
+workspace, are refused until it ends. The agent hears the outcome as an
 [agent message](#agent-messages). With `push = "propose"`, a scoped
 `shoal land` also needs your approval, since it may push the default branch, and
 `shoal pr revert` through the forge is refused, since the forge pushes its
@@ -3988,7 +3990,7 @@ HEAD and commands reset the timer; file changes, including ignored files, restar
 it when it expires.
 Running/unknown commands, saved stopped work, directory users (including shells),
 dirty/unpushed work,
-simulator leases, permits, holds, open [questions](#questions), pending PR proposals and failed checks block cleanup. Pushed means reachable
+simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, and failed checks block cleanup. Pushed means reachable
 from locally known remote branches, merged into the default branch as removal
 decides, or with its changes on the branch the workspace builds on: its base
 workspace's branch, otherwise the local branch it was created from; no fetch.
@@ -4794,7 +4796,7 @@ name preserves the request; changing its settings or reason requires release fir
 Release cancels a pending or denied request even without a lease. Changed effective
 settings cannot reuse a grant. Requests survive restart and failed removal and are
 deleted with the workspace, except proposed issues, which belong to the repository;
-only a pending PR proposal prevents idle cleanup.
+only pending PR proposals and push requests prevent idle cleanup.
 
 ### Shared readers and exclusive writers
 
