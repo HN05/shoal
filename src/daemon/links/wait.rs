@@ -342,11 +342,10 @@ impl Manager {
             .store
             .run(move |db| followed_items(db, &id, None))
             .await?;
-        let branch = watches_branch(&Selection::default()).then_some(workspace.branch);
         let keys = items
             .into_iter()
             .map(|(url, _)| url)
-            .chain(branch)
+            .chain(Some(workspace.branch))
             .collect::<Vec<_>>();
         self.pending_activity(&workspace.id, &keys).await
     }
