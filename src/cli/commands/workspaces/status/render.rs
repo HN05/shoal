@@ -210,14 +210,14 @@ fn render_agent(status: &WorktreeStatus) {
 }
 
 /// The ports, simulators and resources the workspace holds.
-fn render_leases(inspection: &WorktreeStatus, palette: Palette) {
-    outln!("Ports:         {}", inspection.ports.len());
-    for port in &inspection.ports {
+fn render_leases(status: &WorktreeStatus, palette: Palette) {
+    outln!("Ports:         {}", status.ports.len());
+    for port in &status.ports {
         outln!("  {}={} ({})", port.name, port.port, port.env_var);
     }
 
-    outln!("Simulators:    {}", inspection.simulators.len());
-    for simulator in &inspection.simulators {
+    outln!("Simulators:    {}", status.simulators.len());
+    for simulator in &status.simulators {
         outln!(
             "  {}={}  {}  {}  {}",
             simulator.lease_name.as_deref().unwrap_or("default"),
@@ -228,8 +228,8 @@ fn render_leases(inspection: &WorktreeStatus, palette: Palette) {
         );
     }
 
-    outln!("Resources:     {}", inspection.resources.len());
-    for resource in &inspection.resources {
+    outln!("Resources:     {}", status.resources.len());
+    for resource in &status.resources {
         outln!(
             "  {}/{} -> {} [{}]{}",
             resource.pool,
