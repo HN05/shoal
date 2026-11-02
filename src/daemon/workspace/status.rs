@@ -1,21 +1,12 @@
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result};
 
 use super::Manager;
 use crate::{
-    daemon::{
-        forge_hosts::ForgeHosts,
-        links::{pr, wait::linked_items},
-        store,
-    },
-    forge::{
-        ForgeRepo, IssueInput,
-        account::Account,
-        items::link::{self, LinkKind},
-    },
+    daemon::{forge_hosts::ForgeHosts, links::pr, store},
+    forge::{ForgeRepo, IssueInput, account::Account, items::link},
     git,
     model::{
-        DiffSummary, Inspection, IssueStatus, Relation, Selected, SelectedItem, Workspace,
-        WorkspaceStatus, WorkspaceTarget,
+        DiffSummary, Inspection, IssueStatus, Selected, SelectedItem, Workspace, WorkspaceStatus,
     },
     repository,
 };
@@ -193,124 +184,6 @@ impl Manager {
         }
         Ok(Some(SelectedItem { url, kind }))
     }
-
-    /// Workspaces that link an issue, PR or CI run, or hold a lease on a resource,
-    /// optionally only among the one a scoped caller owns.
-    pub async fn find_workspaces(
-        &self,
-        target: &WorkspaceTarget,
-        within: Option<Vec<String>>,
-    ) -> Result<Vec<Workspace>> {
-        let ids = match target {
-            WorkspaceTarget::Item { kind, input } => {
-                self.linking_workspaces(*kind, input, within).await?
-            }
-            WorkspaceTarget::Resource { name } => self.holding_workspaces(name, within).await?,
-        };
-        let mut workspaces = self.list_workspaces().await?;
-        workspaces.retain(|workspace| ids.contains(&workspace.id));
-        Ok(workspaces)
-    }
-
-    async fn linking_workspaces(
-        &self,
-        kind: LinkKind,
-        input: &str,
-        within: Option<Vec<String>>,
-    ) -> Result<Vec<String>> {
-        let label = kind.noun();
-        let wanted = match IssueInput::parse(input) {
-            IssueInput::Url => Some(link::item(kind, input)?),
-            IssueInput::Number => None,
-            IssueInput::Invalid => bail!("{label} must be a number or URL"),
-        };
-        let number = match &wanted {
-            Some((_, number)) => *number,
-            None => input
-                .parse::<u64>()
-                .ok()
-                .filter(|number| *number > 0)
-                .with_context(|| format!("invalid {label} number"))?,
-        };
-        let links = self
-            .store
-            .run(move |db| {
-                let ids = db
-                    .prepare("SELECT id FROM workspaces")?
-                    .query_map([], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?;
-                let mut links = Vec::new();
-                for id in ids.into_iter().filter(|id| within_ids(&within, id)) {
-                    // Only an issue or PR can be assigned.
-                    if let Some(kind) = kind.item() {
-                        for (url, _) in linked_items(db, &id, Some(kind))? {
-                            links.push((id.clone(), url));
-                        }
-                    }
-                    for relation in [Relation::Opened, Relation::Related] {
-                        for item in store::recorded_items(db, &id, relation)? {
-                            if item.kind == kind {
-                                links.push((id.clone(), item.url));
-                            }
-                        }
-                    }
-                }
-                Ok(links)
-            })
-            .await?;
-        let mut matches: Vec<(String, ForgeRepo)> = Vec::new();
-        for (id, url) in links {
-            let Ok((repository, linked)) = link::item(kind, &url) else {
-                continue;
-            };
-            let found = linked == number
-                && wanted
-                    .as_ref()
-                    .is_none_or(|(wanted, _)| *wanted == repository);
-            if found && !matches.iter().any(|(matched, _)| *matched == id) {
-                matches.push((id, repository));
-            }
-        }
-        ensure!(!matches.is_empty(), "no workspace links {label} {input}");
-        ensure!(
-            matches
-                .iter()
-                .all(|(_, repository)| *repository == matches[0].1),
-            "{label} {input} is linked in several repositories; pass its URL"
-        );
-        Ok(matches.into_iter().map(|(id, _)| id).collect())
-    }
-
-    async fn holding_workspaces(
-        &self,
-        name: &str,
-        within: Option<Vec<String>>,
-    ) -> Result<Vec<String>> {
-        let name = name.to_owned();
-        let label = name.clone();
-        let mut ids = self
-            .store
-            .run(move |db| {
-                Ok(db
-                    .prepare(
-                        "SELECT DISTINCT workspace_id FROM resource_leases
-                         WHERE pool=?1 OR resource=?1",
-                    )?
-                    .query_map([name], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?)
-            })
-            .await?;
-        ids.retain(|id| within_ids(&within, id));
-        ensure!(!ids.is_empty(), "no workspace holds resource {label}");
-        Ok(ids)
-    }
-}
-
-/// Whether a lookup confined to the workspaces `within`, or to none, covers `id`.
-fn within_ids(within: &Option<Vec<String>>, id: &str) -> bool {
-    within
-        .as_ref()
-        .is_none_or(|within| within.iter().any(|within| within == id))
 }
 
 fn parse_numstat(output: &str) -> Result<DiffSummary> {
