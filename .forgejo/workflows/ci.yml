@@ -164,6 +164,8 @@ jobs:
       # Runner-mounted volume; a plain directory when unmounted.
       CARGO_TARGET_DIR: /ci-target
       DOCS_ONLY: ${{ needs.gate.outputs.docs_only }}
+      # Empty outside PRs.
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
     steps:
       - name: Checkout
         run: |
@@ -172,6 +174,12 @@ jobs:
           git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
             fetch -q --depth 1 origin "${{ github.sha }}"
           git checkout -q FETCH_HEAD
+          # A PR's base tree decides whether the musl test runs (see below).
+          # Without it the test runs.
+          if [ -n "$PR_BASE" ]; then
+            git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
+              fetch -q --depth 1 origin "$PR_BASE" || echo "base fetch failed; the musl test will run"
+          fi
 
       - name: Toolchain (baked into the image)
         run: rustc --version && cargo clippy --version && wt --version
@@ -210,9 +218,18 @@ jobs:
           done
           cargo test --locked
           # Exercise the libc used by distributed Linux binaries too: GNU-only
-          # tests cannot catch musl's unsupported Metadata::created().
-          musl_target="$(rustc -vV | sed -n 's/^host: //p' | sed 's/-gnu$/-musl/')"
-          cargo-zigbuild test --locked --target "$musl_target" --lib daemon::workspace::identity
+          # tests cannot catch musl's unsupported Metadata::created(). It
+          # rebuilds the whole crate for 5 tests of the identity module, so a
+          # PR runs it only when it changes that module, the dependencies or
+          # this workflow; pushes to main and dispatches always run it.
+          if [ -z "$PR_BASE" ] || ! git diff --quiet "$PR_BASE" HEAD -- \
+              src/daemon/workspace/identity.rs src/daemon/workspace/identity \
+              Cargo.toml Cargo.lock .forgejo/workflows/ci.yml .forgejo/ci-image; then
+            musl_target="$(rustc -vV | sed -n 's/^host: //p' | sed 's/-gnu$/-musl/')"
+            cargo-zigbuild test --locked --target "$musl_target" --lib daemon::workspace::identity
+          else
+            echo "the PR leaves the identity module and the dependencies alone: skipping the musl test"
+          fi
 
       - name: Cross-build release binaries (manual CI runs)
         if: github.event_name == 'workflow_dispatch'
