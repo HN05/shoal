@@ -29831,3 +29831,36 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     assert!(git(&fixture.repo, &["branch", "--list", "scratch"]).is_empty());
     assert_eq!(fixture.ok(&["work", "restore"]), serde_json::json!([]));
 }
+
+#[test]
+fn branch_only_commands_refuse_a_workspace_at_a_commit() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    let created = fixture.ok(&["split", "--no-branch", "--workspace", "parent"]);
+    let name = created["name"].as_str().unwrap().to_owned();
+    let path = PathBuf::from(created["path"].as_str().unwrap());
+    let run = |args: &[&str]| {
+        fixture
+            .command()
+            .current_dir(&path)
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    for args in [
+        &["pr", "open"][..],
+        &["ready"],
+        &["done"],
+        &["land"],
+        &["branch", "rename", "renamed"],
+    ] {
+        let output = run(args);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{args:?}");
+        assert!(stderr.contains("is at a commit"), "{args:?}: {stderr}");
+    }
+    // What needs no branch works there.
+    let output = run(&["run", "--", "git", "rev-parse", "HEAD"]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(fixture.run(&["diff", &name]).status.success());
+}

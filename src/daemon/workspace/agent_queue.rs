@@ -1092,6 +1092,7 @@ impl Manager {
     /// insertion requires it ready.
     async fn launch_target(&self, workspace: &str, repository_id: &str) -> Result<String> {
         let workspace = self.workspace(workspace).await?;
+        Self::ensure_holds_agents(&workspace)?;
         ensure!(
             workspace.repository_id == repository_id,
             "workspace {} belongs to another repository",

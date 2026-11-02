@@ -93,6 +93,14 @@ pub(super) async fn execute(
         origin,
         caller,
     } = context;
+    if kind == ExecutionKind::Command
+        && agent.is_some()
+        && let Err(error) =
+            async { Manager::ensure_holds_agents(&manager.workspace(&workspace).await?) }.await
+    {
+        let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
+        return protocol::write(&mut stream, &Response::new(request_id, body)).await;
+    }
     let takes_entry = (kind == ExecutionKind::Command && agent.is_some())
         .then_some(queue_entry.as_deref())
         .flatten();

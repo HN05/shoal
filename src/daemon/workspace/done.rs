@@ -78,6 +78,8 @@ impl Manager {
         crate::daemon::workspace_files::check_results(&results)?;
         // Serialize cleanup choices with the PR and completion sweeps.
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
+        // A workspace at a commit holds no assignment of its own.
+        workspace.require_branch("shoal done")?;
         self.verify_worktree(&workspace).await?;
         let head = crate::daemon::links::pr::current_head(&workspace).await?;
         let results = (self.keep_results(&workspace.clone().into(), results, attacher)).await?;

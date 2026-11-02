@@ -2178,7 +2178,11 @@ commit without stacking it. It is named after the branch and its short commit
 a child of the caller's workspace; run by the user it is a child of `--workspace`
 or the current workspace, and outside one a top-level workspace of the current
 repository that the user owns. It does not take a branch name, `--issue`,
-`--agent` or `--fork`. `status` shows `At:` with its commit and what it was made
+`--agent` or `--fork`, and no agent runs there: its owner, a CI job, a reviewer
+or the user runs things in it with `shoal run`, `shoal demo` or a shell.
+Commands that need a branch, `pr open`, `land`, `ready`, `done`, `branch rename`
+and CI runs on its branch, refuse it, saying it is at a commit; diffs, demos,
+ports, simulators, checkpoints, reviews and CI and PR views work as anywhere. `status` shows `At:` with its commit and what it was made
 for where a branch workspace shows `Branch:`; `work --json` and `status --json`
 give `branch` null and `at` with `commit` and `made_for` (`{"ref": name}` or
 `{"pr": number}`). `{branch}` is empty for it in configured commands and agent

@@ -372,6 +372,18 @@ impl Manager {
             .await
     }
 
+    /// Refuse an agent of its own in a workspace at a commit, which holds
+    /// none; one that should work at a commit gets a branch workspace from
+    /// it instead.
+    pub(crate) fn ensure_holds_agents(workspace: &crate::model::Workspace) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            workspace.branch.is_some(),
+            "workspace {} is at a commit and holds no agent of its own; start the agent in a workspace on a branch, such as one split with --base <commit>",
+            workspace.name
+        );
+        Ok(())
+    }
+
     /// `running` is how long the agent has already run, so a reattached
     /// agent keeps its place in the newest-first overload order.
     pub(crate) async fn track_agent(

@@ -86,6 +86,7 @@ impl Manager {
             return self.mark_chat_ready(&space, selection).await;
         }
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
+        workspace.require_branch("shoal ready")?;
         let settings = self.workspace_settings(&workspace).await?;
         let command = HookKind::PostReady
             .command(&settings)
