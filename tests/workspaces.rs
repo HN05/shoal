@@ -2552,14 +2552,14 @@ fn fixture_stops_the_commands_of_a_failed_test() {
     }));
     assert!(result.is_err());
     let (mut wrapper, command) = started.into_inner().unwrap().unwrap();
-    assert!(
-        wrapper.try_wait().unwrap().is_some(),
-        "the wrapper still runs"
-    );
-    assert!(
-        !process_running(command),
-        "the wrapper's command still runs"
-    );
+    // The fixture sends SIGKILL as it drops, but a killed process can take a
+    // moment to exit on a loaded runner.
+    wait_until("the wrapper to exit", || {
+        wrapper.try_wait().unwrap().is_some()
+    });
+    wait_until("the wrapper's command to exit", || {
+        !process_running(command)
+    });
 }
 
 /// A command that writes its PID to the file its last argument names, then
