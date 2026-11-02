@@ -278,3 +278,51 @@ fn pressure_must_be_continuous_and_restart_after_recovery() {
     assert!(!pressure.observe(start + Duration::from_secs(60), true, 30));
     assert!(pressure.observe(start + Duration::from_secs(61), true, 30));
 }
+
+#[test]
+fn recovery_publishes_a_sustained_window_and_revokes_on_unsafe_readings() {
+    let start = Instant::now();
+    let settings = crate::config::overload::Overload::default();
+    let sustained = Duration::from_secs(settings.recovery.sustained_seconds);
+    let mut monitor = Monitor::default();
+    assert_eq!(
+        monitor.recovery(start, &settings, 0, Ok(true), true),
+        Recovery::Publish(None)
+    );
+    assert_eq!(
+        monitor.recovery(start + sustained, &settings, 0, Ok(true), true),
+        Recovery::Publish(Some(0))
+    );
+    // A failed memory reading is unsafe, and turning unsafe revokes.
+    assert_eq!(
+        monitor.recovery(
+            start + sustained * 2,
+            &settings,
+            0,
+            Err(anyhow::anyhow!("unavailable")),
+            true
+        ),
+        Recovery::Revoke
+    );
+    assert_eq!(
+        monitor.recovery(start + sustained * 3, &settings, 1, Ok(true), false),
+        Recovery::Publish(None)
+    );
+}
+
+#[test]
+fn a_new_recovery_epoch_restarts_the_window_without_revoking() {
+    let start = Instant::now();
+    let settings = crate::config::overload::Overload::default();
+    let sustained = Duration::from_secs(settings.recovery.sustained_seconds);
+    let mut monitor = Monitor::default();
+    monitor.recovery(start, &settings, 0, Ok(true), true);
+    assert_eq!(
+        monitor.recovery(start + sustained, &settings, 1, Ok(true), true),
+        Recovery::Publish(None)
+    );
+    assert_eq!(
+        monitor.recovery(start + sustained * 2, &settings, 1, Ok(true), true),
+        Recovery::Publish(Some(1))
+    );
+}

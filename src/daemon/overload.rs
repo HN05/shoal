@@ -24,6 +24,55 @@ impl Sustained {
     }
 }
 
+/// One sample's machine readings. A disabled protection reads as calm.
+struct Readings {
+    memory: anyhow::Result<bool>,
+    cpu: anyhow::Result<crate::process::load::CpuTicks>,
+    memory_warning: anyhow::Result<bool>,
+    memory_safe: anyhow::Result<bool>,
+    disk_safe: bool,
+}
+
+impl Readings {
+    fn take(settings: &crate::config::overload::Overload, manager: &Manager) -> Self {
+        use crate::process::load;
+        let memory = settings.memory.enabled;
+        Self {
+            memory: if memory {
+                load::critical_memory(settings.memory.used_percent)
+            } else {
+                Ok(false)
+            },
+            cpu: if settings.cpu.enabled {
+                load::cpu_ticks()
+            } else {
+                Ok(load::CpuTicks::default())
+            },
+            memory_warning: if memory && settings.warning.enabled {
+                load::memory_warning(settings.warning.memory_used_percent)
+            } else {
+                Ok(false)
+            },
+            memory_safe: if memory {
+                load::safe_memory(settings.recovery.memory_used_percent)
+            } else {
+                Ok(true)
+            },
+            disk_safe: manager.config_state.disk_space_recovered(),
+        }
+    }
+}
+
+/// What one sample means for the published recovery.
+#[derive(Debug, PartialEq)]
+enum Recovery {
+    /// Readings that turned unsafe revoke a restore admitted on the earlier
+    /// ones before its agent starts.
+    Revoke,
+    /// The epoch the readings were sustained healthy in, if they were.
+    Publish(Option<u64>),
+}
+
 #[derive(Default)]
 struct Monitor {
     memory: Sustained,
@@ -120,6 +169,38 @@ impl Monitor {
         }
         signals
     }
+
+    /// Advance the healthy window in the current recovery `epoch`, after
+    /// [`Self::reason`] has taken this sample's CPU reading. A new epoch
+    /// restarts the window; a failed memory reading is unsafe.
+    fn recovery(
+        &mut self,
+        now: Instant,
+        settings: &crate::config::overload::Overload,
+        epoch: u64,
+        memory_safe: anyhow::Result<bool>,
+        disk_safe: bool,
+    ) -> Recovery {
+        if self.recovery_epoch != epoch {
+            self.healthy = Sustained::default();
+            self.recovery_epoch = epoch;
+        }
+        let recovery = &settings.recovery;
+        let memory_safe = !settings.memory.enabled || memory_safe.unwrap_or(false);
+        let cpu_safe = !settings.cpu.enabled
+            || self
+                .cpu_used
+                .is_some_and(|used| used < f64::from(recovery.cpu_used_percent));
+        let disk_safe = !settings.disk.enabled || disk_safe;
+        let safe = memory_safe && cpu_safe && disk_safe;
+        let was_safe = std::mem::replace(&mut self.safe, safe);
+        let recovered = self.healthy.observe(now, safe, recovery.sustained_seconds);
+        if was_safe && !safe {
+            Recovery::Revoke
+        } else {
+            Recovery::Publish(recovered.then_some(epoch))
+        }
+    }
 }
 
 pub(super) async fn run(manager: Arc<Manager>) {
@@ -143,51 +224,25 @@ pub(super) async fn run(manager: Arc<Manager>) {
             continue;
         }
         let settings = &config.machine.overload;
-        let memory = if settings.memory.enabled {
-            crate::process::load::critical_memory(settings.memory.used_percent)
-        } else {
-            Ok(false)
-        };
-        let cpu = if settings.cpu.enabled {
-            crate::process::load::cpu_ticks()
-        } else {
-            Ok(crate::process::load::CpuTicks::default())
-        };
+        let readings = Readings::take(settings, &manager);
         let now = Instant::now();
-        let reason = monitor.reason(now, settings, memory, cpu);
-        let memory_warning = if settings.warning.enabled && settings.memory.enabled {
-            crate::process::load::memory_warning(settings.warning.memory_used_percent)
-        } else {
-            Ok(false)
-        };
-        for (signal, message) in monitor.warnings(now, settings, memory_warning) {
+        let reason = monitor.reason(now, settings, readings.memory, readings.cpu);
+        // Decide before awaiting warnings, so a reload meanwhile cannot pair
+        // these readings with its new epoch.
+        let epoch = manager.overload_recovery.epoch();
+        match monitor.recovery(
+            now,
+            settings,
+            epoch,
+            readings.memory_safe,
+            readings.disk_safe,
+        ) {
+            Recovery::Revoke => manager.overload_recovery.reset(),
+            Recovery::Publish(ready) => manager.overload_recovery.publish(ready),
+        }
+        for (signal, message) in monitor.warnings(now, settings, readings.memory_warning) {
             warned.warn(&manager, now, signal, &message).await;
         }
-        let epoch = manager.overload_recovery.epoch();
-        if monitor.recovery_epoch != epoch {
-            monitor.healthy = Sustained::default();
-            monitor.recovery_epoch = epoch;
-        }
-        let memory_safe = !settings.memory.enabled
-            || crate::process::load::safe_memory(settings.recovery.memory_used_percent)
-                .unwrap_or(false);
-        let cpu_safe = !settings.cpu.enabled
-            || monitor
-                .cpu_used
-                .is_some_and(|used| used < f64::from(settings.recovery.cpu_used_percent));
-        let disk_safe = !settings.disk.enabled || manager.config_state.disk_space_recovered();
-        let safe = memory_safe && cpu_safe && disk_safe;
-        // Readings that turn unsafe revoke a restore admitted on the earlier
-        // ones before its agent starts.
-        if std::mem::replace(&mut monitor.safe, safe) && !safe {
-            manager.overload_recovery.reset();
-        }
-        let recovered = monitor
-            .healthy
-            .observe(now, safe, settings.recovery.sustained_seconds);
-        manager
-            .overload_recovery
-            .publish(recovered.then_some(epoch));
         if let Some(reason) = reason
             && manager.stop_agent_for_overload(reason).await
         {
