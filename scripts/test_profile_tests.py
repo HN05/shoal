@@ -32,5 +32,17 @@ class BuiltBinariesTests(unittest.TestCase):
         ])
 
 
+
+class ReportTests(unittest.TestCase):
+    def test_reads_test_names_from_a_terse_listing(self):
+        listing = "a::first: test\na::slow: bench\nb::second: test\n"
+        self.assertEqual(profile_tests.names_in_listing(listing), ["a::first", "b::second"])
+
+    def test_sums_tests_per_binary_in_first_seen_order(self):
+        rows = [("lib", "a", 0, 1.0, 2.0, 3.0), ("workspaces", "b", 0, 1.0, 1.0, 1.0),
+                ("lib", "c", 101, 1.0, 0.5, 0.25)]
+        self.assertEqual(profile_tests.binary_totals(rows), [
+            ("lib", 2, 2.5, 3.25), ("workspaces", 1, 1.0, 1.0)])
+
 if __name__ == "__main__":
     unittest.main()

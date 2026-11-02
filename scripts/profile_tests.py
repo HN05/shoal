@@ -87,54 +87,113 @@ def run(args, cwd, log):
 
 
 def suite(found):
+    """Run each test binary whole and print its times and the total."""
     print(f"{'binary':<28} {'wall s':>8} {'user s':>8} {'sys s':>8}  status")
-    totals = [0.0, 0.0, 0.0]
+    rows = []
     for name, executable, cwd in found:
-        with tempfile.TemporaryFile() as log:
-            status, *times = run([executable], cwd, log)
-            if status != 0:
-                log.seek(0)
-                sys.stdout.write(log.read().decode(errors="replace")[-4000:])
-        totals = [total + value for total, value in zip(totals, times)]
-        print(f"{name:<28} {times[0]:>8.1f} {times[1]:>8.1f} {times[2]:>8.1f}  {status}", flush=True)
-    print(f"{'total':<28} {totals[0]:>8.1f} {totals[1]:>8.1f} {totals[2]:>8.1f}")
+        rows.append((name, *measure_binary(executable, cwd)))
+        print_binary(rows[-1])
+    print_total(rows)
+
+
+def measure_binary(executable, cwd):
+    """(exit status, wall s, user s, system s) of a whole test binary; a
+    failing one's output ends up on stdout."""
+    with tempfile.TemporaryFile() as log:
+        status, *times = run([executable], cwd, log)
+        if status != 0:
+            log.seek(0)
+            sys.stdout.write(log.read().decode(errors="replace")[-4000:])
+    return (status, *times)
+
+
+def print_binary(row):
+    name, status, wall, user, system = row
+    print(f"{name:<28} {wall:>8.1f} {user:>8.1f} {system:>8.1f}  {status}", flush=True)
+
+
+def print_total(rows):
+    wall, user, system = (sum(row[column] for row in rows) for column in (2, 3, 4))
+    print(f"{'total':<28} {wall:>8.1f} {user:>8.1f} {system:>8.1f}")
 
 
 def tests(found, jobs, csv_path):
+    """Run every test alone, `jobs` at a time, and report the costliest."""
+    work = listed_tests(found)
+    print(f"{len(work)} tests, {jobs} at a time", file=sys.stderr)
+    rows = measure_tests(work, jobs)
+    if csv_path:
+        write_csv(rows, csv_path)
+    print_binary_totals(rows)
+    print_failures(rows)
+    print_costliest(rows)
+
+
+def listed_tests(found):
+    """(binary name, executable, package directory, test) of every test."""
     work = []
     for name, executable, cwd in found:
         listing = subprocess.run([executable, "--list", "--format", "terse"], cwd=cwd,
                                  check=True, stdout=subprocess.PIPE, text=True).stdout
-        work += [(name, executable, cwd, line.removesuffix(": test"))
-                 for line in listing.splitlines() if line.endswith(": test")]
-    print(f"{len(work)} tests, {jobs} at a time", file=sys.stderr)
+        work += [(name, executable, cwd, test) for test in names_in_listing(listing)]
+    return work
 
-    def one(item):
-        name, executable, cwd, test = item
-        with tempfile.TemporaryFile() as log:
-            status, wall, user, system = run(
-                [executable, "--exact", test, "--test-threads=1", "-q"], cwd, log)
-        return name, test, status, wall, user, system
 
+def names_in_listing(listing):
+    """The tests in a test binary's terse `--list` output, leaving out benchmarks."""
+    return [line.removesuffix(": test") for line in listing.splitlines()
+            if line.endswith(": test")]
+
+
+def measure_tests(work, jobs):
+    """(binary name, test, exit status, wall s, user s, system s) of each
+    test in `work`, in its order."""
     rows = []
     with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
-        for done, row in enumerate(pool.map(one, work), 1):
+        for done, row in enumerate(pool.map(measure_test, work), 1):
             rows.append(row)
             if done % 100 == 0:
                 print(f"{done}/{len(work)}", file=sys.stderr, flush=True)
-    if csv_path:
-        with open(csv_path, "w", newline="") as file:
-            writer = csv.writer(file)
-            writer.writerow(["binary", "test", "status", "wall", "user", "system"])
-            writer.writerows(rows)
+    return rows
 
+
+def measure_test(item):
+    name, executable, cwd, test = item
+    with tempfile.TemporaryFile() as log:
+        status, wall, user, system = run(
+            [executable, "--exact", test, "--test-threads=1", "-q"], cwd, log)
+    return name, test, status, wall, user, system
+
+
+def write_csv(rows, path):
+    with open(path, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["binary", "test", "status", "wall", "user", "system"])
+        writer.writerows(rows)
+
+
+def binary_totals(rows):
+    """(binary name, tests, user s, system s) per binary, in first-seen order."""
+    totals = {}
+    for name, _, _, _, user, system in rows:
+        count, user_total, system_total = totals.get(name, (0, 0.0, 0.0))
+        totals[name] = (count + 1, user_total + user, system_total + system)
+    return [(name, *total) for name, total in totals.items()]
+
+
+def print_binary_totals(rows):
     print(f"{'binary':<16} {'tests':>6} {'user s':>9} {'sys s':>9}")
-    for name in dict.fromkeys(row[0] for row in rows):
-        own = [row for row in rows if row[0] == name]
-        print(f"{name:<16} {len(own):>6} {sum(r[4] for r in own):>9.1f} {sum(r[5] for r in own):>9.1f}")
-    failed = [row for row in rows if row[2] != 0]
+    for name, count, user, system in binary_totals(rows):
+        print(f"{name:<16} {count:>6} {user:>9.1f} {system:>9.1f}")
+
+
+def print_failures(rows):
+    failed = [f"{name}::{test}" for name, test, status, *_ in rows if status != 0]
     if failed:
-        print(f"\nfailed: {', '.join(f'{r[0]}::{r[1]}' for r in failed)}")
+        print(f"\nfailed: {', '.join(failed)}")
+
+
+def print_costliest(rows):
     print(f"\n{'sys s':>7} {'user s':>7} {'wall s':>7}  test")
     for name, test, _, wall, user, system in sorted(rows, key=lambda r: r[5], reverse=True)[:TOP_ROWS]:
         print(f"{system:>7.2f} {user:>7.2f} {wall:>7.2f}  {name}::{test}")
