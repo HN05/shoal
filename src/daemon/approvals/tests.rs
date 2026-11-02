@@ -253,6 +253,44 @@ async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Re
 }
 
 #[tokio::test]
+async fn a_merge_retried_with_other_wording_keeps_its_request_and_approval() -> Result<()> {
+    let (_root, manager) = crate::test_support::manager().await;
+    manager
+        .store
+        .run(|db| {
+            owners(db)?;
+            let tx = db.transaction()?;
+            let request = |reason: &str| {
+                ApprovalRequest::new(
+                    "owner",
+                    Target::Merge,
+                    MERGE,
+                    Specification::Merge(MergeSpecification {
+                        branch: "feature".into(),
+                        head: "abc".into(),
+                        push: None,
+                    }),
+                    Lifetime::Lease,
+                    Some(reason),
+                )
+            };
+            // As a request stored before the reason named the commit count.
+            let pending = request_merge(&tx, request("merge feature into main"))?.unwrap();
+            let retried = request_merge(&tx, request("Merge feature (1 commit) into main."))?;
+            assert_eq!(retried.unwrap().key, pending.key);
+            assert!(decide(&tx, &pending.key, true)?.new);
+            let approved = request_merge(&tx, request("Merge feature (2 commits) into main."))?;
+            assert!(approved.is_none());
+            assert_eq!(
+                by_key(&tx, &pending.key)?.unwrap().reason,
+                "merge feature into main"
+            );
+            Ok(())
+        })
+        .await
+}
+
+#[tokio::test]
 async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications() {
     let (root, manager) = crate::test_support::manager().await;
     let path = crate::test_support::repository(root.path(), "repo");

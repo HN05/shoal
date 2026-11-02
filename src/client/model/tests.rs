@@ -190,4 +190,8 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
         Sensitive files changed on both sides by fix-login and main: version.\n\
         PR https://forge/pulls/12 is open; shoal pr merge merges it on the forge instead."
     );
+    assert_eq!(preview.reason(), preview.description().replace('\n', " "));
+    preview.branch = "b".repeat(300);
+    assert_eq!(preview.reason().len(), crate::validate::MAX_REASON_LEN);
+    assert!(preview.reason().ends_with('…'));
 }

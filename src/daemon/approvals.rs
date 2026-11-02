@@ -437,18 +437,22 @@ pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -
     Ok(true)
 }
 
-/// Replace a merge request for an earlier commit with `request`. Returns the
-/// request still awaiting or refused a decision; an approval for the same
-/// commit lets the merge proceed.
+/// Replace a merge request for an earlier commit or another push with
+/// `request`. Returns the request still awaiting or refused a decision; an
+/// approval for the same commit and push lets the merge proceed. A request
+/// for the same merge keeps the reason it was decided on, though the commit
+/// count or open PRs it names changed since.
 pub fn request_merge(
     tx: &Transaction<'_>,
-    request: ApprovalRequest,
+    mut request: ApprovalRequest,
 ) -> Result<Option<ApprovalRequest>> {
     let owner = request.workspace_id.clone();
-    if let Some(existing) = current(tx, &owner, &Target::Merge, MERGE)?
-        .filter(|existing| existing.specification != request.specification)
-    {
-        retire(tx, &existing)?;
+    if let Some(existing) = current(tx, &owner, &Target::Merge, MERGE)? {
+        if existing.specification == request.specification {
+            request.reason = existing.reason;
+        } else {
+            retire(tx, &existing)?;
+        }
     }
     check(tx, request)
 }

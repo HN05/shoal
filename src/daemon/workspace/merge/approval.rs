@@ -93,6 +93,6 @@ fn merge_request(plan: &MergePlan, preview: &MergePreview) -> ApprovalRequest {
             push: plan.push.as_ref().map(|push| push.remote.clone()),
         }),
         Lifetime::Lease,
-        Some(&preview.description()),
+        Some(&preview.reason()),
     )
 }

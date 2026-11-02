@@ -1084,25 +1084,31 @@ impl MergePreview {
     /// The merge, its direction and what follows it, one sentence a line:
     /// `Merge fix-login (3 commits) into main, then push main to origin.`
     pub fn description(&self) -> String {
+        self.sentences().join("\n")
+    }
+
+    /// [`Self::description`] on one line, cut to fit an approval reason.
+    pub fn reason(&self) -> String {
+        crate::validate::shorten(self.sentences().join(" "), crate::validate::MAX_REASON_LEN)
+    }
+
+    fn sentences(&self) -> Vec<String> {
         let (branch, default) = (&self.branch, &self.default_branch);
         let commits = match self.commits {
             1 => "1 commit".to_owned(),
             count => format!("{count} commits"),
         };
-        let mut text = format!("Merge {branch} ({commits}) into {default}");
+        let mut merge = format!("Merge {branch} ({commits}) into {default}");
         if let Some(remote) = &self.push_to {
-            text.push_str(&format!(", then push {default} to {remote}"));
+            merge.push_str(&format!(", then push {default} to {remote}"));
         }
-        text.push('.');
-        if let Some(warning) = &self.warning {
-            text.push_str(&format!("\n{warning}."));
-        }
-        for url in &self.open_prs {
-            text.push_str(&format!(
-                "\nPR {url} is open; shoal pr merge merges it on the forge instead."
-            ));
-        }
-        text
+        merge.push('.');
+        let warning = self.warning.iter().map(|warning| format!("{warning}."));
+        let prs = self
+            .open_prs
+            .iter()
+            .map(|url| format!("PR {url} is open; shoal pr merge merges it on the forge instead."));
+        std::iter::once(merge).chain(warning).chain(prs).collect()
     }
 }
 
