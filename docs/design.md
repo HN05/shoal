@@ -1054,7 +1054,8 @@ server's process and birth; Zellij takes no condition with a command, so the
 host checks the instance just before each command on a recorded pane. Zellij
 counts a session only when its server answers a probe in time, so it can
 report a busy session as missing: the host asks again while the session's
-server process still runs, and takes a session as ended only once it does not.
+server process still runs, the recorded instance for a recorded pane, and takes
+a session as ended only once it does not.
 Zellij closes a tab or session with its last pane only while a client shows the
 session, so a close ends either along with the last pane there, as an attached
 client would see it, leaving no empty tab or session. A session's last pane

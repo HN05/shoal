@@ -458,6 +458,22 @@ async fn a_place_recorded_without_its_directory_reaches_its_server() {
     assert!(reached.pane(users, None).await.unwrap().is_some());
 }
 
+/// A listing Zellij reports missing is asked again only while the server
+/// runs, the recorded instance where there is one: a session restarted
+/// meanwhile numbers its panes afresh.
+#[tokio::test]
+async fn a_listing_is_asked_again_only_on_the_recorded_instance() {
+    let Some(server) = Isolated::start() else {
+        return;
+    };
+    let session = server.session.as_str();
+    let (instance, _) = server.zellij.instance(session).await.unwrap().unwrap();
+    assert!(server.zellij.runs(session, Some(&instance)).await.unwrap());
+    assert!(server.zellij.runs(session, None).await.unwrap());
+    assert!(!server.zellij.runs(session, Some("1:0")).await.unwrap());
+    assert!(!server.zellij.runs("ended", None).await.unwrap());
+}
+
 #[tokio::test]
 async fn a_session_left_with_no_pane_ends() {
     let Some(server) = Isolated::start() else {

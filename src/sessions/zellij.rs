@@ -280,22 +280,34 @@ impl Zellij {
 
     /// Every pane of `session`; none when it is gone.
     pub async fn panes(&self, session: &str) -> Result<Vec<Pane>> {
+        self.panes_on(session, None).await
+    }
+
+    /// Every pane of `session` while its server is the instance `instance`,
+    /// or any instance without one; none once it is not.
+    async fn panes_on(&self, session: &str, instance: Option<&str>) -> Result<Vec<Pane>> {
         let listed = self
-            .session_listing(session, &["list-panes", "--all", "--json"])
+            .session_listing(session, instance, &["list-panes", "--all", "--json"])
             .await?;
         parse_panes(&listed)
     }
 
-    /// What the `zellij action` listing `args` prints for `session`, which
-    /// is empty once the session ended.
-    async fn session_listing(&self, session: &str, args: &[&str]) -> Result<String> {
+    /// What the `zellij action` listing `args` prints for `session` while
+    /// its server is the instance `instance`, or any instance without one;
+    /// empty once it is not.
+    async fn session_listing(
+        &self,
+        session: &str,
+        instance: Option<&str>,
+        args: &[&str],
+    ) -> Result<String> {
         let listed = asked_while_running(
             || {
                 let mut list = self.action(session);
                 list.args(args);
                 listing(list)
             },
-            || async { Ok(self.server(session).await?.is_some()) },
+            || self.runs(session, instance),
         )
         .await
         .with_context(|| format!("list Zellij session {session}"))?;
@@ -311,10 +323,19 @@ impl Zellij {
             return Ok(None);
         }
         Ok(self
-            .panes(place.session)
+            .panes_on(place.session, instance)
             .await?
             .into_iter()
             .find(|pane| pane.id == place.pane))
+    }
+
+    /// Whether a server runs `session`: the instance `instance`, or any
+    /// instance without one.
+    async fn runs(&self, session: &str, instance: Option<&str>) -> Result<bool> {
+        match instance {
+            Some(instance) => self.on_instance(session, instance).await,
+            None => Ok(self.server(session).await?.is_some()),
+        }
     }
 
     /// Whether the server of `session` is the instance `instance`.
@@ -335,7 +356,9 @@ impl Zellij {
 
     /// The pane each client attached to `session` shows.
     pub async fn clients(&self, session: &str) -> Result<Vec<String>> {
-        let listed = self.session_listing(session, &["list-clients"]).await?;
+        let listed = self
+            .session_listing(session, None, &["list-clients"])
+            .await?;
         Ok(parse_clients(&listed))
     }
 
@@ -561,7 +584,7 @@ impl Zellij {
         if !self.on_instance(place.session, instance).await? {
             return Ok(());
         }
-        let panes = self.panes(place.session).await?;
+        let panes = self.panes_on(place.session, Some(instance)).await?;
         // The session ends instead of closing its last tab: a client shows
         // the session end with that tab, and a `zellij action` whose server
         // ends before answering never returns.
