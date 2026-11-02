@@ -15,7 +15,7 @@ use crate::{
         link::{ItemKind, LinkKind},
         list::MAX_LIMIT,
     },
-    model::{LinkedItem, Repository},
+    model::{LinkedItem, Relation, Repository},
 };
 
 /// Which issue labelled as needing a plan is planned without naming one.
@@ -112,11 +112,14 @@ fn topic(repo: &Repository, issue: &Issue, labels: &config::Issue) -> Topic {
         asks_name: false,
         opening: Some(prompt(issue, labels)),
         directories: Vec::new(),
-        assigned: Some(LinkedItem {
-            kind: LinkKind::Issue,
-            url: issue.url.clone(),
-            title: Some(issue.title.clone()),
-        }),
+        links: vec![(
+            Relation::Assigned,
+            LinkedItem {
+                kind: LinkKind::Issue,
+                url: issue.url.clone(),
+                title: Some(issue.title.clone()),
+            },
+        )],
     }
 }
 

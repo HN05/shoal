@@ -167,6 +167,7 @@ impl Manifest {
                 let packaged = PackagedChat {
                     name: chat.name,
                     agent: chat.agent,
+                    links: chat.links,
                 };
                 (Space::Chat(packaged), sessions)
             }

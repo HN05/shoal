@@ -61,7 +61,7 @@ fn topic(repo: &Repository, config: &Path) -> chat::Topic {
         asks_name: false,
         opening: Some(prompt(repository::name(repo), config)),
         directories: config.parent().map(Path::to_path_buf).into_iter().collect(),
-        assigned: None,
+        links: Vec::new(),
     }
 }
 

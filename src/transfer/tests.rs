@@ -319,13 +319,24 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         tmp_dir: None,
         session: Some("s1".into()),
         restore: None,
-        links: Default::default(),
+        links: crate::model::SpaceLinks {
+            issue: Some("https://forge.example/team/repo/issues/12".into()),
+            issue_title: Some("Plan the cache".into()),
+            prs: vec!["https://forge.example/team/repo/pulls/14".into()],
+            opened: Vec::new(),
+            related: vec![crate::model::LinkedItem {
+                kind: crate::forge::items::link::LinkKind::Issue,
+                url: "https://forge.example/team/repo/issues/9".into(),
+                title: None,
+            }],
+        },
     };
     let mut manifest = Manifest {
         remote_url: None,
         space: Space::Chat(PackagedChat {
             name: chat.name.clone(),
             agent: chat.agent.clone(),
+            links: chat.links.clone(),
         }),
         sessions: Some(Sessions {
             machine: Some("m1".into()),
@@ -339,7 +350,36 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
     let import = Import::read(&mut &bytes[..]).unwrap();
     assert!(import.bundle.is_none());
     assert_eq!(import.manifest.name(), "plan-cache");
-    assert!(matches!(&import.manifest.space, Space::Chat(chat) if chat.agent == "claude"));
+    let Space::Chat(packaged) = &import.manifest.space else {
+        panic!("expected a chat");
+    };
+    assert_eq!(packaged.agent, "claude");
+    // Its links come back with their relations, for the import to restore.
+    let relations: Vec<_> = (packaged.links.relations().into_iter())
+        .map(|(relation, item)| (relation, item.url))
+        .collect();
+    assert_eq!(
+        relations,
+        [
+            (
+                crate::model::Relation::Assigned,
+                chat.links.issue.clone().unwrap()
+            ),
+            (crate::model::Relation::Assigned, chat.links.prs[0].clone()),
+            (
+                crate::model::Relation::Related,
+                chat.links.related[0].url.clone()
+            ),
+        ]
+    );
+    // A package an earlier release wrote names no links.
+    let mut value = serde_json::to_value(&manifest).unwrap();
+    value.as_object_mut().unwrap().remove("links");
+    let earlier = format!("{}\n{value}\nabc", header(VERSION)).into_bytes();
+    let earlier = Import::read(&mut &earlier[..]).unwrap();
+    assert!(
+        matches!(&earlier.manifest.space, Space::Chat(chat) if chat.links.relations().is_empty())
+    );
     let reported: Vec<_> = import
         .manifest
         .sessions_on(Some("m2"), None)

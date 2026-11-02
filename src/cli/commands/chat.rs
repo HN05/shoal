@@ -21,7 +21,7 @@ use crate::{
         terminal, ui,
     },
     config::{Effective, templates},
-    model::{Chat, LinkedItem, Repository},
+    model::{Chat, LinkedItem, Relation, Repository},
     protocol::ConfigTarget,
     repository,
 };
@@ -116,8 +116,8 @@ pub(super) struct Topic {
     pub opening: Option<String>,
     /// Other working directories the task needs, beside the chat's own.
     pub directories: Vec<PathBuf>,
-    /// The issue the chat is assigned once recorded.
-    pub assigned: Option<LinkedItem>,
+    /// What the chat is linked to once recorded, such as the issue it plans.
+    pub links: Vec<(Relation, LinkedItem)>,
 }
 
 impl Topic {
@@ -128,7 +128,7 @@ impl Topic {
             asks_name: true,
             opening: None,
             directories: Vec::new(),
-            assigned: None,
+            links: Vec::new(),
         }
     }
 }
@@ -211,7 +211,7 @@ pub(super) async fn launch(
         settings,
         args: [resumed.clone(), args.clone()].concat(),
         restores: restore.clone(),
-        assigned: topic.assigned.clone(),
+        links: topic.links.clone(),
     };
     if let Some(code) = agents::start_chat(ctx, agent.name(), &launch).await? {
         return Ok(Started::Exited(code));
@@ -272,7 +272,7 @@ pub(super) async fn launch(
         restore.as_deref(),
     )
     .await?;
-    agents::assign_chat(ctx, &chat, topic.assigned.as_ref()).await;
+    agents::link_chat(ctx, &chat, &topic.links).await;
     let command = command(
         &settings,
         [

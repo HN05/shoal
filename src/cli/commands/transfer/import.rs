@@ -187,7 +187,10 @@ impl Package {
         )
         .await;
         let settings = chat::settings(ctx, &repo).await?;
-        let topic = chat::Topic::repository(&repo);
+        let topic = chat::Topic {
+            links: packaged.links.relations(),
+            ..chat::Topic::repository(&repo)
+        };
         let options = self.chat_options(ctx, packaged, place).await?;
         chat::launch(ctx, repo, settings, topic, options).await
     }

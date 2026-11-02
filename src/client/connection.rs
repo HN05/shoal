@@ -454,13 +454,18 @@ pub async fn chats(daemon: &impl Daemon) -> Result<Vec<Chat>> {
     Ok(chats)
 }
 
-/// Link `item` to the space `space` as assigned.
-pub async fn link_assigned(daemon: &impl Daemon, space: &str, item: &LinkedItem) -> Result<()> {
+/// Link `item` to the space `space` as `relation`.
+pub async fn link_item(
+    daemon: &impl Daemon,
+    space: &str,
+    relation: crate::model::Relation,
+    item: &LinkedItem,
+) -> Result<()> {
     let method = ItemMethod::LinkItem {
         space: space.to_owned(),
         kind: item.kind,
         url: item.url.clone(),
-        relation: crate::model::Relation::Assigned,
+        relation,
         title: item.title.clone(),
     };
     request::<()>(daemon, method).await

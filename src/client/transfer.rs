@@ -56,11 +56,14 @@ pub struct PackagedWorkspace {
 }
 
 /// A chat, which the import starts again in the repository's checkout,
-/// continuing its agent's session.
+/// continuing its agent's session, linked to what it was linked to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackagedChat {
     pub name: String,
     pub agent: String,
+    /// Read as none from a package an earlier release wrote.
+    #[serde(default)]
+    pub links: crate::model::SpaceLinks,
 }
 
 /// A file of an agent's session, copied unread.

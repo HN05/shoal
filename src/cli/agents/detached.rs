@@ -385,7 +385,7 @@ pub(super) async fn start_chat(
         settings,
         model,
         restores,
-        assigned,
+        links,
         ..
     } = chat;
     super::ensure_available(name, settings)?;
@@ -407,7 +407,7 @@ pub(super) async fn start_chat(
         restores.as_deref(),
     )
     .await?;
-    super::assign_chat(ctx, &record, assigned.as_ref()).await;
+    super::link_chat(ctx, &record, links).await;
     let (prompt, args) = chat_input(app, &ctx.paths.home, &record, chat);
     let args = [model_args, args].concat();
     let files = ctx.paths.chat_files(&record);

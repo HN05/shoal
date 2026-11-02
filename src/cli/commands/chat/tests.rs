@@ -10,7 +10,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         asks_name: true,
         opening: None,
         directories: Vec::new(),
-        assigned: None,
+        links: Vec::new(),
     };
     let agent: Agent = "codex".parse().unwrap();
     let model = ModelChoice {

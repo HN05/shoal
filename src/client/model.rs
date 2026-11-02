@@ -163,7 +163,9 @@ pub struct SpaceLinks {
 impl SpaceLinks {
     /// Every linked item once: the assigned issue and PRs, then those opened
     /// and related.
-    pub fn items(&self) -> Vec<LinkedItem> {
+    /// Every link with its relation: the assigned issue and PRs, then the
+    /// opened and related items.
+    pub fn relations(&self) -> Vec<(Relation, LinkedItem)> {
         use crate::forge::items::link::LinkKind;
         let issue = self.issue.iter().map(|url| LinkedItem {
             kind: LinkKind::Issue,
@@ -175,9 +177,17 @@ impl SpaceLinks {
             url: url.clone(),
             title: None,
         });
-        let recorded = self.opened.iter().chain(&self.related).cloned();
+        let assigned = issue.chain(prs).map(|item| (Relation::Assigned, item));
+        let opened = (self.opened.iter().cloned()).map(|item| (Relation::Opened, item));
+        let related = (self.related.iter().cloned()).map(|item| (Relation::Related, item));
+        assigned.chain(opened).chain(related).collect()
+    }
+
+    /// Each linked item once, the first relation's title kept unless a later
+    /// one names it.
+    pub fn items(&self) -> Vec<LinkedItem> {
         let mut items: Vec<LinkedItem> = Vec::new();
-        for item in issue.chain(prs).chain(recorded) {
+        for (_, item) in self.relations() {
             match items.iter_mut().find(|known| known.url == item.url) {
                 Some(known) => known.title = known.title.take().or(item.title),
                 None => items.push(item),
