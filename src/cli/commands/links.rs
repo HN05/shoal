@@ -593,10 +593,14 @@ pub(super) fn fork_head(pull: &PullRequest) -> Result<PullHead> {
             pull.number
         )
     })?;
+    let commit = pull
+        .head_commit
+        .clone()
+        .with_context(|| format!("PR #{} reports no head commit", pull.number))?;
     Ok(PullHead {
         number: pull.number,
         reference,
-        commit: pull.head_commit.clone(),
+        commit,
     })
 }
 

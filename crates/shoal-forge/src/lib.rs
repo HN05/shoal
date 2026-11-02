@@ -247,8 +247,8 @@ pub struct PullRequest {
     /// Its head branch, in this repository or in `fork`.
     pub head: String,
     pub base: String,
-    /// The commit its head branch points to.
-    pub head_commit: String,
+    /// The commit its head branch points to, where the forge reports it.
+    pub head_commit: Option<String>,
     /// Whether its head branch is in another repository, or in one that was
     /// deleted, so this repository has no branch of it.
     pub fork: bool,
@@ -303,9 +303,7 @@ impl ForgeRepo {
             url,
             head: pr.head,
             base: pr.base,
-            head_commit: pull
-                .head_sha
-                .with_context(|| format!("PR #{number} has no head commit"))?,
+            head_commit: pull.head_sha,
             fork,
             head_ref: self.kind.pull_head_ref(number),
         })

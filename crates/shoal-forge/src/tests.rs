@@ -54,7 +54,7 @@ fn a_prs_head_is_in_a_fork_unless_this_repository_has_it() {
         (own.head.as_str(), own.base.as_str(), own.fork),
         ("topic", "main", false)
     );
-    assert_eq!(own.head_commit, "a".repeat(40));
+    assert_eq!(own.head_commit, Some("a".repeat(40)));
     // A deleted fork leaves no head repository.
     for fork in [Some("someone/repo"), None] {
         assert!(details(fork).fork);
