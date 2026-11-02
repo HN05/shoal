@@ -345,7 +345,7 @@ pub(in crate::cli) struct ChatLaunch {
     /// The model and effort it runs with.
     pub model: ModelChoice,
     pub args: Vec<OsString>,
-    /// The saved chat, by ID, it restores instead of recording a new one.
+    /// The stopped chat, by ID, it restores instead of recording a new one.
     pub restores: Option<String>,
     /// What the chat is linked to once recorded, such as the issue it plans.
     pub links: Vec<(Relation, LinkedItem)>,

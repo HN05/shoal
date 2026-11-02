@@ -70,7 +70,7 @@ pub enum AgentsCommand {
         /// Agent session the chat continues, which shoal move import passes.
         #[arg(long, hide = true)]
         session: Option<String>,
-        /// Saved chat, by ID, that this start restores under its own name,
+        /// Stopped chat, by ID, that this start restores under its own name,
         /// which shoal resume passes.
         #[arg(long, hide = true, requires = "name")]
         restore: Option<String>,

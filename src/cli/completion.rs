@@ -71,7 +71,7 @@ enum Target {
     /// running chats.
     Spaces(Need),
     /// Workspaces described by what `shoal resume` restores in them, then
-    /// the chats Shoal saved.
+    /// the stopped chats.
     ResumeSpaces,
     /// Removed workspaces `shoal work restore` can open again, then existing
     /// ones it can return to a checkpoint.
@@ -497,7 +497,9 @@ impl Typed {
                     CompletionCandidate::new(&w.name).help(Some(status.into()))
                 })
                 .collect();
-            candidates.extend(saved_chat_candidates(client::recorded_chats(&paths).await?));
+            candidates.extend(stopped_chat_candidates(
+                client::recorded_chats(&paths).await?,
+            ));
             return Ok(candidates);
         }
         let workspace = self
@@ -592,18 +594,18 @@ async fn chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
         .collect())
 }
 
-/// The chats among `chats` Shoal saved, which `shoal resume` restores, by
+/// The stopped chats among `chats`, which `shoal resume` restores, by
 /// name.
-fn saved_chat_candidates(chats: Vec<Chat>) -> Vec<CompletionCandidate> {
+fn stopped_chat_candidates(chats: Vec<Chat>) -> Vec<CompletionCandidate> {
     chats
         .into_iter()
         .filter(|chat| chat.restore.is_some())
-        .map(|chat| CompletionCandidate::new(chat.name).help(Some(SAVED_CHAT.into())))
+        .map(|chat| CompletionCandidate::new(chat.name).help(Some(STOPPED_CHAT.into())))
         .collect()
 }
 
-/// How completion describes a chat Shoal saved.
-const SAVED_CHAT: &str = "saved chat";
+/// How completion describes a stopped chat.
+const STOPPED_CHAT: &str = "stopped chat";
 
 /// What the argument `id` of the command `name`, under `parent`, completes,
 /// given what the command needs of a workspace.

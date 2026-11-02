@@ -77,7 +77,7 @@ fn living(processes: &[Identity]) -> Result<Vec<Identity>> {
     Ok(living)
 }
 
-/// Stop what the saved chat `chat`, whose process `recorded` ended, is
+/// Stop what the stopped chat `chat`, whose process `recorded` ended, is
 /// proven to own, other than the execution `wrappers`, again while stopping
 /// it starts others, which descend from what each round and the earlier
 /// stops that signalled `stopped` stopped. Each round first has `record`

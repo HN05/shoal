@@ -169,7 +169,7 @@ pub struct AttachedFile {
     /// None for a file attached before Shoal recorded who attached it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attached_by: Option<Attacher>,
-    /// When the file of a removed workspace or ended chat is deleted, in
+    /// When the file of a removed workspace or removed chat is deleted, in
     /// Unix seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<i64>,

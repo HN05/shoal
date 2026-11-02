@@ -344,7 +344,7 @@ async fn empty_caches(
     Ok(())
 }
 
-/// Delete the files kept for removed workspaces and ended chats on the
+/// Delete the files kept for removed workspaces and removed chats on the
 /// filesystem, the oldest first, until it has enough space. They go last: unlike what the
 /// steps before delete, they may exist nowhere else.
 async fn delete_results(

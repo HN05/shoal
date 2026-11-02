@@ -14,14 +14,14 @@ use crate::{
     reason = "a lookup's result, which the selection takes apart at once"
 )]
 pub(super) enum Target {
-    /// A chat Shoal saved, which restores at once.
+    /// A stopped chat, which restores at once.
     Chat(Chat),
     /// A workspace by ID, or a selector no space has, which the daemon
     /// refuses.
     Workspace(String),
 }
 
-/// The space `selector` names among `spaces`: a saved chat or a workspace.
+/// The space `selector` names among `spaces`: a stopped chat or a workspace.
 /// A running chat has nothing to resume.
 pub(super) fn resolve(spaces: &Spaces, selector: String) -> Result<Target> {
     match spaces.find(&selector) {
@@ -42,7 +42,7 @@ pub(super) struct Selected {
 }
 
 impl Selected {
-    /// The spaces `targets` names, each once; every saved chat and every
+    /// The spaces `targets` names, each once; every stopped chat and every
     /// workspace for `--all`; otherwise the current workspace when it has
     /// something to resume, else those picked among the workspaces and saved
     /// chats, or all of them when nothing is resumable anywhere.
@@ -103,7 +103,7 @@ async fn candidates(ctx: &Context, scoped: bool) -> Result<Spaces> {
     Ok(spaces)
 }
 
-/// The chats among `spaces` that Shoal saved to restore.
+/// The stopped chats among `spaces`.
 fn saved_chats(spaces: &Spaces) -> Vec<Chat> {
     spaces
         .chats

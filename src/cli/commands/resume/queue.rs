@@ -16,7 +16,7 @@ use crate::{
 
 /// Queue the restore of every agent and last session `stopped` saves, and
 /// report the commands of workspaces without one, going on after one fails,
-/// with the saved `chats` restored and the resumes already `failed`.
+/// with the stopped `chats` restored and the resumes already `failed`.
 pub(super) async fn queue_all(
     ctx: &Context,
     stopped: Vec<(Workspace, Saved)>,

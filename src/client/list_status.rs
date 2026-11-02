@@ -60,7 +60,7 @@ impl ListStatus {
         }
     }
 
-    /// A chat Shoal saved is stopped until it is restored; another is
+    /// A chat is stopped until it is restored; a running one is
     /// finished once it records completion, ready once it marks its work
     /// ready, or else runs without a reported turn state.
     pub fn of_chat(chat: &Chat) -> Self {

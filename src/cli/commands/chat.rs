@@ -65,7 +65,7 @@ pub(super) struct Options {
     /// The agent session the chat continues, such as one `shoal move
     /// import` brought, instead of starting a new one.
     pub session: Option<String>,
-    /// The saved chat, by ID, that this start restores under its own name
+    /// The stopped chat, by ID, that this start restores under its own name
     /// instead of recording a new one.
     pub restore: Option<String>,
 }
@@ -369,7 +369,7 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     Ok(0)
 }
 
-/// The running and saved chats `filter` keeps.
+/// The running and stopped chats `filter` keeps.
 pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<Chat>> {
     let mut chats = client::recorded_chats(&ctx.paths).await?;
     chats.retain(|chat| filter.keeps_chat(chat));
@@ -433,7 +433,7 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
 }
 
 /// A chat to start in a new place: its topic, name, agent, requested model,
-/// forwarded arguments, the session it continues and the saved chat it
+/// forwarded arguments, the session it continues and the stopped chat it
 /// restores.
 struct Beside<'a> {
     topic: &'a Topic,

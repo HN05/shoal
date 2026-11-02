@@ -429,7 +429,7 @@ pub(super) const FILE_SPACES: &str =
     "ALTER TABLE workspace_files RENAME COLUMN workspace_id TO space_id;
     ALTER TABLE workspace_files RENAME COLUMN workspace TO space;";
 
-/// The ended chats whose attached files stay until `expires_at`.
+/// The removed chats whose attached files stay until `expires_at`.
 pub(super) const ENDED_CHATS: &str = "CREATE TABLE ended_chats (
     chat_id TEXT PRIMARY KEY,
     expires_at INTEGER NOT NULL
@@ -546,7 +546,7 @@ pub(super) const REPOSITORY_AGENT_ENVIRONMENTS: &str =
 );";
 
 /// The workspace a chat's message is about, by identity, which the user's
-/// notification keeps when the chat ends first. Earlier messages name none.
+/// notification keeps when the chat is removed first. Earlier messages name none.
 pub(super) const CHAT_MESSAGE_SENDERS: &str =
     "ALTER TABLE chat_messages ADD COLUMN workspace_id TEXT;";
 

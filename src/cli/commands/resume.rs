@@ -1,6 +1,6 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
 //! It queues restores unless asked to start them now, and restores the
-//! chats Shoal saved at once.
+//! stopped chats at once.
 use crate::client::output::resume::{
     DiscardedWork, Queued, Resumed, ResumedAgent, StoppedCommands,
 };
@@ -29,7 +29,7 @@ use std::{
 use targets::Selected;
 
 /// `shoal resume`: the selected spaces, or every one for `--all` or when no
-/// space has anything to resume. Saved chats restore at once; workspaces'
+/// space has anything to resume. Stopped chats restore at once; workspaces'
 /// restores queue unless `now`, or `focus`, which restores one agent or
 /// chat in this terminal.
 pub async fn select(
@@ -80,7 +80,7 @@ pub async fn select(
 /// Report that no space has anything to resume, as a resume that starts
 /// agents at once when `started`, otherwise as one that queues them.
 fn report_nothing(ctx: &Context, started: bool) -> Result<i32> {
-    let message = "No stopped agents, commands or saved chats";
+    let message = "No stopped agents, commands or chats";
     match started {
         true => ctx.emit(message, Resumed::default())?,
         false => ctx.emit(message, Queued::default())?,
@@ -123,7 +123,7 @@ fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
 }
 
 /// Resume the `selected` spaces together, reporting them at once: restore
-/// the saved chats, or end them for `discard`, and queue the restores of
+/// the stopped chats, or end them for `discard`, and queue the restores of
 /// the workspaces' stopped agents, start them for `now`, or forget the
 /// stopped work for `discard`.
 async fn resume_each(ctx: &Context, selected: Selected, discard: bool, now: bool) -> Result<i32> {
@@ -789,7 +789,7 @@ async fn start_session(
     })
 }
 
-/// End the saved `chats` and forget every workspace's stopped agents and
+/// End the stopped `chats` and forget every workspace's stopped agents and
 /// commands, going on after one fails.
 async fn discard_each(
     ctx: &Context,

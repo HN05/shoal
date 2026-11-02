@@ -143,7 +143,7 @@ async fn confirmation(ctx: &Context, space: Option<&str>) -> Result<Option<Strin
     let Some(space) = space else {
         return Ok(Some(
             "Delete the attached files of every workspace without a running agent or command, \
-             and of every ended chat"
+             and of every removed chat"
                 .into(),
         ));
     };

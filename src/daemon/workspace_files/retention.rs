@@ -56,7 +56,7 @@ impl Manager {
         i64::try_from(unix_seconds() + retention).unwrap_or(i64::MAX)
     }
 
-    /// Delete the files kept for removed workspaces and ended chats whose
+    /// Delete the files kept for removed workspaces and removed chats whose
     /// record has expired, or that never had one. A failure keeps what it
     /// concerns for the next pass and does not skip the rest.
     pub async fn expire_results(&self) -> Result<()> {
@@ -81,13 +81,13 @@ impl Manager {
         Ok(())
     }
 
-    /// The removed workspaces and ended chats whose files are kept, those
+    /// The removed workspaces and removed chats whose files are kept, those
     /// that attached them first oldest first.
     pub(crate) async fn kept_results(&self) -> Result<Vec<Space>> {
         self.store.run(|db| records::kept(db)).await
     }
 
-    /// Delete the files kept for the removed workspace or ended chat `space`
+    /// Delete the files kept for the removed workspace or removed chat `space`
     /// when they are where `holds` says, as on a filesystem low on space,
     /// and return whether it did. The place is checked with the files gate
     /// held, so a move of the repository's directory cannot come between.
@@ -105,7 +105,7 @@ impl Manager {
         Ok(there)
     }
 
-    /// Delete the files kept for the removed workspace or ended chat
+    /// Delete the files kept for the removed workspace or removed chat
     /// `space_id` of `repo`, and then their records. Callers hold the gate of
     /// the repository's files.
     async fn delete_kept_files(&self, repo: &Repository, space_id: String) -> Result<()> {

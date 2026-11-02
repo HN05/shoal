@@ -1,5 +1,5 @@
 //! The store's records of attached files: which copy belongs to which
-//! workspace or chat, how it came, and the removed workspaces and ended chats
+//! workspace or chat, how it came, and the removed workspaces and removed chats
 //! whose files stay. A space is gone when neither a workspace nor a chat has
 //! its ID; its removal or end record says how long its files stay.
 use std::path::{Path, PathBuf};
@@ -189,7 +189,7 @@ pub(super) fn idle(db: &Connection, repository_id: &str) -> Result<Vec<AttachedF
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The latest removed workspace or ended chat with that name or ID whose
+/// The latest removed workspace or removed chat with that name or ID whose
 /// files are kept.
 pub(super) fn gone_space(db: &Connection, selector: &str) -> Result<Option<Space>> {
     Ok(db
@@ -205,7 +205,7 @@ pub(super) fn gone_space(db: &Connection, selector: &str) -> Result<Option<Space
         .optional()?)
 }
 
-/// The removed workspaces and ended chats whose files are kept, those that
+/// The removed workspaces and removed chats whose files are kept, those that
 /// attached them first oldest first.
 pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
     Ok(db
@@ -217,9 +217,9 @@ pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The removed workspaces and ended chats of repository `repository_id`
+/// The removed workspaces and removed chats of repository `repository_id`
 /// whose files are kept though their record expired, or that never had one.
-/// An ended chat's record stays until its files are deleted, so a failed
+/// A removed chat's record stays until its files are deleted, so a failed
 /// deletion still lists them as the chat's.
 pub(super) fn expired(db: &Connection, repository_id: &str) -> Result<Vec<String>> {
     Ok(db
@@ -243,7 +243,7 @@ pub(super) fn forget(db: &mut Connection, ids: &[i64]) -> Result<()> {
     Ok(())
 }
 
-/// Forget every record of the removed workspace or ended chat `space_id`.
+/// Forget every record of the removed workspace or removed chat `space_id`.
 pub(super) fn forget_space(db: &mut Connection, space_id: &str) -> Result<()> {
     let tx = db.transaction()?;
     tx.execute("DELETE FROM workspace_files WHERE space_id=?1", [space_id])?;
@@ -269,7 +269,7 @@ pub(crate) fn keep_ended_chat(tx: &Transaction<'_>, chat_id: &str, expires_at: i
     Ok(())
 }
 
-/// Forget the expired records of ended chats whose files are gone, as when
+/// Forget the expired records of removed chats whose files are gone, as when
 /// `files rm` deleted them all.
 pub(super) fn forget_expired_chats(db: &mut Connection) -> Result<()> {
     db.execute(

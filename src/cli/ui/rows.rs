@@ -115,7 +115,7 @@ pub fn workspace_rows(
     rows_with_status(workspaces, repositories, statuses, palette, width, true)
 }
 
-/// `workspace_rows` for workspaces and the running and saved chats that
+/// `workspace_rows` for workspaces and the running and stopped chats that
 /// opened some of them: the user's own workspaces, then each chat followed by its
 /// workspaces, indented. Child workspaces follow their parent, indented
 /// below it. A chat row names the chat, its status and its agent.

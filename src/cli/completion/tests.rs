@@ -265,7 +265,7 @@ fn resume_completes_resumable_spaces() {
         review: Vec::new(),
         completion: None,
     };
-    let candidates = saved_chat_candidates(vec![
+    let candidates = stopped_chat_candidates(vec![
         chat("talk", Some(crate::state::ChatRestore::Resume)),
         chat("running", None),
     ]);
@@ -278,5 +278,5 @@ fn resume_completes_resumable_spaces() {
             )
         })
         .collect();
-    assert_eq!(offered, [("talk".into(), Some(SAVED_CHAT.to_owned()))]);
+    assert_eq!(offered, [("talk".into(), Some(STOPPED_CHAT.to_owned()))]);
 }

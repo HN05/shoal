@@ -11799,8 +11799,7 @@ fn resume_picker_describes_what_each_workspace_would_restore() {
     assert!(output.status.success(), "{output:?}");
     assert!(rows.is_empty(), "{rows}");
     assert!(
-        String::from_utf8_lossy(&output.stdout)
-            .contains("No stopped agents, commands or saved chats"),
+        String::from_utf8_lossy(&output.stdout).contains("No stopped agents, commands or chats"),
         "{output:?}"
     );
     // Every workspace is listed with what it would restore, stopped work first.

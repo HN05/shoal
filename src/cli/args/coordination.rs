@@ -97,7 +97,7 @@ pub enum FilesCommand {
         #[arg(long)]
         space: Option<String>,
         /// Delete the files of every workspace without a running agent or
-        /// command, and of every ended chat.
+        /// command, and of every removed chat.
         #[arg(long, conflicts_with_all = ["space", "files"])]
         all: bool,
         #[command(flatten)]

@@ -424,7 +424,7 @@ reports how many it queued; the [agent queue](#agent-queue) starts them as
 the agent limits allow. Without a
 space, resume uses the current workspace when it has something to resume,
 otherwise a picker listing every workspace with what it would restore, stopped
-work first, and the saved chats; with nothing to resume anywhere it reports that without a picker.
+work first, and the stopped chats; with nothing to resume anywhere it reports that without a picker.
 Completion describes each workspace the same way.
 A workspace without stopped agents continues one of its last sessions at once,
 placed as `--now` places an agent, when resumed by itself, left by `shoal stop`
@@ -437,7 +437,7 @@ rerun the ones still needed: built-in agents receive it as their prompt argument
 and resume commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal run` commands. Either way they are reported once.
 Several spaces, each workspace among them with stopped work or a last session, or `--all` for every
-saved chat and every workspace whose assignment is not done, resume together and report commands without an agent,
+stopped chat and every workspace whose assignment is not done, resume together and report commands without an agent,
 skipping agents whose wrapper still waits to restore them; a done workspace's
 agent restores only when its workspace is named.
 `--now` starts the agents at once regardless of the limits; with several stopped
@@ -455,7 +455,7 @@ the agents as `shoal resume --focus` commands to run in separate terminals. `--f
 regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
-A [chat](#chats) Shoal saved restores at once under its name, continuing
+A stopped [chat](#chats) restores at once under its name, continuing
 its session, in a background place where a restored agent opens, or in this
 terminal with `--focus`; `--discard` ends it instead. A running chat has nothing to resume.
 When a stopped agent's execution is unknown, after a daemon restart or a stop

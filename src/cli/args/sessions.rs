@@ -19,8 +19,8 @@ pub enum SessionsCommand {
     /// agent stopped, otherwise in a background Herdr tab or a detached zmx
     /// session. `--all` leaves out workspaces whose assignment is done. A named workspace
     /// whose agent's turn `shoal stop --interrupt` ended continues that turn instead.
-    /// A chat Shoal saved restores at once under its name, continuing its
-    /// session; the picker and `--all` include saved chats.
+    /// A stopped chat restores at once under its name, continuing its
+    /// session; the picker and `--all` include stopped chats.
     Resume {
         #[command(flatten)]
         targets: SpaceTargets,

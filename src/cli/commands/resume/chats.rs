@@ -1,4 +1,4 @@
-//! `shoal resume` for the chats Shoal saved: each comes back under its own
+//! `shoal resume` for the stopped chats: each comes back under its own
 //! name, continuing its session, in a background place where a restored
 //! agent opens, or in this terminal with `--focus`; `--discard` ends it
 //! instead.
@@ -15,7 +15,7 @@ use crate::{
     model::Chat,
 };
 
-/// Restore the saved `chat` in this terminal.
+/// Restore the stopped `chat` in this terminal.
 pub(super) async fn restore_here(ctx: &Context, chat: &Chat) -> Result<i32> {
     match restore(ctx, chat, ChatPlace::Here).await? {
         Started::Exited(code) => Ok(code),
@@ -23,7 +23,7 @@ pub(super) async fn restore_here(ctx: &Context, chat: &Chat) -> Result<i32> {
     }
 }
 
-/// End each of the saved `chats` without restoring it, returning those it
+/// End each of the stopped `chats` without restoring it, returning those it
 /// ended and those it failed for.
 pub(super) async fn discard_each(ctx: &Context, chats: &[Chat]) -> (Vec<Chat>, Vec<Failure>) {
     let mut report = ui::Report::new("discard");
@@ -40,7 +40,7 @@ pub(super) async fn discard_each(ctx: &Context, chats: &[Chat]) -> (Vec<Chat>, V
     report.into_parts()
 }
 
-/// Restore each of the saved `chats` in the background, returning those it
+/// Restore each of the stopped `chats` in the background, returning those it
 /// restored and those it failed for.
 pub(super) async fn restore_each(
     ctx: &Context,
@@ -81,7 +81,7 @@ fn restored(chat: &Chat, started: Started) -> RestoredChat {
     }
 }
 
-/// Start the saved `chat` again at `place`, in its repository's checkout,
+/// Start the stopped `chat` again at `place`, in its repository's checkout,
 /// under its own name and agent, continuing the session it reported. A
 /// failure here, such as a session this process starts for an app, reaches
 /// the user through the daemon, as one in the place it opens does.

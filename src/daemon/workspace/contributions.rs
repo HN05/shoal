@@ -160,7 +160,7 @@ async fn advertised_refs(checkout: &std::path::Path) -> Result<Vec<git::RemoteHe
 
 /// Whether the repository still has a workspace, a queued agent, a chat, a
 /// pending issue proposal, a kept branch, an unexpired checkpoint, removal
-/// record or ended chat's files, or a resource another repository's
+/// record or removed chat's files, or a resource another repository's
 /// workspace borrows.
 fn in_use(db: &Connection, id: &str) -> Result<bool> {
     Ok(recorded_use(db, id)? || crate::daemon::resources::borrowed(db, id)?)
