@@ -112,7 +112,7 @@ impl Target {
     /// one last attached, which another terminal may still show.
     async fn record_detach(&self, ctx: &Context) {
         if let Self::Workspace(inspection) = self {
-            recent::record(ctx, &inspection.workspace.id).await;
+            recent::record_attach(ctx, &inspection.workspace.id).await;
         }
     }
 

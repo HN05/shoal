@@ -287,12 +287,22 @@ pub(in crate::cli) async fn attach(name: &str, session: &Session) -> Result<bool
 }
 
 /// Say how to return to `session`, one `host` attached this terminal to, by
-/// `name` when it still runs after this terminal left it.
-pub(super) async fn report_detach(host: &dyn Sessions, name: &str, session: &str) -> Result<()> {
-    if host.left_running(session).await? {
+/// `name` when it still runs after this terminal left it, and whether it does.
+pub(super) async fn report_detach(host: &dyn Sessions, name: &str, session: &str) -> Result<bool> {
+    let running = host.left_running(session).await?;
+    if running {
         eprintln!("shoal: detached from {session}; run `shoal attach {name}` to return");
     }
-    Ok(())
+    Ok(running)
+}
+
+/// Whether `place`, which its host showed here, still has a session there.
+/// A host that keeps no sessions has none.
+pub(super) async fn left_open(place: &Origin) -> bool {
+    match named(place.host).sessions() {
+        Some(sessions) => still_open(sessions, place).await,
+        None => false,
+    }
 }
 
 /// Whether `place` has a session in `host`, which may have attached this

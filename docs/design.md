@@ -1196,11 +1196,12 @@ Scope remains daemon-enforced. Bare `cd` always picks; all-workspace operations 
 A `-` target selects from a per-command history of workspace IDs that the CLI keeps
 in the state directory, shared across terminals so `attach -` works from a new pane;
 it only saves typing a name, so it never fails a command or authorizes anything, and
-scoped callers neither read nor write it. `attach` records a workspace once it has
-shown the session and the session still runs: when the terminal detaches, or right
-away for a host that shows it without attaching the terminal. So `attach -` returns
-to the session last detached from, not one another terminal still shows or one that
-ended.
+scoped callers neither read nor write it. `attach` and every launch that shows a
+workspace's agent session here, such as `add` or `claude`, record the workspace in
+`attach`'s history once the session is shown and still runs: when the terminal
+detaches, or right away for a host that shows it without attaching the terminal. So
+`attach -` returns to the session last detached from, not one another terminal still
+shows or one that ended.
 `resume` uses the current workspace only when it has something to resume; its picker
 and completion list every workspace with the agents and commands it would
 restore, or that nothing would, and with nothing to resume anywhere it reports

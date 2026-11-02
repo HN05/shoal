@@ -19,6 +19,10 @@ use crate::{
 /// The workspace argument that names the previous workspace.
 pub const PREVIOUS: &str = "-";
 
+/// The history `attach -` reads, which every command that shows a
+/// workspace's agent session here keeps.
+pub const ATTACH: &str = "attach";
+
 /// Entries kept per command, enough to pass over the current workspace and
 /// removed ones.
 const LIMIT: usize = 8;
@@ -105,21 +109,29 @@ pub async fn previous(ctx: &Context) -> Result<String> {
 
 /// Remember that the command acted on the workspace `selector` names.
 pub async fn record(ctx: &Context, selector: &str) {
-    remember(ctx, selector, false).await;
+    if let Some(command) = ctx.recent.as_deref() {
+        remember(ctx, command, selector, false).await;
+    }
 }
 
 /// Remember that the command moved from the current workspace to the one
 /// `selector` names, so `-` returns to the one it left.
 pub async fn record_move(ctx: &Context, selector: &str) {
-    remember(ctx, selector, true).await;
+    if let Some(command) = ctx.recent.as_deref() {
+        remember(ctx, command, selector, true).await;
+    }
+}
+
+/// Remember that this terminal showed an agent session of the workspace
+/// `selector` names and left it running, so `attach -` returns to it
+/// whichever command showed it.
+pub async fn record_attach(ctx: &Context, selector: &str) {
+    remember(ctx, ATTACH, selector, false).await;
 }
 
 /// Scoped callers keep no history, and failing to keep it never fails the
 /// command.
-async fn remember(ctx: &Context, selector: &str, from_current: bool) {
-    let Some(command) = ctx.recent.as_deref() else {
-        return;
-    };
+async fn remember(ctx: &Context, command: &str, selector: &str, from_current: bool) {
     if crate::env::inherits_scope(&ctx.paths.state) {
         return;
     }

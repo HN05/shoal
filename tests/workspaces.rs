@@ -24436,7 +24436,9 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
 /// its shell would, logging the output to `$HOME/zmx-<name>.log`, and stays
 /// listed, with the labels set on it, once `$HOME/zmx-keep-sessions` exists.
 /// `$HOME/zmx-<name>.running` exists while the sent text runs.
-/// An attached session ends once `$HOME/zmx-attach-ends-session` exists.
+/// An attached session ends once `$HOME/zmx-attach-ends-session` exists, and
+/// one an attach creates stays listed after its command, as after a detach,
+/// once `$HOME/zmx-attach-detaches` exists.
 /// Calls from a place watcher go to `$HOME/zmx-watch-calls`, out of the
 /// recorded actions.
 const PASSTHROUGH_ZMX: &str = r#"#!/usr/bin/env python3
@@ -24533,6 +24535,9 @@ elif args[:1] == ['attach']:
     if (root / 'zmx-attach-ends-session').exists():
         rewrite_sessions(line for line in (root / 'zmx-sessions').read_text().splitlines()
             if not any(field == f'name={args[0]}' for field in line.strip().split('\t')))
+    if len(args) > 1 and (root / 'zmx-attach-detaches').exists():
+        with (root / 'zmx-sessions').open('a') as sessions:
+            sessions.write(f'  name={args[0]}\tpid=1\n')
     if len(args) > 1:
         os.environ['ZMX_SESSION'] = args[0]
         if os.environ.get('ZMX_TEST_LEAK_INPUT_MODE'):
@@ -28197,6 +28202,43 @@ fn attach_previous_returns_to_the_session_last_detached_from() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "other"]);
     drop((persist, other));
+}
+
+#[test]
+fn attach_previous_returns_to_a_session_an_agent_launch_left_running() {
+    let fixture = Fixture::new();
+    fixture.add("launched");
+    fixture.add("other");
+    let home = fixture.root.path();
+    let session = |name: &str| format!("  name={name}\tpid=1\tclients=0\tshoal.workspace=w0\n");
+    let listed = session("launched") + &session("other");
+    fs::write(home.join("zmx-sessions"), &listed).unwrap();
+    let launched = agent_in_session(&fixture, "launched", "launched");
+    let other = agent_in_session(&fixture, "other", "other");
+    let (output, transcript) = fixture.interactive(&["attach", "other"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    // An agent launched here runs in a new session this terminal attaches
+    // to, which outlives the detach.
+    install_test_script(home.join("bin/claude"), "#!/bin/sh\nexit 0\n");
+    fs::write(home.join("zmx-attach-detaches"), "").unwrap();
+    let mut launch = fixture.command();
+    launch.args(["claude", "launched"]);
+    let (output, transcript) = fixture.terminal_command(&mut launch, "", true);
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        transcript.contains("run `shoal attach launched` to return"),
+        "{transcript}"
+    );
+    fs::remove_file(home.join("zmx-attach-detaches")).unwrap();
+    fs::write(home.join("zmx-sessions"), &listed).unwrap();
+    let (output, transcript) = fixture.interactive(&["attach", "-"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let attached = zmx_calls(&fixture)
+        .into_iter()
+        .rfind(|call| call[0] == "attach")
+        .unwrap();
+    assert_eq!(attached, ["attach", "launched"]);
+    drop((launched, other));
 }
 
 #[test]

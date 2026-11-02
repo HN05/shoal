@@ -204,7 +204,7 @@ impl Command {
     pub fn recent_name(&self) -> Option<String> {
         Some(match self {
             Command::Workspace(WorkspaceCommand::Cd { .. }) => "cd".into(),
-            Command::Sessions(SessionsCommand::Attach { .. }) => "attach".into(),
+            Command::Sessions(SessionsCommand::Attach { .. }) => recent::ATTACH.into(),
             Command::Sessions(SessionsCommand::Demo { .. }) => "demo".into(),
             Command::Workspace(WorkspaceCommand::Edit { .. }) => "edit".into(),
             Command::Changes(ChangesCommand::Diff { .. }) => "diff".into(),

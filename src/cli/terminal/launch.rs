@@ -16,12 +16,13 @@ use super::{
     host::{Attaches, Host, Places, Start},
     hosts::{Beside, Configured, beside, current, enabled_host, hosts, names_places},
     naming,
-    sessions::{Owner, report_detach},
+    sessions::{Owner, left_open, report_detach},
 };
 use crate::{
     cli::{
         commands::{issues::Issue, workspaces::AddPlan},
         context::Context,
+        recent,
     },
     config::Effective,
     env,
@@ -137,24 +138,29 @@ async fn run_add(
     if let Some(directive) = directive {
         directive.hand_over()?;
     }
-    if start.focus {
-        show_opened(host, places, &place, start.label).await?;
+    if start.focus
+        && show_opened(host, places, &place, start.label).await?
+        && left_open(&place).await
+    {
+        recent::record_attach(ctx, name).await;
     }
     Ok(true)
 }
 
 /// Show `place`, which `host` opened focused, in this terminal when the
 /// host does not serve it; a terminal it serves shows its focused place.
+/// Returns whether this terminal showed it.
 async fn show_opened(
     host: &Configured,
     places: &dyn Places,
     place: &Origin,
     name: &str,
-) -> Result<()> {
+) -> Result<bool> {
     if host.serves() {
-        return Ok(());
+        return Ok(false);
     }
-    places.show(place, name).await
+    places.show(place, name).await?;
+    Ok(true)
 }
 
 /// What the place `host` opens for `plan` is called: the plan's label where
@@ -532,16 +538,20 @@ pub(in crate::cli) async fn run_agent(
         argv: &worker,
         env: &env,
     };
-    match run {
+    let left_running = match run {
         AgentRun::Session(attaches) => {
             let owner = Owner::Workspace(&workspace.id);
             let session = attaches.run_agent(&start, owner, &agent.name).await?;
-            report_detach(attaches, &workspace.name, &session).await?;
+            report_detach(attaches, &workspace.name, &session).await?
         }
         AgentRun::Place(places) => {
             let place = places.open(&start).await?;
             places.show(&place, &workspace.name).await?;
+            left_open(&place).await
         }
+    };
+    if left_running {
+        recent::record_attach(ctx, &workspace.id).await;
     }
     Ok(Some(0))
 }

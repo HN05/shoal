@@ -262,7 +262,7 @@ outside one, choose from the interactive picker or pass a target for `--json`
 and noninteractive calls. Bare `shoal cd` always opens a picker. `shoal cd -`,
 `shoal attach -` and other commands that open, show or run something in a
 workspace take `-` for the workspace they last acted on; for `attach`, the one
-whose session you last detached from.
+whose session you last detached from, whichever command attached it.
 Use `shoal <command> --help` for options.
 
 To move changes between your workspace and the default branch:
