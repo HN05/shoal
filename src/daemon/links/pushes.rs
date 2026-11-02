@@ -216,6 +216,15 @@ impl Manager {
             None => self.decide_pushed(request.clone()).await,
         };
         if let Err(error) = &finished {
+            // The request waits for another approval, with no push running.
+            if let Some(mut kept) = self
+                .approval_by_key(key)
+                .await?
+                .filter(|request| request.status == DecisionStatus::Pending)
+            {
+                kept.operation = None;
+                self.save_proposal(kept).await?;
+            }
             let message = format!(
                 "approval {}: {}: {error:#}; approve it again to retry",
                 request.id,

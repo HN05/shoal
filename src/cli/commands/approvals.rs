@@ -265,7 +265,9 @@ pub(super) async fn submit(
     };
     let mut request = request::<Box<ApprovalRequest>>(&ctx.paths, method).await?;
     // An approved push runs in an operation whose end decides the request.
-    if let Some(operation) = request.operation.clone() {
+    if let Some(operation) = request.operation.clone()
+        && request.status == DecisionStatus::Pending
+    {
         request = super::operations::follow_started(ctx, operation).await?;
     }
     for warning in &request.warnings {

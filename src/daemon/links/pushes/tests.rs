@@ -198,6 +198,7 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
         .unwrap()
         .unwrap();
     assert_eq!(kept.status, DecisionStatus::Pending);
+    assert!(kept.operation.is_none());
 
     let decided = manager
         .finish_approved_push(&request.key, None)
