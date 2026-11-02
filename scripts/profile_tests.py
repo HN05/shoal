@@ -32,17 +32,22 @@ TOP_ROWS = 40
 
 
 def cargo_env():
-    """The [env] table of .cargo/config.toml, which `cargo test` gives the
-    test binaries; a variable already set wins."""
+    """The environment `cargo test` gives the test binaries."""
+    return config_env((ROOT / ".cargo" / "config.toml").read_text(), os.environ)
+
+
+def config_env(config, environ):
+    """`environ` with the plain string variables of `config`'s [env] table,
+    which a variable already set overrides."""
     env, section = {}, None
-    for line in (ROOT / ".cargo" / "config.toml").read_text().splitlines():
+    for line in config.splitlines():
         line = line.strip()
         if line.startswith("["):
             section = line
         elif section == "[env]" and "=" in line and not line.startswith("#"):
             name, value = (part.strip() for part in line.split("=", 1))
             env[name] = value.strip('"')
-    return {**env, **os.environ}
+    return {**env, **environ}
 
 
 def binaries():
@@ -51,8 +56,13 @@ def binaries():
         ["cargo", "test", "--locked", "--no-run", "--message-format=json"],
         cwd=ROOT, env={**os.environ, **CI_ENV}, check=True,
         stdout=subprocess.PIPE, text=True).stdout
+    return built_binaries(output.splitlines())
+
+
+def built_binaries(lines):
+    """The test binaries cargo's JSON `lines` report as built."""
     found = []
-    for line in output.splitlines():
+    for line in lines:
         message = json.loads(line)
         # A proc-macro's tests need the toolchain's libraries, which only
         # cargo puts on the library path; they have none here.

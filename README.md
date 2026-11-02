@@ -54,7 +54,7 @@ the daemon. Prebuilt binaries do not require Rust.
 | [Worktrunk](https://worktrunk.dev/) (`wt`, tested with 0.81.0) | Creating and removing worktrees |
 | `lsof` | Checking whether a workspace is in use before cleanup |
 | [zmx](https://github.com/neurosnap/zmx), unless `terminal.default_host` names another host | Agent sessions that keep running after you detach |
-| `ps` (included with macOS; typically `procps` or `procps-ng` on Linux) | Tracking and stopping processes |
+| `ps` (included with macOS; typically `procps` or `procps-ng` on Linux) | Describing processes and checking their terminals |
 | [fzf](https://github.com/junegunn/fzf) | Interactive menus and pickers |
 
 Feature-specific tools are installed separately: `curl` for issues and PR
