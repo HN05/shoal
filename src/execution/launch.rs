@@ -575,7 +575,7 @@ async fn prepare_agent_launch(
 }
 
 /// The helper that holds back the agent's pushes to the remotes of
-/// `workspace`'s repository for the user's approval.
+/// `workspace`'s repository for the user's approval, or refuses them.
 async fn prepare_push_gate(paths: &Paths, workspace: &str) -> Result<crate::push_gate::Launch> {
     let method = crate::protocol::WorkspaceMethod::VerifyWorkspace {
         workspace: workspace.to_owned(),
