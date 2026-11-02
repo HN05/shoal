@@ -170,7 +170,9 @@ lists those, kept branches and shared caches, and why it keeps each other space,
 as `status` gives in `cleanup_reason`; `shoal cleanup caches` empties shared tool
 caches nothing is using. When the repository merges locally instead of through PRs, `shoal merge <workspace>`
 merges a finished branch into the default branch; an agent's own `shoal merge`
-asks for that through `shoal approvals` first.
+asks for that through `shoal approvals` first. A merge that pushes asks for
+confirmation, which needs a terminal; pass `--yes` only when the user asked for
+the push.
 
 ## Install skills
 

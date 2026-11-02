@@ -17,7 +17,7 @@ use crate::{
     daemon::approvals::Undecided,
     env,
     execution::{self, MergeResult},
-    model::{MergePlan, MergedBranch},
+    model::{MergePlan, MergePreview, MergedBranch},
     paths::Paths,
     protocol::{
         ConfigTarget, ExecutionMethod, WorkspaceMethod,
@@ -25,20 +25,23 @@ use crate::{
     },
 };
 
-/// `push` overrides `[merge] push` when given. Unless `confirmed`, the user
-/// confirms a merge the daemon warns about.
+/// `push` overrides `[merge] push` when given, and `yes` skips the
+/// confirmation a merge asks for when it pushes or brings the default branch
+/// sensitive files it changed too.
 pub(in crate::cli::commands) async fn merge(
     ctx: &Context,
     workspace: Option<String>,
     push: Option<bool>,
-    confirmed: bool,
+    yes: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    if !confirmed {
-        let warning = WorkspaceMethod::BranchMergeWarning {
-            workspace: workspace.clone(),
-        };
-        crate::cli::commands::merge_warning::confirm(ctx, request(&ctx.paths, warning).await?)?;
+    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
+    let push = push.unwrap_or(settings.merge.push);
+    if !yes {
+        // An agent's merge asks the user through its approval instead, which
+        // names the files the agent's --yes passed over.
+        let pushing = push && settings.merge.confirm && !env::is_scoped();
+        confirm_merge(ctx, &workspace, push, pushing).await?;
     }
     let spec = OperationSpec::Merge { workspace, push };
     match operations::run(ctx, spec).await {
@@ -51,6 +54,25 @@ pub(in crate::cli::commands) async fn merge(
             Err(error) => Err(error),
         },
     }
+}
+
+/// Ask before merging `workspace`, showing what the merge does, when it
+/// pushes and `pushing` asks for that, or when it brings the default branch
+/// sensitive files it changed too. The daemon checks the merge first, so a
+/// merge it refuses or the user declines changes nothing.
+async fn confirm_merge(ctx: &Context, workspace: &str, push: bool, pushing: bool) -> Result<()> {
+    let method = WorkspaceMethod::PreviewMerge {
+        workspace: workspace.to_owned(),
+        push,
+    };
+    let preview: MergePreview = request(&ctx.paths, method).await?;
+    if pushing || preview.warning.is_some() {
+        anyhow::ensure!(
+            ui::confirm(ctx, &preview.description(), "--yes")?,
+            "merge canceled"
+        );
+    }
+    Ok(())
 }
 
 fn show_merged(ctx: &Context, merged: &MergedBranch) -> Result<()> {
@@ -79,22 +101,14 @@ fn show_merged(ctx: &Context, merged: &MergedBranch) -> Result<()> {
 }
 
 /// Merge `workspace` in an operation's worker, as a tracked execution whose
-/// worker writes what it merged to a file; `push` overrides `[merge] push`.
+/// worker writes what it merged to a file; with `push`, the default branch
+/// is pushed afterwards.
 pub(in crate::cli::commands) async fn merge_branch(
     ctx: &Context,
     workspace: String,
-    push: Option<bool>,
+    push: bool,
     reporter: &Reporter<'_>,
 ) -> Result<MergedBranch> {
-    let push = match push {
-        Some(push) => push,
-        None => {
-            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
-                .await?
-                .merge
-                .push
-        }
-    };
     reporter.step(Step::MergeStarted).await?;
     run_merge(&ctx.paths, workspace, push).await
 }

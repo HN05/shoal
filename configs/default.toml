@@ -330,6 +330,8 @@ settle_seconds = 5
 [merge]
 # false turns shoal merge off, as for a repository that merges only through PRs.
 enabled = true
+# Ask before a merge that pushes; shoal merge --yes skips the question once.
+confirm = true
 # Push the default branch to its upstream after shoal merge; --push and --no-push override it.
 push = false
 

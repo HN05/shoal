@@ -650,8 +650,8 @@ pub struct IssueConfig {
     pub planned_label: Option<String>,
 }
 
-/// Whether `shoal merge` merges into the default branch, and whether it
-/// pushes the default branch to its upstream afterwards.
+/// Whether `shoal merge` merges into the default branch, asks before it
+/// pushes, and pushes the default branch to its upstream afterwards.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Merge)]
@@ -660,6 +660,9 @@ pub struct MergeConfig {
     /// through PRs.
     #[option(default = true)]
     pub enabled: Option<bool>,
+    /// Ask before a merge that pushes; `--yes` skips the question once.
+    #[option(default = true)]
+    pub confirm: Option<bool>,
     #[option(default = false)]
     pub push: Option<bool>,
 }

@@ -29,6 +29,22 @@ struct MergeSource {
 }
 
 impl Manager {
+    /// What merging the workspace `selector` names does, after the checks the
+    /// merge makes before it changes anything; with `push`, the merge pushes
+    /// the default branch afterwards.
+    pub async fn preview_merge(&self, selector: &str, push: bool) -> Result<MergePreview> {
+        let merge = self.validate_merge(selector, push).await?;
+        let default_commit = local_commit(&merge.repo, &merge.default).await?;
+        self.merge_preview(
+            &merge.workspace,
+            &merge.branch,
+            &merge.default,
+            &default_commit,
+            merge.push.as_ref(),
+        )
+        .await
+    }
+
     /// Validate and refresh a merge while the caller holds the repository Git
     /// gate. The gate must stay held until the tracked execution completes.
     /// With `push`, the merge pushes the default branch afterwards.

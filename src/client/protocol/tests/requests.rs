@@ -54,7 +54,7 @@ const REQUESTS: &[&str] = &[
     r#"{"space_status":{"space":"fix"}}"#,
     r#"{"diff_base":{"workspace":"fix"}}"#,
     r#"{"conflicts":{"workspace":"fix","target":null}}"#,
-    r#"{"branch_merge_warning":{"workspace":"fix"}}"#,
+    r#"{"preview_merge":{"workspace":"fix","push":true}}"#,
     r#"{"workspace_hook":{"workspace":"fix","kind":"post_setup"}}"#,
     r#"{"layered_config":{"target":{"workspace":"fix"}}}"#,
     r#"{"keep_agent_environment":{"workspace":"fix","environment":{}}}"#,

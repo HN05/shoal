@@ -17877,6 +17877,56 @@ while True:
 }
 
 #[test]
+fn a_merge_that_pushes_asks_first_unless_confirmed() {
+    let fixture = Fixture::new();
+    git(&fixture.repo, &["config", "user.name", "Test"]);
+    git(
+        &fixture.repo,
+        &["config", "user.email", "test@example.invalid"],
+    );
+    let worker = fixture.add("worker");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    upstream_remote(&fixture);
+    let origin = fixture.root.path().join("origin.git");
+    let pushed = || git(&origin, &["rev-parse", "main"]);
+    let main = || git(&fixture.repo, &["rev-parse", "main"]);
+    commit_file(path, "first", "one\n");
+    let (before, upstream) = (main(), pushed());
+    let question = "Merge worker (1 commit) into main, then push main to origin.";
+    // Without a terminal, a merge that pushes is refused before anything changes.
+    let refused = fixture.run(&["merge", "--push", "worker"]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains(question) && stderr.contains("--yes"),
+        "{stderr}"
+    );
+    let (declined, transcript) = fixture.interactive(&["merge", "--push", "worker"], "n\n");
+    assert!(!declined.status.success());
+    assert!(transcript.contains(question), "{transcript}");
+    assert_eq!((main(), pushed()), (before, upstream));
+    let (accepted, transcript) = fixture.interactive(&["merge", "--push", "worker"], "y\n");
+    assert!(accepted.status.success(), "{transcript}");
+    assert_eq!(pushed(), main());
+    // A merge that stays local never asks.
+    commit_file(path, "second", "two\n");
+    assert_eq!(fixture.ok(&["merge", "worker"])["updated"], true);
+    // --yes, or [merge] confirm = false, skips the question.
+    commit_file(path, "third", "three\n");
+    let confirmed = fixture.ok(&["merge", "--push", "--yes", "worker"]);
+    assert_eq!(confirmed["pushed_to"], "origin");
+    let repo = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+    let repo = repo.as_str().unwrap();
+    fixture.ok(&["config", "set", "merge.confirm", "false", "--repo", repo]);
+    commit_file(path, "fourth", "four\n");
+    assert_eq!(
+        fixture.ok(&["merge", "--push", "worker"])["pushed_to"],
+        "origin"
+    );
+    assert_eq!(pushed(), main());
+}
+
+#[test]
 fn merge_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
     for interruption in ["stop", "daemon", "interrupt"] {
         let mut fixture = Fixture::new();

@@ -151,9 +151,12 @@ pub enum WorkspaceMethod {
         workspace: String,
         target: Option<String>,
     },
-    /// What merging the workspace's HEAD into the default branch warns about.
-    BranchMergeWarning {
+    /// What merging the workspace into the default branch does, after the
+    /// checks the merge makes before it changes anything; with `push`, the
+    /// merge pushes the default branch afterwards.
+    PreviewMerge {
         workspace: String,
+        push: bool,
     },
     /// Keep where an agent of the workspace keeps its configuration, before
     /// Shoal trusts the workspace there, until the repository's removal.

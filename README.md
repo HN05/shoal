@@ -272,7 +272,7 @@ To move changes between your workspace and the default branch:
 shoal repo sync                    # Fetch and fast-forward the default branch
 git rebase main               # Or git merge; use your repo's branch name
 shoal merge                   # Merge your branch into the default branch; no remote needed
-shoal merge --push            # Then push the default branch instead of opening a PR
+shoal merge --push            # Then push the default branch, after asking, instead of opening a PR
 ```
 
 To have an agent review a workspace's committed changes or a PR:

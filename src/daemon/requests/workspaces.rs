@@ -182,8 +182,8 @@ pub(super) async fn handle(
         WorkspaceMethod::Conflicts { workspace, target } => {
             Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
         }
-        WorkspaceMethod::BranchMergeWarning { workspace } => {
-            Body::MergeWarning(manager.branch_merge_warning(&workspace).await?)
+        WorkspaceMethod::PreviewMerge { workspace, push } => {
+            Body::MergePreview(manager.preview_merge(&workspace, push).await?)
         }
         WorkspaceMethod::CloseOwnedPlace { workspace, place } => {
             Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)
@@ -251,7 +251,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::FastForwardWorkspace { workspace, .. }
             | WorkspaceMethod::DiffBase { workspace }
             | WorkspaceMethod::Conflicts { workspace, .. }
-            | WorkspaceMethod::BranchMergeWarning { workspace }
+            | WorkspaceMethod::PreviewMerge { workspace, .. }
             | WorkspaceMethod::WorkspaceHook { workspace, .. }
             | WorkspaceMethod::KeepAgentEnvironment { workspace, .. }
             | WorkspaceMethod::RecordOwnedPlace { workspace, .. }

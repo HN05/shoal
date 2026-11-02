@@ -2561,6 +2561,21 @@ With `[merge] push`, or `--push` for one run, Shoal pushes the default branch to
 its upstream after merging; `--no-push` keeps one merge local. A default branch without an
 upstream is refused before merging, and a failed push keeps the merge.
 
+A merge that pushes asks first, after Shoal has checked it and before anything
+changes. The question names the direction, the commit count and where it pushes,
+and points to `shoal pr merge` for any open PR the workspace watches:
+
+```text
+Merge fix-login (3 commits) into main, then push main to origin.
+PR https://forge.example/team/app/pulls/12 is open; shoal pr merge merges it on the forge instead.
+Are you sure? [y/N]
+```
+
+The default answer is no. `--yes`, or `[merge] confirm = false`, skips the question;
+without a terminal, as in scripts or with `--json`, a merge that would push is
+refused unless one of them is given. A merge that stays local never asks. An
+agent's merge asks through its approval request instead.
+
 `[merge] enabled = false` turns `shoal merge` off for a repository that merges only
 through PRs: it refuses both a merge and an agent's request for one, pointing to
 `shoal pr merge`.
@@ -2568,6 +2583,7 @@ through PRs: it refuses both a merge and an agent's request for one, pointing to
 ```toml
 [merge]
 enabled = true           # Default: true
+confirm = true           # Default: true; ask before a merge that pushes
 push = false             # Default: false
 
 [permissions]

@@ -110,11 +110,9 @@ pub enum OperationSpec {
         workspace: String,
         options: PullOptions,
     },
-    /// Merge the workspace's branch; `push` overrides `[merge] push` when given.
-    Merge {
-        workspace: String,
-        push: Option<bool>,
-    },
+    /// Merge the workspace's branch, then with `push` push the default
+    /// branch to its upstream.
+    Merge { workspace: String, push: bool },
     /// Run the push the user approved in request `approval`, then let the
     /// daemon decide the request, opening the PR it proposed.
     Push {

@@ -627,6 +627,7 @@ response_bodies! {
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
     MergeWarning(Option<crate::model::MergeWarning>),
+    MergePreview(crate::model::MergePreview),
     Hook(Option<std::path::PathBuf>),
     LayeredConfig(Box<ConfigLayers>),
     SyncedRepository(SyncedRepository),

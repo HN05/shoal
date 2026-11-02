@@ -69,6 +69,7 @@ impl Operation {
                         | WorkspaceMethod::SpaceStatus { .. }
                         | WorkspaceMethod::DiffBase { .. }
                         | WorkspaceMethod::Conflicts { .. }
+                        | WorkspaceMethod::PreviewMerge { .. }
                         | WorkspaceMethod::LayeredConfig { .. }
                 )
         )

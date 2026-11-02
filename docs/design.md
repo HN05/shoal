@@ -791,7 +791,12 @@ push fails. The default branch cannot be
 held by a managed workspace, and any checkout of it must be clean. It aborts a merge
 that does not apply cleanly, leaving conflicts to a Git merge of the default branch into
 the workspace. Merging holds the repository Git gate for the tracked execution; the
-daemon validates and refreshes, and the CLI worker merges.
+daemon validates, resolves the push target and refreshes, and the CLI worker merges.
+Pushing publishes the merge where a local reset cannot reach it, so only a
+merge that pushes asks the user first, after the daemon's checks and before it
+changes anything; it names the direction, since `git merge main` in a workspace
+merges the other way, and any open PR `shoal pr merge` would merge instead. An
+agent's approval request carries the same details and is its confirmation.
 A repository that merges only through PRs turns it off with `[merge] enabled =
 false`, which refuses agents' requests to merge too.
 After cancellation, the wrapper rolls back incomplete merges after stopping the
