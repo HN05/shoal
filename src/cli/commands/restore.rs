@@ -236,10 +236,9 @@ impl Reopened {
             ),
         };
         format!(
-            "{action} {} {} at {}{files}{agents}",
+            "{action} {} {}{files}{agents}",
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            super::workspaces::checkout_phrase(workspace),
-            workspace.path.display()
+            super::workspaces::location_phrase(workspace),
         )
     }
 

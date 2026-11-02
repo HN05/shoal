@@ -244,10 +244,9 @@ async fn start_agent(
 fn report(ctx: &Context, child: &Workspace, agent: Option<&QueueEntry>) -> Result<()> {
     let palette = Palette::stdout(ctx.json);
     let mut text = format!(
-        "Created {} {} at {}",
+        "Created {} {}",
         palette.paint(Style::Heading, &child.name),
-        super::workspaces::checkout_phrase(child),
-        child.path.display()
+        super::workspaces::location_phrase(child),
     );
     if let Some(entry) = agent {
         text.push_str(&match entry.state {

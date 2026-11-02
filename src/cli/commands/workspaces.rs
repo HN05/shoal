@@ -41,13 +41,15 @@ pub(super) use status::status;
 pub(super) use title::{request_title, title};
 pub(super) use watch::watch_items;
 
-/// Where the workspace's worktree is, for messages: `on branch <branch>`, or
-/// `at <commit>` with what a workspace at a commit was made for.
-pub(super) fn checkout_phrase(workspace: &crate::model::Workspace) -> String {
+/// Where the workspace's worktree is, for messages: `on branch <branch> at
+/// <path>`, or `at <commit> in <path>` with what a workspace at a commit was
+/// made for.
+pub(super) fn location_phrase(workspace: &crate::model::Workspace) -> String {
+    let path = workspace.path.display();
     match (&workspace.branch, &workspace.at) {
-        (Some(branch), _) => format!("on branch {branch}"),
-        (None, Some(at)) => format!("at {}", commit_label(at)),
-        (None, None) => "at a commit".to_owned(),
+        (Some(branch), _) => format!("on branch {branch} at {path}"),
+        (None, Some(at)) => format!("at {} in {path}", commit_label(at)),
+        (None, None) => format!("at a commit in {path}"),
     }
 }
 

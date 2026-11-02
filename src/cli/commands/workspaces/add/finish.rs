@@ -237,11 +237,10 @@ async fn finish_add_workspace(
     }
     ctx.emit(
         &format!(
-            "{} {} {} at {}",
+            "{} {} {}",
             if reused { "Opened" } else { "Created" },
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            super::super::checkout_phrase(&workspace),
-            workspace.path.display()
+            super::super::location_phrase(&workspace),
         ),
         &workspace,
     )?;
