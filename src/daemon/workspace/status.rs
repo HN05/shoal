@@ -61,6 +61,10 @@ impl Manager {
         });
         let (leftover_count, leftovers) = self.leftovers.of(&inspection.workspace.id);
         let sync = self.checkout_sync(&inspection.workspace.repository_id);
+        let changed_on_both_sides = self
+            .recorded_changed_on_both_sides(&inspection.workspace.id)
+            .await?
+            .map(Box::new);
         Ok(WorkspaceStatus {
             inspection,
             setup_finished,
@@ -77,6 +81,7 @@ impl Manager {
             leftover_count,
             leftovers,
             sync,
+            changed_on_both_sides,
         })
     }
 }

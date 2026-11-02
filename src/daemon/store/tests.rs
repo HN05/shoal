@@ -377,6 +377,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 114 {
         db.execute_batch(SENT_FILES)?;
     }
+    if version >= 115 {
+        db.execute_batch(include_str!("changed_on_both_sides.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

@@ -176,6 +176,7 @@ fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
+    db.execute_batch("DROP TABLE changed_on_both_sides;")?;
     // Pending updates sit in their activity records again.
     db.execute_batch(
         "DROP TRIGGER workspace_pending_updates_removed;

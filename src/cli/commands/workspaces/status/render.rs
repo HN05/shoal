@@ -58,6 +58,7 @@ fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
             }
         }
     }
+    render_changed_on_both_sides(status, palette);
     render_sync(status, palette);
     if let Some(error) = &workspace.error {
         outln!("Error:         {}", palette.paint(Style::Error, error));
@@ -72,6 +73,20 @@ fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
                 .map_or(String::new(), |r| format!(" ({r})"))
         );
     }
+}
+
+/// The sensitive paths the last conflict check found changed on both sides.
+fn render_changed_on_both_sides(status: &WorkspaceStatus, palette: Palette) {
+    let changed = status.changed_on_both_sides.as_ref();
+    let Some(changed) = changed.filter(|changed| !changed.files.is_empty()) else {
+        return;
+    };
+    let line = format!(
+        "Changed on both sides with {}: {}",
+        changed.target,
+        changed.files.join(", ")
+    );
+    outln!("  {}", palette.paint(Style::Warning, &line));
 }
 
 /// When the repository's default branch last synced with its remote, and

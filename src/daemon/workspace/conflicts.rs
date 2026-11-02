@@ -8,8 +8,10 @@ use crate::{
         conflicts::{changed_on_both_sides, merge_conflicts},
         default_branch::DefaultBranchLookup,
     },
-    model::{ConflictCheck, Workspace},
+    model::{ChangedOnBothSides, ConflictCheck, Workspace},
 };
+
+pub(crate) mod recorded;
 
 impl Manager {
     /// Whether the workspace's committed HEAD merges cleanly into `target`,
@@ -21,7 +23,27 @@ impl Manager {
     ) -> Result<ConflictCheck> {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
-        self.conflicts_with(&workspace, target).await
+        let default_target = target.is_none();
+        let check = self.conflicts_with(&workspace, target).await?;
+        if default_target {
+            self.record_changed_on_both_sides(&check).await?;
+        }
+        Ok(check)
+    }
+
+    /// The paths the last check against the workspace's default target
+    /// found changed on both sides.
+    pub(crate) async fn recorded_changed_on_both_sides(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Option<ChangedOnBothSides>> {
+        let id = workspace_id.to_owned();
+        self.store.run(move |db| recorded::get(db, &id)).await
+    }
+
+    async fn record_changed_on_both_sides(&self, check: &ConflictCheck) -> Result<()> {
+        let check = check.clone();
+        self.store.run(move |db| recorded::save(db, &check)).await
     }
 
     /// The conflicts a workspace watch reports: those of
@@ -31,6 +53,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let mut check = self.conflicts_with(&workspace, None).await?;
+        self.record_changed_on_both_sides(&check).await?;
         if check.conflicts
             && self
                 .conflicts_settled(&workspace, &check.head, &check.target_commit)

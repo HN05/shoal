@@ -561,6 +561,10 @@ pub struct WorkspaceStatus {
     /// once the daemon has tried it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sync: Option<CheckoutSync>,
+    /// The last check against the default conflict target, once one ran;
+    /// boxed to keep the response small.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changed_on_both_sides: Option<Box<ChangedOnBothSides>>,
 }
 
 /// How the background sync of a repository's default branch went.
@@ -750,7 +754,7 @@ pub struct DiffBase {
 }
 
 /// Whether a workspace's committed HEAD merges cleanly into a target.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConflictCheck {
     pub workspace_id: String,
     pub target: String,
@@ -762,6 +766,17 @@ pub struct ConflictCheck {
     /// The repository's sensitive paths that HEAD and the target both
     /// changed since their merge base, even where their changes merge.
     pub changed_on_both_sides: Vec<String>,
+}
+
+/// The sensitive paths that a workspace's HEAD and its default conflict
+/// target both changed, as the last check found them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChangedOnBothSides {
+    pub target: String,
+    pub target_commit: String,
+    pub head: String,
+    /// Empty when the check found none.
+    pub files: Vec<String>,
 }
 
 impl ConflictCheck {

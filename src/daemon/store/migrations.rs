@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 114;
+pub(super) const SCHEMA_VERSION: i64 = 115;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -377,6 +377,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (112, include_str!("pending_updates.sql"), None),
     (113, REVIEW_REPLY_LOOKUPS, None),
     (114, SENT_FILES, None),
+    (115, include_str!("changed_on_both_sides.sql"), None),
 ];
 
 /// The JSON array of the record IDs of the files an agent sent the user with

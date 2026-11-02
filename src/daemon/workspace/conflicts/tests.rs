@@ -109,8 +109,27 @@ async fn sensitive_paths_changed_on_both_sides_are_listed_until_the_target_has_h
     assert!(!check.conflicts);
     assert_eq!(check.changed_on_both_sides, ["migrations/2.sql", "version"]);
     assert!(!check.clean());
+    let recorded = manager
+        .recorded_changed_on_both_sides(&workspace.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (recorded.head, recorded.target_commit, recorded.files),
+        (check.head, check.target_commit, check.changed_on_both_sides)
+    );
+    // Only the default target's result is kept.
+    git(&repo, &["branch", "release", "main"]);
+    manager
+        .check_conflicts(&workspace.id, Some("release".into()))
+        .await
+        .unwrap();
+    let recorded = manager.recorded_changed_on_both_sides(&workspace.id);
+    assert_eq!(recorded.await.unwrap().unwrap().target, "main");
 
     change(&repo, &["mine", "feature"]);
     let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
     assert!(check.clean(), "the target has HEAD's changes");
+    let recorded = manager.recorded_changed_on_both_sides(&workspace.id);
+    assert!(recorded.await.unwrap().unwrap().files.is_empty());
 }
