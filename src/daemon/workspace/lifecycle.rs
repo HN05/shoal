@@ -977,22 +977,26 @@ impl Manager {
             if let Some(settings) = xcode {
                 self.delete_xcode_data(&workspace, &settings).await;
             }
-            self.commit_workspace_removal(
-                &workspace.id,
-                if present {
-                    removal.cause()
-                } else {
-                    EventCause::MissingDirectory
-                },
-            )
-            .await?;
-            Ok((outcome, post_remove))
+            let released = self
+                .commit_workspace_removal(
+                    &workspace.id,
+                    if present {
+                        removal.cause()
+                    } else {
+                        EventCause::MissingDirectory
+                    },
+                )
+                .await?;
+            Ok((outcome, post_remove, released))
         }
         .await;
         match result {
-            Ok((outcome, post_remove)) => Ok(self
-                .complete_workspace_removal(&workspace, outcome, post_remove)
-                .await),
+            Ok((outcome, post_remove, released)) => {
+                self.ask_user_about(&released).await;
+                Ok(self
+                    .complete_workspace_removal(&workspace, outcome, post_remove)
+                    .await)
+            }
             Err(error) => {
                 // A deleted directory can no longer be ready.
                 let state = match removal {
@@ -1051,8 +1055,14 @@ impl Manager {
         }
     }
 
-    /// Release ownership and cascading resource leases in one transaction.
-    async fn commit_workspace_removal(&self, id: &str, cause: EventCause) -> Result<()> {
+    /// Release ownership and cascading resource leases in one transaction,
+    /// giving the requests the workspace decides, such as an issue proposal
+    /// that outlives its workspace, back to the user; those given back.
+    async fn commit_workspace_removal(
+        &self,
+        id: &str,
+        cause: EventCause,
+    ) -> Result<Vec<crate::daemon::approvals::ApprovalRequest>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -1069,9 +1079,10 @@ impl Manager {
                 events::record(&tx, &id, EventKind::Removed, cause, None)?;
                 tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
                 crate::daemon::workspace_files::forget_removed(&tx, &id)?;
-                tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
+                let released = crate::daemon::approvals::release_decided_by(&tx, &id)?;
+                tx.execute("DELETE FROM workspaces WHERE id=?1", [&id])?;
                 tx.commit()?;
-                Ok(())
+                Ok(released)
             })
             .await
     }

@@ -4817,11 +4817,12 @@ passes the request up. It never approves a proposal or denies one as a
 duplicate, which write to the forge. A chat runs with your authority and may
 approve anything.
 A land request names its own branch and commit, which no other workspace holds
-a grant for, so its parent workspace passes it up. When a chat ends, the
-requests it had not decided go to the user. Without a deciding space, the user
-is notified as above. The request records its `decider`, the deciding space,
-while one decides it; the user may still decide it. `shoal approvals --space
-<chat>` lists the requests a chat decides.
+a grant for, so its parent workspace passes it up. When a chat ends or is
+saved, or a workspace deciding a request is removed, such as below an issue
+proposal that outlives its workspace, the requests it had not decided go to
+the user. Without a deciding
+space, the user is notified as above. The request records its `decider`, the
+deciding space, while one decides it; the user may still decide it.
 
 An acquisition waiting for a decision returns exit 2 and JSON
 `code: "approval_pending"` with the request; denial returns `"approval_denied"`.

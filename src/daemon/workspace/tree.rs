@@ -298,7 +298,8 @@ pub(crate) fn spaces_above(
 /// The space directly above a workspace.
 enum Above {
     Workspace(String),
-    /// The running chat that opened it; a chat's end clears its ownership.
+    /// The running chat that opened it; a chat's end clears its ownership,
+    /// and a saved chat, which keeps it, is passed by.
     Chat(String),
     User,
 }
@@ -306,9 +307,12 @@ enum Above {
 /// The space directly above the workspace `id`: its parent workspace, else
 /// the chat that opened it.
 fn space_above(db: &Connection, id: &str) -> Result<Above> {
+    // A saved chat keeps its workspaces but has no agent to tell.
     let above: Option<(Option<String>, Option<String>)> = db
         .query_row(
-            "SELECT parent_workspace_id, chat_id FROM workspaces WHERE id=?1",
+            "SELECT parent_workspace_id,
+                    (SELECT id FROM chats WHERE id=workspaces.chat_id AND restore IS NULL)
+                FROM workspaces WHERE id=?1",
             [id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )

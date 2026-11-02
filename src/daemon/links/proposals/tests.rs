@@ -248,7 +248,10 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
 
 #[tokio::test]
 async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
-    use crate::state::AgentState;
+    use crate::{
+        removal::{InspectionPolicy, UnsavedWork},
+        state::AgentState,
+    };
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -327,4 +330,45 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
         .unwrap();
     assert_eq!(denied.status, DecisionStatus::Denied);
     assert!(manager.pending_proposal(proposed).await.is_err());
+
+    // An issue proposal outlives its workspace and the one above that
+    // decides it, which gives it back to the user as it goes.
+    let specification = Specification::Issue(IssueSpecification {
+        issue: NewIssue {
+            title: "Slow".into(),
+            ..NewIssue::default()
+        },
+        repository: None,
+        link: false,
+        branch: "child".into(),
+        commit: "head".into(),
+        agent: None,
+        duplicates: Vec::new(),
+        follow_up: None,
+    });
+    let request = proposal(&child, Target::IssueOpen, proposals::ISSUE, specification);
+    let (pending, _) = manager
+        .store_proposal(request, proposals::propose_issue)
+        .await
+        .unwrap();
+    manager.notify_approval(&child.name, &pending).await;
+    for id in [&child.id, &parent.id] {
+        manager
+            .remove_workspace(id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+            .await
+            .unwrap();
+    }
+    let given_back = manager.approval_request(pending.id).await.unwrap().unwrap();
+    assert_eq!(
+        (given_back.status, given_back.decider),
+        (DecisionStatus::Pending, None)
+    );
+    let asked = manager
+        .notifications(false, 50)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|n| n.kind == crate::daemon::notifications::NotificationKind::ApprovalRequested)
+        .count();
+    assert_eq!(asked, 1);
 }

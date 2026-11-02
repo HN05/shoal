@@ -1227,6 +1227,280 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
 }
 
 #[tokio::test]
+async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
+    use crate::{
+        daemon::approvals::{
+            ApprovalRequest, Lifetime, SecretSpecification, Specification, Target,
+        },
+        state::AgentState,
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let root = manager
+        .create_workspace(&repo.id, "root".into(), None, None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .split_workspace(&root.id, "parent".into(), None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    for workspace in [&root, &parent, &child] {
+        manager
+            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .await
+            .unwrap();
+    }
+    let requested = manager
+        .request_approval(ApprovalRequest::new(
+            &child.id,
+            Target::Secret("token".into()),
+            "default",
+            Specification::Secret(SecretSpecification {
+                command: vec!["token-source".into()],
+                tools: vec![],
+            }),
+            Lifetime::Workspace,
+            Some("Publish the package"),
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    manager.notify_approval(&child.name, &requested).await;
+    // The root cannot be told, so passing it up gives it to the user, as
+    // the reply says.
+    let mut n = 0;
+    while manager
+        .send_agent_message(&root.id, format!("note {n}"), Vec::new(), &Attacher::User)
+        .await
+        .is_ok()
+    {
+        n += 1;
+    }
+    let escalated = manager
+        .escalate_approval(&parent.id, requested.id, None)
+        .await
+        .unwrap();
+    assert_eq!(escalated.decider, None);
+}
+
+#[tokio::test]
+async fn a_request_withdrawn_once_given_back_notifies_nobody() {
+    use crate::{
+        daemon::{
+            approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},
+            notifications::NotificationKind,
+        },
+        state::AgentState,
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let worker = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    let requested = manager
+        .request_approval(ApprovalRequest::new(
+            &worker.id,
+            Target::Secret("token".into()),
+            "default",
+            Specification::Secret(SecretSpecification {
+                command: vec!["token-source".into()],
+                tools: vec![],
+            }),
+            Lifetime::Workspace,
+            Some("Publish the package"),
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    // Given back as an ending chat gives it, then withdrawn before the user
+    // is told.
+    manager
+        .withdraw_approval(&worker.id, requested.id)
+        .await
+        .unwrap();
+    manager
+        .ask_user_about(std::slice::from_ref(&requested))
+        .await;
+    let asked = manager
+        .notifications(false, 10)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|n| n.kind == NotificationKind::ApprovalRequested)
+        .count();
+    assert_eq!(asked, 0);
+}
+
+#[tokio::test]
+async fn a_saved_chat_leaves_its_workspaces_requests_to_the_user() {
+    use crate::{
+        daemon::approvals::{
+            ApprovalRequest, Lifetime, SecretSpecification, Specification, Target,
+        },
+        state::AgentState,
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let worker = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .await
+        .unwrap();
+    manager
+        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    // Saved, the chat keeps its workspace but has no agent to tell.
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE chats SET restore='resume' WHERE id=?1", [&id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let requested = manager
+        .request_approval(ApprovalRequest::new(
+            &worker.id,
+            Target::Secret("token".into()),
+            "default",
+            Specification::Secret(SecretSpecification {
+                command: vec!["token-source".into()],
+                tools: vec![],
+            }),
+            Lifetime::Workspace,
+            Some("Publish the package"),
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    manager.notify_approval(&worker.name, &requested).await;
+    let routed = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(routed.decider, None);
+}
+
+#[tokio::test]
+async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
+    use crate::{
+        daemon::{
+            approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},
+            notifications::NotificationKind,
+        },
+        state::{AgentState, ChatRestore},
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let worker = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .await
+        .unwrap();
+    manager
+        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    let requested = manager
+        .request_approval(ApprovalRequest::new(
+            &worker.id,
+            Target::Secret("token".into()),
+            "default",
+            Specification::Secret(SecretSpecification {
+                command: vec!["token-source".into()],
+                tools: vec![],
+            }),
+            Lifetime::Workspace,
+            Some("Publish the package"),
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    manager.notify_approval(&worker.name, &requested).await;
+    let routed = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(routed.decider.as_deref(), Some(chat.id.as_str()));
+
+    // Saved after the request reached it, the chat decides it no more.
+    manager.save_chats(ChatRestore::Resume).await;
+    let given_back = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(given_back.decider, None);
+    let asked = manager
+        .notifications(false, 10)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|n| n.kind == NotificationKind::ApprovalRequested)
+        .count();
+    assert_eq!(asked, 1);
+}
+
+#[tokio::test]
 async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
     use crate::{
         daemon::{
@@ -1493,6 +1767,9 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .unwrap();
     manager.notify_approval(&child.name, &other).await;
     assert_eq!(user_requests().await, 1);
+    // It is the user's now, so their inbox lists it.
+    let given_back = manager.approval_request(other.id).await.unwrap().unwrap();
+    assert_eq!(given_back.decider, None);
 }
 
 #[tokio::test]

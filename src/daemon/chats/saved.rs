@@ -12,7 +12,11 @@ use super::{
     recorded, stopped,
 };
 use crate::{
-    daemon::{log, workspace::Manager},
+    daemon::{
+        approvals::{ApprovalRequest, release_decided_by},
+        log,
+        workspace::Manager,
+    },
     model::{Chat, Repository},
     process::identity::{self, Identity},
     sessions::Origin,
@@ -33,7 +37,10 @@ impl Manager {
         if let Err(error) = self.end_finished_chats().await {
             log!("ended chats not found before saving: {error:#}");
         }
-        let saved = match self.store.run(move |db| save(db, restore)).await {
+        let Saved {
+            running: saved,
+            released,
+        } = match self.store.run(move |db| save(db, restore)).await {
             Ok(saved) => saved,
             Err(error) => {
                 log!("chats not saved: {error:#}");
@@ -50,6 +57,7 @@ impl Manager {
                 self.keep_after_failed_stop(id, process).await;
             }
         }
+        self.ask_user_about(&released).await;
     }
 
     /// Settle the chat `id`, saved while it ran as `process`, after a stop
@@ -153,7 +161,8 @@ impl Manager {
             }
             Err(error) => {
                 let id = chat.id.clone();
-                self.store.run(move |db| resave(db, &id, pid)).await?;
+                let (_, released) = self.store.run(move |db| resave(db, &id, pid)).await?;
+                self.ask_user_about(&released).await;
                 Err(error)
             }
         }
@@ -165,7 +174,8 @@ impl Manager {
     /// it, and the user, who may not see where it ran, learns why.
     pub async fn return_to_saved(&self, id: &str, pid: u32, error: &str) -> Result<()> {
         let chat = id.to_owned();
-        let saved = self.store.run(move |db| resave(db, &chat, pid)).await?;
+        let (saved, released) = self.store.run(move |db| resave(db, &chat, pid)).await?;
+        self.ask_user_about(&released).await;
         self.notify_restore_failed(&saved, error).await;
         Ok(())
     }
@@ -228,19 +238,29 @@ fn saved_process(db: &mut Connection, id: &str) -> Result<Identity> {
     })
 }
 
-/// Mark every running chat saved to come back as `restore` says, returning
-/// the ID and process of each.
-fn save(db: &mut Connection, restore: ChatRestore) -> Result<Vec<(String, Identity)>> {
+/// What [`save`] saved.
+struct Saved {
+    /// The ID and process of each chat.
+    running: Vec<(String, Identity)>,
+    /// The requests they decided, given back to the user, since a saved
+    /// chat decides none.
+    released: Vec<ApprovalRequest>,
+}
+
+/// Mark every running chat saved to come back as `restore` says.
+fn save(db: &mut Connection, restore: ChatRestore) -> Result<Saved> {
     let tx = db.transaction()?;
     let running = super::recorded_processes(&tx)?;
+    let mut released = Vec::new();
     for (id, process) in &running {
         tx.execute(
             "UPDATE chats SET restore=?2,unique_id=?3 WHERE id=?1",
             params![id, restore, unique_id(process)?],
         )?;
+        released.extend(release_decided_by(&tx, id)?);
     }
     tx.commit()?;
-    Ok(running)
+    Ok(Saved { running, released })
 }
 
 /// The never-reused ID of `process`, as JSON, while it runs.
@@ -254,8 +274,9 @@ fn unique_id(process: &Identity) -> Result<Option<String>> {
 }
 
 /// Mark the chat `id` saved for `shoal resume` while it runs as process
-/// `pid`, and refuse it once it runs as another, returning it.
-fn resave(db: &mut Connection, id: &str, pid: u32) -> Result<Chat> {
+/// `pid`, and refuse it once it runs as another, returning it with the
+/// requests it decided, given back to the user.
+fn resave(db: &mut Connection, id: &str, pid: u32) -> Result<(Chat, Vec<ApprovalRequest>)> {
     let tx = db.transaction()?;
     tx.execute(
         "UPDATE chats SET restore=?3 WHERE id=?1 AND pid=?2 AND restore IS NULL",
@@ -270,8 +291,9 @@ fn resave(db: &mut Connection, id: &str, pid: u32) -> Result<Chat> {
         "chat {id} runs as process {}",
         chat.pid
     );
+    let released = release_decided_by(&tx, id)?;
     tx.commit()?;
-    Ok(chat)
+    Ok((chat, released))
 }
 
 /// Return the chat `id`, saved while it ran as `process`, to running.

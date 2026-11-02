@@ -296,9 +296,8 @@ impl Manager {
             if let Err(error) = self.delete_tmp_dir(&repository_id, &id).await {
                 log!("chat {id}: temporary directory not deleted: {error:#}");
             }
-            // An ended chat decides nothing more.
-            self.pass_up_chat_requests(&id).await;
         }
+        self.ask_user_about(&deleted.released).await;
         if let Some(id) = deleted.notification {
             self.signals.notification_recorded(id);
         }
@@ -589,6 +588,8 @@ struct Deleted {
     notification: Option<i64>,
     /// The repository and ID of each chat.
     chats: Vec<(String, String)>,
+    /// The approval requests the chats had not decided, the user's now.
+    released: Vec<crate::daemon::approvals::ApprovalRequest>,
 }
 
 /// The repository of each recorded chat of `ids`, by chat.
@@ -643,18 +644,22 @@ fn delete(
     let tx = db.transaction()?;
     let mut last = None;
     let mut deleted = Vec::new();
+    let mut released = Vec::new();
     for (id, over) in ended {
         let Some(repository_id) = over.repository(&tx, id)? else {
             continue;
         };
         let expires_at = expiries.get(id).copied().unwrap_or_default();
         last = end_record(&tx, id, expires_at)?.or(last);
+        // With the record, so no request is left with an ended decider.
+        released.extend(crate::daemon::approvals::release_decided_by(&tx, id)?);
         deleted.push((repository_id, id.clone()));
     }
     tx.commit()?;
     Ok(Deleted {
         notification: last,
         chats: deleted,
+        released,
     })
 }
 

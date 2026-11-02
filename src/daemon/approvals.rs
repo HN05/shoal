@@ -86,11 +86,39 @@ fn list_decided(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
     .collect()
 }
 
-/// The pending requests the space `id` decides.
-fn decided_by(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
-    let mut requests = list_decided(db, id)?;
-    requests.retain(|request| request.status == DecisionStatus::Pending);
-    Ok(requests)
+/// Give the pending requests the space `id` decides back to the user, as
+/// it ends, is saved or is removed, in the caller's transaction; the
+/// requests given back.
+pub(crate) fn release_decided_by(tx: &Transaction<'_>, id: &str) -> Result<Vec<ApprovalRequest>> {
+    let mut released = list_decided(tx, id)?;
+    released.retain(|request| request.status == DecisionStatus::Pending);
+    for request in &mut released {
+        request.decider = None;
+        write_record(tx, request)?;
+    }
+    Ok(released)
+}
+
+/// Give the request stored under `key` back to the user while it is pending
+/// and still `decider`'s, in the caller's transaction.
+fn give_back(tx: &Transaction<'_>, key: &str, decider: Option<&str>) -> Result<()> {
+    let Some(mut stored) = by_key(tx, key)? else {
+        return Ok(());
+    };
+    if stored.status == DecisionStatus::Pending && stored.decider.as_deref() == decider {
+        stored.decider = None;
+        write_record(tx, &stored)?;
+    }
+    Ok(())
+}
+
+/// Store `request`'s record in place of the one under its key.
+fn write_record(db: &Connection, request: &ApprovalRequest) -> Result<()> {
+    db.execute(
+        "UPDATE access_requests SET record=?2 WHERE id=?1",
+        params![request.key, serde_json::to_string(request)?],
+    )?;
+    Ok(())
 }
 
 fn by_number(db: &Connection, number: i64) -> Result<Option<ApprovalRequest>> {
@@ -319,10 +347,7 @@ fn route(
     }
     request.decider = candidates.first().cloned();
     request.routed = true;
-    tx.execute(
-        "UPDATE access_requests SET record=?2 WHERE id=?1",
-        params![key, serde_json::to_string(&request)?],
-    )?;
+    write_record(tx, &request)?;
     Ok(request)
 }
 
@@ -468,10 +493,7 @@ pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision
     if new {
         request.status = status;
         request.decided_at = Some(crate::time::unix_seconds());
-        tx.execute(
-            "UPDATE access_requests SET record=?2 WHERE id=?1",
-            params![key, serde_json::to_string(&request)?],
-        )?;
+        write_record(tx, &request)?;
     }
     Ok(Decision { request, new })
 }
@@ -892,8 +914,7 @@ impl Manager {
     pub async fn notify_approval(&self, workspace: &str, request: &ApprovalRequest) {
         let _gate = self.gates.lock_announcements().await;
         // It may have been withdrawn or decided since it was requested.
-        let key = request.key.clone();
-        let request = match self.store.run(move |db| by_key(db, &key)).await {
+        let request = match self.approval_by_key(&request.key).await {
             Ok(Some(stored)) if stored.status == DecisionStatus::Pending => stored,
             Ok(_) => return,
             Err(error) => {
@@ -940,7 +961,9 @@ impl Manager {
         let _gate = self.gates.lock_announcements().await;
         let routed = self.route_approval(&request, Some(space.id())).await?;
         self.announce_approval(&request.workspace, &routed).await;
-        Ok(routed)
+        // A decider that could not be told gave the request to the user. Its
+        // key, unlike its number, never names another request.
+        Ok(self.approval_by_key(&routed.key).await?.unwrap_or(routed))
     }
 
     /// Route `request` to the space above its workspace, or to the one above
@@ -993,38 +1016,52 @@ impl Manager {
         };
         // The user decides what no space could be told about.
         if !told {
+            if request.decider.is_some() {
+                self.release_to_user(request).await;
+            }
             self.ask_user(workspace, request).await;
         }
     }
 
-    /// Pass each pending request the chat `chat` decides up, to the user, as
-    /// the chat ends; a chat has no parent to pass them to.
-    pub(crate) async fn pass_up_chat_requests(&self, chat: &str) {
-        let decided = {
-            let chat = chat.to_owned();
-            self.store.run(move |db| decided_by(db, &chat)).await
-        };
-        let requests = match decided {
-            Ok(requests) => requests,
-            Err(error) => {
-                log!("approvals of chat {chat} not passed up: {error:#}");
-                return;
-            }
-        };
+    /// Tell the user about requests handed to them, such as those of a chat
+    /// that ended, which [`release_decided_by`] gave back in the same
+    /// transaction that ended it.
+    pub(crate) async fn ask_user_about(&self, requests: &[ApprovalRequest]) {
+        // Under the gate a withdrawal takes, with each request read again, so
+        // one withdrawn meanwhile notifies nobody.
+        let _gate = self.gates.lock_announcements().await;
         for request in requests {
-            if let Err(error) = self.escalate_ended(&request, chat).await {
-                log!("approval {} not passed up: {error:#}", request.id);
+            let stored = match self.approval_by_key(&request.key).await {
+                Ok(stored) => stored,
+                Err(error) => {
+                    log!("approval {} not rechecked: {error:#}", request.id);
+                    continue;
+                }
+            };
+            if let Some(stored) = stored.filter(|stored| {
+                stored.status == DecisionStatus::Pending && stored.decider.is_none()
+            }) {
+                self.ask_user(&stored.workspace, &stored).await;
             }
         }
     }
 
-    /// [`Self::escalate_approval`] for a chat that ended, which names no
-    /// present space.
-    async fn escalate_ended(&self, request: &ApprovalRequest, chat: &str) -> Result<()> {
-        let _gate = self.gates.lock_announcements().await;
-        let routed = self.route_approval(request, Some(chat)).await?;
-        self.announce_approval(&request.workspace, &routed).await;
-        Ok(())
+    /// Give the request back to the user when its decider cannot be told,
+    /// so it is the user's to decide and their inbox lists it.
+    async fn release_to_user(&self, request: &ApprovalRequest) {
+        let (key, decider) = (request.key.clone(), request.decider.clone());
+        let released = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                give_back(&tx, &key, decider.as_deref())?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await;
+        if let Err(error) = released {
+            log!("approval {} not given back: {error:#}", request.id);
+        }
     }
 
     /// Queue `message` for the agent of the workspace or chat `space`; false

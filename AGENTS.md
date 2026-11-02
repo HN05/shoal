@@ -173,8 +173,9 @@ when behavior changes, distinguishing decisions from proposals.
   workspace without an approved grant for the same target and settings may only
   deny or pass it up, while a chat, being unscoped, may approve anything.
   Proposals route the same way, but only the user or a chat approves one; a
-  parent workspace may deny it with a reason or pass it up. An ending chat
-  passes its undecided requests to the user. Resource grants bind effective
+  parent workspace may deny it with a reason or pass it up. A chat that ends or
+  is saved, or a deciding workspace that is removed, passes its undecided
+  requests to the user. Resource grants bind effective
   allocation settings, consume no capacity, and last until release or workspace
   removal according to configuration. Never bypass existing allocation rules.
   A scoped land

@@ -639,8 +639,9 @@ without a running agent, else the chat that opened the workspace, since each
 knows best what its children need. A parent workspace approves only what it
 holds an approved grant for, or a hold on its child, and otherwise denies or
 passes the request up; a chat runs with the user's authority and approves
-anything; the user decides at the top, and an ending chat hands the user what it
-had not decided.
+anything; the user decides at the top, and a deciding space that ends, is saved
+or is removed hands the user what it had not decided, since none of them can
+decide any more.
 The worker skill steers agents to a subagent working in the child's directory
 over `--agent`: the child then has no agent of its own, so its activity reaches
 the parent, and the subagent reports to the parent directly, supervision Shoal
@@ -1825,7 +1826,8 @@ messages stand for, and its workers return to the user even if it is resumed.
 A chat passes a question up by asking the user, who attends it. The approval
 requests of the workspaces it opened come to it when no parent workspace above
 them has an agent, and with the user's authority it may approve them; those it
-has not decided go to the user when it ends. A repository may have several chats, so each call starts a new
+has not decided go to the user when it ends or is saved, as with any deciding
+space. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
 ends or is renamed. Renaming changes the record and the files kept under the
