@@ -33,6 +33,8 @@ const REQUESTS: &[&str] = &[
     r#"{"open_branch":{"path":null,"repository":"app","branch":"fix","git_profile":null,"base":"main","chat":null}}"#,
     r#"{"create_workspace":{"path":"/work/fix","repository":"app","name":"fix","base":null,"git_profile":"work","chat":"c1"}}"#,
     r#"{"reopen_workspace":{"workspace":"fix"}}"#,
+    r#"{"create_commit_workspace":{"repository":"app","parent":"fix","start":{"revision":"v1.4.0"},"chat":null,"options":{"skip_setup":true,"disposable":true}}}"#,
+    r#"{"open_pull_head":{"repository":"app","url":"https://forge.example/team/app/pulls/8","head":{"number":8,"reference":"refs/pull/8/head","commit":"abc"},"chat":null}}"#,
     r#"{"split_workspace":{"workspace":"fix","name":"part","base":null}}"#,
     r#"{"check_creation":{"repository":"app","branch":"fix","existing":null,"base":null,"git_profile":null,"path":null}}"#,
     r#"{"check_dependencies":{"repository":"app","after":[{"work":"fix"},{"issue":"https://forge.example/team/app/issues/1"}]}}"#,

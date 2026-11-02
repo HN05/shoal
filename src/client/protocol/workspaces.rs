@@ -17,7 +17,7 @@ pub enum WorkspaceMethod {
         /// The chat opening the workspace; `None` gives it to the user.
         chat: Option<String>,
         /// Apply only when opening creates a new worktree.
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
     CreateWorkspace {
@@ -28,7 +28,7 @@ pub enum WorkspaceMethod {
         git_profile: Option<String>,
         /// The chat opening the workspace; `None` gives it to the user.
         chat: Option<String>,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
     /// Reopen the existing `workspace` for a launch in it, never creating one.
@@ -41,7 +41,7 @@ pub enum WorkspaceMethod {
         workspace: String,
         name: String,
         base: Option<String>,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
     /// Create a workspace at a commit, without a branch: a child of
@@ -52,7 +52,7 @@ pub enum WorkspaceMethod {
         parent: Option<String>,
         start: CommitStart,
         chat: Option<String>,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
     /// Open PR `url`'s `head` in a workspace at a commit: the one in
@@ -64,7 +64,7 @@ pub enum WorkspaceMethod {
         url: String,
         head: PullHead,
         chat: Option<String>,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
     /// Refuse what `CreateWorkspace` or `OpenBranch` would refuse in this
@@ -77,7 +77,7 @@ pub enum WorkspaceMethod {
         base: Option<String>,
         git_profile: Option<String>,
         path: Option<std::path::PathBuf>,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
     /// Refuse the work `after` names that a queued launch in `repository`
@@ -210,6 +210,13 @@ pub struct CreationOptions {
     /// holds, without asking or keeping a checkpoint, and deletes its branch.
     #[serde(default)]
     pub disposable: bool,
+}
+
+impl CreationOptions {
+    /// Whether it leaves nothing out, which requests then do not spell.
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// Where a workspace at a commit starts.
