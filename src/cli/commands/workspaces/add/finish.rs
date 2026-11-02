@@ -159,6 +159,7 @@ async fn open_add_workspace(
         base,
         git_profile,
         pr: _,
+        options,
     } = creation;
     let repository = target.selector.clone();
     if let Some(branch) = existing {
@@ -171,6 +172,7 @@ async fn open_add_workspace(
                 git_profile,
                 base,
                 chat,
+                options,
             },
         )
         .await
@@ -185,6 +187,7 @@ async fn open_add_workspace(
                 base,
                 git_profile,
                 chat,
+                options,
             },
         )
         .await?;

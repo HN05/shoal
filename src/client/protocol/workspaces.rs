@@ -16,6 +16,9 @@ pub enum WorkspaceMethod {
         base: Option<String>,
         /// The chat opening the workspace; `None` gives it to the user.
         chat: Option<String>,
+        /// Apply only when opening creates a new worktree.
+        #[serde(default)]
+        options: CreationOptions,
     },
     CreateWorkspace {
         path: Option<std::path::PathBuf>,
@@ -25,6 +28,8 @@ pub enum WorkspaceMethod {
         git_profile: Option<String>,
         /// The chat opening the workspace; `None` gives it to the user.
         chat: Option<String>,
+        #[serde(default)]
+        options: CreationOptions,
     },
     /// Reopen the existing `workspace` for a launch in it, never creating one.
     ReopenWorkspace {
@@ -36,6 +41,8 @@ pub enum WorkspaceMethod {
         workspace: String,
         name: String,
         base: Option<String>,
+        #[serde(default)]
+        options: CreationOptions,
     },
     /// Create a workspace at a commit, without a branch: a child of
     /// `parent`, or without one a top-level workspace given to `chat`, or
@@ -45,6 +52,8 @@ pub enum WorkspaceMethod {
         parent: Option<String>,
         start: CommitStart,
         chat: Option<String>,
+        #[serde(default)]
+        options: CreationOptions,
     },
     /// Refuse what `CreateWorkspace` or `OpenBranch` would refuse in this
     /// request, without creating anything.
@@ -171,6 +180,18 @@ pub enum WorkspaceMethod {
         since: Option<i64>,
         follow: bool,
     },
+}
+
+/// What a new workspace leaves out, for workspaces on a branch and at a
+/// commit alike.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreationOptions {
+    /// Skip what gates readiness, `setup.command`, `hooks.pre_setup` and
+    /// `setup.copy_ignored`, and the hooks around it, `hooks.post_setup` and
+    /// the removal hooks, until `shoal work setup` runs it; the seed clone
+    /// still happens.
+    #[serde(default)]
+    pub skip_setup: bool,
 }
 
 /// Where a workspace at a commit starts.

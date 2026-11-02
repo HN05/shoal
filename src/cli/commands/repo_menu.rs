@@ -60,6 +60,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             agent: None,
             now: false,
             after: vec![],
+            creation: Default::default(),
             model: Default::default(),
             args: vec![],
         }),

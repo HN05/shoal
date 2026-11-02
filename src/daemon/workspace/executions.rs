@@ -311,7 +311,7 @@ impl ExecutionKind {
                     );
                 }
                 let reserved = tx.execute(
-                    "UPDATE workspaces SET state=?2,error=NULL,setup_finished=0 WHERE id=?1 AND state IN (?3,?4,?2)",
+                    "UPDATE workspaces SET state=?2,error=NULL,setup_finished=0,setup_skipped=0 WHERE id=?1 AND state IN (?3,?4,?2)",
                     params![
                         workspace_id,
                         WorkspaceState::Preparing,

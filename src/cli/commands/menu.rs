@@ -747,6 +747,7 @@ fn add() -> Command {
         agent: None,
         now: false,
         after: vec![],
+        creation: Default::default(),
         model: Default::default(),
         args: vec![],
     })

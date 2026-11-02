@@ -177,8 +177,7 @@ async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
             repo.id.into(),
             "opened".into(),
             None,
-            None,
-            None,
+            Default::default(),
             Some(chat.id.clone()),
         )
         .await
@@ -886,8 +885,7 @@ async fn a_chat_a_removal_holds_neither_gives_up_nor_takes_workspaces() {
             repo.id.clone().into(),
             "below".into(),
             None,
-            None,
-            None,
+            Default::default(),
             Some(chat.id.clone()),
         )
         .await

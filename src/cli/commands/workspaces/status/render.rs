@@ -41,10 +41,10 @@ fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
     split::render(workspace);
     outln!(
         "Setup:         {}",
-        if status.setup_finished {
-            "finished"
-        } else {
-            "in progress"
+        match (workspace.setup_skipped, status.setup_finished) {
+            (true, _) => "skipped",
+            (false, true) => "finished",
+            (false, false) => "in progress",
         }
     );
     match &status.diff {

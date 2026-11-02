@@ -8,7 +8,7 @@ use super::{Manager, derive_workspace_name};
 use crate::{
     git,
     model::{MadeFor, Repository, StartingCommit, Workspace},
-    protocol::CommitStart,
+    protocol::{CommitStart, CreationOptions},
     state::WorkspaceState,
 };
 
@@ -30,6 +30,7 @@ impl Manager {
         parent: Option<String>,
         start: CommitStart,
         chat: Option<String>,
+        options: CreationOptions,
     ) -> Result<Workspace> {
         let parent = match parent {
             Some(parent) => Some(self.workspace(&parent).await?.id),
@@ -42,6 +43,7 @@ impl Manager {
         let workspace = Workspace {
             base_commit: Some(start.at.commit.clone()),
             at: Some(start.at),
+            setup_skipped: options.skip_setup,
             ..Workspace::new_record(repo.id.clone(), name, path, None, WorkspaceState::Preparing)
         };
         self.insert_workspace(workspace.clone(), None, parent)

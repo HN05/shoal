@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 117;
+pub(super) const SCHEMA_VERSION: i64 = 118;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -380,7 +380,12 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (115, include_str!("changed_on_both_sides.sql"), None),
     (116, include_str!("space_cleanup.sql"), None),
     (117, WORKSPACE_COMMITS, Some(allow_branchless_workspaces)),
+    (118, SKIPPED_SETUP, None),
 ];
+
+/// Whether a workspace was created without its setup, which also skips its
+/// removal hooks until `shoal work setup` runs it.
+pub(super) const SKIPPED_SETUP: &str = "ALTER TABLE workspaces ADD COLUMN setup_skipped INTEGER NOT NULL DEFAULT 0 CHECK(setup_skipped IN (0,1));";
 
 /// Where a workspace without a branch started, and the tag, branch or PR it
 /// was created for as JSON.

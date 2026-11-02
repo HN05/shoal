@@ -680,8 +680,7 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
             repo.id.clone().into(),
             "opened".into(),
             None,
-            None,
-            None,
+            Default::default(),
             Some(chat.id.clone()),
         )
         .await

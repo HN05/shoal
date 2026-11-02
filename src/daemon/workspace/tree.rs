@@ -21,6 +21,18 @@ impl Manager {
         name: String,
         base: Option<String>,
     ) -> Result<Workspace> {
+        self.split_workspace_with(parent, name, base, Default::default())
+            .await
+    }
+
+    /// [`Self::split_workspace`] leaving out what `options` say.
+    pub(crate) async fn split_workspace_with(
+        &self,
+        parent: &str,
+        name: String,
+        base: Option<String>,
+        options: crate::protocol::CreationOptions,
+    ) -> Result<Workspace> {
         let parent = self.workspace(parent).await?;
         let (repo, _guard) = self.lock_repository(&parent.repository_id).await?;
         crate::git::check_branch_name(Some(&repo.path), &name).await?;
@@ -33,8 +45,10 @@ impl Manager {
                 base,
                 parent: Some(parent.id),
             },
-            None,
-            None,
+            super::NewWorkspace {
+                options,
+                ..Default::default()
+            },
         )
         .await
     }

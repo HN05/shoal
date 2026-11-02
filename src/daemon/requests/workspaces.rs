@@ -30,18 +30,19 @@ pub(super) async fn handle(
             git_profile,
             base,
             chat,
-        } => Body::OpenedWorkspace(
-            manager
-                .open_branch_for_chat(
-                    repository,
-                    &branch,
-                    git_profile.as_deref(),
-                    path,
-                    base,
-                    chat,
-                )
-                .await?,
-        ),
+            options,
+        } => {
+            let new = workspace::NewWorkspace {
+                git_profile: git_profile.as_deref(),
+                path,
+                options,
+            };
+            Body::OpenedWorkspace(
+                manager
+                    .open_branch_for_chat(repository, &branch, base, new, chat)
+                    .await?,
+            )
+        }
         WorkspaceMethod::CreateWorkspace {
             path,
             repository,
@@ -49,26 +50,28 @@ pub(super) async fn handle(
             base,
             git_profile,
             chat,
-        } => Body::Workspace(
-            manager
-                .create_workspace_for_chat(
-                    repository,
-                    name,
-                    base,
-                    git_profile.as_deref(),
-                    path,
-                    chat,
-                )
-                .await?,
-        ),
+            options,
+        } => {
+            let new = workspace::NewWorkspace {
+                git_profile: git_profile.as_deref(),
+                path,
+                options,
+            };
+            Body::Workspace(
+                manager
+                    .create_workspace_for_chat(repository, name, base, new, chat)
+                    .await?,
+            )
+        }
         WorkspaceMethod::CreateCommitWorkspace {
             repository,
             parent,
             start,
             chat,
+            options,
         } => Body::Workspace(
             manager
-                .create_commit_workspace(repository, parent, start, chat)
+                .create_commit_workspace(repository, parent, start, chat, options)
                 .await?,
         ),
         WorkspaceMethod::ReopenWorkspace { workspace } => {
@@ -78,7 +81,12 @@ pub(super) async fn handle(
             workspace,
             name,
             base,
-        } => Body::Workspace(manager.split_workspace(&workspace, name, base).await?),
+            options,
+        } => Body::Workspace(
+            manager
+                .split_workspace_with(&workspace, name, base, options)
+                .await?,
+        ),
         WorkspaceMethod::CheckCreation {
             repository,
             branch,

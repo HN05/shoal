@@ -22,6 +22,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
             agent,
             now,
             after,
+            creation,
             model,
             args,
         } => {
@@ -39,6 +40,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
                     base,
                     git_profile,
                     pr: None,
+                    options: creation.into(),
                 },
                 agent,
                 args,
@@ -61,13 +63,15 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
             workspace,
             agent,
             fork,
+            creation,
             model,
             args,
         } => {
             if no_branch {
-                return split::at_commit(&ctx, workspace, base).await;
+                return split::at_commit(&ctx, workspace, base, creation.into()).await;
             }
             let split = split::Split {
+                options: creation.into(),
                 branch,
                 issue,
                 base,

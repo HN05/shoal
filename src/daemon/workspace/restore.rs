@@ -112,12 +112,11 @@ impl Manager {
         });
         let base = self.restore_base(&removed).await?;
         let opened = self
-            .open_branch_with(
+            .open_branch_restoring(
                 removed.repository_id.as_str(),
                 &branch,
-                None,
-                None,
                 base,
+                Default::default(),
                 files,
             )
             .await?;

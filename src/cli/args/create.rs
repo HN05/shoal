@@ -57,6 +57,8 @@ pub enum CreateCommand {
         #[arg(long, value_name = "WORK", conflicts_with_all = ["now", "focus"])]
         after: Vec<String>,
         #[command(flatten)]
+        creation: CreationArgs,
+        #[command(flatten)]
         model: ModelArgs,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
@@ -104,11 +106,30 @@ pub enum CreateCommand {
         #[arg(long)]
         fork: bool,
         #[command(flatten)]
+        creation: CreationArgs,
+        #[command(flatten)]
         model: ModelArgs,
         /// Arguments forwarded to the agent, such as its prompt.
         #[arg(last = true, requires = "child_agent")]
         args: Vec<OsString>,
     },
+}
+
+/// What a new workspace leaves out.
+#[derive(Debug, Default, Args)]
+pub struct CreationArgs {
+    /// Skip setup.command, hooks.pre_setup, setup.copy_ignored, hooks.post_setup
+    /// and the removal hooks; `shoal work setup` runs the setup later.
+    #[arg(long)]
+    pub skip_setup: bool,
+}
+
+impl From<CreationArgs> for crate::protocol::CreationOptions {
+    fn from(args: CreationArgs) -> Self {
+        Self {
+            skip_setup: args.skip_setup,
+        }
+    }
 }
 
 // Arguments of `shoal contribute`.

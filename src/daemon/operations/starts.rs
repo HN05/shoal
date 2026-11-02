@@ -45,7 +45,7 @@ impl Manager {
             None => None,
         };
         let workspace = self
-            .create_workspace_for_chat(repository.into(), name, base, None, None, None)
+            .create_workspace_for_chat(repository.into(), name, base, Default::default(), None)
             .await?;
         self.prepare_new(workspace, issue, preparing, caller).await
     }

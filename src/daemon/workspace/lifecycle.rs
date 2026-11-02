@@ -1125,11 +1125,24 @@ impl Manager {
         })
     }
 
+    /// The removal hook `kind` of `workspace`; none for one whose setup was
+    /// skipped, since they tear down what setup made.
+    async fn removal_hook(
+        &self,
+        workspace: &Workspace,
+        kind: HookKind,
+    ) -> Result<Option<std::path::PathBuf>> {
+        if workspace.setup_skipped {
+            return Ok(None);
+        }
+        self.workspace_hook(workspace, kind).await
+    }
+
     async fn prepare_post_remove_hook(
         &self,
         workspace: &Workspace,
     ) -> Result<Option<PostRemoveHook>> {
-        match self.workspace_hook(workspace, HookKind::PostRemove).await? {
+        match self.removal_hook(workspace, HookKind::PostRemove).await? {
             Some(command) => Ok(Some(PostRemoveHook {
                 command,
                 checkout: self.repository(&workspace.repository_id).await?.path,
@@ -1273,7 +1286,7 @@ impl Manager {
             .await?;
         let children = self.remove_workspace_children(workspace, removal).await?;
         // The hook sees the worktree intact; a failing hook retains it.
-        if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
+        if let Some(command) = self.removal_hook(workspace, HookKind::PreRemove).await? {
             let configured_env = self.configured_workspace_environment(workspace).await?;
             hooks::run_detached(
                 Hook::PreRemove,

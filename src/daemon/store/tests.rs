@@ -387,6 +387,9 @@ fn historical_database(version: i64) -> Result<Connection> {
         db.execute_batch(WORKSPACE_COMMITS)?;
         allow_branchless_workspaces(&db)?;
     }
+    if version >= 118 {
+        db.execute_batch(SKIPPED_SETUP)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -935,7 +938,7 @@ fn mappers_use_named_columns() -> Result<()> {
             "base_commit": "abc", "base_ref": "refs/heads/main",
             "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
             "base_workspace": null, "parent_workspace": null, "links": {"issue": null, "prs": [], "opened": [], "related": []}, "running": false, "done": false,
-            "chat": null
+            "setup_skipped": false, "chat": null
         }),
     )?;
     check_columns(

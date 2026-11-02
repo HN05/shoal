@@ -105,6 +105,9 @@ pub struct Workspace {
     /// Whether `shoal done` recorded a completion that is not withdrawn.
     #[serde(default)]
     pub done: bool,
+    /// Whether it was created without setup, which `shoal work setup` runs.
+    #[serde(default)]
+    pub setup_skipped: bool,
     /// The workspace whose branch this one's branch builds on.
     #[serde(default)]
     pub base_workspace: Option<WorkspaceRef>,
@@ -465,6 +468,7 @@ impl Workspace {
             links: SpaceLinks::default(),
             running: false,
             done: false,
+            setup_skipped: false,
             usage: None,
         }
     }

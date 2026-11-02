@@ -15,7 +15,13 @@ async fn create(
     start: CommitStart,
 ) -> anyhow::Result<Workspace> {
     manager
-        .create_commit_workspace(repo.into(), parent.map(str::to_owned), start, None)
+        .create_commit_workspace(
+            repo.into(),
+            parent.map(str::to_owned),
+            start,
+            None,
+            Default::default(),
+        )
         .await
 }
 
@@ -229,6 +235,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
             parent: parent.clone(),
             start: CommitStart::Revision(None),
             chat: None,
+            options: Default::default(),
         };
         let authorized =
             crate::daemon::scope::authorize(&manager, Some("scope"), &mut request).await;

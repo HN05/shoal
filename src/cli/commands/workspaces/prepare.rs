@@ -39,7 +39,8 @@ pub(in crate::cli::commands) async fn prepare(
         workspace = run_setup(ctx, &workspace).await?;
         reporter.step(Step::Ready).await?;
     }
-    if steps.post_setup {
+    // A workspace created without setup runs none of its hooks.
+    if steps.post_setup && !workspace.setup_skipped {
         reporter.step(Step::PostSetupStarted).await?;
         run_post_setup_hook(ctx, &workspace, reporter)
             .await

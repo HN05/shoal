@@ -376,7 +376,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
     })
 }
 
-pub const WORKSPACE_COLUMNS: &str = "id,repository_id,name,title,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id";
+pub const WORKSPACE_COLUMNS: &str = "id,repository_id,name,title,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped";
 
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -393,6 +393,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         running: false,
         done: false,
         usage: None,
+        setup_skipped: row.get("setup_skipped")?,
         id: row.get("id")?,
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,

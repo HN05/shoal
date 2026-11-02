@@ -77,6 +77,7 @@ use crate::{
     git::{self, default_branch::DefaultBranchLookup, worktrunk},
     model::{Execution, Inspection, Repository, Workspace},
     paths::Paths,
+    protocol::CreationOptions,
     state::WorkspaceState,
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -90,6 +91,14 @@ use tokio::sync::OwnedMutexGuard;
 /// process: enough to overlap their waits without one listing taking a
 /// process per workspace.
 const REVIEW_CHECK_CONCURRENCY: usize = 8;
+
+/// Where a new workspace goes, its Git profile, and what it leaves out.
+#[derive(Debug, Default)]
+pub(crate) struct NewWorkspace<'a> {
+    pub git_profile: Option<&'a str>,
+    pub path: Option<std::path::PathBuf>,
+    pub options: CreationOptions,
+}
 
 enum WorkspaceSource {
     /// A new branch from an optional base ref, split from an optional parent
@@ -405,6 +414,7 @@ impl Manager {
         Ok(inspection)
     }
 
+    #[cfg(test)]
     pub async fn create_workspace(
         &self,
         repository: impl Into<crate::repository::Selector>,
@@ -412,6 +422,23 @@ impl Manager {
         base: Option<String>,
         git_profile: Option<&str>,
         path: Option<std::path::PathBuf>,
+    ) -> Result<Workspace> {
+        let new = NewWorkspace {
+            git_profile,
+            path,
+            options: CreationOptions::default(),
+        };
+        self.create_workspace_with(repository, name, base, new)
+            .await
+    }
+
+    /// [`Self::create_workspace`] where and as `new` says.
+    pub(crate) async fn create_workspace_with(
+        &self,
+        repository: impl Into<crate::repository::Selector>,
+        name: String,
+        base: Option<String>,
+        new: NewWorkspace<'_>,
     ) -> Result<Workspace> {
         let (repo, _guard) = self.lock_repository(repository).await?;
         git::check_branch_name(Some(&repo.path), &name).await?;
@@ -421,8 +448,7 @@ impl Manager {
             name,
             branch,
             WorkspaceSource::New { base, parent: None },
-            git_profile,
-            path,
+            new,
         )
         .await
     }
@@ -483,9 +509,13 @@ impl Manager {
         name: String,
         branch: String,
         source: WorkspaceSource,
-        git_profile: Option<&str>,
-        path: Option<std::path::PathBuf>,
+        new: NewWorkspace<'_>,
     ) -> Result<Workspace> {
+        let NewWorkspace {
+            git_profile,
+            path,
+            options,
+        } = new;
         if let Some(name) = git_profile {
             self.config().machine.git_profiles.profile(name)?;
         }
@@ -503,13 +533,16 @@ impl Manager {
         };
         let name = derive_workspace_name(&name);
         let path = self.new_workspace_path(repo, &name, path).await?;
-        let workspace = Workspace::new_record(
-            repo.id.clone(),
-            name,
-            path,
-            Some(branch),
-            WorkspaceState::Preparing,
-        );
+        let workspace = Workspace {
+            setup_skipped: options.skip_setup,
+            ..Workspace::new_record(
+                repo.id.clone(),
+                name,
+                path,
+                Some(branch),
+                WorkspaceState::Preparing,
+            )
+        };
         self.insert_workspace(workspace.clone(), base_branch, parent)
             .await?;
         let result = self
@@ -527,7 +560,7 @@ impl Manager {
     ) -> Result<Workspace> {
         match materialized {
             Ok(needs_setup) => {
-                self.finish_materialization(&workspace.id, needs_setup)
+                self.finish_materialization(&workspace.id, needs_setup && !workspace.setup_skipped)
                     .await?
             }
             Err(error) => {
@@ -594,7 +627,7 @@ impl Manager {
                     tree::ensure_parent(&tx, &record.repository_id, parent)?;
                 }
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,parent_workspace_id,start_commit,made_for) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15)",
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,parent_workspace_id,start_commit,made_for,setup_skipped) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15,?16)",
                     params![
                         record.id,
                         record.repository_id,
@@ -611,6 +644,7 @@ impl Manager {
                         parent,
                         record.at.as_ref().map(|at| &at.commit),
                         record.at.as_ref().and_then(|at| at.made_for.as_ref()).map(serde_json::to_string).transpose()?,
+                        record.setup_skipped,
                     ],
                 )?;
                 tx.execute(
@@ -798,7 +832,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 db.execute(
-                    "UPDATE workspaces SET state=?2,error=NULL,setup_finished=?3 WHERE id=?1",
+                    "UPDATE workspaces SET state=?2,error=NULL,setup_finished=?3 AND NOT setup_skipped WHERE id=?1",
                     params![
                         id,
                         if needs_setup {

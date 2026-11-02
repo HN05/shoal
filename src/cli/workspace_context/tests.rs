@@ -15,6 +15,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
         links: crate::model::SpaceLinks::default(),
         running: false,
         done: false,
+        setup_skipped: false,
         usage: None,
         id: format!("id-{name}"),
         repository_id: "repo".into(),

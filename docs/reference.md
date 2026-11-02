@@ -2670,6 +2670,14 @@ shoal work setup fix-login --skip          # Accept the failure after ownership 
 shoal rm fix-login --yes                    # Delete this workspace
 ```
 
+`--skip-setup` on `shoal add` and `shoal split` creates a workspace without
+setup, for one that only needs a checkout, such as one a CI job or a reviewer
+reads: no `hooks.pre_setup`, ignored-file copy, `setup.command` or
+`hooks.post_setup`, and since they tear down what setup made, no
+`hooks.pre_remove` or `hooks.post_remove` either. The [seed](#seed-builds) clone
+still happens. `status` shows `Setup: skipped` and `--json` `setup_skipped`;
+`shoal work setup` runs the full setup later and clears it.
+
 Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
 without `_cmd`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
 and `SHOAL_STATE_DIR`, without a scope token, port variables or `SHOAL_OUTPUT`, so whatever they leave running (a tmux

@@ -1141,8 +1141,7 @@ async fn chat_with_workspace(
             repo.id.into(),
             "opened".into(),
             None,
-            None,
-            None,
+            Default::default(),
             Some(chat.id.clone()),
         )
         .await

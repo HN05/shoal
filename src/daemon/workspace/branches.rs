@@ -344,6 +344,7 @@ impl Manager {
         git::existing_branch::list(&repo.path).await
     }
 
+    #[cfg(test)]
     pub async fn open_branch(
         &self,
         repository: impl Into<crate::repository::Selector>,
@@ -352,25 +353,41 @@ impl Manager {
         path: Option<std::path::PathBuf>,
         base: Option<String>,
     ) -> Result<OpenedWorkspace> {
-        self.open_branch_with(repository, selector, git_profile, path, base, None)
-            .await
+        let new = super::NewWorkspace {
+            git_profile,
+            path,
+            ..Default::default()
+        };
+        self.open_branch_with(repository, selector, base, new).await
     }
 
-    /// [`Self::open_branch`], writing a restore's files into a new worktree
-    /// before it can be used; a reopened workspace gets none.
-    pub(super) async fn open_branch_with(
+    /// Open the branch `selector` names in `repository`, reopening the
+    /// workspace that owns it or creating one where and as `new` says.
+    pub(crate) async fn open_branch_with(
         &self,
         repository: impl Into<crate::repository::Selector>,
         selector: &str,
-        git_profile: Option<&str>,
-        path: Option<std::path::PathBuf>,
         base: Option<String>,
+        new: super::NewWorkspace<'_>,
+    ) -> Result<OpenedWorkspace> {
+        self.open_branch_restoring(repository, selector, base, new, None)
+            .await
+    }
+
+    /// [`Self::open_branch_with`], writing a restore's files into a new
+    /// worktree before it can be used; a reopened workspace gets none.
+    pub(super) async fn open_branch_restoring(
+        &self,
+        repository: impl Into<crate::repository::Selector>,
+        selector: &str,
+        base: Option<String>,
+        new: super::NewWorkspace<'_>,
         files: Option<super::restore::RestoredFiles>,
     ) -> Result<OpenedWorkspace> {
         let (repo, _guard) = self.lock_repository(repository).await?;
         let options = NewWorktreeOptions {
-            git_profile,
-            path: path.as_deref(),
+            git_profile: new.git_profile,
+            path: new.path.as_deref(),
             base: base.as_deref(),
         };
         let branch = match self.open_target(&repo, selector, options).await? {
@@ -395,8 +412,7 @@ impl Manager {
                     base,
                     files,
                 },
-                git_profile,
-                path,
+                new,
             )
             .await?;
         Ok(OpenedWorkspace {

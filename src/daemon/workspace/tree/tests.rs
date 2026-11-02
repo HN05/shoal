@@ -185,6 +185,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         workspace: workspace.into(),
         name: "grandchild".into(),
         base: None,
+        options: Default::default(),
     };
     for (target, allowed) in [
         (&child.name, true),

@@ -153,7 +153,15 @@ async fn revert_workspace(
     let base = Some(format!("origin/{}", pr.base));
     let created = match from {
         Reverting::Workspace(workspace) if crate::env::is_scoped() => {
-            split::create_child(ctx, workspace.id.clone(), name, base, None).await?
+            split::create_child(
+                ctx,
+                workspace.id.clone(),
+                name,
+                base,
+                None,
+                Default::default(),
+            )
+            .await?
         }
         Reverting::Workspace(workspace) => {
             let repository = workspace.repository_id.clone();
@@ -182,6 +190,7 @@ async fn create_workspace(
         base,
         git_profile: None,
         chat,
+        options: Default::default(),
     };
     request(&ctx.paths, method).await
 }

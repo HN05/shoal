@@ -36,7 +36,8 @@ pub(super) async fn create(ctx: &Context) -> Result<i32> {
     let input: Create = hook_input()?;
     let workspaces = client::workspaces(&ctx.paths).await?;
     let parent = enclosing(&workspaces, &input.cwd)?.id.clone();
-    let child = super::split::create_child(ctx, parent, input.name, None, None).await?;
+    let child =
+        super::split::create_child(ctx, parent, input.name, None, None, Default::default()).await?;
     let Some(child) = super::split::prepare(ctx, child).await? else {
         return Ok(1);
     };

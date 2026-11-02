@@ -26,8 +26,7 @@ async fn removal_waits_for_queued_workspace_creation() {
                     base: None,
                     parent: None,
                 },
-                None,
-                None,
+                Default::default(),
             )
             .await
     });

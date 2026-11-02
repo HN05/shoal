@@ -988,8 +988,7 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
             repo.id.into(),
             "worker".into(),
             None,
-            None,
-            None,
+            Default::default(),
             Some(chat.id.clone()),
         )
         .await
@@ -1045,8 +1044,7 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
             repo.id.into(),
             "root".into(),
             None,
-            None,
-            None,
+            Default::default(),
             Some(chat.id.clone()),
         )
         .await

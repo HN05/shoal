@@ -293,7 +293,8 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch("DROP TABLE earlier_attached_files;")?;
     db.execute_batch(
         "ALTER TABLE workspaces DROP COLUMN start_commit;
-         ALTER TABLE workspaces DROP COLUMN made_for;",
+         ALTER TABLE workspaces DROP COLUMN made_for;
+         ALTER TABLE workspaces DROP COLUMN setup_skipped;",
     )?;
     Ok(())
 }

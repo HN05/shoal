@@ -19,7 +19,9 @@ use crate::{
     },
     daemon::refusal::{Reason, Refusal},
     model::{AgentSession, QueueEntry, Workspace},
-    protocol::{AgentMethod, CommitStart, ConfigTarget, ItemMethod, WorkspaceMethod},
+    protocol::{
+        AgentMethod, CommitStart, ConfigTarget, CreationOptions, ItemMethod, WorkspaceMethod,
+    },
     shell,
     state::{QueueState, WorkspaceState},
 };
@@ -37,6 +39,7 @@ pub(super) struct Split {
     pub fork: bool,
     /// The model and effort requested over the configured ones.
     pub model: ModelChoice,
+    pub options: CreationOptions,
     pub args: Vec<OsString>,
 }
 
@@ -69,7 +72,7 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
         (None, Some(issue)) => issue.branch_name(),
         (None, None) => anyhow::bail!("name the child's branch or pass --issue"),
     };
-    let child = create_child(ctx, parent, name, split.base, issue.as_ref()).await?;
+    let child = create_child(ctx, parent, name, split.base, issue.as_ref(), split.options).await?;
     let Some(child) = prepare(ctx, child).await? else {
         return Ok(1);
     };
@@ -88,6 +91,7 @@ pub(super) async fn at_commit(
     ctx: &Context,
     workspace: Option<String>,
     base: Option<String>,
+    options: CreationOptions,
 ) -> Result<i32> {
     let (repository, parent) = commit_owner(ctx, workspace).await?;
     let method = WorkspaceMethod::CreateCommitWorkspace {
@@ -95,6 +99,7 @@ pub(super) async fn at_commit(
         parent,
         start: CommitStart::Revision(base),
         chat: ui::current_chat(&None),
+        options,
     };
     let Some(child) = prepare(ctx, request(&ctx.paths, method).await?).await? else {
         return Ok(1);
@@ -182,6 +187,7 @@ pub(super) async fn create_child(
     name: String,
     base: Option<String>,
     issue: Option<&Issue>,
+    options: CreationOptions,
 ) -> Result<Workspace> {
     let child: Workspace = request(
         &ctx.paths,
@@ -189,6 +195,7 @@ pub(super) async fn create_child(
             workspace: parent,
             name,
             base,
+            options,
         },
     )
     .await?;

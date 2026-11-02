@@ -14,7 +14,7 @@ use crate::{
     },
     env, git,
     model::{QueueRequest, Workspace},
-    protocol::WorkspaceMethod,
+    protocol::{CreationOptions, WorkspaceMethod},
 };
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
@@ -27,6 +27,8 @@ pub(in crate::cli) struct Creation {
     /// The PR whose head branch is opened; it is linked once the workspace is ready.
     #[serde(default)]
     pub pr: Option<String>,
+    #[serde(default)]
+    pub options: CreationOptions,
 }
 
 impl Creation {

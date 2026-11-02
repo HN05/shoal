@@ -29749,3 +29749,55 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
         assert!(!fixture.run(args).status.success(), "{args:?}");
     }
 }
+
+#[test]
+fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    for (name, hook) in [
+        ("setup.sh", "setup"),
+        ("post-setup.sh", "post-setup"),
+        ("pre-remove.sh", "pre-remove"),
+    ] {
+        install_test_script(
+            fixture.repo.join(name),
+            format!("#!/bin/sh\necho \"$SHOAL_WORKSPACE\" >> \"$HOME/{hook}-ran\"\n"),
+        );
+    }
+    commit_resource_config(
+        &fixture.repo,
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\nhooks.pre_remove = 'pre-remove.sh'\n",
+    );
+    let ran = |hook: &str| fs::read_to_string(home.join(format!("{hook}-ran"))).unwrap_or_default();
+    let repo = fixture.repo.to_str().unwrap();
+    let skipped = fixture.ok(&["add", repo, "skipped", "--skip-setup"]);
+    assert_eq!(skipped["state"], "ready");
+    assert_eq!(skipped["setup_skipped"], true);
+    let at_commit = fixture.ok(&[
+        "split",
+        "--no-branch",
+        "--workspace",
+        "skipped",
+        "--skip-setup",
+    ]);
+    assert_eq!(at_commit["setup_skipped"], true);
+    assert_eq!(
+        (ran("setup"), ran("post-setup")),
+        (String::new(), String::new())
+    );
+    let status = fixture.run(&["status", "skipped"]);
+    assert!(String::from_utf8_lossy(&status.stdout).contains("Setup:         skipped"));
+    fixture.ok(&["rm", "skipped", "--yes"]);
+    assert_eq!(ran("pre-remove"), "");
+
+    // Setup run later clears the mark, so the hooks around it run again.
+    fixture.ok(&["add", repo, "later", "--skip-setup"]);
+    let set_up = fixture.ok(&["work", "setup", "later"]);
+    assert_eq!(set_up["setup_skipped"], false);
+    assert_eq!(
+        (ran("setup"), ran("post-setup")),
+        ("later\n".into(), "later\n".into())
+    );
+    fixture.ok(&["rm", "later", "--yes"]);
+    assert_eq!(ran("pre-remove"), "later\n");
+}

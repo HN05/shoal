@@ -282,6 +282,7 @@ async fn an_app_queues_an_agent_once_it_can_run() {
         workspace: parent.id.clone(),
         name: "child".into(),
         base: Some("HEAD".into()),
+        options: Default::default(),
     };
     connection::request::<Workspace>(&app, split).await.unwrap();
     let agent = daemon.scoped(&parent).await;
