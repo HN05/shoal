@@ -429,10 +429,9 @@ async fn a_chats_wait_takes_activity_an_item_change_held_back() {
         let (manager, chat) = (manager.clone(), chat.id.clone());
         async move { manager.wait_chat_messages(&chat).await }
     });
-    // The change ends without a signal; the wait looks again by itself.
-    while !manager.chat_waits.is_waiting(&chat.id) {
-        tokio::task::yield_now().await;
-    }
+    // The change ends without a signal once the wait found the gate held;
+    // the wait looks again by itself.
+    manager.gates.pr_contention.notified().await;
     drop(gate);
     let woken = tokio::time::timeout(std::time::Duration::from_secs(10), waiting)
         .await

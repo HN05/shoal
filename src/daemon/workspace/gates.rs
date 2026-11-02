@@ -29,6 +29,10 @@ pub(crate) struct Gates {
     forge_hosts: Keyed<Mutex<()>>,
     resources: Keyed<RwLock<()>>,
     prs: Keyed<Mutex<()>>,
+    /// Signalled when [`Self::try_lock_prs`] finds a gate held, so a test
+    /// releases it only once a caller saw it held.
+    #[cfg(test)]
+    pub(crate) pr_contention: tokio::sync::Notify,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -208,8 +212,12 @@ impl Gates {
             .gates(ids)
             .into_iter()
             .map(|gate| gate.try_lock_owned().ok())
-            .collect::<Option<_>>()?;
-        Some(PrGuard { _guards: guards })
+            .collect::<Option<_>>();
+        #[cfg(test)]
+        if guards.is_none() {
+            self.pr_contention.notify_one();
+        }
+        Some(PrGuard { _guards: guards? })
     }
 
     /// How many PR gates someone holds or awaits.
