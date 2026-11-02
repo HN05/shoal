@@ -29,9 +29,8 @@ jobs:
       - name: Measure
         run: |
           . .forgejo/scripts/lock-target-dir.sh
-          true
-          true
-          id; cat /proc/self/status | grep -i cap
-          for args in "--pid --fork --mount-proc" "--user --map-root-user --pid --fork --mount-proc" "--map-current-user --user --pid --fork --mount-proc"; do
-            echo "== unshare $args"; unshare $args sh -c 'echo pid $$; id; ps -e' 2>&1 | head -8 || true
-          done
+          cargo clean --workspace
+          cargo test --locked --no-run -q
+          (apt-get update -qq && apt-get install -y -qq strace) > /dev/null 2>&1 || echo "strace install failed"
+          strace -V | head -1
+          python3 scripts/trace_execs.py workspaces "shoal (lib)"
