@@ -380,3 +380,41 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
     let refused = open(third).await.unwrap_err();
     assert!(refused.to_string().contains("of its own"), "{refused:#}");
 }
+
+#[tokio::test]
+async fn a_chat_owns_its_top_level_workspace_at_a_commit_but_not_a_child() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let create = |parent: Option<String>| {
+        manager.create_commit_workspace(
+            repo.id.as_str().into(),
+            parent,
+            CommitStart::Revision(None),
+            Some(chat.id.clone()),
+            Default::default(),
+        )
+    };
+    let top = create(None).await.unwrap();
+    assert_eq!(top.chat.as_deref(), Some(chat.id.as_str()));
+    let child = create(Some(parent.name.clone())).await.unwrap();
+    assert_eq!(child.chat, None);
+}

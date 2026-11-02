@@ -80,6 +80,8 @@ impl Manager {
         chat: Option<String>,
         options: CreationOptions,
     ) -> Result<Workspace> {
+        // A child belongs to its parent, whose agent or owner coordinates it.
+        let chat = chat.filter(|_| parent.is_none());
         let start = self.resolve_start(repo, start).await?;
         let head = start.at.commit.clone();
         let workspace = self
