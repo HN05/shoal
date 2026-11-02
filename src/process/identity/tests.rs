@@ -659,6 +659,45 @@ fn observe_unreaped_child(child: &mut std::process::Child) -> Result<Identity> {
 }
 
 #[test]
+fn listings_show_live_processes_with_group_and_parent_but_no_zombies() -> Result<()> {
+    use std::os::unix::process::CommandExt;
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "read line"])
+        .stdin(std::process::Stdio::piped())
+        .process_group(0)
+        .spawn()?;
+    let listed = list_unreaped_child(&mut child);
+    // Close and reap even if a listing failed.
+    drop(child.stdin.take());
+    child.wait()?;
+    let (live, own, exited) = listed?;
+    let row = (child.id(), child.id(), std::process::id());
+    assert!(live.contains(&row), "{live:?}");
+    assert!(own.contains(&child.id()));
+    assert!(!own.contains(&std::process::id()));
+    assert!(!exited.contains(&row), "{exited:?}");
+    Ok(())
+}
+
+/// The same-user listing and inventory PIDs while `child` runs, then the
+/// listing once it exited unreaped.
+#[allow(clippy::type_complexity)]
+fn list_unreaped_child(
+    child: &mut std::process::Child,
+) -> Result<(Vec<(u32, u32, u32)>, Vec<u32>, Vec<(u32, u32, u32)>)> {
+    let identity = capture(child.id())?.context("identify live child")?;
+    let live = same_user_processes()?;
+    let own = list_processes()?.own;
+    drop(child.stdin.take());
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    while !unreaped(&identity)? {
+        ensure!(std::time::Instant::now() < deadline, "child never exited");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    Ok((live, own, same_user_processes()?))
+}
+
+#[test]
 #[ignore = "helper child launched by ownership test"]
 fn marked_child() {
     std::thread::sleep(Duration::from_secs(30));

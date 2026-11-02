@@ -6,7 +6,6 @@ pub(crate) use crate::client::processes::Identity;
 #[cfg(any(target_os = "macos", test))]
 use crate::client::processes::UniqueId;
 use crate::protocol::timing;
-use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -19,14 +18,6 @@ use std::{
 
 /// Deeper chains are not plausible process trees; stop rather than loop.
 const MAX_ANCESTRY: usize = 64;
-
-/// The limit on an inventory's `ps`. Unit tests run inventories on loaded
-/// machines, where it is only a hang guard, so they allow far longer.
-const INVENTORY_TIMEOUT: Duration = if cfg!(test) {
-    Duration::from_secs(120)
-} else {
-    timing::PROCESS_INVENTORY_TIMEOUT
-};
 
 impl Identity {
     /// The unique ID that live processes' parent links can name: one recorded
@@ -310,10 +301,10 @@ async fn inventory<T: Send + 'static>(
     read: impl FnOnce(&Inventory<'static>) -> Result<T> + Send + 'static,
 ) -> Result<T> {
     let turn = owners::TURN.lock().await;
-    let listing = list_processes().await?;
     let subreaper = subreaper().await?;
     tokio::task::spawn_blocking(move || {
         let _turn = turn;
+        let listing = list_processes().context("process inventory failed")?;
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
         let mut inventory = Inventory::new(owners);
         for pid in listing.own {
@@ -343,39 +334,39 @@ struct Listing {
     elevated: Vec<u32>,
 }
 
-async fn list_processes() -> Result<Listing> {
-    let mut command = tokio::process::Command::new(Tool::Ps.program());
-    command
-        .args(["-ax", "-o", "pid=,uid=,ruid="])
-        .env("LC_ALL", "C");
-    let output = crate::subprocess::Run::new(command)
-        .timeout(INVENTORY_TIMEOUT)
-        .output()
-        .await
-        .context("process inventory failed")?;
+fn list_processes() -> Result<Listing> {
     let user = unsafe { libc::geteuid() };
     let mut listing = Listing {
         own: Vec::new(),
         elevated: Vec::new(),
     };
-    for line in output.lines() {
-        let fields: Vec<_> = line.split_whitespace().collect();
-        ensure!(fields.len() == 3, "invalid process inventory");
-        let pid: u32 = fields[0].parse()?;
-        if pid <= 1 || pid == std::process::id() {
-            continue;
-        }
-        // System daemons may run as negative UIDs such as nobody (-2);
-        // they are never ours.
-        let uid = fields[1].parse::<u32>().ok();
-        let real = fields[2].parse::<u32>().ok();
-        if uid == Some(user) {
-            listing.own.push(pid);
-        } else if real == Some(user) {
-            listing.elevated.push(pid);
+    for process in listed()? {
+        if process.uid == user {
+            listing.own.push(process.pid);
+        } else if process.real_uid == user {
+            listing.elevated.push(process.pid);
         }
     }
     Ok(listing)
+}
+
+/// A live process, with its effective and real user, process group and
+/// parent.
+struct Listed {
+    pid: u32,
+    uid: u32,
+    real_uid: u32,
+    group: u32,
+    parent: u32,
+}
+
+/// Every live process other than init and the daemon, read from the kernel.
+/// Inventories run often, and spawning `ps` for each cost more than all the
+/// reads it saves.
+fn listed() -> Result<Vec<Listed>> {
+    let mut listed = platform_listed()?;
+    listed.retain(|process| process.pid > 1 && process.pid != std::process::id());
+    Ok(listed)
 }
 
 /// One live process and what its own environment says about its owner.
@@ -1178,6 +1169,46 @@ fn pid_info<T>(pid: u32, flavor: i32, argument: u64) -> Result<Option<T>> {
     Ok(Some(unsafe { info.assume_init() }))
 }
 
+#[cfg(target_os = "macos")]
+fn platform_listed() -> Result<Vec<Listed>> {
+    let mut capacity = 1024;
+    let pids = loop {
+        let mut pids = vec![0 as libc::pid_t; capacity];
+        let size = i32::try_from(capacity * std::mem::size_of::<libc::pid_t>())?;
+        let count = unsafe { libc::proc_listallpids(pids.as_mut_ptr().cast(), size) };
+        if count < 0 {
+            return Err(std::io::Error::last_os_error()).context("list processes");
+        }
+        // A full buffer may have left processes out.
+        if (count as usize) < capacity {
+            pids.truncate(count as usize);
+            break pids;
+        }
+        capacity *= 2;
+    };
+    let mut listed = Vec::new();
+    for pid in pids.into_iter().filter_map(|pid| u32::try_from(pid).ok()) {
+        if pid <= 1 {
+            continue;
+        }
+        let Some(info) = pid_info::<libc::proc_bsdshortinfo>(pid, libc::PROC_PIDT_SHORTBSDINFO, 0)?
+        else {
+            continue;
+        };
+        // BSD SZOMB = 5. Zombies cannot execute or hold resources.
+        if info.pbsi_status != 5 {
+            listed.push(Listed {
+                pid,
+                uid: info.pbsi_uid,
+                real_uid: info.pbsi_ruid,
+                group: info.pbsi_pgid,
+                parent: info.pbsi_ppid,
+            });
+        }
+    }
+    Ok(listed)
+}
+
 #[cfg(any(target_os = "macos", test))]
 fn process_identity_unavailable(errno: Option<i32>) -> bool {
     // EPERM means proc_pidinfo could not inspect another user's process. It
@@ -1359,6 +1390,48 @@ pub(super) fn read_process_stat(path: &str) -> Result<Option<String>> {
 }
 
 #[cfg(target_os = "linux")]
+fn platform_listed() -> Result<Vec<Listed>> {
+    let mut listed = Vec::new();
+    for entry in std::fs::read_dir("/proc")? {
+        let Some(pid) = entry?
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse().ok())
+        else {
+            continue;
+        };
+        let Some(stat) = read_process_stat(&format!("/proc/{pid}/stat"))? else {
+            continue;
+        };
+        let fields = stat_fields(&stat)?;
+        ensure!(fields.len() > 2, "incomplete process stat");
+        // Zombies cannot execute or hold resources.
+        if fields[0] == "Z" || fields[0] == "X" {
+            continue;
+        }
+        let Some(status) = read_process_stat(&format!("/proc/{pid}/status"))? else {
+            continue;
+        };
+        let users = status
+            .lines()
+            .find_map(|line| line.strip_prefix("Uid:"))
+            .context("process status names no user")?;
+        let mut users = users.split_whitespace().map(str::parse::<u32>);
+        let (Some(real_uid), Some(uid)) = (users.next(), users.next()) else {
+            anyhow::bail!("incomplete process users");
+        };
+        listed.push(Listed {
+            pid,
+            uid: uid?,
+            real_uid: real_uid?,
+            group: fields[2].parse()?,
+            parent: fields[1].parse()?,
+        });
+    }
+    Ok(listed)
+}
+
+#[cfg(target_os = "linux")]
 fn environment(pid: u32) -> Result<Vec<Vec<u8>>> {
     Ok(std::fs::read(format!("/proc/{pid}/environ"))?
         .split(|b| *b == 0)
@@ -1519,7 +1592,7 @@ pub async fn started_by(identities: &[Identity], wrappers: &[Identity]) -> Resul
     if roots.is_empty() {
         return Ok(Vec::new());
     }
-    let rows = same_user_processes().await?;
+    let rows = same_user_processes()?;
     let wrappers = wrappers.to_vec();
     tokio::task::spawn_blocking(move || {
         let mut lineages = Vec::new();
@@ -1563,7 +1636,7 @@ pub async fn related(
     let Some(group) = group else {
         return Ok((vec![], vec![]));
     };
-    let rows = same_user_processes().await?;
+    let rows = same_user_processes()?;
     let live = child.map(alive).transpose()?.unwrap_or(false);
     let mut pids: HashSet<u32> = rows
         .iter()
@@ -1600,34 +1673,13 @@ pub async fn related(
 
 /// Same-user processes other than init and the daemon, as (PID, process
 /// group, parent PID).
-async fn same_user_processes() -> Result<Vec<(u32, u32, u32)>> {
-    let mut command = tokio::process::Command::new(Tool::Ps.program());
-    command
-        .args(["-ax", "-o", "pid=,uid=,pgid=,ppid="])
-        .env("LC_ALL", "C");
-    let output = crate::subprocess::Run::new(command)
-        .timeout(INVENTORY_TIMEOUT)
-        .output()
-        .await?;
-    let mut rows = Vec::new();
-    for line in output.lines() {
-        // Negative UIDs (nobody) cannot parse and are never ours; see `scan`.
-        let Ok(fields) = line
-            .split_whitespace()
-            .map(str::parse)
-            .collect::<std::result::Result<Vec<u32>, _>>()
-        else {
-            continue;
-        };
-        ensure!(fields.len() == 4, "invalid process ancestry inventory");
-        if fields[1] == unsafe { libc::geteuid() }
-            && fields[0] > 1
-            && fields[0] != std::process::id()
-        {
-            rows.push((fields[0], fields[2], fields[3]));
-        }
-    }
-    Ok(rows)
+fn same_user_processes() -> Result<Vec<(u32, u32, u32)>> {
+    let user = unsafe { libc::geteuid() };
+    Ok(listed()?
+        .into_iter()
+        .filter(|process| process.uid == user)
+        .map(|process| (process.pid, process.group, process.parent))
+        .collect())
 }
 
 /// `pids` and the PIDs whose parent links lead to one of them.

@@ -117,7 +117,8 @@ pub mod timing {
     /// Cover stopping an exited agent's survivors and the completion scan,
     /// with room for ownership checks and persistence.
     pub const COMPLETION_ACK_TIMEOUT: Duration = Duration::from_secs(60);
-    /// Bound the ps inventory subprocess used by the daemon's completion scan.
+    /// Bound the `ps` that describes processes. The completion budget also
+    /// allows it for each process inventory, which reads the kernel instead.
     pub const PROCESS_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
     /// Give an identity-verified survivor time to handle SIGTERM before SIGKILL.
     pub const PROCESS_TERM_GRACE: Duration = Duration::from_secs(2);
