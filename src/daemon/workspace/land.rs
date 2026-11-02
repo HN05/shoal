@@ -173,10 +173,7 @@ fn land_request(plan: &LandPlan, warning: Option<MergeWarning>) -> ApprovalReque
     let branch = &plan.workspace.branch;
     let mut reason = format!("merge {branch} into {}", plan.default_refresh.branch);
     if let Some(warning) = warning {
-        // A reason reads as one lowercase phrase.
-        let warning = warning.to_string();
-        let (first, rest) = warning.split_at(1);
-        reason.push_str(&format!("; {}{rest}", first.to_lowercase()));
+        reason.push_str(&format!("; {}", warning.phrase()));
     }
     ApprovalRequest::new(
         &plan.workspace.id,

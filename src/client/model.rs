@@ -789,14 +789,22 @@ pub struct MergeWarning {
     pub files: Vec<String>,
 }
 
+impl MergeWarning {
+    /// The warning as a phrase inside a sentence, such as a request's reason.
+    pub fn phrase(&self) -> String {
+        format!("sensitive files {}", self.changes())
+    }
+
+    fn changes(&self) -> String {
+        let (subject, target) = (&self.subject, &self.target);
+        let files = self.files.join(", ");
+        format!("changed on both sides by {subject} and {target}: {files}")
+    }
+}
+
 impl std::fmt::Display for MergeWarning {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (subject, target) = (&self.subject, &self.target);
-        write!(
-            f,
-            "Sensitive files changed on both sides by {subject} and {target}: {}",
-            self.files.join(", ")
-        )
+        write!(f, "Sensitive files {}", self.changes())
     }
 }
 
