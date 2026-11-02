@@ -101,8 +101,6 @@ pub enum InternalCommand {
     /// Finish a planned merge inside its tracked execution.
     #[command(name = internal::MERGE)]
     Merge {
-        #[arg(long)]
-        push: bool,
         /// Where to write what it merged, or why it could not.
         #[arg(long)]
         result: PathBuf,

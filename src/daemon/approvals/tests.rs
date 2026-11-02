@@ -230,6 +230,7 @@ async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Re
                     Specification::Merge(MergeSpecification {
                         branch: "feature".into(),
                         head: head.into(),
+                        push: None,
                     }),
                     Lifetime::Lease,
                     Some("merge it"),
@@ -464,6 +465,7 @@ fn decision_messages_name_the_request_target_and_next_step() {
     request.specification = Specification::Merge(MergeSpecification {
         branch: "feature".into(),
         head: "abc".into(),
+        push: None,
     });
     assert_eq!(
         request.decision_message(),

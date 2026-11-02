@@ -28,6 +28,7 @@ pub(super) async fn handle(
             queue_entry,
             demo,
             origin,
+            push,
         } => {
             let manager = manager.clone();
             let context = execution_connection::ExecutionContext {
@@ -40,6 +41,7 @@ pub(super) async fn handle(
                 queue_entry,
                 demo: demo.map(|demo| *demo),
                 origin: origin.map(|origin| *origin),
+                push,
                 caller: caller.cloned(),
             };
             return Ok(Answer::connection(move |stream, request_id, guard| {

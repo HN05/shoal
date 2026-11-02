@@ -471,6 +471,7 @@ async fn open_execution(
             _ => None,
         },
         origin: place.map(Box::new),
+        push: matches!(mode, Mode::Merge { push: true, .. }),
     };
     let kind = mode.kind();
     let (mut link, body) = Link::open(paths, method, kind.start_timeout()).await?;
@@ -594,7 +595,7 @@ fn execution_command(
     mode: &Mode,
 ) -> Result<Vec<OsString>> {
     if let Some(merge) = &plan.merge {
-        let Mode::Merge { push, result } = mode else {
+        let Mode::Merge { result, .. } = mode else {
             anyhow::bail!("only a merge execution merges");
         };
         return internal_command(
@@ -602,7 +603,6 @@ fn execution_command(
             false,
             Worker::Merge {
                 plan: &serde_json::to_string(merge)?,
-                push: *push,
                 result,
             },
         );

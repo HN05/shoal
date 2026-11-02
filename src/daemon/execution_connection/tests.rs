@@ -41,6 +41,7 @@ async fn scoped_merge_answers_with_its_approval_request() {
             queue_entry: None,
             demo: None,
             origin: None,
+            push: false,
             caller: Some(Caller {
                 workspace_id: workspace.id.clone(),
                 execution: None,
@@ -134,6 +135,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
             queue_entry: None,
             demo: None,
             origin: None,
+            push: false,
             caller: None,
         },
         manager.gates.owned_operation().await,
@@ -218,6 +220,7 @@ async fn running_executions_leave_daemon_operations_idle() {
             queue_entry: None,
             demo: None,
             origin: None,
+            push: false,
         },
         manager.gates.owned_operation().await,
     ));
@@ -289,6 +292,7 @@ async fn a_wrapper_registers_again_from_where_it_runs() {
             queue_entry: None,
             demo: None,
             origin: None,
+            push: false,
         },
         manager.gates.owned_operation().await,
     ));

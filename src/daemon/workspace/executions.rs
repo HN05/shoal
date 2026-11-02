@@ -211,6 +211,17 @@ pub(crate) struct StartedExecution {
     pub _git_guard: Option<OwnedMutexGuard<()>>,
 }
 
+/// What a wrapper asks of its execution besides its kind.
+#[derive(Default)]
+pub(crate) struct ExecutionRequest {
+    /// The demo the command runs.
+    pub demo: Option<Launch>,
+    /// Where it runs in a terminal host.
+    pub place: Option<ExecutionPlace>,
+    /// A merge pushes the default branch afterwards.
+    pub push: bool,
+}
+
 #[derive(Default)]
 struct PreparedExecution {
     setup_cmd: Option<PathBuf>,
@@ -353,12 +364,16 @@ impl Manager {
         caller: Option<&Caller>,
         demo: Option<Launch>,
     ) -> Result<StartedExecution> {
-        self.begin_execution_placed(selector, wrapper, kind, caller, demo, None)
+        let request = ExecutionRequest {
+            demo,
+            ..Default::default()
+        };
+        self.begin_execution_placed(selector, wrapper, kind, caller, request)
             .await
     }
 
     /// Register an execution and issue its scope token, recording the demo it
-    /// runs and the `place` it runs at with it. The returned receiver fires
+    /// runs and the place it runs at with it. The returned receiver fires
     /// when the workspace asks its commands to stop.
     pub(crate) async fn begin_execution_placed(
         &self,
@@ -366,11 +381,11 @@ impl Manager {
         wrapper: Option<Identity>,
         kind: ExecutionKind,
         caller: Option<&Caller>,
-        demo: Option<Launch>,
-        place: Option<ExecutionPlace>,
+        request: ExecutionRequest,
     ) -> Result<StartedExecution> {
+        let ExecutionRequest { demo, place, push } = request;
         let (workspace, preparation) = self
-            .prepare_execution(selector, wrapper.as_ref(), kind, caller.is_some())
+            .prepare_execution(selector, wrapper.as_ref(), kind, caller.is_some(), push)
             .await?;
         let agent = match caller {
             Some(caller) => self.caller_agent(caller).await.map(|agent| agent.execution),
@@ -580,6 +595,7 @@ impl Manager {
         wrapper: Option<&Identity>,
         kind: ExecutionKind,
         scoped: bool,
+        push: bool,
     ) -> Result<(Workspace, PreparedExecution)> {
         if let Some(wrapper) = wrapper {
             ensure!(
@@ -592,22 +608,24 @@ impl Manager {
         self.reserve_repository_directory(&workspace.repository_id)
             .await?;
         let preparation = self
-            .prepare_execution_kind(&workspace, kind, scoped)
+            .prepare_execution_kind(&workspace, kind, scoped, push)
             .await?;
         Ok((workspace, preparation))
     }
 
+    /// With `push`, a merge pushes the default branch afterwards.
     async fn prepare_execution_kind(
         &self,
         workspace: &Workspace,
         kind: ExecutionKind,
         scoped: bool,
+        push: bool,
     ) -> Result<PreparedExecution> {
         match kind {
             ExecutionKind::Command => Ok(PreparedExecution::default()),
             ExecutionKind::Merge => {
                 let guard = self.gates.lock_git(&workspace.repository_id).await;
-                let merge = self.prepare_merge(&workspace.id).await?;
+                let merge = self.prepare_merge(&workspace.id, push).await?;
                 if scoped {
                     self.authorize_scoped_merge(&merge).await?;
                 }

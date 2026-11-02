@@ -57,7 +57,7 @@ pub use agents::RestartWaits;
 pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use daemon_exit::Ending;
-pub(crate) use executions::{Completing, ReattachedExecution, StartedExecution};
+pub(crate) use executions::{Completing, ExecutionRequest, ReattachedExecution, StartedExecution};
 pub use executions::{ExecutionKind, StopRequest, UnprovenStop};
 pub(crate) use gates::{GuardMode, PrGuard, ResourceGuard};
 pub(crate) use holds::place_approved as place_approved_hold;

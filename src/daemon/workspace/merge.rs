@@ -1,15 +1,11 @@
-//! Merge preparation: validate a workspace branch and refresh the default
-//! branch before the merge worker merges it.
+//! Merge preparation: validate a workspace branch, say what merging it does,
+//! and refresh the default branch before the merge worker merges it.
+mod approval;
+
 use anyhow::{Context, Result, bail, ensure};
 
 use super::{Manager, branches::UpstreamPolicy};
 use crate::{
-    daemon::{
-        approvals::{
-            ApprovalRequest, Lifetime, MERGE, MergeSpecification, Specification, Target, Undecided,
-        },
-        log,
-    },
     fsutil::off_runtime,
     git::{
         self,
@@ -17,58 +13,35 @@ use crate::{
         repo::{clean_branch, merge_temporaries, unfinished_operation, upstream},
         run_isolated as git_run,
     },
-    model::{MergePlan, MergeWarning, PulledBranch, Repository, Workspace},
+    model::{MergePlan, MergePreview, MergePush, PulledBranch, Repository, Workspace},
 };
+
+/// A workspace branch that passed every check a merge makes before it
+/// changes anything.
+struct MergeSource {
+    workspace: Workspace,
+    branch: String,
+    repo: Repository,
+    default: String,
+    /// The branch's commit that merges.
+    source: String,
+    push: Option<MergePush>,
+}
 
 impl Manager {
     /// Validate and refresh a merge while the caller holds the repository Git
     /// gate. The gate must stay held until the tracked execution completes.
-    pub async fn prepare_merge(&self, selector: &str) -> Result<MergePlan> {
-        let workspace = self.workspace(selector).await?;
-        self.ensure_merging_enabled(&workspace).await?;
-        let repo = self.repository(&workspace.repository_id).await?;
-        ensure!(
-            off_runtime::is_dir(&workspace.path).await?,
-            "workspace directory is missing: {}",
-            workspace.path.display()
-        );
-        self.verify_worktree(&workspace).await?;
-        let default =
-            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
-        let branch = workspace.require_branch("merging")?.to_owned();
-        let branch = branch.as_str();
-        ensure!(
-            branch != default,
-            "workspace {} is on the default branch {default}; nothing to merge",
-            workspace.name
-        );
-        clean_branch(&workspace.path, branch)
-            .await
-            .with_context(|| format!("workspace {} is not ready to merge", workspace.name))?;
-        let source = git::resolve_commit(&workspace.path, &git::local_ref(branch), git_run).await?;
-        if let Some(checkout) = self.managed_checkout(&repo, &default).await? {
-            bail!(
-                "{default} is checked out in workspace {checkout}; merge needs it outside managed workspaces"
-            );
-        }
-        let default_ref = git::local_ref(&default);
-        let default_refresh = if upstream(&repo, &default_ref).await?.is_none() {
-            let commit = git::verify_revision(&repo.path, &default_ref, git_run)
-                .await
-                .with_context(|| format!("repository has no local {default} branch"))?
-                .trim()
-                .to_owned();
-            PulledBranch::unchanged(
-                &repo,
-                &default,
-                commit,
-                format!("{default} has no upstream; merging on its local state"),
-            )
-        } else {
-            self.refresh_branch(&repo, &default, UpstreamPolicy::Required)
-                .await
-                .with_context(|| format!("could not refresh {default} before merging"))?
-        };
+    /// With `push`, the merge pushes the default branch afterwards.
+    pub async fn prepare_merge(&self, selector: &str, push: bool) -> Result<MergePlan> {
+        let MergeSource {
+            workspace,
+            branch,
+            repo,
+            default,
+            source,
+            push,
+        } = self.validate_merge(selector, push).await?;
+        let default_refresh = self.refresh_default(&repo, &default).await?;
         let checkout = git::checkout_of(&repo.path, &default, git::run)
             .await?
             .map(|tree| tree.path);
@@ -84,13 +57,70 @@ impl Manager {
             .transpose()?
             .unwrap_or_default();
         Ok(MergePlan {
-            branch: branch.to_owned(),
             workspace,
+            branch,
             repo,
             source,
             checkout,
             merge_temporaries,
             default_refresh,
+            push,
+        })
+    }
+
+    /// What merging `plan` does, for the approval of a scoped merge.
+    async fn plan_preview(&self, plan: &MergePlan) -> Result<MergePreview> {
+        self.merge_preview(
+            &plan.workspace,
+            &plan.branch,
+            &plan.default_refresh.branch,
+            &plan.default_refresh.commit,
+            plan.push.as_ref(),
+        )
+        .await
+    }
+
+    /// The checks a merge makes before it changes anything. A merge that
+    /// pushes needs an upstream for the default branch.
+    async fn validate_merge(&self, selector: &str, push: bool) -> Result<MergeSource> {
+        let workspace = self.workspace(selector).await?;
+        self.ensure_merging_enabled(&workspace).await?;
+        let repo = self.repository(&workspace.repository_id).await?;
+        ensure!(
+            off_runtime::is_dir(&workspace.path).await?,
+            "workspace directory is missing: {}",
+            workspace.path.display()
+        );
+        self.verify_worktree(&workspace).await?;
+        let default =
+            crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
+        let branch = workspace.require_branch("merging")?.to_owned();
+        ensure!(
+            branch != default,
+            "workspace {} is on the default branch {default}; nothing to merge",
+            workspace.name
+        );
+        clean_branch(&workspace.path, &branch)
+            .await
+            .with_context(|| format!("workspace {} is not ready to merge", workspace.name))?;
+        let source =
+            git::resolve_commit(&workspace.path, &git::local_ref(&branch), git_run).await?;
+        if let Some(checkout) = self.managed_checkout(&repo, &default).await? {
+            bail!(
+                "{default} is checked out in workspace {checkout}; merge needs it outside managed workspaces"
+            );
+        }
+        let push = match push {
+            true => Some(push_target(&repo, &default).await?),
+            false => None,
+        };
+        Ok(MergeSource {
+            workspace,
+            branch,
+            repo,
+            default,
+            source,
+            push,
         })
     }
 
@@ -104,70 +134,48 @@ impl Manager {
         Ok(())
     }
 
-    /// A scoped merge needs the user's approval for the branch at the commit
-    /// `plan` merges, naming the files changed on both sides it would merge,
-    /// unless `[permissions] merge` is "direct" and `[permissions] push` lets
-    /// the merge push the default branch without it. The caller
-    /// holds the repository Git gate, so the approved commit is the one that
-    /// merges.
-    pub(super) async fn authorize_scoped_merge(&self, plan: &MergePlan) -> Result<()> {
-        use crate::config::repo::{Opening, Pushes};
-        let settings = self.workspace_settings(&plan.workspace).await?;
-        let permissions = &settings.permissions;
-        if permissions.merge == Opening::Direct && permissions.push == Pushes::Direct {
-            return Ok(());
+    /// Fast-forward the default branch from its upstream, or leave it as it
+    /// is when it has none.
+    async fn refresh_default(&self, repo: &Repository, default: &str) -> Result<PulledBranch> {
+        if upstream(repo, &git::local_ref(default)).await?.is_none() {
+            return Ok(PulledBranch::unchanged(
+                repo,
+                default,
+                local_commit(repo, default).await?,
+                format!("{default} has no upstream; merging on its local state"),
+            ));
         }
-        // The approver decides what the agent's --yes passed over.
-        let warning = self.branch_merge_warning(&plan.workspace.id).await?;
-        match self
-            .request_merge_approval(merge_request(plan, warning))
-            .await?
-        {
-            Some(request) => Err(Undecided(Box::new(request)).into()),
-            None => Ok(()),
-        }
+        self.refresh_branch(repo, default, UpstreamPolicy::Required)
+            .await
+            .with_context(|| format!("could not refresh {default} before merging"))
     }
 
-    /// Refuse to approve a merge request whose branch has moved since the
-    /// request: drop it and tell the agent to request again. A failed Git
-    /// lookup keeps the request. The merge itself merges only the approved commit.
-    pub(crate) async fn ensure_merge_current(&self, request: &ApprovalRequest) -> Result<()> {
-        let Specification::Merge(merge) = &request.specification else {
-            bail!("approval request {} has no merge specification", request.id);
-        };
-        let workspace = self.workspace(&request.workspace_id).await?;
-        let head = git::status::local_branch_commit(&workspace.path, &merge.branch)
-            .await
-            .with_context(|| format!("could not check {} for approval", merge.branch))?;
-        if workspace.branch.as_ref() == Some(&merge.branch)
-            && head.as_deref() == Some(merge.head.as_str())
-        {
-            return Ok(());
-        }
-        self.retire_stale_merge_request(request).await?;
-        bail!(
-            "approval request {} is stale: {} moved since it was requested",
-            request.id,
-            merge.branch
-        )
-    }
-
-    /// Retire a stale merge request and tell the requesting agent; failing to
-    /// queue the message only logs.
-    async fn retire_stale_merge_request(&self, request: &ApprovalRequest) -> Result<()> {
-        self.retire_approval(request.clone()).await?;
-        let message = format!(
-            "Approval {} for {} is stale: the branch moved; run shoal merge again to request merging it.",
-            request.id,
-            request.subject()
-        );
-        if let Err(error) = self
-            .queue_agent_message(&request.workspace_id, message)
-            .await
-        {
-            log!("stale merge request message not queued: {error:#}");
-        }
-        Ok(())
+    /// What merging `workspace`'s `branch` into `default` at `default_commit`
+    /// does: its commits, where it pushes, the sensitive files it brings to
+    /// a default branch that changed them too, and the open PRs it bypasses.
+    async fn merge_preview(
+        &self,
+        workspace: &Workspace,
+        branch: &str,
+        default: &str,
+        default_commit: &str,
+        push: Option<&MergePush>,
+    ) -> Result<MergePreview> {
+        let id = workspace.id.clone();
+        let open_prs = self
+            .store
+            .run(move |db| crate::daemon::links::wait::open_prs(db, &id))
+            .await?;
+        let warning = self.branch_merge_warning(&workspace.id).await?;
+        Ok(MergePreview {
+            workspace_id: workspace.id.clone(),
+            branch: branch.to_owned(),
+            default_branch: default.to_owned(),
+            commits: git::status::commits_since(&workspace.path, default_commit).await?,
+            push_to: push.map(|push| push.remote.clone()),
+            warning,
+            open_prs,
+        })
     }
 
     /// The managed workspace that has `branch` checked out, if any.
@@ -182,23 +190,21 @@ impl Manager {
     }
 }
 
-/// The merge request a scoped merge of `plan` asks the user to decide,
-/// with its `warning` in the reason.
-fn merge_request(plan: &MergePlan, warning: Option<MergeWarning>) -> ApprovalRequest {
-    let branch = &plan.branch;
-    let mut reason = format!("merge {branch} into {}", plan.default_refresh.branch);
-    if let Some(warning) = warning {
-        reason.push_str(&format!("; {}", warning.phrase()));
-    }
-    ApprovalRequest::new(
-        &plan.workspace.id,
-        Target::Merge,
-        MERGE,
-        Specification::Merge(MergeSpecification {
-            branch: branch.clone(),
-            head: plan.source.clone(),
-        }),
-        Lifetime::Lease,
-        Some(&reason),
+/// The commit of `repo`'s local `branch`.
+async fn local_commit(repo: &Repository, branch: &str) -> Result<String> {
+    Ok(
+        git::verify_revision(&repo.path, &git::local_ref(branch), git_run)
+            .await
+            .with_context(|| format!("repository has no local {branch} branch"))?
+            .trim()
+            .to_owned(),
     )
+}
+
+/// The upstream a merge pushes `default` to, refused when it has none.
+async fn push_target(repo: &Repository, default: &str) -> Result<MergePush> {
+    let (remote, reference) = upstream(repo, &git::local_ref(default))
+        .await?
+        .with_context(|| format!("{default} has no upstream to push to"))?;
+    Ok(MergePush { remote, reference })
 }

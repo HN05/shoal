@@ -535,11 +535,13 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
             None,
             ExecutionKind::Command,
             None,
-            None,
-            Some(crate::daemon::workspace::places::ExecutionPlace {
-                origin: Origin::created(HostName::Rex, "shared".into()),
-                agent: true,
-            }),
+            crate::daemon::workspace::ExecutionRequest {
+                place: Some(crate::daemon::workspace::places::ExecutionPlace {
+                    origin: Origin::created(HostName::Rex, "shared".into()),
+                    agent: true,
+                }),
+                ..Default::default()
+            },
         )
         .await?;
     // A creation record that arrives late does not take the block back.
@@ -620,11 +622,13 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
             None,
             ExecutionKind::Command,
             None,
-            None,
-            Some(crate::daemon::workspace::places::ExecutionPlace {
-                origin: Origin::created(HostName::Rex, "parent".into()),
-                agent: false,
-            }),
+            crate::daemon::workspace::ExecutionRequest {
+                place: Some(crate::daemon::workspace::places::ExecutionPlace {
+                    origin: Origin::created(HostName::Rex, "parent".into()),
+                    agent: false,
+                }),
+                ..Default::default()
+            },
         )
         .await?;
     assert_eq!(
@@ -735,11 +739,13 @@ async fn panes_of_different_servers_under_one_id_are_different_places() -> Resul
             None,
             ExecutionKind::Command,
             None,
-            None,
-            Some(crate::daemon::workspace::places::ExecutionPlace {
-                origin: users.clone(),
-                agent: true,
-            }),
+            crate::daemon::workspace::ExecutionRequest {
+                place: Some(crate::daemon::workspace::places::ExecutionPlace {
+                    origin: users.clone(),
+                    agent: true,
+                }),
+                ..Default::default()
+            },
         )
         .await?;
     assert!(

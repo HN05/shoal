@@ -2548,11 +2548,12 @@ merges without asking. An agent's merge that needs approval names those files
 in its request, so the approver decides on them.
 
 An agent's scoped `shoal merge` needs the user's approval for the branch at its
-current commit unless `[permissions] merge = "direct"` and
+current commit, and for whether it pushes, unless `[permissions] merge = "direct"` and
 [`[permissions] push`](#approval-for-agent-pushes) is `"direct"` too. The first run records a
 `merge` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
-after approval, running it again merges that commit with every check above. A new
-commit replaces the request with one for the new commit, approving a request
+the request names the branch, the default branch it merges into, its commit count,
+the remote it pushes to and any open PR the workspace watches. After approval, running it again merges that commit with every check above. A new
+commit or a change to whether it pushes replaces the request, approving a request
 after its branch moved is refused as stale, and a denied commit stays refused
 with `"approval_denied"`.
 

@@ -15,7 +15,7 @@ pub(super) enum Mode {
     /// to `log`, and the launch reported on stdout for the spawning CLI.
     Detached { log: PathBuf },
     /// Merging, whose worker writes what it merged, or why it could not,
-    /// to `result`.
+    /// to `result`; with `push`, the default branch is pushed afterwards.
     Merge { push: bool, result: PathBuf },
     /// A command publishing for the workspace under its agent account, with
     /// output on stderr so stdout stays for the caller's result.

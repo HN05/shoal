@@ -1046,6 +1046,64 @@ pub struct MergePlan {
     pub checkout: Option<PathBuf>,
     pub merge_temporaries: Vec<PathBuf>,
     pub default_refresh: PulledBranch,
+    /// Where the default branch is pushed after the merge, if it is.
+    pub push: Option<MergePush>,
+}
+
+/// The upstream a merge pushes the default branch to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergePush {
+    pub remote: String,
+    /// The ref on `remote` that receives the default branch.
+    pub reference: String,
+}
+
+/// What merging a workspace branch into the default branch does, for the
+/// user to confirm or approve before it happens.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MergePreview {
+    pub workspace_id: String,
+    pub branch: String,
+    pub default_branch: String,
+    /// Commits of the branch that the default branch lacks.
+    pub commits: u64,
+    /// The remote the default branch is pushed to afterwards, if it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push_to: Option<String>,
+    /// The sensitive files the merge brings to a default branch that changed
+    /// them too, as the last check of the branch's head found them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<MergeWarning>,
+    /// Open PRs the workspace watches, which `shoal pr merge` merges on the
+    /// forge instead.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open_prs: Vec<String>,
+}
+
+impl MergePreview {
+    /// The merge, its direction and what follows it, one sentence a line:
+    /// `Merge fix-login (3 commits) into main, then push main to origin.`
+    pub fn description(&self) -> String {
+        let (branch, default) = (&self.branch, &self.default_branch);
+        let commits = match self.commits {
+            1 => "1 commit".to_owned(),
+            count => format!("{count} commits"),
+        };
+        let mut text = format!("Merge {branch} ({commits}) into {default}");
+        if let Some(remote) = &self.push_to {
+            text.push_str(&format!(", then push {default} to {remote}"));
+        }
+        text.push('.');
+        if let Some(warning) = &self.warning {
+            text.push_str(&format!("\n{warning}."));
+        }
+        for url in &self.open_prs {
+            text.push_str(&format!(
+                "\nPR {url} is open; shoal pr merge merges it on the forge instead."
+            ));
+        }
+        text
+    }
 }
 
 /// An agent the user talks with in a repository's registered checkout,

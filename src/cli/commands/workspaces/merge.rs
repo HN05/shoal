@@ -117,10 +117,9 @@ async fn run_merge(paths: &Paths, workspace: String, push: bool) -> Result<Merge
 pub(in crate::cli::commands) async fn merge_worker(
     ctx: &Context,
     plan: String,
-    push: bool,
     result: PathBuf,
 ) -> Result<i32> {
-    let merged: MergeResult = finish(ctx, plan, push)
+    let merged: MergeResult = finish(ctx, plan)
         .await
         .map_err(|error| format!("{error:#}"));
     std::fs::write(&result, serde_json::to_vec(&merged)?)
@@ -128,7 +127,7 @@ pub(in crate::cli::commands) async fn merge_worker(
     Ok(if merged.is_ok() { 0 } else { 1 })
 }
 
-async fn finish(ctx: &Context, plan: String, push: bool) -> Result<MergedBranch> {
+async fn finish(ctx: &Context, plan: String) -> Result<MergedBranch> {
     anyhow::ensure!(
         env::is_scoped(),
         "merge worker requires a tracked execution"
@@ -139,5 +138,5 @@ async fn finish(ctx: &Context, plan: String, push: bool) -> Result<MergedBranch>
         std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,
         "merge worker requires its authorized workspace"
     );
-    crate::git::repo::finish_merge(plan, push).await
+    crate::git::repo::finish_merge(plan).await
 }

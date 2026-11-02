@@ -15,8 +15,8 @@ use super::{
     execution_recovery,
     scope::Caller,
     workspace::{
-        Completing, ExecutionKind, Manager, ReattachedExecution, StartedExecution, StopRequest,
-        places::ExecutionPlace,
+        Completing, ExecutionKind, ExecutionRequest, Manager, ReattachedExecution,
+        StartedExecution, StopRequest, places::ExecutionPlace,
     },
 };
 use crate::{
@@ -39,6 +39,8 @@ pub(super) struct ExecutionContext {
     pub demo: Option<crate::demos::Launch>,
     /// Where the wrapper runs in a terminal host.
     pub origin: Option<crate::sessions::Origin>,
+    /// A merge pushes the default branch afterwards.
+    pub push: bool,
     /// The scoped caller starting the execution.
     pub caller: Option<Caller>,
 }
@@ -91,6 +93,7 @@ pub(super) async fn execute(
         queue_entry,
         demo,
         origin,
+        push,
         caller,
     } = context;
     if kind == ExecutionKind::Command
@@ -124,11 +127,14 @@ pub(super) async fn execute(
             Some(wrapper),
             kind,
             caller.as_ref(),
-            demo,
-            origin.map(|origin| ExecutionPlace {
-                origin,
-                agent: agent.is_some(),
-            }),
+            ExecutionRequest {
+                demo,
+                place: origin.map(|origin| ExecutionPlace {
+                    origin,
+                    agent: agent.is_some(),
+                }),
+                push,
+            },
         )
         .await
     {

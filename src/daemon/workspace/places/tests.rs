@@ -26,11 +26,13 @@ async fn an_execution_reports_where_it_runs() -> Result<()> {
             None,
             ExecutionKind::Command,
             None,
-            None,
-            Some(crate::daemon::workspace::places::ExecutionPlace {
-                origin: origin.clone(),
-                agent: true,
-            }),
+            crate::daemon::workspace::ExecutionRequest {
+                place: Some(crate::daemon::workspace::places::ExecutionPlace {
+                    origin: origin.clone(),
+                    agent: true,
+                }),
+                ..Default::default()
+            },
         )
         .await?;
     let executions = manager.inspect_workspace(&workspace.id).await?.executions;

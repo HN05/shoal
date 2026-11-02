@@ -1325,6 +1325,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     queue_entry: None,
                     demo: None,
                     origin: None,
+                    push: false,
                     wrapper: wrapper.clone(),
                 };
                 let allowed = target.id == workspace.id
@@ -1508,12 +1509,32 @@ async fn merge_as_agent(
     f: &Fixture,
     workspace: &crate::model::Workspace,
 ) -> anyhow::Result<crate::daemon::workspace::StartedExecution> {
+    begin_merge_as_agent(f, workspace, false).await
+}
+
+/// Begin a merge execution as the workspace's agent, which with `push`
+/// pushes the default branch afterwards.
+async fn begin_merge_as_agent(
+    f: &Fixture,
+    workspace: &crate::model::Workspace,
+    push: bool,
+) -> anyhow::Result<crate::daemon::workspace::StartedExecution> {
     let caller = scope::Caller {
         execution: None,
         workspace_id: workspace.id.clone(),
     };
+    let request = crate::daemon::workspace::ExecutionRequest {
+        push,
+        ..Default::default()
+    };
     f.manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Merge, Some(&caller))
+        .begin_execution_placed(
+            &workspace.id,
+            None,
+            ExecutionKind::Merge,
+            Some(&caller),
+            request,
+        )
         .await
 }
 
@@ -1522,9 +1543,14 @@ async fn undecided_merge(
     f: &Fixture,
     workspace: &crate::model::Workspace,
 ) -> crate::daemon::approvals::ApprovalRequest {
-    let error = merge_as_agent(f, workspace)
-        .await
-        .expect_err("merge needs a decision");
+    undecided(begin_merge_as_agent(f, workspace, false).await)
+}
+
+/// The approval request `begun` waits for or was refused.
+fn undecided(
+    begun: anyhow::Result<crate::daemon::workspace::StartedExecution>,
+) -> crate::daemon::approvals::ApprovalRequest {
+    let error = begun.expect_err("merge needs a decision");
     *error
         .downcast::<crate::daemon::approvals::Undecided>()
         .expect("an approval request")
@@ -1545,7 +1571,7 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
     let pending = undecided_merge(&f, &workspace).await;
     assert_eq!(pending.status, DecisionStatus::Pending);
     assert_eq!(pending.subject(), format!("merge worker at {head}"));
-    assert_eq!(pending.reason, "merge worker into main");
+    assert_eq!(pending.reason, "Merge worker (1 commit) into main.");
     assert_eq!(undecided_merge(&f, &workspace).await.id, pending.id);
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
 
@@ -1694,6 +1720,40 @@ async fn scoped_merge_needs_approval_while_pushes_do() {
 }
 
 #[tokio::test]
+async fn scoped_merge_approval_binds_and_describes_its_push() {
+    use crate::daemon::approvals::{DecisionStatus, Specification};
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    f.remote();
+    for file in ["one", "two"] {
+        fs::write(workspace.path.join(file), "work\n").unwrap();
+        commit(&workspace.path, file);
+    }
+    let head = git(&workspace.path, &["rev-parse", "HEAD"])
+        .trim()
+        .to_owned();
+    let local = undecided_merge(&f, &workspace).await;
+    assert_eq!(local.reason, "Merge worker (2 commits) into main.");
+    let pushing = undecided(begin_merge_as_agent(&f, &workspace, true).await);
+    let Specification::Merge(merge) = &pushing.specification else {
+        panic!("merge specification expected");
+    };
+    assert_eq!(merge.push.as_deref(), Some("origin"));
+    assert_eq!(
+        pushing.reason,
+        "Merge worker (2 commits) into main, then push main to origin."
+    );
+    assert_eq!(
+        pushing.subject(),
+        format!("merge worker at {head} and push to origin")
+    );
+    // The local request no longer covers a merge that pushes.
+    let requests = f.manager.approval_requests(Some("worker")).await.unwrap();
+    let replaced = requests.iter().find(|request| request.id == local.id);
+    assert!(replaced.is_none_or(|request| request.status == DecisionStatus::Outdated));
+}
+
+#[tokio::test]
 async fn merge_turned_off_refuses_runs_and_agent_requests() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
@@ -1818,7 +1878,7 @@ impl Manager {
     ) -> anyhow::Result<crate::model::MergedBranch> {
         let workspace = self.workspace(selector).await?;
         let _guard = self.gates.lock_git(&workspace.repository_id).await;
-        crate::git::repo::finish_merge(self.prepare_merge(selector).await?, push).await
+        crate::git::repo::finish_merge(self.prepare_merge(selector, push).await?).await
     }
 }
 

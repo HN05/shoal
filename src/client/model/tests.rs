@@ -159,3 +159,35 @@ fn the_workspaces_below_a_chat_include_those_split_from_them() {
         .collect();
     assert_eq!(below, ["opened", "grandchild"]);
 }
+
+#[test]
+fn merge_preview_names_its_direction_push_warning_and_open_prs() {
+    let mut preview = MergePreview {
+        workspace_id: "id".into(),
+        branch: "fix-login".into(),
+        default_branch: "main".into(),
+        commits: 1,
+        push_to: None,
+        warning: None,
+        open_prs: Vec::new(),
+    };
+    assert_eq!(
+        preview.description(),
+        "Merge fix-login (1 commit) into main."
+    );
+    preview.commits = 3;
+    preview.push_to = Some("origin".into());
+    preview.warning = Some(MergeWarning {
+        subject: "fix-login".into(),
+        target: "main".into(),
+        files: vec!["version".into()],
+        url: None,
+    });
+    preview.open_prs = vec!["https://forge/pulls/12".into()];
+    assert_eq!(
+        preview.description(),
+        "Merge fix-login (3 commits) into main, then push main to origin.\n\
+        Sensitive files changed on both sides by fix-login and main: version.\n\
+        PR https://forge/pulls/12 is open; shoal pr merge merges it on the forge instead."
+    );
+}

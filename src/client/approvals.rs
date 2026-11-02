@@ -172,12 +172,16 @@ pub struct SimulatorSpecification {
     pub profile: Profile,
 }
 
-/// A merge decision covers the branch at one commit; later commits need a new one.
+/// A merge decision covers the branch at one commit and whether it pushes
+/// the default branch afterwards; later commits need a new one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MergeSpecification {
     pub branch: String,
     pub head: String,
+    /// The remote the merge pushes the default branch to afterwards.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push: Option<String>,
 }
 
 /// A secret grant covers the configured source; changing the command or the
@@ -455,9 +459,13 @@ impl ApprovalRequest {
     /// to place.
     pub fn subject(&self) -> String {
         match (&self.target, &self.specification) {
-            (Target::Merge, Specification::Merge(merge)) => {
-                format!("merge {} at {}", merge.branch, merge.head)
-            }
+            (Target::Merge, Specification::Merge(merge)) => match &merge.push {
+                Some(remote) => format!(
+                    "merge {} at {} and push to {remote}",
+                    merge.branch, merge.head
+                ),
+                None => format!("merge {} at {}", merge.branch, merge.head),
+            },
             (Target::IssueOpen, Specification::Issue(issue)) => {
                 let title = &issue.issue.title;
                 match &issue.repository {

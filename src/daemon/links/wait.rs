@@ -1576,12 +1576,18 @@ pub(crate) fn linked_items(
 /// Whether the workspace watches a PR that no poll has seen merged or
 /// closed, so its activity is still to come.
 pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &str) -> Result<bool> {
+    Ok(!open_prs(db, id)?.is_empty())
+}
+
+/// The PRs the workspace watches that no poll has seen merged or closed.
+pub(crate) fn open_prs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
+    let mut open = Vec::new();
     for (url, _) in linked_items(db, id, Some(ItemKind::Pr))? {
         if observed_item(db, id, &url)?.is_none_or(|snapshot| !concluded(&snapshot)) {
-            return Ok(true);
+            open.push(url);
         }
     }
-    Ok(false)
+    Ok(open)
 }
 
 /// The item as the workspace's last poll saw it, if one has.

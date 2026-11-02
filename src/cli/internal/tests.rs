@@ -119,17 +119,15 @@ fn the_herdr_watcher_of_earlier_releases_still_parses() {
 fn merge_round_trips_serialized_plan_and_globals() {
     let plan = r#"{"path":"/a path/with \"quotes\""}"#;
     let result = Path::new("/a path/result.json");
-    for (json, push) in [(false, false), (true, true)] {
+    for json in [false, true] {
         let InternalCommand::Merge {
             plan: parsed_plan,
-            push: parsed_push,
             result: parsed_result,
-        } = parse(Worker::Merge { plan, push, result }, json)
+        } = parse(Worker::Merge { plan, result }, json)
         else {
             panic!("expected merge worker");
         };
         assert_eq!(parsed_plan, plan);
-        assert_eq!(parsed_push, push);
         assert_eq!(parsed_result, result);
     }
 }

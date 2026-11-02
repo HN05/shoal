@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail, ensure};
 use crate::{
     fsutil::off_runtime,
     git::{self, run_isolated as git_run, worktrunk},
-    model::{MergePlan, MergedBranch, Repository},
+    model::{MergePlan, MergePush, MergedBranch, Repository},
 };
 
 /// The `(remote, refs/heads/...)` upstream of a local branch, if configured.
@@ -111,19 +111,13 @@ pub(crate) async fn unfinished_operation(checkout: &Path) -> Result<Option<&'sta
 }
 
 /// Executed only by the merge worker, inside the tracked process group.
-/// With `push`, the default branch then goes to its upstream; a missing
-/// upstream is refused before anything merges.
-pub async fn finish_merge(plan: MergePlan, push: bool) -> Result<MergedBranch> {
+/// When `plan` pushes, the default branch then goes to its upstream.
+pub async fn finish_merge(plan: MergePlan) -> Result<MergedBranch> {
     let default = plan.default_refresh.branch.clone();
-    let target = if push {
-        let target = upstream(&plan.repo, &git::local_ref(&default)).await?;
-        Some(target.with_context(|| format!("{default} has no upstream to push to"))?)
-    } else {
-        None
-    };
+    let target = plan.push.clone();
     let repo = plan.repo.path.clone();
     let mut merged = merge_branch(plan).await?;
-    if let Some((remote, reference)) = target {
+    if let Some(MergePush { remote, reference }) = target {
         git_run(
             &repo,
             &[
@@ -154,6 +148,7 @@ async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
         checkout,
         merge_temporaries: _,
         default_refresh,
+        push: _,
     } = plan;
     let branch = branch.as_str();
     let default = default_refresh.branch.clone();
