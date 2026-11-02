@@ -109,3 +109,42 @@ fn states_and_running_work_are_shown_and_missing_targets_hidden() {
     };
     assert_eq!(attachable.fit(&ready), Fit::Accepted);
 }
+
+#[test]
+fn agent_places_set_stopped_agents_apart() {
+    let place =
+        |name: &str| crate::sessions::Origin::created(crate::sessions::HostName::Zmx, name.into());
+    let (running, stopped, gone) = (place("running"), place("stopped"), place("gone"));
+    let agent = |workspace: &str, origin: Option<&Origin>, name: Option<&str>| RunningAgent {
+        execution: format!("{workspace}-execution"),
+        workspace_id: workspace.into(),
+        agent: name.map(Into::into),
+        restorable: true,
+        state: None,
+        interrupted: false,
+        origin: origin.cloned(),
+        restarted_by: Vec::new(),
+        restart: None,
+        stopped: None,
+    };
+    let agents = [
+        agent("w1", Some(&running), Some("claude")),
+        RunningAgent {
+            stopped: Some(crate::protocol::Protection {
+                reason: "critical memory pressure".into(),
+                resumes_when: "an update arrives for it".into(),
+            }),
+            ..agent("w2", Some(&stopped), Some("claude"))
+        },
+        agent("w3", Some(&gone), None),
+        agent("w4", None, Some("codex")),
+    ];
+    assert_eq!(
+        agent_places(&agents),
+        AgentPlaces {
+            connected: vec![("w1", &running)],
+            stopped: vec![("w2", &stopped)],
+            unknown: vec![("w3", &gone)],
+        }
+    );
+}

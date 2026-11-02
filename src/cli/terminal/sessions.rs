@@ -318,24 +318,18 @@ pub(in crate::cli) fn session_owners(places: &[(&str, &Origin)]) -> HashSet<Stri
 /// session still open there, asking only hosts the owner's `settings`
 /// enable. A place whose owner has no settings, or whose host cannot say,
 /// counts as closed, as does one whose session is that of an agent stopped
-/// at one of `stopped`.
+/// at one of `stopped`, recorded the same way.
 pub(in crate::cli) async fn open_session_owners(
     places: &[(&str, &Origin)],
-    stopped: &[&Origin],
+    stopped: &[(&str, &Origin)],
     settings: &HashMap<String, Effective>,
 ) -> HashSet<String> {
-    let places: Vec<_> = places
-        .iter()
-        .filter(|(owner, place)| {
-            settings
-                .get(*owner)
-                .is_some_and(|settings| enabled_host(settings, place.host).is_some())
-        })
-        .collect();
+    let places = enabled_places(places, settings);
+    let stopped = enabled_places(stopped, settings);
     let origins: Vec<&Origin> = places
         .iter()
+        .chain(&stopped)
         .map(|(_, place)| *place)
-        .chain(stopped.iter().copied())
         .collect();
     let (found, _) = open_at(&origins, |host| named(host).sessions()).await;
     let (open, stopped) = found.split_at(places.len());
@@ -349,6 +343,23 @@ pub(in crate::cli) async fn open_session_owners(
                 .is_some_and(|session| !stopped.contains(&session.key()))
         })
         .map(|((owner, _), _)| (*owner).to_owned())
+        .collect()
+}
+
+/// Those of `places`, recorded for owners by ID, in a host their owner's
+/// `settings` enable.
+fn enabled_places<'a>(
+    places: &[(&'a str, &'a Origin)],
+    settings: &HashMap<String, Effective>,
+) -> Vec<(&'a str, &'a Origin)> {
+    places
+        .iter()
+        .filter(|(owner, place)| {
+            settings
+                .get(*owner)
+                .is_some_and(|settings| enabled_host(settings, place.host).is_some())
+        })
+        .copied()
         .collect()
 }
 
