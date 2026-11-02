@@ -203,11 +203,12 @@ impl View {
 }
 
 /// What a row stands for, by the picker id it is chosen with: an inbox
-/// item with its workspace's ID, a workspace, or the entry that adds one.
+/// item with its space's ID, a workspace, or the entry that adds one.
 enum Row {
+    /// A question by its number, of a workspace or chat.
     Question {
         id: i64,
-        workspace: String,
+        space: String,
     },
     /// A request by its number and when it was made, since a later request
     /// may reuse the number.
@@ -218,8 +219,9 @@ enum Row {
     },
     NeedsInput(String),
     Failed(String),
+    /// A mark of a workspace or chat, on its item or on itself.
     Ready {
-        workspace: String,
+        space: String,
         url: Option<String>,
     },
     /// A running demo, by its name.
@@ -241,25 +243,25 @@ enum Row {
 
 impl Row {
     fn of(item: &Item) -> Self {
-        let workspace = item.space_id().to_owned();
+        let space = item.space_id().to_owned();
         match item {
             Item::Question { question } => Self::Question {
                 id: question.id,
-                workspace,
+                space,
             },
             Item::Approval { request } => Self::Approval {
                 id: request.id,
                 created_at: request.created_at,
-                workspace,
+                workspace: space,
             },
-            Item::NeedsInput { .. } => Self::NeedsInput(workspace),
-            Item::Failed { .. } => Self::Failed(workspace),
+            Item::NeedsInput { .. } => Self::NeedsInput(space),
+            Item::Failed { .. } => Self::Failed(space),
             Item::Ready { mark, .. } | Item::ChatReady { mark, .. } => Self::Ready {
-                workspace,
+                space,
                 url: mark.url.clone(),
             },
             Item::Demo { demo } => Self::Demo {
-                workspace,
+                workspace: space,
                 name: demo.launch.name.clone(),
             },
             Item::Untracked { worktree } => Self::Untracked(worktree.path.clone()),
@@ -272,7 +274,7 @@ impl Row {
     /// last since it holds colons itself; a workspace row is its ID.
     fn id(&self) -> String {
         match self {
-            Self::Question { id, workspace } => format!("question:{workspace}:{id}"),
+            Self::Question { id, space } => format!("question:{space}:{id}"),
             Self::Approval {
                 id,
                 created_at,
@@ -280,8 +282,8 @@ impl Row {
             } => format!("approval:{workspace}:{id}:{created_at}"),
             Self::NeedsInput(workspace) => format!("needs-input:{workspace}"),
             Self::Failed(workspace) => format!("failed:{workspace}"),
-            Self::Ready { workspace, url } => {
-                format!("ready:{workspace}:{}", url.as_deref().unwrap_or_default())
+            Self::Ready { space, url } => {
+                format!("ready:{space}:{}", url.as_deref().unwrap_or_default())
             }
             Self::Demo { workspace, name } => format!("demo:{workspace}:{name}"),
             Self::Untracked(path) => format!("untracked:{}", encode_path(path)),
@@ -312,13 +314,13 @@ impl Row {
         if kind == "sync-failed" {
             return Ok(Self::SyncFailed(rest.to_owned()));
         }
-        let (workspace, detail) = rest.split_once(':').unwrap_or((rest, ""));
-        let workspace = workspace.to_owned();
+        let (space, detail) = rest.split_once(':').unwrap_or((rest, ""));
+        let space = space.to_owned();
         let number = || detail.parse().context("picker returned an invalid row");
         Ok(match kind {
             "question" => Self::Question {
                 id: number()?,
-                workspace,
+                space,
             },
             "approval" => {
                 let (id, created_at) = detail.split_once(':').unwrap_or((detail, ""));
@@ -326,32 +328,37 @@ impl Row {
                 Self::Approval {
                     id: id.parse().map_err(|_| invalid())?,
                     created_at: created_at.parse().map_err(|_| invalid())?,
-                    workspace,
+                    workspace: space,
                 }
             }
-            "needs-input" => Self::NeedsInput(workspace),
-            "failed" => Self::Failed(workspace),
+            "needs-input" => Self::NeedsInput(space),
+            "failed" => Self::Failed(space),
             "ready" => Self::Ready {
-                workspace,
+                space,
                 url: (!detail.is_empty()).then(|| detail.to_owned()),
             },
             "demo" => Self::Demo {
-                workspace,
+                workspace: space,
                 name: detail.to_owned(),
             },
             _ => anyhow::bail!("picker returned an unknown row"),
         })
     }
 
-    fn workspace(&self) -> Option<&str> {
+    /// The workspace or chat the row belongs to, which keys act on.
+    fn space(&self) -> Option<&str> {
         match self {
-            Self::Question { workspace, .. }
-            | Self::Approval { workspace, .. }
-            | Self::NeedsInput(workspace)
-            | Self::Failed(workspace)
-            | Self::Ready { workspace, .. }
-            | Self::Demo { workspace, .. }
-            | Self::Workspace(workspace) => Some(workspace),
+            Self::Question { space, .. }
+            | Self::Approval {
+                workspace: space, ..
+            }
+            | Self::NeedsInput(space)
+            | Self::Failed(space)
+            | Self::Ready { space, .. }
+            | Self::Demo {
+                workspace: space, ..
+            }
+            | Self::Workspace(space) => Some(space),
             Self::Notification(name) => (!name.is_empty()).then_some(name.as_str()),
             Self::Untracked(_) | Self::Cleanup | Self::SyncFailed(_) | Self::Add => None,
         }
@@ -415,7 +422,7 @@ async fn current_items(ctx: &Context, entries: &Entries) -> Result<Option<String
         return Ok(None);
     };
     let has_items = entries.iter().any(|(id, _)| {
-        Row::parse(id.clone()).is_ok_and(|row| row.workspace() == Some(current.id.as_str()))
+        Row::parse(id.clone()).is_ok_and(|row| row.space() == Some(current.id.as_str()))
     });
     Ok(has_items.then(|| format!("'{}", current.name)))
 }
@@ -594,13 +601,13 @@ async fn command(ctx: &Context, key: Key, row: Row) -> Result<Choice> {
     if key == Key::Enter {
         return enter(ctx, row).await;
     }
-    let workspace = row.workspace().map(str::to_owned);
-    ensure!(workspace.is_some(), "select a workspace for this action");
-    if let Some(chat) = chat_name(ctx, workspace.as_deref()).await? {
+    let space = row.space().map(str::to_owned);
+    ensure!(space.is_some(), "select a space for this action");
+    if let Some(chat) = chat_name(ctx, space.as_deref()).await? {
         return Ok(Choice::Run(Box::new(chat_command(ctx, key, chat).await?)));
     }
     Ok(Choice::Run(Box::new(
-        workspace_command(ctx, key, workspace).await?,
+        workspace_command(ctx, key, space).await?,
     )))
 }
 
@@ -656,13 +663,13 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             item: None,
         }),
         Row::Ready {
-            workspace,
+            space,
             url: Some(url),
         } => Command::Items(ItemsCommand::View(ViewArgs {
             items: ItemArgs {
                 kind_or_url: Some(url),
                 item: None,
-                space: Some(workspace),
+                space: Some(space),
             },
             repo: Default::default(),
             no_comments: false,
@@ -671,17 +678,14 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             job_id: None,
             web: false,
         })),
-        Row::Ready {
-            workspace,
-            url: None,
-        } => match chat_name(ctx, Some(&workspace)).await? {
+        Row::Ready { space, url: None } => match chat_name(ctx, Some(&space)).await? {
             // A chat marked itself, so its agent says what is ready.
             Some(chat) => Command::Sessions(SessionsCommand::Attach {
                 target: Some(chat),
                 session: None,
             }),
             None => Command::Workspace(WorkspaceCommand::Status {
-                workspace: Some(workspace),
+                workspace: Some(space),
                 item: None,
             }),
         },
@@ -778,16 +782,16 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
 
 /// View one of the issues and PRs the space `workspace` names links, or
 /// open it in the browser, as chosen.
-async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
-    let workspace = workspace.context("select a workspace to view its issues and PRs")?;
-    let (items, kind) = linked_items(ctx, &workspace).await?;
+async fn view_command(ctx: &Context, space: Option<String>) -> Result<Command> {
+    let space = space.context("select a space to view its issues and PRs")?;
+    let (items, kind) = linked_items(ctx, &space).await?;
     ensure!(!items.is_empty(), "the {kind} links no issue or PR");
     let (url, web) = pick_linked(ctx, &items)?;
     Ok(Command::Items(ItemsCommand::View(ViewArgs {
         items: ItemArgs {
             kind_or_url: Some(url),
             item: None,
-            space: Some(workspace),
+            space: Some(space),
         },
         repo: Default::default(),
         no_comments: false,
@@ -802,7 +806,7 @@ async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Comman
 /// only ones `shoal view` reads for it: a workspace's worktree's, or a chat's
 /// registered checkout's; with the space's kind.
 async fn linked_items(ctx: &Context, space: &str) -> Result<(Vec<LinkedItem>, &'static str)> {
-    let unknown = || Refusal::new(Reason::NotFound, format!("unknown workspace: {space}"));
+    let unknown = || Refusal::new(Reason::NotFound, format!("unknown space: {space}"));
     let (links, path, kind) = match client::present_space(&ctx.paths, space).await? {
         Some(PresentSpace::Workspace(workspace)) => (workspace.links, workspace.path, "workspace"),
         Some(PresentSpace::Chat(chat)) => {

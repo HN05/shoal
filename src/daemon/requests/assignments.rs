@@ -23,19 +23,16 @@ pub(super) async fn handle(
             workspace,
             execution,
         } => Body::Discarded(manager.discard_stopped_work(&workspace, execution).await?),
-        AssignmentMethod::MarkReady {
-            space: workspace,
-            selection,
-        } => {
+        AssignmentMethod::MarkReady { space, selection } => {
             // Only a workspace process's mark waits for a review.
             let gated = caller.is_some();
-            Body::ReviewMarks(manager.mark_ready(&workspace, selection, gated).await?)
+            Body::ReviewMarks(manager.mark_ready(&space, selection, gated).await?)
         }
         AssignmentMethod::ClearReady {
-            space: workspace,
+            space,
             selection,
             draft,
-        } => Body::ReviewMarks(manager.clear_ready(&workspace, selection, draft).await?),
+        } => Body::ReviewMarks(manager.clear_ready(&space, selection, draft).await?),
         AssignmentMethod::WorkspaceDone {
             workspace,
             cleanup,
@@ -57,8 +54,12 @@ impl Scoped for AssignmentMethod {
         Ok(match self {
             AssignmentMethod::WorkspaceDone { workspace, .. }
             | AssignmentMethod::WorkspaceUndone { workspace }
-            | AssignmentMethod::MarkReady { space: workspace, .. }
-            | AssignmentMethod::ClearReady { space: workspace, .. } => Some(workspace),
+            | AssignmentMethod::MarkReady {
+                space: workspace, ..
+            }
+            | AssignmentMethod::ClearReady {
+                space: workspace, ..
+            } => Some(workspace),
             AssignmentMethod::DiscardStoppedWork { workspace, .. } => Some(
                 manager
                     .workspace_below(
