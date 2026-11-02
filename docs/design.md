@@ -1199,9 +1199,10 @@ it only saves typing a name, so it never fails a command or authorizes anything,
 scoped callers neither read nor write it. `attach` and every launch that shows a
 workspace's agent session here, such as `add` or `claude`, record the workspace in
 `attach`'s history once the session is shown and still runs: when the terminal
-detaches, or right away for a host that shows it without attaching the terminal. So
-`attach -` returns to the session last detached from, not one another terminal still
-shows or one that ended.
+detaches, or right away for a host that shows it without attaching the terminal. A
+focused `add` that opens a place records the workspace once the place hosts it, since
+the host may show the place before the workspace exists. So `attach -` returns to the
+session last detached from, not one another terminal still shows or one that ended.
 `resume` uses the current workspace only when it has something to resume; its picker
 and completion list every workspace with the agents and commands it would
 restore, or that nothing would, and with nothing to resume anywhere it reports

@@ -25276,6 +25276,41 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
 }
 
 #[test]
+fn attach_previous_returns_to_the_herdr_tab_a_focused_add_opened() {
+    let fixture = Fixture::with_config(Some(
+        "terminal.focus = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
+    ));
+    install_fake_herdr(&fixture);
+    let add = |name: &str, focus: bool| {
+        let mut args = vec!["add", fixture.repo.to_str().unwrap(), name, "--agent", "pi"];
+        if focus {
+            args.push("--focus");
+        }
+        let (caller, transcript) = herdr_call(&fixture, &args, "");
+        assert!(caller.status.success(), "{caller:?} {transcript}");
+        let (worker, transcript) =
+            fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
+        assert!(worker.status.success(), "{worker:?} {transcript}");
+    };
+    // A tab opened in the background shows nothing to return to.
+    add("hidden", false);
+    let (output, transcript) = herdr_call(&fixture, &["attach", "-"], "");
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains("no previous workspace for `shoal attach`"),
+        "{transcript}"
+    );
+    add("shown", true);
+    let before = herdr_calls(&fixture).len();
+    let (output, transcript) = herdr_call(&fixture, &["attach", "-"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(
+        herdr_calls(&fixture)[before..],
+        [vec!["tab", "focus", "w1:t9"]]
+    );
+}
+
+#[test]
 fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     let fixture = Fixture::with_config(Some("terminal.focus = false\n"));
     install_fake_herdr(&fixture);

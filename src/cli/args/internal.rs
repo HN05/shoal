@@ -164,6 +164,9 @@ pub enum InternalCommand {
         /// Close the place once the workspace is done.
         #[arg(long)]
         close_when_done: bool,
+        /// The place was opened focused, showing the workspace's session.
+        #[arg(long)]
+        focused: bool,
         #[arg(env = crate::env::ADD_PLAN, hide_env_values = true)]
         plan: String,
     },

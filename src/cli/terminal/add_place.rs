@@ -12,7 +12,7 @@ use super::{
     sessions::Owner,
 };
 use crate::{
-    cli::{commands::workspaces::execute_add, context::Context},
+    cli::{commands::workspaces::execute_add, context::Context, recent},
     env,
     model::Workspace,
     sessions::HostName,
@@ -25,18 +25,25 @@ pub(in crate::cli) struct Place {
     /// The place's ID in its origin record.
     id: String,
     closes_when_done: bool,
+    /// Whether the host opened the place focused, showing it.
+    focused: bool,
 }
 
 /// The worker that adds the workspace `plan` describes in the place `host`
-/// opened for it, closing the place with the workspace when config says so.
-/// The plan reaches it in the place's environment.
-pub(super) fn add_worker_argv(ctx: &Context, host: &Configured) -> Result<Vec<OsString>> {
+/// opened for it, `focused` or not, closing the place with the workspace
+/// when config says so. The plan reaches it in the place's environment.
+pub(super) fn add_worker_argv(
+    ctx: &Context,
+    host: &Configured,
+    focused: bool,
+) -> Result<Vec<OsString>> {
     crate::cli::internal::internal_command(
         &ctx.paths,
         false,
         crate::cli::internal::Worker::Add {
             host: host.host.name(),
             close_when_done: host.closes_when_done,
+            focused,
         },
     )
 }
@@ -47,6 +54,7 @@ pub(in crate::cli) async fn add_worker(
     mut ctx: Context,
     host: HostName,
     closes_when_done: bool,
+    focused: bool,
     payload: &str,
 ) -> Result<i32> {
     let plan = serde_json::from_str(payload).context("invalid workspace plan")?;
@@ -57,14 +65,15 @@ pub(in crate::cli) async fn add_worker(
         host,
         id,
         closes_when_done,
+        focused,
     });
     execute_add(&ctx, plan).await
 }
 
 /// Tell the place this process runs in that it hosts `workspace`, whose
-/// agent starts there when `runs_agent`: it takes `label`, and closes with the
-/// workspace when it should. A session the user opened is labelled once an
-/// agent starts in it.
+/// agent starts there when `runs_agent`: it takes `label`, closes with the
+/// workspace when it should, and once opened focused is where `attach -`
+/// returns. A session the user opened is labelled once an agent starts in it.
 pub(in crate::cli) async fn host_workspace(
     ctx: &Context,
     workspace: &Workspace,
@@ -86,6 +95,9 @@ pub(in crate::cli) async fn host_workspace(
             record_owned_in(ctx, place.host, &workspace.id).await;
             if place.closes_when_done {
                 closing::start_watcher(ctx, place.host, &place.id, &workspace.id).await?;
+            }
+            if place.focused {
+                recent::record_attach(ctx, &workspace.id).await;
             }
             Ok(())
         }

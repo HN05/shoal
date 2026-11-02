@@ -83,11 +83,12 @@ pub enum Worker<'a> {
     /// Start an admitted queue entry where its launching terminal would.
     QueueStart { entry: &'a str },
     /// Add the workspace planned in the environment in the place `host`
-    /// opened for it, closing it once the workspace is done when
-    /// `close_when_done` is set.
+    /// opened for it, `focused` when it shows the place, closing it once
+    /// the workspace is done when `close_when_done` is set.
     Add {
         host: HostName,
         close_when_done: bool,
+        focused: bool,
     },
     /// Copy the checkout's ignored files, then run setup.
     CopyIgnored { setup_cmd: Option<&'a Path> },
@@ -265,10 +266,14 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
         Worker::Add {
             host,
             close_when_done,
+            focused,
         } => {
             args.extend([ADD.into(), "--host".into(), host.as_str().into()]);
             if close_when_done {
                 args.push("--close-when-done".into());
+            }
+            if focused {
+                args.push("--focused".into());
             }
         }
         Worker::CopyIgnored { setup_cmd } => {

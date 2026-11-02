@@ -119,7 +119,7 @@ async fn run_add(
     if placement == Placement::Focus && host.host.attaches().is_some() {
         return Ok(false);
     }
-    let worker = add_worker_argv(ctx, host)?;
+    let worker = add_worker_argv(ctx, host, placement == Placement::Focus)?;
     let directive = places
         .places_keep_shells()
         .then(ShellDirective::create)
@@ -138,29 +138,24 @@ async fn run_add(
     if let Some(directive) = directive {
         directive.hand_over()?;
     }
-    if start.focus
-        && show_opened(host, places, &place, start.label).await?
-        && left_open(&place).await
-    {
-        recent::record_attach(ctx, name).await;
+    if start.focus {
+        show_opened(host, places, &place, start.label).await?;
     }
     Ok(true)
 }
 
 /// Show `place`, which `host` opened focused, in this terminal when the
 /// host does not serve it; a terminal it serves shows its focused place.
-/// Returns whether this terminal showed it.
 async fn show_opened(
     host: &Configured,
     places: &dyn Places,
     place: &Origin,
     name: &str,
-) -> Result<bool> {
+) -> Result<()> {
     if host.serves() {
-        return Ok(false);
+        return Ok(());
     }
-    places.show(place, name).await?;
-    Ok(true)
+    places.show(place, name).await
 }
 
 /// What the place `host` opens for `plan` is called: the plan's label where

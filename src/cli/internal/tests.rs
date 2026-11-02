@@ -32,13 +32,14 @@ fn parse(worker: Worker<'_>, json: bool) -> InternalCommand {
 }
 
 #[test]
-fn add_round_trips_host_and_close_when_done() {
+fn add_round_trips_host_close_when_done_and_focus() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
-    for close_when_done in [false, true] {
+    for (close_when_done, focused) in [(false, true), (true, false)] {
         let worker = Worker::Add {
             host: HostName::Herdr,
             close_when_done,
+            focused,
         };
         // The plan normally arrives in the place's environment.
         let mut args = internal_command(&paths, false, worker).unwrap();
@@ -50,6 +51,7 @@ fn add_round_trips_host_and_close_when_done() {
                 InternalCommand::Add {
                     host,
                     close_when_done: parsed,
+                    focused: parsed_focus,
                     plan,
                 },
         }) = cli.command
@@ -58,6 +60,7 @@ fn add_round_trips_host_and_close_when_done() {
         };
         assert_eq!(host, HostName::Herdr);
         assert_eq!(parsed, close_when_done);
+        assert_eq!(parsed_focus, focused);
         assert_eq!(plan, "plan");
     }
 }
