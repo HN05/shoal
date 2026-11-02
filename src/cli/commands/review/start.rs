@@ -17,8 +17,8 @@ use crate::{
         items::link::{ItemKind, Link, LinkTarget},
     },
     git,
-    model::{Chat, Repository, Workspace},
-    protocol::{ConfigTarget, ReviewMethod, WorkspaceMethod},
+    model::{Chat, OpenedWorkspace, Repository, Workspace},
+    protocol::{ConfigTarget, CreationOptions, ReviewMethod, WorkspaceMethod},
     reviews::{Review, ReviewTarget},
 };
 
@@ -229,11 +229,11 @@ async fn pull_request(
         .await?
         .pull_request(&ctx.forge_account()?, input)
         .await?;
-    ensure!(
-        !pull.fork,
-        "PR #{} comes from a fork; only branches in this repository can be opened",
-        pull.number
-    );
+    if pull.fork {
+        let workspace = fork_pull_workspace(ctx, repo, &pull).await?;
+        let subject = Subject::Pull { pull, post };
+        return run(ctx, Some(workspace), reviewer, subject, model, args).await;
+    }
     let owner = client::workspaces(&ctx.paths)
         .await?
         .into_iter()
@@ -292,6 +292,37 @@ async fn pull_request(
     };
     let subject = Subject::Pull { pull, post };
     run(ctx, Some(workspace), reviewer, subject, model, args).await
+}
+
+/// The workspace at a commit a fork PR's review reads: the one at its head,
+/// or a new one without setup, since the reviewer only reads a checkout,
+/// with the PR linked.
+async fn fork_pull_workspace(
+    ctx: &Context,
+    repo: &Repository,
+    pull: &PullRequest,
+) -> Result<String> {
+    fetch_pull_branch(&repo.path, "base", &pull.base).await?;
+    let method = WorkspaceMethod::OpenPullHead {
+        repository: repo.id.as_str().into(),
+        url: pull.url.clone(),
+        head: super::super::links::fork_head(pull)?,
+        chat: crate::cli::ui::current_chat(&None),
+        options: CreationOptions {
+            skip_setup: true,
+            ..Default::default()
+        },
+    };
+    let opened: OpenedWorkspace = client::request(&ctx.paths, method).await?;
+    let Some(workspace) = super::super::split::prepare(ctx, opened.workspace).await? else {
+        bail!("PR #{}'s workspace could not be set up", pull.number);
+    };
+    let workspace = super::super::workspaces::link_pull(ctx, workspace, pull.url.clone()).await?;
+    eprintln!(
+        "Reviewing PR #{} in workspace {}",
+        pull.number, workspace.name
+    );
+    Ok(workspace.id)
 }
 
 /// Fast-forward a reused workspace to the PR's pushed head so the review sees

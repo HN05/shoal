@@ -411,17 +411,27 @@ impl Manager {
                 Ok(Commits { head, base })
             }
             ReviewTarget::Pr { head, base, .. } => {
-                let head_ref = crate::git::remote_ref("origin", head);
                 let base_ref = crate::git::remote_ref("origin", base);
-                let head = crate::git::resolve_commit(&workspace.path, &head_ref, crate::git::run)
-                    .await
-                    .with_context(|| format!("the PR head {head} is not fetched"))?;
+                let head = self.pull_review_head(workspace, head).await?;
                 let base = crate::git::diff::merge_base_of(&workspace.path, &head, &base_ref)
                     .await
                     .with_context(|| format!("the PR base {base} is not fetched"))?;
                 Ok(Commits { head, base })
             }
         }
+    }
+
+    /// The commit a PR review reads: the fetched head branch `head`, or the
+    /// detached HEAD of a workspace at a commit, which is at the head of a
+    /// PR whose branch origin does not have, as a fork's.
+    async fn pull_review_head(&self, workspace: &Workspace, head: &str) -> Result<String> {
+        if workspace.branch.is_none() {
+            return crate::daemon::links::pr::current_head(workspace).await;
+        }
+        let head_ref = crate::git::remote_ref("origin", head);
+        crate::git::resolve_commit(&workspace.path, &head_ref, crate::git::run)
+            .await
+            .with_context(|| format!("the PR head {head} is not fetched"))
     }
 
     /// Remove the checkouts and output that reviews a daemon stop interrupted

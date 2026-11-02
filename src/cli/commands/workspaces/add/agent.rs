@@ -87,6 +87,19 @@ pub(super) enum AgentChoice {
     PickerIfInteractive,
 }
 
+/// No agent for a fork PR's head, which a workspace at a commit holds,
+/// refusing one that was named.
+pub(super) fn for_creation(creation: &super::Creation, agent: AgentChoice) -> Result<AgentChoice> {
+    if creation.pull_head.is_none() {
+        return Ok(agent);
+    }
+    anyhow::ensure!(
+        !matches!(agent, AgentChoice::Chosen(Some(_))),
+        "the PR comes from a fork, so its head opens in a workspace at a commit, which holds no agent of its own"
+    );
+    Ok(AgentChoice::Chosen(None))
+}
+
 /// Validate a named agent before looking up the issue or creating work.
 pub(super) async fn choose_add_agent(
     settings: &AddSettings<'_>,

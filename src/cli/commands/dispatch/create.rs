@@ -41,6 +41,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
                     git_profile,
                     pr: None,
                     options: creation.into(),
+                    pull_head: None,
                 },
                 agent,
                 args,

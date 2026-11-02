@@ -81,6 +81,7 @@ pub(in crate::cli::commands) async fn add(
         None => pick_add_source(ctx, &target, &mut creation).await?,
     };
     let agent = choose_for_picked_issue(&settings, agent, picked.is_some()).await?;
+    let agent = agent::for_creation(&creation, agent)?;
     let issue = load_add_issue(ctx, &target, issue.or(picked)).await?;
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
     // An issue or a typed name settles the branch; check it before the agent picker.

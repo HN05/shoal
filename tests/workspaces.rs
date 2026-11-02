@@ -29864,3 +29864,85 @@ fn branch_only_commands_refuse_a_workspace_at_a_commit() {
     assert!(output.status.success(), "{output:?}");
     assert!(fixture.run(&["diff", &name]).status.success());
 }
+
+#[test]
+fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
+    let fixture = Fixture::with_config(Some(
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n",
+    ));
+    let author = forge_origin(&fixture);
+    let remote = fixture.root.path().join("origin.git");
+    // A fork's head reaches the repository only under the PR's ref.
+    let push_fork_head = |file: &str| {
+        git(&author, &["switch", "-q", "--detach", "main"]);
+        fs::write(author.join(file), "fork\n").unwrap();
+        git(&author, &["add", file]);
+        git(
+            &author,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-qm",
+                file,
+            ],
+        );
+        let head = git(&author, &["rev-parse", "HEAD"]).trim().to_owned();
+        git(&remote, &["fetch", "-q", author.to_str().unwrap(), &head]);
+        git(&remote, &["update-ref", "refs/pull/8/head", &head]);
+        head
+    };
+    let bin = fixture.root.path().join("bin");
+    install_api_curl(&bin);
+    let script = |head: &str| {
+        let mut pull = forgejo_pull(8, "open", "topic", head);
+        pull["head"]["repo"]["full_name"] = "someone/project".into();
+        script_api(fixture.root.path(), "repos/team/project/pulls/8", &pull);
+    };
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let url = "https://forge.example/team/project/pulls/8";
+    let run = |args: &[&str]| {
+        fixture
+            .command()
+            .args(args)
+            .current_dir(&fixture.repo)
+            .env("PATH", &path)
+            .output()
+            .unwrap()
+    };
+    let first = push_fork_head("first");
+    script(&first);
+    let output = run(&["review", "run", "--pr", "8", "--agent", "reviewer"]);
+    assert!(output.status.success(), "{output:?}");
+    let ended = fixture.ok(&["watch", "review", "1"]);
+    assert_eq!(ended["head"], first, "{ended}");
+    let workspace = &fixture.ok(&["status", "pr-8"])["workspace"];
+    assert_eq!(workspace["branch"], Value::Null);
+    assert_eq!(workspace["at"]["made_for"], serde_json::json!({"pr": 8}));
+    assert_eq!(workspace["setup_skipped"], true);
+    assert_eq!(workspace["links"]["prs"], serde_json::json!([url]));
+
+    // Adding the PR reuses its workspace; it holds no agent.
+    let output = run(&["--json", "add", url]);
+    assert!(output.status.success(), "{output:?}");
+    let added: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(added["id"], workspace["id"]);
+    let output = run(&["add", url, "--agent", "reviewer"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("holds no agent"),
+        "{output:?}"
+    );
+
+    // A moved head moves the workspace with it.
+    let second = push_fork_head("second");
+    script(&second);
+    let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
+    assert!(output.status.success(), "{output:?}");
+    let moved = &fixture.ok(&["status", "pr-8"])["workspace"];
+    assert_eq!(moved["id"], workspace["id"]);
+    assert_eq!(moved["at"]["commit"], second);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+}

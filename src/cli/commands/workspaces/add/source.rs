@@ -90,7 +90,7 @@ pub(super) async fn select_add_creation(
     mut creation: Creation,
     issue: Option<&issues::Issue>,
 ) -> Result<Creation> {
-    if creation.branch.is_some() || creation.existing.is_some() {
+    if creation.branch.is_some() || creation.existing.is_some() || creation.pull_head.is_some() {
         return Ok(creation);
     }
     if let Some(issue) = issue {

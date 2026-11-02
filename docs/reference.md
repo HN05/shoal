@@ -624,7 +624,14 @@ one, and points to `shoal view` for comments and later edits; options after
 
 PR links open their head branch against the refreshed remote base, reusing an
 owned workspace when present, and link the PR once the workspace is ready; a
-refused link only warns. Fork PRs cannot be opened. Branch URLs use
+refused link only warns. A PR from a fork, which has no branch in the
+repository, opens in a top-level [workspace at a commit](#child-workspaces) at
+its head, named `pr-<number>`, fetched from the ref the forge serves it under
+(`refs/pull/<number>/head`, or `refs/merge-requests/<number>/head` on GitLab), with
+setup; a forge without such a ref refuses it, as does `--agent`, since no agent
+runs there. The workspace made for or linked to the PR is reused, so there is at
+most one per PR: when the PR's head moved, it moves to the new head, unless it has
+commits or changes of its own, which is refused. Branch URLs use
 GitHub's `/tree/<branch>`, GitLab's `/-/tree/<branch>`, Bitbucket's
 `/branch/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
@@ -1003,8 +1010,10 @@ deletes its reviews. Every command takes `--json`.
 the workspace that owns its head branch, fast-forwarded to the pushed head and
 refused when diverged or when the worktree is no longer the recorded one on that
 branch, or in one opened from origin whose base is the PR's `origin/<base>`. Either
-workspace links the PR as `shoal add` does, and the review is stored on it; fork
-PRs are refused. `--repo` selects the PR's repository, which otherwise follows
+workspace links the PR as `shoal add` does, and the review is stored on it. A
+fork's PR is reviewed in its workspace at a commit, opened or moved as `shoal add`
+does but with `--skip-setup`, since the reviewer only reads the checkout; its
+review covers that workspace's HEAD against the PR's base. `--repo` selects the PR's repository, which otherwise follows
 `shoal add`. An issue URL is refused: `shoal plan` settles an issue before
 implementation. Unless `[review] post` is false, a finished PR review is posted on
 the PR as a comment review by the workspace's agent account, as

@@ -14,7 +14,7 @@ use crate::{
     },
     env, git,
     model::{QueueRequest, Workspace},
-    protocol::{CreationOptions, WorkspaceMethod},
+    protocol::{CreationOptions, PullHead, WorkspaceMethod},
 };
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
@@ -29,6 +29,9 @@ pub(in crate::cli) struct Creation {
     pub pr: Option<String>,
     #[serde(default)]
     pub options: CreationOptions,
+    /// The head of a PR from a fork, opened in a workspace at a commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull_head: Option<PullHead>,
 }
 
 impl Creation {

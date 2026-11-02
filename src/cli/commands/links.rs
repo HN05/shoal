@@ -20,7 +20,7 @@ use crate::{
     },
     git,
     model::{PresentSpace, Relation, Repository, ReviewMark, Selected, SelectedItem},
-    protocol::{AssignmentMethod, ItemContext, ItemMethod},
+    protocol::{AssignmentMethod, ItemContext, ItemMethod, PullHead},
 };
 
 /// The space and the items selected in it, with the kind of a bare number
@@ -555,11 +555,11 @@ pub(super) async fn pull_creation(
     pull: PullRequest,
     creation: &mut Creation,
 ) -> Result<()> {
-    ensure!(
-        !pull.fork,
-        "PR #{} comes from a fork; only branches in this repository can be opened",
-        pull.number
-    );
+    if pull.fork {
+        creation.pull_head = Some(fork_head(&pull)?);
+        creation.pr = Some(pull.url);
+        return Ok(());
+    }
     let owned = client::workspaces(&ctx.paths)
         .await?
         .iter()
@@ -577,6 +577,22 @@ pub(super) async fn pull_creation(
     }
     creation.pr = Some(pull.url);
     Ok(())
+}
+
+/// The head of `pull`, a PR from a fork, which only the ref the forge serves
+/// it under reaches.
+pub(super) fn fork_head(pull: &PullRequest) -> Result<PullHead> {
+    let reference = pull.head_ref.clone().with_context(|| {
+        format!(
+            "PR #{} comes from a fork, and its forge serves no ref for a fork's head, so Shoal cannot open it",
+            pull.number
+        )
+    })?;
+    Ok(PullHead {
+        number: pull.number,
+        reference,
+        commit: pull.head_commit.clone(),
+    })
 }
 
 #[cfg(test)]

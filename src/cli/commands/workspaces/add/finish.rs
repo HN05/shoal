@@ -158,10 +158,22 @@ async fn open_add_workspace(
         existing,
         base,
         git_profile,
-        pr: _,
+        pr,
         options,
+        pull_head,
     } = creation;
     let repository = target.selector.clone();
+    if let Some(head) = pull_head {
+        let url = pr.context("a PR head needs its PR")?;
+        let method = WorkspaceMethod::OpenPullHead {
+            repository,
+            url,
+            head,
+            chat,
+            options,
+        };
+        return request(&ctx.paths, method).await;
+    }
     if let Some(branch) = existing {
         request::<OpenedWorkspace>(
             &ctx.paths,
