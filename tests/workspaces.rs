@@ -23,7 +23,7 @@ mod pty;
 
 #[path = "support/daemon.rs"]
 mod daemon_fixture;
-use daemon_fixture::{CommandGroup, DaemonGuard};
+use daemon_fixture::{CommandGroup, DaemonGuard, Detached};
 
 #[path = "support/git.rs"]
 mod git_fixture;
@@ -54,9 +54,11 @@ use tempfile::TempDir;
 
 struct Fixture {
     // Fields drop in declaration order: the commands stop while the daemon
-    // still answers them.
+    // still answers them, and what left their group stops before the
+    // directory goes.
     commands: CommandGroup,
     daemon: DaemonGuard,
+    _detached: Detached,
     root: TempDir,
     repo: PathBuf,
 }
@@ -134,6 +136,7 @@ impl Fixture {
         let daemon = DaemonGuard::start(root.path(), &mut daemon_launch(root.path()));
         let fixture = Self {
             commands: CommandGroup::new(),
+            _detached: Detached::new(root.path().join("state")),
             root,
             repo,
             daemon,

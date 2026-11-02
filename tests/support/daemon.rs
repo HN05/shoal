@@ -2,7 +2,7 @@ use std::{
     fs::{self, File},
     io::{Read, Seek},
     os::unix::{fs::PermissionsExt, process::CommandExt},
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     time::{Duration, Instant},
 };
@@ -183,6 +183,64 @@ fn group_runs(group: u32) -> bool {
         fields.next().and_then(|pgid| pgid.parse().ok()) == Some(group)
             && fields.next().is_some_and(|stat| !stat.starts_with('Z'))
     })
+}
+
+/// The processes that name a fixture's state directory, such as place
+/// watchers, which start their own session and so leave its command group.
+/// Dropped after the commands and the daemon stop, it kills them with their
+/// groups before the fixture's directory goes: a watcher still polling its
+/// host would write into the directory while it is removed and keep it.
+#[allow(dead_code)]
+pub struct Detached {
+    state: PathBuf,
+}
+
+#[allow(dead_code)]
+impl Detached {
+    pub fn new(state: PathBuf) -> Self {
+        Self { state }
+    }
+}
+
+impl Drop for Detached {
+    fn drop(&mut self) {
+        let argument = format!("--state-dir {} ", self.state.display());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let found = processes_naming(&argument);
+            if found.is_empty() || Instant::now() >= deadline {
+                break;
+            }
+            for (pid, group) in found {
+                let target = if pid == group { -pid } else { pid };
+                unsafe { libc::kill(target, libc::SIGKILL) };
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+}
+
+/// The process and group IDs of the processes whose command line contains
+/// `text`, other than zombies.
+#[allow(dead_code)]
+fn processes_naming(text: &str) -> Vec<(i32, i32)> {
+    let Ok(output) = Command::new("ps")
+        .args(["-ax", "-ww", "-o", "pid=,pgid=,stat=,command="])
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|line| line.contains(text))
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let pid = fields.next()?.parse().ok()?;
+            let group = fields.next()?.parse().ok()?;
+            let stat = fields.next()?;
+            (!stat.starts_with('Z')).then_some((pid, group))
+        })
+        .collect()
 }
 
 /// Give the daemon a `zmx`, last on its PATH, when the runner has none, so
