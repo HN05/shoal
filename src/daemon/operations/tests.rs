@@ -150,9 +150,10 @@ async fn an_ended_operation_is_forgotten_once_its_retention_passes_without_a_new
     let mut worker = fake::take(&id);
     let entry = manager.operation(&id, None).await.unwrap();
     worker.stdout("installing").await;
+    until(&entry, |progress, _| progress.len() == 1).await;
+    tokio::time::pause();
     worker.exit(0);
     until(&entry, |_, ended| ended).await;
-    tokio::time::pause();
     tokio::time::sleep(RETAIN - Duration::from_secs(1)).await;
     assert!(manager.operation(&id, None).await.is_ok(), "still retained");
     tokio::time::sleep(Duration::from_secs(1)).await;
