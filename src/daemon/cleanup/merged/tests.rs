@@ -72,9 +72,14 @@ impl Fixture {
     /// Run a pass `hours` from now and report whether the workspace remains.
     async fn kept_after(&self, hours: u64) -> bool {
         let mut state = State::default();
-        sweep_at(&self.manager, &mut state, unix_seconds() + hours * HOUR)
-            .await
-            .unwrap();
+        sweep_at(
+            &self.manager,
+            &mut state,
+            unix_seconds() + hours * HOUR,
+            &Default::default(),
+        )
+        .await
+        .unwrap();
         self.manager
             .list_workspaces()
             .await

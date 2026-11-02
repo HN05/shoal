@@ -12,7 +12,10 @@ pub mod usage;
 
 use crate::tools::Tool;
 use anyhow::{Context, Result};
-use std::{path::Path, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use tokio::process::Command;
 
 /// Automatic cleanup treats every process using the directory as activity.
@@ -22,12 +25,9 @@ pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
 
 /// The processes using the directory besides those of `excluded`.
 pub async fn in_directory_except(root: &Path, excluded: &[u32]) -> Result<Vec<String>> {
-    Ok(directory_users(root)
-        .await?
-        .into_iter()
-        .filter(|(pid, _)| !excluded.contains(pid))
-        .map(|(pid, name)| format!("{name} (PID {pid})"))
-        .collect())
+    DirectoryUsers::default()
+        .in_directory_except(root, excluded)
+        .await
 }
 
 /// The processes using the directory other than those `excluded` names,
@@ -38,7 +38,8 @@ pub async fn in_directory_besides(
     root: &Path,
     excluded: impl Future<Output = Result<Vec<u32>>>,
 ) -> Result<Vec<String>> {
-    let users = directory_users(root).await?;
+    let users = DirectoryUsers::default();
+    let users = users.of(root).await?;
     let excluded = excluded.await?;
     let mut found = Vec::new();
     for (pid, name) in users {
@@ -50,9 +51,48 @@ pub async fn in_directory_besides(
     Ok(found)
 }
 
-/// This user's processes whose working directory is in the directory, other
-/// than this one, with their command names.
-async fn directory_users(root: &Path) -> Result<Vec<(u32, String)>> {
+/// The working directories of this user's processes other than this one,
+/// listed on the first read and reused by every later one, so a sweep over
+/// many directories scans once.
+#[derive(Default)]
+pub struct DirectoryUsers {
+    listed: tokio::sync::OnceCell<Vec<WorkingDirectory>>,
+}
+
+struct WorkingDirectory {
+    pid: u32,
+    name: String,
+    path: PathBuf,
+}
+
+impl DirectoryUsers {
+    /// The processes using the directory besides those of `excluded`.
+    pub async fn in_directory_except(&self, root: &Path, excluded: &[u32]) -> Result<Vec<String>> {
+        Ok(self
+            .of(root)
+            .await?
+            .into_iter()
+            .filter(|(pid, _)| !excluded.contains(pid))
+            .map(|(pid, name)| format!("{name} (PID {pid})"))
+            .collect())
+    }
+
+    /// The processes whose working directory is in the directory, with
+    /// their command names.
+    async fn of(&self, root: &Path) -> Result<Vec<(u32, String)>> {
+        let listed = self.listed.get_or_try_init(working_directories).await?;
+        let root = std::fs::canonicalize(root)?;
+        Ok(listed
+            .iter()
+            .filter(|process| process.path.starts_with(&root))
+            .map(|process| (process.pid, process.name.clone()))
+            .collect())
+    }
+}
+
+/// The working directory of each of this user's processes other than this
+/// one, with their command names.
+async fn working_directories() -> Result<Vec<WorkingDirectory>> {
     let own = std::process::id();
     let mut command = Command::new(Tool::Lsof.program());
     command
@@ -74,7 +114,6 @@ async fn directory_users(root: &Path) -> Result<Vec<(u32, String)>> {
         .context(
             "inspect workspace processes; install lsof and make it available on the daemon's PATH",
         )?;
-    let root = std::fs::canonicalize(root)?;
     let mut pid = 0;
     let mut name = String::new();
     let mut found = Vec::new();
@@ -85,9 +124,12 @@ async fn directory_users(root: &Path) -> Result<Vec<(u32, String)>> {
             name = value.to_owned();
         } else if let Some(value) = line.strip_prefix('n')
             && pid != own
-            && Path::new(value).starts_with(&root)
         {
-            found.push((pid, name.clone()));
+            found.push(WorkingDirectory {
+                pid,
+                name: name.clone(),
+                path: PathBuf::from(value),
+            });
         }
     }
     Ok(found)

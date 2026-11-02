@@ -266,6 +266,7 @@ async fn free_space(
     filesystem: &mut Filesystem,
     available: impl Fn(&Path) -> io::Result<u64>,
 ) -> Result<()> {
+    let users = crate::process::DirectoryUsers::default();
     for workspace in workspaces {
         if filesystem.free >= settings.cleanup_free_bytes() {
             break;
@@ -279,7 +280,7 @@ async fn free_space(
         {
             continue;
         }
-        let Some(snapshot) = super::cleanup::candidate(manager, workspace).await else {
+        let Some(snapshot) = super::cleanup::candidate(manager, workspace, &users).await else {
             continue;
         };
         let (kind, message) = match manager.remove_for_disk_space(&workspace.id, snapshot).await {

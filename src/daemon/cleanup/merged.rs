@@ -17,6 +17,7 @@ use super::Snapshot;
 use crate::{
     daemon::{events::EventCause, log, notifications::NotificationKind, workspace::Manager},
     model::Workspace,
+    process::DirectoryUsers,
     state::WorkspaceState,
     time::unix_seconds,
 };
@@ -41,13 +42,19 @@ impl State {
     }
 }
 
-/// One pass over every ready workspace; a failure in one does not skip the others.
-pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
-    sweep_at(manager, state, unix_seconds()).await
+/// One pass over every ready workspace, reading the processes in each from
+/// `users`; a failure in one does not skip the others.
+pub async fn sweep(manager: &Manager, state: &mut State, users: &DirectoryUsers) -> Result<()> {
+    sweep_at(manager, state, unix_seconds(), users).await
 }
 
 /// A pass as of `now`, in Unix seconds.
-async fn sweep_at(manager: &Manager, state: &mut State, now: u64) -> Result<()> {
+async fn sweep_at(
+    manager: &Manager,
+    state: &mut State,
+    now: u64,
+    users: &DirectoryUsers,
+) -> Result<()> {
     let workspaces = manager.list_workspaces().await?;
     state
         .retained
@@ -57,7 +64,7 @@ async fn sweep_at(manager: &Manager, state: &mut State, now: u64) -> Result<()> 
         if workspace.state != WorkspaceState::Ready || manager.sweep_skips(&workspace.path).await {
             continue;
         }
-        if let Err(error) = sweep_workspace(manager, state, &workspace, now).await {
+        if let Err(error) = sweep_workspace(manager, state, &workspace, now, users).await {
             failed.push(&workspace.id, &workspace.name, &error);
         }
     }
@@ -69,8 +76,9 @@ async fn sweep_workspace(
     state: &mut State,
     workspace: &Workspace,
     now: u64,
+    users: &DirectoryUsers,
 ) -> Result<()> {
-    let Some(snapshot) = idle_candidate(manager, workspace, now).await else {
+    let Some(snapshot) = idle_candidate(manager, workspace, now, users).await else {
         return Ok(());
     };
     if state.waits(&workspace.id, snapshot) {
@@ -113,7 +121,12 @@ async fn sweep_workspace(
 /// The snapshot of a merged workspace idle for its configured period, or
 /// `None`. Cheap checks come first: recorded activity, then Git and process
 /// state, and only then a walk of the worktree's files.
-async fn idle_candidate(manager: &Manager, workspace: &Workspace, now: u64) -> Option<Snapshot> {
+async fn idle_candidate(
+    manager: &Manager,
+    workspace: &Workspace,
+    now: u64,
+    users: &DirectoryUsers,
+) -> Option<Snapshot> {
     let observed = async {
         let settings = manager.workspace_settings(workspace).await?;
         let Some(delay) = settings.cleanup.merged.delay() else {
@@ -126,7 +139,7 @@ async fn idle_candidate(manager: &Manager, workspace: &Workspace, now: u64) -> O
         if !manager.default_branch_fresh(&workspace.repository_id).await {
             return Ok(None);
         }
-        let Some(snapshot) = manager.merged_snapshot(&workspace.id).await? else {
+        let Some(snapshot) = manager.swept_merged_snapshot(&workspace.id, users).await? else {
             return Ok(None);
         };
         let (path, git_dir) = (workspace.path.clone(), workspace.git_dir.clone());

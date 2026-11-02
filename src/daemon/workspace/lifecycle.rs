@@ -15,6 +15,7 @@ use crate::{
     },
     hooks::{self, Hook, HookKind},
     model::{CleanupReason, Workspace},
+    process,
     removal::{
         self, BranchOutcome, IdleRestore, InspectionPolicy, NOTHING, RemovalCheck, RemovalResult,
         UnsavedWork,
@@ -533,24 +534,42 @@ impl Manager {
     }
 
     /// HEAD and activity of a cleanup candidate, cheap enough to compare on
-    /// every sweep, or `None` when it is not a candidate.
-    pub async fn cleanup_signals(&self, id: &str) -> Result<Option<u64>> {
+    /// every sweep, or `None` when it is not a candidate; the processes in
+    /// the worktree are read from `users`.
+    pub async fn cleanup_signals(
+        &self,
+        id: &str,
+        users: &process::DirectoryUsers,
+    ) -> Result<Option<u64>> {
         Ok(self
-            .checked_cleanup_candidate(id, &[])
+            .checked_cleanup_candidate(id, &[], users)
             .await?
             .ok()
             .map(|(_, signals)| signals))
     }
 
+    /// [`Self::swept_snapshot`], scanning the processes in the worktree.
+    #[cfg(test)]
+    pub(crate) async fn cleanup_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
+        self.swept_snapshot(id, &process::DirectoryUsers::default())
+            .await
+    }
+
     /// Everything automatic cleanup must see unchanged before removing the
-    /// workspace, or `None` when it is not a cleanup candidate.
-    pub async fn cleanup_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
-        Ok(self.cleanup_candidacy(id).await?.ok())
+    /// workspace, or `None` when it is not a cleanup candidate, with the
+    /// processes in the worktree read from `users`.
+    pub async fn swept_snapshot(
+        &self,
+        id: &str,
+        users: &process::DirectoryUsers,
+    ) -> Result<Option<Snapshot>> {
+        Ok(self.idle_candidacy(id, &[], users).await?.ok())
     }
 
     /// The snapshot of a cleanup candidate, or why it is not one.
     pub async fn cleanup_candidacy(&self, id: &str) -> Result<Result<Snapshot, CleanupReason>> {
-        self.idle_candidacy(id, &[]).await
+        self.idle_candidacy(id, &[], &process::DirectoryUsers::default())
+            .await
     }
 
     /// The snapshot of a cleanup candidate whose `cancelled` restores a
@@ -559,8 +578,9 @@ impl Manager {
         &self,
         id: &str,
         cancelled: &[IdleRestore],
+        users: &process::DirectoryUsers,
     ) -> Result<Result<Snapshot, CleanupReason>> {
-        let (path, signals) = match self.checked_cleanup_candidate(id, cancelled).await? {
+        let (path, signals) = match self.checked_cleanup_candidate(id, cancelled, users).await? {
             Ok(candidate) => candidate,
             Err(reason) => return Ok(Err(reason)),
         };
@@ -590,7 +610,8 @@ impl Manager {
                 state: workspace.state,
             });
         }
-        if let Err(reason) = self.cleanup_candidate(&workspace.id, &[]).await? {
+        let users = process::DirectoryUsers::default();
+        if let Err(reason) = self.cleanup_candidate(&workspace.id, &[], &users).await? {
             return Ok(reason);
         }
         let auto = self
@@ -613,18 +634,21 @@ impl Manager {
         &self,
         id: &str,
         cancelled: &[IdleRestore],
+        users: &process::DirectoryUsers,
     ) -> Result<Result<(PathBuf, u64), CleanupReason>> {
         let path = self.workspace(id).await?.path;
-        self.check_access(&path, self.cleanup_candidate(id, cancelled))
+        self.check_access(&path, self.cleanup_candidate(id, cancelled, users))
             .await
     }
 
     /// The path and cleanup signals of a candidate whose `cancelled`
-    /// restores a removal stopped, or the first reason it is not one.
+    /// restores a removal stopped, or the first reason it is not one; the
+    /// processes in the worktree are read from `users`.
     async fn cleanup_candidate(
         &self,
         id: &str,
         cancelled: &[IdleRestore],
+        users: &process::DirectoryUsers,
     ) -> Result<Result<(PathBuf, u64), CleanupReason>> {
         let executions = self.cleanup_executions(id, cancelled).await?;
         if let Some(reason) = self.recorded_cleanup_reason(id, &executions).await? {
@@ -641,7 +665,7 @@ impl Manager {
         if let Some(reason) = worktree_cleanup_reason(&check).await? {
             return Ok(Err(reason));
         }
-        check.load_directory_processes().await?;
+        check.load_directory_processes(users).await?;
         if let Some(reason) = worktree_cleanup_reason(&check).await? {
             return Ok(Err(reason));
         }
@@ -658,9 +682,10 @@ impl Manager {
         &self,
         id: &str,
         cancelled: &[IdleRestore],
+        users: &process::DirectoryUsers,
     ) -> Result<Option<(PathBuf, u64)>> {
         let path = self.workspace(id).await?.path;
-        self.check_access(&path, self.merged_candidate(id, cancelled))
+        self.check_access(&path, self.merged_candidate(id, cancelled, users))
             .await
     }
 
@@ -668,11 +693,13 @@ impl Manager {
     /// it is not one: merged into the default branch and unused, with no Git
     /// operation under way, no workspace stacked on it, no hold or keep
     /// choice, and any unsaved files left over from merged work. Assignment
-    /// state does not keep it. `cancelled` are the restores a removal stopped.
+    /// state does not keep it. `cancelled` are the restores a removal stopped,
+    /// and the processes in the worktree are read from `users`.
     async fn merged_candidate(
         &self,
         id: &str,
         cancelled: &[IdleRestore],
+        users: &process::DirectoryUsers,
     ) -> Result<Option<(PathBuf, u64)>> {
         let executions = self.cleanup_executions(id, cancelled).await?;
         if self.keep_reason(id).await?.is_some()
@@ -694,7 +721,7 @@ impl Manager {
         {
             return Ok(None);
         }
-        check.load_directory_processes().await?;
+        check.load_directory_processes(users).await?;
         if !Rule::Merged.allows(&check) {
             return Ok(None);
         }
@@ -708,15 +735,28 @@ impl Manager {
 
     /// The full snapshot of a merged cleanup candidate.
     pub async fn merged_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
-        self.merged_snapshot_after(id, &[]).await
+        self.swept_merged_snapshot(id, &process::DirectoryUsers::default())
+            .await
+    }
+
+    /// [`Self::merged_snapshot`], with the processes in the worktree read
+    /// from `users`.
+    pub async fn swept_merged_snapshot(
+        &self,
+        id: &str,
+        users: &process::DirectoryUsers,
+    ) -> Result<Option<Snapshot>> {
+        self.merged_snapshot_after(id, &[], users).await
     }
 
     async fn merged_snapshot_after(
         &self,
         id: &str,
         cancelled: &[IdleRestore],
+        users: &process::DirectoryUsers,
     ) -> Result<Option<Snapshot>> {
-        let Some((path, signals)) = self.checked_merged_candidate(id, cancelled).await? else {
+        let Some((path, signals)) = self.checked_merged_candidate(id, cancelled, users).await?
+        else {
             return Ok(None);
         };
         let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::fingerprint(&path))
@@ -730,21 +770,22 @@ impl Manager {
 
     /// The signals an automatic removal compares after stopping commands
     /// and the `cancelled` restores, under the rule that made the workspace a
-    /// candidate.
+    /// candidate, with the processes in the worktree scanned afresh.
     async fn automatic_signals(
         &self,
         id: &str,
         rule: Rule,
         cancelled: &[IdleRestore],
     ) -> Result<Option<u64>> {
+        let users = process::DirectoryUsers::default();
         Ok(match rule {
             Rule::Idle => self
-                .checked_cleanup_candidate(id, cancelled)
+                .checked_cleanup_candidate(id, cancelled, &users)
                 .await?
                 .ok()
                 .map(|(_, signals)| signals),
             Rule::Merged => self
-                .checked_merged_candidate(id, cancelled)
+                .checked_merged_candidate(id, cancelled, &users)
                 .await?
                 .map(|(_, signals)| signals),
         })
@@ -756,9 +797,10 @@ impl Manager {
         rule: Rule,
         cancelled: &[IdleRestore],
     ) -> Result<Option<Snapshot>> {
+        let users = process::DirectoryUsers::default();
         match rule {
-            Rule::Idle => Ok(self.idle_candidacy(id, cancelled).await?.ok()),
-            Rule::Merged => self.merged_snapshot_after(id, cancelled).await,
+            Rule::Idle => Ok(self.idle_candidacy(id, cancelled, &users).await?.ok()),
+            Rule::Merged => self.merged_snapshot_after(id, cancelled, &users).await,
         }
     }
 

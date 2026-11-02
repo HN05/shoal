@@ -745,6 +745,33 @@ async fn ignored_changes_during_idle_delay_restart_timer_at_expiry() {
 }
 
 #[tokio::test]
+async fn a_process_in_the_worktree_stops_a_running_idle_timer() {
+    use crate::test_support::{manager, repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "idle".into(), None, None, None)
+        .await
+        .unwrap();
+    let mut timers = Timers::default();
+    sweep(&manager, &mut timers).await.unwrap();
+    assert!(timers.idle.contains_key(&workspace.id));
+    let mut child = tokio::process::Command::new("sleep")
+        .arg("60")
+        .current_dir(&workspace.path)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    sweep(&manager, &mut timers).await.unwrap();
+    assert!(!timers.idle.contains_key(&workspace.id));
+    child.kill().await.unwrap();
+}
+
+#[tokio::test]
 async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_others() {
     use crate::{
         daemon::links::pr::Action,
