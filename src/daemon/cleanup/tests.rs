@@ -39,7 +39,7 @@ fn fingerprint_sees_rewrites_that_restore_the_modification_time() {
     let modified = metadata.modified().unwrap();
     let change_time = |metadata: fs::Metadata| (metadata.ctime(), metadata.ctime_nsec());
     let changed = change_time(metadata);
-    let before = fingerprint(root.path()).unwrap();
+    let before = walk(root.path()).unwrap().fingerprint;
     // Filesystem timestamps are coarse; rewrite until the change time moves.
     while change_time(fs::metadata(&file).unwrap()) == changed {
         fs::write(&file, "after!").unwrap();
@@ -51,7 +51,7 @@ fn fingerprint_sees_rewrites_that_restore_the_modification_time() {
             .unwrap();
     }
     assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), modified);
-    assert_ne!(fingerprint(root.path()).unwrap(), before);
+    assert_ne!(walk(root.path()).unwrap().fingerprint, before);
 }
 
 #[tokio::test]

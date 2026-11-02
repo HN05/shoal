@@ -622,8 +622,9 @@ impl Manager {
             Ok(candidate) => candidate,
             Err(reason) => return Ok(Err(reason)),
         };
-        let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::fingerprint(&path))
-            .await??;
+        let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::walk(&path))
+            .await??
+            .fingerprint;
         Ok(Ok(Snapshot {
             rule: Rule::Idle,
             signals,
@@ -763,20 +764,21 @@ impl Manager {
         Ok(Some((check.workspace.path, signals)))
     }
 
-    /// The full snapshot of a merged cleanup candidate.
-    pub async fn merged_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
-        self.swept_merged_snapshot(id, &process::DirectoryUsers::default())
-            .await
-    }
-
-    /// [`Self::merged_snapshot`], with the processes in the worktree read
-    /// from `users`.
-    pub async fn swept_merged_snapshot(
+    /// The path and signals of a merged cleanup candidate, with the
+    /// processes in the worktree read from `users`, before the walk of its
+    /// files a full snapshot takes.
+    pub async fn merged_signals(
         &self,
         id: &str,
         users: &process::DirectoryUsers,
-    ) -> Result<Option<Snapshot>> {
-        self.merged_snapshot_after(id, &[], users).await
+    ) -> Result<Option<(PathBuf, u64)>> {
+        self.checked_merged_candidate(id, &[], users).await
+    }
+
+    /// The full snapshot of a merged cleanup candidate.
+    pub async fn merged_snapshot(&self, id: &str) -> Result<Option<Snapshot>> {
+        self.merged_snapshot_after(id, &[], &process::DirectoryUsers::default())
+            .await
     }
 
     async fn merged_snapshot_after(
@@ -789,8 +791,9 @@ impl Manager {
         else {
             return Ok(None);
         };
-        let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::fingerprint(&path))
-            .await??;
+        let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::walk(&path))
+            .await??
+            .fingerprint;
         Ok(Some(Snapshot {
             rule: Rule::Merged,
             signals,

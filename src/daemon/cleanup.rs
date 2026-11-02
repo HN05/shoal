@@ -130,17 +130,27 @@ pub fn signals(head: &str, activity: u64) -> u64 {
     hash.finish()
 }
 
+/// What one walk of a worktree's files sees.
+#[derive(Clone, Copy, Debug)]
+pub struct Tree {
+    /// The metadata of every file. Change times only move forward and cannot
+    /// be set, unlike modification times, so two equal fingerprints mean no
+    /// file changed between them.
+    pub fingerprint: u64,
+    /// The newest change or modification time of any file, in Unix seconds.
+    pub changed: u64,
+}
+
 /// Metadata only, including ignored files; never follow symlinks out of the tree.
 /// Git administrative storage is shared and inspected separately through HEAD.
-/// Change times only move forward and cannot be set, unlike modification
-/// times, so two equal fingerprints mean no file changed between them.
-pub fn fingerprint(root: &Path) -> Result<u64> {
-    fn visit(path: &Path, hash: &mut DefaultHasher) -> Result<()> {
+pub fn walk(root: &Path) -> Result<Tree> {
+    fn visit(path: &Path, hash: &mut DefaultHasher, changed: &mut u64) -> Result<()> {
         let metadata = fs::symlink_metadata(path)?;
         path.hash(hash);
         metadata.len().hash(hash);
         metadata.modified()?.hash(hash);
         (metadata.ctime(), metadata.ctime_nsec()).hash(hash);
+        *changed = (*changed).max(metadata.ctime().max(metadata.mtime()).max(0) as u64);
         if metadata.is_dir() {
             let mut children = fs::read_dir(path)?
                 .map(|entry| entry.map(|e| e.path()))
@@ -150,14 +160,18 @@ pub fn fingerprint(root: &Path) -> Result<u64> {
                 if child.file_name().is_some_and(|name| name == ".git") {
                     continue;
                 }
-                visit(&child, hash)?;
+                visit(&child, hash, changed)?;
             }
         }
         Ok(())
     }
     let mut hash = DefaultHasher::new();
-    visit(root, &mut hash)?;
-    Ok(hash.finish())
+    let mut changed = 0;
+    visit(root, &mut hash, &mut changed)?;
+    Ok(Tree {
+        fingerprint: hash.finish(),
+        changed,
+    })
 }
 
 /// One pass of every automatic cleanup. A failed step does not skip the
