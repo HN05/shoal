@@ -4,3 +4,9 @@
 # are added. Test threads get the 8 MiB the daemon's workers have; unused
 # stack is reserved, not committed. A RUST_MIN_STACK already set wins.
 RUST_MIN_STACK = "8388608"
+
+# SQLite's memory statistics take one process-wide lock on every allocation
+# and free. With many test threads each on its own store, threads spend more
+# time waiting for that lock than querying. Shoal reads no SQLite memory
+# statistics, so the bundled build leaves them out.
+LIBSQLITE3_FLAGS = "-DSQLITE_DEFAULT_MEMSTATUS=0"
