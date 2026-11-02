@@ -111,8 +111,8 @@ impl Manager {
 
     /// Move `workspace`, whose repository's Git gate the caller holds, to
     /// the PR head `head` and record it as its starting commit, unless it is
-    /// there already. One with commits or changes of its own is refused, as
-    /// a branch workspace that diverged from its PR is.
+    /// there already. The lifecycle reservation excludes removal, restores
+    /// and new commands meanwhile.
     async fn move_to_pull_head(
         &self,
         repo: &Repository,
@@ -127,9 +127,36 @@ impl Manager {
         if at.commit == head.commit {
             return Ok(());
         }
+        let reserved = self
+            .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
+            .await?;
+        let result = self
+            .replace_pull_head(repo, workspace, &at.commit, head)
+            .await;
+        self.set_state(&workspace.id, reserved, workspace.error.clone())
+            .await?;
+        result
+    }
+
+    /// Move the reserved `workspace`, which started at `start`, to the PR
+    /// head `head`. One running commands, or with commits or changes of its
+    /// own, is refused, as a branch workspace that diverged from its PR is.
+    async fn replace_pull_head(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        start: &str,
+        head: &PullHead,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            !self.workspace_has_executions(&workspace.id).await?,
+            "workspace {} runs commands; stop them before PR #{}'s new head replaces its checkout",
+            workspace.name,
+            head.number
+        );
         let current = crate::daemon::links::pr::current_head(workspace).await?;
         anyhow::ensure!(
-            current == at.commit && git::status::porcelain(&workspace.path).await?.is_empty(),
+            current == start && git::status::porcelain(&workspace.path).await?.is_empty(),
             "workspace {} has commits or changes of its own since PR #{}'s earlier head; remove it to open the PR's new head",
             workspace.name,
             head.number
