@@ -1,6 +1,6 @@
 //! Persistent agent sessions run in terminal hosts; attaching hands this
 //! terminal to one of a workspace's or a running chat's.
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, anyhow, bail, ensure};
 
 use crate::{
     cli::{
@@ -11,7 +11,7 @@ use crate::{
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     model::{Chat, Inspection},
-    protocol::ConfigTarget,
+    protocol::{ConfigTarget, Protection},
     sessions::Origin,
 };
 
@@ -28,6 +28,8 @@ pub(super) async fn attach(
     let target = Target::resolve(ctx, target).await?;
     let settings = client::settings(&ctx.paths, target.config()).await?;
     let sessions = terminal::sessions(&settings, &target.places()).await?;
+    let sessions = terminal::attachable(sessions, session.as_deref())
+        .map_err(|protection| anyhow!("{}", stopped_agent(target.name(), &protection)))?;
     let session = match (session, sessions.as_slice()) {
         (Some(name), _) => sessions
             .iter()
@@ -156,6 +158,14 @@ impl Target {
             },
         }
     }
+}
+
+/// Why `name`'s agent, which `protection` stopped, cannot be attached to.
+fn stopped_agent(name: &str, protection: &Protection) -> String {
+    format!(
+        "{name}'s agent is stopped ({}) and resumes once {}; `shoal queue start {name}` resumes it now",
+        protection.reason, protection.resumes_when
+    )
 }
 
 /// Where the daemon recorded `chats` running, by chat ID.

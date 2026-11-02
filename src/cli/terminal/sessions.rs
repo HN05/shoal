@@ -12,6 +12,7 @@ use super::{
 use crate::{
     config::Effective,
     model::{Chat, Inspection},
+    protocol::Protection,
     sessions::{HostName, Origin},
 };
 
@@ -54,6 +55,9 @@ pub struct Session {
     /// Terminals attached to the session; a host that cannot count them
     /// gives one while it shows the session.
     pub clients: u32,
+    /// Why Shoal stopped the agent there, while it waits to be restored.
+    #[serde(skip)]
+    pub stopped: Option<Protection>,
     /// Where it was recorded, which names the host keeping it.
     #[serde(skip)]
     place: Origin,
@@ -67,8 +71,15 @@ impl Session {
             name,
             agent: None,
             clients,
+            stopped: None,
             place: place.clone(),
         }
+    }
+
+    /// The host and the name it knows the session by, the same for every
+    /// place it found open in the session.
+    fn key(&self) -> (HostName, &str) {
+        (self.place.host, &self.name)
     }
 
     /// The session as commands print it.
@@ -98,6 +109,8 @@ impl Session {
 pub(in crate::cli) struct Recorded<'a> {
     pub place: &'a Origin,
     pub agent: Option<&'a str>,
+    /// Why Shoal stopped that agent, while its wrapper waits to restore it.
+    pub stopped: Option<&'a Protection>,
 }
 
 impl<'a> Recorded<'a> {
@@ -108,12 +121,14 @@ impl<'a> Recorded<'a> {
             Some(Self {
                 place: execution.origin.as_ref()?,
                 agent: execution.agent.as_deref(),
+                stopped: execution.stopped.as_ref(),
             })
         });
-        let created = inspection
-            .places
-            .iter()
-            .map(|place| Self { place, agent: None });
+        let created = inspection.places.iter().map(|place| Self {
+            place,
+            agent: None,
+            stopped: None,
+        });
         executions.chain(created).collect()
     }
 
@@ -124,6 +139,7 @@ impl<'a> Recorded<'a> {
             .map(|place| Self {
                 place,
                 agent: Some(&chat.agent),
+                stopped: None,
             })
             .collect()
     }
@@ -154,7 +170,8 @@ impl Attachment {
 
 /// The agent sessions still open at `places` in the hosts `settings`
 /// enable, where the daemon recorded a workspace's executions or a chat
-/// running, or the places Shoal created for a workspace.
+/// running, or the places Shoal created for a workspace. A session where a
+/// stopped agent waits to be restored says so, whichever place found it.
 pub(in crate::cli) async fn sessions(
     settings: &Effective,
     places: &[Recorded<'_>],
@@ -168,16 +185,63 @@ pub(in crate::cli) async fn sessions(
     if let Some(error) = failure {
         return Err(error);
     }
-    Ok(places
+    let mut sessions: Vec<_> = places
         .iter()
         .zip(found)
         .filter_map(|(recorded, session)| {
             Some(Session {
                 agent: recorded.agent.map(str::to_owned),
+                stopped: recorded.stopped.cloned(),
                 ..session?
             })
         })
-        .collect())
+        .collect();
+    mark_stopped(&mut sessions);
+    Ok(sessions)
+}
+
+/// `sessions` without those where an agent Shoal stopped waits to be
+/// restored, or why not when the `named` session or every session is one.
+pub(in crate::cli) fn attachable(
+    sessions: Vec<Session>,
+    named: Option<&str>,
+) -> Result<Vec<Session>, Protection> {
+    let (stopped, running): (Vec<_>, Vec<_>) = sessions
+        .into_iter()
+        .partition(|session| session.stopped.is_some());
+    let refused = match named {
+        Some(name) => stopped.into_iter().find(|session| session.name == name),
+        None if running.is_empty() => stopped.into_iter().next(),
+        None => None,
+    };
+    match refused.and_then(|session| session.stopped) {
+        Some(protection) => Err(protection),
+        None => Ok(running),
+    }
+}
+
+/// Mark every one of `sessions` that is the session of a stopped agent,
+/// which another place, such as the one Shoal created for the agent, may
+/// have found too.
+fn mark_stopped(sessions: &mut [Session]) {
+    let stopped: Vec<_> = sessions
+        .iter()
+        .filter_map(|session| {
+            Some((
+                session.place.host,
+                session.name.clone(),
+                session.stopped.clone()?,
+            ))
+        })
+        .collect();
+    for session in sessions {
+        if let Some((.., protection)) = stopped
+            .iter()
+            .find(|(host, name, _)| (*host, name.as_str()) == session.key())
+        {
+            session.stopped = Some(protection.clone());
+        }
+    }
 }
 
 /// The session open at each of `places`, in order, asking each host that
@@ -230,7 +294,10 @@ fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
             .iter_mut()
             .find(|kept| key(kept.place) == key(recorded.place))
         {
-            Some(kept) => kept.agent = kept.agent.or(recorded.agent),
+            Some(kept) => {
+                kept.agent = kept.agent.or(recorded.agent);
+                kept.stopped = kept.stopped.or(recorded.stopped);
+            }
             None => distinct.push(*recorded),
         }
     }
@@ -250,9 +317,11 @@ pub(in crate::cli) fn session_owners(places: &[(&str, &Origin)]) -> HashSet<Stri
 /// The IDs of the owners of `places`, recorded for owners by ID, with a
 /// session still open there, asking only hosts the owner's `settings`
 /// enable. A place whose owner has no settings, or whose host cannot say,
-/// counts as closed.
+/// counts as closed, as does one whose session is that of an agent stopped
+/// at one of `stopped`.
 pub(in crate::cli) async fn open_session_owners(
     places: &[(&str, &Origin)],
+    stopped: &[&Origin],
     settings: &HashMap<String, Effective>,
 ) -> HashSet<String> {
     let places: Vec<_> = places
@@ -263,12 +332,22 @@ pub(in crate::cli) async fn open_session_owners(
                 .is_some_and(|settings| enabled_host(settings, place.host).is_some())
         })
         .collect();
-    let origins: Vec<&Origin> = places.iter().map(|(_, place)| *place).collect();
+    let origins: Vec<&Origin> = places
+        .iter()
+        .map(|(_, place)| *place)
+        .chain(stopped.iter().copied())
+        .collect();
     let (found, _) = open_at(&origins, |host| named(host).sessions()).await;
+    let (open, stopped) = found.split_at(places.len());
+    let stopped: HashSet<_> = stopped.iter().flatten().map(Session::key).collect();
     places
         .iter()
-        .zip(found)
-        .filter(|(_, session)| session.is_some())
+        .zip(open)
+        .filter(|(_, session)| {
+            session
+                .as_ref()
+                .is_some_and(|session| !stopped.contains(&session.key()))
+        })
         .map(|((owner, _), _)| (*owner).to_owned())
         .collect()
 }

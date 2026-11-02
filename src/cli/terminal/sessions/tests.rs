@@ -45,6 +45,7 @@ fn a_repeated_place_keeps_the_agent_recorded_there() {
     let agent = Recorded {
         place: &session,
         agent: Some("claude"),
+        stopped: None,
     };
     let other = Origin::created(HostName::Zmx, "other".to_owned());
     assert_eq!(
@@ -102,7 +103,8 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
         [
             Recorded {
                 place: &agent,
-                agent: Some("claude")
+                agent: Some("claude"),
+                stopped: None,
             },
             unrecorded(&setup),
             unrecorded(&shell),
@@ -126,5 +128,118 @@ fn a_session_label_names_its_agent() {
 }
 
 fn unrecorded(place: &Origin) -> Recorded<'_> {
-    Recorded { place, agent: None }
+    Recorded {
+        place,
+        agent: None,
+        stopped: None,
+    }
+}
+
+fn stopped_by_load() -> Protection {
+    Protection {
+        reason: "critical memory pressure".into(),
+        resumes_when: "an update arrives for it".into(),
+    }
+}
+
+#[test]
+fn a_workspace_records_where_a_stopped_agent_waits() {
+    let place = Origin::created(HostName::Zmx, "agent".to_owned());
+    let execution = Execution {
+        model: Default::default(),
+        id: "agent".into(),
+        workspace_id: "workspace".into(),
+        state: crate::state::ExecutionState::Running,
+        wrapper: None,
+        child: None,
+        group_id: None,
+        origin: Some(place.clone()),
+        agent: Some("claude".into()),
+        stopped: Some(stopped_by_load()),
+    };
+    let inspection = Inspection {
+        issue: None,
+        completion: None,
+        pr_cleanup: None,
+        workspace: Workspace::new_record(
+            "repo".into(),
+            "workspace".into(),
+            "/workspace".into(),
+            "topic".into(),
+            crate::state::WorkspaceState::Ready,
+        ),
+        executions: vec![execution],
+        places: Vec::new(),
+        ports: Vec::new(),
+        resources: Vec::new(),
+        simulators: Vec::new(),
+    };
+    let protection = stopped_by_load();
+    assert_eq!(
+        Recorded::workspace(&inspection),
+        [Recorded {
+            place: &place,
+            agent: Some("claude"),
+            stopped: Some(&protection),
+        }]
+    );
+}
+
+#[test]
+fn every_place_in_a_stopped_agents_session_reports_the_stop() {
+    let execution = Origin::created(HostName::Zmx, "work".to_owned());
+    let created = Origin {
+        instance: Some("1:10".into()),
+        ..execution.clone()
+    };
+    let other = Origin::created(HostName::Zmx, "other".to_owned());
+    let mut sessions = vec![
+        Session::open("work".into(), 0, &created),
+        Session {
+            stopped: Some(stopped_by_load()),
+            ..Session::open("work".into(), 0, &execution)
+        },
+        Session::open("other".into(), 0, &other),
+    ];
+    mark_stopped(&mut sessions);
+    let stopped: Vec<_> = sessions
+        .iter()
+        .map(|session| session.stopped.is_some())
+        .collect();
+    assert_eq!(stopped, [true, true, false]);
+}
+
+#[test]
+fn a_stopped_agents_session_is_not_attachable() {
+    let (work, other) = (
+        Origin::created(HostName::Zmx, "work".to_owned()),
+        Origin::created(HostName::Zmx, "other".to_owned()),
+    );
+    let stopped = Session {
+        stopped: Some(stopped_by_load()),
+        ..Session::open("work".into(), 0, &work)
+    };
+    let running = Session::open("other".into(), 0, &other);
+    let names = |sessions: Vec<Session>| -> Vec<String> {
+        sessions.into_iter().map(|session| session.name).collect()
+    };
+
+    let both = vec![stopped.clone(), running.clone()];
+    assert_eq!(
+        attachable(both.clone(), None).map(names),
+        Ok(vec!["other".into()])
+    );
+    assert_eq!(
+        attachable(both, Some("work")).map(names),
+        Err(stopped_by_load())
+    );
+    assert_eq!(
+        attachable(vec![stopped], None).map(names),
+        Err(stopped_by_load())
+    );
+    assert_eq!(attachable(Vec::new(), None).map(names), Ok(Vec::new()));
+    assert_eq!(
+        attachable(vec![running], Some("missing")).map(names),
+        Ok(vec!["other".into()])
+    );
 }

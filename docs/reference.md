@@ -1085,8 +1085,11 @@ Herdr session, and inside another Herdr session it is refused. A chat running
 in the Happy app or a terminal outside zmx has no session, and attaching says
 where it runs instead. Attach finds a session where the daemon recorded the
 workspace's agent or the chat running, or one Shoal opened for the workspace,
-such as a detached session left at its shell after a failed setup. Sessions
-are named after the workspace or chat, suffixed `-2`, `-3`, ... when the name
+such as a detached session left at its shell after a failed setup. The
+session of an agent Shoal stopped, such as for memory pressure, while it waits
+for its automatic restore is not offered: attaching to it says why the agent
+stopped, what restores it, and that `shoal queue start <workspace>` restores it
+now. Sessions are named after the workspace or chat, suffixed `-2`, `-3`, ... when the name
 is in use, so `zmx ls` and `zmx attach` work as well, and labelled with their
 owner, `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`.
 Sessions Shoal creates are also labelled `shoal.created=1`. Removing a

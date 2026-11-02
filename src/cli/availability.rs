@@ -104,7 +104,8 @@ pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Availa
 
 /// The IDs of workspaces with agent sessions, counting the places their
 /// running agents were recorded in and those Shoal created for them, such as
-/// a session left at its shell after a failed launch.
+/// a session left at its shell after a failed launch, but not the session
+/// of an agent Shoal stopped to restore later.
 async fn session_workspaces(paths: &Paths) -> HashSet<String> {
     let agents: Vec<crate::model::RunningAgent> =
         client::request(paths, crate::protocol::ExecutionMethod::ListAgents)
@@ -114,12 +115,17 @@ async fn session_workspaces(paths: &Paths) -> HashSet<String> {
         client::request(paths, crate::protocol::WorkspaceMethod::OwnedPlaces)
             .await
             .unwrap_or_default();
-    // A connected agent runs in its place. The record of an execution whose
-    // wrapper is gone, or of a place Shoal created, outlives its session.
+    // A connected agent runs in its place, unless Shoal stopped it there to
+    // restore it later. The record of an execution whose wrapper is gone, or
+    // of a place Shoal created, outlives its session.
     let (connected, unknown): (Vec<_>, Vec<_>) = agents
         .iter()
         .filter_map(|agent| Some((agent, agent.origin.as_ref()?)))
         .partition(|(agent, _)| agent.agent.is_some());
+    let (stopped, connected): (Vec<_>, Vec<_>) = connected
+        .into_iter()
+        .partition(|(agent, _)| agent.stopped.is_some());
+    let stopped: Vec<_> = stopped.into_iter().map(|(_, place)| place).collect();
     let connected: Vec<_> = connected
         .into_iter()
         .map(|(agent, place)| (agent.workspace_id.as_str(), place))
@@ -137,7 +143,7 @@ async fn session_workspaces(paths: &Paths) -> HashSet<String> {
         .filter(|(owner, _)| !owners.contains(*owner))
         .collect();
     let settings = workspace_settings(paths, recorded.iter().map(|(owner, _)| *owner)).await;
-    owners.extend(terminal::open_session_owners(&recorded, &settings).await);
+    owners.extend(terminal::open_session_owners(&recorded, &stopped, &settings).await);
     owners
 }
 

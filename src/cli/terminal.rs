@@ -50,6 +50,7 @@ pub(in crate::cli) use prompts::{
 pub(crate) use prompts::{PromptSession, WAKE_PROMPT};
 pub(crate) use sessions::Attachment;
 pub(in crate::cli) use sessions::{
-    Owner, OwnerKind, Recorded, Session, attach, open_session_owners, session_owners, sessions,
+    Owner, OwnerKind, Recorded, Session, attach, attachable, open_session_owners, session_owners,
+    sessions,
 };
 pub(in crate::cli) use typed::run as run_launch;
