@@ -2553,9 +2553,25 @@ shoal conflicts release    # Against another branch or commit
 Reports the paths a merge of the workspace's committed HEAD into the target would
 leave conflicted, without touching the worktree, index or refs; uncommitted
 changes are not checked. The default target is the local branch, so run
-`shoal repo sync` first to compare with the remote's latest default branch. Exits 1 on
-conflicts; `--json` returns `target`, `target_commit`, `head`, `conflicts` and
-`files`. Requires Git 2.38 or newer.
+`shoal repo sync` first to compare with the remote's latest default branch. Requires
+Git 2.38 or newer.
+
+Some files hold a number each change picks for itself, such as a schema
+migration or protocol version. Two branches that pick the same number make
+identical edits, which Git merges cleanly. A repository lists such files as
+paths and globs relative to its root, and `shoal conflicts` also lists, under
+"Changed on both sides", each listed file that both HEAD and the target changed
+since their merge base, unless the target already has HEAD's changes as
+[removal](#remove-a-workspace) decides merges. Update the branch from the
+target and pick a number past the target's.
+
+```toml
+[conflicts]
+sensitive = ["src/version.rs", "migrations/**"] # Default: []
+```
+
+Exits 1 on either; `--json` returns `target`, `target_commit`, `head`,
+`conflicts`, `files` and `changed_on_both_sides`.
 
 ### Workspace setup and hooks
 

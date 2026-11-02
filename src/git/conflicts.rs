@@ -36,6 +36,45 @@ pub(crate) async fn merge_conflicts(repo: &Path, head: &str, target: &str) -> Re
     })
 }
 
+/// The paths matching `patterns`, globs relative to the repository root,
+/// that both `head` and `target` changed since their merge base, whether or
+/// not their changes merge cleanly.
+pub(crate) async fn changed_on_both_sides(
+    repo: &Path,
+    head: &str,
+    target: &str,
+    patterns: &[String],
+) -> Result<Vec<String>> {
+    if patterns.is_empty() {
+        return Ok(Vec::new());
+    }
+    let base = git::diff::merge_base_of(repo, head, target).await?;
+    let theirs = changed_paths(repo, &base, target, patterns).await?;
+    let ours = changed_paths(repo, &base, head, patterns).await?;
+    Ok(ours
+        .into_iter()
+        .filter(|path| theirs.contains(path))
+        .collect())
+}
+
+/// The paths matching `patterns` that differ between `from` and `to`.
+async fn changed_paths(
+    repo: &Path,
+    from: &str,
+    to: &str,
+    patterns: &[String],
+) -> Result<Vec<String>> {
+    let mut args = vec!["diff", "--name-only", "--no-renames", "-z", from, to, "--"];
+    let pathspecs: Vec<String> = patterns.iter().map(|p| format!(":(top,glob){p}")).collect();
+    args.extend(pathspecs.iter().map(String::as_str));
+    let output = git::run_isolated(repo, &args).await?;
+    Ok(output
+        .split('\0')
+        .filter(|path| !path.is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
 /// The paths after the tree ID in `-z` output, or `None` when it is not a
 /// conflict result.
 fn conflicted_paths(stdout: &str) -> Option<Vec<String>> {

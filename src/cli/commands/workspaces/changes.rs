@@ -37,14 +37,25 @@ pub(in crate::cli::commands) async fn conflicts(
         request::<ConflictCheck>(&ctx.paths, WorkspaceMethod::Conflicts { workspace, target })
             .await?;
     ctx.show(&check, |check| {
-        if check.conflicts {
-            outln!("Conflicts with {}:", check.target);
-            for file in &check.files {
-                outln!("  {file}");
-            }
-        } else {
+        if check.clean() {
             outln!("No conflicts with {}", check.target);
         }
+        show_files(&format!("Conflicts with {}", check.target), &check.files);
+        show_files(
+            &format!("Changed on both sides with {}", check.target),
+            &check.changed_on_both_sides,
+        );
     })?;
-    Ok(i32::from(check.conflicts))
+    Ok(i32::from(!check.clean()))
+}
+
+/// `files` under `heading`, unless there are none.
+fn show_files(heading: &str, files: &[String]) {
+    if files.is_empty() {
+        return;
+    }
+    outln!("{heading}:");
+    for file in files {
+        outln!("  {file}");
+    }
 }

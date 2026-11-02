@@ -759,6 +759,17 @@ pub struct ConflictCheck {
     pub conflicts: bool,
     /// Conflicted paths, empty when the merge is clean.
     pub files: Vec<String>,
+    /// The repository's sensitive paths that HEAD and the target both
+    /// changed since their merge base, even where their changes merge.
+    pub changed_on_both_sides: Vec<String>,
+}
+
+impl ConflictCheck {
+    /// Whether the merge neither conflicts nor changes a sensitive path on
+    /// both sides.
+    pub fn clean(&self) -> bool {
+        !self.conflicts && self.changed_on_both_sides.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

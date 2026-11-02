@@ -1817,6 +1817,7 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         head: String::new(),
         conflicts: true,
         files: vec!["tracked".into()],
+        changed_on_both_sides: Vec::new(),
     }));
     let observation = vec![(workspace.branch.clone(), conflicting)];
     let recorded = manager.record_activity(&workspace.id, observation, &all);
@@ -1976,6 +1977,7 @@ fn resolved_branch(workspace_id: &str) -> Snapshot {
         head: String::new(),
         conflicts: false,
         files: Vec::new(),
+        changed_on_both_sides: Vec::new(),
     }))
 }
 

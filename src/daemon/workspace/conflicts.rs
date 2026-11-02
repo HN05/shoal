@@ -3,7 +3,11 @@ use anyhow::{Context, Result};
 
 use super::Manager;
 use crate::{
-    git::{self, conflicts::merge_conflicts, default_branch::DefaultBranchLookup},
+    git::{
+        self,
+        conflicts::{changed_on_both_sides, merge_conflicts},
+        default_branch::DefaultBranchLookup,
+    },
     model::{ConflictCheck, Workspace},
 };
 
@@ -21,31 +25,58 @@ impl Manager {
     }
 
     /// The conflicts a workspace watch reports: those of
-    /// [`Self::check_conflicts`] with the default target, unless that target
-    /// already has HEAD's changes and a merge could only repeat them, or the
-    /// assignment is done at HEAD with its work integrated elsewhere.
+    /// [`Self::check_conflicts`] with the default target, unless the target
+    /// already has HEAD's changes as [`Self::conflicts_settled`] decides.
     pub(crate) async fn watched_conflicts(&self, selector: &str) -> Result<ConflictCheck> {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let mut check = self.conflicts_with(&workspace, None).await?;
-        if check.conflicts && self.conflicts_settled(&workspace, &check).await? {
+        if check.conflicts
+            && self
+                .conflicts_settled(&workspace, &check.head, &check.target_commit)
+                .await?
+        {
             check.conflicts = false;
             check.files.clear();
         }
         Ok(check)
     }
 
+    /// Whether `target_commit` already has `head`'s changes and a merge could
+    /// only repeat them, or the assignment is done at `head` with its work
+    /// integrated elsewhere.
     async fn conflicts_settled(
         &self,
         workspace: &Workspace,
-        check: &ConflictCheck,
+        head: &str,
+        target_commit: &str,
     ) -> Result<bool> {
         let integrated = self
             .completion(&workspace.id)
             .await?
-            .is_some_and(|completion| completion.integrated && completion.head == check.head);
-        Ok(integrated
-            || git::status::merged_into(&workspace.path, &check.head, &check.target_commit).await?)
+            .is_some_and(|completion| completion.integrated && completion.head == head);
+        Ok(integrated || git::status::merged_into(&workspace.path, head, target_commit).await?)
+    }
+
+    /// The repository's sensitive paths that `head` and `target_commit` both
+    /// changed since their merge base, unless the conflicts are settled.
+    async fn sensitive_changes(
+        &self,
+        workspace: &Workspace,
+        head: &str,
+        target_commit: &str,
+    ) -> Result<Vec<String>> {
+        let settings = self.workspace_settings(workspace).await?;
+        let sensitive = &settings.conflicts.sensitive;
+        let files = changed_on_both_sides(&workspace.path, head, target_commit, sensitive).await?;
+        if files.is_empty()
+            || self
+                .conflicts_settled(workspace, head, target_commit)
+                .await?
+        {
+            return Ok(Vec::new());
+        }
+        Ok(files)
     }
 
     /// The conflicts of `workspace`'s committed HEAD with `target`.
@@ -67,6 +98,9 @@ impl Manager {
             .await
             .with_context(|| format!("cannot resolve {target}"))?;
         let files = merge_conflicts(&workspace.path, &head, &target_commit).await?;
+        let changed_on_both_sides = self
+            .sensitive_changes(workspace, &head, &target_commit)
+            .await?;
         Ok(ConflictCheck {
             workspace_id: workspace.id.clone(),
             target,
@@ -74,6 +108,7 @@ impl Manager {
             head,
             conflicts: !files.is_empty(),
             files,
+            changed_on_both_sides,
         })
     }
 

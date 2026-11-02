@@ -99,6 +99,27 @@ fn seed_paths_stay_inside_the_worktree() {
 }
 
 #[test]
+fn sensitive_paths_are_relative_to_the_repository_root() {
+    let conflicts = parse("[conflicts]\nsensitive = ['src/version.rs', 'migrations/**']\n")
+        .unwrap()
+        .conflicts;
+    assert_eq!(
+        conflicts.sensitive.unwrap(),
+        ["src/version.rs", "migrations/**"]
+    );
+    for pattern in [
+        "",
+        "/version",
+        ":(exclude)version",
+        "../version",
+        "a/../../b",
+    ] {
+        let text = format!("[conflicts]\nsensitive = ['{pattern}']\n");
+        assert!(parse(&text).is_err(), "{text}");
+    }
+}
+
+#[test]
 fn former_option_names_are_unknown_keys() {
     for text in [
         "[auto_cleanup]\nenabled = false",

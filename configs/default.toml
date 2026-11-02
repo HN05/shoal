@@ -331,6 +331,13 @@ settle_seconds = 5
 [land]
 push = false
 
+# Files that hold a number each change picks for itself, such as a schema or
+# protocol version: paths and globs relative to the repository root. Shoal
+# reports a branch that changed one its base also changed, and asks before
+# merging it.
+[conflicts]
+sensitive = []
+
 # What agents may do: "direct" at once, "propose" after your approval, or
 # "deny" where it applies. Issues and PRs in the workspace's repository:
 [permissions]

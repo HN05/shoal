@@ -115,6 +115,8 @@ pub struct RepoConfig {
     #[option(section)]
     pub land: LandConfig,
     #[option(section)]
+    pub conflicts: ConflictsConfig,
+    #[option(section)]
     pub permissions: PermissionsConfig,
 }
 
@@ -441,6 +443,7 @@ impl RepoConfig {
         }
         self.cleanup.validate()?;
         self.messages.validate()?;
+        self.conflicts.validate()?;
         crate::config::validate_port_range(self.ports.start, self.ports.end)?;
         for (name, definition) in &self.ports.definitions {
             crate::validate::lowercase_name("port", name)
@@ -654,6 +657,31 @@ pub struct IssueConfig {
 pub struct LandConfig {
     #[option(default = false)]
     pub push: Option<bool>,
+}
+
+/// Files that hold a number each change picks for itself, such as a schema
+/// or protocol version, which a branch and its base must not both change.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = Conflicts)]
+pub struct ConflictsConfig {
+    /// Paths and globs relative to the repository root.
+    #[option(default = Vec::new())]
+    pub sensitive: Option<Vec<String>>,
+}
+
+impl ConflictsConfig {
+    pub fn validate(&self) -> Result<()> {
+        for pattern in self.sensitive.iter().flatten() {
+            ensure!(
+                !pattern.is_empty()
+                    && !pattern.starts_with(['/', ':'])
+                    && !pattern.split('/').any(|part| part == ".."),
+                "conflicts.sensitive entries must be paths or globs relative to the repository root: {pattern}"
+            );
+        }
+        Ok(())
+    }
 }
 
 states!(
