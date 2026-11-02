@@ -23,7 +23,8 @@ pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
     // Refuse bad arguments before the workspace picker asks for anything.
     validate_run(args.workflow.as_deref(), args.branch.as_deref())?;
     let workflow = args.workflow.as_deref();
-    let context = super::input_context(ctx, args.workspace, args.repo.name, workflow).await?;
+    let context =
+        super::workspace_input_context(ctx, args.workspace, args.repo.name, workflow).await?;
     let follow = follow_hint(context.as_ref(), workflow.is_some_and(is_workflow_url));
     let started: StartedRun = client::request(
         &ctx.paths,
@@ -57,7 +58,7 @@ pub(super) async fn act(
     match subject.run.clone() {
         Some(run) => {
             let (workspace, repo) = (subject.workspace.clone(), subject.repo.name.clone());
-            let context = super::input_context(ctx, workspace, repo, Some(&run)).await?;
+            let context = super::workspace_input_context(ctx, workspace, repo, Some(&run)).await?;
             act_on_run(ctx, context, run, action, failed).await
         }
         None => {
