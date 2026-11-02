@@ -378,6 +378,13 @@ shoal split --issue 42                # Named after the issue, which it links
 shoal split api-part --base <branch>  # Stacked on your branch
 ```
 
+To compare with `main` or your fork point, such as whether a failure happens
+there too, or to read or run code as it was at a tag or commit, create a
+workspace at a commit instead of changing your own worktree:
+`shoal split --no-branch`, with `--base <ref>` for anything but the default
+branch. It has no branch, PR or agent of its own; run what you need in its
+`path`, then `shoal rm` it.
+
 The child gets its own worktree, branch and setup; the result gives its `path`.
 Work there with `cd` or absolute paths: Shoal commands run inside the child's
 directory act on the child, so `shoal pr open`, `shoal ready` and `shoal done`

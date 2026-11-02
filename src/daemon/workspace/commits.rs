@@ -31,6 +31,10 @@ impl Manager {
         start: CommitStart,
         chat: Option<String>,
     ) -> Result<Workspace> {
+        let parent = match parent {
+            Some(parent) => Some(self.workspace(&parent).await?.id),
+            None => None,
+        };
         let (repo, _guard) = self.lock_repository(repository).await?;
         let start = self.resolve_start(&repo, start).await?;
         let name = self.free_workspace_name(&start.name).await?;

@@ -178,7 +178,7 @@ async fn a_child_at_its_parents_branch_starts_at_the_parents_commit_without_stac
     let child = create(
         &manager,
         &repo.id,
-        Some(&parent.id),
+        Some(&parent.name),
         CommitStart::Revision(Some("parent".into())),
     )
     .await

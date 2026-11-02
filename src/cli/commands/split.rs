@@ -1,7 +1,7 @@
 //! `shoal split`: a child workspace on a new branch, which the parent
 //! workspace's agent works on and receives the activity of, or which an agent
 //! of its own works on, which may start from a fork of the parent agent's
-//! session.
+//! session; or a workspace at a commit, with no branch or agent of its own.
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
@@ -19,7 +19,7 @@ use crate::{
     },
     daemon::refusal::{Reason, Refusal},
     model::{AgentSession, QueueEntry, Workspace},
-    protocol::{AgentMethod, ConfigTarget, ItemMethod, WorkspaceMethod},
+    protocol::{AgentMethod, CommitStart, ConfigTarget, ItemMethod, WorkspaceMethod},
     shell,
     state::{QueueState, WorkspaceState},
 };
@@ -79,6 +79,56 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
     };
     report(ctx, &child, agent.as_ref())?;
     Ok(0)
+}
+
+/// Create a workspace at `base`, or at the default branch, without a branch:
+/// a child of the named or current workspace, or outside one a top-level
+/// workspace in the current repository.
+pub(super) async fn at_commit(
+    ctx: &Context,
+    workspace: Option<String>,
+    base: Option<String>,
+) -> Result<i32> {
+    let (repository, parent) = commit_owner(ctx, workspace).await?;
+    let method = WorkspaceMethod::CreateCommitWorkspace {
+        repository,
+        parent,
+        start: CommitStart::Revision(base),
+        chat: ui::current_chat(&None),
+    };
+    let Some(child) = prepare(ctx, request(&ctx.paths, method).await?).await? else {
+        return Ok(1);
+    };
+    report(ctx, &child, None)?;
+    Ok(0)
+}
+
+/// The repository and parent of a workspace at a commit: the named or
+/// current workspace's, or without one the current repository's and none.
+async fn commit_owner(
+    ctx: &Context,
+    workspace: Option<String>,
+) -> Result<(crate::repository::Selector, Option<String>)> {
+    match ui::choose_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await {
+        Ok(parent) => {
+            let repository = client::workspaces(&ctx.paths)
+                .await?
+                .into_iter()
+                .find(|workspace| workspace.id == parent || workspace.name == parent)
+                .map(|workspace| workspace.repository_id)
+                .ok_or_else(|| {
+                    Refusal::new(Reason::NotFound, format!("unknown workspace: {parent}"))
+                })?;
+            Ok((repository.into(), Some(parent)))
+        }
+        Err(error) if error.is::<ui::NoCurrentWorkspace>() => {
+            let repositories = client::repositories(&ctx.paths).await?;
+            let hint = "pass --workspace or run it in a registered checkout";
+            let repository = super::issues::current_repository(ctx, repositories, hint).await?;
+            Ok((repository.into(), None))
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// The agent the child of `parent` starts with the requested `model`: the

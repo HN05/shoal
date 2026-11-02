@@ -55,6 +55,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
         CreateCommand::Contribute(args) => contribute::contribute(&ctx, args).await,
         CreateCommand::Split {
             branch,
+            no_branch,
             issue,
             base,
             workspace,
@@ -63,6 +64,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
             model,
             args,
         } => {
+            if no_branch {
+                return split::at_commit(&ctx, workspace, base).await;
+            }
             let split = split::Split {
                 branch,
                 issue,

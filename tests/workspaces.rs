@@ -29707,3 +29707,45 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
         head.trim()
     );
 }
+
+#[test]
+fn split_without_a_branch_creates_a_workspace_at_a_commit() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    let main = git(&fixture.repo, &["rev-parse", "HEAD"]);
+    let short = &main.trim()[..7];
+    // Outside a workspace it is top-level, in the current checkout's repository.
+    let top = fixture
+        .command()
+        .current_dir(&fixture.repo)
+        .args(["--json", "split", "--no-branch"])
+        .output()
+        .unwrap();
+    assert!(top.status.success(), "{top:?}");
+    let top: Value = serde_json::from_slice(&top.stdout).unwrap();
+    assert_eq!(top["name"], format!("main-{short}"));
+    assert_eq!(top["branch"], Value::Null);
+    assert_eq!(top["at"]["commit"], main.trim());
+    assert_eq!(top["at"]["made_for"], serde_json::json!({"ref": "main"}));
+    assert_eq!(top["parent_workspace"], Value::Null);
+    let path = top["path"].as_str().unwrap();
+    assert_eq!(
+        git(Path::new(path), &["branch", "--show-current"]).trim(),
+        ""
+    );
+    let child = fixture.ok(&["split", "--no-branch", "--workspace", "parent"]);
+    assert_eq!(child["parent_workspace"]["name"], "parent");
+    assert_eq!(child["name"], format!("main-{short}-2"));
+    let status = fixture.run(&["status", &format!("main-{short}")]);
+    let status = String::from_utf8_lossy(&status.stdout);
+    assert!(
+        status.contains(&format!("At:            {short} (main)")),
+        "{status}"
+    );
+    for args in [
+        &["split", "--no-branch", "child"][..],
+        &["split", "--no-branch", "--issue", "4"],
+    ] {
+        assert!(!fixture.run(args).status.success(), "{args:?}");
+    }
+}

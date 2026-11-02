@@ -76,8 +76,13 @@ pub enum CreateCommand {
     #[command(group(clap::ArgGroup::new("child_agent").args(["agent", "fork"])))]
     Split {
         /// Git branch name; a portable workspace name is derived from it.
-        #[arg(required_unless_present = "issue")]
+        #[arg(required_unless_present_any = ["issue", "no_branch"])]
         branch: Option<String>,
+        /// Create a workspace at a commit, with no branch of its own, for
+        /// comparisons and research: at --base, a tag or commit, or the default
+        /// branch. Without a parent workspace, the user owns it.
+        #[arg(long, conflicts_with_all = ["branch", "issue", "agent", "fork"])]
+        no_branch: bool,
         /// Derive the branch name from a forge issue number or URL and link the issue.
         #[arg(long, value_parser = item_reference)]
         issue: Option<String>,
@@ -85,7 +90,8 @@ pub enum CreateCommand {
         /// upstream); the parent's branch stacks the child on it.
         #[arg(long, value_name = "REF")]
         base: Option<String>,
-        /// Parent workspace; defaults to the current workspace or picker.
+        /// Parent workspace; defaults to the current workspace or picker, or
+        /// with --no-branch to none outside a workspace.
         #[arg(long)]
         workspace: Option<String>,
         /// Start an agent of its own in the child, which reports to the parent's agent;

@@ -2153,6 +2153,8 @@ shoal split fix-typo --workspace fix-api
 shoal split --issue 43 --agent claude                  # A child with an agent of its own
 shoal split api-part --agent codex -- "Move the API client into its own crate"
 shoal split api-part --fork -- "Implement the API part of the plan"  # Forks the parent agent's session
+shoal split --no-branch                # A child at the default branch, with no branch of its own
+shoal split --no-branch --base v1.4.0  # At a tag or commit
 ```
 
 `shoal split` creates a workspace on a new branch in the parent's repository,
@@ -2163,6 +2165,24 @@ child on it. Children can be split from children. Workspace processes may split
 from their own workspace, act on every workspace below it and `shoal rm` one
 unless the user holds it or a workspace below it, which is the only workspace
 creation and removal scope allows; the rest stays with the user.
+
+`--no-branch` creates a workspace at a commit instead: a worktree at a detached
+HEAD with no branch, nothing to push and no agent of its own, for comparing with
+another commit or reading and running older code without touching the parent's
+worktree. `--base` resolves as for a branch and defaults to the refreshed default
+branch; a tag or commit that does not resolve makes Shoal fetch origin with its
+tags once and try again, and naming the parent's branch starts it at the parent's
+commit without stacking it. It is named after the branch and its short commit
+(`main-3f2a9c1`), the tag or the commit, with the usual suffix when taken, and
+`shoal diff` compares with its starting commit. Run by a workspace process it is
+a child of the caller's workspace; run by the user it is a child of `--workspace`
+or the current workspace, and outside one a top-level workspace of the current
+repository that the user owns. It does not take a branch name, `--issue`,
+`--agent` or `--fork`. `status` shows `At:` with its commit and what it was made
+for where a branch workspace shows `Branch:`; `work --json` and `status --json`
+give `branch` null and `at` with `commit` and `made_for` (`{"ref": name}` or
+`{"pr": number}`). `{branch}` is empty for it in configured commands and agent
+templates, and place names use its name instead.
 
 The parent's agent receives the issue and PR activity of its children that have
 no agent of their own, and of their children in turn, through its hooks and an
