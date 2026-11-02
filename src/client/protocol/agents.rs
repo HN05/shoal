@@ -115,19 +115,25 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         sender_chat: Option<String>,
     },
-    /// The workspace's undelivered agent messages, oldest first.
+    /// The undelivered messages of the agents of a workspace or running
+    /// chat, oldest first.
     AgentMessages {
-        workspace: String,
+        space: String,
     },
     MarkAgentMessagesDelivered {
         space: String,
         ids: Vec<i64>,
     },
-    /// The workspace's undelivered agent messages and queued item updates,
-    /// without waiting or polling the forge; acknowledge them with
-    /// [`Self::AcknowledgePrUpdates`]. It replaces a running watch.
+    /// The undelivered agent messages and queued item updates of a
+    /// workspace or running chat, without waiting or polling the forge;
+    /// acknowledge them with [`Self::AcknowledgePrUpdates`]. It replaces a
+    /// running watch.
     AgentUpdates {
-        workspace: String,
+        space: String,
+    },
+    /// Long-lived: what [`Self::AgentUpdates`] answers, once there is any.
+    WaitAgentUpdates {
+        space: String,
     },
     AcknowledgePrUpdates {
         space: String,
@@ -171,7 +177,7 @@ impl TurnEnd {
 impl AgentMethod {
     pub fn lifetime(&self) -> Lifetime {
         match self {
-            Self::AwaitAgentWake { .. } => Lifetime::Resumed,
+            Self::AwaitAgentWake { .. } | Self::WaitAgentUpdates { .. } => Lifetime::Resumed,
             _ => Lifetime::Reply,
         }
     }

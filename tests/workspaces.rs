@@ -20943,8 +20943,8 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    let sent = fixture.request(serde_json::json!({"send_chat_message":{
-        "chat": "planning", "message": "Plan the next step"
+    let sent = fixture.request(serde_json::json!({"send_agent_message":{
+        "space": "planning", "message": "Plan the next step"
     }}));
     assert_eq!(sent["type"], "ok", "{sent}");
     // A hang guard only: the message ends the wait.

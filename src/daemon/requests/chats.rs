@@ -7,7 +7,6 @@ use super::super::{
     answer::Answer,
     scope::{Caller, Scoped, denied},
     workspace::Manager,
-    workspace_files::Attacher,
 };
 use crate::protocol::{Body, ChatMethod};
 
@@ -17,12 +16,6 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        ChatMethod::WaitChatMessages { chat } => {
-            let manager = manager.clone();
-            return Ok(Answer::wait(async move {
-                Ok(Body::PrUpdates(manager.wait_chat_messages(&chat).await?))
-            }));
-        }
         ChatMethod::StartChat {
             repository,
             name,
@@ -49,34 +42,11 @@ pub(super) async fn handle(
         ChatMethod::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
         ChatMethod::RenameChat { chat, name } => Body::Chat(manager.rename_chat(chat, name).await?),
-        ChatMethod::SendChatMessage { chat, message } => {
-            manager
-                .send_chat_message(&chat, message, Vec::new(), &Attacher::User)
-                .await?;
-            Body::Ok
-        }
         ChatMethod::CheckChatName { name } => {
             manager.check_chat_name(name).await?;
             Body::Ok
         }
         ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),
-        ChatMethod::ChatMessages { chat } => {
-            Body::AgentMessages(manager.chat_messages(&chat).await?)
-        }
-        ChatMethod::ChatUpdates { chat } => Body::PrUpdates(manager.chat_updates(&chat).await?),
-        ChatMethod::AcknowledgeChatMessages {
-            chat,
-            ids,
-            leftovers,
-            deliveries,
-        } => {
-            // Item updates first: a failure then leaves both to be delivered
-            // again, while deleted messages could not be.
-            manager.acknowledge_pr_updates(&chat, deliveries).await?;
-            manager.mark_chat_messages_delivered(&chat, ids).await?;
-            manager.leftovers.delivered(&chat, &leftovers);
-            Body::Ok
-        }
         ChatMethod::ChatDone {
             chat,
             results,
@@ -99,13 +69,8 @@ impl Scoped for ChatMethod {
             | ChatMethod::SaveChat { .. }
             | ChatMethod::DiscardChat { .. }
             | ChatMethod::RenameChat { .. }
-            | ChatMethod::SendChatMessage { .. }
             | ChatMethod::CheckChatName { .. }
             | ChatMethod::FreeChatName { .. }
-            | ChatMethod::ChatMessages { .. }
-            | ChatMethod::ChatUpdates { .. }
-            | ChatMethod::WaitChatMessages { .. }
-            | ChatMethod::AcknowledgeChatMessages { .. }
             | ChatMethod::ChatDone { .. }
             | ChatMethod::ChatUndone { .. } => return Err(denied()),
         })

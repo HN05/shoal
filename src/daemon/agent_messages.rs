@@ -341,6 +341,15 @@ impl Manager {
         Ok(())
     }
 
+    /// [`Self::agent_messages`] of the workspace, or [`Self::chat_messages`]
+    /// of the running chat, `selector` names.
+    pub async fn space_messages(&self, selector: &str) -> Result<Vec<AgentMessage>> {
+        match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => self.agent_messages(&workspace.id).await,
+            PresentSpace::Chat(chat) => self.chat_messages(&chat.id).await,
+        }
+    }
+
     /// Unread messages, oldest first. They stay unread until delivered.
     pub async fn agent_messages(&self, selector: &str) -> Result<Vec<AgentMessage>> {
         let workspace = self.workspace(selector).await?;
@@ -397,17 +406,21 @@ impl Manager {
             .await
     }
 
-    /// Acknowledge the item updates and messages an agent received.
-    pub async fn acknowledge_agent_delivery(
+    /// Acknowledge the item updates, messages and leftovers the agent of the
+    /// workspace or running chat `selector` names received.
+    pub async fn acknowledge_space_delivery(
         &self,
         selector: &str,
         deliveries: Vec<String>,
         messages: Vec<i64>,
+        leftovers: &[u32],
     ) -> Result<()> {
         // Item updates first: a failure then leaves both to be delivered
         // again, while deleted messages could not be.
         self.acknowledge_pr_updates(selector, deliveries).await?;
-        self.mark_space_messages_delivered(selector, messages).await
+        self.mark_space_messages_delivered(selector, messages)
+            .await?;
+        self.acknowledge_leftovers(selector, leftovers).await
     }
 
     /// [`Self::mark_agent_messages_delivered`] for the workspace, or

@@ -20,8 +20,7 @@ use crate::{
     },
     daemon::{agent_messages::AgentMessage, links::wait::Updates, workspace_files::NewFile},
     forge::items::attach::Attachment,
-    model::PresentSpace,
-    protocol::{AgentMethod, ChatMethod, Method, QuestionMethod},
+    protocol::{AgentMethod, QuestionMethod},
     repository::Selector,
 };
 
@@ -177,7 +176,7 @@ pub(super) async fn show(ctx: &Context, space: Option<String>) -> Result<i32> {
         }
     })?;
     crate::stdout::flush()?;
-    inbox.delivered(ctx, &messages, Vec::new()).await?;
+    inbox.delivered(ctx, &messages).await?;
     Ok(0)
 }
 
@@ -230,7 +229,7 @@ fn user_prompt(input: &str) -> bool {
 async fn report_reply(ctx: &Context, deadline: tokio::time::Instant) -> Result<()> {
     let reply = async {
         let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
-        let space = inbox.space().to_owned();
+        let space = inbox.space.clone();
         request::<()>(&ctx.paths, QuestionMethod::RepliedInChat { space }).await
     };
     tokio::time::timeout_at(deadline, reply)
@@ -302,7 +301,7 @@ pub(super) async fn wake(
 /// restore. A failed report still delivers, since without the turn the agent
 /// would stay idle.
 async fn woken_turn_starts(ctx: &Context, inbox: &Inbox) -> bool {
-    super::agent_state::start_woken_turn(ctx, inbox.space().to_owned())
+    super::agent_state::start_woken_turn(ctx, inbox.space.clone())
         .await
         .unwrap_or_else(|error| {
             eprintln!("shoal: the woken turn was not reported: {error:#}");
@@ -394,7 +393,7 @@ impl WakeWait {
     /// release handed over names its workspace the earlier way, which the
     /// space replaces.
     fn resume_arguments(&self, arguments: Vec<OsString>) -> Vec<OsString> {
-        let space = self.inbox.as_ref().map(Inbox::space);
+        let space = self.inbox.as_ref().map(|inbox| inbox.space.as_str());
         let arguments = match space.or(self.space.as_deref()) {
             Some(space) => {
                 let arguments = without_option(arguments, "--workspace");
@@ -409,17 +408,21 @@ impl WakeWait {
 /// Where an agent's messages arrive: its chat's, when it runs under one
 /// outside any workspace scope, otherwise its workspace's.
 #[derive(Clone)]
-enum Inbox {
-    Workspace(String),
-    Chat(String),
+struct Inbox {
+    /// The ID of the workspace or chat whose inbox this is.
+    space: String,
+    /// What the hook's text calls the space: `workspace` or `chat`.
+    kind: &'static str,
 }
 
 impl Inbox {
     /// The inbox of the workspace or running chat `space` names.
     async fn named(ctx: &Context, space: &str) -> Result<Self> {
         match client::present_space(&ctx.paths, space).await? {
-            Some(PresentSpace::Workspace(workspace)) => Ok(Self::Workspace(workspace.id)),
-            Some(PresentSpace::Chat(chat)) => Ok(Self::Chat(chat.id)),
+            Some(space) => Ok(Self {
+                kind: space.kind(),
+                space: space.id().to_owned(),
+            }),
             None => bail!("no workspace or running chat {space}"),
         }
     }
@@ -428,71 +431,44 @@ impl Inbox {
         if !crate::env::is_scoped()
             && let Some(chat) = crate::env::chat()
         {
-            return Ok(Self::Chat(chat));
+            return Ok(Self {
+                space: chat,
+                kind: "chat",
+            });
         }
-        Ok(Self::Workspace(
-            ui::select_workspace(ctx, None, fallback).await?,
-        ))
-    }
-
-    /// The ID of the workspace or chat whose inbox this is.
-    fn space(&self) -> &str {
-        match self {
-            Self::Workspace(space) | Self::Chat(space) => space,
-        }
+        Ok(Self {
+            space: ui::select_workspace(ctx, None, fallback).await?,
+            kind: "workspace",
+        })
     }
 
     async fn messages(&self, ctx: &Context) -> Result<Vec<AgentMessage>> {
-        match self {
-            Self::Workspace(workspace) => {
-                let workspace = workspace.clone();
-                request(&ctx.paths, AgentMethod::AgentMessages { workspace }).await
-            }
-            Self::Chat(chat) => {
-                let chat = chat.clone();
-                request(&ctx.paths, ChatMethod::ChatMessages { chat }).await
-            }
-        }
+        let space = self.space.clone();
+        request(&ctx.paths, AgentMethod::AgentMessages { space }).await
     }
 
     /// Undelivered messages and queued item updates, without waiting.
     async fn updates(&self, ctx: &Context) -> Result<Updates> {
-        match self {
-            Self::Workspace(workspace) => {
-                let workspace = workspace.clone();
-                request(&ctx.paths, AgentMethod::AgentUpdates { workspace }).await
-            }
-            Self::Chat(chat) => chat_updates(ctx, chat).await,
-        }
+        let space = self.space.clone();
+        request(&ctx.paths, AgentMethod::AgentUpdates { space }).await
     }
 
     /// The next messages or item updates, waiting for them; `restarted` says
     /// the daemon restarted before this wait began.
     async fn next(&self, ctx: &Context, restarted: bool) -> Result<Updates> {
-        match self {
-            Self::Workspace(workspace) => Updates::try_from(
-                super::workspaces::wait_for_items(
-                    ctx,
-                    workspace,
-                    Default::default(),
-                    None,
-                    restarted,
-                )
-                .await?,
-            ),
-            Self::Chat(chat) => wait_for_chat(ctx, chat, restarted).await,
-        }
+        let method = || AgentMethod::WaitAgentUpdates {
+            space: self.space.clone(),
+        };
+        Updates::try_from(client::await_reply(&ctx.paths, method, restarted).await?)
     }
 
     /// What an agent hook tells the agent about `updates`.
     fn hook_context(&self, updates: &Updates) -> String {
-        let (heading, space) = match self {
-            Self::Workspace(_) => ("New Shoal messages for this workspace:", "workspace"),
-            Self::Chat(_) => ("New Shoal messages for this chat:", "chat"),
-        };
-        let mut context = hook_context(heading, space, updates);
+        let heading = format!("New Shoal messages for this {}:", self.kind);
+        let mut context = hook_context(&heading, self.kind, updates);
         if !updates.leftovers.is_empty() {
-            let notice = leftovers::notice(space, &updates.leftovers, crate::time::unix_seconds());
+            let notice =
+                leftovers::notice(self.kind, &updates.leftovers, crate::time::unix_seconds());
             context = [context, notice]
                 .into_iter()
                 .filter(|part| !part.is_empty())
@@ -505,62 +481,20 @@ impl Inbox {
     /// Shown once: the messages, updates and leftovers a hook printed do not
     /// come back.
     async fn acknowledge(&self, ctx: &Context, updates: &Updates) -> Result<()> {
-        match self {
-            Self::Workspace(workspace) => acknowledge(ctx, workspace.clone(), updates).await,
-            Self::Chat(chat) => {
-                let method = ChatMethod::AcknowledgeChatMessages {
-                    chat: chat.clone(),
-                    ids: updates.messages.iter().map(|message| message.id).collect(),
-                    leftovers: leftover_pids(updates),
-                    deliveries: deliveries(updates),
-                };
-                request::<()>(&ctx.paths, method).await
-            }
-        }
+        acknowledge(ctx, self.space.clone(), updates).await
     }
 
-    /// Shown once: exactly the messages and the leftovers `leftovers` names
-    /// that a caller printed do not come back.
-    async fn delivered(
-        &self,
-        ctx: &Context,
-        messages: &[AgentMessage],
-        leftovers: Vec<u32>,
-    ) -> Result<()> {
-        if messages.is_empty() && leftovers.is_empty() {
+    /// Shown once: exactly the messages a caller printed do not come back.
+    async fn delivered(&self, ctx: &Context, messages: &[AgentMessage]) -> Result<()> {
+        if messages.is_empty() {
             return Ok(());
         }
-        let ids = messages.iter().map(|message| message.id).collect();
-        let method: Method = match self {
-            Self::Workspace(workspace) => AgentMethod::MarkAgentMessagesDelivered {
-                space: workspace.clone(),
-                ids,
-            }
-            .into(),
-            Self::Chat(chat) => ChatMethod::AcknowledgeChatMessages {
-                chat: chat.clone(),
-                ids,
-                leftovers,
-                deliveries: Vec::new(),
-            }
-            .into(),
+        let method = AgentMethod::MarkAgentMessagesDelivered {
+            space: self.space.clone(),
+            ids: messages.iter().map(|message| message.id).collect(),
         };
         request::<()>(&ctx.paths, method).await
     }
-}
-
-/// The chat's undelivered messages, without waiting.
-async fn chat_updates(ctx: &Context, chat: &str) -> Result<Updates> {
-    let chat = chat.to_owned();
-    request(&ctx.paths, ChatMethod::ChatUpdates { chat }).await
-}
-
-/// The chat's next messages, waiting again when the daemon restarts.
-async fn wait_for_chat(ctx: &Context, chat: &str, restarted: bool) -> Result<Updates> {
-    let method = || ChatMethod::WaitChatMessages {
-        chat: chat.to_owned(),
-    };
-    Updates::try_from(client::await_reply(&ctx.paths, method, restarted).await?)
 }
 
 /// What an agent hook tells the agent about `updates`, its messages under

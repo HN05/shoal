@@ -54,12 +54,6 @@ pub enum ChatMethod {
         chat: String,
         name: String,
     },
-    /// A message from the user to the agent of the running chat `chat`, by
-    /// ID or name, which other senders send as [`super::AgentMethod::SendAgentMessage`].
-    SendChatMessage {
-        chat: String,
-        message: String,
-    },
     /// Refuse a name a new chat could not take now.
     CheckChatName {
         name: String,
@@ -68,31 +62,6 @@ pub enum ChatMethod {
     /// take now.
     FreeChatName {
         name: String,
-    },
-    /// The chat's undelivered messages, oldest first, leaving a running wait
-    /// for them in place.
-    ChatMessages {
-        chat: String,
-    },
-    /// The chat's undelivered messages about the workspaces it coordinates,
-    /// without waiting; acknowledge them with
-    /// [`Self::AcknowledgeChatMessages`]. It replaces a running wait.
-    ChatUpdates {
-        chat: String,
-    },
-    /// Long-lived: the chat's next messages, once it has any.
-    WaitChatMessages {
-        chat: String,
-    },
-    AcknowledgeChatMessages {
-        chat: String,
-        ids: Vec<i64>,
-        /// The PIDs of the leftovers the hook printed.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        leftovers: Vec<u32>,
-        /// The deliveries of the item updates the hook printed.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        deliveries: Vec<String>,
     },
     /// Record the running chat `chat`, by ID or name, as done, handing back
     /// `results`; the reply is the [`Completion`](crate::model::Completion).
@@ -112,9 +81,6 @@ pub enum ChatMethod {
 
 impl ChatMethod {
     pub fn lifetime(&self) -> Lifetime {
-        match self {
-            Self::WaitChatMessages { .. } => Lifetime::Resumed,
-            _ => Lifetime::Reply,
-        }
+        Lifetime::Reply
     }
 }

@@ -9,7 +9,7 @@ use crate::{
         terminal, ui,
     },
     model::Chat,
-    protocol::ChatMethod,
+    protocol::{AgentMethod, ChatMethod},
 };
 
 /// What `shoal chat rename --request` asks the chat's agent.
@@ -39,8 +39,13 @@ pub(in crate::cli::commands) async fn request_name(
 ) -> Result<i32> {
     super::ensure_unscoped(ctx)?;
     let chat = select(ctx, chat).await?;
-    let message = NAME_REQUEST.into();
-    request::<()>(&ctx.paths, ChatMethod::SendChatMessage { chat, message }).await?;
+    let method = AgentMethod::SendAgentMessage {
+        space: chat,
+        message: NAME_REQUEST.into(),
+        attachments: Vec::new(),
+        sender_chat: None,
+    };
+    request::<()>(&ctx.paths, method).await?;
     ctx.emit("Asked the chat's agent to choose its name.", ())?;
     Ok(0)
 }

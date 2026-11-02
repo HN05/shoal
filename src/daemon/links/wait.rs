@@ -28,7 +28,7 @@ use crate::{
         transport::limits::rate_limited,
         updates::{Edited, MergeCheck, Snapshot, Update, UpdateKind},
     },
-    model::{ConflictCheck, Workspace, WorkspaceRef},
+    model::{ConflictCheck, PresentSpace, Workspace, WorkspaceRef},
     repository,
 };
 
@@ -205,6 +205,29 @@ impl Manager {
             return Ok(Updates::superseded());
         }
         Ok(Updates::messages(messages))
+    }
+
+    /// [`Self::agent_updates`] of the workspace, or [`Self::chat_updates`] of
+    /// the running chat, `selector` names.
+    pub async fn space_updates(&self, selector: &str) -> Result<Updates> {
+        match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => self.agent_updates(&workspace.id).await,
+            PresentSpace::Chat(chat) => self.chat_updates(&chat.id).await,
+        }
+    }
+
+    /// The next messages or item activity of the agent of the workspace or
+    /// running chat `selector` names, unless a newer wait or delivery takes
+    /// them first: a workspace's as an unfiltered [`Self::wait_items`]
+    /// without a deadline finds them, a chat's as
+    /// [`Self::wait_chat_messages`] does.
+    pub async fn wait_space_updates(&self, selector: &str) -> Result<Updates> {
+        match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                (self.wait_items(&workspace.id, &Selection::default(), None)).await
+            }
+            PresentSpace::Chat(chat) => self.wait_chat_messages(&chat.id).await,
+        }
     }
 
     /// What the workspace's agent has not received: its settled messages and

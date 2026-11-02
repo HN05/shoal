@@ -200,7 +200,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         for mut method in [
             AgentMethod::AgentMessages {
-                workspace: target.clone(),
+                space: target.clone(),
             },
             AgentMethod::MarkAgentMessagesDelivered {
                 space: target.clone(),

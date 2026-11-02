@@ -72,7 +72,7 @@ pub(in crate::cli::commands) async fn watch_items(
 /// `deadline`; `restarted` says the daemon restarted before this wait began.
 /// Waiting acknowledges nothing, and undelivered updates stay pending for the
 /// next wait.
-pub(in crate::cli::commands) async fn wait_for_items(
+async fn wait_for_items(
     ctx: &Context,
     workspace: &str,
     selection: Selection,

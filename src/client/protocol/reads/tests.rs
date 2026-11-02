@@ -2,9 +2,7 @@ use super::*;
 
 #[test]
 fn hook_reads_are_cancellable() {
-    let updates = Operation::from(AgentMethod::AgentUpdates {
-        workspace: "w".into(),
-    });
+    let updates = Operation::from(AgentMethod::AgentUpdates { space: "w".into() });
     assert!(updates.reads_only());
     assert!(Operation::from(DaemonMethod::Status).reads_only());
 }
