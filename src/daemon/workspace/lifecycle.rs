@@ -1591,11 +1591,11 @@ impl Manager {
 }
 
 /// Worktrunk's options for the inspected worktree. A branch goes when its
-/// commits are all preserved, as a disposable workspace's always count when
-/// it is still on its recorded branch, except the default branch, which an
-/// unresolved default branch could be;
-/// files go by force only once the removal may discard unsaved work, as it
-/// always may in a disposable workspace.
+/// commits are all preserved, except the default branch, which an
+/// unresolved default branch could be; files go by force only once the
+/// removal may discard unsaved work. A disposable workspace's branch counts
+/// as preserved while the worktree is still on it, and its files always go
+/// by force.
 fn worktrunk_removal_options(
     check: &RemovalCheck,
     unsaved: &UnsavedWork,

@@ -2194,8 +2194,8 @@ or an app hosting an external session, or an agent. Scoped callers hold and
 release the workspaces below their own directly; holding their own is an approval
 request, which approval carries out, so a coordinator keeps what its children
 need. Agents release only the holds agents placed; the user's and host apps'
-stay theirs. A hold never keeps a parent or survives its removal. Removal is
-reversible through checkpoints, so an agent otherwise has no way to keep a
+stay theirs. A hold never keeps a parent or survives its removal. Removal of a
+workspace that is not disposable is reversible through checkpoints, so an agent otherwise has no way to keep a
 workspace: one that needs the user asks, and an open question, like a hold, keeps the
 workspace from every unattended removal, completion and PR cleanup included. So
 does an agent launch waiting in the agent queue to start in the workspace.
@@ -2320,8 +2320,9 @@ request, like a PR's, so no response outgrows a protocol frame.
 
 Manual and automatic cleanup share one path: establish ownership, stop owned
 executions, saving an existing worktree's agent sessions but no commands, run
-removal hooks, remove owned simulators, take a checkpoint, remove the worktree, and release leases with the record. Failures retain what is
-needed to retry. Workspaces are cheap to remove because removal is reversible.
+removal hooks, remove owned simulators, take a checkpoint unless the workspace is disposable, remove the worktree, and release leases with the record. Failures retain what is
+needed to retry. Workspaces are cheap to remove because removal is reversible,
+except that of a disposable workspace, which holds nothing worth keeping.
 A checkpoint is a commit of HEAD plus the unsaved files Git does not ignore, built
 with a temporary index and kept under `refs/shoal/checkpoints/<commit>`, with a
 record in the store. A ref is named by its commit, so it belongs to whichever
@@ -2345,8 +2346,8 @@ a checkpoint and stops when that one keeps HEAD only, then cleans untracked file
 the branch and applies the snapshot's files without staging them. Scoped
 callers may do this in their own workspace, since the replaced state stays a
 checkpoint.
-Removal's record (base, links and stopped agents' recovery records, with its
-checkpoint) persists before any file is deleted, so an interrupted or failed
+The removal record of a workspace that is not disposable (base, links and stopped
+agents' recovery records, with its checkpoint) persists before any file is deleted, so an interrupted or failed
 removal stays restorable; records of workspaces that still exist are not offered,
 and a retried removal replaces the record with a new checkpoint while the earlier
 one stays. When the removal's checkpoint keeps HEAD only, merged cleanup retains

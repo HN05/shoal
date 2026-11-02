@@ -2868,8 +2868,9 @@ it moved, is checked out or belongs to a workspace again.
 Uncommitted changes, untracked files and commits on a detached HEAD are deleted
 only after `Are you sure? [y/N]`, which lists the changes with Git status codes
 first, or with `--yes`. Large previews show an omitted-entry count; use
-`git status` for the full list. Every removal of an existing worktree first keeps
-them, with HEAD, in a [checkpoint](#checkpoints-and-restore).
+`git status` for the full list. Every removal of an existing worktree, unless the
+workspace is disposable, first keeps them, with HEAD, in a
+[checkpoint](#checkpoints-and-restore).
 
 A [workspace at a commit](#child-workspaces) has no branch to delete or keep. The
 commit it started at counts as kept, so a fork PR's head or a local commit it was
