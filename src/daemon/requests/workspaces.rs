@@ -151,6 +151,9 @@ pub(super) async fn handle(
         WorkspaceMethod::Conflicts { workspace, target } => {
             Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
         }
+        WorkspaceMethod::LandWarning { workspace } => {
+            Body::MergeWarning(manager.land_warning(&workspace).await?)
+        }
         WorkspaceMethod::CloseOwnedPlace { workspace, place } => {
             Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)
         }
@@ -214,6 +217,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::WorkspaceStatus { workspace }
             | WorkspaceMethod::DiffBase { workspace }
             | WorkspaceMethod::Conflicts { workspace, .. }
+            | WorkspaceMethod::LandWarning { workspace }
             | WorkspaceMethod::WorkspaceHook { workspace, .. }
             | WorkspaceMethod::KeepAgentEnvironment { workspace, .. }
             | WorkspaceMethod::RecordOwnedPlace { workspace, .. }

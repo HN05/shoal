@@ -697,7 +697,7 @@ pub(super) async fn head_repository(
 }
 
 /// Why an action outside a space needs its item named.
-pub(super) const NOTHING_LINKED: &str =
+pub(in crate::daemon::links) const NOTHING_LINKED: &str =
     "outside a workspace or chat, nothing is linked; pass a number or URL";
 
 /// The one assigned item of `kind` among `assigned`.

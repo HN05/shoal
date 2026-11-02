@@ -8,7 +8,7 @@ mod branches;
 pub(crate) mod capacity;
 mod checkpoints;
 mod config_state;
-mod conflicts;
+pub(crate) mod conflicts;
 mod contributions;
 mod daemon_exit;
 mod demos;

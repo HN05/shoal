@@ -8,6 +8,7 @@ mod ci;
 pub mod issue;
 mod listing;
 mod memories;
+mod merge_warning;
 pub mod pr;
 pub mod proposals;
 mod pushes;

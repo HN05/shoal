@@ -89,6 +89,9 @@ pub(super) async fn handle(
             item,
             action,
         } => Body::Item(manager.item_action(&context, kind, item, action).await?),
+        ItemMethod::MergeWarning { context, item } => {
+            Body::MergeWarning(manager.merge_warning(&context, item).await?)
+        }
         ItemMethod::OpenPull {
             workspace,
             options,
@@ -191,7 +194,10 @@ impl Scoped for ItemMethod {
             ItemMethod::ItemAction {
                 action: Action::Merge { .. } | Action::AutoMerge { .. } | Action::CancelAutoMerge,
                 ..
-            } => bail!("merging is the user's decision; ask them with shoal alerts send"),
+            }
+            | ItemMethod::MergeWarning { .. } => {
+                bail!("merging is the user's decision; ask them with shoal alerts send")
+            }
             ItemMethod::ItemAction {
                 action: Action::DeleteBranch,
                 ..

@@ -779,6 +779,27 @@ pub struct ChangedOnBothSides {
     pub files: Vec<String>,
 }
 
+/// The sensitive files a merge brings to a target that changed them too,
+/// as the last check of the merged head found them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MergeWarning {
+    /// What is merged: a PR or a branch.
+    pub subject: String,
+    pub target: String,
+    pub files: Vec<String>,
+}
+
+impl std::fmt::Display for MergeWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (subject, target) = (&self.subject, &self.target);
+        write!(
+            f,
+            "{subject} and {target} both changed {}",
+            self.files.join(", ")
+        )
+    }
+}
+
 impl ConflictCheck {
     /// Whether the merge neither conflicts nor changes a sensitive path on
     /// both sides.

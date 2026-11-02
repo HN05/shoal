@@ -625,6 +625,7 @@ response_bodies! {
     ExportedSpace(crate::client::transfer::ExportedSpace),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
+    MergeWarning(Option<crate::model::MergeWarning>),
     Hook(Option<std::path::PathBuf>),
     LayeredConfig(Box<ConfigLayers>),
     SyncedRepository(SyncedRepository),

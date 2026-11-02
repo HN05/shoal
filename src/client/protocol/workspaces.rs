@@ -118,6 +118,10 @@ pub enum WorkspaceMethod {
         workspace: String,
         target: Option<String>,
     },
+    /// What landing the workspace's HEAD warns about.
+    LandWarning {
+        workspace: String,
+    },
     /// Keep where an agent of the workspace keeps its configuration, before
     /// Shoal trusts the workspace there, until the repository's removal.
     KeepAgentEnvironment {

@@ -72,6 +72,13 @@ pub enum ItemMethod {
         repository: Option<String>,
         link: bool,
     },
+    /// What merging the PR `item` names in the context's repository, or the
+    /// space's linked PR, warns about.
+    MergeWarning {
+        #[serde(flatten)]
+        context: ItemContext,
+        item: Option<String>,
+    },
     /// Change an issue or PR of the context's repository: the one `item`
     /// names, or the workspace's linked one of `kind`.
     ItemAction {
