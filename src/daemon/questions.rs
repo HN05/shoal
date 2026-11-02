@@ -430,6 +430,42 @@ enum Asker {
     Chat(Turn),
 }
 
+/// What recording a question did.
+enum Recorded {
+    /// Nothing: the chat asker's turn has no mark.
+    Unmarked,
+    /// Found the same question asked before.
+    Repeated(Question),
+    /// Recorded a new question.
+    New(Question),
+}
+
+/// Record `ask` from `asker` in `space` unless the same question was asked
+/// before. A chat asker's turn must be marked, and recording consumes the
+/// mark, also for a repeated question.
+fn record(db: &mut Connection, space: &PresentSpace, ask: &Ask, asker: &Asker) -> Result<Recorded> {
+    let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    // A workspace reserved for removal takes no question its cleanup checks
+    // have not seen.
+    if let PresentSpace::Workspace(workspace) = space {
+        crate::daemon::store::require_ready(&tx, &workspace.id)?;
+    }
+    if let Asker::Chat(turn) = asker
+        && !set_chat_mark(&tx, turn, false)?
+    {
+        return Ok(Recorded::Unmarked);
+    }
+    if let Some(question) = repeated(&tx, space.id(), ask)? {
+        tx.commit()?;
+        return Ok(Recorded::Repeated(question));
+    }
+    let in_chat = matches!(asker, Asker::Chat(_));
+    let id = insert(&tx, space, ask, in_chat)?;
+    let question = by_id(&tx, id)?.context("recorded question is missing")?;
+    tx.commit()?;
+    Ok(Recorded::New(question))
+}
+
 /// The turn of an agent: the current one of the agent an execution runs, or
 /// of a chat's agent, which no execution tracks.
 #[derive(Debug, Clone)]
@@ -546,36 +582,16 @@ impl Manager {
         let space = self.present_space(selector).await?;
         let recorded = self
             .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                // A workspace reserved for removal takes no question its
-                // cleanup checks have not seen.
-                if let PresentSpace::Workspace(workspace) = &space {
-                    crate::daemon::store::require_ready(&tx, &workspace.id)?;
-                }
-                if let Asker::Chat(turn) = &asker
-                    && !set_chat_mark(&tx, turn, false)?
-                {
-                    return Ok(None);
-                }
-                if let Some(question) = repeated(&tx, space.id(), &ask)? {
-                    tx.commit()?;
-                    return Ok(Some((question, false)));
-                }
-                let in_chat = matches!(asker, Asker::Chat(_));
-                let id = insert(&tx, &space, &ask, in_chat)?;
-                let question = by_id(&tx, id)?.context("recorded question is missing")?;
-                tx.commit()?;
-                Ok(Some((question, true)))
-            })
+            .run(move |db| record(db, &space, &ask, &asker))
             .await?;
-        let Some((question, new)) = recorded else {
-            return Ok(None);
-        };
-        if new {
-            self.announce_question(&question).await;
+        match recorded {
+            Recorded::Unmarked => Ok(None),
+            Recorded::Repeated(question) => Ok(Some(question)),
+            Recorded::New(question) => {
+                self.announce_question(&question).await;
+                Ok(Some(question))
+            }
         }
-        Ok(Some(question))
     }
 
     /// Tell the user about `question` unless it was withdrawn or answered

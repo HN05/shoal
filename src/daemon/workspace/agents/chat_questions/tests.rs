@@ -110,6 +110,38 @@ async fn a_marked_turn_asks_its_final_message_until_the_user_replies_in_the_chat
 }
 
 #[tokio::test]
+async fn asking_the_same_in_the_chat_again_consumes_the_mark() {
+    let (_root, manager, workspace, id, _other) = agent().await;
+    let ask_in_chat = async |message| {
+        manager
+            .mark_chat_question(&workspace.name, Some(&id))
+            .await
+            .unwrap();
+        manager
+            .end_agent_turn(&workspace.name, Some(id.clone()), None, ending(message))
+            .await
+            .unwrap();
+    };
+    ask_in_chat("Which database should the cache use?").await;
+    ask_in_chat("Which database should the cache use?").await;
+    let asked = manager.questions(None).await.unwrap().questions;
+    assert_eq!(asked.len(), 1);
+    assert_eq!(manager.notifications(true, 50).await.unwrap().len(), 1);
+
+    // The repeat consumed the mark, so the next turn asks nothing.
+    manager
+        .end_agent_turn(
+            &workspace.name,
+            Some(id.clone()),
+            None,
+            ending("Waiting for your answer."),
+        )
+        .await
+        .unwrap();
+    assert_eq!(manager.questions(None).await.unwrap().questions, asked);
+}
+
+#[tokio::test]
 async fn an_inbox_answer_reaches_the_agent_without_repeating_its_message() {
     let (_root, manager, workspace, id, _other) = agent().await;
     manager
