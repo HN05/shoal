@@ -3335,11 +3335,11 @@ repository's settings say, so it refuses `--delete-branch` with `--auto`, and
 Bitbucket cannot merge later. `--cancel-auto` withdraws the automatic merge.
 When the last check of a workspace that links the PR found files
 [changed on both sides](#conflicts) at the PR's head with its base branch,
-`merge` and `merge --auto`
-name them and ask before merging, such as `PR #12 and main both changed
-src/version.rs.`; `--yes` merges without asking, and without a terminal they
-refuse and name it. They read only that record, so a PR without one, a record
-of another head, or a PR no workspace links merges without a question.
+`merge` and `merge --auto` name them and ask before merging, such as
+`Sensitive files changed on both sides by PR #12 and main: src/version.rs`;
+`--yes` merges without asking, and without a terminal they refuse and name it.
+They read only that record, so a PR without one, a record of another head or
+base branch, or a PR no workspace links merges without a question.
 `delete-branch` deletes the branch of a merged or closed PR on the forge, such
 as one merged on the forge's website, never a local branch, with your own
 login; workspace processes cannot. It refuses an open PR, a branch in a fork,

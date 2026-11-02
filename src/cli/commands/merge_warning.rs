@@ -16,7 +16,7 @@ pub(in crate::cli::commands) fn confirm(
         return Ok(());
     };
     ensure!(
-        ui::confirm(ctx, &format!("{warning}."), "--yes")?,
+        ui::confirm(ctx, &warning.to_string(), "--yes")?,
         "merge canceled"
     );
     Ok(())

@@ -17492,7 +17492,7 @@ fn land_asks_before_merging_files_changed_on_both_sides() {
     assert!(!refused.status.success());
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(
-        stderr.contains("worker and main both changed version"),
+        stderr.contains("Sensitive files changed on both sides by worker and main: version"),
         "{stderr}"
     );
     assert!(stderr.contains("--yes"), "{stderr}");
@@ -17517,7 +17517,7 @@ fn land_asks_before_merging_files_changed_on_both_sides() {
     let pending: serde_json::Value = serde_json::from_slice(&pending.stdout).unwrap();
     assert_eq!(
         pending["request"]["reason"],
-        "merge worker into main; worker and main both changed version"
+        "merge worker into main; sensitive files changed on both sides by worker and main: version"
     );
 
     // Landing makes a merge commit in the checkout, which needs an identity.

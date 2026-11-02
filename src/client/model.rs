@@ -794,7 +794,7 @@ impl std::fmt::Display for MergeWarning {
         let (subject, target) = (&self.subject, &self.target);
         write!(
             f,
-            "{subject} and {target} both changed {}",
+            "Sensitive files changed on both sides by {subject} and {target}: {}",
             self.files.join(", ")
         )
     }

@@ -49,7 +49,10 @@ async fn changed_on_both_sides() -> (
 async fn landing_warns_only_at_the_checked_head() {
     let (_root, manager, workspace) = changed_on_both_sides().await;
     let warning = manager.land_warning(&workspace.id).await.unwrap().unwrap();
-    assert_eq!(warning.to_string(), "topic and main both changed version");
+    assert_eq!(
+        warning.to_string(),
+        "Sensitive files changed on both sides by topic and main: version"
+    );
 
     let current = manager.current_changed_on_both_sides(&workspace).await;
     assert!(current.unwrap().is_some());
@@ -122,7 +125,10 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
         target: target.into(),
     };
     let found = warning("PR #7".into(), recorded.clone(), &into("main")).unwrap();
-    assert_eq!(found.to_string(), "PR #7 and main both changed version");
+    assert_eq!(
+        found.to_string(),
+        "Sensitive files changed on both sides by PR #7 and main: version"
+    );
     // A PR into another branch merges nothing the check of main found.
     assert!(warning("PR #7".into(), recorded, &into("release")).is_none());
 }
