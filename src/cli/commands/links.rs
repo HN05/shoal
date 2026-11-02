@@ -556,6 +556,11 @@ pub(super) async fn pull_creation(
     creation: &mut Creation,
 ) -> Result<()> {
     if pull.fork {
+        ensure!(
+            creation.path.is_none() && creation.git_profile.is_none() && creation.base.is_none(),
+            "PR #{} comes from a fork and opens at its head in a workspace Shoal places; --path, --git-profile and --base apply to a branch",
+            pull.number
+        );
         creation.pull_head = Some(fork_head(&pull)?);
         creation.pr = Some(pull.url);
         return Ok(());

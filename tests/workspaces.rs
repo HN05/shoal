@@ -29745,6 +29745,7 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
     for args in [
         &["split", "--no-branch", "child"][..],
         &["split", "--no-branch", "--issue", "4"],
+        &["split", "--no-branch", "--model", "fast"],
     ] {
         assert!(!fixture.run(args).status.success(), "{args:?}");
     }
@@ -29933,6 +29934,13 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("holds no agent"),
+        "{output:?}"
+    );
+    let output = run(&["add", url, "--git-profile", "work"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("--git-profile and --base apply to a branch"),
         "{output:?}"
     );
 
