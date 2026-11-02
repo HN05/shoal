@@ -1055,10 +1055,7 @@ fn recorded_urls(
     // A PR linked since the poll takes over conflict reports from the
     // branch; a chat works on none.
     let branch = if watches_branch(selection, &items) {
-        db.query_row("SELECT branch FROM workspaces WHERE id=?1", [id], |row| {
-            row.get::<_, String>(0)
-        })
-        .optional()?
+        workspace_branch(db, id)?
     } else {
         None
     };
@@ -1069,6 +1066,15 @@ fn recorded_urls(
             .chain(branch)
             .collect(),
     ))
+}
+
+/// The branch of the workspace `id`; a chat has none.
+fn workspace_branch(db: &rusqlite::Connection, id: &str) -> Result<Option<String>> {
+    Ok(db
+        .query_row("SELECT branch FROM workspaces WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()?)
 }
 
 /// The IDs of workspace `id` and of `children`, whose activity its agent
