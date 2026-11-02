@@ -264,11 +264,7 @@ fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> R
     if loaded.is_none() {
         installation.remove_unrecorded_skill()?;
     }
-    if loaded.as_ref() != Some(&installation.record) {
-        fs::create_dir_all(directory)
-            .with_context(|| format!("create skill directory {}", directory.display()))?;
-        installation.record.save(directory)?;
-    }
+    installation.save(loaded.as_ref())?;
     Ok(installation.outcome)
 }
 
@@ -346,6 +342,16 @@ impl Installation<'_> {
             }
         }
         Ok(())
+    }
+
+    /// Write the record when it differs from the one `loaded` from disk.
+    fn save(&self, loaded: Option<&Record>) -> Result<()> {
+        if loaded == Some(&self.record) {
+            return Ok(());
+        }
+        fs::create_dir_all(self.directory)
+            .with_context(|| format!("create skill directory {}", self.directory.display()))?;
+        self.record.save(self.directory)
     }
 
     /// Remove the skill Shoal installed before it recorded installations.
