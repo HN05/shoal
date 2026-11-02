@@ -320,10 +320,15 @@ async fn poll_item_activity(manager: Arc<Manager>) {
     loop {
         interval.tick().await;
         let _operation = manager.gates.operation().await;
-        if let Err(error) = manager.poll_linked_item_activity().await {
+        // Dependencies are unrelated issues; a slow item sweep must not delay them.
+        let (items, dependencies) = tokio::join!(
+            manager.poll_linked_item_activity(),
+            manager.poll_dependency_issues(),
+        );
+        if let Err(error) = items {
             log!("item activity: {error:#}");
         }
-        if let Err(error) = manager.poll_dependency_issues().await {
+        if let Err(error) = dependencies {
             log!("agent queue dependencies: {error:#}");
         }
     }
