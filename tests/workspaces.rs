@@ -29811,7 +29811,18 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     assert_eq!(workspace["disposable"], true);
     let path = PathBuf::from(workspace["path"].as_str().unwrap());
     fs::write(path.join("tracked"), "changed\n").unwrap();
-    git(&path, &["commit", "-qam", "unpushed"]);
+    git(
+        &path,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qam",
+            "unpushed",
+        ],
+    );
     fs::write(path.join("untracked"), "draft\n").unwrap();
     let child = fixture.ok(&[
         "split",
