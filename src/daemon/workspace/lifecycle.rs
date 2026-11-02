@@ -358,6 +358,17 @@ async fn worktree_cleanup_reason(check: &RemovalCheck) -> Result<Option<CleanupR
     })
 }
 
+/// Whether a process `users` finds uses the directory, besides the wrappers
+/// waiting to restore the idle agents of `executions`.
+async fn directory_in_use(
+    path: &Path,
+    executions: &CleanupExecutions,
+    users: &process::DirectoryUsers,
+) -> Result<bool> {
+    let wrappers = removal::wrappers(&executions.idle);
+    Ok(!users.in_directory_except(path, &wrappers).await?.is_empty())
+}
+
 /// The workspace's executions as cleanup sees them.
 struct CleanupExecutions {
     /// Those other than the idle restores, which keep the workspace.
@@ -560,16 +571,19 @@ impl Manager {
             .await?
             .is_some()
             || !off_runtime::is_dir(path).await?
-            || !users
-                .in_directory_except(path, &removal::wrappers(&executions.idle))
-                .await?
-                .is_empty()
+            || directory_in_use(path, &executions, users).await?
         {
             return Ok(None);
         }
+        Ok(Some(self.current_signals(id, path).await?))
+    }
+
+    /// The HEAD and recorded activity of the workspace at `path`, hashed for
+    /// comparison between sweeps.
+    async fn current_signals(&self, id: &str, path: &Path) -> Result<u64> {
         let head = git::revision(path, "HEAD", git::run).await?;
         let activity = self.usage.activity(id);
-        Ok(Some(crate::daemon::cleanup::signals(&head, activity)))
+        Ok(crate::daemon::cleanup::signals(&head, activity))
     }
 
     /// [`Self::swept_snapshot`], scanning the processes in the worktree.
@@ -693,12 +707,8 @@ impl Manager {
         if let Some(reason) = worktree_cleanup_reason(&check).await? {
             return Ok(Err(reason));
         }
-        let head = git::revision(&check.workspace.path, "HEAD", git::run).await?;
-        let activity = self.usage.activity(id);
-        Ok(Ok((
-            check.workspace.path,
-            crate::daemon::cleanup::signals(&head, activity),
-        )))
+        let signals = self.current_signals(id, &check.workspace.path).await?;
+        Ok(Ok((check.workspace.path, signals)))
     }
 
     /// [`Self::merged_candidate`], inspected under [`Manager::check_access`].
@@ -749,12 +759,8 @@ impl Manager {
         if !Rule::Merged.allows(&check) {
             return Ok(None);
         }
-        let head = git::revision(&check.workspace.path, "HEAD", git::run).await?;
-        let activity = self.usage.activity(id);
-        Ok(Some((
-            check.workspace.path,
-            crate::daemon::cleanup::signals(&head, activity),
-        )))
+        let signals = self.current_signals(id, &check.workspace.path).await?;
+        Ok(Some((check.workspace.path, signals)))
     }
 
     /// The full snapshot of a merged cleanup candidate.
