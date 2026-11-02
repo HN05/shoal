@@ -29,5 +29,17 @@ jobs:
       - name: Measure
         run: |
           . .forgejo/scripts/lock-target-dir.sh
-          cargo clean --workspace
-          python3 scripts/profile_tests.py suite
+          base=5c21abe15c5732ea495cde9b1e7bbfdc63b30c1a
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
+            fetch -q --depth 1 origin "$base"
+          mkdir -p /tmp/before && git archive "$base" | tar -x -C /tmp/before
+          cp scripts/profile_tests.py /tmp/before/scripts/
+          target=$CARGO_TARGET_DIR
+          before() { (cd /tmp/before && LIBSQLITE3_FLAGS= CARGO_TARGET_DIR=$target/before python3 scripts/profile_tests.py suite); }
+          after() { CARGO_TARGET_DIR=$target/after python3 scripts/profile_tests.py suite; }
+          zombies() { ps -ax -o stat= | grep -c '^Z' || true; }
+          # Zombies pile up over the job, so the order balances them.
+          for side in before after after before; do
+            echo "== $side, zombies $(zombies), load $(cut -d' ' -f1-3 /proc/loadavg)"
+            $side | grep -E '^(binary|workspaces|forge|shoal \(lib\)|total)|panicked|failed'
+          done
