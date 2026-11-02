@@ -28,16 +28,19 @@ fn rewrites_send_pushes_through_the_helper() {
 }
 
 #[test]
-fn a_push_url_that_is_also_fetched_from_cannot_be_held() {
-    let urls = git::RemoteUrls {
-        fetch: vec!["git@forge:o/r.git".into()],
-        push: vec!["git@forge:o/r.git".into()],
-    };
-    let error = rewrites(&urls).unwrap_err();
-    assert!(
-        format!("{error:#}").contains("also fetched from"),
-        "{error:#}"
-    );
+fn a_push_url_that_starts_a_fetch_url_cannot_be_held() {
+    // Git rewrites every URL that starts with an insteadOf value.
+    for fetch in ["git@forge:o/r", "git@forge:o/r.git"] {
+        let urls = git::RemoteUrls {
+            fetch: vec![fetch.into()],
+            push: vec!["git@forge:o/r".into()],
+        };
+        let error = rewrites(&urls).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("also rewrite fetches"),
+            "{error:#}"
+        );
+    }
 }
 
 #[test]

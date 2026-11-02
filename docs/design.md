@@ -2041,7 +2041,7 @@ covered by rewriting the agent's push URLs, through its Git environment, to a
 Shoal remote helper that asks the daemon about each ref. The rewrite is chosen
 over a pre-push hook because `--no-verify` skips hooks and a Shoal hook would
 replace the repository's own; like scope, it stops accidents, not a process
-that clears its Git settings. A push URL that is also fetched from cannot be
+that clears its Git settings. A push URL that a fetch URL starts with cannot be
 rewritten without breaking fetches, so the agent launch refuses it rather than
 leave those pushes unheld. Approval runs the push without the agent, in an
 operation whose end decides the request, with the agent's Git profile as

@@ -58,13 +58,20 @@ impl Launch {
 
 /// Settings that send pushes to `urls` through the helper. A remote's URL
 /// is rewritten for pushes only. An explicit push URL ignores push
-/// rewrites, so it is rewritten for every use, which fails for one that is
-/// also fetched from: the helper only pushes, so the agent does not start.
+/// rewrites, so it is rewritten for every use, which Git applies to every
+/// URL that starts with it. That fails for a fetch URL: the helper only
+/// pushes, so the agent does not start.
 fn rewrites(urls: &git::RemoteUrls) -> Result<Vec<(String, String)>> {
-    if let Some(url) = urls.push.iter().find(|url| urls.fetch.contains(url)) {
-        anyhow::bail!(
-            "the push URL {url} is also fetched from, so Shoal cannot hold pushes to it for approval; change or remove that pushurl, or set [permissions] push = \"direct\""
-        );
+    for url in &urls.push {
+        if let Some(fetch) = urls
+            .fetch
+            .iter()
+            .find(|fetch| fetch.starts_with(url.as_str()))
+        {
+            anyhow::bail!(
+                "the push URL {url} would also rewrite fetches from {fetch}, so Shoal cannot hold pushes to it for approval; change or remove that pushurl, or set [permissions] push = \"direct\""
+            );
+        }
     }
     let fetched = urls
         .fetch

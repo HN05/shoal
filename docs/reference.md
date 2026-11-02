@@ -3466,9 +3466,10 @@ that PR and records a push request for the branch at its current commit.
 A tracked agent's own `git push` is covered too. Shoal adds Git settings to the
 agent's environment that rewrite the push URLs of the repository's remotes to
 Shoal's remote helper, `git-remote-shoal`, which Shoal puts first on the agent's
-`PATH`; fetches keep their URLs. A remote whose explicit push URL is also
-fetched from cannot be held, so the agent does not start until that push URL
-changes or the setting is `"direct"`. Git runs its usual checks and pre-push hook,
+`PATH`; fetches keep their URLs. An explicit push URL that a fetch URL starts
+with, such as one also fetched from, cannot be held, since Git would rewrite
+that fetch URL too, so the agent does not start until that push URL changes or
+the setting is `"direct"`. Git runs its usual checks and pre-push hook,
 then hands the push to the helper, which asks the daemon about each ref. A push
 that may go ahead goes to the real URL with Git as the agent; any other is
 recorded as an approval request bound to the remote, the push URL when the

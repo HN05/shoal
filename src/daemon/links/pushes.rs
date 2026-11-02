@@ -216,15 +216,7 @@ impl Manager {
             None => self.decide_pushed(request.clone()).await,
         };
         if let Err(error) = &finished {
-            // The request waits for another approval, with no push running.
-            if let Some(mut kept) = self
-                .approval_by_key(key)
-                .await?
-                .filter(|request| request.status == DecisionStatus::Pending)
-            {
-                kept.operation = None;
-                self.save_proposal(kept).await?;
-            }
+            self.release_push_operation(key).await?;
             let message = format!(
                 "approval {}: {}: {error:#}; approve it again to retry",
                 request.id,
@@ -238,6 +230,20 @@ impl Manager {
             .await;
         }
         finished
+    }
+
+    /// Forget the ended push of request `key`, which waits for another
+    /// approval while still pending.
+    async fn release_push_operation(&self, key: &str) -> Result<()> {
+        let pending = self
+            .approval_by_key(key)
+            .await?
+            .filter(|request| request.status == DecisionStatus::Pending);
+        if let Some(mut request) = pending {
+            request.operation = None;
+            self.save_proposal(request).await?;
+        }
+        Ok(())
     }
 
     /// Decide the request whose push is done: open the PR a proposal held
