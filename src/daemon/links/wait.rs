@@ -1,16 +1,15 @@
 //! Workspace-owned activity cursors; waiting does not change completion policy.
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
-use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
-use self::held::HeldPasses;
+use self::cursor::{ActivityRecord, cursor_record, save_cursor_record};
 use super::{
     pr::RegistrationKind,
     space::{LinkSpace, require_ready_space},
@@ -31,6 +30,7 @@ use crate::{
 
 pub(crate) use crate::client::links::Updates;
 
+mod cursor;
 mod held;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
@@ -120,24 +120,6 @@ impl Drop for ActiveWait<'_> {
             waits.remove(&self.workspace);
         }
     }
-}
-
-#[derive(Default, Serialize, Deserialize)]
-struct ActivityRecord {
-    #[serde(flatten)]
-    snapshot: Snapshot,
-    #[serde(default)]
-    pending: Vec<Update>,
-    /// Comments and reviews the workspace changed through Shoal that no
-    /// poll has seen change yet.
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    authored: BTreeSet<String>,
-    /// Unix seconds when the workspace last set the item's state through
-    /// Shoal; observations that started by then cannot show it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    own_state_at: Option<u64>,
-    #[serde(default, skip_serializing_if = "HeldPasses::is_empty")]
-    held: HeldPasses,
 }
 
 impl Manager {
@@ -952,56 +934,11 @@ impl Manager {
         let _guard = self.gates.lock_prs([id]).await;
         let id = id.to_owned();
         let agents = self.tracked_agents().await;
-        self.store.run(move |db| {
-            let tx = db.transaction()?;
-            require_ready_space(&tx, &id)?;
-            let items = followed_items(&tx, &id, selection.kind)?;
-            if selection.input.is_none() && items.is_empty() {
-                ensure!(links_kind(&tx, &id, selection.kind, &agents)?, "{NO_LINKED_ITEMS}");
-            }
-            // A PR linked since the poll takes over conflict reports from the
-            // branch; a chat works on none.
-            let branch = if watches_branch(&selection, &items) {
-                tx.query_row("SELECT branch FROM workspaces WHERE id=?1", [&id], |row| row.get::<_, String>(0)).optional()?
-            } else {
-                None
-            };
-            let mut updates = Vec::new();
-            for (url, mut snapshot) in observations {
-                if selection.input.is_none() && !items.iter().any(|(linked, _)| linked == &url) && branch.as_ref() != Some(&url) {
-                    continue;
-                }
-                let previous: Option<String> = tx.query_row(
-                    "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
-                    params![id, url], |row| row.get(0),
-                ).optional()?;
-                let mut previous: ActivityRecord = previous.map(|text| serde_json::from_str(&text)).transpose()?.unwrap_or_default();
-                if !previous.pending.is_empty() {
-                    updates.extend(previous.pending);
-                    continue;
-                }
-                snapshot.normalize(&previous.snapshot, crate::time::unix_seconds());
-                previous.snapshot.adopt_authored(&snapshot, &mut previous.authored);
-                // A poll that started by the agent's own state change may
-                // have read the state before it.
-                if previous.own_state_at.is_some_and(|at| observed_at <= at) {
-                    snapshot.adopt_state(previous.snapshot.state());
-                } else {
-                    previous.own_state_at = None;
-                }
-                let changes = previous.snapshot.changes(&snapshot, &url);
-                let mut pending = previous.held.deliver(&snapshot, changes);
-                let delivery = uuid::Uuid::new_v4().to_string();
-                for update in &mut pending {
-                    update.delivery.clone_from(&delivery);
-                }
-                updates.extend(pending.clone());
-                let record = ActivityRecord { snapshot, pending, authored: previous.authored, own_state_at: previous.own_state_at, held: previous.held };
-                tx.execute("INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,?3) ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record", params![id, url, serde_json::to_string(&record)?])?;
-            }
-            tx.commit()?;
-            Ok(updates)
-        }).await
+        self.store
+            .run(move |db| {
+                record_observations(db, &id, observations, &selection, &agents, observed_at)
+            })
+            .await
     }
 
     #[cfg(test)]
@@ -1064,6 +1001,76 @@ impl Manager {
     }
 }
 
+/// Record `observations` from a poll that started at `observed_at` on the
+/// cursor of the space `id` in one transaction, and return the updates its
+/// watch reports. Observations of items the watch no longer follows are
+/// dropped.
+fn record_observations(
+    db: &mut rusqlite::Connection,
+    id: &str,
+    observations: Vec<(String, Snapshot)>,
+    selection: &Selection,
+    agents: &crate::daemon::workspace::TrackedAgents,
+    observed_at: u64,
+) -> Result<Vec<Update>> {
+    let tx = db.transaction()?;
+    require_ready_space(&tx, id)?;
+    let followed = recorded_urls(&tx, id, selection, agents)?;
+    let mut updates = Vec::new();
+    for (url, snapshot) in observations {
+        if followed
+            .as_ref()
+            .is_some_and(|followed| !followed.contains(&url))
+        {
+            continue;
+        }
+        let mut record = cursor_record(&tx, id, &url)?.unwrap_or_default();
+        updates.extend(record.observe(snapshot, &url, observed_at));
+        save_cursor_record(&tx, id, &url, &record)?;
+    }
+    tx.commit()?;
+    Ok(updates)
+}
+
+/// The URLs whose observations a watch of `selection` records on the cursor
+/// of the space `id`: the items it follows, and the workspace branch when it
+/// watches that. `None` for a watch of an explicit item, which records every
+/// observation.
+fn recorded_urls(
+    db: &rusqlite::Connection,
+    id: &str,
+    selection: &Selection,
+    agents: &crate::daemon::workspace::TrackedAgents,
+) -> Result<Option<Vec<String>>> {
+    if selection.input.is_some() {
+        return Ok(None);
+    }
+    let items = followed_items(db, id, selection.kind)?;
+    if items.is_empty() {
+        ensure!(
+            links_kind(db, id, selection.kind, agents)?,
+            "{NO_LINKED_ITEMS}"
+        );
+    }
+    // A PR linked since the poll takes over conflict reports from the
+    // branch; a chat works on none.
+    let branch = if watches_branch(selection, &items) {
+        db.query_row("SELECT branch FROM workspaces WHERE id=?1", [id], |row| {
+            row.get::<_, String>(0)
+        })
+        .optional()?
+    } else {
+        None
+    };
+    Ok(Some(
+        items
+            .into_iter()
+            .map(|(url, _)| url)
+            .chain(branch)
+            .collect(),
+    ))
+}
+
 /// The IDs of workspace `id` and of `children`, whose activity its agent
 /// receives: the PR gates a delivery to that agent holds.
 fn receiving<'a>(id: &'a str, children: &'a [WorkspaceRef]) -> impl Iterator<Item = &'a str> {
@@ -1087,28 +1094,9 @@ pub(crate) fn record_own_change(
     workspace_id: &str,
     change: OwnChange<'_>,
 ) -> Result<()> {
-    let previous: Option<String> = db
-        .query_row(
-            "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
-            params![workspace_id, change.url],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let mut record: ActivityRecord = previous
-        .map(|text| serde_json::from_str(&text))
-        .transpose()?
-        .unwrap_or_default();
-    record.authored.extend(change.authored);
-    if let Some(state) = change.state {
-        record.snapshot.adopt_state(state);
-        record.own_state_at = Some(crate::time::unix_seconds());
-    }
-    db.execute(
-        "INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,?3)
-         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
-        params![workspace_id, change.url, serde_json::to_string(&record)?],
-    )?;
-    Ok(())
+    let mut record = cursor_record(db, workspace_id, change.url)?.unwrap_or_default();
+    record.adopt_own_change(change.authored, change.state);
+    save_cursor_record(db, workspace_id, change.url, &record)
 }
 
 /// Queue an update for the workspace's next watch of `update.url`, ahead of
@@ -1118,25 +1106,10 @@ pub(super) fn queue_update(
     workspace_id: &str,
     update: Update,
 ) -> Result<()> {
-    let previous: Option<String> = db
-        .query_row(
-            "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
-            params![workspace_id, update.url],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let mut record: ActivityRecord = previous
-        .map(|text| serde_json::from_str(&text))
-        .transpose()?
-        .unwrap_or_default();
+    let mut record = cursor_record(db, workspace_id, &update.url)?.unwrap_or_default();
     let url = update.url.clone();
     record.pending.push(update);
-    db.execute(
-        "INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,?3)
-         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
-        params![workspace_id, url, serde_json::to_string(&record)?],
-    )?;
-    Ok(())
+    save_cursor_record(db, workspace_id, &url, &record)
 }
 
 /// Remove `deliveries` from the pending updates of the workspaces `ids`;
@@ -1444,18 +1417,6 @@ fn unpolled_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
     Ok(runs)
 }
 
-/// The item's record on the workspace's watch cursor, if it has one.
-fn cursor_record(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Option<ActivityRecord>> {
-    let record: Option<String> = db
-        .query_row(
-            "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
-            params![id, url],
-            |row| row.get(0),
-        )
-        .optional()?;
-    Ok(record.map(|text| serde_json::from_str(&text)).transpose()?)
-}
-
 /// The workspace's assigned issue and PRs, of `kind` or every kind.
 pub(crate) fn linked_items(
     db: &rusqlite::Connection,
@@ -1522,17 +1483,9 @@ fn observed_item(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Optio
 /// Whether the workspace's watch saw the item's activity end: a PR merged,
 /// or, once the assignment is `done`, an item closed.
 fn activity_ended(db: &rusqlite::Connection, id: &str, url: &str, done: bool) -> Result<bool> {
-    let record: Option<String> = db
-        .query_row(
-            "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
-            params![id, url],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let Some(record) = record else {
+    let Some(ActivityRecord { snapshot, .. }) = cursor_record(db, id, url)? else {
         return Ok(false);
     };
-    let snapshot = serde_json::from_str::<ActivityRecord>(&record)?.snapshot;
     Ok(snapshot.state() == ItemState::Merged.as_str() || (done && concluded(&snapshot)))
 }
 
