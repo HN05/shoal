@@ -28,9 +28,4 @@ jobs:
 
       - name: Measure
         run: |
-          . .forgejo/scripts/lock-target-dir.sh
-          cargo clean --workspace
-          cargo test --locked --no-run -q
-          (apt-get update -qq && apt-get install -y -qq strace) > /dev/null 2>&1 || echo "strace install failed"
-          strace -V | head -1
-          python3 scripts/trace_execs.py workspaces "shoal (lib)"
+          python3 scripts/bench_inventory.py
