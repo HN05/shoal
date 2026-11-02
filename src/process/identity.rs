@@ -1377,21 +1377,109 @@ impl Identity {
     }
 }
 
-/// A live, identity-verified leader establishes ownership of its group and
-/// current descendants (including children that started another session).
-/// After it exits, its lineage still establishes ownership of the processes
-/// descending from it through live parents, except those below a process
-/// whose own environment lacks the marker of `execution`, such as a demo the
-/// command started. Without that proof, group members are candidates only and
-/// must not be killed.
 /// Wait until no process of process group `group` remains. A leader may
-/// exit before its descendants finish their signal handlers; native identity
-/// checks exclude zombies that can no longer clean up.
+/// exit before its descendants finish their signal handlers.
 pub async fn group_exited(group: u32) -> Result<()> {
-    while !related(None, Some(group), None).await?.1.is_empty() {
+    while group_alive(group).await? {
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
     Ok(())
+}
+
+/// Whether a live process of this user remains in process group `group`.
+/// Zombies, which can no longer clean up, do not count. It reads only the
+/// group's members, so frequent checks stay cheap.
+pub async fn group_alive(group: u32) -> Result<bool> {
+    ensure!(
+        group > 1 && group <= i32::MAX as u32,
+        "invalid process group"
+    );
+    tokio::task::spawn_blocking(move || {
+        // SAFETY: signal 0 only checks whether the group has members it may
+        // signal, so a group with none of this user's processes fails.
+        if unsafe { libc::killpg(group as i32, 0) } != 0 {
+            return Ok(false);
+        }
+        for pid in group_members(group)? {
+            if capture(pid)?.is_some() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    })
+    .await
+    .context("process group worker failed")?
+}
+
+/// The PIDs in process group `group`, including zombies.
+#[cfg(target_os = "macos")]
+fn group_members(group: u32) -> Result<Vec<u32>> {
+    // PROC_PGRP_ONLY in sys/proc_info.h.
+    const PROC_PGRP_ONLY: u32 = 2;
+    const PID_SIZE: usize = std::mem::size_of::<libc::pid_t>();
+    // A null buffer asks for room for every process on the machine.
+    let list = |buffer: *mut libc::pid_t, len: usize| {
+        let bytes = unsafe {
+            libc::proc_listpids(
+                PROC_PGRP_ONLY,
+                group,
+                buffer.cast(),
+                (len * PID_SIZE) as i32,
+            )
+        };
+        if bytes < 0 {
+            return Err(std::io::Error::last_os_error()).context("list process group");
+        }
+        Ok(bytes as usize / PID_SIZE)
+    };
+    let mut pids = vec![0; list(std::ptr::null_mut(), 0)?.max(1)];
+    // A full buffer may have cut off members forked since it was sized.
+    loop {
+        let count = list(pids.as_mut_ptr(), pids.len())?;
+        if count < pids.len() {
+            pids.truncate(count);
+            break;
+        }
+        pids.resize(pids.len() * 2, 0);
+    }
+    Ok(pids
+        .into_iter()
+        .filter(|pid| *pid > 1)
+        .map(|pid| pid as u32)
+        .collect())
+}
+
+/// The PIDs in process group `group`, including zombies. Linux lists
+/// process groups only in each process's stat.
+#[cfg(target_os = "linux")]
+fn group_members(group: u32) -> Result<Vec<u32>> {
+    let mut members = Vec::new();
+    for entry in std::fs::read_dir("/proc")? {
+        let Some(pid) = entry?
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let Some(stat) = read_process_stat(&format!("/proc/{pid}/stat"))? else {
+            continue;
+        };
+        if pid > 1 && stat_group(&stat)? == group {
+            members.push(pid);
+        }
+    }
+    Ok(members)
+}
+
+/// The process group a `/proc/<pid>/stat` line names after the state and
+/// the parent PID.
+#[cfg(target_os = "linux")]
+fn stat_group(stat: &str) -> Result<u32> {
+    Ok(stat_fields(stat)?
+        .get(2)
+        .context("incomplete process stat")?
+        .parse()?)
 }
 
 /// The live processes those of `identities` started, directly or through
@@ -1437,6 +1525,13 @@ pub fn owned_by_workspace(identity: &Identity, wrappers: &[Identity]) -> Result<
     }))
 }
 
+/// A live, identity-verified leader establishes ownership of its group and
+/// current descendants (including children that started another session).
+/// After it exits, its lineage still establishes ownership of the processes
+/// descending from it through live parents, except those below a process
+/// whose own environment lacks the marker of `execution`, such as a demo the
+/// command started. Without that proof, group members are candidates only and
+/// must not be killed.
 pub async fn related(
     child: Option<&Identity>,
     group: Option<u32>,
