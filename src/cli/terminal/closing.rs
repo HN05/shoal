@@ -19,6 +19,7 @@ use anyhow::{Context as _, Result};
 use super::{Host, host::Watches, hosts::hosts};
 use crate::{
     cli::{client, context::Context, installed, internal},
+    daemon::ownership,
     env,
     model::Inspection,
     paths::Paths,
@@ -166,6 +167,7 @@ pub async fn watch(
         known.get()
     };
     let close = async || close_place(ctx, host, &place, &record, known.get()).await;
+    let mut daemon = DaemonPresence::new(|| ownership::owner(&ctx.paths).is_some());
     close_when_due(
         watches,
         &place,
@@ -173,7 +175,7 @@ pub async fn watch(
         at_removal,
         lifecycle,
         close,
-        || ctx.paths.state.exists(),
+        || ctx.paths.state.exists() && daemon.seen_recently(),
     )
     .await?;
     discard_inherited_directive();
@@ -247,7 +249,7 @@ async fn close_when_due<F, R>(
     mut at_removal: impl FnMut() -> R,
     mut lifecycle: impl FnMut() -> F,
     close: impl AsyncFn() -> Result<()>,
-    watching: impl Fn() -> bool,
+    mut watching: impl FnMut() -> bool,
 ) -> Result<()>
 where
     F: Future<Output = Result<Option<Lifecycle>>>,
@@ -277,6 +279,35 @@ where
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     Ok(())
+}
+
+/// How long a watcher waits for a daemon to own its state directory again
+/// before it ends and leaves its place open. A restart or an upgrade takes far
+/// less; a state directory no daemon serves any more, such as a killed test's,
+/// would otherwise keep its watchers forever.
+const DAEMON_ABSENCE_LIMIT: Duration = Duration::from_secs(120);
+
+/// Whether a daemon owned the watcher's state directory, as `owned` reads
+/// it, within [`DAEMON_ABSENCE_LIMIT`].
+struct DaemonPresence<F> {
+    owned: F,
+    seen: tokio::time::Instant,
+}
+
+impl<F: FnMut() -> bool> DaemonPresence<F> {
+    fn new(owned: F) -> Self {
+        Self {
+            owned,
+            seen: tokio::time::Instant::now(),
+        }
+    }
+
+    fn seen_recently(&mut self) -> bool {
+        if (self.owned)() {
+            self.seen = tokio::time::Instant::now();
+        }
+        self.seen.elapsed() < DAEMON_ABSENCE_LIMIT
+    }
 }
 
 /// The kept completion a watch began under, by its HEAD: an agent started in

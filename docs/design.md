@@ -913,8 +913,9 @@ tab's watcher as it was. Top-level `terminal.close_when_done` applies to every h
 `terminal.herdr.close_when_done` overrides it for tabs, as `terminal.focus` is shared.
 Preparation failures and shell or untracked desktop handoffs retain them until
 that lifecycle change. A watcher ends once its host reports the place missing,
-whatever the daemon reports. It asks the daemon whose its place is until the
-daemon answers; a place the daemon records, for its workspace or another
+whatever the daemon reports, and leaves the place open once no daemon has owned
+its state directory for two minutes, longer than a restart takes. It asks the
+daemon whose its place is until the daemon answers; a place the daemon records, for its workspace or another
 owner, or whose host labels it, is the daemon's, and the watcher closes it at
 removal only when the daemon knows nothing of it, such as a tab opened before
 Shoal recorded its places, never before an answer, which could close what

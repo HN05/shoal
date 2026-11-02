@@ -1141,7 +1141,8 @@ Failures before agent execution leave the tab open. Agent exits leave the tab
 open so work can continue, and with shell integration its shell enters the
 workspace at its next prompt; completion closes it once tracked executions resolve
 or the agent finishes its turn, as its hooks report it or, for an agent without
-them, as Herdr does, unless stopped work waits for `shoal resume`. Workspace
+them, as Herdr does, unless stopped work waits for `shoal resume` or the daemon
+stayed stopped for more than two minutes while the tab was open. Workspace
 removal closes it immediately, regardless of `terminal.close_when_done`, and daemon
 startup and `shoal cleanup` close those whose workspace is gone. Shoal closes
 only the pane it opened the tab with, so a pane you split off keeps the tab
