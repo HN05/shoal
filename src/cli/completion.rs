@@ -68,7 +68,7 @@ enum Target {
     /// Workspaces, each described by why the command would refuse it.
     Workspaces(Need),
     /// Spaces: workspaces as [`Target::Workspaces`] offers them, then
-    /// running chats.
+    /// chats.
     Spaces(Need),
     /// Workspaces described by what `shoal resume` restores in them, then
     /// the stopped chats.
@@ -584,13 +584,18 @@ async fn live<T>(lookup: impl Future<Output = Result<T>>) -> Result<T> {
         .context("live completion lookup timed out")?
 }
 
-/// Unique display names, with IDs, sources, and paths as prefix-matched extras.
-/// The running chats, by name.
+/// Every chat, by name, a stopped one described as such.
 async fn chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
-    Ok(client::chats(paths)
+    Ok(client::recorded_chats(paths)
         .await?
         .into_iter()
-        .map(|chat| CompletionCandidate::new(chat.name).help(Some("chat".into())))
+        .map(|chat| {
+            let help = match chat.restore {
+                Some(_) => STOPPED_CHAT,
+                None => "chat",
+            };
+            CompletionCandidate::new(chat.name).help(Some(help.into()))
+        })
         .collect())
 }
 

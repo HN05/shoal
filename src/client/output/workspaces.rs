@@ -22,10 +22,12 @@ pub struct Removed {
     pub holds: Vec<WorkspaceHold>,
 }
 
-/// The workspaces a removal of several removed.
+/// The spaces a removal of several removed.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Removals {
     pub removed: Vec<Removed>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chats: Vec<crate::client::output::chat::RemovedChat>,
     pub failed: Vec<Failure>,
 }
 

@@ -7864,7 +7864,6 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
     let fixture = Fixture::with_config(Some("[commands]\ncheck = ['true']\n"));
     fixture.add("available");
     let workspace = "missing workspace; pass <workspace>";
-    let workspaces = "missing workspaces; pass <workspace>";
     for (args, refusal) in [
         (
             &["add"][..],
@@ -7874,7 +7873,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
             &["run", "--", "true"],
             "missing workspace; pass --workspace <workspace>",
         ),
-        (&["rm"], workspaces),
+        (&["rm"], "missing spaces; pass <space>"),
         (&["status"], "missing workspace; pass <target>"),
         (&["stop"], "missing workspaces; pass <space>"),
         (&["diff"], workspace),
@@ -26562,7 +26561,8 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         .unwrap();
     assert_eq!(stopped["chat"]["id"], started["chat"]["id"]);
 
-    // Opening it outside a chat gives it back to the user.
+    // Opening it outside a chat gives it back to the user, so removing the
+    // chat leaves it.
     let reopened = fixture.ok(&[
         "add",
         fixture.repo.to_str().unwrap(),
@@ -26570,6 +26570,53 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         "chat-worker",
     ]);
     assert_eq!(reopened["chat"], Value::Null);
+    let removed = fixture.ok(&["rm", CHAT_NAME]);
+    assert_eq!(removed["chat"]["id"], *chat, "{removed}");
+    assert!(removed["children"].is_null(), "{removed}");
+    assert_eq!(fixture.ok(&["work"])[0]["name"], "chat-worker");
+}
+
+#[test]
+fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
+    let fixture = Fixture::new();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = Command::new("sleep").arg("600").spawn().unwrap();
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository["id"], "name": "planning", "agent": "claude",
+        "pid": agent.id()
+    }}));
+    assert_eq!(response["type"], "chat", "{response}");
+    let chat = response["data"]["id"].as_str().unwrap().to_owned();
+    // The chat's agent opens a workspace, and a child is split from it.
+    let output = fixture
+        .command()
+        .args(["--json", "add", fixture.repo.to_str().unwrap(), "opened"])
+        .env("SHOAL_CHAT", &chat)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    fixture.ok(&["split", "below", "--workspace", "opened"]);
+
+    // Removing the chat asks first, naming what it takes.
+    let (output, prompt) = fixture.interactive(&["rm", "planning"], "n\n");
+    assert!(!output.status.success(), "{prompt}");
+    let prompt = prompt.replace("\r\n", "\n");
+    assert!(prompt.contains("Remove chat: planning"), "{prompt}");
+    assert!(
+        prompt.contains("Removes the workspaces below it first")
+            && prompt.contains("opened, below"),
+        "{prompt}"
+    );
+    assert!(prompt.contains("Stops its agent"), "{prompt}");
+
+    let removed = fixture.ok(&["rm", "planning", "--yes"]);
+    assert_eq!(removed["chat"]["id"], chat.as_str(), "{removed}");
+    assert_eq!(removed["children"], serde_json::json!(["below", "opened"]));
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
+    assert!(!agent.wait().unwrap().success());
 }
 
 #[test]

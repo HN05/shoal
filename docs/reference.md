@@ -661,6 +661,7 @@ shoal status resource devices            # Workspaces that hold a devices lease
 shoal stop fix-login                     # Stop agents and commands until shoal resume
 shoal rm fix-login                       # Remove; choose what to keep if work differs
 shoal rm fix-login old-spike             # Remove several, confirming once for all
+shoal rm plan-cache                      # Remove a chat and the workspaces below it
 ```
 
 Bare `shoal` opens an fzf picker on the [inbox](#inbox) when something needs you,

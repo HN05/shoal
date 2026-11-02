@@ -1,10 +1,17 @@
-//! Removing workspaces after checking what each loses.
+//! Removing spaces after checking what each loses.
 use anyhow::{Result, ensure};
 
 use super::removal::{ensure_batch_removable, leaving};
 use crate::client::output::workspaces::{Removals, Removed};
 use crate::{
-    cli::{client::request, commands::agent_queue, context::Context, output::Style, ui},
+    cli::{
+        client::{self, request},
+        commands::{agent_queue, chat::removal as chats},
+        context::Context,
+        output::Style,
+        ui,
+    },
+    model::{Chat, PresentSpace, Spaces},
     protocol::RemovalMethod,
     removal::{RemovalCheck, RemovalResult, UnsavedWork},
 };
@@ -19,15 +26,41 @@ pub(in crate::cli::commands) async fn remove(
     {
         return Ok(code);
     }
-    let workspaces = ui::select_workspaces(ctx, names).await?;
+    let selected = ui::select_spaces(ctx, names, true).await?;
+    let spaces = client::spaces(&ctx.paths).await?;
+    let (chats, workspaces) = named_chats(&spaces, selected);
     let checks = check_removals(ctx, workspaces, yes).await?;
     if !yes {
-        confirm_removals(ctx, &checks)?;
+        confirm_removals(ctx, &chats, &checks, &spaces)?;
+    }
+    if let [chat] = chats.as_slice()
+        && checks.is_empty()
+    {
+        return remove_one_chat(ctx, chat, &spaces).await;
     }
     match <[RemovalCheck; 1]>::try_from(checks) {
-        Ok([check]) => remove_one(ctx, check).await,
-        Err(checks) => remove_each(ctx, checks).await,
+        Ok([check]) if chats.is_empty() => remove_one(ctx, check).await,
+        Ok(check) => remove_each(ctx, &chats, check.into(), &spaces).await,
+        Err(checks) => remove_each(ctx, &chats, checks, &spaces).await,
     }
+}
+
+/// The chats among the spaces `names` select, each once, and the other
+/// names, which name workspaces or nothing.
+fn named_chats(spaces: &Spaces, names: Vec<String>) -> (Vec<Chat>, Vec<String>) {
+    let mut chats: Vec<Chat> = Vec::new();
+    let mut others = Vec::new();
+    for name in names {
+        match spaces.find(&name) {
+            Some(PresentSpace::Chat(chat)) => {
+                if !chats.iter().any(|named| named.id == chat.id) {
+                    chats.push(chat);
+                }
+            }
+            _ => others.push(name),
+        }
+    }
+    (chats, others)
 }
 
 /// Check every workspace before removing any, so one that cannot be removed
@@ -66,6 +99,13 @@ async fn check_removals(
     Ok(checks)
 }
 
+async fn remove_one_chat(ctx: &Context, chat: &Chat, spaces: &Spaces) -> Result<i32> {
+    let removed = chats::remove(ctx, chat, spaces).await?;
+    let message = chats::message("Chat removed", &removed);
+    ctx.emit_styled(Style::Success, &message, removed)?;
+    Ok(0)
+}
+
 async fn remove_one(ctx: &Context, check: RemovalCheck) -> Result<i32> {
     let result = remove_checked(ctx, &check).await?;
     let message = removal_message("Workspace removed", &result);
@@ -73,11 +113,29 @@ async fn remove_one(ctx: &Context, check: RemovalCheck) -> Result<i32> {
     Ok(0)
 }
 
-/// Remove each checked workspace, going on after one fails. One that a
-/// removal before it took as its child is not removed again.
-async fn remove_each(ctx: &Context, checks: Vec<RemovalCheck>) -> Result<i32> {
-    let mut report = ui::Report::new("remove");
+/// Remove each of the `chats`, then each checked workspace, going on after
+/// one fails. One that a removal before it took as its child is not removed
+/// again.
+async fn remove_each(
+    ctx: &Context,
+    chats: &[Chat],
+    checks: Vec<RemovalCheck>,
+    spaces: &Spaces,
+) -> Result<i32> {
+    let mut removed_chats = ui::Report::new("remove");
     let mut taken = Vec::new();
+    for chat in chats {
+        match chats::remove(ctx, chat, spaces).await {
+            Ok(removed) => {
+                let message = chats::message(&format!("Removed {}", chat.name), &removed);
+                taken.extend(removed.children.iter().cloned());
+                removed_chats.done(ctx, &message, removed);
+            }
+            Err(error) => removed_chats.failed(ctx, &chat.name, &error),
+        }
+    }
+    let (chats, failed) = removed_chats.into_parts();
+    let mut report = ui::Report::new("remove");
     for check in checks {
         let name = &check.workspace.name;
         if taken.contains(name) {
@@ -92,7 +150,14 @@ async fn remove_each(ctx: &Context, checks: Vec<RemovalCheck>) -> Result<i32> {
             Err(error) => report.failed(ctx, name, &error),
         }
     }
-    report.finish(ctx, "", |removed, failed| Removals { removed, failed })
+    let chats_failed = !failed.is_empty();
+    let code = report.finish(ctx, "", |removed, more| Removals {
+        removed,
+        chats,
+        failed: failed.into_iter().chain(more).collect(),
+    })?;
+    // A chat that was not removed fails the command as a workspace does.
+    Ok(if chats_failed { 1 } else { code })
 }
 
 /// Remove the workspace `check` inspected, deleting only the unsaved work it
@@ -124,31 +189,50 @@ fn removed(removal: RemovalResult, check: &RemovalCheck, name: Option<&str>) -> 
     }
 }
 
-/// Ask once before removing workspaces that would lose unsaved work or
-/// holds, naming what each loses.
-fn confirm_removals(ctx: &Context, checks: &[RemovalCheck]) -> Result<()> {
-    let losses: Vec<(String, Vec<String>)> = checks
+/// Ask once before removing `chats` that take workspaces or stop an agent,
+/// or workspaces that would lose unsaved work or holds, naming what each
+/// loses.
+fn confirm_removals(
+    ctx: &Context,
+    chats: &[Chat],
+    checks: &[RemovalCheck],
+    spaces: &Spaces,
+) -> Result<()> {
+    let chat_losses = chats
         .iter()
-        .map(|check| (check.workspace.name.clone(), removal_losses(ctx, check)))
+        .map(|chat| (chat.name.clone(), chats::losses(chat, spaces)));
+    let losses: Vec<(String, Vec<String>)> = chat_losses
+        .chain(
+            checks
+                .iter()
+                .map(|check| (check.workspace.name.clone(), removal_losses(ctx, check))),
+        )
         .collect();
     if losses.iter().all(|(_, lines)| lines.is_empty()) {
         return Ok(());
     }
-    let action = match checks {
-        [check] => format!("Remove workspace: {}", check.workspace.name),
+    let kind = match (chats, checks) {
+        ([_], []) => "chat",
+        ([], [_]) => "workspace",
+        (_, []) => "chats",
+        ([], _) => "workspaces",
+        _ => "spaces",
+    };
+    let action = match losses.as_slice() {
+        [(name, _)] => format!("Remove {kind}: {name}"),
         _ => format!(
-            "Remove {} workspaces: {}",
-            checks.len(),
-            checks
+            "Remove {} {kind}: {}",
+            losses.len(),
+            losses
                 .iter()
-                .map(|check| check.workspace.name.as_str())
+                .map(|(name, _)| name.as_str())
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
     };
     ensure!(
         ui::confirm_losses(ctx, &action, &losses, "--yes")?,
-        "workspace removal canceled"
+        "removal canceled"
     );
     Ok(())
 }

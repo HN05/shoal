@@ -79,7 +79,7 @@ pub(super) async fn selected_spaces(
     names: Vec<String>,
 ) -> Result<Vec<PresentSpace>> {
     let mut spaces = Vec::new();
-    for selector in ui::select_spaces(ctx, names).await? {
+    for selector in ui::select_spaces(ctx, names, true).await? {
         let space = client::present_space(&ctx.paths, &selector)
             .await?
             .with_context(|| format!("no space {selector}"))?;

@@ -33,9 +33,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: LifecycleComman
             ..
         } => stop::run(&ctx, targets, yes, skip_children).await,
         LifecycleCommand::Rm {
-            workspace,
+            space,
             confirmation,
-        } => workspaces::remove(&ctx, workspace, confirmation.yes).await,
+        } => workspaces::remove(&ctx, space, confirmation.yes).await,
         LifecycleCommand::Cleanup { kind, args } => cleanup::run(&ctx, kind, args).await,
         LifecycleCommand::Move { command } => transfer::run(&ctx, command).await,
     }

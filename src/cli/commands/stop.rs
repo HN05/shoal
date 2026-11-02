@@ -92,7 +92,7 @@ pub(super) async fn processes(
     // it runs in.
     let selectors = match ui::current_chat(&None) {
         Some(chat) if selectors.is_empty() => vec![chat],
-        _ => ui::select_spaces(ctx, selectors).await?,
+        _ => ui::select_spaces(ctx, selectors, false).await?,
     };
     if selectors.len() > 1 {
         ensure_spaces(ctx, &selectors).await?;

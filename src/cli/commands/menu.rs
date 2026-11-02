@@ -613,8 +613,8 @@ async fn command(ctx: &Context, key: Key, row: Row) -> Result<Choice> {
     )))
 }
 
-/// The name of the running chat the space `id` names, if it is one, whose
-/// inbox rows only some keys act on.
+/// The name of the chat the space `id` names, if it is one, whose inbox
+/// rows only some keys act on.
 async fn chat_name(ctx: &Context, id: Option<&str>) -> Result<Option<String>> {
     let Some(id) = id else {
         return Ok(None);
@@ -625,11 +625,15 @@ async fn chat_name(ctx: &Context, id: Option<&str>) -> Result<Option<String>> {
     })
 }
 
-/// What `key` does to the chat `chat`: only attaching and viewing its items
-/// act on a chat.
+/// What `key` does to the chat `chat`: only attaching, viewing its items
+/// and removing it act on a chat.
 async fn chat_command(ctx: &Context, key: Key, chat: String) -> Result<Command> {
     let chat = Some(chat);
     Ok(match key {
+        Key::Delete => Command::Lifecycle(LifecycleCommand::Rm {
+            space: chat.into_iter().collect(),
+            confirmation: ConfirmationArgs::default(),
+        }),
         Key::Attach => Command::Sessions(SessionsCommand::Attach {
             target: chat,
             session: None,
@@ -753,7 +757,7 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
     Ok(match key {
         Key::Enter => Command::Workspace(WorkspaceCommand::Cd { workspace }),
         Key::Delete => Command::Lifecycle(LifecycleCommand::Rm {
-            workspace: workspace.into_iter().collect(),
+            space: workspace.into_iter().collect(),
             confirmation: ConfirmationArgs::default(),
         }),
         Key::Status => Command::Workspace(WorkspaceCommand::Status {

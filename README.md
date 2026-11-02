@@ -425,8 +425,9 @@ tools such as `agent-browser`, values fetched from your secret store; see
 
 ## Cleanup
 
-`shoal rm` removes workspaces and their resources, prompting once, and only before
-it deletes uncommitted work. It deletes the branch too unless the branch has commits that are
+`shoal rm` removes workspaces and chats with their resources and the workspaces
+below them, prompting once, and only before it deletes uncommitted work, takes
+workspaces below a chat or stops a chat's agent. It deletes the branch too unless the branch has commits that are
 on no remote and not on the default branch; Shoal deletes such a kept branch once
 they are, and `shoal cleanup branches` deletes kept branches, several at a time, with
 their commits. `shoal stop` keeps the workspace.
@@ -439,7 +440,7 @@ shared caches nothing is using, with why it keeps the other workspaces. On a ter
 it opens a picker, where Tab selects several, and removes what you pick.
 `shoal cleanup workspaces`, `branches` or `caches` acts on one kind, and `shoal status`
 shows why it keeps one workspace.
-Every removal can be undone for 30 days: `shoal work restore` picks a removed workspace,
+Every workspace removal can be undone for 30 days: `shoal work restore` picks a removed workspace,
 and `shoal work restore <workspace>` opens one again with its uncommitted files and links;
 `shoal resume` then continues the agents the removal stopped. Removal keeps the
 workspace's HEAD and unsaved files in a checkpoint, as `shoal work checkpoint` does and

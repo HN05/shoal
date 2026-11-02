@@ -97,16 +97,24 @@ pub async fn select_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<
 
 /// The spaces, workspaces or chats, a command that acts on several takes:
 /// those named, each once and in order, otherwise the current workspace,
-/// otherwise those picked among the workspaces and running chats. It ends
-/// what it acts on, so it never defaults to the chat it runs in. A name no
-/// workspace has stays as given, for a chat or the daemon's refusal.
-pub async fn select_spaces(ctx: &Context, names: Vec<String>) -> Result<Vec<String>> {
+/// otherwise those picked among the workspaces and the running chats, or
+/// every chat when `stopped_chats`. It ends what it acts on, so it never
+/// defaults to the chat it runs in. A name no workspace has stays as given,
+/// for a chat or the daemon's refusal.
+pub async fn select_spaces(
+    ctx: &Context,
+    names: Vec<String>,
+    stopped_chats: bool,
+) -> Result<Vec<String>> {
     let mut selected = named_workspaces(ctx, names).await?;
     if selected.is_empty() {
         selected = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
             Resolution::Workspace(id) => vec![id],
             Resolution::Picker(workspaces) => {
-                let chats = client::chats(&ctx.paths).await?;
+                let chats = match stopped_chats {
+                    true => client::recorded_chats(&ctx.paths).await?,
+                    false => client::chats(&ctx.paths).await?,
+                };
                 require_argument(ctx, "spaces", SPACE)?;
                 let entries = space_entries(ctx, workspaces, &chats).await;
                 ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());

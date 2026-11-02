@@ -280,3 +280,16 @@ fn resume_completes_resumable_spaces() {
         .collect();
     assert_eq!(offered, [("talk".into(), Some(STOPPED_CHAT.to_owned()))]);
 }
+
+#[test]
+fn rm_completes_spaces() {
+    let command = <crate::cli::Cli as clap::CommandFactory>::command();
+    // Its arguments are deferred until the subcommand builds.
+    let mut rm = command.find_subcommand("rm").unwrap().clone();
+    rm.build();
+    let positional = rm.get_positionals().next().unwrap();
+    assert_eq!(
+        target_of(positional.get_id().as_str(), "", "rm", Need::Any),
+        Some(Target::Spaces(Need::Any))
+    );
+}

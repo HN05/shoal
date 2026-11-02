@@ -26,6 +26,7 @@ use crate::{
     repository,
 };
 
+pub(super) mod removal;
 mod rename;
 
 pub(super) use rename::{rename, request_name};

@@ -41,14 +41,15 @@ pub enum LifecycleCommand {
         #[arg(long, conflicts_with_all = ["all", "yes", "skip_children", "interrupt"])]
         leftovers: bool,
     },
-    /// Remove workspaces and release their resources.
+    /// Remove spaces, workspaces or chats, and release their resources.
     ///
-    /// A branch goes too when a remote or the default branch has all its commits; otherwise it
-    /// stays. Deleting uncommitted changes or commits on a detached HEAD needs confirmation,
-    /// asked once for every workspace.
+    /// Removing a space first removes the workspaces below it, and removing a chat stops its
+    /// agent. A branch goes too when a remote or the default branch has all its commits;
+    /// otherwise it stays. Deleting uncommitted changes or commits on a detached HEAD needs
+    /// confirmation, asked once for every space.
     Rm {
-        #[arg(value_name = "WORKSPACE")]
-        workspace: Vec<String>,
+        #[arg(value_name = "SPACE")]
+        space: Vec<String>,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },
