@@ -3401,7 +3401,7 @@ A proposed `issue open` records every option it was given, with the workspace,
 branch, commit and agent; running it again unchanged returns the same request.
 The request belongs to the repository, so it stays when the workspace is removed.
 A proposed `pr open` pushes the branch as usual, unless
-[`[permissions] push`](#approval-for-agent-pushes) holds the push back or refuses it, links the branch's open PR if
+[`[permissions] push`](#approval-for-agent-pushes) holds the push back, links the branch's open PR if
 there is one, and otherwise records the PR it would open, with its defaults
 filled in, at the branch's current commit. Running it again at the same commit
 returns that request; at a newer commit it replaces it, and the old one stays
@@ -3449,8 +3449,8 @@ the opened item.
 A proposed PR still shows its branch and commits on the forge before you
 decide, and an agent can push with plain `git push` at any time. `[permissions]
 push = "propose"` keeps an agent's pushes to the workspace repository's remotes
-off the forge until you approve them; `"deny"` refuses them, so agents never
-push; `"direct"`, the default, pushes at once. Unscoped callers always push
+off the forge until you approve them; `"deny"` refuses them; `"direct"`, the
+default, pushes at once. Unscoped callers always push
 directly.
 
 ```toml

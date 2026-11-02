@@ -2030,8 +2030,9 @@ stay direct.
 A proposed PR still publishes its branch, and agents push with plain Git too, so
 `[permissions] push = "propose"` holds a scoped caller's pushes to the workspace
 repository's remotes for the user (`"direct"` is the default; unscoped callers
-always push); `"deny"` refuses them outright for repositories where agents never
-push, through the same helper and `pr open` check, recording nothing. A push request is a proposal, decided only by the user, and binds
+always push); `"deny"` refuses them outright for repositories that should get
+no agent push, through the same helper and `pr open` check, recording nothing.
+A push request is a proposal, decided only by the user, and binds
 exactly what the push changes: the remote and, where it has several, the push
 URL, the ref, the object, and for a forced push or a deletion what it replaces,
 so approval cannot push something the user did not see. A newer push to the
