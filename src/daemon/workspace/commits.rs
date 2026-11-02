@@ -7,8 +7,8 @@ use anyhow::{Context, Result};
 use super::{Manager, derive_workspace_name, restore::RestoredFiles};
 use crate::{
     git,
-    model::{MadeFor, RemovedWorkspace, Repository, StartingCommit, Workspace},
-    protocol::{CommitStart, CreationOptions},
+    model::{MadeFor, OpenedWorkspace, RemovedWorkspace, Repository, StartingCommit, Workspace},
+    protocol::{CommitStart, CreationOptions, PullHead},
     state::WorkspaceState,
 };
 
@@ -37,16 +37,115 @@ impl Manager {
             None => None,
         };
         let (repo, _guard) = self.lock_repository(repository).await?;
-        let start = self.resolve_start(&repo, start).await?;
+        self.create_at_start(&repo, parent, start, chat, options)
+            .await
+    }
+
+    /// Open PR `url`'s `head` in a workspace at a commit in `repository`:
+    /// the one made for or linked to the PR, moved to `head` when the PR's
+    /// head moved, so there is at most one per PR, or else a new top-level
+    /// one given to `chat`, or to the user.
+    pub async fn open_pull_head(
+        &self,
+        repository: crate::repository::Selector,
+        url: String,
+        head: PullHead,
+        chat: Option<String>,
+        options: CreationOptions,
+    ) -> Result<OpenedWorkspace> {
+        let (repo, _guard) = self.lock_repository(repository).await?;
+        if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
+            self.move_to_pull_head(&repo, &workspace, &head).await?;
+            return Ok(OpenedWorkspace {
+                workspace: self.workspace(&workspace.id).await?,
+                reused: true,
+            });
+        }
+        let start = CommitStart::PullHead(head);
+        Ok(OpenedWorkspace {
+            workspace: self
+                .create_at_start(&repo, None, start, chat, options)
+                .await?,
+            reused: false,
+        })
+    }
+
+    /// Create a workspace at `start` in `repo`, whose Git gate the caller
+    /// holds, as [`Self::create_commit_workspace`] does.
+    async fn create_at_start(
+        &self,
+        repo: &Repository,
+        parent: Option<String>,
+        start: CommitStart,
+        chat: Option<String>,
+        options: CreationOptions,
+    ) -> Result<Workspace> {
+        let start = self.resolve_start(repo, start).await?;
         let head = start.at.commit.clone();
         let workspace = self
-            .record_commit_workspace(&repo, &start.name, start.at, parent, options)
+            .record_commit_workspace(repo, &start.name, start.at, parent, options)
             .await?;
         let result = self
-            .materialize_commit_worktree(&repo, &workspace, &head, None)
+            .materialize_commit_worktree(repo, &workspace, &head, None)
             .await;
         let created = self.settle_creation(&workspace, result).await?;
         self.give_to_chat(&created.id, chat).await
+    }
+
+    /// The workspace at a commit of `repository_id` made for PR `number` or
+    /// linked to it at `url`.
+    async fn pull_workspace(
+        &self,
+        repository_id: &str,
+        url: &str,
+        number: u64,
+    ) -> Result<Option<Workspace>> {
+        let made_for = Some(MadeFor::Pr(number));
+        Ok(self.list_workspaces().await?.into_iter().find(|workspace| {
+            workspace.repository_id == repository_id
+                && workspace.at.as_ref().is_some_and(|at| {
+                    at.made_for == made_for || workspace.links.prs.iter().any(|pr| pr == url)
+                })
+        }))
+    }
+
+    /// Move `workspace`, whose repository's Git gate the caller holds, to
+    /// the PR head `head` and record it as its starting commit, unless it is
+    /// there already. One with commits or changes of its own is refused, as
+    /// a branch workspace that diverged from its PR is.
+    async fn move_to_pull_head(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        head: &PullHead,
+    ) -> Result<()> {
+        self.check_reopen(workspace, None).await?;
+        let at = workspace
+            .at
+            .as_ref()
+            .context("workspace records no starting commit")?;
+        if at.commit == head.commit {
+            return Ok(());
+        }
+        let current = crate::daemon::links::pr::current_head(workspace).await?;
+        anyhow::ensure!(
+            current == at.commit && git::status::porcelain(&workspace.path).await?.is_empty(),
+            "workspace {} has commits or changes of its own since PR #{}'s earlier head; remove it to open the PR's new head",
+            workspace.name,
+            head.number
+        );
+        let fetched = pull_head(repo, head).await?;
+        git::detached::move_to(&workspace.path, &fetched.at.commit).await?;
+        let (id, commit) = (workspace.id.clone(), fetched.at.commit);
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE workspaces SET start_commit=?2,base_commit=?2 WHERE id=?1",
+                    rusqlite::params![id, commit],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     /// Open the removed workspace at a commit `removed` again, without a
@@ -111,11 +210,7 @@ impl Manager {
     async fn resolve_start(&self, repo: &Repository, start: CommitStart) -> Result<Start> {
         match start {
             CommitStart::Revision(base) => self.resolve_revision(repo, base.as_deref()).await,
-            CommitStart::PullHead {
-                number,
-                reference,
-                commit,
-            } => pull_head(repo, number, &reference, commit).await,
+            CommitStart::PullHead(head) => pull_head(repo, &head).await,
         }
     }
 
@@ -148,25 +243,21 @@ impl Manager {
     }
 }
 
-/// PR `number`'s head, which `origin` serves under `reference`, fetched and
-/// checked to be the `commit` the forge reported.
-async fn pull_head(
-    repo: &Repository,
-    number: u64,
-    reference: &str,
-    commit: String,
-) -> Result<Start> {
-    let fetched = git::fetch::reference(&repo.path, "origin", reference).await?;
+/// A PR's `head`, fetched from `origin` and checked to be the commit the
+/// forge reported.
+async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Start> {
+    let fetched = git::fetch::reference(&repo.path, "origin", &head.reference).await?;
     anyhow::ensure!(
-        fetched == commit,
-        "PR #{number} moved while its head was fetched; run the command again"
+        fetched == head.commit,
+        "PR #{} moved while its head was fetched; run the command again",
+        head.number
     );
     Ok(Start {
         at: StartingCommit {
-            commit,
-            made_for: Some(MadeFor::Pr(number)),
+            commit: fetched,
+            made_for: Some(MadeFor::Pr(head.number)),
         },
-        name: format!("pr-{number}"),
+        name: format!("pr-{}", head.number),
     })
 }
 

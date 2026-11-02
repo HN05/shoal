@@ -74,6 +74,17 @@ pub(super) async fn handle(
                 .create_commit_workspace(repository, parent, start, chat, options)
                 .await?,
         ),
+        WorkspaceMethod::OpenPullHead {
+            repository,
+            url,
+            head,
+            chat,
+            options,
+        } => Body::OpenedWorkspace(
+            manager
+                .open_pull_head(repository, url, head, chat, options)
+                .await?,
+        ),
         WorkspaceMethod::ReopenWorkspace { workspace } => {
             Body::OpenedWorkspace(manager.reopen_workspace(&workspace).await?)
         }
@@ -251,6 +262,7 @@ impl Scoped for WorkspaceMethod {
             WorkspaceMethod::OpenBranch { .. }
             | WorkspaceMethod::CreateWorkspace { .. }
             | WorkspaceMethod::CreateCommitWorkspace { parent: None, .. }
+            | WorkspaceMethod::OpenPullHead { .. }
             | WorkspaceMethod::ReopenWorkspace { .. }
             | WorkspaceMethod::CheckCreation { .. }
             | WorkspaceMethod::CheckDependencies { .. }

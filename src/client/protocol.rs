@@ -75,7 +75,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use subscriptions::SubscriptionMethod;
 pub use version::VERSION;
-pub use workspaces::{CommitStart, CreationOptions, WorkspaceMethod};
+pub use workspaces::{CommitStart, CreationOptions, PullHead, WorkspaceMethod};
 
 /// The first protocol whose wrappers read [`Control::RestoreWaits`].
 pub const RESTORE_WAITS: u32 = 174;

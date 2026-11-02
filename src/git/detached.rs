@@ -23,6 +23,17 @@ pub async fn add_workspace(repo: &Path, path: &Path, commit: &str) -> Result<()>
     worktree_add(repo, path, commit, &[]).await
 }
 
+/// Move the detached worktree at `worktree` to `commit`, which Git refuses
+/// when that would overwrite changes. No hooks run.
+pub async fn move_to(worktree: &Path, commit: &str) -> Result<()> {
+    let mut command = super::isolated_command_without_submodules(worktree);
+    command.args(["checkout", "--detach", commit, "--"]);
+    super::output(command)
+        .await
+        .with_context(|| format!("check out {commit} at {}", worktree.display()))
+        .map(drop)
+}
+
 async fn worktree_add(repo: &Path, path: &Path, commit: &str, options: &[&str]) -> Result<()> {
     let mut command = super::isolated_command_without_submodules(repo);
     command

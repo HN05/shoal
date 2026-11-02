@@ -55,6 +55,18 @@ pub enum WorkspaceMethod {
         #[serde(default)]
         options: CreationOptions,
     },
+    /// Open PR `url`'s `head` in a workspace at a commit: the one in
+    /// `repository` made for or linked to the PR, moved to the head when the
+    /// PR's head moved, else a new top-level one given to `chat`, or else to
+    /// the user.
+    OpenPullHead {
+        repository: crate::client::repository::Selector,
+        url: String,
+        head: PullHead,
+        chat: Option<String>,
+        #[serde(default)]
+        options: CreationOptions,
+    },
     /// Refuse what `CreateWorkspace` or `OpenBranch` would refuse in this
     /// request, without creating anything.
     CheckCreation {
@@ -204,13 +216,16 @@ pub struct CreationOptions {
 pub enum CommitStart {
     /// A revision as `--base` names it; `None` for the default branch.
     Revision(Option<String>),
-    /// PR `number`'s head, which `origin` serves under `reference`, expected
-    /// at `commit`.
-    PullHead {
-        number: u64,
-        reference: String,
-        commit: String,
-    },
+    PullHead(PullHead),
+}
+
+/// PR `number`'s head, which `origin` serves under `reference`, expected at
+/// `commit`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PullHead {
+    pub number: u64,
+    pub reference: String,
+    pub commit: String,
 }
 
 impl WorkspaceMethod {

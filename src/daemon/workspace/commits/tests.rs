@@ -152,10 +152,12 @@ async fn a_pr_head_is_fetched_from_the_ref_its_forge_serves() {
         )
         .await
         .unwrap();
-    let pull = |commit: &str| CommitStart::PullHead {
-        number: 812,
-        reference: "refs/pull/812/head".into(),
-        commit: commit.into(),
+    let pull = |commit: &str| {
+        CommitStart::PullHead(crate::protocol::PullHead {
+            number: 812,
+            reference: "refs/pull/812/head".into(),
+            commit: commit.into(),
+        })
     };
     let moved = create(&manager, &repo.id, None, pull(&"0".repeat(40))).await;
     assert!(moved.unwrap_err().to_string().contains("moved"));
@@ -316,4 +318,65 @@ async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
         "draft\n"
     );
     assert!(git(&checkout, &["branch", "--list", &workspace.name]).is_empty());
+}
+
+#[tokio::test]
+async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work() {
+    let (temp, manager) = manager().await;
+    let origin = repository(temp.path(), "origin");
+    git(
+        temp.path(),
+        &["clone", "-q", origin.to_str().unwrap(), "clone"],
+    );
+    let push_head = |file: &str| {
+        std::fs::write(origin.join(file), "fork\n").unwrap();
+        commit(&origin, file);
+        let head = git(&origin, &["rev-parse", "HEAD"]).trim().to_owned();
+        git(&origin, &["update-ref", "refs/pull/9/head", &head]);
+        head
+    };
+    let repo = manager
+        .register_repository(
+            temp.path().join("clone").to_str().unwrap().into(),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let url = "https://forge.example/team/repo/pulls/9".to_owned();
+    let open = |commit: String| {
+        manager.open_pull_head(
+            repo.id.as_str().into(),
+            url.clone(),
+            crate::protocol::PullHead {
+                number: 9,
+                reference: "refs/pull/9/head".into(),
+                commit,
+            },
+            None,
+            Default::default(),
+        )
+    };
+    let first = push_head("first");
+    let opened = open(first.clone()).await.unwrap();
+    assert!(!opened.reused);
+    let again = open(first).await.unwrap();
+    assert!(again.reused);
+    assert_eq!(again.workspace.id, opened.workspace.id);
+
+    let second = push_head("second");
+    let moved = open(second.clone()).await.unwrap();
+    assert_eq!(moved.workspace.id, opened.workspace.id);
+    assert_eq!(moved.workspace.at.unwrap().commit, second);
+    assert_eq!(
+        moved.workspace.base_commit.as_deref(),
+        Some(second.as_str())
+    );
+    assert_eq!(head(&moved.workspace.path), (second, String::new()));
+
+    std::fs::write(moved.workspace.path.join("own"), "own\n").unwrap();
+    commit(&moved.workspace.path, "own");
+    let third = push_head("third");
+    let refused = open(third).await.unwrap_err();
+    assert!(refused.to_string().contains("of its own"), "{refused:#}");
 }
