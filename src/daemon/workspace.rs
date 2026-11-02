@@ -38,6 +38,7 @@ mod repo_removal;
 mod restore;
 pub(crate) mod review;
 mod sessions;
+mod shared_scans;
 mod shutdown_stop;
 mod signals;
 pub(crate) mod spotlight;
@@ -126,6 +127,8 @@ pub struct Manager {
     /// a system shutdown is cancelled, so later ones leave the work alone.
     pub(crate) shutdown_stopped: tokio::sync::Mutex<bool>,
     pub(crate) signals: signals::Signals,
+    /// Process scans shared by the checks for agents' running work.
+    pub(crate) work_scans: shared_scans::SharedScans,
     pub(crate) usage: usage::Usage,
     pub(crate) leftovers: crate::daemon::leftovers::Leftovers,
     /// Held shared from reading the tracked processes until those found
@@ -173,6 +176,7 @@ impl Manager {
             operations: Default::default(),
             shutdown_stopped: Default::default(),
             signals: Default::default(),
+            work_scans: Default::default(),
             usage: Default::default(),
             leftovers: Default::default(),
             chat_handoffs: Default::default(),

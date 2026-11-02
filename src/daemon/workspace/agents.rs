@@ -20,7 +20,7 @@ use crate::{
     agent::ModelChoice,
     daemon::notifications::NotificationKind,
     execution::TrackedAgent,
-    process::{execution::Processes, identity as process},
+    process::execution::Processes,
     protocol::timing,
     state::{AgentState, ExecutionState, WorkspaceState},
 };
@@ -841,7 +841,11 @@ impl Manager {
         if agents.is_empty() {
             return Ok(false);
         }
-        let scan = process::scan(agents.iter().map(|agent| agent.id.clone()).collect()).await?;
+        // Only wake checks read this, so checks made at the same time share a scan.
+        let scan = self
+            .work_scans
+            .scan(agents.iter().map(|agent| agent.id.clone()).collect())
+            .await?;
         Ok(agents
             .iter()
             .any(|agent| Processes::runs_outside_group(agent, &scan)))

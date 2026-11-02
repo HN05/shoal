@@ -266,6 +266,8 @@ wakes an idle agent only while something besides the agents runs in its
 workspace, checked when the agent would be woken rather than when the warning
 is queued, since a turn that has just ended leaves nothing to stop and each
 woken turn costs tokens; otherwise it waits for the agent's next update or turn.
+Checks made at the same time share one process scan that starts after each asks;
+operations that stop or remove processes verify ownership with their own.
 A disk warning still wakes it, since deleting files frees space.
 Their thresholds are not
 validated against stop thresholds, so lowering a stop threshold never invalidates
