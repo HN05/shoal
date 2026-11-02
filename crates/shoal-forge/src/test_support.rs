@@ -111,6 +111,21 @@ fn read_request(stream: &mut std::net::TcpStream) -> Option<Received> {
     Some(request)
 }
 
+/// A check that holds each caller until `parts` callers are waiting, and
+/// says whether they all arrived before a generous hang guard ran out.
+pub fn together(parts: usize) -> impl Fn() -> bool + Send + Sync {
+    let arrivals = std::sync::Arc::new((std::sync::Mutex::new(0), std::sync::Condvar::new()));
+    move || {
+        let (count, arrived) = &*arrivals;
+        let mut count = count.lock().unwrap();
+        *count += 1;
+        arrived.notify_all();
+        let guard = std::time::Duration::from_secs(60);
+        let wait = arrived.wait_timeout_while(count, guard, |count| *count < parts);
+        !wait.unwrap().1.timed_out()
+    }
+}
+
 /// The repository `path` of a `kind` forge that `server` stands in for.
 pub fn repo_on(server: &Server, kind: crate::backends::ForgeKind, path: &str) -> crate::ForgeRepo {
     crate::ForgeRepo {

@@ -40,8 +40,8 @@ mod held;
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
 /// How many spaces the background poll reads at once, and how many of one
-/// space's items: each read runs forge CLI or curl processes, and a slow
-/// forge must not hold back every other space's poll.
+/// space's items: each read runs curl processes, and a slow forge must not
+/// hold back every other space's poll.
 const POLLED_SPACES_AT_ONCE: usize = 4;
 const ITEMS_READ_AT_ONCE: usize = 4;
 

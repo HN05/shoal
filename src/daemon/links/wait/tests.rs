@@ -2247,7 +2247,7 @@ async fn the_background_poll_reads_spaces_together() {
         .await
         .unwrap();
     // Each workspace's issue is answered only once both are being read.
-    let arrivals = Arc::new((Mutex::new(0), std::sync::Condvar::new()));
+    let arrived = crate::forge::test_support::together(2);
     let server = crate::forge::test_support::Server::start(move |request| {
         let Some(number) = request
             .line
@@ -2258,13 +2258,7 @@ async fn the_background_poll_reads_spaces_together() {
         if number.contains("/comments") {
             return (200, Vec::new(), "[]".into());
         }
-        let (count, arrived) = &*arrivals;
-        let mut count = count.lock().unwrap();
-        *count += 1;
-        arrived.notify_all();
-        let guard = Duration::from_secs(60);
-        let wait = arrived.wait_timeout_while(count, guard, |count| *count < 2);
-        if wait.unwrap().1.timed_out() {
+        if !arrived() {
             return (500, Vec::new(), Vec::new());
         }
         let issue = json!({"number": number.parse::<u64>().unwrap(), "title": "Fix",
