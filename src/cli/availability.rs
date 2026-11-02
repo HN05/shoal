@@ -1,5 +1,6 @@
-//! The facts the CLI judges a command's workspaces against, which
-//! [`crate::client::availability`] decides with.
+//! What each CLI command needs of its workspace, and the facts the CLI
+//! judges its workspaces against, which [`crate::client::availability`]
+//! decides with.
 use std::collections::{HashMap, HashSet};
 
 pub(crate) use crate::client::availability::*;
@@ -10,6 +11,70 @@ use crate::{
 };
 
 impl Need {
+    /// The need of the built-in command at `path`, such as `["release", "hold"]`; `None` for other names, which run configured commands.
+    pub fn of(path: &[&str]) -> Option<Self> {
+        Some(match path {
+            ["attach"] => Self::Session,
+            ["cd"] => Self::Directory,
+            ["stop" | "restart"] => Self::Running,
+            ["repo", "labels"]
+            | ["forge", "capabilities" | "reactions" | "api" | "download"]
+            | ["ci", ..] => Self::Any,
+            ["work", "setup"] => Self::Setup,
+            ["work", "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
+            ["work", "checkpoint"] => Self::Checkpoint,
+            ["branch", "rename"] => Self::Settled,
+            ["branch", "base", "clear"] => Self::Base,
+            ["branch", "base", ..] => Self::Any,
+            ["work", "env"] => Self::Ready,
+            ["release", "hold"] => Self::Holds,
+            ["link" | "unlink"] | ["issue", "open"] => Self::Links,
+            [
+                "run" | "edit" | "claude" | "codex" | "t3" | "happy" | "land" | "split" | "done"
+                | "watch" | "ready" | "acquire" | "release",
+                ..,
+            ]
+            | ["review", "run"]
+            | ["pr", "open"]
+            | ["questions", "ask"]
+            | ["demo", "start"] => Self::Ready,
+            [
+                "status" | "diff" | "conflicts" | "rm" | "leases" | "messages" | "files"
+                | "questions" | "approvals" | "view" | "resume" | "catalog" | "history" | "config"
+                | "pr" | "issue" | "alerts" | "demo" | "queue" | "review",
+                ..,
+            ] => Self::Any,
+            ["internal", ..] => Self::Any,
+            _ => return None,
+        })
+    }
+
+    /// The need of the command at `path`; configured commands need a ready
+    /// workspace to run in.
+    pub fn of_command(path: &[&str]) -> Self {
+        Self::of(path).unwrap_or(Self::Ready)
+    }
+
+    /// What a picker reports when no workspace is left to offer.
+    pub fn none_offered(self) -> &'static str {
+        match self {
+            Self::Session => "no workspace or chat has an agent session",
+            Self::Running => "nothing is running in any workspace",
+            Self::Done => "no workspace is done",
+            Self::Base => "no workspace has a base workspace",
+            Self::Holds => "no workspace has holds",
+            Self::Marks => "no workspace is marked ready",
+            Self::Directory => "no workspace directory exists",
+            Self::Untracked => "no workspace or chat",
+            Self::Any
+            | Self::Ready
+            | Self::Settled
+            | Self::Links
+            | Self::Setup
+            | Self::Checkpoint => "no workspaces",
+        }
+    }
+
     /// Flags that change the operation also change which workspaces it offers.
     pub fn of_matches(path: &[&str], matches: &clap::ArgMatches) -> Option<Self> {
         let flag = |name| matches.try_get_one::<bool>(name).ok().flatten() == Some(&true);
