@@ -72,7 +72,7 @@ instead of the PR delivery guidance below.
   then rechecks, under the gates workspace creation takes and in the transaction
   that records the removal, that no workspace, queued agent, chat, pending issue
   proposal, kept branch, borrowed resource, unexpired checkpoint, removal
-  record or ended chat's files, or checkout work the remotes' advertised branches and tags lack remains;
+  record or removed chat's files, or checkout work the remotes' advertised branches and tags lack remains;
   removing one with any of them is a blocker.
   Workspace removal confirmations list uncommitted changes
   and untracked files with Git status codes, bounding the preview and reporting omitted
@@ -133,7 +133,7 @@ instead of the PR delivery guidance below.
   coordinating agents of the workspaces below theirs, queue messages for a workspace's agents, and delivery deletes a message. Agent hooks deliver
   messages and queued item activity, replacing a running watch, and a Claude Code
   hook wakes the idle agent; a chat's hooks deliver its own queue of its workers'
-  events, which the user receives as notifications if the chat ends first; a workspace's own Shoal comments, thread replies,
+  events, which the user receives as notifications if the chat is removed first; a workspace's own Shoal comments, thread replies,
   closing and reopening are not reported back to it. The only terminal input Shoal writes is
   the tracked wrapper's fixed prompt into an idle Codex's terminal session, or an
   idle Claude Code's after an interrupted turn, once per idle stretch, the

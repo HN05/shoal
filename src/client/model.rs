@@ -1017,6 +1017,27 @@ impl Spaces {
             .find(|chat| named(&chat.id, &chat.name))
             .map(|chat| PresentSpace::Chat(chat.clone()))
     }
+
+    /// The workspaces below the chat `id`, nearest first: those it opened
+    /// that no workspace was split from, and those split from them in turn.
+    pub fn below_chat(&self, id: &str) -> Vec<&Workspace> {
+        let mut below: Vec<&Workspace> = self
+            .workspaces
+            .iter()
+            .filter(|workspace| {
+                workspace.chat.as_deref() == Some(id) && workspace.parent_workspace.is_none()
+            })
+            .collect();
+        let mut next = 0;
+        while let Some(parent) = below.get(next) {
+            let children = self.workspaces.iter().filter(|workspace| {
+                (workspace.parent_workspace.as_ref()).is_some_and(|above| above.id == parent.id)
+            });
+            below.extend(children);
+            next += 1;
+        }
+        below
+    }
 }
 
 /// A place Shoal created for a workspace, which closes with it.

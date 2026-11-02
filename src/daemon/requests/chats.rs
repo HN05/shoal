@@ -38,7 +38,9 @@ pub(super) async fn handle(
             manager.return_to_saved(&chat, pid, &error).await?;
             Body::Ok
         }
-        ChatMethod::DiscardChat { chat } => Body::Chat(manager.discard_saved_chat(&chat).await?),
+        ChatMethod::RemoveChat { chat, children } => {
+            Body::RemovedChat(manager.remove_chat(&chat, children).await?)
+        }
         ChatMethod::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
         ChatMethod::RenameChat { chat, name } => {
@@ -60,7 +62,7 @@ impl Scoped for ChatMethod {
             | ChatMethod::MoveChat { .. }
             | ChatMethod::RestoreChat { .. }
             | ChatMethod::SaveChat { .. }
-            | ChatMethod::DiscardChat { .. }
+            | ChatMethod::RemoveChat { .. }
             | ChatMethod::RenameChat { .. }
             | ChatMethod::CheckChatName { .. }
             | ChatMethod::FreeChatName { .. } => return Err(denied()),

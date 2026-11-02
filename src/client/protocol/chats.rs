@@ -20,7 +20,7 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         hands_over: bool,
     },
-    /// Run the saved chat `chat`, by ID, again as process `pid`, as
+    /// Run the stopped chat `chat`, by ID, again as process `pid`, as
     /// [`Self::StartChat`] records a new one.
     RestoreChat {
         chat: String,
@@ -30,7 +30,7 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         hands_over: bool,
     },
-    /// Process `pid` could not restore the saved chat `chat`, failing with
+    /// Process `pid` could not restore the stopped chat `chat`, failing with
     /// `error`; the chat waits for `shoal resume` again if `pid` had taken
     /// it over.
     SaveChat {
@@ -45,9 +45,13 @@ pub enum ChatMethod {
         pid: u32,
     },
     ListChats,
-    /// End the saved chat `chat`, by ID or name, without restoring it.
-    DiscardChat {
+    /// Remove the chat `chat`, by ID or name, stopping its agent: first
+    /// the spaces below it, of which `children`, when given, are the IDs the
+    /// caller saw and the only ones it takes.
+    RemoveChat {
         chat: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        children: Option<Vec<String>>,
     },
     /// Give the running chat `chat`, by ID or name, the name `name`; the
     /// reply also names the chat as it was before.

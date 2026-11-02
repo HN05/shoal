@@ -290,30 +290,16 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
         ["worker: unread", "worker: marked ready"]
     );
     assert!(user(&manager).await.is_empty());
-    manager.discard_saved_chat(&chat.id).await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
     assert!(received(&manager, &chat).await.is_empty());
     let unread = (
         Some("worker".to_owned()),
         NotificationKind::AgentMessage,
         "unread".to_owned(),
     );
-    assert_eq!(user(&manager).await, std::slice::from_ref(&unread));
-    // The worker is the user's again.
-    manager
-        .send_message(&worker.id, "later".into(), Vec::new(), &Attacher::User)
-        .await
-        .unwrap();
-    assert_eq!(
-        user(&manager).await,
-        [
-            unread,
-            (
-                Some("worker".into()),
-                NotificationKind::AgentMessage,
-                "later".into()
-            )
-        ]
-    );
+    assert_eq!(user(&manager).await, [unread]);
+    // The worker went first, with the chat it was below.
+    assert!(manager.workspace(&worker.id).await.is_err());
 }
 
 #[tokio::test]
@@ -364,7 +350,10 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
 
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    manager.discard_saved_chat(&chat.id).await.unwrap();
+    // Opened outside the chat, the worker is the user's and stays when the
+    // chat is removed.
+    manager.assign_chat(&worker.id, None).await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
     let handed = manager.notifications(true, 50).await.unwrap();
     assert_eq!(handed.len(), 1);
     let id = handed[0].id;
@@ -449,10 +438,11 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         destination.join(copy.strip_prefix(&source).unwrap())
     );
 
-    // Discarded once stopped, the chat hands the files to the user.
+    // Removed with nothing below it, the chat hands the files to the user.
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    manager.discard_saved_chat(&chat.id).await.unwrap();
+    manager.assign_chat(&worker.id, None).await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
     let notifications = manager.notifications(false, 100).await.unwrap();
     let [notification] = notifications.as_slice() else {
         panic!("{notifications:?}");

@@ -143,7 +143,7 @@ async fn a_child_that_cannot_go_retains_its_parent() {
         .await
         .unwrap_err();
     assert!(
-        format!("{error:#}").contains("child workspace child retained, so parent is too"),
+        format!("{error:#}").contains("child below it was retained, so parent is too"),
         "{error:#}"
     );
     let kept = manager.workspace(&parent.id).await.unwrap();
@@ -2227,7 +2227,8 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
         .await
         .unwrap_err();
     assert!(
-        format!("{error:#}").contains("late was split from child after the removal was confirmed"),
+        format!("{error:#}")
+            .contains("late was opened below child after the removal was confirmed"),
         "{error:#}"
     );
     for workspace in [&parent, &child, &late] {

@@ -198,7 +198,7 @@ repository's directory that no longer exists,
 removes the workspaces there that idle cleanup would remove, without waiting for
 their idle delay, then empties [shared caches](#shared-caches) there nothing is
 using, then deletes the [files](#attached-files) kept there for removed
-workspaces and ended chats, oldest first and recording `results_deleted` notifications, until
+workspaces and chats, oldest first and recording `results_deleted` notifications, until
 enough space is available. A repository with idle
 cleanup disabled keeps its workspaces. Removals record `workspace_removed`
 notifications and the `disk_space` event cause; a pass that cannot free enough
@@ -457,7 +457,8 @@ Use `--discard` to forget the workspace's stopped agents, last sessions and comm
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
 A stopped [chat](#chats) restores at once under its name, continuing
 its session, in a background place where a restored agent opens, or in this
-terminal with `--focus`; `--discard` ends it instead. A running chat has nothing to resume.
+terminal with `--focus`; `--discard` removes it instead, unless workspaces are
+below it, which only `shoal rm` takes. A running chat has nothing to resume.
 When a stopped agent's execution is unknown, after a daemon restart or a stop
 Shoal could not prove, the daemon forgets it once its wrapper has exited and none
 of its processes remain, keeping the record for `shoal resume`, which repeats the
@@ -1749,7 +1750,7 @@ workspaces and `TMPDIR`, `shoal work` lists it as `stopped`, and
 `shoal resume <chat> --discard` ends it. Workspaces and chats share one set of names across
 repositories: a chat cannot take a workspace's name or a name an unfinished
 rename reserves, and a workspace cannot be created or renamed to a chat's name.
-The name frees once the chat ends.
+The name frees once the chat is removed.
 
 `shoal chat rename [chat] NAME` gives a running chat, `shoal plan` chats
 included, a new name that is free as a new chat's would be, and frees the old
@@ -2327,7 +2328,7 @@ there and opens the PR from the fork. Forking needs GitHub, Forgejo or Gitea.
 The cleanup sweep removes a contribution repository as `repo rm` does once it has
 had no workspace, queued agent, chat, pending issue proposal, kept branch or
 resource another repository's workspace borrows, no unexpired
-[checkpoint](#checkpoints-and-restore), removal record or ended chat's
+[checkpoint](#checkpoints-and-restore), removal record or removed chat's
 [files](#attached-files), and no changed files,
 stash, Git operation under way or commits in its checkout that no branch or tag
 its remotes advertise has, for
@@ -2808,7 +2809,7 @@ exports its environment or records the chat, reserving the repository directory
 for a registration without one. It marks `.tmp` with the repository and refuses
 to start the process or chat while an unmarked `.tmp` is in the way.
 
-Nothing in it is kept: removing the workspace or ending the chat deletes the
+Nothing in it is kept: removing the workspace or chat deletes the
 directory without a checkpoint, and cleanup deletes those that belong to no
 workspace or chat of the repository. Removing the repository deletes `.tmp`.
 
@@ -2942,8 +2943,8 @@ branch; a checkpoint that branch already has travels without one. Ignored files,
 leases, permits, approvals, grants and holds stay behind; setup rebuilds what the
 workspace needs. A chat's file holds its name, agent and session: the export
 refuses a chat whose agent reported no session, or the one it runs in, and asks
-before stopping the agent unless given `--yes`; the chat then ends as when its
-agent exits. The file's manifest names its `kind`, `workspace` or `chat`.
+before stopping the agent unless given `--yes`, and one with workspaces below
+it; the chat is then removed. The file's manifest names its `kind`, `workspace` or `chat`.
 
 `shoal move export <space>... -o <directory>`, for several spaces or those the
 picker selects when `-o` names an existing directory, and `shoal move export
@@ -3827,7 +3828,7 @@ A chat links items the same way in its repository's registered checkout. It has
 no completion or cleanup, so its assigned items drive neither, and its assigned PRs
 name no branch; the activity Shoal polls for its items reaches its agent with its
 messages, through the chat's hooks, and wakes it as they do. Its links go with it
-when it ends. `shoal plan` assigns its chat the issue it plans.
+when it is removed. `shoal plan` assigns its chat the issue it plans.
 
 `shoal view` shows linked items as the forge reports them now: title, state,
 author, labels, assignees, milestone, description, comments, and reviews with their inline comments,
@@ -4352,7 +4353,7 @@ shoal done --attach report.md    # Hand back a file with the completion
 shoal files add notes.md [--space S]      # Attach files without a message
 shoal files add 'chart.html#Latency by region'  # Attach a file with a title
 shoal files rm [FILE...] [--space S]      # Delete a space's files, or those with these names
-shoal files rm --all                      # Delete the files of every idle workspace and ended chat
+shoal files rm --all                      # Delete the files of every idle workspace and removed chat
 ```
 
 `shoal files` lists the files attached to a space, a workspace or
@@ -4372,7 +4373,7 @@ long as its removal record, `cleanup.restore.retention_days` like its
 [checkpoints](#checkpoints-and-restore), and `shoal files <name>` still lists
 them, with when they go, and deletes them with `rm`. A chat's files outlive
 the chat the same way: they stay for `cleanup.restore.retention_days` after it
-ends, listed under its last name. Disk space cleanup
+is removed, listed under its last name. Disk space cleanup
 deletes them sooner when nothing else frees enough space. A space is named by
 the workspace's or chat's name or ID; run from a chat's agent outside any workspace, `shoal files`, `add`
 and `rm` act on its chat.

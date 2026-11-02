@@ -1,8 +1,8 @@
 //! `shoal resume` for the stopped chats: each comes back under its own
 //! name, continuing its session, in a background place where a restored
-//! agent opens, or in this terminal with `--focus`; `--discard` ends it
+//! agent opens, or in this terminal with `--focus`; `--discard` removes it
 //! instead.
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
@@ -12,7 +12,7 @@ use crate::{
         ui,
     },
     client::output::{batch::Failure, resume::RestoredChat},
-    model::Chat,
+    model::{Chat, Spaces},
 };
 
 /// Restore the stopped `chat` in this terminal.
@@ -23,21 +23,43 @@ pub(super) async fn restore_here(ctx: &Context, chat: &Chat) -> Result<i32> {
     }
 }
 
-/// End each of the stopped `chats` without restoring it, returning those it
-/// ended and those it failed for.
+/// Remove each of the stopped `chats` without restoring it, returning
+/// those it removed and those it failed for. One with workspaces below it,
+/// which its removal would take, is left to `shoal rm`, which shows them.
 pub(super) async fn discard_each(ctx: &Context, chats: &[Chat]) -> (Vec<Chat>, Vec<Failure>) {
     let mut report = ui::Report::new("discard");
+    let spaces = match client::spaces(&ctx.paths).await {
+        Ok(spaces) => spaces,
+        Err(error) => {
+            for chat in chats {
+                report.failed(ctx, &chat.name, &error);
+            }
+            return report.into_parts();
+        }
+    };
     for chat in chats {
-        match client::discard_chat(&ctx.paths, &chat.id).await {
-            Ok(discarded) => report.done(
-                ctx,
-                &format!("Discarded chat {}", discarded.name),
-                discarded,
-            ),
+        match discard(ctx, chat, &spaces).await {
+            Ok(removed) => report.done(ctx, &format!("Removed chat {}", removed.name), removed),
             Err(error) => report.failed(ctx, &chat.name, &error),
         }
     }
     report.into_parts()
+}
+
+/// Remove the stopped `chat` unless workspaces are below it.
+async fn discard(ctx: &Context, chat: &Chat, spaces: &Spaces) -> Result<Chat> {
+    let below: Vec<&str> = (spaces.below_chat(&chat.id).iter())
+        .map(|workspace| workspace.name.as_str())
+        .collect();
+    ensure!(
+        below.is_empty(),
+        "removing it also removes the workspaces below it ({}); remove it with shoal rm {}",
+        below.join(", "),
+        chat.name
+    );
+    Ok(client::remove_chat(&ctx.paths, &chat.id, Some(Vec::new()))
+        .await?
+        .chat)
 }
 
 /// Restore each of the stopped `chats` in the background, returning those it

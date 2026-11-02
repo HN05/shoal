@@ -13,4 +13,13 @@ pub struct BackgroundChat {
     pub place: String,
 }
 
-outputs!(BackgroundChat);
+/// A removed chat.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemovedChat {
+    pub chat: crate::model::Chat,
+    /// The spaces below it removed first, each after those below it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<String>,
+}
+
+outputs!(BackgroundChat, RemovedChat);

@@ -390,6 +390,6 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
     process.kill();
     manager.stop_finished_chats().await.unwrap();
     assert_eq!(manager.questions(None).await.unwrap().questions.len(), 1);
-    manager.discard_saved_chat(&chat.id).await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
 }

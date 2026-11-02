@@ -242,7 +242,7 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
         .unwrap();
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    manager.discard_saved_chat(&chat.id).await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
     manager.sweep_contributions().await.unwrap();
     assert!(
         registered(&manager, &repo).await,

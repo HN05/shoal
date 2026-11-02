@@ -577,6 +577,7 @@ response_bodies! {
     Chat(crate::model::Chat),
     RenamedChat(crate::model::RenamedChat),
     Chats(Vec<crate::model::Chat>),
+    RemovedChat(crate::client::output::chat::RemovedChat),
     ChatName(String),
     Branches(Vec<crate::model::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),

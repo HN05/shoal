@@ -124,10 +124,10 @@ impl Manager {
         })
     }
 
-    /// Remove `chat` for its export once its agent has reported the
-    /// session the package continues and its package is made, stopping a
-    /// running one first, so the session's files stop changing and only
-    /// writing them is left.
+    /// Remove `chat` for its export, which takes no space below it, once its
+    /// agent has reported the session the package continues and its package
+    /// is made, stopping a running one, so the session's files stop changing
+    /// and only writing them is left.
     async fn end_chat_for_export(&self, chat: Chat) -> Result<Ended> {
         let repo = self.repository(&chat.repository_id).await?;
         let Some(continues) = crate::transfer::continue_chat(&chat, crate::repository::name(&repo))
@@ -137,12 +137,14 @@ impl Manager {
                 chat.name
             );
         };
-        let (id, running) = (chat.id.clone(), chat.restore.is_none());
+        ensure!(
+            self.chat_children(&chat.id).await?.is_empty(),
+            "chat {} has workspaces below it; move or remove them first",
+            chat.name
+        );
+        let id = chat.id.clone();
         let manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
-        if running {
-            self.stop_chat(&id).await?;
-        }
-        self.discard_saved_chat(&id).await?;
+        self.remove_chat(&id, Some(Vec::new())).await?;
         Ok(Ended {
             repo,
             manifest,

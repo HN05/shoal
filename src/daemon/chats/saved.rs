@@ -180,16 +180,6 @@ impl Manager {
         Ok(())
     }
 
-    /// Remove the stopped chat `selector` names, by ID or name, without
-    /// restoring it.
-    pub(crate) async fn discard_saved_chat(&self, selector: &str) -> Result<Chat> {
-        let _saving = self.chat_saves.lock().await;
-        let chat = self.saved_chat(selector).await?;
-        self.ensure_ended(&chat, std::process::id()).await?;
-        self.delete_chat(&chat).await?;
-        Ok(chat)
-    }
-
     /// The stopped chat `selector` names, by ID or name.
     async fn saved_chat(&self, selector: &str) -> Result<Chat> {
         self.recorded_chat(selector)
@@ -202,7 +192,7 @@ impl Manager {
     /// than `caller`, as after a stop that did not end them: a restore would
     /// have two agents write one session, and a removal would delete files
     /// they use.
-    async fn ensure_ended(&self, chat: &Chat, caller: u32) -> Result<()> {
+    pub(crate) async fn ensure_ended(&self, chat: &Chat, caller: u32) -> Result<()> {
         let id = chat.id.clone();
         let recorded = self.store.run(move |db| saved_process(db, &id)).await?;
         let wrappers = self.execution_wrappers().await?;

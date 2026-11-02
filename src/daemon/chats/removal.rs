@@ -1,6 +1,7 @@
-//! Removing a chat, the only way one ends: the user gets the messages it had
-//! not read and the approval requests it had not decided, its attached files
-//! stay for the retention period, and its record and temporary directory go.
+//! The end of a removed chat's record, once the spaces below it and its
+//! agent are gone: the user gets the messages it had not read and the
+//! approval requests it had not decided, its attached files stay for the
+//! retention period, and its record and temporary directory go.
 use anyhow::{Result, ensure};
 use rusqlite::Connection;
 
@@ -16,7 +17,7 @@ use crate::{
 
 impl Manager {
     /// Delete the record of the stopped `chat` with what only it kept.
-    pub(super) async fn delete_chat(&self, chat: &Chat) -> Result<()> {
+    pub(crate) async fn delete_chat(&self, chat: &Chat) -> Result<()> {
         let expires_at = self.chat_files_expiry(&chat.repository_id).await;
         let id = chat.id.clone();
         let deleted = self
@@ -56,6 +57,11 @@ fn delete(db: &mut Connection, id: &str, expires_at: i64) -> Result<Deleted> {
             [id]
         )?,
         "the chat runs again"
+    );
+    // The spaces below go first; none may outlive it.
+    ensure!(
+        crate::daemon::workspace::chat_children(&tx, id)?.is_empty(),
+        "workspaces were opened from it during removal; retaining it"
     );
     let notification = chat_messages::hand_to_user(&tx, id)?;
     workspace_files::keep_ended_chat(&tx, id, expires_at)?;

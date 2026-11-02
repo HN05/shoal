@@ -14,7 +14,7 @@ use crate::{
         worktrunk::{self, BranchRemoval, FileRemoval},
     },
     hooks::{self, Hook, HookKind},
-    model::{CleanupReason, Workspace},
+    model::{CleanupReason, Workspace, WorkspaceRef},
     process,
     removal::{
         self, BranchOutcome, IdleRestore, InspectionPolicy, NOTHING, RemovalCheck, RemovalResult,
@@ -29,6 +29,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod chats;
 #[cfg(test)]
 mod tests;
 
@@ -1262,7 +1263,7 @@ impl Manager {
         .await?;
         self.recheck_removal(workspace, removal, Stage::AfterStop, &cancelled)
             .await?;
-        let children = self.remove_children(workspace, removal).await?;
+        let children = self.remove_workspace_children(workspace, removal).await?;
         // The hook sees the worktree intact; a failing hook retains it.
         if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
             let configured_env = self.configured_workspace_environment(workspace).await?;
@@ -1345,8 +1346,8 @@ impl Manager {
             bail!("{retention}; retaining workspace");
         }
         if matches!(stage, Stage::Initial) {
-            self.ensure_none_stalled_below(&check.workspace, removal)
-                .await?;
+            let below = check.workspace.child_workspaces.clone();
+            self.ensure_none_stalled_below(below, removal).await?;
         }
         removal.verify(&check, stage)?;
         match (removal, stage) {
@@ -1393,18 +1394,19 @@ impl Manager {
     }
 
     /// Refuse a removal that [skips stalled](Removal::skips_stalled)
-    /// workspaces while one below `workspace`, which may be in another
-    /// directory, is in a directory whose file access stalled. The sweep's
-    /// own pass of that workspace rechecks it.
+    /// workspaces while one of the `children` of the space it removes, or
+    /// one below them, which may be in another directory, is in a directory
+    /// whose file access stalled. The sweep's own pass of that workspace
+    /// rechecks it.
     async fn ensure_none_stalled_below(
         &self,
-        workspace: &Workspace,
+        children: Vec<WorkspaceRef>,
         removal: Removal<'_>,
     ) -> Result<()> {
         if !removal.skips_stalled() {
             return Ok(());
         }
-        let mut pending = workspace.child_workspaces.clone();
+        let mut pending = children;
         while let Some(child) = pending.pop() {
             let child = self.workspace(&child.id).await?;
             ensure!(
@@ -1439,7 +1441,8 @@ impl Manager {
                 "commands are recorded; stop them with shoal stop or shoal rm"
             );
         }
-        self.ensure_none_stalled_below(workspace, removal).await?;
+        let below = workspace.child_workspaces.clone();
+        self.ensure_none_stalled_below(below, removal).await?;
         self.stop_executions(
             &workspace.id,
             removal.stop_policy(),
@@ -1448,7 +1451,7 @@ impl Manager {
         .await?;
         self.stop_removed_processes(workspace, WorktreeTies::None)
             .await?;
-        let children = self.remove_children(workspace, removal).await?;
+        let children = self.remove_workspace_children(workspace, removal).await?;
         // Prune only this owned registration, through Worktrunk, and retain
         // its branch because the contents cannot be inspected.
         let registered = self.is_registered_worktree(workspace).await?;
@@ -1467,34 +1470,43 @@ impl Manager {
         })
     }
 
-    /// Remove the workspaces below `workspace` for `removal` of it, each
-    /// after those below it, returning their names in that order. The first
-    /// that fails stops the rest and retains `workspace`, so no workspace
-    /// outlives its parent. Each reservation refuses splits from its
-    /// workspace, so none appears below one whose children were listed.
-    async fn remove_children(
+    /// [`Self::remove_children`] for the workspaces split from `workspace`,
+    /// listed once it was reserved, so no split can follow.
+    async fn remove_workspace_children(
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
     ) -> Result<Vec<String>> {
+        let children = self.workspace(&workspace.id).await?.child_workspaces;
+        self.remove_children(&workspace.name, children, removal)
+            .await
+    }
+
+    /// Remove `children`, the spaces below the space named `parent`, for
+    /// `removal` of it, each after those below it, returning their names in
+    /// that order. The first that fails stops the rest and retains the
+    /// parent, so no space outlives its parent. Each reservation refuses
+    /// splits from its workspace, so none appears below one whose children
+    /// were listed.
+    async fn remove_children(
+        &self,
+        parent: &str,
+        children: Vec<WorkspaceRef>,
+        removal: Removal<'_>,
+    ) -> Result<Vec<String>> {
         let mut removed = Vec::new();
-        for child in self.workspace(&workspace.id).await?.child_workspaces {
-            // Listed once `workspace` was reserved, so no split can follow.
+        for child in children {
             ensure!(
                 removal
                     .confirmed_children()
                     .is_none_or(|confirmed| confirmed.contains(&child.id)),
-                "{} was split from {} after the removal was confirmed; retaining both",
+                "{} was opened below {parent} after the removal was confirmed; retaining both",
                 child.name,
-                workspace.name
             );
             let result = Box::pin(self.remove(&child.id, removal.of_child()))
                 .await
                 .with_context(|| {
-                    format!(
-                        "child workspace {} retained, so {} is too",
-                        child.name, workspace.name
-                    )
+                    format!("{} below it was retained, so {parent} is too", child.name)
                 })?;
             removed.extend(result.children);
             if removal.announces_children() {
@@ -1503,7 +1515,7 @@ impl Manager {
                     crate::daemon::notifications::NotificationKind::WorkspaceRemoved,
                     super::removal_notice(
                         &child.name,
-                        &format!("removed with its parent {}", workspace.name),
+                        &format!("removed with its parent {parent}"),
                     ),
                 )
                 .await;

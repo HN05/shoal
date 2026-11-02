@@ -7608,7 +7608,7 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
         "{rows:?}"
     );
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Discarded chat talk"),
+        String::from_utf8_lossy(&output.stdout).contains("Removed chat talk"),
         "{output:?}"
     );
     assert_eq!(fixture.ok(&["work", "--chats"]), Value::Array(vec![]));

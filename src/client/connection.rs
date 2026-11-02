@@ -556,12 +556,19 @@ pub async fn keep_failed_restore<T>(
     ran
 }
 
-/// End the stopped chat `chat`, by ID or name, without restoring it.
-pub async fn discard_chat(daemon: &impl Daemon, chat: &str) -> Result<Chat> {
+/// Remove the chat `chat`, by ID or name, stopping its agent: first the
+/// spaces below it, of which `children`, when given, are the IDs the caller
+/// saw and the only ones it takes.
+pub async fn remove_chat(
+    daemon: &impl Daemon,
+    chat: &str,
+    children: Option<Vec<String>>,
+) -> Result<crate::client::output::chat::RemovedChat> {
     request(
         daemon,
-        ChatMethod::DiscardChat {
+        ChatMethod::RemoveChat {
             chat: chat.to_owned(),
+            children,
         },
     )
     .await

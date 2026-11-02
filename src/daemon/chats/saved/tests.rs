@@ -124,16 +124,14 @@ async fn a_saved_chat_keeps_its_record_until_it_is_restored() {
 }
 
 #[tokio::test]
-async fn a_discarded_saved_chat_ends() {
+async fn a_removed_saved_chat_ends() {
     let (root, manager) = manager().await;
     let (_repo, chat, _process) = running_chat(root.path(), &manager).await;
-    let error = manager.discard_saved_chat("talk").await.unwrap_err();
-    assert!(error.to_string().contains("no stopped chat"), "{error:#}");
 
     manager.save_chats(ChatRestore::Resume).await;
-    let discarded = manager.discard_saved_chat("talk").await.unwrap();
+    let removed = manager.remove_chat("talk", None).await.unwrap();
 
-    assert_eq!(discarded.id, chat.id);
+    assert_eq!(removed.chat.id, chat.id);
     assert!(manager.chats().await.unwrap().is_empty());
     assert!(!chat.tmp_dir.unwrap().exists());
     manager.check_chat_name("talk".into()).await.unwrap();
@@ -196,7 +194,7 @@ async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
     let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.pid, chat.pid);
     // Nor is it discarded, which would delete the files its agent uses.
-    let error = manager.discard_saved_chat("talk").await.unwrap_err();
+    let error = manager.remove_chat("talk", None).await.unwrap_err();
     assert!(
         error.to_string().contains(&format!("kill {}", chat.pid)),
         "{error:#}"
@@ -351,7 +349,7 @@ async fn a_survivor_in_the_chats_process_group_holds_it_saved() {
         error.to_string().contains(&format!("kill {child}")),
         "{error:#}"
     );
-    let error = manager.discard_saved_chat("talk").await.unwrap_err();
+    let error = manager.remove_chat("talk", None).await.unwrap_err();
     assert!(
         error.to_string().contains(&format!("kill {child}")),
         "{error:#}"
@@ -442,7 +440,7 @@ async fn a_survivor_that_left_the_chats_group_holds_it_saved() {
     unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
     leader.wait().unwrap();
 
-    let error = manager.discard_saved_chat("talk").await.unwrap_err();
+    let error = manager.remove_chat("talk", None).await.unwrap_err();
     assert!(
         error.to_string().contains(&format!("kill {child}")),
         "{error:#}"
@@ -787,13 +785,13 @@ wait
     unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
     leader.wait().unwrap();
 
-    let error = manager.discard_saved_chat("talk").await.unwrap_err();
+    let error = manager.remove_chat("talk", None).await.unwrap_err();
     assert!(
         error.to_string().contains(&format!("kill {descendant}")),
         "{error:#}"
     );
     manager.stop_saved(&chat.id, &agent).await.unwrap();
-    manager.discard_saved_chat("talk").await.unwrap();
+    manager.remove_chat("talk", None).await.unwrap();
     assert!(!chat.tmp_dir.unwrap().exists());
     drop(escaped);
     drop(group);

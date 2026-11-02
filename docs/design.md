@@ -512,7 +512,7 @@ repository directory's `.tmp` under its ID, which never changes or comes back
 like a name. Outside the worktree it neither dirties it nor enters checkpoints,
 and its path stays short enough for the Unix sockets tools create in it on
 macOS. It is created only once its record exists and deleted with it, by
-workspace removal or the one operation that ends a chat; the cleanup sweep
+the removal of its space; the cleanup sweep
 deletes any without a record, since nothing there is worth keeping. The
 post-remove hook runs after it is gone and keeps the inherited `TMPDIR`.
 A contribution is a URL clone registered for work in a repository the user does
@@ -522,7 +522,7 @@ becomes the `fork` remote and `remote.pushDefault`, which Git, `pr open` and
 cleanup all honour. It goes through `repo rm`'s path once nothing of it has been
 left for the unattended grace period: no workspace, queued agent, chat, pending
 issue proposal, kept branch or borrowed resource, nothing `shoal work restore` could
-use, no files an ended chat keeps, and no work in its checkout that the remotes' advertised branches and tags
+use, no files a removed chat keeps, and no work in its checkout that the remotes' advertised branches and tags
 lack. The final
 check records the removal in the same transaction, under the gates creation
 takes, and queue and chat records refuse a repository being removed. An existing
@@ -1841,15 +1841,18 @@ a new process or a discard ends it. `shoal resume` resolves each target to a
 saved chat or a workspace in one lookup over the shared namespace, so its
 picker, `--all` and a list of names act on both. Restores and discards wait for a save
 under way and refuse while a process the chat owns still runs, since two agents
-would write one session and a discard would delete files in use, and a restore
-whose agent does not start leaves the chat saved and tells the user, who may
-not see the place it opened. Starts, renames, saves, restores and ends
+would write one session and a removal would delete files in use, and a restore
+whose agent does not start leaves the chat stopped and tells the user, who may
+not see the place it opened. Starts, renames, stops, restores and removals
 are journal events. A workspace belongs to the
-chat that last opened it until that chat ends, and opening it outside a chat
-returns it to the user, so Shoal knows which chat coordinates which workers.
+chat that last opened it, and opening it outside a chat
+returns it to the user, so Shoal knows which chat coordinates which workers;
+removing the chat first removes them through the removal path of a workspace's
+children, and a stopped chat passes their events to the user unless it waits
+for its automatic restore.
 Having no workspace, a chat keeps its messages in its own queue, which the same
-hooks deliver, including the user's request to rename it; a chat that ends gives the user the notifications its unread
-messages stand for, and its workers return to the user even if it is resumed.
+hooks deliver, including the user's request to rename it; a removed chat gives the user the notifications its unread
+messages stand for.
 A chat passes a question up by asking the user, who attends it. The approval
 requests of the workspaces it opened come to it when no parent workspace above
 them has an agent, and with the user's authority it may approve them; those it
@@ -1857,7 +1860,7 @@ has not decided go to the user when its agent stops or it is removed, as with
 any deciding space. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
-ends or is renamed. Renaming changes the record and the files kept under the
+is removed or renamed. Renaming changes the record and the files kept under the
 name, not the zmx session, which zmx names only at creation. A tab or block
 that hosts the chat takes the new name only while it still shows the old one,
 since another label is the user's. The process the user runs chooses the name, so the tab or session that
@@ -2197,8 +2200,8 @@ one namespace, so what applies to both is named for
 the space, and the flag that selects one is `--space`. A chat owns attached
 files as a workspace does, since its
 agent hands the user reports and pages too; they stay for the same retention
-after the chat ends, as a chat has no worktree to clean up and its files are
-what remain of it. Files are keyed by their owner's ID, which a workspace and a
+after the chat is removed, as a chat has no worktree to clean up and its files
+are what remain of it. Files are keyed by their owner's ID, which a workspace and a
 chat never share, so no kind tells them apart: an owner is gone when neither
 has the ID, and its removal or end record says how long its files stay. Each attached file records who attached it: the user, or the
 agent whose process tree sent the request, by both its execution, which pins
@@ -2208,7 +2211,7 @@ outside any execution, so its requests name the chat they come from, and its
 files record the chat as who attached them; like scope, this is cooperative.
 The journal records each file's record as it is added and deleted, by store
 triggers so no route of attaching or deleting is missed, and carries the
-owner's ID from the record because a removed workspace or ended chat has no row
+owner's ID from the record because a removed space has no row
 left to supply it; clients showing files follow them without polling. A file's optional title
 rides on its argument as `PATH#TITLE`, the form forge attachments use for alt
 text, because attach flags repeat and a separate title flag could not say which
@@ -2359,14 +2362,14 @@ machine's terminal places and waiting wrappers, and every reopen trusts the
 workspace's path for those agents, since resuming skips the launch's trust
 setup. Otherwise moved recovery records drop their session, place and wrapper,
 and `shoal resume` starts them through the fresh-agent launch, with its trust
-setup and guidance, told the workspace moved. Moving a chat ends its
-agent, since a session that kept growing here would fork from the one that
+setup and guidance, told the workspace moved. Moving a chat removes it here,
+stopping its agent, since a session that kept growing here would fork from the one that
 continues there, and the user attends a chat, so export asks first; a chat whose
-agent reported no session refuses before ending, since nothing could continue
-it. Import starts the chat through `shoal chat`'s launch with the agent's resume
+agent reported no session refuses before stopping it, since nothing could continue
+it, and so does one with workspaces below it, which its removal would take. Import starts the chat through `shoal chat`'s launch with the agent's resume
 arguments, under a free name since its own may be taken there, in the background
 when no terminal attends the import, as queued agents start. A chat keeps no
-record once it ends, so a failed `move ssh` keeps its package where a workspace
+record once it is removed, so a failed `move ssh` keeps its package where a workspace
 keeps its removal record. Export and import move work
 through any byte stream, and `move ssh` runs that pipe over SSH as a shorthand
 after checking Shoal answers there; Shoal keeps no registry of machines, and

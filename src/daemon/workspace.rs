@@ -64,7 +64,9 @@ pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use restore::removal_notice;
 pub(crate) use stack::record_base_changed;
 pub use stopped_work::Discarded;
-pub(crate) use tree::{Source, TrackedAgents, deciders, delegated, receiving_paths, spaces_above};
+pub(crate) use tree::{
+    Source, TrackedAgents, chat_children, deciders, delegated, receiving_paths, spaces_above,
+};
 
 use crate::daemon::refusal::{Reason, Refusal};
 use crate::{

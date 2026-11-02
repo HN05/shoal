@@ -85,7 +85,7 @@ fn linked_items_know_their_repository() {
 }
 
 #[test]
-fn spaces_find_a_workspace_or_a_running_or_saved_chat_by_id_or_name() {
+fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_id_or_name() {
     let workspace: Workspace = serde_json::from_value(serde_json::json!({
         "id": "w1",
         "repository_id": "repo",
@@ -123,4 +123,39 @@ fn spaces_find_a_workspace_or_a_running_or_saved_chat_by_id_or_name() {
     assert_eq!(found("c1").as_deref(), Some("talk"));
     assert_eq!(found("saved").as_deref(), Some("saved"));
     assert!(spaces.find("missing").is_none());
+}
+
+#[test]
+fn the_workspaces_below_a_chat_include_those_split_from_them() {
+    let workspace = |id: &str, chat: Option<&str>, parent: Option<&str>| -> Workspace {
+        serde_json::from_value(serde_json::json!({
+            "id": id,
+            "repository_id": "repo",
+            "name": id,
+            "path": format!("/{id}"),
+            "branch": id,
+            "state": "ready",
+            "chat": chat,
+            "parent_workspace": parent.map(|parent| serde_json::json!({
+                "id": parent, "name": parent, "branch": parent,
+            })),
+        }))
+        .unwrap()
+    };
+    let spaces = Spaces {
+        workspaces: vec![
+            workspace("grandchild", Some("talk"), Some("opened")),
+            workspace("opened", Some("talk"), None),
+            workspace("other", None, None),
+            // Split from a workspace the chat did not open, it stays with that one.
+            workspace("adopted", Some("talk"), Some("other")),
+        ],
+        chats: Vec::new(),
+    };
+    let below: Vec<&str> = spaces
+        .below_chat("talk")
+        .iter()
+        .map(|workspace| workspace.id.as_str())
+        .collect();
+    assert_eq!(below, ["opened", "grandchild"]);
 }

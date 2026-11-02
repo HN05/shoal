@@ -409,7 +409,7 @@ async fn chats_and_workspaces_share_one_namespace() {
             .await
             .is_err()
     );
-    manager.discard_saved_chat("talk").await.unwrap();
+    manager.remove_chat("talk", None).await.unwrap();
     manager
         .check_creation(&repo.id, Some("talk"), None, options)
         .await
@@ -629,7 +629,7 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     process.kill();
     assert!(manager.chats().await.unwrap()[0].restore.is_some());
     assert!(tmp_dir.exists());
-    manager.discard_saved_chat(&chat.id).await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
     assert!(!tmp_dir.exists());
 
@@ -652,4 +652,75 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
         "{error:#}"
     );
     assert!(manager.chats().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_agent() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let opened = manager
+        .create_workspace_for_chat(
+            repo.id.clone().into(),
+            "opened".into(),
+            None,
+            None,
+            None,
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
+    let split = manager
+        .split_workspace(&opened.id, "split".into(), None)
+        .await
+        .unwrap();
+    let other = manager
+        .create_workspace(&repo.id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+
+    // A removal the user confirmed for fewer spaces than are below it takes
+    // none of them, and the chat stays.
+    let error = manager
+        .remove_chat("talk", Some(vec![opened.id.clone()]))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}")
+            .contains("split was opened below opened after the removal was confirmed"),
+        "{error:#}"
+    );
+    assert!(manager.workspace(&split.id).await.is_ok());
+    assert!(manager.recorded_chat("talk").await.unwrap().is_some());
+
+    let removed = manager.remove_chat("talk", None).await.unwrap();
+    assert_eq!(removed.chat.id, chat.id);
+    assert_eq!(removed.children, ["split", "opened"]);
+    assert!(manager.workspace(&opened.id).await.is_err());
+    assert!(manager.workspace(&split.id).await.is_err());
+    assert!(manager.workspace(&other.id).await.is_ok());
+    assert!(manager.chats().await.unwrap().is_empty());
+    // The removal stopped the chat's agent.
+    assert!(!process_wait(process).success());
+}
+
+/// How `process` exited.
+fn process_wait(mut process: crate::test_support::ProcessGroup) -> std::process::ExitStatus {
+    process.wait().unwrap()
 }

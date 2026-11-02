@@ -137,9 +137,9 @@ when behavior changes, distinguishing decisions from proposals.
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
   preserves associations and watches but never defers cleanup; only holds,
   open questions and queued agent launches keep a workspace. Children never keep
-  their parent: every removal of a workspace first removes the workspaces below it
+  their parent: every removal of a space first removes the workspaces below it
   through the same path, whatever keeps them, and a child that cannot go retains
-  the parent. A standing completion with cleanup also removes the workspaces below
+  the parent; a chat's are those it opened that no workspace was split from. A standing completion with cleanup also removes the workspaces below
   that nothing of their own keeps, whatever their work.
   Completion cleanup without a PR registration requires every commit kept that way,
   retaining dirty or newer work through the same

@@ -1216,7 +1216,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
 
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    manager.discard_saved_chat(&chat.id).await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
     manager.expire_results().await.unwrap();
     let files = manager.attached_files("planning").await.unwrap();
     let [kept] = files.as_slice() else {

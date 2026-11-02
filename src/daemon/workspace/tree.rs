@@ -67,6 +67,13 @@ impl Manager {
             .await
     }
 
+    /// The workspaces directly below the chat `id`: those it opened that no
+    /// workspace was split from.
+    pub(crate) async fn chat_children(&self, id: &str) -> Result<Vec<WorkspaceRef>> {
+        let id = id.to_owned();
+        self.store.run(move |db| chat_children(db, &id)).await
+    }
+
     /// Queue `message` about the workspace named `name` for its coordinator,
     /// with Shoal's copies `attachments` of the files it sent: the agent of
     /// its nearest ancestor that has one, or the chat that owns it or a
@@ -424,6 +431,17 @@ fn coordinator(
         true => Some(Coordinator::Agent(id)),
         false => chat.map(Coordinator::Chat),
     }))
+}
+
+/// The workspaces directly below the chat `id`.
+pub(crate) fn chat_children(db: &Connection, id: &str) -> Result<Vec<WorkspaceRef>> {
+    Ok(db
+        .prepare(
+            "SELECT id,name,branch FROM workspaces
+             WHERE chat_id=?1 AND parent_workspace_id IS NULL ORDER BY name",
+        )?
+        .query_map([id], row)?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Fill in the workspace's parent and its children.

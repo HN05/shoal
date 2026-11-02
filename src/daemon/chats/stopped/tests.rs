@@ -9,7 +9,7 @@ async fn a_stop_of_a_chat_removed_meanwhile_records_nothing_and_goes_on() {
     // the chat is removed before the next round.
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    manager.discard_saved_chat(&chat.id).await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
     assert!(manager.recorded_chat(&chat.id).await.unwrap().is_none());
 
     manager

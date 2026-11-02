@@ -123,7 +123,7 @@ fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
 }
 
 /// Resume the `selected` spaces together, reporting them at once: restore
-/// the stopped chats, or end them for `discard`, and queue the restores of
+/// the stopped chats, or remove them for `discard`, and queue the restores of
 /// the workspaces' stopped agents, start them for `now`, or forget the
 /// stopped work for `discard`.
 async fn resume_each(ctx: &Context, selected: Selected, discard: bool, now: bool) -> Result<i32> {
@@ -789,7 +789,7 @@ async fn start_session(
     })
 }
 
-/// End the stopped `chats` and forget every workspace's stopped agents and
+/// Remove the stopped `chats` and forget every workspace's stopped agents and
 /// commands, going on after one fails.
 async fn discard_each(
     ctx: &Context,
