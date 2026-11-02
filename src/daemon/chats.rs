@@ -267,6 +267,21 @@ impl Manager {
             .collect())
     }
 
+    /// Whether Shoal saved the stopped chat `id`'s session, rather than its
+    /// agent exiting.
+    pub(crate) async fn chat_saved(&self, id: &str) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                store::exists(
+                    db,
+                    "SELECT 1 FROM chats WHERE id=?1 AND restore IS NOT NULL AND saved",
+                    [id],
+                )
+            })
+            .await
+    }
+
     /// When the chat `id`'s agent stopped, in Unix seconds, while it is
     /// stopped.
     pub(crate) async fn chat_stopped_at(&self, id: &str) -> Result<Option<u64>> {

@@ -1186,7 +1186,7 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
 }
 
 #[tokio::test]
-async fn a_chat_waiting_for_its_restore_or_with_assignment_state_is_kept_from_idle_cleanup() {
+async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup() {
     let (temp, manager) = crate::test_support::manager().await;
     let process =
         crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
@@ -1207,8 +1207,8 @@ async fn a_chat_waiting_for_its_restore_or_with_assignment_state_is_kept_from_id
             .unwrap(),
         None
     );
-    // Waiting for `shoal resume`, its completion still keeps it from idle
-    // cleanup, which merged cleanup disregards.
+    // Saved for `shoal resume`, it is kept as a workspace's saved agent
+    // keeps it.
     let id = chat.id.clone();
     manager
         .store
@@ -1219,13 +1219,25 @@ async fn a_chat_waiting_for_its_restore_or_with_assignment_state_is_kept_from_id
         .await
         .unwrap();
     let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
-    assert_eq!(
-        manager
-            .chat_cleanup_snapshot(&stopped, Rule::Idle)
+    let idle = async || {
+        (manager.chat_cleanup_candidacy(&stopped, Rule::Idle))
             .await
-            .unwrap(),
-        None
-    );
+            .unwrap()
+            .unwrap_err()
+    };
+    assert_eq!(idle().await, CleanupReason::Recovering);
+    // Once its agent exited instead, its completion still keeps it from
+    // idle cleanup, which merged cleanup disregards.
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE chats SET saved=0 WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert_eq!(idle().await, CleanupReason::Completed { integrated: false });
     assert!(
         manager
             .chat_cleanup_snapshot(&stopped, Rule::Merged)

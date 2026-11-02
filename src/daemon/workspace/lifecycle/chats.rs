@@ -58,7 +58,8 @@ impl Manager {
 
     /// [`Self::chat_cleanup_snapshot`], or why `rule` does not take `chat`:
     /// its agent runs or waits to, something keeps it, or for idle cleanup,
-    /// it has assignment state.
+    /// Shoal saved its session, as saved agents keep a workspace, or it has
+    /// assignment state.
     pub(crate) async fn chat_cleanup_candidacy(
         &self,
         chat: &Chat,
@@ -72,10 +73,13 @@ impl Manager {
         if let Some(retention) = self.keep_reason(&chat.id).await? {
             return Ok(Err(retention.into()));
         }
-        if rule == Rule::Idle
-            && let Some(reason) = self.chat_assignment_reason(chat).await?
-        {
-            return Ok(Err(reason));
+        if rule == Rule::Idle {
+            if self.chat_saved(&chat.id).await? {
+                return Ok(Err(CleanupReason::Recovering));
+            }
+            if let Some(reason) = self.chat_assignment_reason(chat).await? {
+                return Ok(Err(reason));
+            }
         }
         Ok(Ok(Snapshot {
             rule,

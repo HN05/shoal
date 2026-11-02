@@ -4086,8 +4086,8 @@ timers reset on restart. The daemon needs `lsof` on PATH.
 [Chats](#chats) follow the same rules, with their repository's settings and
 none of the conditions on a worktree: a chat goes once its agent stopped, with
 the workspaces below it, unless a restore waits to run it, a hold, an open
-question, or for idle cleanup a completion, a linked issue or a watched PR
-keeps it. Merged cleanup removes one whose agent has been stopped for its
+question, or for idle cleanup a session Shoal saved, as saved agents keep a
+workspace, a completion, a linked issue or a watched PR keeps it. Merged cleanup removes one whose agent has been stopped for its
 `idle_minutes`, and cleanup after `shoal done` removes a done chat, stopping its
 agent.
 

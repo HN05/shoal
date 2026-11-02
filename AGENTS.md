@@ -120,8 +120,9 @@ when behavior changes, distinguishing decisions from proposals.
   moves workspace branches; agents update their branch from it with plain Git.
 - Cleanup is space cleanup: chats follow the workspace rules below, with their
   repository's config, meeting every condition on a worktree; a running agent
-  is use, and a restore that waits to run its agent keeps a chat as a queued
-  launch keeps a workspace. A chat's agent exiting stops the chat, which ends
+  is use, a restore that waits to run its agent keeps a chat as a queued
+  launch keeps a workspace, and a session Shoal saved keeps it from idle
+  cleanup as saved stopped work does. A chat's agent exiting stops the chat, which ends
   only by removal.
 - `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,

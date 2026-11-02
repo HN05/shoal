@@ -1840,7 +1840,8 @@ messages, questions, workspaces and temporary directory, until a restore runs it
 a new process. Only removal ends a chat: `shoal rm`, `shoal resume --discard`
 for one with no workspace below it, or space cleanup, which treats a chat as a
 workspace whose worktree is always clean, pushed and merged, its running agent
-as use and a restore waiting to run as a queued agent, and takes the idle time
+as use, a restore waiting to run as a queued agent and a session Shoal saved as
+saved stopped work, and takes the idle time
 of merged cleanup from when its agent stopped. `shoal resume` resolves each target to a
 stopped chat or a workspace in one lookup over the shared namespace, so its
 picker, `--all` and a list of names act on both. Restores and removals wait for a save
