@@ -179,9 +179,10 @@ pub struct SimulatorSpecification {
 pub struct MergeSpecification {
     pub branch: String,
     pub head: String,
-    /// The remote the merge pushes the default branch to afterwards.
+    /// Where the merge pushes the default branch afterwards: the remote and
+    /// the ref there, so another destination needs another decision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub push: Option<String>,
+    pub push: Option<crate::model::MergePush>,
 }
 
 /// A secret grant covers the configured source; changing the command or the
@@ -460,9 +461,11 @@ impl ApprovalRequest {
     pub fn subject(&self) -> String {
         match (&self.target, &self.specification) {
             (Target::Merge, Specification::Merge(merge)) => match &merge.push {
-                Some(remote) => format!(
-                    "merge {} at {} and push to {remote}",
-                    merge.branch, merge.head
+                Some(push) => format!(
+                    "merge {} at {} and push to {}",
+                    merge.branch,
+                    merge.head,
+                    push.remote_branch()
                 ),
                 None => format!("merge {} at {}", merge.branch, merge.head),
             },

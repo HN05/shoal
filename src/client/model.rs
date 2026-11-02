@@ -1051,11 +1051,34 @@ pub struct MergePlan {
 }
 
 /// The upstream a merge pushes the default branch to.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MergePush {
     pub remote: String,
     /// The ref on `remote` that receives the default branch.
     pub reference: String,
+}
+
+impl MergePush {
+    /// Where `default` goes, as `origin`, or as `origin/release` when the
+    /// remote branch has another name.
+    pub fn destination(&self, default: &str) -> String {
+        match self.branch() == default {
+            true => self.remote.clone(),
+            false => self.remote_branch(),
+        }
+    }
+
+    /// The remote and its branch, as `origin/main`.
+    pub fn remote_branch(&self) -> String {
+        format!("{}/{}", self.remote, self.branch())
+    }
+
+    fn branch(&self) -> &str {
+        self.reference
+            .strip_prefix("refs/heads/")
+            .unwrap_or(&self.reference)
+    }
 }
 
 /// What merging a workspace branch into the default branch does, for the
@@ -1067,9 +1090,9 @@ pub struct MergePreview {
     pub default_branch: String,
     /// Commits of the branch that the default branch lacks.
     pub commits: u64,
-    /// The remote the default branch is pushed to afterwards, if it is.
+    /// Where the default branch is pushed afterwards, if it is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub push_to: Option<String>,
+    pub push_to: Option<MergePush>,
     /// The sensitive files the merge brings to a default branch that changed
     /// them too, as the last check of the branch's head found them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1099,8 +1122,9 @@ impl MergePreview {
             count => format!("{count} commits"),
         };
         let mut merge = format!("Merge {branch} ({commits}) into {default}");
-        if let Some(remote) = &self.push_to {
-            merge.push_str(&format!(", then push {default} to {remote}"));
+        if let Some(push) = &self.push_to {
+            let destination = push.destination(default);
+            merge.push_str(&format!(", then push {default} to {destination}"));
         }
         merge.push('.');
         let warning = self.warning.iter().map(|warning| format!("{warning}."));

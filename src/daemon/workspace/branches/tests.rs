@@ -1738,14 +1738,15 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
     let Specification::Merge(merge) = &pushing.specification else {
         panic!("merge specification expected");
     };
-    assert_eq!(merge.push.as_deref(), Some("origin"));
+    let push = merge.push.as_ref().expect("a push");
+    assert_eq!(push.remote_branch(), "origin/main");
     assert_eq!(
         pushing.reason,
         "Merge worker (2 commits) into main, then push main to origin."
     );
     assert_eq!(
         pushing.subject(),
-        format!("merge worker at {head} and push to origin")
+        format!("merge worker at {head} and push to origin/main")
     );
     // An open watched PR joins the request's single-line reason.
     let id = workspace.id.clone();
@@ -1775,6 +1776,27 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
     let requests = f.manager.approval_requests(Some("worker")).await.unwrap();
     let replaced = requests.iter().find(|request| request.id == local.id);
     assert!(replaced.is_none_or(|request| request.status == DecisionStatus::Outdated));
+    // An approval covers its destination: another upstream branch needs another.
+    f.manager
+        .decide_approval(watched.id, true, None, Default::default(), None)
+        .await
+        .unwrap();
+    git(&f.repo, &["push", "origin", "main:release"]);
+    git(&f.repo, &["fetch", "origin"]);
+    git(
+        &f.repo,
+        &["branch", "--set-upstream-to=origin/release", "main"],
+    );
+    let moved = undecided(begin_merge_as_agent(&f, &workspace, true).await);
+    assert_ne!(moved.id, watched.id);
+    assert_eq!(moved.status, DecisionStatus::Pending);
+    assert!(
+        moved
+            .reason
+            .starts_with("Merge worker (3 commits) into main, then push main to origin/release."),
+        "{}",
+        moved.reason
+    );
 }
 
 #[tokio::test]

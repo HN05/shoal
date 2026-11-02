@@ -188,7 +188,7 @@ impl Manager {
             branch: branch.to_owned(),
             default_branch: default.to_owned(),
             commits: git::status::commits_since(&workspace.path, default_commit).await?,
-            push_to: push.map(|push| push.remote.clone()),
+            push_to: push.cloned(),
             warning,
             open_prs,
         })

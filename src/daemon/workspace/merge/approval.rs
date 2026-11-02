@@ -90,7 +90,7 @@ fn merge_request(plan: &MergePlan, preview: &MergePreview) -> ApprovalRequest {
         Specification::Merge(MergeSpecification {
             branch: plan.branch.clone(),
             head: plan.source.clone(),
-            push: plan.push.as_ref().map(|push| push.remote.clone()),
+            push: plan.push.clone(),
         }),
         Lifetime::Lease,
         Some(&preview.reason()),

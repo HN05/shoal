@@ -176,7 +176,10 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
         "Merge fix-login (1 commit) into main."
     );
     preview.commits = 3;
-    preview.push_to = Some("origin".into());
+    preview.push_to = Some(MergePush {
+        remote: "origin".into(),
+        reference: "refs/heads/main".into(),
+    });
     preview.warning = Some(MergeWarning {
         subject: "fix-login".into(),
         target: "main".into(),
@@ -191,6 +194,12 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
         PR https://forge/pulls/12 is open; shoal pr merge merges it on the forge instead."
     );
     assert_eq!(preview.reason(), preview.description().replace('\n', " "));
+    preview.open_prs.clear();
+    preview.push_to.as_mut().unwrap().reference = "refs/heads/release".into();
+    assert_eq!(
+        preview.description(),
+        "Merge fix-login (3 commits) into main, then push main to origin/release."
+    );
     preview.branch = "b".repeat(300);
     assert_eq!(preview.reason().len(), crate::validate::MAX_REASON_LEN);
     assert!(preview.reason().ends_with('…'));
