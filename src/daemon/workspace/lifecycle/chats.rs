@@ -65,12 +65,10 @@ impl Manager {
         chat: &Chat,
         rule: Rule,
     ) -> Result<Result<Snapshot, CleanupReason>> {
-        match chat.restore {
-            None => return Ok(Err(CleanupReason::AgentRunning)),
-            Some(ChatRestore::Automatic) => return Ok(Err(CleanupReason::QueuedAgent)),
-            Some(ChatRestore::Resume) => {}
+        if chat.restore.is_none() {
+            return Ok(Err(CleanupReason::AgentRunning));
         }
-        if let Some(retention) = self.keep_reason(&chat.id).await? {
+        if let Some(retention) = self.chat_keep_reason(chat).await? {
             return Ok(Err(retention.into()));
         }
         if rule == Rule::Idle {
@@ -193,6 +191,18 @@ impl Manager {
         Ok(children)
     }
 
+    /// What keeps `chat` from every unattended removal: what keeps any space,
+    /// or a restore that waits to run its agent, as a queued agent keeps a
+    /// workspace.
+    pub(crate) async fn chat_keep_reason(&self, chat: &Chat) -> Result<Option<Retention>> {
+        Ok(match self.keep_reason(&chat.id).await? {
+            Some(retention) => Some(retention),
+            None => {
+                (chat.restore == Some(ChatRestore::Automatic)).then_some(Retention::QueuedAgent)
+            }
+        })
+    }
+
     /// The chat `id` as recorded now, once `removal` still applies to it.
     async fn recheck_chat(&self, id: &str, removal: Removal<'_>) -> Result<Chat> {
         let chat = self
@@ -207,18 +217,10 @@ impl Manager {
     /// something keeps it; idle or merged cleanup once it changed from the
     /// snapshot it took; completion cleanup once the completion changed.
     async fn check_chat_removal(&self, chat: &Chat, removal: Removal<'_>) -> Result<()> {
-        if removal.unattended() {
-            let retention = match self.keep_reason(&chat.id).await? {
-                Some(retention) => Some(retention),
-                // A restore that waits to run its agent keeps it, as a
-                // queued agent keeps a workspace.
-                None => {
-                    (chat.restore == Some(ChatRestore::Automatic)).then_some(Retention::QueuedAgent)
-                }
-            };
-            if let Some(retention) = retention {
-                bail!("{retention}; retaining the chat");
-            }
+        if removal.unattended()
+            && let Some(retention) = self.chat_keep_reason(chat).await?
+        {
+            bail!("{retention}; retaining the chat");
         }
         match removal {
             Removal::Automatic { snapshot, .. } => ensure!(

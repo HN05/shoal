@@ -86,7 +86,7 @@ impl Manager {
         let Some(completion) = chat.completion.clone() else {
             return Ok(());
         };
-        if !completion.cleanup || self.keep_reason(&chat.id).await?.is_some() {
+        if !completion.cleanup || self.chat_keep_reason(&chat).await?.is_some() {
             return Ok(());
         }
         let removal = self.remove_completed_chat(&chat, &completion).await;
