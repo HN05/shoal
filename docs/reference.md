@@ -4719,7 +4719,7 @@ PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
 `ready`, `stop --processes`, `stop --leftovers`, `internal agent-state` and
 `internal turn-failed` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
-`status`, inspect, execute, `merge`, `diff`, `work setup`, and resources. They may read
+`status`, inspect, execute, `diff`, `work setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.
 They `merge` only with [approval](#merge-into-the-default-branch) and cannot reach worktrees outside the workspaces split
 from theirs, create workspaces other than by `split`, remove workspaces other than those below theirs without holds, read
