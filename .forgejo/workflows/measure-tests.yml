@@ -14,7 +14,7 @@ jobs:
     runs-on: docker
     container:
       image: git.henriknordvik.com/hn05/ci-shoal:1.98
-      options: --init --tmpfs /tmp:rw,exec,nosuid,mode=1777,size=8g
+      options: --tmpfs /tmp:rw,exec,nosuid,mode=1777,size=8g
     env:
       CARGO_TARGET_DIR: /ci-target
     steps:
@@ -33,5 +33,5 @@ jobs:
           cargo test --locked --no-run -q
           zombies() { echo "processes: $(ps -e --no-headers | wc -l), zombies: $(ps -e -o stat= | grep -c '^Z')"; }
           nproc; uptime; zombies; ps -p 1 -o args=
-          python3 scripts/profile_tests.py suite
+          .forgejo/scripts/reap.py python3 scripts/profile_tests.py suite
           uptime; zombies
