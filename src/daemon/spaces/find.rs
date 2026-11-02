@@ -7,29 +7,33 @@ use crate::{
         ForgeRepo, IssueInput,
         items::link::{self, LinkKind},
     },
-    model::{Relation, Workspace, WorkspaceTarget},
+    model::{Relation, SpaceTarget, Spaces},
 };
 
 impl Manager {
-    /// Workspaces that link an issue, PR or CI run, or hold a lease on a resource,
-    /// optionally only among the one a scoped caller owns.
-    pub async fn find_workspaces(
+    /// The spaces that link an issue, PR or CI run, or the workspaces that
+    /// hold a lease on a resource, optionally only among those `within`.
+    pub async fn find_spaces(
         &self,
-        target: &WorkspaceTarget,
+        target: &SpaceTarget,
         within: Option<Vec<String>>,
-    ) -> Result<Vec<Workspace>> {
+    ) -> Result<Spaces> {
         let ids = match target {
-            WorkspaceTarget::Item { kind, input } => {
-                self.linking_workspaces(*kind, input, within).await?
-            }
-            WorkspaceTarget::Resource { name } => self.holding_workspaces(name, within).await?,
+            SpaceTarget::Item { kind, input } => self.linking_spaces(*kind, input, within).await?,
+            SpaceTarget::Resource { name } => self.holding_workspaces(name, within).await?,
         };
-        let mut workspaces = self.list_workspaces().await?;
-        workspaces.retain(|workspace| ids.contains(&workspace.id));
-        Ok(workspaces)
+        let mut spaces = Spaces {
+            workspaces: self.list_workspaces().await?,
+            chats: self.chats().await?,
+        };
+        spaces
+            .workspaces
+            .retain(|workspace| ids.contains(&workspace.id));
+        spaces.chats.retain(|chat| ids.contains(&chat.id));
+        Ok(spaces)
     }
 
-    async fn linking_workspaces(
+    async fn linking_spaces(
         &self,
         kind: LinkKind,
         input: &str,
@@ -53,7 +57,7 @@ impl Manager {
             .store
             .run(move |db| {
                 let ids = db
-                    .prepare("SELECT id FROM workspaces")?
+                    .prepare("SELECT id FROM workspaces UNION ALL SELECT id FROM chats")?
                     .query_map([], |row| row.get::<_, String>(0))?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 let mut links = Vec::new();
@@ -88,7 +92,7 @@ impl Manager {
                 matches.push((id, repository));
             }
         }
-        ensure!(!matches.is_empty(), "no workspace links {label} {input}");
+        ensure!(!matches.is_empty(), "no space links {label} {input}");
         ensure!(
             matches
                 .iter()
@@ -123,7 +127,7 @@ impl Manager {
     }
 }
 
-/// Whether a lookup confined to the workspaces `within`, or to none, covers `id`.
+/// Whether a lookup confined to the spaces `within`, or to none, covers `id`.
 fn within_ids(within: &Option<Vec<String>>, id: &str) -> bool {
     within
         .as_ref()

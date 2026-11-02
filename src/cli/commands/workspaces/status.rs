@@ -13,7 +13,7 @@ use crate::{
         ui::{self, Fallback},
     },
     forge::{IssueInput, items::link::Selection},
-    model::{Chat, SpaceDetail, SpaceStatus, Workspace, WorkspaceTarget},
+    model::{Chat, SpaceDetail, SpaceStatus, SpaceTarget, Spaces, Workspace},
     protocol::{ConfigTarget, WorkspaceMethod},
 };
 
@@ -28,11 +28,10 @@ pub(in crate::cli::commands) async fn status(
         ctx.show(&status, |status| render_status(status, ctx.json))?;
         return Ok(0);
     };
-    let workspaces =
-        request::<Vec<Workspace>>(&ctx.paths, WorkspaceMethod::FindWorkspaces { target }).await?;
+    let spaces = request::<Spaces>(&ctx.paths, WorkspaceMethod::FindSpaces { target }).await?;
     let mut statuses = Vec::new();
-    for workspace in workspaces {
-        statuses.push(status_view(ctx, workspace.id).await?);
+    for space in spaces.ids() {
+        statuses.push(status_view(ctx, space).await?);
     }
     ctx.show(&statuses, |statuses| {
         for (index, status) in statuses.iter().enumerate() {
@@ -97,11 +96,11 @@ fn chat_name(chats: &[Chat], workspace: &Workspace) -> Option<String> {
     })
 }
 
-/// Linked items and resources find the workspaces that link or hold them;
-/// anything else selects a workspace.
-fn status_target(first: Option<&str>, item: Option<String>) -> Result<Option<WorkspaceTarget>> {
+/// Linked items find the spaces that link them, and resources the
+/// workspaces that hold them; anything else selects a space.
+fn status_target(first: Option<&str>, item: Option<String>) -> Result<Option<SpaceTarget>> {
     match first {
-        Some("resource") => Ok(Some(WorkspaceTarget::Resource {
+        Some("resource") => Ok(Some(SpaceTarget::Resource {
             name: item.context("resource needs a pool or member name")?,
         })),
         Some(first)
@@ -109,7 +108,7 @@ fn status_target(first: Option<&str>, item: Option<String>) -> Result<Option<Wor
                 || IssueInput::parse(first) == IssueInput::Url =>
         {
             let selection = Selection::parse(Some(first.to_owned()), item)?;
-            Ok(Some(WorkspaceTarget::Item {
+            Ok(Some(SpaceTarget::Item {
                 kind: selection.kind.context("expected an issue, PR or CI run")?,
                 input: selection
                     .input

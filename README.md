@@ -151,7 +151,7 @@ shoal work --chats            # Running chats
 shoal work --repo my-project  # Only one repository's workspaces, chats and queued agents
 shoal work --status needs-input,failed  # Only rows with these statuses
 shoal status fix-login        # A workspace's or chat's activity, issue and PR state; a workspace's changes and resources
-shoal status pr 12            # Workspaces that link PR 12; also issue, ci or resource
+shoal status pr 12            # Workspaces and chats that link PR 12; also issue, ci or resource
 shoal config show fix-login   # Effective settings and the source of each value
 shoal config reference        # This release's command and configuration reference
 shoal config set agent.default codex

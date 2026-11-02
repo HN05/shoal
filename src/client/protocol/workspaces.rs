@@ -99,9 +99,9 @@ pub enum WorkspaceMethod {
     /// Git worktrees under repositories' Shoal directories that no
     /// workspace owns; in pages.
     UntrackedWorktrees,
-    /// Workspaces that link an item or hold a resource.
-    FindWorkspaces {
-        target: crate::model::WorkspaceTarget,
+    /// The spaces that link an item or the workspaces that hold a resource.
+    FindSpaces {
+        target: crate::model::SpaceTarget,
     },
     /// Give the workspace a title its places show, or clear it without one.
     SetWorkspaceTitle {

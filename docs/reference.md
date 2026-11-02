@@ -664,8 +664,8 @@ shoal happy codex fix-login              # Detached Happy session for the Happy 
 shoal t3 fix-login                       # Running T3 Code desktop app
 shoal status fix-login                   # Activity, changes, held resources, issue and PR state
 shoal status planning                    # A chat's agent, sessions, issue and PR state
-shoal status pr 12                       # Workspaces that link PR 12
-shoal status ci 2765                     # Workspaces that link CI run 2765
+shoal status pr 12                       # Workspaces and chats that link PR 12
+shoal status ci 2765                     # Workspaces and chats that link CI run 2765
 shoal status resource devices            # Workspaces that hold a devices lease
 shoal stop fix-login                     # Stop agents and commands until shoal resume
 shoal rm fix-login                       # Remove; choose what to keep if work differs
@@ -804,7 +804,7 @@ recorded as opened or related in `links.opened` and `links.related`, each with
 `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
 `links.prs` empty. `status` lists opened and related items too. An issue, PR or
 CI run URL, `pr`, `issue` or `ci` with a number or URL, or `resource` with a pool
-or member name shows every workspace that links or holds it instead, as a JSON array; a number must be linked in only one repository.
+or member name shows every space that links it or workspace that holds it instead, as a JSON array; a number must be linked in only one repository.
 Scoped callers find only their own workspace and its child workspaces.
 
 ### Configured commands

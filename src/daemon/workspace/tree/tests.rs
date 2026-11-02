@@ -605,10 +605,21 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
         .split_workspace(&parent.id, "child".into(), None)
         .await
         .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
     let issue = "https://github.com/owner/repo/issues/7";
     let run = "https://github.com/owner/repo/actions/runs/2765";
-    for workspace in [&child, &sibling] {
-        let id = workspace.id.clone();
+    for id in [&child.id, &sibling.id, &chat.id] {
+        let id = id.clone();
         manager
             .store
             .run(move |db| {
@@ -621,6 +632,8 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
             })
             .await
             .unwrap();
+    }
+    for workspace in [&child, &sibling] {
         manager
             .acquire_resource(
                 &workspace.id,
@@ -639,32 +652,38 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
             .unwrap();
     }
     let targets = [
-        crate::model::WorkspaceTarget::Item {
+        crate::model::SpaceTarget::Item {
             kind: crate::forge::items::link::LinkKind::Issue,
             input: "7".into(),
         },
-        crate::model::WorkspaceTarget::Item {
+        crate::model::SpaceTarget::Item {
             kind: crate::forge::items::link::LinkKind::Ci,
             input: "2765".into(),
         },
-        crate::model::WorkspaceTarget::Item {
+        crate::model::SpaceTarget::Item {
             kind: crate::forge::items::link::LinkKind::Ci,
             input: run.into(),
         },
-        crate::model::WorkspaceTarget::Resource {
+        crate::model::SpaceTarget::Resource {
             name: "lock".into(),
         },
     ];
     let subtree = manager.subtree(&parent.id).await.unwrap();
     for target in &targets {
         let found = manager
-            .find_workspaces(target, Some(subtree.clone()))
+            .find_spaces(target, Some(subtree.clone()))
             .await
             .unwrap();
-        let names: Vec<_> = found.iter().map(|w| w.name.as_str()).collect();
-        assert_eq!(names, ["child"], "{target:?}");
-        let everywhere = manager.find_workspaces(target, None).await.unwrap();
-        assert_eq!(everywhere.len(), 2, "{target:?}");
+        assert_eq!(found.ids(), std::slice::from_ref(&child.id), "{target:?}");
+        // Unscoped, the chat links the items too, but holds no lease.
+        let everywhere = manager.find_spaces(target, None).await.unwrap();
+        assert_eq!(everywhere.workspaces.len(), 2, "{target:?}");
+        let chats: Vec<_> = everywhere.chats.iter().map(|chat| &chat.id).collect();
+        let linked = matches!(target, crate::model::SpaceTarget::Item { .. });
+        assert_eq!(
+            chats,
+            linked.then_some(&chat.id).into_iter().collect::<Vec<_>>()
+        );
     }
 }
 

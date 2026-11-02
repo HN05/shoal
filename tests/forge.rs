@@ -3389,6 +3389,45 @@ fn watch_reports_failed_steps_or_log_lookup_errors_without_hiding_comments() {
     }
 }
 
+/// Status finds a chat that links a PR and shows the PR's state there.
+#[test]
+fn status_finds_the_chats_that_link_a_pr() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .current_dir(fixture.root.path())
+        .spawn()
+        .unwrap();
+    let chat = fixture.request(json!({"start_chat": {"repository": repository,
+        "name": "planning", "agent": "claude", "pid": agent.id()}}));
+    assert_eq!(chat["type"], "chat", "{chat}");
+    fixture.respond(
+        json!({"GET repos/team/project/pulls/12": {"body": pull(12, "open", "Fix", &[])}}),
+    );
+    fixture.ok(&["link", "pr", "12", "assigned", "--space", "planning"]);
+
+    let found = fixture.ok(&["status", "pr", "12"]);
+    let found = found.as_array().unwrap();
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0]["kind"], "chat", "{found:?}");
+    assert_eq!(found[0]["chat"]["name"], "planning", "{found:?}");
+    let url = format!("{}/pulls/12", fixture.web);
+    assert_eq!(found[0]["prs"][0]["url"], url.as_str(), "{found:?}");
+    assert_eq!(found[0]["prs"][0]["state"], "open", "{found:?}");
+
+    let output = fixture.run(&["status", "pr", "12"]);
+    assert!(output.status.success(), "{output:?}");
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        text.contains(&format!("PR watch:      {url}\n  State:       open")),
+        "{text}"
+    );
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
 #[test]
 fn a_chats_watch_reports_the_failed_step_of_a_check() {
     let fixture = Fixture::new(Forge::Forgejo, "");

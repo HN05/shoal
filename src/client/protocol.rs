@@ -595,6 +595,7 @@ response_bodies! {
     WokenTurn(WokenTurn),
     AgentSession(crate::model::AgentSession),
     SpaceStatus(Box<SpaceStatus>),
+    Spaces(crate::model::Spaces),
     SelectedItems(crate::model::Selected),
     MergedPull(crate::forge::items::revert::MergedPull),
     CheckLog(crate::forge::ci::checks::CheckLog),

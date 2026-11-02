@@ -38,9 +38,10 @@ pub enum WorkspaceCommand {
     /// Show a space's activity and issue and PR state, and a workspace's
     /// changes and resources.
     ///
-    /// Name a workspace or chat, or find the workspaces that link an issue,
-    /// PR or CI run or hold a resource: `status pr 12`, `status ci 2765`,
-    /// `status <issue-PR-or-run-URL>`, `status resource <pool-or-member>`.
+    /// Name a workspace or chat, find the spaces that link an issue, PR or
+    /// CI run, or the workspaces that hold a resource: `status pr 12`,
+    /// `status ci 2765`, `status <issue-PR-or-run-URL>`, `status resource
+    /// <pool-or-member>`.
     Status {
         /// Workspace or chat, issue, PR or CI run URL, or pr, issue, ci or
         /// resource.

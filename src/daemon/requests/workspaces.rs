@@ -173,8 +173,8 @@ pub(super) async fn handle(
         WorkspaceMethod::SpaceStatus { space } => {
             Body::SpaceStatus(Box::new(manager.space_status(&space).await?))
         }
-        WorkspaceMethod::FindWorkspaces { target } => {
-            Body::Workspaces(manager.find_visible_workspaces(&target, caller).await?)
+        WorkspaceMethod::FindSpaces { target } => {
+            Body::Spaces(manager.find_visible_spaces(&target, caller).await?)
         }
         WorkspaceMethod::DiffBase { workspace } => {
             Body::DiffBase(manager.diff_base(&workspace).await?)
@@ -236,7 +236,7 @@ async fn owned_places(manager: &Manager, workspace: Option<String>) -> Result<Bo
 impl Scoped for WorkspaceMethod {
     async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
-            WorkspaceMethod::ListWorkspaces | WorkspaceMethod::FindWorkspaces { .. } => None,
+            WorkspaceMethod::ListWorkspaces | WorkspaceMethod::FindSpaces { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
             | WorkspaceMethod::SetWorkspaceTitle { workspace, .. }
             | WorkspaceMethod::WorkspacePlaces { workspace }

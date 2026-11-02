@@ -64,7 +64,7 @@ impl Operation {
                         | WorkspaceMethod::CheckDependencies { .. }
                         | WorkspaceMethod::ListWorkspaces
                         | WorkspaceMethod::UntrackedWorktrees
-                        | WorkspaceMethod::FindWorkspaces { .. }
+                        | WorkspaceMethod::FindSpaces { .. }
                         | WorkspaceMethod::InspectWorkspace { .. }
                         | WorkspaceMethod::SpaceStatus { .. }
                         | WorkspaceMethod::DiffBase { .. }

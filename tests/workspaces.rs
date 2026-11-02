@@ -2764,18 +2764,18 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         assert_eq!(found[0]["prs"][0]["state"], "open");
     }
     for (target, error) in [
-        (vec!["pr", "8"], "no workspace links PR 8"),
-        (vec!["issue", "7"], "no workspace links issue 7"),
+        (vec!["pr", "8"], "no space links PR 8"),
+        (vec!["issue", "7"], "no space links issue 7"),
         (
             vec!["https://forge.example/team/other/pulls/7"],
-            "no workspace links PR",
+            "no space links PR",
         ),
         (
             vec!["resource", "missing"],
             "no workspace holds resource missing",
         ),
         (vec!["pr"], "pr needs a number or URL"),
-        (vec!["ci", "2765"], "no workspace links CI run 2765"),
+        (vec!["ci", "2765"], "no space links CI run 2765"),
         (vec!["summary", "7"], "put pr, issue, ci or resource before"),
     ] {
         let output = fixture.run(&[&["status"], target.as_slice()].concat());

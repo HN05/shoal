@@ -820,10 +820,10 @@ pub struct IssueStatus {
     pub error: Option<String>,
 }
 
-/// Something a workspace links or holds, for finding that workspace.
+/// Something a space links or a workspace holds, for finding that space.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum WorkspaceTarget {
+pub enum SpaceTarget {
     /// An issue, PR or CI run number or URL.
     Item {
         kind: crate::forge::items::link::LinkKind,
@@ -1132,15 +1132,23 @@ impl PresentSpace {
     }
 }
 
-/// The spaces a caller sees: its workspaces, and its chats, running or
-/// stopped.
-#[derive(Debug, Clone, Default)]
+/// Spaces a caller sees, such as all of them or those a lookup finds:
+/// workspaces, and chats, running or stopped.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Spaces {
     pub workspaces: Vec<Workspace>,
     pub chats: Vec<Chat>,
 }
 
 impl Spaces {
+    /// Their IDs: the workspaces', then the chats'.
+    pub fn ids(self) -> Vec<String> {
+        let workspaces = self.workspaces.into_iter().map(|workspace| workspace.id);
+        workspaces
+            .chain(self.chats.into_iter().map(|chat| chat.id))
+            .collect()
+    }
+
     /// The space `selector` names, by ID or name.
     pub fn find(&self, selector: &str) -> Option<PresentSpace> {
         let named = |id: &str, name: &str| id == selector || name == selector;

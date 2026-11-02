@@ -7,7 +7,7 @@ use super::Caller;
 use crate::{
     daemon::{approvals::ApprovalRequest, questions::Question, workspace::Manager},
     execution::recovery,
-    model::{Chat, QueueEntry, QueueRequest, Repository, Workspace, WorkspaceTarget},
+    model::{Chat, QueueEntry, QueueRequest, Repository, SpaceTarget, Spaces},
     repository::Selector,
 };
 
@@ -26,18 +26,19 @@ impl Manager {
         Ok(repositories)
     }
 
-    /// The workspaces `target` finds among those `caller` may see: the ones
-    /// in its workspace tree, or all of them for an unscoped caller.
-    pub(in crate::daemon) async fn find_visible_workspaces(
+    /// The spaces `target` finds among those `caller` may see: the
+    /// workspaces in its workspace tree, or every space for an unscoped
+    /// caller.
+    pub(in crate::daemon) async fn find_visible_spaces(
         &self,
-        target: &WorkspaceTarget,
+        target: &SpaceTarget,
         caller: Option<&Caller>,
-    ) -> Result<Vec<Workspace>> {
+    ) -> Result<Spaces> {
         let within = match caller {
             Some(caller) => Some(self.subtree(&caller.workspace_id).await?),
             None => None,
         };
-        self.find_workspaces(target, within).await
+        self.find_spaces(target, within).await
     }
 
     /// `workspace`, which must be the caller's own; `refusal` says why
