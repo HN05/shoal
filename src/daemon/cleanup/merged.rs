@@ -55,6 +55,11 @@ impl State {
             .is_some_and(|changed| *changed > deadline)
     }
 
+    /// Remember the newest change a walk at `now` saw, no later than the walk.
+    fn remember_change(&mut self, id: &str, changed: u64, now: u64) {
+        self.changed.insert(id.to_owned(), changed.min(now));
+    }
+
     fn forget_removed(&mut self, workspaces: &[Workspace]) {
         let present = |id: &String| workspaces.iter().any(|workspace| &workspace.id == id);
         self.retained.retain(|id, _| present(id));
@@ -159,18 +164,9 @@ async fn idle_candidate(
         if state.waits(&workspace.id, signals) {
             return Ok(None);
         }
-        let git_dir = workspace.git_dir.clone();
-        let tree =
-            tokio::task::spawn_blocking(move || walk_with_git_state(&path, git_dir.as_deref()))
-                .await??;
-        state
-            .changed
-            .insert(workspace.id.clone(), tree.changed.min(now));
-        Ok((tree.changed <= deadline).then_some(Snapshot {
-            rule: Rule::Merged,
-            signals,
-            tree: tree.fingerprint,
-        }))
+        let (snapshot, changed) = walked_snapshot(path, workspace.git_dir.clone(), signals).await?;
+        state.remember_change(&workspace.id, changed, now);
+        Ok((changed <= deadline).then_some(snapshot))
     }
     .await;
     observed.unwrap_or_else(|error: anyhow::Error| {
@@ -189,6 +185,23 @@ async fn idle_deadline(manager: &Manager, workspace: &Workspace, now: u64) -> Re
     };
     let deadline = now.saturating_sub(delay.as_secs());
     Ok((manager.active_at(&workspace.id).await? <= deadline).then_some(deadline))
+}
+
+/// The snapshot of a merged candidate at `path` with `signals`, and the
+/// newest change its walk saw, in Unix seconds.
+async fn walked_snapshot(
+    path: PathBuf,
+    git_dir: Option<PathBuf>,
+    signals: u64,
+) -> Result<(Snapshot, u64)> {
+    let tree = tokio::task::spawn_blocking(move || walk_with_git_state(&path, git_dir.as_deref()))
+        .await??;
+    let snapshot = Snapshot {
+        rule: Rule::Merged,
+        signals,
+        tree: tree.fingerprint,
+    };
+    Ok((snapshot, tree.changed))
 }
 
 /// One walk of the worktree, whose newest change also covers the
