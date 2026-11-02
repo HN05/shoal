@@ -435,6 +435,11 @@ impl Manager {
                     Path::new(&source),
                     Path::new(&destination),
                 )?;
+                crate::daemon::chat_messages::rebase_attachments(
+                    &tx,
+                    Path::new(&source),
+                    Path::new(&destination),
+                )?;
                 crate::daemon::workspace_files::rebase(
                     &tx,
                     &id,

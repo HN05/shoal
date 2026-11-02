@@ -135,6 +135,18 @@ pub(crate) fn rebase_attachments(
         )?
         .query_map([repository_id], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<rusqlite::Result<_>>()?;
+    rewrite_attachments(tx, "agent_messages", attached, source, destination)
+}
+
+/// Point the attached paths of the messages `attached` of `table`, by ID
+/// with their JSON array of paths, from `source` to `destination`.
+pub(crate) fn rewrite_attachments(
+    tx: &Transaction<'_>,
+    table: &str,
+    attached: Vec<(i64, String)>,
+    source: &Path,
+    destination: &Path,
+) -> Result<()> {
     for (id, attachments) in attached {
         let paths: Vec<PathBuf> = serde_json::from_str::<Vec<PathBuf>>(&attachments)?
             .into_iter()
@@ -144,7 +156,7 @@ pub(crate) fn rebase_attachments(
             })
             .collect();
         tx.execute(
-            "UPDATE agent_messages SET attachments=?2 WHERE id=?1",
+            &format!("UPDATE {table} SET attachments=?2 WHERE id=?1"),
             params![id, serde_json::to_string(&paths)?],
         )?;
     }

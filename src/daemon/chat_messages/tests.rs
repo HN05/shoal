@@ -370,3 +370,87 @@ async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
     );
     manager.withdraw_message(&worker.id, id).await.unwrap();
 }
+
+#[tokio::test]
+async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_moved() {
+    let (temp, manager) = manager().await;
+    let (_, worker) = chat_and_worker(&temp, &manager).await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            worker.repository_id.clone().into(),
+            "chat-4".into(),
+            "codex".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    manager
+        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .await
+        .unwrap();
+    manager
+        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    let shot = temp.path().join("layout.png");
+    std::fs::write(&shot, "png").unwrap();
+    manager
+        .send_message(
+            &worker.id,
+            "Which layout?".into(),
+            vec![shot.into()],
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let [copy] = messages[0].attachments.as_slice() else {
+        panic!("{messages:?}");
+    };
+    assert_eq!(std::fs::read_to_string(copy).unwrap(), "png");
+
+    // The worker's repository directory moves, as a chat of another
+    // repository may coordinate it.
+    let repo = manager.repository(&worker.repository_id).await.unwrap();
+    let source = repo.workspaces_dir.unwrap();
+    let destination = temp.path().join("moved");
+    std::fs::rename(&source, &destination).unwrap();
+    let (from, to) = (source.clone(), destination.clone());
+    let id = worker.repository_id.clone();
+    manager
+        .store
+        .run(move |db| {
+            let tx = db.transaction()?;
+            crate::daemon::workspace_files::rebase(&tx, &id, &from, &to)?;
+            super::rebase_attachments(&tx, &from, &to)?;
+            tx.commit()?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let [moved] = messages[0].attachments.as_slice() else {
+        panic!("{messages:?}");
+    };
+    assert_eq!(
+        *moved,
+        destination.join(copy.strip_prefix(&source).unwrap())
+    );
+
+    process.kill();
+    manager.end_finished_chats().await.unwrap();
+    let notifications = manager.notifications(false, 100).await.unwrap();
+    let [notification] = notifications.as_slice() else {
+        panic!("{notifications:?}");
+    };
+    assert_eq!(notification.message, "Which layout?");
+    let [file] = notification.files.as_slice() else {
+        panic!("{notification:?}");
+    };
+    assert_eq!(file.path, *moved);
+    assert_eq!(std::fs::read_to_string(&file.path).unwrap(), "png");
+}

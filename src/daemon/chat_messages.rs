@@ -5,10 +5,10 @@
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::daemon::{
-    agent_messages::{AgentMessage, MAX_UNREAD, MAX_UNREAD_BYTES},
+    agent_messages::{self, AgentMessage, MAX_UNREAD, MAX_UNREAD_BYTES},
     links::wait::{RESPONSE_LIMIT, Updates},
     notifications::{self, About, NotificationKind},
     workspace::Manager,
@@ -290,6 +290,22 @@ fn insert(
         ],
     )?;
     Ok(Some(tx.last_insert_rowid()))
+}
+
+/// Point the attached paths of chats' messages from `source` to
+/// `destination`, in the transaction that moves a repository's directory
+/// there. A moving repository has no chat of its own, but a chat of another
+/// may hold the files a workspace of it sent.
+pub(crate) fn rebase_attachments(
+    tx: &Transaction<'_>,
+    source: &Path,
+    destination: &Path,
+) -> Result<()> {
+    let attached: Vec<(i64, String)> = tx
+        .prepare("SELECT id,attachments FROM chat_messages WHERE attachments!='[]'")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    agent_messages::rewrite_attachments(tx, "chat_messages", attached, source, destination)
 }
 
 /// Give the user the notifications that the ended chat's unread messages
