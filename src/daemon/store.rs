@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 111;
+const SCHEMA_VERSION: i64 = 112;
 
 #[cfg(test)]
 mod benchmark;
@@ -454,6 +454,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (109, include_str!("store/link_spaces.sql"), None),
     (110, include_str!("store/review_spaces.sql"), None),
     (111, CHAT_COMPLETION, None),
+    (112, include_str!("store/pending_updates.sql"), None),
 ];
 
 /// The JSON completion a chat recorded with `shoal done`, until `--undo`.

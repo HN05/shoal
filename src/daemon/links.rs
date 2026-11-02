@@ -367,7 +367,7 @@ pub(crate) fn forget_assigned(
 /// Drop the replay cursors of items that are no longer linked.
 fn forget_activity(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
     let urls = serde_json::to_string(urls)?;
-    for table in ["pr_activity", "space_item_activity"] {
+    for table in ["pr_activity", "pending_updates", "space_item_activity"] {
         db.execute(
             &format!(
                 "DELETE FROM {table} WHERE space_id=?1

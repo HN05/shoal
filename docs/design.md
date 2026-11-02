@@ -2457,6 +2457,8 @@ Activity lookups run outside completion serialization; persisting results
 rechecks the watch set so cancelled watches cannot recreate their cursors.
 Unacknowledged deliveries persist with the cursor so timeout or disconnection
 cannot discard unseen updates; the CLI acknowledges after successful output.
+They are stored apart from what the cursor saw of each item, so hook deliveries
+and wake checks read only queued updates, never an item's discussion history.
 Waits share the cursor, so a newer wait in a workspace supersedes the running one
 before it takes updates, and an acknowledgement arriving while a newer wait runs
 leaves the updates pending for it; competing waits would consume updates the agent

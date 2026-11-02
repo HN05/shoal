@@ -368,6 +368,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 111 {
         db.execute_batch(CHAT_COMPLETION)?;
     }
+    if version >= 112 {
+        db.execute_batch(include_str!("pending_updates.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -795,6 +798,31 @@ fn migration_remembers_the_latest_branch_each_removal_record_names() -> Result<(
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     assert_eq!(kept, [("kept".into(), "topic".into(), "bbb".into(), 2)]);
+    Ok(())
+}
+
+#[test]
+fn migration_moves_pending_updates_out_of_activity_records() -> Result<()> {
+    let mut db = historical_database(111)?;
+    db.execute_batch(
+        r#"INSERT INTO pr_activity(space_id,url,record) VALUES
+            ('workspace','queued','{"state":"open","pending":[{"url":"queued"}]}'),
+            ('workspace','delivered','{"state":"open","pending":[]}');"#,
+    )?;
+    migrate(&mut db)?;
+    let pending = db
+        .prepare("SELECT url,updates FROM pending_updates")?
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(pending, [("queued".into(), r#"[{"url":"queued"}]"#.into())]);
+    let records = db
+        .prepare("SELECT record FROM pr_activity ORDER BY url")?
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(records, [r#"{"state":"open"}"#, r#"{"state":"open"}"#]);
+    db.execute_batch("DELETE FROM executions; DELETE FROM workspaces;")?;
+    let left: i64 = db.query_row("SELECT COUNT(*) FROM pending_updates", [], |r| r.get(0))?;
+    assert_eq!(left, 0);
     Ok(())
 }
 

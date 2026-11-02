@@ -9,7 +9,9 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 use tokio::sync::Notify;
 
-use self::cursor::{ActivityRecord, cursor_record, save_cursor_record};
+use self::cursor::{
+    ActivityRecord, all_pending, cursor_record, pending_updates, save_cursor_record, save_pending,
+};
 use super::{
     pr::RegistrationKind,
     space::{LinkSpace, require_ready_space},
@@ -1113,10 +1115,10 @@ pub(super) fn queue_update(
     workspace_id: &str,
     update: Update,
 ) -> Result<()> {
-    let mut record = cursor_record(db, workspace_id, &update.url)?.unwrap_or_default();
+    let mut pending = pending_updates(db, workspace_id, &update.url)?;
     let url = update.url.clone();
-    record.pending.push(update);
-    save_cursor_record(db, workspace_id, &url, &record)
+    pending.push(update);
+    save_pending(db, workspace_id, &url, &pending)
 }
 
 /// Remove `deliveries` from the pending updates of the workspaces `ids`;
@@ -1126,17 +1128,11 @@ fn acknowledge_deliveries(
     ids: &[String],
     deliveries: &[String],
 ) -> Result<()> {
-    for (id, url, record) in activity_records(db, ids)? {
-        let mut record: ActivityRecord = serde_json::from_str(&record)?;
-        let pending = record.pending.len();
-        record
-            .pending
-            .retain(|update| !deliveries.contains(&update.delivery));
-        if record.pending.len() != pending {
-            db.execute(
-                "UPDATE pr_activity SET record=?1 WHERE space_id=?2 AND url=?3",
-                params![serde_json::to_string(&record)?, id, url],
-            )?;
+    for (id, url, mut pending) in all_pending(db, ids)? {
+        let count = pending.len();
+        pending.retain(|update| !deliveries.contains(&update.delivery));
+        if pending.len() != count {
+            save_pending(db, &id, &url, &pending)?;
         }
     }
     Ok(())
@@ -1145,20 +1141,11 @@ fn acknowledge_deliveries(
 /// The updates pending on the cursor of the space `id` for the items at
 /// `urls`.
 fn pending_on_cursor(db: &rusqlite::Connection, id: &str, urls: &[String]) -> Result<Vec<Update>> {
-    let mut statement = db.prepare("SELECT url,record FROM pr_activity WHERE space_id=?1")?;
-    let records = statement.query_map([id], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
-    let mut updates = Vec::new();
-    for record in records {
-        let (url, record) = record?;
-        if !urls.contains(&url) {
-            continue;
-        }
-        let record: ActivityRecord = serde_json::from_str(&record)?;
-        updates.extend(record.pending);
-    }
-    Ok(updates)
+    Ok(all_pending(db, &[id.to_owned()])?
+        .into_iter()
+        .filter(|(_, url, _)| urls.contains(url))
+        .flat_map(|(_, _, pending)| pending)
+        .collect())
 }
 
 /// Pending updates for one response, each with the workspace whose cursor
@@ -1234,10 +1221,9 @@ fn redeliver_after(
 ) -> Result<()> {
     let next = uuid::Uuid::new_v4().to_string();
     let mut seen = 0;
-    for (id, url, record) in activity_records(db, &[workspace.to_owned()])? {
-        let mut record: ActivityRecord = serde_json::from_str(&record)?;
+    for (id, url, mut pending) in all_pending(db, &[workspace.to_owned()])? {
         let mut moved = false;
-        for update in &mut record.pending {
+        for update in &mut pending {
             if update.delivery == delivery {
                 seen += 1;
                 if seen > kept {
@@ -1247,10 +1233,7 @@ fn redeliver_after(
             }
         }
         if moved {
-            db.execute(
-                "UPDATE pr_activity SET record=?1 WHERE space_id=?2 AND url=?3",
-                params![serde_json::to_string(&record)?, id, url],
-            )?;
+            save_pending(db, &id, &url, &pending)?;
         }
     }
     Ok(())
@@ -1294,24 +1277,6 @@ fn links_kind(
         }
     }
     Ok(false)
-}
-
-/// The activity record of every item of the workspaces `ids`, with its
-/// workspace and URL.
-fn activity_records(
-    db: &rusqlite::Connection,
-    ids: &[String],
-) -> Result<Vec<(String, String, String)>> {
-    let mut statement = db.prepare("SELECT ?1, url, record FROM pr_activity WHERE space_id=?1")?;
-    let mut records = Vec::new();
-    for id in ids {
-        records.extend(
-            statement
-                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-                .collect::<rusqlite::Result<Vec<_>>>()?,
-        );
-    }
-    Ok(records)
 }
 
 /// The workspace's items of a kind, or of every kind, that one use of its
