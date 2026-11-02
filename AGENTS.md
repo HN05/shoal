@@ -20,6 +20,9 @@ when behavior changes, distinguishing decisions from proposals.
   cover several, or a match dispatches every command of a group, split it by
   responsibility into a directory of modules before adding to it; judge the
   responsibility, not the line count.
+- When you see a problem with the code's structure or code that should be
+  refactored, refactor it in your change when it lies within your work, and
+  otherwise file an issue for it instead of only mentioning it.
 - Tests live in a sibling `tests.rs` (`#[cfg(test)] mod tests;`), not inline in
   the implementation file.
 - Integrations such as agent tools, terminal hosts and apps implement callbacks
