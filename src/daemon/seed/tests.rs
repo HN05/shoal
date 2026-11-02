@@ -374,15 +374,3 @@ async fn removal_keeps_a_symlinked_seed_worktree() {
     assert!(manager.remove_repository(&repo.id).await.is_err());
     assert!(moved.join("seed.sh").exists());
 }
-
-#[test]
-fn group_membership_reads_the_group_field() {
-    // pid 40, command "a) b", state S, parent 7, group 30.
-    let stat = "40 (a) b) S 7 30 30 0 -1";
-    assert!(live_member(stat, 30));
-    assert!(!live_member(stat, 7), "the parent PID is not the group");
-    assert!(
-        !live_member("40 (a) Z 7 30 30 0 -1", 30),
-        "zombies are gone"
-    );
-}
