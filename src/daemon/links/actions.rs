@@ -340,12 +340,13 @@ fn own_posts(action: &Action, authored: Vec<String>) -> Vec<String> {
 }
 
 /// What `action` changed of the item's details that is the agent's own:
-/// none of the user's decisions.
+/// only an edit's, since what another action's reads show changed is
+/// someone else's change.
 fn own_edits(action: &Action, edited: Edited) -> Edited {
-    if users_decision(action) {
-        Edited::default()
-    } else {
+    if matches!(action, Action::Edit(_)) {
         edited
+    } else {
+        Edited::default()
     }
 }
 

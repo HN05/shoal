@@ -3831,10 +3831,13 @@ log or Forgejo's step list names one, and a pointer to `shoal view ci`; its watc
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
 without linking it or changing completion policy; explicit PR watches also accept
 PRs whose head branch is in a fork. Watches return on comments,
-reviews, completed CI checks, new merge conflicts, closure, reopening, merging,
-or a merged base workspace, except for comments, review thread replies, closing
+reviews, edits, completed CI checks, new merge conflicts, closure, reopening, merging,
+or a merged base workspace, except for comments, review thread replies, edits, closing
 and reopening that the workspace itself made through Shoal; the same change made another way, such as
-in the web interface, is reported. A passing check is held while
+in the web interface, is reported. An `edited` update names what changed of an
+item's title, description, labels, assignees, milestone and, for a PR, its draft
+state and base branch, such as `Labels added: bug; title changed to "Fix"`;
+Shoal's own retargeting of a stacked PR is left to its `base_merged` update. A passing check is held while
 another check on the PR's head commit is pending, and arrives with a check that
 fails or does not pass, or with the last pending one; a new head commit drops
 the passes held for the previous one. `shoal status` and `item_activity` events

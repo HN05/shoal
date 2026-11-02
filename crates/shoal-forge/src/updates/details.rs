@@ -86,13 +86,15 @@ impl ItemDetails {
         Some(summary)
     }
 
-    /// Take each part `edited` changed as it is after the action.
+    /// Take each part `edited` changed as it is after the action, and only
+    /// the names it added to or removed from a list, so a name someone else
+    /// changed since the cursor last saw the item is still reported.
     fn adopt(&mut self, edited: &Edited) {
         let Edited { before, after } = edited;
         adopt(&mut self.title, &before.title, &after.title);
         adopt(&mut self.body, &before.body, &after.body);
-        adopt(&mut self.labels, &before.labels, &after.labels);
-        adopt(&mut self.assignees, &before.assignees, &after.assignees);
+        adopt_names(&mut self.labels, &before.labels, &after.labels);
+        adopt_names(&mut self.assignees, &before.assignees, &after.assignees);
         adopt(&mut self.milestone, &before.milestone, &after.milestone);
         adopt(&mut self.draft, &before.draft, &after.draft);
         adopt(&mut self.base, &before.base, &after.base);
@@ -141,6 +143,18 @@ fn adopt<T: Clone + PartialEq>(seen: &mut T, before: &T, after: &T) {
     if before != after {
         seen.clone_from(after);
     }
+}
+
+/// `seen` with the names the action added from `before` to `after` and
+/// without those it removed.
+fn adopt_names(seen: &mut Vec<String>, before: &[String], after: &[String]) {
+    seen.retain(|name| after.contains(name) || !before.contains(name));
+    for name in after {
+        if !before.contains(name) && !seen.contains(name) {
+            seen.push(name.clone());
+        }
+    }
+    seen.sort();
 }
 
 fn sorted(names: &[String]) -> Vec<String> {

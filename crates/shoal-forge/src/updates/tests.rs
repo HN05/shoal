@@ -654,6 +654,21 @@ fn own_edits_are_taken_as_seen_leaving_other_changes_reported() {
     assert!(seen.changes(&snapshot("main", json!([])), "pr").is_empty());
     let labelled = seen.changes(&snapshot("main", json!(["bug"])), "pr");
     assert_eq!(labelled[0].message, "Labels added: bug");
+    // A label someone else added before the agent added its own is still
+    // reported, and one the agent removed is not.
+    let labels = |names: serde_json::Value| snapshot("main", names).details.unwrap();
+    let own = Edited {
+        before: labels(json!(["bug", "wip"])),
+        after: labels(json!(["bug", "docs", "wip"])),
+    };
+    let mut seen = snapshot("main", json!(["wip"]));
+    seen.adopt_edited(&own);
+    seen.adopt_edited(&Edited {
+        before: labels(json!(["bug", "docs", "wip"])),
+        after: labels(json!(["bug", "docs"])),
+    });
+    let updates = seen.changes(&snapshot("main", json!(["bug", "docs"])), "pr");
+    assert_eq!(updates[0].message, "Labels added: bug");
     // An item not observed yet takes its details from its first observation.
     let mut unobserved = Snapshot::default();
     unobserved.adopt_edited(&Edited::retarget("feature", "main"));

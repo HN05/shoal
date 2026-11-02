@@ -2414,8 +2414,10 @@ forge's timeline would, and works the same on every forge; changes no read
 reports, such as requested reviewers, are not followed. A snapshot saved before
 details were recorded takes the next read as its baseline. Edits a workspace
 makes through Shoal, and Shoal's retargeting of a stacked PR, are taken as seen
-on its cursor, field by field, as its own comments and state changes are, so
-another edit read in the same poll is still reported.
+on its cursor as its own comments and state changes are: each field the edit
+changed, and of labels and assignees only the names it added or removed, so
+another edit read in the same poll is still reported. Only edits count, since
+what the reads around any other action show changed is someone else's.
 Passing checks wait on the cursor while another check on the PR's head commit is
 pending, since a pass asks nothing of the agent until the rest finish and each
 wake costs it a turn: a check that does not pass delivers them at once, the last
