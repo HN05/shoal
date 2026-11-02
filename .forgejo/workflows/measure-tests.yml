@@ -14,7 +14,7 @@ jobs:
     runs-on: docker
     container:
       image: git.henriknordvik.com/hn05/ci-shoal:1.98
-      options: --tmpfs /tmp:rw,exec,nosuid,mode=1777,size=8g
+      options: --init --tmpfs /tmp:rw,exec,nosuid,mode=1777,size=8g
     env:
       CARGO_TARGET_DIR: /ci-target
     steps:
@@ -31,9 +31,7 @@ jobs:
           . .forgejo/scripts/lock-target-dir.sh
           cargo clean --workspace
           cargo test --locked --no-run -q
-          nproc; uptime; ps -e | wc -l
-          # suite measured in run 13923
-          uptime
-          python3 scripts/profile_tests.py tests --jobs "$(nproc)"
-          uptime; ps -e | wc -l
-          ps -eo pid,ppid,etime,args | grep -v ' \[' | tail -40
+          zombies() { echo "processes: $(ps -e --no-headers | wc -l), zombies: $(ps -e -o stat= | grep -c '^Z')"; }
+          nproc; uptime; zombies; ps -p 1 -o args=
+          python3 scripts/profile_tests.py suite
+          uptime; zombies
