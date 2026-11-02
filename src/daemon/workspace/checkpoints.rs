@@ -1,5 +1,7 @@
 //! Checkpoints: a workspace's HEAD and unsaved files, kept under private refs
 //! until they expire, which `shoal work restore` returns the workspace to.
+use std::collections::HashSet;
+
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -371,18 +373,22 @@ impl Manager {
         let repo = &self.repository(&repo.id).await?;
         let _refs = self.gates.lock_checkpoints().await;
         let repository_id = repo.id.clone();
-        self.store
-            .run(move |db| delete_expired(db, &repository_id))
+        let kept = self
+            .store
+            .run(move |db| {
+                delete_expired(db, &repository_id)?;
+                kept_commits(db, &repository_id)
+            })
             .await?;
-        self.adopt_legacy_refs(repo).await?;
-        self.delete_unowned_refs(repo).await
+        self.adopt_legacy_refs(repo, &kept).await?;
+        self.delete_unowned_refs(repo, &kept).await
     }
 
     /// A ref no checkpoint keeps is left by deleted checkpoints, or by a
     /// write that failed between the record and the ref.
-    async fn delete_unowned_refs(&self, repo: &Repository) -> Result<()> {
+    async fn delete_unowned_refs(&self, repo: &Repository, kept: &HashSet<String>) -> Result<()> {
         for (reference, commit) in git::checkpoint::saved_refs(&repo.path).await? {
-            if !self.keeps_commit(repo, &commit).await? {
+            if !kept.contains(&commit) {
                 git::checkpoint::delete_at(&repo.path, &reference, &commit).await?;
             }
         }
@@ -392,30 +398,15 @@ impl Manager {
     /// Move the refs removals kept before checkpoints to the checkpoint ref
     /// of the commit when the store migration recorded a checkpoint for it,
     /// deleting the rest.
-    async fn adopt_legacy_refs(&self, repo: &Repository) -> Result<()> {
+    async fn adopt_legacy_refs(&self, repo: &Repository, kept: &HashSet<String>) -> Result<()> {
         for (legacy, commit) in git::checkpoint::legacy_refs(&repo.path).await? {
-            if self.keeps_commit(repo, &commit).await? {
+            if kept.contains(&commit) {
                 let reference = git::checkpoint::reference(&commit);
                 git::checkpoint::save(&repo.path, &reference, &commit).await?;
             }
             git::checkpoint::delete_at(&repo.path, &legacy, &commit).await?;
         }
         Ok(())
-    }
-
-    /// Whether a checkpoint of the repository keeps `commit`.
-    async fn keeps_commit(&self, repo: &Repository, commit: &str) -> Result<bool> {
-        let (id, commit) = (repo.id.clone(), commit.to_owned());
-        self.store
-            .run(move |db| {
-                crate::daemon::store::exists(
-                    db,
-                    "SELECT 1 FROM checkpoints
-                     WHERE repository_id=?1 AND json_extract(record, '$.commit')=?2",
-                    [id, commit],
-                )
-            })
-            .await
     }
 }
 
@@ -539,6 +530,15 @@ fn delete_expired(db: &Connection, repository_id: &str) -> Result<()> {
         [repository_id],
     )?;
     Ok(())
+}
+
+/// The commits the repository's checkpoints keep, read once so a pass over
+/// thousands of refs does not query the store for each.
+fn kept_commits(db: &Connection, repository_id: &str) -> Result<HashSet<String>> {
+    db.prepare("SELECT json_extract(record, '$.commit') FROM checkpoints WHERE repository_id=?1")?
+        .query_map([repository_id], |row| row.get(0))?
+        .map(|commit| Ok(commit?))
+        .collect()
 }
 
 fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Checkpoint>> {
