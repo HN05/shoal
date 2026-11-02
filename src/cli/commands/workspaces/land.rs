@@ -20,18 +20,26 @@ use crate::{
     model::{LandPlan, LandedBranch},
     paths::Paths,
     protocol::{
-        ConfigTarget, ExecutionMethod,
+        ConfigTarget, ExecutionMethod, WorkspaceMethod,
         operations::{OperationSpec, Step},
     },
 };
 
-/// `push` overrides `[land] push` when given.
+/// `push` overrides `[land] push` when given. Unless `confirmed`, the user
+/// confirms a landing the daemon warns about.
 pub(in crate::cli::commands) async fn land(
     ctx: &Context,
     workspace: Option<String>,
     push: Option<bool>,
+    confirmed: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    if !confirmed {
+        let warning = WorkspaceMethod::LandWarning {
+            workspace: workspace.clone(),
+        };
+        crate::cli::commands::merge_warning::confirm(ctx, request(&ctx.paths, warning).await?)?;
+    }
     let spec = OperationSpec::Land { workspace, push };
     match operations::run(ctx, spec).await {
         Ok(landed) => {

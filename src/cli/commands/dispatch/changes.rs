@@ -21,7 +21,11 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
             workspace,
             push,
             no_push,
-        } => workspaces::land(&ctx, workspace, (push || no_push).then_some(push)).await,
+            confirmation,
+        } => {
+            let push = (push || no_push).then_some(push);
+            workspaces::land(&ctx, workspace, push, confirmation.yes).await
+        }
     }
 }
 

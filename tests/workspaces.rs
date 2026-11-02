@@ -17433,6 +17433,88 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
 }
 
 #[test]
+fn invalid_item_actions_fail_before_a_picker_asks_for_their_space() {
+    let fixture = Fixture::new();
+    fixture.add("worker");
+    let picked = fixture.root.path().join("picked");
+    install_test_script(
+        fixture.root.path().join("bin/fzf"),
+        format!("#!/bin/sh\ntouch '{}'\n", picked.display()),
+    );
+    for args in [
+        &["issue", "comment", "--body", " "][..],
+        &["pr", "comment", "--body", " "][..],
+    ] {
+        let mut command = fixture.command();
+        command.current_dir(fixture.root.path()).args(args);
+        let (output, transcript) = fixture.interactive_command(&mut command, "");
+        assert!(!output.status.success(), "{args:?}");
+        assert!(
+            transcript.contains("the comment is empty"),
+            "{args:?}: {transcript}"
+        );
+        assert!(!picked.exists(), "{args:?} opened a picker");
+    }
+}
+
+#[test]
+fn land_asks_before_merging_files_changed_on_both_sides() {
+    let fixture = Fixture::new();
+    commit_file(
+        &fixture.repo,
+        ".shoal.toml",
+        "[conflicts]\nsensitive = ['version']\n",
+    );
+    let worker = fixture.add("worker");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    commit_file(path, "version", "2\n");
+    commit_file(path, "feature", "new\n");
+    commit_file(&fixture.repo, "other", "main\n");
+    commit_file(&fixture.repo, "version", "2\n");
+    let before = git(&fixture.repo, &["rev-parse", "main"]);
+
+    let check = fixture.run(&["--json", "conflicts", "--workspace", "worker"]);
+    assert_eq!(check.status.code(), Some(1), "{check:?}");
+    let check: serde_json::Value = serde_json::from_slice(&check.stdout)
+        .unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(&check.stderr)));
+    assert_eq!(check["conflicts"], false);
+    assert_eq!(
+        check["changed_on_both_sides"],
+        serde_json::json!(["version"])
+    );
+    let status = fixture.ok(&["status", "worker"]);
+    assert_eq!(
+        status["changed_on_both_sides"]["files"],
+        serde_json::json!(["version"])
+    );
+
+    let refused = fixture.run(&["land", "worker"]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("worker and main both changed version"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("--yes"), "{stderr}");
+    let (declined, transcript) = fixture.interactive(&["land", "worker"], "n\n");
+    assert!(!declined.status.success());
+    assert!(transcript.contains("Are you sure? [y/N]"), "{transcript}");
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
+
+    // Landing makes a merge commit in the checkout, which needs an identity.
+    git(&fixture.repo, &["config", "user.name", "Test"]);
+    git(
+        &fixture.repo,
+        &["config", "user.email", "test@example.invalid"],
+    );
+    assert_eq!(fixture.ok(&["land", "--yes", "worker"])["updated"], true);
+    assert_eq!(
+        fs::read_to_string(fixture.repo.join("feature")).unwrap(),
+        "new\n"
+    );
+}
+
+#[test]
 fn view_shows_linked_items_with_status_and_discussion() {
     let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("view");

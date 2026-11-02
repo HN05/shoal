@@ -29,6 +29,7 @@ mod leases;
 mod links;
 mod listing;
 pub(crate) mod menu;
+mod merge_warning;
 mod messages;
 mod notifications;
 pub(crate) mod operations;

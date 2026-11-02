@@ -16,7 +16,7 @@ use crate::{
         link::{ItemKind, LinkKind, Selection},
     },
     model::Selected,
-    protocol::ItemMethod,
+    protocol::{ItemContext, ItemMethod},
 };
 
 mod content;
@@ -99,9 +99,10 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
             delete_branch,
             auto,
             cancel_auto: _,
+            confirmation,
         } => {
             let (action, outcome) = merge(method, delete_branch, auto);
-            (item, action, outcome)
+            return merge_pr(ctx, item, action, outcome, confirmation.yes).await;
         }
         PrCommand::DeleteBranch { item } => (item, Action::DeleteBranch, "PR branch deleted"),
     };
@@ -177,6 +178,29 @@ fn merge(method: Option<MergeMethod>, delete_branch: bool, auto: bool) -> (Actio
     }
 }
 
+/// Carry out `action`, a merge or its withdrawal, on the PR `selector`
+/// names, unless the user declines a merge the daemon warns about.
+async fn merge_pr(
+    ctx: &Context,
+    selector: ItemSelector,
+    action: Action,
+    outcome: &str,
+    confirmed: bool,
+) -> Result<i32> {
+    // An invalid action fails before a picker asks for its context.
+    action.validate(ItemKind::Pr)?;
+    let context = item_context(ctx, &selector).await?;
+    if !confirmed && !matches!(action, Action::CancelAutoMerge) {
+        let item = selector.item.clone();
+        let warning = ItemMethod::MergeWarning {
+            context: context.clone(),
+            item,
+        };
+        super::merge_warning::confirm(ctx, client::request(&ctx.paths, warning).await?)?;
+    }
+    act_in(ctx, context, selector.item, ItemKind::Pr, action, outcome).await
+}
+
 async fn act(
     ctx: &Context,
     selector: ItemSelector,
@@ -185,20 +209,34 @@ async fn act(
     outcome: &str,
 ) -> Result<i32> {
     action.validate(kind)?;
+    let context = item_context(ctx, &selector).await?;
+    act_in(ctx, context, selector.item, kind, action, outcome).await
+}
+
+/// The context `selector` names an item in.
+async fn item_context(ctx: &Context, selector: &ItemSelector) -> Result<ItemContext> {
+    let (space, repo) = (selector.space.clone(), selector.repo.name.clone());
+    select_space_item_context(ctx, space, repo, selector.item.as_deref()).await
+}
+
+/// Carry out `action`, which the caller validated, on `item` in `context`,
+/// or on the space's linked item of `kind`, and report `outcome`.
+async fn act_in(
+    ctx: &Context,
+    context: ItemContext,
+    item: Option<String>,
+    kind: ItemKind,
+    action: Action,
+    outcome: &str,
+) -> Result<i32> {
     // The forge merges now a PR whose checks already pass.
     let auto_merge = matches!(action, Action::AutoMerge { .. });
     let item: Item = client::request(
         &ctx.paths,
         ItemMethod::ItemAction {
-            context: select_space_item_context(
-                ctx,
-                selector.space,
-                selector.repo.name,
-                selector.item.as_deref(),
-            )
-            .await?,
+            context,
             kind,
-            item: selector.item,
+            item,
             action,
         },
     )

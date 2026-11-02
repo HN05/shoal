@@ -95,6 +95,8 @@ pub enum ChangesCommand {
         /// Keep the landing local, overriding [land] push.
         #[arg(long, overrides_with = "push")]
         no_push: bool,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
     },
 }
 
@@ -311,6 +313,8 @@ pub enum PrCommand {
         /// Withdraw the PR's automatic merge.
         #[arg(long, conflicts_with_all = ["method", "delete_branch", "auto"])]
         cancel_auto: bool,
+        #[command(flatten)]
+        confirmation: ConfirmationArgs,
     },
     /// Delete the branch of a merged or closed PR on the forge with your own
     /// login; workspace processes cannot delete branches.
