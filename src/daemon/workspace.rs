@@ -1038,9 +1038,7 @@ struct RemovalRules {
 fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.holds = holds::list(db, &workspace.id)?;
     workspace.review = review::list(db, &workspace.id)?;
-    workspace.latest_review = crate::daemon::reviews::store::latest(db, &workspace.id)?
-        .as_ref()
-        .map(Into::into);
+    workspace.latest_review = crate::daemon::reviews::store::latest_status(db, &workspace.id)?;
     workspace.agent_state = agent_state::current(db, &workspace.id)?;
     stack::load(db, workspace)?;
     tree::load(db, workspace)?;

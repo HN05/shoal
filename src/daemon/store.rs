@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 112;
+const SCHEMA_VERSION: i64 = 113;
 
 #[cfg(test)]
 mod benchmark;
@@ -455,7 +455,12 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (110, include_str!("store/review_spaces.sql"), None),
     (111, CHAT_COMPLETION, None),
     (112, include_str!("store/pending_updates.sql"), None),
+    (113, REVIEW_REPLY_LOOKUPS, None),
 ];
+
+/// The replies to a review's findings, which every read of the review loads.
+const REVIEW_REPLY_LOOKUPS: &str =
+    "CREATE INDEX IF NOT EXISTS review_replies_review ON review_replies(review_id, id);";
 
 /// The JSON completion a chat recorded with `shoal done`, until `--undo`.
 const CHAT_COMPLETION: &str = "ALTER TABLE chats ADD COLUMN completion TEXT;";

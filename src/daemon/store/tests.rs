@@ -371,6 +371,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 112 {
         db.execute_batch(include_str!("pending_updates.sql"))?;
     }
+    if version >= 113 {
+        db.execute_batch(REVIEW_REPLY_LOOKUPS)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
