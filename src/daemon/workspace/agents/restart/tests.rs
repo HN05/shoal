@@ -77,6 +77,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 origin: None,
                 restarted_by: Vec::new(),
                 restart: None,
+                stopped: None,
             },
             RunningAgent {
                 execution: gone.plan.id.clone(),
@@ -88,6 +89,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 origin: None,
                 restarted_by: Vec::new(),
                 restart: None,
+                stopped: None,
             },
         ]
     );

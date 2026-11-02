@@ -634,6 +634,14 @@ impl Manager {
             .flatten()
     }
 
+    /// Mark each of `executions` whose agent protection stopped while its
+    /// wrapper waits to restore it.
+    pub(crate) async fn annotate_stops(&self, executions: &mut [crate::model::Execution]) {
+        for execution in executions {
+            execution.stopped = self.agent_overload(&execution.id).await;
+        }
+    }
+
     pub(crate) async fn agent_was_overloaded(&self, id: &str) -> bool {
         self.agent_overload(id).await.is_some()
     }

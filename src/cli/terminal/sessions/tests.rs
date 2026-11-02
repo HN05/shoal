@@ -70,6 +70,7 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
         group_id: None,
         origin: Some(origin.clone()),
         agent: agent.map(str::to_owned),
+        stopped: None,
     };
     let detached = Execution {
         origin: None,

@@ -370,7 +370,8 @@ impl Manager {
         let issue = self.issue_registration(&workspace.id).await?;
         let pr_cleanup = self.pr_registration(&workspace.id).await?;
         let completion = self.completion(&workspace.id).await?;
-        self.store
+        let mut inspection = self
+            .store
             .run(move |db| {
                 Ok(Inspection {
                     issue,
@@ -387,7 +388,9 @@ impl Manager {
                     workspace,
                 })
             })
-            .await
+            .await?;
+        self.annotate_stops(&mut inspection.executions).await;
+        Ok(inspection)
     }
 
     pub async fn create_workspace(

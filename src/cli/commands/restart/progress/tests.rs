@@ -20,6 +20,7 @@ fn restart(name: &str) -> Restart {
             origin: None,
             restarted_by: Vec::new(),
             restart: None,
+            stopped: None,
         },
         workspace,
         joins: None,

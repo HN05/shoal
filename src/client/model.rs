@@ -468,6 +468,9 @@ pub struct Execution {
     /// The model and effort its agent runs with.
     #[serde(default, flatten)]
     pub model: crate::agent::ModelChoice,
+    /// Why Shoal stopped its agent, while its wrapper waits to restore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped: Option<crate::client::protocol::Protection>,
 }
 
 /// A file a completion handed back: the record of Shoal's copy, which tells a
@@ -959,6 +962,9 @@ pub struct RunningAgent {
     /// The `shoal restart` of it in progress.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restart: Option<PendingRestart>,
+    /// Why Shoal stopped it, while its wrapper waits to restore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped: Option<crate::client::protocol::Protection>,
 }
 
 /// A `shoal restart` that has not started its agent again yet.

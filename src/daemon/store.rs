@@ -1152,6 +1152,7 @@ fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
             model: row.get("model")?,
             effort: row.get("effort")?,
         },
+        stopped: None,
     })
 }
 
