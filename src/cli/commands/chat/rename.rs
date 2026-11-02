@@ -8,7 +8,7 @@ use crate::{
         context::Context,
         terminal, ui,
     },
-    model::Chat,
+    model::RenamedChat,
     protocol::{AgentMethod, ChatMethod},
 };
 
@@ -24,10 +24,11 @@ pub(in crate::cli::commands) async fn rename(
     // Refuse an invalid name before a picker asks for the chat.
     crate::validate::name("chat", &name)?;
     let chat = select(ctx, chat).await?;
-    let old = name_of(ctx, &chat).await?;
-    let renamed = request::<Chat>(&ctx.paths, ChatMethod::RenameChat { chat, name }).await?;
-    relabel(ctx, old.as_deref(), &renamed).await;
-    ctx.show(&renamed, |chat| outln!("Renamed chat to {}", chat.name))?;
+    let renamed = request::<RenamedChat>(&ctx.paths, ChatMethod::RenameChat { chat, name }).await?;
+    relabel(ctx, &renamed).await;
+    ctx.show(&renamed.chat, |chat| {
+        outln!("Renamed chat to {}", chat.name)
+    })?;
     Ok(0)
 }
 
@@ -50,25 +51,17 @@ pub(in crate::cli::commands) async fn request_name(
     Ok(0)
 }
 
-/// The name of the running chat `chat` names by name or ID, if any.
-async fn name_of(ctx: &Context, chat: &str) -> Result<Option<String>> {
-    let chats = client::chats(&ctx.paths).await?;
-    Ok(chats
-        .into_iter()
-        .find(|running| running.id == chat || running.name == chat)
-        .map(|running| running.name))
-}
-
 /// Show the renamed chat's name on the place it runs in, where that still
-/// shows `old`; the chat keeps its new name when that fails.
-async fn relabel(ctx: &Context, old: Option<&str>, renamed: &Chat) {
-    let Some(old) = old else {
-        return;
-    };
-    if let Err(error) = terminal::relabel_chat(ctx, old, renamed).await {
+/// shows its previous name; the chat keeps its new name when that fails.
+async fn relabel(ctx: &Context, renamed: &RenamedChat) {
+    let RenamedChat {
+        chat,
+        previous_name,
+    } = renamed;
+    if let Err(error) = terminal::relabel_chat(ctx, previous_name, chat).await {
         eprintln!(
             "warning: cannot relabel the place of chat {}: {error:#}",
-            renamed.name
+            chat.name
         );
     }
 }

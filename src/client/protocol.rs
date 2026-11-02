@@ -75,7 +75,7 @@ pub use simulators::SimulatorMethod;
 pub use subscriptions::SubscriptionMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 192;
+pub const VERSION: u32 = 193;
 /// The first protocol whose wrappers read [`Control::RestoreWaits`].
 pub const RESTORE_WAITS: u32 = 174;
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -574,6 +574,7 @@ response_bodies! {
     Workspaces(Vec<Workspace>),
     Reached(crate::client::output::messages::Reached),
     Chat(crate::model::Chat),
+    RenamedChat(crate::model::RenamedChat),
     Chats(Vec<crate::model::Chat>),
     ChatName(String),
     Branches(Vec<crate::model::Branch>),

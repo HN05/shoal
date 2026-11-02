@@ -41,7 +41,9 @@ pub(super) async fn handle(
         ChatMethod::DiscardChat { chat } => Body::Chat(manager.discard_saved_chat(&chat).await?),
         ChatMethod::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
-        ChatMethod::RenameChat { chat, name } => Body::Chat(manager.rename_chat(chat, name).await?),
+        ChatMethod::RenameChat { chat, name } => {
+            Body::RenamedChat(manager.rename_chat(chat, name).await?)
+        }
         ChatMethod::CheckChatName { name } => {
             manager.check_chat_name(name).await?;
             Body::Ok

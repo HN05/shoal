@@ -442,7 +442,7 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
     // An ended chat named topic left its log.
     let topic_log = files.with_file_name("topic.log");
     std::fs::write(&topic_log, "ended log").unwrap();
-    let refusal = |result: Result<Chat>| format!("{:#}", result.unwrap_err());
+    let refusal = |result: Result<RenamedChat>| format!("{:#}", result.unwrap_err());
 
     // The new name is refused where a new chat's would be.
     let rename = |chat: &str, name: &str| manager.rename_chat(chat.into(), name.into());
@@ -450,17 +450,27 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
     assert!(refusal(rename("talk", "other").await).contains("a chat already has"));
     assert!(refusal(rename("talk", "-topic").await).contains("chat names must"));
     assert!(refusal(rename("gone", "topic").await).contains("no running chat gone"));
-    assert_eq!(rename("talk", "talk").await.unwrap(), talk);
+    assert_eq!(
+        rename("talk", "talk").await.unwrap(),
+        RenamedChat {
+            chat: talk.clone(),
+            previous_name: "talk".into(),
+        }
+    );
 
+    // The reply names the chat as it was before.
     let renamed = rename(&talk.id, "topic").await.unwrap();
     assert_eq!(
         renamed,
-        Chat {
-            name: "topic".into(),
-            ..talk.clone()
+        RenamedChat {
+            chat: Chat {
+                name: "topic".into(),
+                ..talk.clone()
+            },
+            previous_name: "talk".into(),
         }
     );
-    assert!(manager.chats().await.unwrap().contains(&renamed));
+    assert!(manager.chats().await.unwrap().contains(&renamed.chat));
     assert_eq!(std::fs::read_to_string(&topic_log).unwrap(), "talk log");
     assert_eq!(
         std::fs::read_to_string(files.with_file_name("topic.prompt.md")).unwrap(),
@@ -517,7 +527,7 @@ async fn a_chat_keeps_its_name_until_its_session_takes_it_over() {
         .rename_chat(chat.id.clone(), "topic".into())
         .await
         .unwrap();
-    assert_eq!(renamed.name, "topic");
+    assert_eq!(renamed.chat.name, "topic");
 }
 
 #[tokio::test]

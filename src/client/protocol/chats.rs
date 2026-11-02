@@ -49,7 +49,8 @@ pub enum ChatMethod {
     DiscardChat {
         chat: String,
     },
-    /// Give the running chat `chat`, by ID or name, the name `name`.
+    /// Give the running chat `chat`, by ID or name, the name `name`; the
+    /// reply also names the chat as it was before.
     RenameChat {
         chat: String,
         name: String,

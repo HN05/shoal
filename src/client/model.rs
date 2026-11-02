@@ -869,6 +869,13 @@ pub struct Chat {
     pub completion: Option<Completion>,
 }
 
+/// A running chat after a rename, with the name it had before.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RenamedChat {
+    pub chat: Chat,
+    pub previous_name: String,
+}
+
 /// A space as it exists: a workspace or a chat, running or saved, which
 /// share one namespace of IDs and names.
 #[derive(Debug, Clone)]

@@ -19,7 +19,7 @@ use crate::{
         workspace::{Manager, derive_workspace_name},
         workspace_files,
     },
-    model::{Chat, OpenedWorkspace, Repository, SpaceLinks, Workspace},
+    model::{Chat, OpenedWorkspace, RenamedChat, Repository, SpaceLinks, Workspace},
     process::identity::{self, Identity},
     tmp_dirs,
 };
@@ -134,7 +134,7 @@ impl Manager {
 
     /// Give the running chat `chat`, by ID or name, the name `name`, which
     /// must be free as a new chat's, and move its files to that name.
-    pub async fn rename_chat(&self, chat: String, name: String) -> Result<Chat> {
+    pub async fn rename_chat(&self, chat: String, name: String) -> Result<RenamedChat> {
         crate::validate::name("chat", &name)?;
         self.end_finished_chats().await?;
         let paths = self.paths.clone();
@@ -149,7 +149,10 @@ impl Manager {
                 {
                     log!("chat {}: {error:#}", renamed.id);
                 }
-                Ok(renamed)
+                Ok(RenamedChat {
+                    chat: renamed,
+                    previous_name: old.name,
+                })
             })
             .await
     }
