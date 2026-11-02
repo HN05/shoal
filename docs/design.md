@@ -350,7 +350,9 @@ commands, deferring service changes until restart; incompatible daemons are
 verified stopped before replacing their service.
 
 Worktrunk creates and removes worktrees through Shoal's adapter with isolated
-configuration and hooks disabled. Typed adapter outcomes preserve unfamiliar strings;
+configuration and hooks disabled, except that plain Git, with hooks disabled too,
+creates a workspace at a commit's worktree, since Worktrunk only makes worktrees on
+a branch; Worktrunk removes it like any other. Typed adapter outcomes preserve unfamiliar strings;
 only confirmed branch deletion sets the response deletion flag. Invoke external
 tools with argument arrays. Captured subprocesses share optional deadlines, whose
 error names the command line and directory, and a
@@ -590,6 +592,26 @@ replaced only by reclaiming it at its recorded path. Never adopt a main checkout
 under the repository's Shoal directory, copies the source worktree's files while
 leaving the source in place, removes checkout files the source deleted at any
 depth, and adopts the copy on an available branch derived from the source branch; failures retain a failed record for normal removal.
+
+A workspace may sit at a commit instead of on a branch: a worktree at a detached
+HEAD with no branch of its own, created from a commit, tag, branch or PR head, a
+fork's included, so comparing with another commit, researching older code or
+reviewing a fork's PR never disturbs another worktree. It holds no agent of its
+own, so no session, ready marks, completion or the hooks that follow them: whoever
+created it owns it and runs things in it, a CI job, a reviewer, the parent's agent
+or the user's shell, `shoal run` and `shoal demo`, and an agent that should work at
+a commit gets a branch workspace from it instead. Everything else goes through the
+workspace paths: the seed clone, executions, leases, scope tokens, children, holds,
+checkpoints and removal. `split --no-branch` creates one, below the caller's
+workspace or as the user's top-level one, and a fork PR's head opens in one that
+is reused per PR and moved to its new head while it has nothing of its own. Its
+starting commit counts as kept on removal, since a fork's head or a local commit is
+on no remote, while commits made on top count as unsaved work; restore reopens it
+without a branch, and branch-only commands refuse it. `--skip-setup` and
+`--disposable` are general creation options of `add` and `split`, not special cases
+for a runner: one skips what gates readiness, with the removal hooks that tear it
+down, and the other makes every removal delete the workspace without inspecting it,
+asking or keeping a checkpoint.
 
 A child workspace is split from a parent with `shoal split`, so an agent whose
 work needs another PR gets another branch and worktree instead of switching

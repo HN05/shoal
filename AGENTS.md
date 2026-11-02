@@ -40,7 +40,9 @@ when behavior changes, distinguishing decisions from proposals.
   that lets it act on a chat. Command names stay short: `shoal work` for
   workspaces, `shoal chat` for chats.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
-  operations and preserve Shoal's ownership records and cleanup policy.
+  operations, except creating a workspace at a commit's worktree, which plain
+  Git creates since Worktrunk only makes worktrees on a branch, and preserve
+  Shoal's ownership records and cleanup policy.
 - Keep production Git command arguments in the `git` module; callers use named
   operations and retain lifecycle and execution policy.
 - Interactive input lives in `cli::ui`, whose module doc lists what it offers:
