@@ -409,6 +409,24 @@ fn listing(noun: &str, names: &[String]) -> String {
     }
 }
 
+/// What an action's requests left on the forge.
+#[derive(Default)]
+struct Receipt {
+    /// The response to the first request, such as the comment it posted;
+    /// none until a request reached the forge.
+    first: Option<serde_json::Value>,
+    /// The activity keys of the comment or reply the first request posted.
+    authored: Vec<String>,
+}
+
+impl Receipt {
+    /// `error`, marked as [`Sent`] with what the action posted once a
+    /// request reached the forge.
+    fn failed(&self, error: anyhow::Error) -> anyhow::Error {
+        after_post(error, self.first.is_some(), &self.authored)
+    }
+}
+
 /// What an action left on the forge.
 pub struct Acted {
     /// The item as the forge reports it afterwards.
@@ -459,34 +477,62 @@ impl ForgeRepo {
         let (action, pending) = self
             .upload_attachments(account, &current, action, per_item)
             .await?;
-        let mut authored = Vec::new();
-        let mut first = None;
-        for request in self.requests(account, current, &action).await? {
+        let requests = self.requests(account, current, &action).await?;
+        let receipt = self.execute(account, &action, requests).await?;
+        let item = self
+            .settle(account, kind, number, &action, pending, &receipt)
+            .await
+            .map_err(|error| receipt.failed(error))?;
+        Ok(Acted {
+            item,
+            authored: receipt.authored,
+        })
+    }
+
+    /// Send `requests`, which carry out `action`, in order, stopping at the
+    /// first failure, which is marked as [`Sent`] once a request reached the
+    /// forge.
+    async fn execute(
+        &self,
+        account: &Account,
+        action: &Action,
+        requests: Vec<Request>,
+    ) -> Result<Receipt> {
+        let mut receipt = Receipt::default();
+        for request in requests {
             let response = self
                 .send(account, &request)
                 .await
-                .map_err(|error| after_post(error, first.is_some(), &authored))?;
+                .map_err(|error| receipt.failed(error))?;
             // A comment, or a thread's reply, is the action's first request.
-            if first.is_none() {
-                authored.extend(self.posted(&action, &response));
-                first = Some(response);
+            if receipt.first.is_none() {
+                receipt.authored.extend(self.posted(action, &response));
+                receipt.first = Some(response);
             }
         }
-        if let (Some(pending), Some(comment)) = (pending, &first) {
+        Ok(receipt)
+    }
+
+    /// Attach the files `pending` holds to the comment `receipt` posted on
+    /// item `number`, then read the item and refuse it when it does not show
+    /// `action`.
+    async fn settle(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        action: &Action,
+        pending: Option<Pending>,
+        receipt: &Receipt,
+    ) -> Result<Item> {
+        if let (Some(pending), Some(comment)) = (pending, &receipt.first) {
             self.attach_to_comment(account, kind, number, comment, pending)
                 .await
-                .context("the comment was posted, but attaching its files failed")
-                .map_err(|error| after_post(error, first.is_some(), &authored))?;
+                .context("the comment was posted, but attaching its files failed")?;
         }
-        let item = self
-            .read(account, kind, number)
-            .await
-            .map_err(|error| after_post(error, first.is_some(), &authored))?
-            .item;
-        action
-            .ensure_applied(&item, self.kind.label_names_fold_case())
-            .map_err(|error| after_post(error, first.is_some(), &authored))?;
-        Ok(Acted { item, authored })
+        let item = self.read(account, kind, number).await?.item;
+        action.ensure_applied(&item, self.kind.label_names_fold_case())?;
+        Ok(item)
     }
 
     /// `action` with its attachments uploaded and embedded in its body, and
