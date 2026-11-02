@@ -157,7 +157,10 @@ instead of the PR delivery guidance below.
   stands for a body remembered for that account and URL. A forge's rate limit
   holds back that account's requests until it ends and slows polls with a
   notification instead of producing lookup failures. Pending deliveries remain
-  replayable until CLI output succeeds and is acknowledged.
+  replayable until CLI output succeeds and is acknowledged. Files a repository
+  lists as `[conflicts] sensitive` that a branch and its target both changed are
+  reported apart from conflicts, beside a linked PR too; `pr merge` and `land`
+  read only the recorded check and ask, never block.
   Registration variants preserve existing stored and JSON shapes and reject ambiguous
   records and conflicting actions without blocking other workspaces' cleanup;
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
