@@ -1171,26 +1171,10 @@ fn pid_info<T>(pid: u32, flavor: i32, argument: u64) -> Result<Option<T>> {
 
 #[cfg(target_os = "macos")]
 fn platform_listed() -> Result<Vec<Listed>> {
-    let mut capacity = 1024;
-    let pids = loop {
-        let mut pids = vec![0 as libc::pid_t; capacity];
-        let size = i32::try_from(capacity * std::mem::size_of::<libc::pid_t>())?;
-        let count = unsafe { libc::proc_listallpids(pids.as_mut_ptr().cast(), size) };
-        if count < 0 {
-            return Err(std::io::Error::last_os_error()).context("list processes");
-        }
-        // A full buffer may have left processes out.
-        if (count as usize) < capacity {
-            pids.truncate(count as usize);
-            break pids;
-        }
-        capacity *= 2;
-    };
+    // PROC_ALL_PIDS in sys/proc_info.h.
+    const PROC_ALL_PIDS: u32 = 1;
     let mut listed = Vec::new();
-    for pid in pids.into_iter().filter_map(|pid| u32::try_from(pid).ok()) {
-        if pid <= 1 {
-            continue;
-        }
+    for pid in listed_pids(PROC_ALL_PIDS, 0)? {
         let Some(info) = pid_info::<libc::proc_bsdshortinfo>(pid, libc::PROC_PIDT_SHORTBSDINFO, 0)?
         else {
             continue;
@@ -1513,24 +1497,25 @@ pub async fn group_alive(group: u32) -> Result<bool> {
 fn group_members(group: u32) -> Result<Vec<u32>> {
     // PROC_PGRP_ONLY in sys/proc_info.h.
     const PROC_PGRP_ONLY: u32 = 2;
+    listed_pids(PROC_PGRP_ONLY, group)
+}
+
+/// The PIDs other than init's that `proc_listpids` lists for `kind` and
+/// `argument`, including zombies.
+#[cfg(target_os = "macos")]
+fn listed_pids(kind: u32, argument: u32) -> Result<Vec<u32>> {
     const PID_SIZE: usize = std::mem::size_of::<libc::pid_t>();
     // A null buffer asks for room for every process on the machine.
     let list = |buffer: *mut libc::pid_t, len: usize| {
-        let bytes = unsafe {
-            libc::proc_listpids(
-                PROC_PGRP_ONLY,
-                group,
-                buffer.cast(),
-                (len * PID_SIZE) as i32,
-            )
-        };
+        let bytes =
+            unsafe { libc::proc_listpids(kind, argument, buffer.cast(), (len * PID_SIZE) as i32) };
         if bytes < 0 {
-            return Err(std::io::Error::last_os_error()).context("list process group");
+            return Err(std::io::Error::last_os_error()).context("list processes");
         }
         Ok(bytes as usize / PID_SIZE)
     };
     let mut pids = vec![0; list(std::ptr::null_mut(), 0)?.max(1)];
-    // A full buffer may have cut off members forked since it was sized.
+    // A full buffer may have cut off processes started since it was sized.
     loop {
         let count = list(pids.as_mut_ptr(), pids.len())?;
         if count < pids.len() {
