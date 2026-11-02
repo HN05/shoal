@@ -745,6 +745,39 @@ async fn ignored_changes_during_idle_delay_restart_timer_at_expiry() {
 }
 
 #[tokio::test]
+async fn git_state_is_inspected_when_the_idle_timer_starts_and_expires() {
+    use crate::test_support::{commit, git, manager, repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    fs::write(checkout.join("second"), "second\n").unwrap();
+    commit(&checkout, "second");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "idle".into(), None, None, None)
+        .await
+        .unwrap();
+    let mut timers = Timers::default();
+    sweep(&manager, &mut timers).await.unwrap();
+    let started = timers.idle[&workspace.id].snapshot;
+    // The workspace's last commit is no longer anywhere else, which changes
+    // neither its HEAD nor its files.
+    git(&checkout, &["reset", "--hard", "HEAD~1"]);
+    sweep(&manager, &mut timers).await.unwrap();
+    assert_eq!(timers.idle[&workspace.id].snapshot, started);
+    timers.idle.get_mut(&workspace.id).unwrap().since -= Duration::from_secs(600);
+    sweep(&manager, &mut timers).await.unwrap();
+    assert!(workspace.path.exists());
+    assert!(!timers.idle.contains_key(&workspace.id));
+    assert_eq!(
+        manager.cleanup_reason(&workspace).await,
+        CleanupReason::Unpushed { commits: 1 }
+    );
+}
+
+#[tokio::test]
 async fn a_process_in_the_worktree_stops_a_running_idle_timer() {
     use crate::test_support::{manager, repository};
     let (temp, manager) = manager().await;

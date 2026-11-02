@@ -268,8 +268,8 @@ async fn sweep_workspace(
         timers.idle.remove(&workspace.id);
         return Ok(());
     };
-    // Each pass compares only the signals; the tree is walked when the timer
-    // starts and again when it expires.
+    // Each pass compares only the signals; Git state is inspected and the
+    // tree walked when the timer starts and again when it expires.
     let now = Instant::now();
     let started = match timers.expired(&workspace.id, signals, now, delay) {
         Expiry::Running => return Ok(()),
@@ -327,9 +327,9 @@ async fn idle_delay(manager: &Manager, workspace: &Workspace) -> Result<Option<D
     Ok(settings.cleanup.auto.delay())
 }
 
-/// The idle delay and cleanup signals of a ready, removable workspace;
-/// `None` when it is not, its idle cleanup is disabled, or its config cannot
-/// be read.
+/// The idle delay and timer signals of a ready workspace nothing recorded
+/// and no process keeps; `None` when something does, its idle cleanup is
+/// disabled, or its config cannot be read.
 async fn observe(
     manager: &Manager,
     workspace: &Workspace,
@@ -339,7 +339,7 @@ async fn observe(
         let Some(delay) = idle_delay(manager, workspace).await? else {
             return Ok(None);
         };
-        let signals = manager.cleanup_signals(&workspace.id, users).await?;
+        let signals = manager.idle_timer_signals(&workspace.id, users).await?;
         Ok(signals.map(|signals| (delay, signals)))
     }
     .await;

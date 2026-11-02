@@ -4021,7 +4021,8 @@ sooner when [disk space](#overload-protection) runs low.
 Deleted directories are forgotten even when disabled, releasing resources and
 retaining branches; moved worktrees or recorded commands need manual recovery.
 HEAD and commands reset the timer; file changes, including ignored files, restart
-it when it expires.
+it when it expires, and Git state such as unpushed commits is checked when it
+starts and when it expires.
 Running/unknown commands, saved stopped work, directory users (including shells),
 dirty/unpushed work,
 simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, and failed checks block cleanup. Pushed means reachable

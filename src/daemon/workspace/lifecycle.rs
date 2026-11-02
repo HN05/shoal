@@ -26,7 +26,7 @@ use anyhow::{Context, Result, bail, ensure};
 use std::{
     collections::{BTreeMap, HashMap},
     ffi::OsString,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 #[cfg(test)]
@@ -533,19 +533,43 @@ impl Manager {
         .await
     }
 
-    /// HEAD and activity of a cleanup candidate, cheap enough to compare on
-    /// every sweep, or `None` when it is not a candidate; the processes in
-    /// the worktree are read from `users`.
-    pub async fn cleanup_signals(
+    /// HEAD and activity of a workspace whose idle timer runs, or `None`
+    /// when what Shoal records about it, or a process `users` finds in it,
+    /// keeps it. Its Git state and files are left to the full inspections
+    /// when the timer starts and when it expires, which fail or differ after
+    /// any change to them.
+    pub async fn idle_timer_signals(
         &self,
         id: &str,
         users: &process::DirectoryUsers,
     ) -> Result<Option<u64>> {
-        Ok(self
-            .checked_cleanup_candidate(id, &[], users)
+        let path = self.workspace(id).await?.path;
+        self.check_access(&path, self.timer_signals(id, &path, users))
+            .await
+    }
+
+    async fn timer_signals(
+        &self,
+        id: &str,
+        path: &Path,
+        users: &process::DirectoryUsers,
+    ) -> Result<Option<u64>> {
+        let executions = self.cleanup_executions(id, &[]).await?;
+        if self
+            .recorded_cleanup_reason(id, &executions)
             .await?
-            .ok()
-            .map(|(_, signals)| signals))
+            .is_some()
+            || !off_runtime::is_dir(path).await?
+            || !users
+                .in_directory_except(path, &removal::wrappers(&executions.idle))
+                .await?
+                .is_empty()
+        {
+            return Ok(None);
+        }
+        let head = git::revision(path, "HEAD", git::run).await?;
+        let activity = self.usage.activity(id);
+        Ok(Some(crate::daemon::cleanup::signals(&head, activity)))
     }
 
     /// [`Self::swept_snapshot`], scanning the processes in the worktree.

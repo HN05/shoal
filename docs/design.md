@@ -720,9 +720,10 @@ and automatic removal, after checks pass and commands stop, bounded in time;
 failure retains the workspace. Ownership and removal policy are rechecked after
 all removal hooks, with branch deletion derived from the final inspection.
 Idle cleanup requires unchanged
-HEAD, activity and file metadata; sweeps compare HEAD and activity, and walk the
-tree only when the timer starts, when it expires and after removal hooks, since
-change times only move forward and cannot be set. A sweep lists directory
+HEAD, activity and file metadata; while the timer runs, sweeps compare HEAD and
+activity and check recorded state and directory users, and inspect Git state and
+walk the tree only when the timer starts, when it expires and after removal hooks,
+since change times only move forward and cannot be set. A sweep lists directory
 users with one lsof scan shared by every workspace it checks; removal scans again.
 Status reports the first reason cleanup keeps a workspace from the checks the sweep
 runs, so it cannot disagree with the sweep. A HEAD changed by removal
