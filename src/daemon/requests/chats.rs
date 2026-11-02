@@ -47,15 +47,6 @@ pub(super) async fn handle(
             Body::Ok
         }
         ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),
-        ChatMethod::ChatDone {
-            chat,
-            results,
-            sender_chat,
-        } => {
-            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
-            Body::Completion(manager.mark_chat_done(&chat, results, &attacher).await?)
-        }
-        ChatMethod::ChatUndone { chat } => Body::Completion(manager.undo_chat_done(&chat).await?),
     }))
 }
 
@@ -70,9 +61,7 @@ impl Scoped for ChatMethod {
             | ChatMethod::DiscardChat { .. }
             | ChatMethod::RenameChat { .. }
             | ChatMethod::CheckChatName { .. }
-            | ChatMethod::FreeChatName { .. }
-            | ChatMethod::ChatDone { .. }
-            | ChatMethod::ChatUndone { .. } => return Err(denied()),
+            | ChatMethod::FreeChatName { .. } => return Err(denied()),
         })
     }
 }

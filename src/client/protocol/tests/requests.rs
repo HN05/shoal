@@ -79,8 +79,8 @@ const REQUESTS: &[&str] = &[
     r#"{"checkpoints":{"workspace":"fix","after":null}}"#,
     r#"{"restore_checkpoint":{"workspace":"fix","checkpoint":2}}"#,
     // Assignments and agents.
-    r#"{"workspace_done":{"workspace":"fix","cleanup":true}}"#,
-    r#"{"workspace_undone":{"workspace":"fix"}}"#,
+    r#"{"mark_done":{"space":"fix","cleanup":true}}"#,
+    r#"{"undo_done":{"space":"fix"}}"#,
     r#"{"discard_stopped_work":{"workspace":"part","execution":null}}"#,
     r#"{"mark_ready":{"space":"fix","selection":{"kind":"pr","input":null}}}"#,
     r#"{"clear_ready":{"space":"fix","selection":{"kind":null,"input":null},"draft":true}}"#,
@@ -110,8 +110,6 @@ const REQUESTS: &[&str] = &[
     r#"{"rename_chat":{"chat":"app-chat","name":"topic"}}"#,
     r#"{"check_chat_name":{"name":"app-chat"}}"#,
     r#"{"free_chat_name":{"name":"app-chat"}}"#,
-    r#"{"chat_done":{"chat":"planning"}}"#,
-    r#"{"chat_undone":{"chat":"planning"}}"#,
     // The agent queue.
     r#"{"queue_add":{"request":{"repository":"app","name":"fix","agent":"claude","issue_title":null,"plan":"{}","env":{},"now":false,"workspace":null,"after":[]}}}"#,
     r#"{"queue_agent":{"workspace":"fix","agent":"claude","prompt":"Fix the build"}}"#,

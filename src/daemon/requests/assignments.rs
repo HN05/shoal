@@ -16,8 +16,8 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        AssignmentMethod::WorkspaceUndone { workspace } => {
-            Body::Completion(manager.undo_done(&workspace).await?)
+        AssignmentMethod::UndoDone { space } => {
+            Body::Completion(manager.undo_space_done(&space).await?)
         }
         AssignmentMethod::DiscardStoppedWork {
             workspace,
@@ -33,16 +33,17 @@ pub(super) async fn handle(
             selection,
             draft,
         } => Body::ReviewMarks(manager.clear_ready(&space, selection, draft).await?),
-        AssignmentMethod::WorkspaceDone {
-            workspace,
+        AssignmentMethod::MarkDone {
+            space,
             cleanup,
             integrated,
             results,
+            sender_chat,
         } => {
-            let attacher = manager.attacher(caller, None).await;
+            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
             Body::Completion(
                 manager
-                    .mark_done(&workspace, cleanup, integrated, results, &attacher)
+                    .mark_space_done(&space, cleanup, integrated, results, &attacher)
                     .await?,
             )
         }
@@ -52,14 +53,10 @@ pub(super) async fn handle(
 impl Scoped for AssignmentMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
-            AssignmentMethod::WorkspaceDone { workspace, .. }
-            | AssignmentMethod::WorkspaceUndone { workspace }
-            | AssignmentMethod::MarkReady {
-                space: workspace, ..
-            }
-            | AssignmentMethod::ClearReady {
-                space: workspace, ..
-            } => Some(workspace),
+            AssignmentMethod::MarkDone { space, .. }
+            | AssignmentMethod::UndoDone { space }
+            | AssignmentMethod::MarkReady { space, .. }
+            | AssignmentMethod::ClearReady { space, .. } => Some(space),
             AssignmentMethod::DiscardStoppedWork { workspace, .. } => Some(
                 manager
                     .workspace_below(

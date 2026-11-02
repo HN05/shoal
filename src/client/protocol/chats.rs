@@ -63,20 +63,6 @@ pub enum ChatMethod {
     FreeChatName {
         name: String,
     },
-    /// Record the running chat `chat`, by ID or name, as done, handing back
-    /// `results`; the reply is the [`Completion`](crate::model::Completion).
-    ChatDone {
-        chat: String,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        results: Vec<crate::client::files::NewFile>,
-        /// The chat whose agent sends the request, which attaches them.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        sender_chat: Option<String>,
-    },
-    /// Withdraw the completion the running chat `chat` recorded.
-    ChatUndone {
-        chat: String,
-    },
 }
 
 impl ChatMethod {

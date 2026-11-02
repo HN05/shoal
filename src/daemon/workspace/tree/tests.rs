@@ -199,19 +199,18 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         .split_workspace(&child.id, "grandchild".into(), None)
         .await
         .unwrap();
-    let mut done = AssignmentMethod::WorkspaceDone {
-        workspace: grandchild.name.clone(),
+    let mut done = AssignmentMethod::MarkDone {
+        space: grandchild.name.clone(),
         cleanup: false,
         integrated: false,
         results: vec![],
+        sender_chat: None,
     };
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut done)
         .await
         .unwrap();
     // Targets resolve to the named workspace, not the caller's own.
-    assert!(
-        matches!(&done, AssignmentMethod::WorkspaceDone { workspace, .. } if *workspace == grandchild.id)
-    );
+    assert!(matches!(&done, AssignmentMethod::MarkDone { space, .. } if *space == grandchild.id));
 }
 
 #[tokio::test]

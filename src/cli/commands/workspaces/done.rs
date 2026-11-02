@@ -1,4 +1,4 @@
-//! Recording a workspace's assignment as done, and withdrawing that.
+//! Recording a space's work as done, and withdrawing that.
 use anyhow::Result;
 
 use crate::client::output::workspaces::Withdrawn;
@@ -9,7 +9,7 @@ use crate::{
         ui::{self, Fallback},
     },
     model::{Completion, PresentSpace},
-    protocol::{AssignmentMethod, ChatMethod, DemoMethod},
+    protocol::{AssignmentMethod, DemoMethod},
 };
 
 /// The space `space` names, else the current chat or workspace, else a
@@ -28,12 +28,8 @@ enum Selected {
 }
 
 pub(in crate::cli::commands) async fn undone(ctx: &Context, space: Option<String>) -> Result<i32> {
-    let withdrawn: Completion = match selected(ctx, space).await? {
-        Selected::Chat(chat) => request(&ctx.paths, ChatMethod::ChatUndone { chat }).await?,
-        Selected::Workspace(workspace) => {
-            request(&ctx.paths, AssignmentMethod::WorkspaceUndone { workspace }).await?
-        }
-    };
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let withdrawn: Completion = request(&ctx.paths, AssignmentMethod::UndoDone { space }).await?;
     ctx.emit(
         "Completion withdrawn; run shoal done when finished.",
         Withdrawn { withdrawn },
@@ -61,46 +57,45 @@ pub(in crate::cli::commands) async fn done(
     space: Option<String>,
     options: Done,
 ) -> Result<i32> {
-    let workspace = match selected(ctx, space).await? {
+    let selected = selected(ctx, space).await?;
+    let space = match &selected {
         Selected::Chat(chat) => {
             anyhow::ensure!(
                 !options.cleanup && !options.integrated && !options.keep_demos,
                 "a chat has no cleanup, branch or demos; --cleanup, --integrated and --keep-demos apply to workspaces"
             );
-            let method = ChatMethod::ChatDone {
-                chat,
-                results: options.results,
-                sender_chat: crate::env::chat(),
-            };
-            let completion: Completion = request(&ctx.paths, method).await?;
-            ctx.emit("Chat marked done; its agent keeps running.", &completion)?;
-            return Ok(0);
+            chat.clone()
         }
-        Selected::Workspace(workspace) => workspace,
+        Selected::Workspace(workspace) => {
+            // Before completion, whose cleanup may remove the workspace at once.
+            if !options.keep_demos {
+                stop_demos(ctx, workspace).await?;
+            }
+            workspace.clone()
+        }
     };
-    // Before completion, whose cleanup may remove the workspace at once.
-    if !options.keep_demos {
-        request::<()>(
-            &ctx.paths,
-            DemoMethod::StopDemos {
-                workspace: workspace.clone(),
-                name: None,
-            },
-        )
-        .await?;
-    }
-    let completion: Completion = request(
-        &ctx.paths,
-        AssignmentMethod::WorkspaceDone {
-            workspace,
-            cleanup: options.cleanup,
-            integrated: options.integrated,
-            results: options.results,
-        },
-    )
-    .await?;
-    ctx.emit(&done_message(&completion), &completion)?;
+    let method = AssignmentMethod::MarkDone {
+        space,
+        cleanup: options.cleanup,
+        integrated: options.integrated,
+        results: options.results,
+        sender_chat: crate::env::chat(),
+    };
+    let completion: Completion = request(&ctx.paths, method).await?;
+    let message = match selected {
+        Selected::Chat(_) => "Chat marked done; its agent keeps running.".to_owned(),
+        Selected::Workspace(_) => done_message(&completion),
+    };
+    ctx.emit(&message, &completion)?;
     Ok(0)
+}
+
+async fn stop_demos(ctx: &Context, workspace: &str) -> Result<()> {
+    let method = DemoMethod::StopDemos {
+        workspace: workspace.to_owned(),
+        name: None,
+    };
+    request::<()>(&ctx.paths, method).await
 }
 
 fn done_message(completion: &Completion) -> String {
