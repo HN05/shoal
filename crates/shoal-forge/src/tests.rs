@@ -59,6 +59,15 @@ fn a_prs_head_is_in_a_fork_unless_this_repository_has_it() {
     for fork in [Some("someone/repo"), None] {
         assert!(details(fork).fork);
     }
+    // A read that needs only the base works without a head commit.
+    let without_head = Current {
+        head_sha: None,
+        ..pull(Some("team/repo"))
+    };
+    let read = forge
+        .checkout_details(7, String::new(), without_head)
+        .unwrap();
+    assert_eq!((read.base.as_str(), read.head_commit), ("main", None));
 }
 
 #[test]
