@@ -90,15 +90,11 @@ impl Manager {
         self.record_chat_registration(id, change).await
     }
 
-    /// Applies `change` to the PR registration of the chat `id`.
+    /// Applies `change` to the PR registration of the chat `id`, unless the
+    /// chat ended meanwhile, whose end deleted its registration.
     async fn record_chat_registration(&self, id: String, change: RegistrationChange) -> Result<()> {
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                change.apply(&tx, &id)?;
-                tx.commit()?;
-                Ok(())
-            })
+            .run(move |db| record_chat_change(db, &id, change))
             .await
     }
 
@@ -588,6 +584,20 @@ pub(crate) fn origin<'a>(
         Ok(remote) => remote.as_deref().context(missing),
         Err(error) => Err(anyhow::anyhow!("{error:#}")),
     }
+}
+
+/// Apply `change` to the PR registration of the chat `id` in a transaction
+/// that finds the chat still recorded: one that ended has no registration
+/// to change, and writing one would outlive it.
+fn record_chat_change(db: &mut Connection, id: &str, change: RegistrationChange) -> Result<()> {
+    let tx = db.transaction()?;
+    ensure!(
+        super::space::is_chat(&tx, id)?,
+        "the chat ended before its PR links changed"
+    );
+    change.apply(&tx, id)?;
+    tx.commit()?;
+    Ok(())
 }
 
 #[cfg(test)]

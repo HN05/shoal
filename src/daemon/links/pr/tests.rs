@@ -153,3 +153,36 @@ async fn a_failed_branch_check_does_not_claim_another_branch() {
         "{error}"
     );
 }
+
+#[tokio::test]
+async fn a_chat_that_ended_before_its_pr_link_is_written_keeps_none() {
+    let (_temp, manager) = crate::test_support::manager().await;
+    let url = "https://forge.example/team/repo/pulls/8".to_owned();
+    let change = RegistrationChange::new(
+        None,
+        Some(Registration {
+            kind: RegistrationKind::Watch {
+                urls: vec![url],
+                merged_head: None,
+            },
+            error: None,
+        }),
+    );
+    // The chat's end, which deletes its registration, ran first.
+    let refused = manager
+        .store
+        .run(move |db| record_chat_change(db, "ended-chat", change))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{refused:#}").contains("the chat ended"),
+        "{refused:#}"
+    );
+    assert!(
+        manager
+            .pr_registration("ended-chat")
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
