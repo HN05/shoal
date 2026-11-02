@@ -33,10 +33,10 @@ pub enum ApprovalMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<Box<crate::client::approvals::ApprovalRequest>>,
     },
-    /// Withdraw the workspace's pending approval request `id`, which its
-    /// agent no longer needs.
+    /// Withdraw the pending approval request `id` of the space `space`,
+    /// which its agent no longer needs.
     WithdrawApproval {
-        workspace: String,
+        space: String,
         id: i64,
     },
     /// Whether `[permissions] push` holds back the push of the workspace's

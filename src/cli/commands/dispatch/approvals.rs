@@ -12,8 +12,8 @@ pub(in crate::cli::commands) async fn run(
     args: ApprovalsArgs,
 ) -> Result<i32> {
     match command {
-        Some(ApprovalsCommand::Withdraw { id, workspace }) => {
-            approvals::withdraw(&ctx, workspace, id).await
+        Some(ApprovalsCommand::Withdraw { id, space }) => {
+            approvals::withdraw(&ctx, space, id).await
         }
         None => approvals::run(&ctx, args).await,
     }

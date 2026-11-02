@@ -191,7 +191,7 @@ const REQUESTS: &[&str] = &[
     r#"{"show_approval":{"id":7}}"#,
     r#"{"decide_approval":{"id":7,"approve":true,"details":{"reason":"later"}}}"#,
     r#"{"escalate_approval":{"space":"fix","id":7}}"#,
-    r#"{"withdraw_approval":{"workspace":"fix","id":7}}"#,
+    r#"{"withdraw_approval":{"space":"fix","id":7}}"#,
     r#"{"branch_push":{"workspace":"fix"}}"#,
     r#"{"request_push":{"workspace":"fix","push":{"remote":"origin","destination":"refs/heads/fix","commit":"abc"}}}"#,
     r#"{"finish_push":{"key":"key","failure":"rejected"}}"#,

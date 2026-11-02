@@ -4797,7 +4797,7 @@ the decision. Pending requests produce a daemon notification, collapsed until re
 a decision queues an [agent message](#agent-messages) for the requesting workspace
 naming the request, its target and the decision.
 
-`shoal approvals withdraw <number> [--workspace W]` lets the requesting workspace
+`shoal approvals withdraw <number> [--space S]` lets the requesting workspace
 take back a pending request it no longer needs, as releasing a lease does for a
 lease request. The request stays listed as `withdrawn` on the same terms as
 `outdated`, except a proposed issue, which is deleted as a decided proposal is.

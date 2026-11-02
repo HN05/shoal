@@ -42,13 +42,13 @@ pub struct ApprovalsArgs {
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum ApprovalsCommand {
-    /// Withdraw a pending request the workspace's agent no longer needs.
+    /// Withdraw a pending request the space's agent no longer needs.
     Withdraw {
         /// Request number.
         id: i64,
-        /// Workspace whose request it is; defaults to the request's.
+        /// Space whose request it is; defaults to the request's.
         #[arg(long)]
-        workspace: Option<String>,
+        space: Option<String>,
     },
 }
 
