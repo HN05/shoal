@@ -185,7 +185,14 @@ impl Manager {
                     "worktree is not on its recorded branch {recorded}; check it out before reclaiming"
                 );
             }
-            None => self.verify_checkout(workspace, None).await?,
+            None => {
+                let (_, branch) = git::head_and_branch(&workspace.path).await?;
+                ensure!(
+                    branch.is_none(),
+                    "worktree is on branch {}, but its workspace is at a commit; detach it before reclaiming",
+                    branch.unwrap_or_default()
+                );
+            }
         }
         self.release_stale_owner(&git_dir, &workspace.id).await?;
         self.record_worktree_identity(workspace).await?;
