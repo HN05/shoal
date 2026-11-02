@@ -31,6 +31,20 @@ CI_ENV = {"CARGO_INCREMENTAL": "0", "CARGO_PROFILE_DEV_DEBUG": "0",
 TOP_ROWS = 40
 
 
+def cargo_env():
+    """The [env] table of .cargo/config.toml, which `cargo test` gives the
+    test binaries; a variable already set wins."""
+    env, section = {}, None
+    for line in (ROOT / ".cargo" / "config.toml").read_text().splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            section = line
+        elif section == "[env]" and "=" in line and not line.startswith("#"):
+            name, value = (part.strip() for part in line.split("=", 1))
+            env[name] = value.strip('"')
+    return {**env, **os.environ}
+
+
 def binaries():
     """(name, executable, package directory) of each test binary."""
     output = subprocess.run(
@@ -50,7 +64,7 @@ def binaries():
 
 def run(args, cwd, log):
     """Run a test process; return (exit status, wall s, user s, system s)."""
-    env = {**os.environ, "CARGO_MANIFEST_DIR": cwd}
+    env = {**cargo_env(), "CARGO_MANIFEST_DIR": cwd}
     start = time.monotonic()
     process = subprocess.Popen(args, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                                stdout=log, stderr=subprocess.STDOUT)
