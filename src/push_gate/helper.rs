@@ -106,6 +106,11 @@ impl Session {
             "verbosity" | "progress" | "force" => "ok\n",
             "cas" => {
                 let (name, expected) = value.split_once(':').unwrap_or((value, ""));
+                // Git sends the null object ID when the ref must not exist.
+                let expected = match expected.bytes().all(|byte| byte == b'0') {
+                    true => "",
+                    false => expected,
+                };
                 self.leases.insert(name.to_owned(), expected.to_owned());
                 "ok\n"
             }

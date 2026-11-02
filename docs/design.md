@@ -2028,43 +2028,29 @@ from unattended removal. Other agent writes, such as comments, edits and closing
 stay direct.
 
 A proposed PR still publishes its branch, and agents push with plain Git too, so
-`[permissions] push = "propose"` keeps a scoped caller's pushes to the workspace
-repository's remotes for the user's approval (`"direct"` is the default; unscoped
-callers always push). A push request is a proposal, decided only by the user,
-bound to the remote, the ref, the object and, for a forced push or a deletion,
-the remote commit it replaces or that the ref must not exist, so approval pushes
-exactly that with `--force-with-lease`. Git runs the helper once per push URL,
-so a remote with several records the URL and approval pushes to it alone. One
-active request per workspace, ref and recorded URL, which a newer push there
-outdates. `pr open` asks the daemon first and pushes only when
-the setting allows or the remote has the commit; otherwise a new PR becomes a PR
-proposal carrying the push, whatever `pr_open` says, since it cannot open before
-the push, and the push to an open PR links it and becomes a push request. One approval then
-pushes and opens. Plain `git push` is covered through the tracked agent's
-environment: alongside its Git profile, Shoal adds `url.shoal::<url>.pushInsteadOf`
-for each remote URL, or `insteadOf` for an explicit push URL, and a launcher directory first on the PATH with `git-remote-shoal`, a remote
-helper that hands Git's helper protocol to this binary. Git keeps its own checks
-and pre-push hook and gives the helper the refs; the helper asks the daemon per
-ref, pushes what it allows to the real URL with Git without the rewrites and
-hooks, and rejects the rest naming the request. An explicit push URL that is
-also fetched from cannot be rewritten without sending fetches to the helper, so
-the agent launch refuses it rather than leaving those pushes unheld. The
-rewrite is chosen over a
-pre-push hook because `--no-verify` skips hooks and a Shoal hook would replace
-the repository's own; it is cooperative like scope, stopping accidents rather
-than a process that clears its Git settings. Approval runs the push without the
-agent: the decision starts an operation, in the approving client's environment
-when it sends one and otherwise the daemon's, whose worker pushes as a tracked
-command with the agent's Git profile, as `pr open` does, and then reports to the
-daemon, which decides the request, opening a carried PR through the proposal path;
-the request stays pending until then, a failed push notifies the user and waits
-for another approval, and a second approval while the push runs is refused. A
-push of the workspace branch whose local branch moved since is outdated at
-approval. Pushes Shoal authorized itself, `pr open`'s and `land`'s, run without
-the rewrites; with `push = "propose"` a scoped `land` needs approval whatever
-`[permissions] land` says, since it may push the default branch, and a forge's
-`pr revert`, which pushes at once, is refused for scoped callers. A pending push
-request keeps the workspace from unattended removal. Approving a land
+`[permissions] push = "propose"` holds a scoped caller's pushes to the workspace
+repository's remotes for the user (`"direct"` is the default; unscoped callers
+always push). A push request is a proposal, decided only by the user, and binds
+exactly what the push changes: the remote and, where it has several, the push
+URL, the ref, the object, and for a forced push or a deletion what it replaces,
+so approval cannot push something the user did not see. A newer push to the
+same ref outdates it, as does a moved branch at approval. A new PR whose push is
+held becomes one PR proposal carrying the push, whatever `pr_open` says, since
+it cannot open first, so one approval pushes and opens. Plain `git push` is
+covered by rewriting the agent's push URLs, through its Git environment, to a
+Shoal remote helper that asks the daemon about each ref. The rewrite is chosen
+over a pre-push hook because `--no-verify` skips hooks and a Shoal hook would
+replace the repository's own; like scope, it stops accidents, not a process
+that clears its Git settings. A push URL that is also fetched from cannot be
+rewritten without breaking fetches, so the agent launch refuses it rather than
+leave those pushes unheld. Approval runs the push without the agent, in an
+operation whose end decides the request, with the agent's Git profile as
+`pr open`'s push has. Nothing decides, withdraws or replaces a request while its
+push runs, since the push lands regardless. Pushes Shoal authorized itself run
+without the rewrites. With `push = "propose"`, a scoped `land` needs approval
+whatever `[permissions] land` says, since it may push the default branch, and a
+forge's `pr revert`, which pushes at once, is refused for scoped callers. A
+pending push request keeps the workspace from unattended removal. Approving a land
 request whose branch moved since it was requested is refused as stale and marks it outdated.
 Agents also find problems that belong to another repository, such as a tool the
 project uses, so `issue open --repo` files an issue there, on any forge, as the

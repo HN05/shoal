@@ -321,6 +321,18 @@ fn own_posts(action: &Action, authored: Vec<String>) -> Vec<String> {
     }
 }
 
+/// Refuse a PR whose head is not the workspace branch.
+fn ensure_branch_head(workspace: &Workspace, item: &Item) -> Result<()> {
+    anyhow::ensure!(
+        item.pr
+            .as_ref()
+            .is_some_and(|pr| pr.head == workspace.branch),
+        "{} does not have the workspace branch as its head",
+        item.url
+    );
+    Ok(())
+}
+
 impl Manager {
     /// Link the open PR of the workspace's branch, or open one as its agent
     /// account and link it; only a removal that starts meanwhile leaves it
@@ -361,18 +373,15 @@ impl Manager {
             .open_pull_for(&account, &workspace.branch, head_repository.as_deref())
             .await?;
         let (item, body, unfinished) = match existing {
-            Some(number) if let Some(push) = push => {
-                let url = forge.read(&account, ItemKind::Pr, number).await?.item.url;
-                let watch = super::pr::Action::Watch { url: url.clone() };
-                self.set_pr_gated(&workspace.id, watch, super::pr::WatchCheck::Known)
-                    .await
-                    .with_context(|| format!("{url} is open, but linking it failed"))?;
-                self.ensure_workspace_not_pushing(&workspace).await?;
-                let proposed = self.propose_push(&workspace, push).await?;
-                return Ok(OpenOutcome::Proposed(proposed));
-            }
             Some(number) => {
                 let item = forge.read(&account, ItemKind::Pr, number).await?.item;
+                // The PR is linked now; approving the push updates it.
+                if let Some(push) = push {
+                    self.link_open_pull(&workspace, &item).await?;
+                    self.ensure_workspace_not_pushing(&workspace).await?;
+                    let proposed = self.propose_push(&workspace, push).await?;
+                    return Ok(OpenOutcome::Proposed(proposed));
+                }
                 (item, None, None)
             }
             None => {
@@ -402,20 +411,12 @@ impl Manager {
             }
         };
         let created = body.is_some();
-        anyhow::ensure!(
-            item.pr
-                .as_ref()
-                .is_some_and(|pr| pr.head == workspace.branch),
-            "{} does not have the workspace branch as its head",
-            item.url
-        );
         let (linked, warning) = if created {
+            ensure_branch_head(&workspace, &item)?;
             self.keep_created(&workspace.id, ItemKind::Pr, &item, true)
                 .await?
         } else {
-            self.set_pr_gated(&workspace.id, watch(&item), super::pr::WatchCheck::Known)
-                .await
-                .with_context(|| format!("{} is open, but linking it failed", item.url))?;
+            self.link_open_pull(&workspace, &item).await?;
             (true, None)
         };
         let checked = conventions::warnings(
@@ -437,6 +438,15 @@ impl Manager {
                 .chain(checked)
                 .collect(),
         }))
+    }
+
+    /// Link `item`, an open PR the workspace did not create, after checking
+    /// that its head is the workspace branch.
+    pub(super) async fn link_open_pull(&self, workspace: &Workspace, item: &Item) -> Result<()> {
+        ensure_branch_head(workspace, item)?;
+        self.set_pr_gated(&workspace.id, watch(item), super::pr::WatchCheck::Known)
+            .await
+            .with_context(|| format!("{} is open, but linking it failed", item.url))
     }
 
     /// Whether `shoal pr open` from a workspace process would open a new PR

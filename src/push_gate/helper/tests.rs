@@ -31,7 +31,10 @@ fn options_accept_what_a_push_passes_on_and_refuse_a_dry_run() {
     assert_eq!(session.option("progress false"), "ok\n");
     assert_eq!(session.option("cas refs/heads/topic:abc"), "ok\n");
     assert_eq!(session.option("cas refs/heads/new:"), "ok\n");
+    let null = format!("cas refs/heads/created:{}", "0".repeat(40));
+    assert_eq!(session.option(&null), "ok\n");
     assert_eq!(session.option("dry-run true"), "unsupported\n");
     assert_eq!(session.leases["refs/heads/topic"], "abc");
     assert_eq!(session.leases["refs/heads/new"], "");
+    assert_eq!(session.leases["refs/heads/created"], "");
 }

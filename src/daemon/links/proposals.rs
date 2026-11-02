@@ -572,7 +572,7 @@ impl Manager {
                 .await?
             {
                 return self
-                    .link_open_pull(workspace, &forge, &account, number)
+                    .link_opened_since(workspace, &forge, &account, number)
                     .await;
             }
             let (posted, follow_up) = forge.post_pull(&account, &proposed.pull).await?;
@@ -590,7 +590,7 @@ impl Manager {
     }
 
     /// Link the branch's PR, which someone opened since the proposal.
-    async fn link_open_pull(
+    async fn link_opened_since(
         &self,
         workspace: &Workspace,
         forge: &ForgeRepo,
@@ -598,12 +598,7 @@ impl Manager {
         number: u64,
     ) -> Result<(Item, bool)> {
         let item = forge.read(account, ItemKind::Pr, number).await?.item;
-        let watch = super::pr::Action::Watch {
-            url: item.url.clone(),
-        };
-        self.set_pr_gated(&workspace.id, watch, super::pr::WatchCheck::Known)
-            .await
-            .with_context(|| format!("{} is open, but linking it failed", item.url))?;
+        self.link_open_pull(workspace, &item).await?;
         Ok((item, true))
     }
 
