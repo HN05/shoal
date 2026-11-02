@@ -280,12 +280,12 @@ and the Python release-script tests; a PR whose only `area/` label is
 (removing the `WIP:` title prefix, as `shoal ready` does) starts one run.
 Jobs use the image built from
 `.forgejo/ci-image/Containerfile` (`git.henriknordvik.com/hn05/ci-shoal:<rust
-version>`), so a run installs nothing, and whose `tail` runs the runner's
-`tail -f /dev/null` under tini as PID 1, which reaps the orphans tests leave
-(ci.yml checks it): new CI tooling goes into the
+version>`), so a run installs nothing: new CI tooling goes into the
 Containerfile, and only the owner rebuilds it with `.forgejo/ci-image/build.sh`
 on the runner host, then updates `workspace.package.rust-version` in `Cargo.toml`, the
-Containerfile's `ARG RUST`, and the `image:` tag in every workflow. Cargo builds
+Containerfile's `ARG RUST`, and the `image:` tag in every workflow. The image's
+`tail` runs the job container's PID 1 under tini, which reaps the orphans
+tests leave. Cargo builds
 share the runner-mounted `/ci-target`; every step that runs cargo there sources
 `.forgejo/scripts/lock-target-dir.sh` first, which takes a free slot directory
 instead of waiting, and runs `cargo clean --workspace`.
