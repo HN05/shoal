@@ -1,6 +1,8 @@
 use std::{
+    io::Read as _,
     os::{fd::FromRawFd as _, unix::process::CommandExt as _},
     process::Stdio,
+    sync::{Arc, Mutex, PoisonError},
 };
 
 use super::*;
@@ -227,13 +229,19 @@ fn exited(code: i32, stdout: &str, stderr: &str) -> std::process::Output {
 /// socket path, started without the runner's Zellij config, home or shell
 /// and ended on drop, with a client on a terminal of its own showing it,
 /// since Zellij drops tabs opened in a session no client shows; `None`
-/// without Zellij on PATH, which these tests then skip.
+/// without Zellij on PATH, which these tests then skip. A test that fails
+/// reports what Zellij showed of the session.
 struct Isolated {
     dir: tempfile::TempDir,
     zellij: Zellij,
     session: String,
     client: std::process::Child,
+    /// The end of what the client's terminal showed.
+    screen: Arc<Mutex<Vec<u8>>>,
 }
+
+/// How much of the client's terminal output a failure reports.
+const SCREEN_TAIL: usize = 4096;
 
 impl Isolated {
     fn start() -> Option<Self> {
@@ -263,7 +271,8 @@ impl Isolated {
             .output()
             .unwrap();
         assert!(started.status.success(), "{started:?}");
-        let client = Self::client(dir.path(), &session);
+        let screen = Arc::default();
+        let client = Self::client(dir.path(), &session, Arc::clone(&screen));
         let zellij = Zellij {
             socket_dir: Some(dir.path().join("s")),
         };
@@ -272,6 +281,7 @@ impl Isolated {
             zellij,
             session,
             client,
+            screen,
         })
     }
 
@@ -291,8 +301,8 @@ impl Isolated {
     }
 
     /// A client attached to `session` on a terminal of its own, whose
-    /// output a thread drains.
-    fn client(dir: &Path, session: &str) -> std::process::Child {
+    /// output a thread drains into `screen`.
+    fn client(dir: &Path, session: &str, screen: Arc<Mutex<Vec<u8>>>) -> std::process::Child {
         let (mut master, mut slave) = (-1, -1);
         let mut size = libc::winsize {
             ws_row: 40,
@@ -332,7 +342,13 @@ impl Isolated {
         let client = attach.spawn().unwrap();
         std::thread::spawn(move || {
             let mut master = master;
-            let _ = std::io::copy(&mut master, &mut std::io::sink());
+            let mut read = [0; 4096];
+            while let Ok(count @ 1..) = master.read(&mut read) {
+                let mut screen = screen.lock().unwrap_or_else(PoisonError::into_inner);
+                screen.extend_from_slice(&read[..count]);
+                let excess = screen.len().saturating_sub(SCREEN_TAIL);
+                screen.drain(..excess);
+            }
         });
         client
     }
@@ -351,19 +367,80 @@ impl Isolated {
     }
 
     /// Wait until the client shows the session, which Zellij's tabs need.
-    async fn shown(&self) {
+    async fn shown(&mut self) {
         for _ in 0..600 {
             if !self.zellij.clients(&self.session).await.unwrap().is_empty() {
                 return;
+            }
+            if let Some(status) = self.client.try_wait().unwrap() {
+                panic!("the client of {} exited: {status}", self.session);
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         panic!("no client attached to {}", self.session);
     }
+
+    /// What Zellij shows of the session: its client, its listing, its
+    /// socket, its server and Zellij's log.
+    fn report(&mut self) -> String {
+        let client = self.client_state();
+        format!(
+            "session {}\nclient: {}\nclient screen:\n{}\nlist-sessions: {}\nsockets: {:?}\nprocesses:\n{}\nzellij log:\n{}",
+            self.session,
+            client,
+            self.client_screen(),
+            self.listed(),
+            walkdir(&self.dir.path().join("s")),
+            self.processes(),
+            zellij_log(),
+        )
+    }
+
+    /// Whether the client still runs, or how it exited.
+    fn client_state(&mut self) -> String {
+        match self.client.try_wait() {
+            Ok(Some(status)) => format!("exited: {status}"),
+            Ok(None) => "running".to_owned(),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    /// The text at the end of what the client's terminal showed.
+    fn client_screen(&self) -> String {
+        let screen = self.screen.lock().unwrap_or_else(PoisonError::into_inner);
+        without_escapes(&String::from_utf8_lossy(&screen))
+    }
+
+    /// What `zellij list-sessions` prints in the session's socket directory.
+    fn listed(&self) -> String {
+        Self::zellij_in(self.dir.path())
+            .args(["list-sessions", "--no-formatting"])
+            .output()
+            .map_or_else(|error| error.to_string(), |output| format!("{output:?}"))
+    }
+
+    /// The processes naming the session or its directory, with their
+    /// parents and states.
+    fn processes(&self) -> String {
+        let listed = std::process::Command::new(Tool::Ps.program())
+            .args(["-A", "-o", "pid=,ppid=,stat=,etime=,args="])
+            .output()
+            .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+            .unwrap_or_else(|error| error.to_string());
+        let dir = self.dir.path().to_string_lossy();
+        listed
+            .lines()
+            .filter(|line| line.contains(dir.as_ref()) || line.contains(&self.session))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 }
 
 impl Drop for Isolated {
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            eprintln!("{}", self.report());
+        }
         let _ = self.client.kill();
         let _ = self.client.wait();
         let _ = Self::zellij_in(self.dir.path())
@@ -374,7 +451,7 @@ impl Drop for Isolated {
 
 #[tokio::test]
 async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
-    let Some(server) = Isolated::start() else {
+    let Some(mut server) = Isolated::start() else {
         return;
     };
     server.shown().await;
@@ -427,7 +504,7 @@ async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
 
 #[tokio::test]
 async fn typed_text_reaches_the_shell_as_it_is() {
-    let Some(server) = Isolated::start() else {
+    let Some(mut server) = Isolated::start() else {
         return;
     };
     server.shown().await;
@@ -494,7 +571,7 @@ async fn a_listing_is_asked_again_only_on_the_recorded_instance() {
 
 #[tokio::test]
 async fn a_session_left_with_no_pane_ends() {
-    let Some(server) = Isolated::start() else {
+    let Some(mut server) = Isolated::start() else {
         return;
     };
     server.shown().await;
@@ -535,6 +612,50 @@ async fn what_zellij_lists(zellij: &Zellij, session: &str) -> String {
     list.args(["list-panes", "--all", "--json"]);
     let output = Run::new(list).timeout(TIMEOUT).capture().await;
     format!("the server is {instance:?} and Zellij lists {output:?}")
+}
+
+/// `text` without its terminal escape sequences.
+fn without_escapes(text: &str) -> String {
+    let mut plain = String::new();
+    let mut chars = text.chars();
+    while let Some(char) = chars.next() {
+        if char != '\x1b' {
+            plain.push(char);
+            continue;
+        }
+        for char in chars.by_ref() {
+            if char.is_ascii_alphabetic() || char == '\x07' {
+                break;
+            }
+        }
+    }
+    plain
+}
+
+/// The end of Zellij's log, which every session of this user writes.
+fn zellij_log() -> String {
+    // SAFETY: getuid has no preconditions.
+    let uid = unsafe { libc::getuid() };
+    let file = format!("zellij-{uid}/zellij-log/zellij.log");
+    [PathBuf::from("/tmp"), std::env::temp_dir()]
+        .iter()
+        .find_map(|dir| std::fs::read_to_string(dir.join(&file)).ok())
+        .map_or_else(|| "none".to_owned(), |log| last_lines(&log, 60))
+}
+
+/// Every path under `dir`.
+fn walkdir(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .flat_map(|entry| {
+            let path = entry.path();
+            let below = walkdir(&path);
+            std::iter::once(path).chain(below)
+        })
+        .collect()
 }
 
 /// Wait until `place` is gone; the limit is only a hang guard.
