@@ -110,6 +110,33 @@ async fn gitlab_reads_an_upload_from_its_api_route() {
 }
 
 #[tokio::test]
+async fn a_redirect_to_storage_on_another_host_gets_no_token() {
+    let png = vec!["Content-Type: image/png".to_owned()];
+    let storage = Server::start(move |_| (200, png.clone(), b"PNG".to_vec()));
+    // The storage host is named differently from the forge, as object
+    // storage is.
+    let signed = format!("http://{}/bucket/shot.png?signed", storage.renamed_host());
+    let forge = Server::start(move |_| (302, vec![format!("Location: {signed}")], Vec::new()));
+    let repo = repo_on(&forge, ForgeKind::GitLab, "team/project");
+    let url = format!(
+        "http://{}/-/project/42/uploads/0123abcd/shot.png",
+        forge.host
+    );
+    let download = repo
+        .download(&agent_on(&forge, "agent"), &url)
+        .await
+        .unwrap();
+    assert_eq!(download.bytes, b"PNG");
+    assert_eq!(
+        forge.received()[0].header("Authorization"),
+        Some("Bearer agent")
+    );
+    let received = storage.received();
+    assert_eq!(received[0].line, "GET /bucket/shot.png?signed");
+    assert_eq!(received[0].header("Authorization"), None);
+}
+
+#[tokio::test]
 async fn forges_without_downloads_refuse_before_sending() {
     let repo = ForgeRepo::parse("https://bitbucket.org/team/project").unwrap();
     let error = repo

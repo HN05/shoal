@@ -50,6 +50,12 @@ impl Server {
         Self { host, received }
     }
 
+    /// `localhost:<port>`: this server under a host name other than
+    /// [`Self::host`], as a client sees a different host.
+    pub fn renamed_host(&self) -> String {
+        self.host.replacen("127.0.0.1", "localhost", 1)
+    }
+
     /// Every request received so far.
     pub fn received(&self) -> Vec<Received> {
         self.received.lock().unwrap().clone()

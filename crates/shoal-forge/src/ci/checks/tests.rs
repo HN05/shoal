@@ -55,3 +55,26 @@ fn tails_are_bounded_and_keep_the_failed_step() {
     assert!(job(JOB_URL_BYTES).job_url.is_some());
     assert!(job(JOB_URL_BYTES + 1).job_url.is_none());
 }
+
+#[tokio::test]
+async fn a_log_redirected_to_another_host_is_read_without_the_token() {
+    use crate::test_support::{Server, agent_on, repo_on};
+    let storage = Server::start(|_| (200, Vec::new(), b"Job failed\n".to_vec()));
+    let signed = format!("http://{}/logs/56?signed", storage.renamed_host());
+    let forge = Server::start(move |_| (302, vec![format!("Location: {signed}")], Vec::new()));
+    let repo = repo_on(&forge, crate::backends::ForgeKind::GitLab, "team/project");
+    let log = repo
+        .job_log(&agent_on(&forge, "agent"), Location::GitLab { job: 56 })
+        .await
+        .unwrap();
+    assert_eq!(log, "Job failed\n");
+    let asked = forge.received();
+    assert_eq!(
+        asked[0].line,
+        "GET /api/v4/projects/team%2Fproject/jobs/56/trace"
+    );
+    assert_eq!(asked[0].header("Authorization"), Some("Bearer agent"));
+    let received = storage.received();
+    assert_eq!(received[0].line, "GET /logs/56?signed");
+    assert_eq!(received[0].header("Authorization"), None);
+}
