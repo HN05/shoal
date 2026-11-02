@@ -146,17 +146,57 @@ fn a_missing_session_lists_nothing() {
         "Session 'gone' not found. The following sessions are active:"
     ));
     assert!(!nothing_to_list("Permission denied"));
+    let missing = "Session 'busy' not found. The following sessions are active:\n";
+    assert_eq!(listed(&exited(1, "", missing)).ok(), Some(Reply::Missing));
+    assert_eq!(
+        listed(&exited(0, "[]", "")).ok(),
+        Some(Reply::Answered("[]".to_owned()))
+    );
 }
 
 #[test]
 fn a_session_without_an_answer_is_reported_missing() {
     let missing = "No session named \"busy\" found.\n  help: Did you mean `busy`?\n";
-    assert_eq!(killed(&exited(1, missing, "")).ok(), Some(Kill::Missing));
-    assert_eq!(killed(&exited(0, "", "")).ok(), Some(Kill::Sent));
+    assert_eq!(killed(&exited(1, missing, "")).ok(), Some(Reply::Missing));
+    assert_eq!(killed(&exited(0, "", "")).ok(), Some(Reply::Answered(())));
     let none = "No active zellij sessions found.";
-    assert_eq!(killed(&exited(1, "", none)).ok(), Some(Kill::Sent));
+    assert_eq!(killed(&exited(1, "", none)).ok(), Some(Reply::Answered(())));
     let failed = killed(&exited(1, "Permission denied\n", "")).map_err(|error| error.to_string());
     assert_eq!(failed, Err("zellij failed: Permission denied".to_owned()));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_session_reported_missing_is_asked_again_while_its_server_runs() {
+    let mut replies = vec![Reply::Missing, Reply::Missing, Reply::Answered("[]")].into_iter();
+    let mut asked = 0;
+    let answer = asked_while_running(
+        || {
+            asked += 1;
+            std::future::ready(Ok(replies.next().unwrap_or(Reply::Missing)))
+        },
+        || async { Ok(true) },
+    )
+    .await;
+    assert_eq!(answer.ok(), Some(Some("[]")));
+    assert_eq!(asked, 3);
+
+    let ended = asked_while_running(
+        || async { Ok(Reply::<&str>::Missing) },
+        || async { Ok(false) },
+    )
+    .await;
+    assert_eq!(ended.ok(), Some(None));
+
+    let busy = asked_while_running(
+        || async { Ok(Reply::<&str>::Missing) },
+        || async { Ok(true) },
+    )
+    .await;
+    let busy = busy.map_err(|error| error.to_string());
+    assert_eq!(
+        busy,
+        Err("Zellij reported the running session as missing".to_owned())
+    );
 }
 
 /// What a command that exited with `code`, printing `stdout` and `stderr`,

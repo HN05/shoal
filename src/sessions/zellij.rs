@@ -41,11 +41,11 @@ const CONTRACT_DIR: &str = "/contract_version_1/";
 /// soon after it answers.
 const PANE_POLL: Duration = Duration::from_millis(100);
 const PANE_POLLS: u32 = 100;
-/// How often, and how many times, Shoal asks Zellij to end a session it
+/// How often, and how many times, Shoal asks Zellij again about a session it
 /// reports as missing while its server still runs; only a hang guard, since
 /// Zellij finds the session once its server answers in time.
-const KILL_RETRY: Duration = Duration::from_millis(100);
-const KILL_ATTEMPTS: u32 = 100;
+const MISSING_RETRY: Duration = Duration::from_millis(100);
+const MISSING_ATTEMPTS: u32 = 100;
 
 /// How long a `zellij` command may run before it is stopped; only a hang
 /// guard, since each one answers at once.
@@ -280,10 +280,26 @@ impl Zellij {
 
     /// Every pane of `session`; none when it is gone.
     pub async fn panes(&self, session: &str) -> Result<Vec<Pane>> {
-        let mut list = self.action(session);
-        list.args(["list-panes", "--all", "--json"]);
-        let listed = listing(list).await?;
+        let listed = self
+            .session_listing(session, &["list-panes", "--all", "--json"])
+            .await?;
         parse_panes(&listed)
+    }
+
+    /// What the `zellij action` listing `args` prints for `session`, which
+    /// is empty once the session ended.
+    async fn session_listing(&self, session: &str, args: &[&str]) -> Result<String> {
+        let listed = asked_while_running(
+            || {
+                let mut list = self.action(session);
+                list.args(args);
+                listing(list)
+            },
+            || async { Ok(self.server(session).await?.is_some()) },
+        )
+        .await
+        .with_context(|| format!("list Zellij session {session}"))?;
+        Ok(listed.unwrap_or_default())
     }
 
     /// The pane `place`, while it is open on the server instance `instance`,
@@ -319,9 +335,8 @@ impl Zellij {
 
     /// The pane each client attached to `session` shows.
     pub async fn clients(&self, session: &str) -> Result<Vec<String>> {
-        let mut list = self.action(session);
-        list.arg("list-clients");
-        Ok(parse_clients(&listing(list).await?))
+        let listed = self.session_listing(session, &["list-clients"]).await?;
+        Ok(parse_clients(&listed))
     }
 
     /// Every session's name, exited ones included, which Zellij would
@@ -329,7 +344,8 @@ impl Zellij {
     async fn session_names(&self) -> Result<Vec<String>> {
         let mut list = self.command();
         list.args(["list-sessions", "--no-formatting"]);
-        Ok(parse_sessions(&listing(list).await?))
+        let listed = listing(list).await?.answer().unwrap_or_default();
+        Ok(parse_sessions(&listed))
     }
 
     /// Open `shell` in a new tab of `session`, which a client shows: Zellij
@@ -574,24 +590,20 @@ impl Zellij {
         Ok(())
     }
 
-    /// End `session`, which holds no pane, unless it ended already. Zellij
-    /// counts a session only when its server answers a probe in time, so it
-    /// can report a busy one as missing: Shoal asks again while the server
-    /// instance `instance` still runs.
+    /// End `session`, which holds no pane, unless it ended already, asking
+    /// again while the server instance `instance` still runs.
     async fn end_session(&self, session: &str, instance: &str) -> Result<()> {
-        for _ in 0..KILL_ATTEMPTS {
-            if self.kill_session(session).await? == Kill::Sent
-                || !self.on_instance(session, instance).await?
-            {
-                return Ok(());
-            }
-            tokio::time::sleep(KILL_RETRY).await;
-        }
-        bail!("end Zellij session {session}: Zellij reported the running session as missing")
+        asked_while_running(
+            || self.kill_session(session),
+            || self.on_instance(session, instance),
+        )
+        .await
+        .with_context(|| format!("end Zellij session {session}"))?;
+        Ok(())
     }
 
     /// Ask Zellij to end `session`.
-    async fn kill_session(&self, session: &str) -> Result<Kill> {
+    async fn kill_session(&self, session: &str) -> Result<Reply<()>> {
         let mut kill = self.command();
         kill.args(["kill-session", session]);
         let output = Run::new(kill).timeout(TIMEOUT).capture().await?;
@@ -599,13 +611,48 @@ impl Zellij {
     }
 }
 
-/// What `zellij kill-session` did with a session.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Kill {
-    /// Zellij asked its server to end, or no session runs at all.
-    Sent,
-    /// Zellij found no answering server of that name among others.
+/// What Zellij answered a command on one session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Reply<T> {
+    /// The session's server answered; for `kill-session`, also when no
+    /// session runs at all.
+    Answered(T),
+    /// Zellij found no answering server of that name.
     Missing,
+}
+
+impl<T> Reply<T> {
+    /// What the server answered, if it did.
+    fn answer(self) -> Option<T> {
+        match self {
+            Self::Answered(answer) => Some(answer),
+            Self::Missing => None,
+        }
+    }
+}
+
+/// What `ask` answers once Zellij finds the session, or `None` once
+/// `running` says the session's server no longer runs. Zellij counts a
+/// session only when its server answers a probe in time, so it can report a
+/// busy one as missing: Shoal asks again while the server still runs.
+async fn asked_while_running<T, Asked, Running>(
+    mut ask: impl FnMut() -> Asked,
+    mut running: impl FnMut() -> Running,
+) -> Result<Option<T>>
+where
+    Asked: Future<Output = Result<Reply<T>>>,
+    Running: Future<Output = Result<bool>>,
+{
+    for _ in 0..MISSING_ATTEMPTS {
+        if let Reply::Answered(answer) = ask().await? {
+            return Ok(Some(answer));
+        }
+        if !running().await? {
+            return Ok(None);
+        }
+        tokio::time::sleep(MISSING_RETRY).await;
+    }
+    bail!("Zellij reported the running session as missing")
 }
 
 /// The arguments that run `shell`'s command in a new pane, which closes
@@ -625,22 +672,22 @@ async fn run(command: Command) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// What `command` prints, a listing, which is empty when the session or
-/// every session is gone.
-async fn listing(command: Command) -> Result<String> {
+/// What the listing `command` prints, or that Zellij found the session, or
+/// any session, missing.
+async fn listing(command: Command) -> Result<Reply<String>> {
     listed(&Run::new(command).timeout(TIMEOUT).capture().await?)
 }
 
 /// What a listing command that ended with `output` printed; see [`listing`].
 /// A failure names Zellij's message, which some commands print to stdout.
-fn listed(output: &Output) -> Result<String> {
+fn listed(output: &Output) -> Result<Reply<String>> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     if output.status.success() {
-        return Ok(stdout.into_owned());
+        return Ok(Reply::Answered(stdout.into_owned()));
     }
     let error = crate::subprocess::diagnostic(&output.stderr);
     if nothing_to_list(&error) || nothing_to_list(&stdout) {
-        return Ok(String::new());
+        return Ok(Reply::Missing);
     }
     let reason = if error.trim().is_empty() {
         crate::subprocess::diagnostic(&output.stdout)
@@ -817,7 +864,8 @@ fn parse_version(output: &str) -> Option<(u32, u32)> {
     Some((major, minor.parse().ok()?))
 }
 
-/// Whether Zellij's `message` says the session, or every session, is gone.
+/// Whether Zellij's `message` says it found the session, or any session,
+/// missing.
 fn nothing_to_list(message: &str) -> bool {
     message.contains("There is no active session")
         || message.contains("No active zellij sessions found")
@@ -825,15 +873,16 @@ fn nothing_to_list(message: &str) -> bool {
 }
 
 /// What a `zellij kill-session` that ended with `output` did. Zellij says
-/// on stdout when no session of the name answered among the others.
-fn killed(output: &Output) -> Result<Kill> {
+/// on stdout when no session of the name answered among the others; when it
+/// finds no session at all, nothing is left to end.
+fn killed(output: &Output) -> Result<Reply<()>> {
     if !output.status.success()
         && String::from_utf8_lossy(&output.stdout).contains("No session named ")
     {
-        return Ok(Kill::Missing);
+        return Ok(Reply::Missing);
     }
     listed(output)?;
-    Ok(Kill::Sent)
+    Ok(Reply::Answered(()))
 }
 
 /// Zellij panes carry no Shoal labels, so the daemon's records of the panes
