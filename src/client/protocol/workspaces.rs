@@ -37,6 +37,15 @@ pub enum WorkspaceMethod {
         name: String,
         base: Option<String>,
     },
+    /// Create a workspace at a commit, without a branch: a child of
+    /// `parent`, or without one a top-level workspace given to `chat`, or
+    /// else to the user.
+    CreateCommitWorkspace {
+        repository: crate::client::repository::Selector,
+        parent: Option<String>,
+        start: CommitStart,
+        chat: Option<String>,
+    },
     /// Refuse what `CreateWorkspace` or `OpenBranch` would refuse in this
     /// request, without creating anything.
     CheckCreation {
@@ -161,6 +170,21 @@ pub enum WorkspaceMethod {
     WatchWorkspaceEvents {
         since: Option<i64>,
         follow: bool,
+    },
+}
+
+/// Where a workspace at a commit starts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommitStart {
+    /// A revision as `--base` names it; `None` for the default branch.
+    Revision(Option<String>),
+    /// PR `number`'s head, which `origin` serves under `reference`, expected
+    /// at `commit`.
+    PullHead {
+        number: u64,
+        reference: String,
+        commit: String,
     },
 }
 

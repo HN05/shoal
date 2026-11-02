@@ -211,6 +211,18 @@ pub fn name_taken(db: &Connection, name: &str) -> Result<bool> {
     Ok(name_holder(db, name, None)?.is_some())
 }
 
+/// The first of `base`, `base-2`, `base-3`, ... that nothing holds, each cut
+/// to the longest name allowed.
+pub fn free_name(db: &Connection, base: &str) -> Result<String> {
+    for suffix in 1_u64.. {
+        let candidate = crate::daemon::chats::suffixed(base, suffix);
+        if !name_taken(db, &candidate)? {
+            return Ok(candidate);
+        }
+    }
+    unreachable!("an unused suffix exists")
+}
+
 /// Check ownership before inserting a workspace or reserving a rename in a transaction.
 /// Names (including pending renames) are global; branches belong to one repository.
 pub fn ensure_name_and_branch_available(

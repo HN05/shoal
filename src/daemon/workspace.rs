@@ -7,6 +7,7 @@ mod agents;
 mod branches;
 pub(crate) mod capacity;
 mod checkpoints;
+mod commits;
 mod config_state;
 pub(crate) mod conflicts;
 mod contributions;
@@ -514,7 +515,17 @@ impl Manager {
         let result = self
             .materialize_worktree(repo, &workspace, source, git_profile)
             .await;
-        match result {
+        self.settle_creation(&workspace, result).await
+    }
+
+    /// Record how materializing the recorded `workspace` went: ready, or
+    /// preparing while it needs setup, or failed.
+    async fn settle_creation(
+        &self,
+        workspace: &Workspace,
+        materialized: Result<bool>,
+    ) -> Result<Workspace> {
+        match materialized {
             Ok(needs_setup) => {
                 self.finish_materialization(&workspace.id, needs_setup)
                     .await?
@@ -634,11 +645,26 @@ impl Manager {
             matches!(&source, WorkspaceSource::New { .. }).then_some(commit.as_str()),
         )
         .await?;
+        let files = match &source {
+            WorkspaceSource::Existing { files, .. } => files.as_ref(),
+            WorkspaceSource::New { .. } => None,
+        };
+        self.configure_worktree(repo, workspace, files, git_profile)
+            .await
+    }
+
+    /// Record the new worktree's identity, write a restore's files into it,
+    /// then apply its Git profile and the seed build, returning whether setup
+    /// is still needed.
+    async fn configure_worktree(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        files: Option<&restore::RestoredFiles>,
+        git_profile: Option<&str>,
+    ) -> Result<bool> {
         self.record_worktree_identity(workspace).await?;
-        if let WorkspaceSource::Existing {
-            files: Some(files), ..
-        } = &source
-        {
+        if let Some(files) = files {
             restore::write_files(&workspace.path, files).await?;
         }
         let config = self.config();

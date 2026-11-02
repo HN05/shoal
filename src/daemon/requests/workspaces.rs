@@ -61,6 +61,16 @@ pub(super) async fn handle(
                 )
                 .await?,
         ),
+        WorkspaceMethod::CreateCommitWorkspace {
+            repository,
+            parent,
+            start,
+            chat,
+        } => Body::Workspace(
+            manager
+                .create_commit_workspace(repository, parent, start, chat)
+                .await?,
+        ),
         WorkspaceMethod::ReopenWorkspace { workspace } => {
             Body::OpenedWorkspace(manager.reopen_workspace(&workspace).await?)
         }
@@ -211,6 +221,10 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::WorkspacePlaces { workspace }
             | WorkspaceMethod::RenameWorkspace { workspace, .. }
             | WorkspaceMethod::SplitWorkspace { workspace, .. }
+            | WorkspaceMethod::CreateCommitWorkspace {
+                parent: Some(workspace),
+                ..
+            }
             | WorkspaceMethod::InspectWorkspace { workspace }
             | WorkspaceMethod::VerifyWorkspace { workspace, .. }
             | WorkspaceMethod::FastForwardWorkspace { workspace, .. }
@@ -228,6 +242,7 @@ impl Scoped for WorkspaceMethod {
             } => Some(workspace),
             WorkspaceMethod::OpenBranch { .. }
             | WorkspaceMethod::CreateWorkspace { .. }
+            | WorkspaceMethod::CreateCommitWorkspace { parent: None, .. }
             | WorkspaceMethod::ReopenWorkspace { .. }
             | WorkspaceMethod::CheckCreation { .. }
             | WorkspaceMethod::CheckDependencies { .. }

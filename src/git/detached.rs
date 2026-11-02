@@ -1,7 +1,7 @@
-//! Detached checkouts of one commit for read-only work beside a workspace,
-//! such as a review. Worktrunk's worktrees are always on a branch, so these
-//! are plain Git worktrees that no workspace owns, and their files are
-//! read-only until they are removed.
+//! Detached checkouts of one commit: the worktrees of workspaces at a
+//! commit, and read-only checkouts beside a workspace, such as a review's,
+//! that no workspace owns. Worktrunk's worktrees are always on a branch, so
+//! these are plain Git worktrees.
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -12,15 +12,29 @@ use anyhow::{Context, Result};
 /// `path`, so a registration a killed checkout left there, locked while it
 /// was being created, is replaced.
 pub async fn add(repo: &Path, path: &Path, commit: &str) -> Result<()> {
+    worktree_add(repo, path, commit, &["--force", "--force"]).await?;
+    set_writable(path, false).with_context(|| format!("make {} read-only", path.display()))
+}
+
+/// Check out `commit` at `path`, a new linked worktree of `repo` on no
+/// branch, for a workspace at a commit. No hooks run, as for the worktrees
+/// Worktrunk creates on a branch.
+pub async fn add_workspace(repo: &Path, path: &Path, commit: &str) -> Result<()> {
+    worktree_add(repo, path, commit, &[]).await
+}
+
+async fn worktree_add(repo: &Path, path: &Path, commit: &str, options: &[&str]) -> Result<()> {
     let mut command = super::isolated_command_without_submodules(repo);
     command
-        .args(["worktree", "add", "--detach", "--force", "--force", "--"])
+        .args(["worktree", "add", "--detach"])
+        .args(options)
+        .arg("--")
         .arg(path)
         .arg(commit);
     super::output(command)
         .await
-        .with_context(|| format!("check out {commit} at {}", path.display()))?;
-    set_writable(path, false).with_context(|| format!("make {} read-only", path.display()))
+        .with_context(|| format!("check out {commit} at {}", path.display()))
+        .map(drop)
 }
 
 /// Remove the detached checkout at `path`, whatever it holds, and forget it

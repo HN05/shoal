@@ -81,6 +81,24 @@ pub async fn materialize_branch(repo: &Path, remote: &str, branch: &str) -> Resu
     Ok(tracking)
 }
 
+/// Fetch `remote`'s branches and tags, so a tag or commit that does not
+/// resolve here may resolve afterwards.
+pub async fn with_tags(repo: &Path, remote: &str) -> Result<()> {
+    let args = [FETCH_SAFE_ARGS, &["--tags", "--", remote]].concat();
+    // `--tags` after `--no-tags` wins.
+    super::run_isolated(repo, &args).await.map(drop)
+}
+
+/// Fetch `reference` from `remote`, such as the ref a forge serves a PR's
+/// head under, and return the commit it names, without keeping a ref.
+pub async fn reference(repo: &Path, remote: &str, reference: &str) -> Result<String> {
+    with_temporary_ref(repo, "pull", super::run_isolated, async |fetched| {
+        fetch_commit(repo, remote, reference, fetched, super::run_isolated).await
+    })
+    .await
+    .with_context(|| format!("could not fetch {reference} from {remote}"))
+}
+
 /// Fetch only a review's branch, retaining the caller's normal Git policy.
 pub async fn review_branch(repo: &Path, branch: &str) -> Result<String> {
     let tracking = super::remote_ref("origin", branch);

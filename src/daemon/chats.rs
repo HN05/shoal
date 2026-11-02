@@ -130,7 +130,7 @@ impl Manager {
     /// that a new chat could take now.
     pub async fn free_chat_name(&self, name: String) -> Result<String> {
         let base = derive_workspace_name(&name);
-        self.store.run(move |db| free_name(db, &base)).await
+        self.store.run(move |db| store::free_name(db, &base)).await
     }
 
     /// Give the chat `chat`, by ID or name, the name `name`, which must be
@@ -360,7 +360,11 @@ impl Manager {
     }
 
     /// Assign `workspace` to `chat` and read it again.
-    async fn give_to_chat(&self, workspace: &str, chat: Option<String>) -> Result<Workspace> {
+    pub(crate) async fn give_to_chat(
+        &self,
+        workspace: &str,
+        chat: Option<String>,
+    ) -> Result<Workspace> {
         self.assign_chat(workspace, chat).await?;
         self.workspace(workspace).await
     }
@@ -416,18 +420,6 @@ fn ensure_checkout_free(tx: &rusqlite::Transaction<'_>, repository_id: &str) -> 
     );
     // A chat edits the checkout, which a move may be copying.
     store::ensure_repository_not_moving(tx, repository_id)
-}
-
-/// The first of `base`, `base-2`, `base-3`, ... that nothing holds, each cut
-/// to the longest name allowed.
-fn free_name(db: &mut Connection, base: &str) -> Result<String> {
-    for suffix in 1_u64.. {
-        let candidate = suffixed(base, suffix);
-        if !store::name_taken(db, &candidate)? {
-            return Ok(candidate);
-        }
-    }
-    unreachable!("an unused suffix exists")
 }
 
 /// `base`, or `base-<suffix>` from 2 on, shortened to fit the name limit.
