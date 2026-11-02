@@ -1014,7 +1014,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
         "if [ -e agent-started ]; then printf '%s\\n' \"$@\" > agent-args; \
          i=0; while [ ! -e release ] && [ $i -lt 120 ]; do sleep 1; i=$((i + 1)); done; \
          exit 0; fi\n\
-         touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+         trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
@@ -1175,7 +1175,7 @@ fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds()
          if [ -e post-setup-done ]; then touch agent-restarted; else touch agent-before-setup; fi; \
          i=0; while [ ! -e release ] && [ $i -lt 120 ]; do sleep 1; i=$((i + 1)); done; \
          exit 0; fi\n\
-         touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+         trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     let agent = fixture
@@ -1286,7 +1286,7 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
         "if [ -e agent-started ]; then touch agent-restarted; \
          i=0; while [ ! -e release ] && [ $i -lt 120 ]; do sleep 1; i=$((i + 1)); done; \
          exit 0; fi\n\
-         touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+         trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     let agent = here
@@ -1766,7 +1766,7 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(
         path.join("agent.sh"),
-        "touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+        "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     fs::write(path.join("resume.sh"), "touch resumed\n").unwrap();
@@ -3059,7 +3059,7 @@ fn migrate_moves_workspaces_into_a_saved_root() {
 #[test]
 fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     let fixture = Fixture::with_config(Some(
-        "[machine.overload.disk]\nenabled = false\n[agents.claude]\ncommand = ['sh', '-c', 'touch started; trap \"exit 0\" TERM; while :; do sleep 1; done']\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "[machine.overload.disk]\nenabled = false\n[agents.claude]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; touch started; while :; do sleep 1; done']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let claude_config = fixture.root.path().join(".claude.json");
@@ -3087,7 +3087,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
             "--",
             "sh",
             "-c",
-            "touch running; trap 'exit 0' TERM; while :; do sleep 1; done",
+            "trap 'exit 0' TERM; touch running; while :; do sleep 1; done",
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -6323,7 +6323,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
 #[test]
 fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -6390,7 +6390,7 @@ fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
 #[test]
 fn stopping_a_workspace_stops_the_workspaces_below_it() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -6561,7 +6561,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(
         path.join("agent.sh"),
-        "printf %s \"${SHOAL_OUTPUT-unset}\" > output-$SHOAL_EXECUTION_ID\ntouch started-$SHOAL_EXECUTION_ID\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+        "printf %s \"${SHOAL_OUTPUT-unset}\" > output-$SHOAL_EXECUTION_ID\ntrap 'exit 0' TERM\ntouch started-$SHOAL_EXECUTION_ID\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     fs::write(
@@ -6983,8 +6983,9 @@ fn a_chat_moves_with_its_session_and_continues_it() {
             "printf '%s\\n' \"$@\" > \"$HOME/chat-args\"\n\
              case \" $* \" in *' --resume '*) exit 0;; esac\n\
              printf '{{\"session_id\":\"chat-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n\
+             trap 'exit 0' TERM\n\
              touch \"$HOME/chat-started\"\n\
-             trap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+             while :; do sleep 1; done\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     )
@@ -7158,7 +7159,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(
         path.join("agent.sh"),
-        "touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+        "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     let spawn = |args: &[&str]| {
@@ -7263,7 +7264,7 @@ fn daemon_stop_and_signals_stop_tracked_agents() {
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(
         path.join("agent.sh"),
-        "touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+        "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     let state = fixture
@@ -7345,8 +7346,9 @@ fn chat_session_fixture() -> Fixture {
              echo \"$TMPDIR\" > \"$HOME/chat-tmpdir\"\n\
              case \" $* \" in *' --resume '*) exit 0;; esac\n\
              printf '{{\"session_id\":\"chat-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n\
+             trap 'exit 0' TERM\n\
              touch \"$TMPDIR/notes\" \"$HOME/chat-started\"\n\
-             trap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+             while :; do sleep 1; done\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     )
@@ -28459,7 +28461,7 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
 #[test]
 fn resume_queues_restores_that_start_as_agent_slots_free() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let mut paths = Vec::new();

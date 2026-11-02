@@ -10,12 +10,12 @@ fn restart_continues_an_upgraded_wrapper_from_the_installed_binary() {
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(
         path.join("agent.sh"),
-        "touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+        "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     fs::write(
         path.join("resume.sh"),
-        "touch restored\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+        "trap 'exit 0' TERM\ntouch restored\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
     // The wrapper starts from an installed link to an earlier release, a copy
