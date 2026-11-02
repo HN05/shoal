@@ -351,11 +351,14 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   PR with its `area/`, `type/` and `complexity/` labels, then watch CI and the
   review bot. Review findings are claims to verify against the code and its
   callers before fixing them or rejecting them with evidence in the thread.
-  After fixing findings or resolving merge conflicts, request another review
-  with `shoal pr edit --add-label review/default`, since a push does not, and
-  mark the PR ready only once a review of the current head comes back clean.
   Agents cannot merge PRs; leave merging to the user instead of asking for
   permission to merge.
+- Every push after the first review needs a new one: a push does not request
+  it. After each push that fixes findings, resolves merge conflicts, rebases
+  or adds commits, run `shoal pr edit --add-label review/default`, wait for
+  that review, and handle its findings. Run `shoal ready` only once the latest
+  review covers the current head and comes back clean; green CI alone is not
+  enough.
 
 ## Shoal feedback
 
