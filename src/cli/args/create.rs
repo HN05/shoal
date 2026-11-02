@@ -83,7 +83,10 @@ pub enum CreateCommand {
         /// Create a workspace at a commit, with no branch of its own, for
         /// comparisons and research: at --base, a tag or commit, or the default
         /// branch. Without a parent workspace, the user owns it.
-        #[arg(long, conflicts_with_all = ["branch", "issue", "agent", "fork"])]
+        #[arg(
+            long,
+            conflicts_with_all = ["branch", "issue", "agent", "fork", "model", "effort"]
+        )]
         no_branch: bool,
         /// Derive the branch name from a forge issue number or URL and link the issue.
         #[arg(long, value_parser = item_reference)]
