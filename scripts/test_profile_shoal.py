@@ -30,11 +30,16 @@ class IsolationTests(unittest.TestCase):
             plain = isolated_git.environment(root)
             subprocess.run(["git", "init", "-q", str(caller)], env=plain, check=True)
             inherited = {"GIT_DIR": str(caller / ".git"), "GIT_WORK_TREE": str(caller),
-                         "SHOAL_SCOPE_TOKEN": "caller", "CODEX_HOME": str(caller)}
+                         "SHOAL_SCOPE_TOKEN": "caller", "CODEX_HOME": str(caller),
+                         "ZMX_SESSION": "agent", "HAPPY_SESSION": "session",
+                         "TMUX": "/tmp/tmux-501/default,1,0"}
             with patch.dict(os.environ, inherited):
                 env = profile_shoal.environment(sandbox)
             self.assertFalse(set(inherited) & set(env))
             self.assertEqual(env["SHOAL_STATE_DIR"], str(sandbox / "s"))
+            self.assertEqual(env["SHOAL_PROFILE"], "1")
+            self.assertEqual(env["ZMX_DIR"], str(sandbox / "zmx"))
+            self.assertTrue(Path(env["TMUX_TMPDIR"]).is_dir())
             repo = profile_shoal.fixture_repository(sandbox, env)
             log = subprocess.run(["git", "-C", str(repo), "log", "--format=%an"], env=env,
                                  capture_output=True, text=True, check=True)

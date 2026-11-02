@@ -25,14 +25,9 @@ import tempfile
 import time
 from pathlib import Path
 
-import isolated_git
+from sandbox import build, isolated, prepare_directories
 
-ROOT = Path(__file__).resolve().parent.parent
 LINE = re.compile(r"^profile (\w+) ([\d.]+)ms (.*)$")
-# Variables that would reach the user's agent configuration; Shoal's own and
-# Git's are dropped by prefix.
-LEAKING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME")
-OWN = ("SHOAL_STATE_DIR", "SHOAL_PROFILE")
 IDENTITY = {f"GIT_{role}_{field}": value for role in ("AUTHOR", "COMMITTER")
             for field, value in (("NAME", "Shoal Profile"), ("EMAIL", "profile@example.invalid"))}
 DAEMON_START_SECONDS = 60
@@ -65,26 +60,13 @@ def report(walls, rows, sandbox):
         print(f"{kind:<8} {count:>6} {per_run:>9.1f} {longest:>8.1f}  {subject}")
 
 
-def build():
-    """The executable Cargo reports building, wherever its config puts it."""
-    output = subprocess.run(["cargo", "build", "--profile", "profiling", "--bin", "shoal",
-                             "--message-format=json-render-diagnostics"],
-                            cwd=ROOT, check=True, stdout=subprocess.PIPE, text=True).stdout
-    for line in output.splitlines():
-        message = json.loads(line)
-        if message.get("reason") == "compiler-artifact" and message.get("executable"):
-            return Path(message["executable"])
-    sys.exit("cargo built no shoal executable")
-
-
 def environment(sandbox):
-    """The caller's environment without its Git, Shoal or agent settings."""
-    home = sandbox / "home"
-    home.mkdir()
-    env = isolated_git.environment(home, **IDENTITY, SHOAL_STATE_DIR=str(sandbox / "s"),
-                                   SHOAL_PROFILE="1")
-    return {name: value for name, value in env.items()
-            if name not in LEAKING and (not name.startswith("SHOAL_") or name in OWN)}
+    """The sandbox's isolated environment with its directories created and
+    Shoal's timing lines on."""
+    prepare_directories(sandbox)
+    env = isolated(sandbox, IDENTITY)
+    env.update(SHOAL_STATE_DIR=str(sandbox / "s"), SHOAL_PROFILE="1")
+    return env
 
 
 def fixture_repository(sandbox, env):
@@ -172,7 +154,7 @@ def daemon_lines(log_path, offset, cli_lines):
 
 
 def profile(options, sandbox):
-    shoal = build()
+    shoal = build("profiling")
     env = environment(sandbox)
     repo = fixture_repository(sandbox, env)
     command = with_repo(options.command, repo)

@@ -1,4 +1,4 @@
-"""A development build of Shoal in a sandbox directory: its own home, state
+"""A build of Shoal in a sandbox directory: its own home, state
 directory, zmx, tmux and Zellij directories and Git config, without the
 caller's Shoal, Git, host or agent settings, so nothing reaches the user's own
 daemon or sessions."""
@@ -21,9 +21,10 @@ LEAKING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "SHOAL_", "HERDR_", "ZMX_", "HAPPY
 DAEMON_START_SECONDS = 60
 
 
-def build():
-    """The executable Cargo reports building, wherever its config puts it."""
-    output = subprocess.run(["cargo", "build", "--bin", "shoal",
+def build(profile="dev"):
+    """The executable Cargo reports building with `profile`, wherever its
+    config puts it."""
+    output = subprocess.run(["cargo", "build", "--profile", profile, "--bin", "shoal",
                              "--message-format=json-render-diagnostics"],
                             cwd=ROOT, check=True, stdout=subprocess.PIPE, text=True).stdout
     for line in output.splitlines():
@@ -33,18 +34,31 @@ def build():
     sys.exit("cargo built no shoal executable")
 
 
-def environment(sandbox, bin_dir):
+def isolated(sandbox, identity):
     """The caller's environment without its Git, Shoal, host or agent settings,
-    with the sandbox's home, state, zmx, tmux and Zellij directories and `bin_dir`
-    first on PATH."""
-    env = isolated_git.environment(sandbox / "home", **IDENTITY)
+    with the sandbox's home, state, zmx, tmux and Zellij directories and Git
+    commits made as `identity`."""
+    env = isolated_git.environment(sandbox / "home", **identity)
     env = {name: value for name, value in env.items() if not name.startswith(LEAKING)}
     env.update(SHOAL_STATE_DIR=str(sandbox / "state"), ZMX_DIR=str(sandbox / "zmx"),
                TMUX_TMPDIR=str(sandbox / "tmux"),
                # Short, since Zellij's socket paths are.
-               ZELLIJ_SOCKET_DIR=str(sandbox / "z"),
-               PATH=os.pathsep.join([str(bin_dir), env.get("PATH", "")]))
+               ZELLIJ_SOCKET_DIR=str(sandbox / "z"))
     return env
+
+
+def environment(sandbox, bin_dir):
+    """The isolated environment of a sandbox with `bin_dir` first on PATH."""
+    env = isolated(sandbox, IDENTITY)
+    env["PATH"] = os.pathsep.join([str(bin_dir), env.get("PATH", "")])
+    return env
+
+
+def prepare_directories(sandbox):
+    """Create the home and tmux directories `isolated` names, which their
+    programs expect to exist."""
+    (sandbox / "home").mkdir(parents=True)
+    (sandbox / "tmux").mkdir()
 
 
 def prepare_zmx_lock(sandbox):
@@ -80,9 +94,8 @@ class Sandbox:
         its shells."""
         self.clear()
         self.bin_dir.mkdir(parents=True)
+        prepare_directories(self.path)
         home = self.path / "home"
-        home.mkdir()
-        (self.path / "tmux").mkdir()
         # An empty home would start zsh's first-run wizard instead of a prompt.
         (home / ".zshrc").write_text(f"PROMPT='{prompt} %1~ %# '\n")
         (home / ".bashrc").write_text(f"PS1='{prompt} \\W \\$ '\n")
