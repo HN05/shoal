@@ -51,6 +51,7 @@ pub(super) async fn ask(
     wait: bool,
 ) -> Result<i32> {
     let attachments = super::messages::attachments(&attach)?;
+    crate::client::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let method = QuestionMethod::AskQuestion {
         space,

@@ -457,3 +457,34 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
     assert!(kept.files[0].path.exists());
     assert!(copy.exists());
 }
+
+#[tokio::test]
+async fn a_message_to_the_user_sends_a_limited_number_of_files() {
+    use crate::test_support::repository;
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "sender".into(), None, None, None)
+        .await
+        .unwrap();
+    let shot = temp.path().join("shot.png");
+    std::fs::write(&shot, "png").unwrap();
+    let files = vec![NewFile::from(shot); crate::client::files::MAX_SENT + 1];
+    let error = manager
+        .send_message(&workspace.id, "Look".into(), files, &Attacher::User)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("at most"), "{error:#}");
+    assert!(
+        manager
+            .attached_files(&workspace.name)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(manager.notifications(false, 50).await.unwrap().is_empty());
+}

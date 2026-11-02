@@ -939,3 +939,24 @@ async fn files_sent_with_a_question_are_listed_with_it_and_its_notification() {
     assert_eq!(messages, 1, "{workspace_results:?}");
     assert!(asked.files.iter().all(|file| file.path.exists()));
 }
+
+#[tokio::test]
+async fn a_question_sends_a_limited_number_of_files() {
+    let (root, manager, workspace) = fixture().await;
+    let shot = root.path().join("shot.png");
+    std::fs::write(&shot, "png").unwrap();
+    let files = vec![NewFile::from(shot); crate::client::files::MAX_SENT + 1];
+    let error = manager
+        .ask_question(&workspace.name, ask("Which?", &[]), files, &Attacher::User)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("at most"), "{error:#}");
+    assert!(
+        manager
+            .attached_files(&workspace.name)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(manager.questions(None).await.unwrap().questions.is_empty());
+}

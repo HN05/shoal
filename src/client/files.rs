@@ -65,6 +65,20 @@ pub fn check_results(results: &[NewFile]) -> Result<()> {
     Ok(())
 }
 
+/// The most files one alert or question sends, which keeps one with the
+/// paths of Shoal's copies to a small part of a protocol frame, so listings
+/// of several still fit one response.
+pub const MAX_SENT: usize = 20;
+
+/// Refuse more files than one alert or question sends.
+pub fn check_sent(files: &[NewFile]) -> Result<()> {
+    ensure!(
+        files.len() <= MAX_SENT,
+        "send at most {MAX_SENT} files with one alert or question"
+    );
+    Ok(())
+}
+
 /// The `names` and record `ids` that none of `files` has, as an error
 /// names them.
 pub fn missing_selection(files: &[AttachedFile], names: &[String], ids: &[i64]) -> Vec<String> {

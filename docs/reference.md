@@ -4193,7 +4193,7 @@ reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
 a checkout with `core.bare` set, or a global worker template repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a space, a workspace or chat, which the entry names;
 agents use it to ask for attention without marking the assignment done.
-`--attach FILE`, repeated for more, sends files with it, such as a
+`--attach FILE`, repeated for up to 20, sends files with it, such as a
 screenshot, kept as [attached files](#attached-files); a coordinating agent
 receives them with the message. It
 prints the notification's number, or that a

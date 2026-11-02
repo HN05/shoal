@@ -101,6 +101,7 @@ pub(super) async fn send(
     attach: Vec<String>,
 ) -> Result<i32> {
     let attachments = super::messages::attachments(&attach)?;
+    crate::client::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let sent = request::<Sent>(
         &ctx.paths,

@@ -591,6 +591,7 @@ impl Manager {
         attacher: &Attacher,
     ) -> Result<Question> {
         ask.validate()?;
+        workspace_files::check_sent(&attachments)?;
         let space = self.present_space(selector).await?;
         let question = ask.question.clone();
         let asked = (self.send_with_files(

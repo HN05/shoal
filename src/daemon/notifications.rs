@@ -271,6 +271,7 @@ impl Manager {
         attacher: &Attacher,
     ) -> Result<Sent> {
         crate::validate::message(&message)?;
+        workspace_files::check_sent(&attachments)?;
         let space = self.present_space(selector).await?;
         let about = About::workspace(space.name(), space.id());
         let (kind, text) = (NotificationKind::AgentMessage, message.clone());
