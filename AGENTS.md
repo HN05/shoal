@@ -285,6 +285,11 @@ Shoal process print a `profile` line to stderr for each daemon call, daemon
 request and subprocess run. It is a contributor tool, so the user documentation
 leaves it out.
 
+`python3 scripts/profile_tests.py suite` runs each test binary as `cargo test`
+does and prints its wall, user and system time; `tests --binary NAME` runs
+every test of a binary alone and lists the costliest. Both count a test's
+daemons and commands, but not processes that outlive it.
+
 ## CI
 
 `.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
