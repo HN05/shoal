@@ -95,7 +95,7 @@ pub(crate) async fn keep(
 /// with `message`, apart from its other files since they outlive its
 /// removal, made off the async runtime. Callers hold the gate of the
 /// repository's attached files.
-async fn keep_for_user(
+async fn copy_for_user(
     layout: Layout,
     space_id: &str,
     message: &str,
@@ -222,9 +222,16 @@ impl Manager {
         results: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Vec<HandedBack>> {
-        let records = self
-            .keep_for_user(space, FileSource::Result, "shoal done", results, attacher)
-            .await?;
+        let kept = |files: Vec<SentFile>| std::future::ready(Ok(files));
+        let records = (self.send_with_files(
+            space,
+            FileSource::Result,
+            "shoal done",
+            results,
+            attacher,
+            kept,
+        ))
+        .await?;
         Ok(records
             .into_iter()
             .map(|file| HandedBack {
@@ -234,11 +241,12 @@ impl Manager {
             .collect())
     }
 
-    /// Send the user `message`, an alert or a question, from `space` with
-    /// `send`, passing it copies of the files `files` recorded as coming from
-    /// `source` and attached by `attacher`, which outlive its removal. When
-    /// `send` refuses the message, the copies and records made for it go;
-    /// those an identical earlier message made stay with it.
+    /// Hand the user `message`, such as an alert, a question or a
+    /// completion, from `space` with `send`, passing it copies of the files
+    /// `files` recorded as coming from `source` and attached by `attacher`,
+    /// which outlive its removal. When `send` refuses the message, the copies
+    /// and records made for it go; those an identical earlier message made
+    /// stay with it.
     pub(crate) async fn send_with_files<T, Send, Sent>(
         &self,
         space: &Space,
@@ -256,7 +264,7 @@ impl Manager {
             return send(Vec::new()).await;
         }
         let (layout, _files) = self.lock_files(space).await?;
-        let kept = keep_for_user(layout, &space.id, message, files).await?;
+        let kept = copy_for_user(layout, &space.id, message, files).await?;
         let records = self
             .record_or_discard(&space.id, source, attacher, kept.clone())
             .await?;
@@ -279,27 +287,6 @@ impl Manager {
             crate::daemon::log!("records of refused files not deleted: {error:#}");
         }
         discard(kept).await;
-    }
-
-    /// Copies of the files `files` that `space` hands the user with
-    /// `message`, recorded as coming from `source` and attached by
-    /// `attacher`, kept apart from its other files since they outlive its
-    /// removal.
-    async fn keep_for_user(
-        &self,
-        space: &Space,
-        source: FileSource,
-        message: &str,
-        files: Vec<NewFile>,
-        attacher: &Attacher,
-    ) -> Result<Vec<AttachedFile>> {
-        if files.is_empty() {
-            return Ok(Vec::new());
-        }
-        let (layout, _files) = self.lock_files(space).await?;
-        let kept = keep_for_user(layout, &space.id, message, files).await?;
-        self.record_or_discard(&space.id, source, attacher, kept)
-            .await
     }
 
     /// Delete the files attached to the workspace or chat `selector` names,

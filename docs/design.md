@@ -2170,7 +2170,10 @@ removes it, for as long as its removal record, so the user or the parent's
 agent can read them after the worktree is gone; the workspace's other attached
 files go with it. Files an agent sends the user with an alert or a question
 stay the same way, since the user may read the alert after the workspace is
-gone. The alert or question names them by their records rather than by path,
+gone, and outlive the alert or question as a message's files outlive the
+message: clearing or withdrawing an alert and answering a question leave them
+among the space's files, which the user already sees and Quay may show, until
+`shoal files rm` or the retention removes them. The alert or question names them by their records rather than by path,
 so a file `shoal files rm` deleted drops out and a moved repository directory
 moves them, and a coordinating agent that receives the alert or question
 instead receives their paths as the message's attached files. A chat's `done` records its completion on the chat
