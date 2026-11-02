@@ -17500,6 +17500,25 @@ fn land_asks_before_merging_files_changed_on_both_sides() {
     assert!(!declined.status.success());
     assert!(transcript.contains("Are you sure? [y/N]"), "{transcript}");
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
+    // An agent's --yes leaves the question to whoever approves the landing.
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let scoped = [
+        "run",
+        "--workspace",
+        "worker",
+        "--",
+        binary,
+        "--json",
+        "land",
+        "--yes",
+    ];
+    let pending = fixture.run(&scoped);
+    assert_eq!(pending.status.code(), Some(2));
+    let pending: serde_json::Value = serde_json::from_slice(&pending.stdout).unwrap();
+    assert_eq!(
+        pending["request"]["reason"],
+        "merge worker into main; worker and main both changed version"
+    );
 
     // Landing makes a merge commit in the checkout, which needs an identity.
     git(&fixture.repo, &["config", "user.name", "Test"]);

@@ -17,7 +17,7 @@ use crate::{
         repo::{clean_branch, merge_temporaries, unfinished_operation, upstream},
         run_isolated as git_run,
     },
-    model::{LandPlan, PulledBranch, Repository},
+    model::{LandPlan, MergeWarning, PulledBranch, Repository},
 };
 
 impl Manager {
@@ -92,7 +92,8 @@ impl Manager {
     }
 
     /// A scoped landing needs the user's approval for the branch at the commit
-    /// `plan` lands, unless `[permissions] land` is "direct" and `[permissions]
+    /// `plan` lands, naming the files changed on both sides it would merge,
+    /// unless `[permissions] land` is "direct" and `[permissions]
     /// push` lets the landing push the default branch without it. The caller
     /// holds the repository Git gate, so the approved commit is the one that
     /// lands.
@@ -103,7 +104,12 @@ impl Manager {
         if permissions.land == Opening::Direct && permissions.push == Pushes::Direct {
             return Ok(());
         }
-        match self.request_land_approval(land_request(plan)).await? {
+        // The approver decides what the agent's --yes passed over.
+        let warning = self.land_warning(&plan.workspace.id).await?;
+        match self
+            .request_land_approval(land_request(plan, warning))
+            .await?
+        {
             Some(request) => Err(Undecided(Box::new(request)).into()),
             None => Ok(()),
         }
@@ -161,9 +167,14 @@ impl Manager {
     }
 }
 
-/// The land request a scoped landing of `plan` asks the user to decide.
-fn land_request(plan: &LandPlan) -> ApprovalRequest {
+/// The land request a scoped landing of `plan` asks the user to decide,
+/// with its `warning` in the reason.
+fn land_request(plan: &LandPlan, warning: Option<MergeWarning>) -> ApprovalRequest {
     let branch = &plan.workspace.branch;
+    let mut reason = format!("merge {branch} into {}", plan.default_refresh.branch);
+    if let Some(warning) = warning {
+        reason.push_str(&format!("; {warning}"));
+    }
     ApprovalRequest::new(
         &plan.workspace.id,
         Target::Land,
@@ -173,9 +184,6 @@ fn land_request(plan: &LandPlan) -> ApprovalRequest {
             head: plan.source.clone(),
         }),
         Lifetime::Lease,
-        Some(&format!(
-            "merge {branch} into {}",
-            plan.default_refresh.branch
-        )),
+        Some(&reason),
     )
 }
