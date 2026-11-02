@@ -5,7 +5,6 @@
 use std::{
     collections::HashMap,
     fs,
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -13,7 +12,7 @@ use std::{
 use anyhow::Result;
 use tokio::time::Instant;
 
-use super::{Rule, Snapshot, Tree};
+use super::{Rule, Snapshot, Tree, change_time};
 use crate::{
     daemon::{events::EventCause, log, notifications::NotificationKind, workspace::Manager},
     model::Workspace,
@@ -33,9 +32,11 @@ pub struct State {
     /// passing failure does not keep them. A file change makes the workspace
     /// wait for its idle period again.
     retained: HashMap<String, (u64, Instant)>,
-    /// The newest file change each workspace's last walk saw, in Unix seconds.
-    /// Change times only move forward, so until the idle period passes that
-    /// change, another walk could only find the workspace in use.
+    /// The newest file change each workspace's last walk saw, in Unix seconds
+    /// and no later than that walk. Change times only move forward, so until
+    /// the idle period passes that change, another walk could only find the
+    /// workspace in use; a modification time set into the future does not
+    /// defer walks past it.
     changed: HashMap<String, u64>,
 }
 
@@ -159,8 +160,12 @@ async fn idle_candidate(
             return Ok(None);
         }
         let git_dir = workspace.git_dir.clone();
-        let tree = tokio::task::spawn_blocking(move || walk(&path, git_dir.as_deref())).await??;
-        state.changed.insert(workspace.id.clone(), tree.changed);
+        let tree =
+            tokio::task::spawn_blocking(move || walk_with_git_state(&path, git_dir.as_deref()))
+                .await??;
+        state
+            .changed
+            .insert(workspace.id.clone(), tree.changed.min(now));
         Ok((tree.changed <= deadline).then_some(Snapshot {
             rule: Rule::Merged,
             signals,
@@ -188,7 +193,7 @@ async fn idle_deadline(manager: &Manager, workspace: &Workspace, now: u64) -> Re
 
 /// One walk of the worktree, whose newest change also covers the
 /// per-worktree Git state that commits, checkouts and staging update.
-fn walk(root: &Path, git_dir: Option<&Path>) -> Result<Tree> {
+fn walk_with_git_state(root: &Path, git_dir: Option<&Path>) -> Result<Tree> {
     let mut tree = super::walk(root)?;
     let state: Vec<PathBuf> = git_dir
         .into_iter()
@@ -196,9 +201,7 @@ fn walk(root: &Path, git_dir: Option<&Path>) -> Result<Tree> {
         .collect();
     for path in state {
         if path.try_exists()? {
-            let metadata = fs::symlink_metadata(&path)?;
-            let changed = metadata.ctime().max(metadata.mtime()).max(0) as u64;
-            tree.changed = tree.changed.max(changed);
+            tree.changed = tree.changed.max(change_time(&fs::symlink_metadata(&path)?));
         }
     }
     Ok(tree)

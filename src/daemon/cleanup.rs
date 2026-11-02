@@ -141,6 +141,11 @@ pub struct Tree {
     pub changed: u64,
 }
 
+/// The later of a file's change and modification times, in Unix seconds.
+pub fn change_time(metadata: &fs::Metadata) -> u64 {
+    metadata.ctime().max(metadata.mtime()).max(0) as u64
+}
+
 /// Metadata only, including ignored files; never follow symlinks out of the tree.
 /// Git administrative storage is shared and inspected separately through HEAD.
 pub fn walk(root: &Path) -> Result<Tree> {
@@ -150,7 +155,7 @@ pub fn walk(root: &Path) -> Result<Tree> {
         metadata.len().hash(hash);
         metadata.modified()?.hash(hash);
         (metadata.ctime(), metadata.ctime_nsec()).hash(hash);
-        *changed = (*changed).max(metadata.ctime().max(metadata.mtime()).max(0) as u64);
+        *changed = (*changed).max(change_time(&metadata));
         if metadata.is_dir() {
             let mut children = fs::read_dir(path)?
                 .map(|entry| entry.map(|e| e.path()))
