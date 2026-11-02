@@ -59,6 +59,44 @@ async fn detached_processes_in_the_worktree_are_leftovers_and_attached_ones_are_
     assert_eq!(listed(&found, &attached), None, "{found:?}");
 }
 
+/// An orphan goes to its nearest ancestor that set `PR_SET_CHILD_SUBREAPER`,
+/// such as `systemd --user`, instead of init.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn detached_processes_a_subreaper_adopted_are_leftovers() {
+    let root = tempfile::tempdir().unwrap();
+    let output = crate::test_support::isolated_test(
+        root.path(),
+        "process::identity::spaces::tests::surveys_as_a_subreaper",
+    )
+    .output()
+    .await
+    .unwrap();
+    assert!(output.status.success(), "{output:?}");
+}
+
+/// Adopt this helper's orphans, as a subreaper, and survey a detached shell.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+#[ignore = "helper process tests start"]
+async fn surveys_as_a_subreaper() {
+    // SAFETY: prctl only sets a flag of this process.
+    assert_eq!(unsafe { libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1) }, 0);
+    let root = tempfile::tempdir().unwrap();
+    let space = workspace(root.path());
+    let worktree = space.programs.clone().unwrap();
+    let detached = Detached::start(&worktree, &root.path().join("pids")).await;
+    assert_eq!(
+        super::super::parent(detached.shell.pid),
+        Some(std::process::id())
+    );
+
+    let found = untracked(&space, vec![]).await;
+
+    assert_eq!(listed(&found, &detached.shell), Some(true), "{found:?}");
+    assert_eq!(listed(&found, &detached.child), Some(true), "{found:?}");
+}
+
 #[tokio::test]
 async fn the_temporary_directory_and_programs_built_in_the_worktree_tie_detached_processes() {
     let root = tempfile::tempdir().unwrap();

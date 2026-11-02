@@ -491,8 +491,9 @@ workspace's count and the PID and command of the first ten, and with `--json`
 `directory` and `started_at` in Unix seconds. Its agent's hook names each new
 one once, up to ten per delivery, and they create no notification. A space's untracked processes carry its identity
 (`SHOAL_WORKSPACE_ID`, or `SHOAL_CHAT` for a chat) or are its leftovers:
-processes whose parent exited, so that launchd or init adopted them, or that
-descend from such a process, working in the worktree or the space's temporary
+processes whose parent exited, so that launchd or init adopted them, or on
+Linux the subreaper that adopts the daemon's orphans, such as `systemd --user`,
+or that descend from such a process, working in the worktree or the space's temporary
 directory, running a program inside the worktree, or carrying its identity,
 with every process they started wherever it runs. Never among them are the
 processes of tracked executions and chat agents, the processes that started

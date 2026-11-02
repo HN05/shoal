@@ -691,9 +691,10 @@ but no scope token, because their purpose is to start or stop things that
 outlive the hook (a tmux session, say) without becoming execution survivors.
 Nothing outlives the workspace: removal stops every verified process that still
 carries its identity, including those hooks and exported environments started,
-and its leftovers. A leftover is a detached process, one launchd or init adopted
-or a descendant of one, that the space's worktree, temporary directory, program
-or identity ties to it, with everything it started: no live process outside the
+and its leftovers. A leftover is a detached process, one whose parent exited and
+left it to launchd, init or the subreaper that takes the daemon's orphans (such
+as `systemd --user`), or a descendant of one, that the space's worktree,
+temporary directory, program or identity ties to it, with everything it started: no live process outside the
 space keeps it, and the ties cover platform binaries whose hidden environment
 cannot show the identity and programs built in the worktree that run elsewhere.
 Exclusion follows live ancestry, not environment variables: the processes of

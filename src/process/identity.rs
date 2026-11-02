@@ -80,15 +80,22 @@ struct Lineage {
     parent: Option<u64>,
     /// Read with the identity, so it names this process's parent.
     parent_pid: u32,
-    /// Launchd adopted it when its parent exited, rather than starting it.
+    /// Launchd adopted it when its parent exited, rather than starting it,
+    /// or on Linux its parent is the subreaper that adopts orphans.
     adopted: bool,
 }
 
 impl Lineage {
-    /// Its parent exited and launchd or init adopted it. Linux cannot tell
-    /// init's own children from adopted ones, so all of them count.
+    /// Its parent exited and launchd, init or a subreaper adopted it. Linux
+    /// cannot tell their own children from adopted ones, so all of them count.
     fn detached(&self) -> bool {
         self.adopted || (cfg!(target_os = "linux") && self.parent_pid == 1)
+    }
+
+    /// Count it adopted when its parent is `subreaper`, which takes orphans
+    /// in init's place.
+    fn note_subreaper(&mut self, subreaper: Option<u32>) {
+        self.adopted |= subreaper == Some(self.parent_pid);
     }
 
     /// Whether `parent`, observed after this process, is the process it was
@@ -304,17 +311,20 @@ async fn inventory<T: Send + 'static>(
 ) -> Result<T> {
     let turn = owners::TURN.lock().await;
     let listing = list_processes().await?;
+    let subreaper = subreaper().await?;
     tokio::task::spawn_blocking(move || {
         let _turn = turn;
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
         let mut inventory = Inventory::new(owners);
         for pid in listing.own {
-            if let Some(process) = observe(pid, settle_deadline)? {
+            if let Some(mut process) = observe(pid, settle_deadline)? {
+                process.lineage.note_subreaper(subreaper);
                 inventory.observed.insert(pid, process);
             }
         }
         for pid in listing.elevated {
-            if let Some(process) = observe_elevated(pid)? {
+            if let Some(mut process) = observe_elevated(pid)? {
+                process.lineage.note_subreaper(subreaper);
                 inventory.observed.insert(pid, process);
             }
         }
@@ -870,6 +880,19 @@ fn hides_environment(_pid: u32) -> bool {
     false
 }
 
+/// The process other than init that adopts this user's orphans.
+#[cfg(target_os = "macos")]
+async fn subreaper() -> Result<Option<u32>> {
+    // Launchd adopts every orphan, and unique IDs tell which it adopted.
+    Ok(None)
+}
+
+/// The process other than init that adopts this user's orphans.
+#[cfg(target_os = "linux")]
+async fn subreaper() -> Result<Option<u32>> {
+    subreaper::current().await
+}
+
 #[cfg(target_os = "linux")]
 fn boot_session() -> Option<&'static String> {
     None
@@ -1256,7 +1279,7 @@ fn proc_lineage(pid: u32, owned: impl Fn(u32) -> bool) -> Result<Option<Lineage>
         parent: None,
         parent_pid: fields[1].parse()?,
         // Linux shows every environment, so nothing depends on how a process
-        // came to init.
+        // came to init. An inventory marks the children of a subreaper.
         adopted: false,
     }))
 }
@@ -1721,5 +1744,7 @@ pub async fn stop_verified(targets: &[Identity]) -> Result<()> {
 
 mod owners;
 pub mod spaces;
+#[cfg(target_os = "linux")]
+mod subreaper;
 #[cfg(test)]
 mod tests;
