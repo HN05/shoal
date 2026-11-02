@@ -13,6 +13,7 @@ use rusqlite::{Connection, params};
 
 use super::{GuardMode, Manager};
 use crate::{
+    config::Effective,
     daemon::{
         links::{
             pr::current_head,
@@ -24,7 +25,7 @@ use crate::{
     },
     forge::items::link::{ItemKind, LinkKind, Selection},
     hooks::{self, Hook, HookKind, HookSpace},
-    model::{Chat, ReviewMark, Workspace},
+    model::{Chat, Repository, ReviewMark, Workspace},
 };
 
 /// How long a listing waits for its review checks before it leaves their
@@ -163,9 +164,15 @@ impl Manager {
                 chat,
                 checkout: &checkout.path,
             };
-            let configured = chat_hook_environment(chat);
-            self.run_post_ready(hook, &checkout.path.join(command), &configured, &marks)
-                .await;
+            // As for a workspace, a hook that cannot run keeps the marks.
+            match chat_hook_environment(chat, checkout, &settings) {
+                Ok(configured) => {
+                    let command = checkout.path.join(command);
+                    self.run_post_ready(hook, &command, &configured, &marks)
+                        .await;
+                }
+                Err(error) => self.post_ready_failed(&chat.name, &error).await,
+            }
         }
         undrafted.context("marked ready for review, but a PR is still a draft")?;
         self.check_conventions(space, &settings, &mut marks).await;
@@ -421,16 +428,21 @@ impl Manager {
     }
 }
 
-/// What a chat's hooks add to their environment: its temporary directory.
-fn chat_hook_environment(chat: &Chat) -> BTreeMap<String, OsString> {
-    (chat.tmp_dir.iter())
-        .map(|directory| {
-            (
-                crate::env::TMPDIR.to_owned(),
-                directory.as_os_str().to_owned(),
-            )
-        })
-        .collect()
+/// What a chat's hooks add to their environment: the repository's `[env]`
+/// with the placeholders a chat has, after its temporary directory.
+fn chat_hook_environment(
+    chat: &Chat,
+    checkout: &Repository,
+    settings: &Effective,
+) -> Result<BTreeMap<String, OsString>> {
+    let caches = crate::caches::directories(checkout, &settings.caches)?;
+    Ok(crate::env::render_chat_environment(
+        &settings.env,
+        &checkout.path,
+        crate::repository::name(checkout),
+        &caches,
+        chat.tmp_dir.as_deref(),
+    ))
 }
 
 /// The PRs among `marks`.

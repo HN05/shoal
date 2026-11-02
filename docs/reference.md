@@ -3829,7 +3829,9 @@ when nothing is linked, at its checkout's HEAD. `work --chats` shows a marked
 chat as `ready`, `inbox` lists its marks, and `work --json` lists them as the
 chat's `review` without `stale`. A chat's marks are not workspace events, and
 the [review gate](#local-reviews) does not apply to them; `hooks.post_ready` runs in
-the chat's checkout.
+the chat's checkout, with the repository's `[env]`, whose `{path}` is the
+checkout and `{repo}` the repository; a chat has no `{workspace}`, `{branch}`
+or ports.
 
 `hooks.post_ready` runs in the daemon after marks are recorded, under the same
 rules, precedence and limits as `hooks.post_done`, with `SHOAL_REVIEW_MARKS` holding

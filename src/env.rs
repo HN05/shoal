@@ -60,10 +60,38 @@ pub fn render_configured_environment(
             .iter()
             .map(|(name, value)| (name.as_str(), std::ffi::OsStr::new(value))),
     );
+    render_environment(values, fields, caches, tmp_dir)
+}
+
+/// [`render_configured_environment`] for a chat, which runs in the
+/// registered checkout at `checkout` and has no workspace, branch or ports.
+pub fn render_chat_environment(
+    values: &BTreeMap<String, String>,
+    checkout: &Path,
+    repository_name: &str,
+    caches: &BTreeMap<String, PathBuf>,
+    tmp_dir: Option<&Path>,
+) -> BTreeMap<String, OsString> {
+    let fields = vec![
+        ("{path}", checkout.as_os_str()),
+        ("{repo}", std::ffi::OsStr::new(repository_name)),
+    ];
+    render_environment(values, fields, caches, tmp_dir)
+}
+
+/// `values` with `fields` and each cache's `{cache.<name>}` filled in, after
+/// `TMPDIR` when there is a temporary directory.
+fn render_environment(
+    values: &BTreeMap<String, String>,
+    fields: Vec<(&str, &std::ffi::OsStr)>,
+    caches: &BTreeMap<String, PathBuf>,
+    tmp_dir: Option<&Path>,
+) -> BTreeMap<String, OsString> {
     let cache_keys: Vec<_> = caches
         .iter()
         .map(|(name, directory)| (format!("{{cache.{name}}}"), directory))
         .collect();
+    let mut fields = fields;
     fields.extend(
         cache_keys
             .iter()

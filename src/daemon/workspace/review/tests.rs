@@ -333,6 +333,55 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
     }));
 }
 
+#[tokio::test]
+async fn a_chats_post_ready_hook_gets_the_configured_environment() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let record = temp.path().join("environment");
+    let hook = temp.path().join("post-ready");
+    install_test_script(
+        &hook,
+        &format!(
+            "#!/bin/sh\nprintf '%s|%s' \"$GREETING\" \"$SHOAL_CHAT\" > '{}'\n",
+            record.display()
+        ),
+    );
+    manager
+        .write_local_config(
+            &repo.id,
+            Some(format!(
+                "hooks.post_ready = '{}'\n[env]\nGREETING = 'hello from {{repo}} in {{path}}'\n",
+                hook.display()
+            )),
+        )
+        .await
+        .unwrap();
+    manager
+        .mark_ready(&chat.id, Selection::default(), false)
+        .await
+        .unwrap();
+    let recorded = std::fs::read_to_string(&record).unwrap();
+    assert_eq!(
+        recorded,
+        format!("hello from repo in {}|{}", repo.path.display(), chat.id)
+    );
+}
+
 /// A GitHub on a loopback port that serves PR 12 of acme/widgets with its
 /// draft state and no labels, and the repository's one label; it changes
 /// draft state through GraphQL, and refuses every request while it fails.
