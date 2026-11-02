@@ -248,71 +248,114 @@ struct Outcome {
 /// skip a linked `SKILL.md`; links earlier versions recorded become copies.
 fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> Result<Outcome> {
     let loaded = Record::load(directory)?;
-    let mut record = loaded.clone().unwrap_or_default();
-    let mut outcome = Outcome::default();
-    if mode == Mode::Refresh && !holds_shoal_skills(directory, &record)? {
-        return Ok(outcome);
+    let mut installation = Installation {
+        directory,
+        mode,
+        record: loaded.clone().unwrap_or_default(),
+        outcome: Outcome::default(),
+    };
+    if mode == Mode::Refresh && !holds_shoal_skills(directory, &installation.record)? {
+        return Ok(installation.outcome);
     }
     for &(name, ref contents) in skills {
-        let path = skill_file(directory, name);
-        let expected = Entry::copy(contents.as_bytes());
-        let present = exists(&path)?;
-        let linked = !real_directory(&directory.join(name))?;
-        // A concurrent refresh may already have written this version.
-        let current = expected.matches(&path)?;
-        let owned = match record.skills.get(name) {
-            None => true,
-            // An install reclaims a kept skill that matches this version.
-            Some(Entry::Kept) => (!present || current) && mode != Mode::Refresh,
-            Some(previous) if present => current || previous.matches(&path)?,
-            Some(_) => mode != Mode::Refresh,
-        };
-        if !linked && (owned || present && replace_changed(mode, name, &path, contents)?) {
-            if !current {
-                install(&path, contents)?;
-                outcome.changed = true;
-            }
-            record.skills.insert(name.to_owned(), expected);
-            outcome.installed.push(name);
-        } else if record.skills.insert(name.to_owned(), Entry::Kept) != Some(Entry::Kept) {
-            if present {
-                outcome.kept.push(name.to_owned());
-            }
-        } else if present && mode != Mode::Refresh {
-            outcome.kept.push(name.to_owned());
-        }
+        installation.refresh_skill(name, contents)?;
     }
-    let retired: Vec<_> = record
-        .skills
-        .keys()
-        .filter(|name| !SKILLS.iter().any(|(bundled, _)| bundled == name))
-        .cloned()
-        .collect();
-    for name in retired {
-        let entry = record
-            .skills
-            .remove(&name)
-            .expect("retired names are recorded");
-        let path = skill_file(directory, &name);
-        if real_directory(&directory.join(&name))? && entry.matches(&path)? {
-            remove_skill(&directory.join(&name))?;
-            outcome.changed = true;
-        } else if entry != Entry::Kept && exists(&path)? {
-            outcome.kept.push(name);
-        }
+    installation.retire_skills()?;
+    if loaded.is_none() {
+        installation.remove_unrecorded_skill()?;
     }
-    if loaded.is_none()
-        && real_directory(&directory.join(RETIRED))?
-        && remove_skill(&directory.join(RETIRED))?
-    {
-        outcome.changed = true;
-    }
-    if loaded.as_ref() != Some(&record) {
+    if loaded.as_ref() != Some(&installation.record) {
         fs::create_dir_all(directory)
             .with_context(|| format!("create skill directory {}", directory.display()))?;
-        record.save(directory)?;
+        installation.record.save(directory)?;
     }
-    Ok(outcome)
+    Ok(installation.outcome)
+}
+
+/// One skill directory's record as a refresh updates it, and what it reports.
+struct Installation<'a> {
+    directory: &'a Path,
+    mode: Mode,
+    record: Record,
+    outcome: Outcome,
+}
+
+impl Installation<'_> {
+    /// Install bundled skill `name` while Shoal owns it, or the user lets an
+    /// install replace it; otherwise record it as the user's.
+    fn refresh_skill(&mut self, name: &'static str, contents: &str) -> Result<()> {
+        let path = skill_file(self.directory, name);
+        let expected = Entry::copy(contents.as_bytes());
+        let present = exists(&path)?;
+        // A concurrent refresh may already have written this version.
+        let current = expected.matches(&path)?;
+        let replace = real_directory(&self.directory.join(name))?
+            && (self.owns(name, &path, present, current)?
+                || present && replace_changed(self.mode, name, &path, contents)?);
+        if !replace {
+            self.keep(name, present);
+            return Ok(());
+        }
+        if !current {
+            install(&path, contents)?;
+            self.outcome.changed = true;
+        }
+        self.record.skills.insert(name.to_owned(), expected);
+        self.outcome.installed.push(name);
+        Ok(())
+    }
+
+    /// Whether Shoal still owns skill `name` at `path`; `current` says whether
+    /// that file already holds this version.
+    fn owns(&self, name: &str, path: &Path, present: bool, current: bool) -> Result<bool> {
+        Ok(match self.record.skills.get(name) {
+            None => true,
+            // An install reclaims a kept skill that matches this version.
+            Some(Entry::Kept) => (!present || current) && self.mode != Mode::Refresh,
+            Some(previous) if present => current || previous.matches(path)?,
+            Some(_) => self.mode != Mode::Refresh,
+        })
+    }
+
+    /// Record skill `name` as the user's; a refresh reports it only when it
+    /// first becomes theirs, an install every time.
+    fn keep(&mut self, name: &str, present: bool) {
+        let newly = self.record.skills.insert(name.to_owned(), Entry::Kept) != Some(Entry::Kept);
+        if present && (newly || self.mode != Mode::Refresh) {
+            self.outcome.kept.push(name.to_owned());
+        }
+    }
+
+    /// Forget recorded skills this version no longer bundles, removing those
+    /// still as Shoal installed them and reporting changed ones once.
+    fn retire_skills(&mut self) -> Result<()> {
+        let retired: Vec<_> = self
+            .record
+            .skills
+            .extract_if(.., |name, _| {
+                !SKILLS.iter().any(|(bundled, _)| bundled == name)
+            })
+            .collect();
+        for (name, entry) in retired {
+            let path = skill_file(self.directory, &name);
+            if real_directory(&self.directory.join(&name))? && entry.matches(&path)? {
+                remove_skill(&self.directory.join(&name))?;
+                self.outcome.changed = true;
+            } else if entry != Entry::Kept && exists(&path)? {
+                self.outcome.kept.push(name);
+            }
+        }
+        Ok(())
+    }
+
+    /// Remove the skill Shoal installed before it recorded installations.
+    fn remove_unrecorded_skill(&mut self) -> Result<()> {
+        let skill = self.directory.join(RETIRED);
+        if real_directory(&skill)? && remove_skill(&skill)? {
+            self.outcome.changed = true;
+        }
+        Ok(())
+    }
 }
 
 /// Whether an install replaces the changed skill at `path`.
