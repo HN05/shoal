@@ -10,7 +10,7 @@ use crate::{
     forge::{
         ForgeRepo, IssueInput,
         account::Account,
-        items::link::{self, ItemKind},
+        items::link::{self, LinkKind},
     },
     git,
     model::{
@@ -185,7 +185,7 @@ impl Manager {
         Ok(Some(SelectedItem { url, kind }))
     }
 
-    /// Workspaces that link an issue or PR, or hold a lease on a resource,
+    /// Workspaces that link an issue, PR or CI run, or hold a lease on a resource,
     /// optionally only among the one a scoped caller owns.
     pub async fn find_workspaces(
         &self,
@@ -205,13 +205,13 @@ impl Manager {
 
     async fn linking_workspaces(
         &self,
-        kind: ItemKind,
+        kind: LinkKind,
         input: &str,
         within: Option<Vec<String>>,
     ) -> Result<Vec<String>> {
         let label = kind.noun();
         let wanted = match IssueInput::parse(input) {
-            IssueInput::Url => Some(link::item(kind.into(), input)?),
+            IssueInput::Url => Some(link::item(kind, input)?),
             IssueInput::Number => None,
             IssueInput::Invalid => bail!("{label} must be a number or URL"),
         };
@@ -232,12 +232,15 @@ impl Manager {
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 let mut links = Vec::new();
                 for id in ids.into_iter().filter(|id| within_ids(&within, id)) {
-                    for (url, _) in linked_items(db, &id, Some(kind))? {
-                        links.push((id.clone(), url));
+                    // Only an issue or PR can be assigned.
+                    if let Some(kind) = kind.item() {
+                        for (url, _) in linked_items(db, &id, Some(kind))? {
+                            links.push((id.clone(), url));
+                        }
                     }
                     for relation in [Relation::Opened, Relation::Related] {
                         for item in store::recorded_items(db, &id, relation)? {
-                            if item.kind == kind.into() {
+                            if item.kind == kind {
                                 links.push((id.clone(), item.url));
                             }
                         }
@@ -248,7 +251,7 @@ impl Manager {
             .await?;
         let mut matches: Vec<(String, ForgeRepo)> = Vec::new();
         for (id, url) in links {
-            let Ok((repository, linked)) = link::item(kind.into(), &url) else {
+            let Ok((repository, linked)) = link::item(kind, &url) else {
                 continue;
             };
             let found = linked == number

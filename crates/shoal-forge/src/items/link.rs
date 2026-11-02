@@ -58,6 +58,14 @@ impl LinkKind {
         }
     }
 
+    /// The kind's name in a sentence, as in `PR 12` or `CI run 2765`.
+    pub fn noun(self) -> &'static str {
+        match self.item() {
+            Some(kind) => kind.noun(),
+            None => "CI run",
+        }
+    }
+
     /// The kind's name as a heading or a label of its own.
     pub fn title(self) -> &'static str {
         match self.item() {

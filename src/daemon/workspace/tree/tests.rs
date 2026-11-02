@@ -605,6 +605,7 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
         .await
         .unwrap();
     let issue = "https://github.com/owner/repo/issues/7";
+    let run = "https://github.com/owner/repo/actions/runs/2765";
     for workspace in [&child, &sibling] {
         let id = workspace.id.clone();
         manager
@@ -612,8 +613,8 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
             .run(move |db| {
                 db.execute(
                     "INSERT INTO space_items(space_id,relation,kind,url)
-                     VALUES (?1,'related','issue',?2)",
-                    [&id, issue],
+                     VALUES (?1,'related','issue',?2),(?1,'related','ci',?3)",
+                    [&id, issue, run],
                 )?;
                 Ok(())
             })
@@ -638,8 +639,16 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
     }
     let targets = [
         crate::model::WorkspaceTarget::Item {
-            kind: crate::forge::items::link::ItemKind::Issue,
+            kind: crate::forge::items::link::LinkKind::Issue,
             input: "7".into(),
+        },
+        crate::model::WorkspaceTarget::Item {
+            kind: crate::forge::items::link::LinkKind::Ci,
+            input: "2765".into(),
+        },
+        crate::model::WorkspaceTarget::Item {
+            kind: crate::forge::items::link::LinkKind::Ci,
+            input: run.into(),
         },
         crate::model::WorkspaceTarget::Resource {
             name: "lock".into(),

@@ -683,9 +683,9 @@ pub struct IssueStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceTarget {
-    /// An issue or PR number or URL.
+    /// An issue, PR or CI run number or URL.
     Item {
-        kind: crate::forge::items::link::ItemKind,
+        kind: crate::forge::items::link::LinkKind,
         input: String,
     },
     /// A resource pool or member with a lease.

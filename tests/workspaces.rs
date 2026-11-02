@@ -2762,7 +2762,8 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
             "no workspace holds resource missing",
         ),
         (vec!["pr"], "pr needs a number or URL"),
-        (vec!["summary", "7"], "put pr, issue or resource before"),
+        (vec!["ci", "2765"], "no workspace links CI run 2765"),
+        (vec!["summary", "7"], "put pr, issue, ci or resource before"),
     ] {
         let output = fixture.run(&[&["status"], target.as_slice()].concat());
         assert!(!output.status.success(), "{target:?}");
