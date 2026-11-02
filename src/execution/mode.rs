@@ -14,9 +14,9 @@ pub(super) enum Mode {
     /// A caller-chosen command without a terminal: no stdin, output appended
     /// to `log`, and the launch reported on stdout for the spawning CLI.
     Detached { log: PathBuf },
-    /// Landing, whose worker writes what it landed, or why it could not,
+    /// Merging, whose worker writes what it merged, or why it could not,
     /// to `result`.
-    Land { push: bool, result: PathBuf },
+    Merge { push: bool, result: PathBuf },
     /// A command publishing for the workspace under its agent account, with
     /// output on stderr so stdout stays for the caller's result.
     Publish,
@@ -34,7 +34,7 @@ impl Mode {
             | Self::Detached { .. }
             | Self::Publish
             | Self::Demo { .. } => ExecutionKind::Command,
-            Self::Land { .. } => ExecutionKind::Land,
+            Self::Merge { .. } => ExecutionKind::Merge,
             Self::Setup => ExecutionKind::Setup,
         }
     }
@@ -43,7 +43,7 @@ impl Mode {
         matches!(self, Mode::Setup)
     }
 
-    /// Commands keep running across a daemon restart; setup and landing
+    /// Commands keep running across a daemon restart; setup and merge
     /// depend on gates the daemon holds.
     pub(super) fn reattaches(&self) -> bool {
         self.kind() == ExecutionKind::Command

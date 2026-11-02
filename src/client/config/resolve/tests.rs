@@ -26,8 +26,8 @@ post_resource_acquire = 'acquire'\npre_resource_release = 'release'\npost_setup 
 [cleanup]\ngrace_minutes = 5\n[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n\
 [cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[cleanup.done]\nenabled = false\n[idle_stop]\nenabled = true\n\
 [pr]\ndraft = true\nrequired_labels = ['area/']\nundraft_on_ready = false\ndraft_on_unready = true\n\
-[issue]\nrequired_labels = ['type/']\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n[review]\npost = false\nagent = 'codex'\nfallback_agent = 'claude'\nrequire_for_pr = true\nrequire_for_ready = true\n[messages]\nsettle_seconds = 2\n[land]\npush = true\n[conflicts]\nsensitive = ['version']\n\
-[permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'direct'\nland = 'direct'\npush = 'propose'\napi_writes = 'direct'\n[agents.reviewer]\ncommand = ['reviewer', '{prompt}']\nresume_command = ['reviewer', '--resume']\ndefault_mode = 'app'\n\
+[issue]\nrequired_labels = ['type/']\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n[review]\npost = false\nagent = 'codex'\nfallback_agent = 'claude'\nrequire_for_pr = true\nrequire_for_ready = true\n[messages]\nsettle_seconds = 2\n[merge]\npush = true\n[conflicts]\nsensitive = ['version']\n\
+[permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'direct'\nmerge = 'direct'\npush = 'propose'\napi_writes = 'direct'\n[agents.reviewer]\ncommand = ['reviewer', '{prompt}']\nresume_command = ['reviewer', '--resume']\ndefault_mode = 'app'\n\
 base = 'claude'\ninstructions = ['--system', '{instructions}']\nresume = ['--resume', '{session}']\nresume_latest = ['--continue']\n\
 fork = ['--fork', '{session}']\nadd_dir = ['--dir', '{directory}']\nreview = ['-p', '{prompt}', '{schema}']\nenv = { MODE = 'review' }\nenv_remove = ['TOKEN']\nretry = true\n\
 prompt_cache_minutes = 5\nmodel = 'opus'\neffort = 'high'\nmodel_args = ['--model', '{model}']\neffort_args = ['--effort', '{effort}']\n[agents.claude]\ndefault_mode = 'app'\n[agents.codex]\ndefault_mode = 'app'\n";

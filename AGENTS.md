@@ -189,9 +189,9 @@ when behavior changes, distinguishing decisions from proposals.
   the user. Resource grants bind effective
   allocation settings, consume no capacity, and last until release or workspace
   removal according to configuration. Never bypass existing allocation rules.
-  A scoped land
-  is a request bound to the branch HEAD unless `[permissions] land` is
-  `"direct"`; approval lets the retried land proceed under every landing check.
+  A scoped merge
+  is a request bound to the branch HEAD unless `[permissions] merge` is
+  `"direct"`; approval lets the retried merge proceed under every merge check.
   `[permissions] issue_open`/`pr_open = "propose"` make a scoped `issue open` or
   `pr open` an approval request the user may edit, deny or mark as a duplicate;
   approval opens it through the normal open path, a PR only at its recorded

@@ -255,7 +255,7 @@ impl RemovalCheck {
         self.running_commands == 0 && self.processes.is_empty()
     }
 
-    /// Every commit is pushed or landed, or the branch the workspace builds
+    /// Every commit is pushed or merged, or the branch the workspace builds
     /// on has their changes.
     pub fn commits_kept(&self) -> bool {
         self.unpushed_commits == 0 || self.integrated

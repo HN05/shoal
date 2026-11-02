@@ -54,7 +54,7 @@ const REQUESTS: &[&str] = &[
     r#"{"space_status":{"space":"fix"}}"#,
     r#"{"diff_base":{"workspace":"fix"}}"#,
     r#"{"conflicts":{"workspace":"fix","target":null}}"#,
-    r#"{"land_warning":{"workspace":"fix"}}"#,
+    r#"{"branch_merge_warning":{"workspace":"fix"}}"#,
     r#"{"workspace_hook":{"workspace":"fix","kind":"post_setup"}}"#,
     r#"{"layered_config":{"target":{"workspace":"fix"}}}"#,
     r#"{"keep_agent_environment":{"workspace":"fix","environment":{}}}"#,
@@ -100,7 +100,7 @@ const REQUESTS: &[&str] = &[
     // Executions.
     r#"{"execute":{"workspace":"fix","wrapper":{"pid":2,"birth":"b"},"kind":"command","agent":null,"recover":false,"reattach":false,"queue_entry":null}}"#,
     r#"{"reattach":{"execution":"e1","wrapper":{"pid":2,"birth":"b"},"child":null,"group_id":2,"scope_token":"t1","agent":null,"recover":false,"running_ms":0}}"#,
-    r#""check_landing""#,
+    r#""check_merge""#,
     r#""list_agents""#,
     r#"{"restart_agent":{"execution":"e1"}}"#,
     // Chats.

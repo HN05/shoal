@@ -1097,20 +1097,20 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
 }
 
 #[tokio::test]
-async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
+async fn merge_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
-    let landed = f.manager.land_workspace("worker").await.unwrap();
-    assert!(!landed.updated);
-    assert_eq!(landed.commit, git(&f.repo, &["rev-parse", "main"]).trim());
+    let merged = f.manager.merge_workspace("worker").await.unwrap();
+    assert!(!merged.updated);
+    assert_eq!(merged.commit, git(&f.repo, &["rev-parse", "main"]).trim());
     fs::write(workspace.path.join("feature"), "work\n").unwrap();
     commit(&workspace.path, "feature");
     let expected = git(&workspace.path, &["rev-parse", "HEAD"]);
-    let landed = f.manager.land_workspace("worker").await.unwrap();
-    assert!(landed.updated && landed.fast_forward);
-    assert_eq!(landed.default_branch, "main");
-    assert_eq!(landed.commit, expected.trim());
-    assert!(landed.default_refresh.skipped.is_some());
+    let merged = f.manager.merge_workspace("worker").await.unwrap();
+    assert!(merged.updated && merged.fast_forward);
+    assert_eq!(merged.default_branch, "main");
+    assert_eq!(merged.commit, expected.trim());
+    assert!(merged.default_refresh.skipped.is_some());
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
     assert_eq!(
         fs::read_to_string(f.repo.join("feature")).unwrap(),
@@ -1121,8 +1121,8 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
     commit(&f.repo, "tracked");
     fs::write(workspace.path.join("feature"), "more\n").unwrap();
     commit(&workspace.path, "feature");
-    let landed = f.manager.land_workspace("worker").await.unwrap();
-    assert!(landed.updated && !landed.fast_forward);
+    let merged = f.manager.merge_workspace("worker").await.unwrap();
+    assert!(merged.updated && !merged.fast_forward);
     assert_eq!(
         git(&f.repo, &["rev-list", "--count", "--merges", "main"]),
         "1\n"
@@ -1132,7 +1132,7 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
         "more\n"
     );
     assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
-    // Landed work counts as retained, and the merged branch is redundant.
+    // Merged work counts as retained, and the merged branch is redundant.
     let check = f
         .manager
         .check_removal(&workspace.id, InspectionPolicy::IncludeDirectoryProcesses)
@@ -1146,7 +1146,7 @@ async fn land_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
     let main = git(&f.repo, &["rev-parse", "main"]);
     fs::write(workspace.path.join("tracked"), "worker again\n").unwrap();
     commit(&workspace.path, "tracked");
-    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    let error = f.manager.merge_workspace("worker").await.unwrap_err();
     assert!(error.to_string().contains("git merge main"), "{error:#}");
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
     assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
@@ -1268,7 +1268,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
         .unwrap();
     for kind in [
         ExecutionKind::Command,
-        ExecutionKind::Land,
+        ExecutionKind::Merge,
         ExecutionKind::Setup,
     ] {
         if kind == ExecutionKind::Setup {
@@ -1292,8 +1292,8 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
         for (mut method, allowed) in [
             (Operation::from(DaemonMethod::Status), true),
             (
-                ExecutionMethod::CheckLanding.into(),
-                kind == ExecutionKind::Land,
+                ExecutionMethod::CheckMerge.into(),
+                kind == ExecutionKind::Merge,
             ),
             (DaemonMethod::ReloadConfig.into(), false),
             (
@@ -1312,7 +1312,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
         for requested in [
             ExecutionKind::Command,
             ExecutionKind::Setup,
-            ExecutionKind::Land,
+            ExecutionKind::Merge,
         ] {
             for target in [&workspace, &other] {
                 let mut method = ExecutionMethod::Execute {
@@ -1331,7 +1331,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     && match requested {
                         ExecutionKind::Command => true,
                         ExecutionKind::Setup => kind != ExecutionKind::Setup,
-                        ExecutionKind::Land => true,
+                        ExecutionKind::Merge => true,
                     };
                 let result = scope::authorize(&f.manager, Some(token), &mut method).await;
                 assert_eq!(result.is_ok(), allowed, "{kind:?}: {method:?}: {result:?}");
@@ -1430,7 +1430,7 @@ async fn incomplete_removal_allows_refresh_recovery_and_diagnosis() {
 }
 
 #[tokio::test]
-async fn land_execution_holds_git_gate_through_completion_and_releases_on_failure() {
+async fn merge_execution_holds_git_gate_through_completion_and_releases_on_failure() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
     let guard = f.manager.gates.lock_git(&workspace.repository_id).await;
@@ -1439,10 +1439,10 @@ async fn land_execution_holds_git_gate_through_completion_and_releases_on_failur
     for exit in [Some(0), None] {
         let started = f
             .manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Land, None)
+            .begin_execution(&workspace.id, None, ExecutionKind::Merge, None)
             .await
             .unwrap();
-        assert!(started.plan.land.is_some());
+        assert!(started.plan.merge.is_some());
         assert!(gate.try_lock().is_err());
         assert_eq!(
             f.manager
@@ -1451,10 +1451,10 @@ async fn land_execution_holds_git_gate_through_completion_and_releases_on_failur
                 .unwrap()
                 .unwrap()
                 .kind(),
-            Some(ExecutionKind::Land)
+            Some(ExecutionKind::Merge)
         );
         f.manager
-            .finish_execution(started.plan.id.clone(), ExecutionKind::Land, exit)
+            .finish_execution(started.plan.id.clone(), ExecutionKind::Merge, exit)
             .await
             .unwrap();
         assert!(gate.try_lock().is_err(), "hold the gate through completion");
@@ -1464,7 +1464,7 @@ async fn land_execution_holds_git_gate_through_completion_and_releases_on_failur
     fs::write(workspace.path.join("dirty"), "preserve me").unwrap();
     assert!(
         f.manager
-            .begin_execution(&workspace.id, None, ExecutionKind::Land, None)
+            .begin_execution(&workspace.id, None, ExecutionKind::Merge, None)
             .await
             .is_err()
     );
@@ -1475,7 +1475,7 @@ async fn land_execution_holds_git_gate_through_completion_and_releases_on_failur
 }
 
 #[tokio::test]
-async fn land_refuses_dirty_checkouts_and_other_branches() {
+async fn merge_refuses_dirty_checkouts_and_other_branches() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
     f.add("caller").await;
@@ -1483,28 +1483,28 @@ async fn land_refuses_dirty_checkouts_and_other_branches() {
     commit(&workspace.path, "feature");
     let main = git(&f.repo, &["rev-parse", "main"]);
     fs::write(f.repo.join("scratch"), "").unwrap();
-    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    let error = f.manager.merge_workspace("worker").await.unwrap_err();
     assert!(
         format!("{error:#}").contains("uncommitted or untracked"),
         "{error:#}"
     );
     fs::remove_file(f.repo.join("scratch")).unwrap();
     fs::write(workspace.path.join("scratch"), "").unwrap();
-    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    let error = f.manager.merge_workspace("worker").await.unwrap_err();
     assert!(
-        format!("{error:#}").contains("not ready to land"),
+        format!("{error:#}").contains("not ready to merge"),
         "{error:#}"
     );
     fs::remove_file(workspace.path.join("scratch")).unwrap();
     git(&workspace.path, &["switch", "--detach"]);
-    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    let error = f.manager.merge_workspace("worker").await.unwrap_err();
     assert!(format!("{error:#}").contains("not on worker"), "{error:#}");
     git(&workspace.path, &["switch", "worker"]);
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
 }
 
-/// Begin a land execution as the workspace's agent.
-async fn land_as_agent(
+/// Begin a merge execution as the workspace's agent.
+async fn merge_as_agent(
     f: &Fixture,
     workspace: &crate::model::Workspace,
 ) -> anyhow::Result<crate::daemon::workspace::StartedExecution> {
@@ -1513,18 +1513,18 @@ async fn land_as_agent(
         workspace_id: workspace.id.clone(),
     };
     f.manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Land, Some(&caller))
+        .begin_execution(&workspace.id, None, ExecutionKind::Merge, Some(&caller))
         .await
 }
 
-/// The approval a scoped landing is waiting for or was refused.
-async fn undecided_land(
+/// The approval a scoped merge is waiting for or was refused.
+async fn undecided_merge(
     f: &Fixture,
     workspace: &crate::model::Workspace,
 ) -> crate::daemon::approvals::ApprovalRequest {
-    let error = land_as_agent(f, workspace)
+    let error = merge_as_agent(f, workspace)
         .await
-        .expect_err("landing needs a decision");
+        .expect_err("merge needs a decision");
     *error
         .downcast::<crate::daemon::approvals::Undecided>()
         .expect("an approval request")
@@ -1532,7 +1532,7 @@ async fn undecided_land(
 }
 
 #[tokio::test]
-async fn scoped_land_waits_for_approval_of_its_commit() {
+async fn scoped_merge_waits_for_approval_of_its_commit() {
     use crate::daemon::approvals::{ApprovalRequest, DecisionStatus, Specification};
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
@@ -1542,22 +1542,22 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
     let head = git(&workspace.path, &["rev-parse", "HEAD"])
         .trim()
         .to_owned();
-    let pending = undecided_land(&f, &workspace).await;
+    let pending = undecided_merge(&f, &workspace).await;
     assert_eq!(pending.status, DecisionStatus::Pending);
-    assert_eq!(pending.subject(), format!("land worker at {head}"));
+    assert_eq!(pending.subject(), format!("merge worker at {head}"));
     assert_eq!(pending.reason, "merge worker into main");
-    assert_eq!(undecided_land(&f, &workspace).await.id, pending.id);
+    assert_eq!(undecided_merge(&f, &workspace).await.id, pending.id);
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
 
-    // Approval lets the agent's retry land the approved commit.
+    // Approval lets the agent's retry merge the approved commit.
     f.manager
         .decide_approval(pending.id, true, None, Default::default(), None)
         .await
         .unwrap();
-    let started = land_as_agent(&f, &workspace).await.unwrap();
-    assert_eq!(started.plan.land.as_ref().unwrap().source, head);
+    let started = merge_as_agent(&f, &workspace).await.unwrap();
+    assert_eq!(started.plan.merge.as_ref().unwrap().source, head);
     f.manager
-        .finish_execution(started.plan.id.clone(), ExecutionKind::Land, Some(0))
+        .finish_execution(started.plan.id.clone(), ExecutionKind::Merge, Some(0))
         .await
         .unwrap();
     drop(started);
@@ -1566,7 +1566,7 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
     // the earlier one stays outdated, keeping its number.
     fs::write(workspace.path.join("feature"), "more\n").unwrap();
     commit(&workspace.path, "feature");
-    let next = undecided_land(&f, &workspace).await;
+    let next = undecided_merge(&f, &workspace).await;
     assert_ne!(next.id, pending.id);
     assert_eq!(next.status, DecisionStatus::Pending);
     let statuses = |requests: Vec<ApprovalRequest>| -> Vec<_> {
@@ -1608,21 +1608,21 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
         "{messages:?}"
     );
 
-    // Denial leaves the branch unlanded and refuses the same commit again.
+    // Denial leaves the branch unmerged and refuses the same commit again.
     let main = git(&f.repo, &["rev-parse", "main"]);
-    let denied = undecided_land(&f, &workspace).await;
-    let Specification::Land(land) = &denied.specification else {
-        panic!("land specification expected");
+    let denied = undecided_merge(&f, &workspace).await;
+    let Specification::Merge(merge) = &denied.specification else {
+        panic!("merge specification expected");
     };
     assert_eq!(
-        land.head,
+        merge.head,
         git(&workspace.path, &["rev-parse", "HEAD"]).trim()
     );
     f.manager
         .decide_approval(denied.id, false, None, Default::default(), None)
         .await
         .unwrap();
-    let refused = undecided_land(&f, &workspace).await;
+    let refused = undecided_merge(&f, &workspace).await;
     assert_eq!(
         (refused.id, refused.status),
         (denied.id, DecisionStatus::Denied)
@@ -1631,10 +1631,10 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
 }
 
 #[tokio::test]
-async fn approving_a_land_request_keeps_it_when_the_branch_cannot_be_read() {
+async fn approving_a_merge_request_keeps_it_when_the_branch_cannot_be_read() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
-    let pending = undecided_land(&f, &workspace).await;
+    let pending = undecided_merge(&f, &workspace).await;
     let reference = f.repo.join(".git/refs/heads/worker");
     let saved = fs::read(&reference).unwrap();
     fs::write(&reference, "not a commit\n").unwrap();
@@ -1659,17 +1659,17 @@ async fn approving_a_land_request_keeps_it_when_the_branch_cannot_be_read() {
 }
 
 #[tokio::test]
-async fn scoped_land_skips_approval_when_configured() {
+async fn scoped_merge_skips_approval_when_configured() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[permissions]\nland = 'direct'\n",
+        "[permissions]\nmerge = 'direct'\n",
     )
     .unwrap();
     commit(&workspace.path, ".shoal.toml");
-    let started = land_as_agent(&f, &workspace).await.unwrap();
-    assert!(started.plan.land.is_some());
+    let started = merge_as_agent(&f, &workspace).await.unwrap();
+    assert!(started.plan.merge.is_some());
     assert!(
         f.manager
             .approval_requests(Some("worker"))
@@ -1680,31 +1680,31 @@ async fn scoped_land_skips_approval_when_configured() {
 }
 
 #[tokio::test]
-async fn scoped_land_needs_approval_while_pushes_do() {
+async fn scoped_merge_needs_approval_while_pushes_do() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[permissions]\nland = 'direct'\npush = 'propose'\n",
+        "[permissions]\nmerge = 'direct'\npush = 'propose'\n",
     )
     .unwrap();
     commit(&workspace.path, ".shoal.toml");
-    let pending = undecided_land(&f, &workspace).await;
-    assert_eq!(pending.target, crate::daemon::approvals::Target::Land);
+    let pending = undecided_merge(&f, &workspace).await;
+    assert_eq!(pending.target, crate::daemon::approvals::Target::Merge);
 }
 
 #[tokio::test]
-async fn land_refreshes_the_default_branch_and_needs_it_outside_workspaces() {
+async fn merge_refreshes_the_default_branch_and_needs_it_outside_workspaces() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
     let author = f.remote();
     let upstream = git(&author, &["rev-parse", "HEAD"]);
     fs::write(workspace.path.join("feature"), "work\n").unwrap();
     commit(&workspace.path, "feature");
-    let landed = f.manager.land_workspace("worker").await.unwrap();
-    assert!(landed.default_refresh.updated);
-    assert_eq!(landed.default_refresh.commit, upstream.trim());
-    assert!(landed.updated && !landed.fast_forward);
+    let merged = f.manager.merge_workspace("worker").await.unwrap();
+    assert!(merged.default_refresh.updated);
+    assert_eq!(merged.default_refresh.commit, upstream.trim());
+    assert!(merged.updated && !merged.fast_forward);
     assert_eq!(
         git(&f.repo, &["rev-parse", "main^1"]).trim(),
         upstream.trim()
@@ -1718,61 +1718,61 @@ async fn land_refreshes_the_default_branch_and_needs_it_outside_workspaces() {
         "remote\n"
     );
     assert_eq!(git(&f.repo, &["for-each-ref", "refs/shoal/"]), "");
-    // Without a checkout of the default branch only fast-forwards land.
+    // Without a checkout of the default branch only fast-forwards merge.
     git(&f.repo, &["switch", "-c", "side"]);
     let main = git(&f.repo, &["rev-parse", "main"]);
     fs::write(workspace.path.join("feature"), "diverged\n").unwrap();
     commit(&workspace.path, "feature");
-    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    let error = f.manager.merge_workspace("worker").await.unwrap_err();
     assert!(error.to_string().contains("not checked out"), "{error:#}");
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
     git(&workspace.path, &["merge", "--no-edit", "main"]);
     let expected = git(&workspace.path, &["rev-parse", "HEAD"]);
-    let landed = f.manager.land_workspace("worker").await.unwrap();
-    assert!(landed.updated && landed.fast_forward);
+    let merged = f.manager.merge_workspace("worker").await.unwrap();
+    assert!(merged.updated && merged.fast_forward);
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
-    // A managed workspace holding the default branch blocks landing.
+    // A managed workspace holding the default branch blocks merging.
     let holder = f.add("holder").await;
     git(&holder.path, &["switch", "main"]);
     fs::write(workspace.path.join("feature"), "held\n").unwrap();
     commit(&workspace.path, "feature");
-    let error = f.manager.land_workspace("worker").await.unwrap_err();
+    let error = f.manager.merge_workspace("worker").await.unwrap_err();
     assert!(
         error
             .to_string()
             .contains("checked out in workspace holder"),
         "{error:#}"
     );
-    assert!(f.manager.land_workspace("holder").await.is_err());
+    assert!(f.manager.merge_workspace("holder").await.is_err());
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), expected);
 }
 
 #[tokio::test]
-async fn land_pushes_the_default_branch_to_its_upstream() {
+async fn merge_pushes_the_default_branch_to_its_upstream() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
     fs::write(workspace.path.join("feature"), "work\n").unwrap();
     commit(&workspace.path, "feature");
     let main = git(&f.repo, &["rev-parse", "main"]);
-    let error = f.manager.land_and_push("worker", true).await.unwrap_err();
+    let error = f.manager.merge_and_push("worker", true).await.unwrap_err();
     assert!(error.to_string().contains("no upstream"), "{error:#}");
     assert_eq!(git(&f.repo, &["rev-parse", "main"]), main);
     f.remote();
     let origin = f.root.path().join("origin.git");
-    let landed = f.manager.land_and_push("worker", true).await.unwrap();
-    assert_eq!(landed.pushed_to.as_deref(), Some("origin"));
-    assert_eq!(git(&origin, &["rev-parse", "main"]).trim(), landed.commit);
+    let merged = f.manager.merge_and_push("worker", true).await.unwrap();
+    assert_eq!(merged.pushed_to.as_deref(), Some("origin"));
+    assert_eq!(git(&origin, &["rev-parse", "main"]).trim(), merged.commit);
     assert_eq!(
         git(&f.repo, &["rev-parse", "origin/main"]).trim(),
-        landed.commit
+        merged.commit
     );
-    // A rejected push keeps the landing and says so.
+    // A rejected push keeps the merge and says so.
     let hook = origin.join("hooks/pre-receive");
     install_test_script(&hook, "#!/bin/sh\nexit 1\n");
     fs::write(workspace.path.join("feature"), "more\n").unwrap();
     commit(&workspace.path, "feature");
     let expected = git(&workspace.path, &["rev-parse", "HEAD"]);
-    let error = f.manager.land_and_push("worker", true).await.unwrap_err();
+    let error = f.manager.merge_and_push("worker", true).await.unwrap_err();
     assert!(
         error
             .to_string()
@@ -1780,22 +1780,22 @@ async fn land_pushes_the_default_branch_to_its_upstream() {
         "{error:#}"
     );
     assert_eq!(git(&f.repo, &["rev-parse", "main^2"]), expected);
-    assert_eq!(git(&origin, &["rev-parse", "main"]).trim(), landed.commit);
+    assert_eq!(git(&origin, &["rev-parse", "main"]).trim(), merged.commit);
 }
 
 impl Manager {
-    async fn land_workspace(&self, selector: &str) -> anyhow::Result<crate::model::LandedBranch> {
-        self.land_and_push(selector, false).await
+    async fn merge_workspace(&self, selector: &str) -> anyhow::Result<crate::model::MergedBranch> {
+        self.merge_and_push(selector, false).await
     }
 
-    async fn land_and_push(
+    async fn merge_and_push(
         &self,
         selector: &str,
         push: bool,
-    ) -> anyhow::Result<crate::model::LandedBranch> {
+    ) -> anyhow::Result<crate::model::MergedBranch> {
         let workspace = self.workspace(selector).await?;
         let _guard = self.gates.lock_git(&workspace.repository_id).await;
-        crate::git::repo::finish_land(self.prepare_land(selector).await?, push).await
+        crate::git::repo::finish_merge(self.prepare_merge(selector).await?, push).await
     }
 }
 

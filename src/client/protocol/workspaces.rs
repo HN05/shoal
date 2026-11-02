@@ -151,8 +151,8 @@ pub enum WorkspaceMethod {
         workspace: String,
         target: Option<String>,
     },
-    /// What landing the workspace's HEAD warns about.
-    LandWarning {
+    /// What merging the workspace's HEAD into the default branch warns about.
+    BranchMergeWarning {
         workspace: String,
     },
     /// Keep where an agent of the workspace keeps its configuration, before

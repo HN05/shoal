@@ -39,7 +39,7 @@ const GROUPS: &[(&str, &[&str])] = &[
             "diff",
             "conflicts",
             "review",
-            "land",
+            "merge",
             "forge",
             "pr",
             "issue",

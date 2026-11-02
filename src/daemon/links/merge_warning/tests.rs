@@ -46,9 +46,13 @@ async fn changed_on_both_sides() -> (
 }
 
 #[tokio::test]
-async fn landing_warns_only_at_the_checked_head() {
+async fn a_branch_merge_warns_only_at_the_checked_head() {
     let (_root, manager, workspace) = changed_on_both_sides().await;
-    let warning = manager.land_warning(&workspace.id).await.unwrap().unwrap();
+    let warning = manager
+        .branch_merge_warning(&workspace.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(
         warning.to_string(),
         "Sensitive files changed on both sides by topic and main: version"
@@ -59,7 +63,13 @@ async fn landing_warns_only_at_the_checked_head() {
 
     fs::write(workspace.path.join("feature"), "newer\n").unwrap();
     commit(&workspace.path, "feature");
-    assert!(manager.land_warning(&workspace.id).await.unwrap().is_none());
+    assert!(
+        manager
+            .branch_merge_warning(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
     let current = manager.current_changed_on_both_sides(&workspace).await;
     assert!(
         current.unwrap().is_none(),
@@ -68,7 +78,7 @@ async fn landing_warns_only_at_the_checked_head() {
 }
 
 #[tokio::test]
-async fn landing_ignores_a_check_against_a_base_workspaces_branch() {
+async fn a_branch_merge_ignores_a_check_against_a_base_workspaces_branch() {
     let (_root, manager, workspace) = changed_on_both_sides().await;
     let repo_id = workspace.repository_id.clone();
     let base = manager
@@ -84,7 +94,13 @@ async fn landing_ignores_a_check_against_a_base_workspaces_branch() {
     let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
     assert_eq!(Some(check.target), base.branch);
     assert_eq!(check.changed_on_both_sides, ["version"]);
-    assert!(manager.land_warning(&workspace.id).await.unwrap().is_none());
+    assert!(
+        manager
+            .branch_merge_warning(&workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]

@@ -62,7 +62,7 @@ it installs the latest GitHub release's archive for this platform when that
 release is newer, after checking it against the release's `SHA256SUMS` and its
 reported version, by replacing the resolved executable file, or on macOS the
 `Shoal.app` bundle holding it. Managed daemons notice the replacement and restart once daemon operations are
-idle and no setup or landing runs; until then, commands of the new release wait
+idle and no setup or merge runs; until then, commands of the new release wait
 up to ten minutes for it. Followed event and notification streams and
 item waits reconnect across the handoff, continuing in the installed release
 when its protocol differs; use `shoal daemon restart` to apply an
@@ -168,7 +168,7 @@ that it is waiting and gives up after two minutes or on Ctrl-C, leaving the
 execution for `shoal stop`. When the daemon refuses an execution, the wrapper
 stops the command and saves what `shoal stop` saves. Waiting executions stay
 active for cleanup and removal. An agent's wait for its automatic restore after
-a protection stop continues the same way. Setup, landing and wrappers from releases before
+a protection stop continues the same way. Setup, merges and wrappers from releases before
 reattachment stop on a restart as `shoal stop` does, and `shoal daemon restart`
 then suggests `shoal resume --all`.
 
@@ -327,7 +327,7 @@ becomes a last session, as an agent that exits on its own leaves, which holds
 no agent slot, keeps nothing from cleanup and nothing restores on its own. To
 take agents down briefly, use `shoal restart` instead. Commands started
 with `run` save their arguments, which `shoal resume` reports and never
-reruns; arguments that are not UTF-8 are not saved. Setup, landing and other internal commands save nothing.
+reruns; arguments that are not UTF-8 are not saved. Setup, merges and other internal commands save nothing.
 Agents waiting in the [agent queue](#agent-queue) to start in a stopped workspace, such as
 a `split --agent` launch waiting for a slot, have no session to save, so the stop removes them
 from the queue and reports them in `cancelled`; `shoal resume` does not bring them back. One
@@ -2201,7 +2201,7 @@ or the current workspace, and outside one a top-level workspace of the current
 repository that the user owns. It does not take a branch name, `--issue`,
 `--agent` or `--fork`, and no agent runs there: its owner, a CI job, a reviewer
 or the user runs things in it with `shoal run`, `shoal demo` or a shell.
-Commands that need a branch, `pr open`, `land`, `ready`, `done`, `branch rename`
+Commands that need a branch, `pr open`, `merge`, `ready`, `done`, `branch rename`
 and CI runs on its branch, refuse it, saying it is at a commit; diffs, demos,
 ports, simulators, checkpoints, reviews and CI and PR views work as anywhere. `status` shows `At:` with its commit and what it was made
 for where a branch workspace shows `Branch:`; `work --json` and `status --json`
@@ -2553,41 +2553,41 @@ creates a merge commit; conflicts stay in the worktree for `git commit` or `git
 merge --abort`, and `--json` reports `success`, `exit_code`, commits, and Git
 output. Nothing is stashed, reset, or pushed.
 
-### Land into the default branch
+### Merge into the default branch
 
-`shoal land [workspace]` merges the workspace's recorded branch into the
+`shoal merge [workspace]` merges the workspace's recorded branch into the
 repository default branch for repositories without a pull-request flow. When the
 default branch has an upstream, Shoal fetches and fast-forwards it first,
 preserving an ahead branch and refusing divergence or a failed fetch. The default
 branch cannot be held by a managed workspace, and any other checkout of it must be
 clean. The workspace must be clean and on its recorded branch. Git fast-forwards or
 creates a merge commit in the default checkout. A merge that does not apply cleanly
-is aborted: run `shoal merge <default>` in the workspace, resolve there, and land
-again. Landed commits count as pushed for `rm` and automatic cleanup. As
-[`pr merge`](#issue-and-pr-actions) does, `land` asks before landing a HEAD whose last check found
+is aborted: run `shoal merge <default>` in the workspace, resolve there, and merge
+again. Merged commits count as pushed for `rm` and automatic cleanup. As
+[`pr merge`](#issue-and-pr-actions) does, `merge` asks before merging a HEAD whose last check found
 files [changed on both sides](#conflicts) with the default branch, and `--yes`
-lands without asking. An agent's landing that needs approval names those files
+merges without asking. An agent's merge that needs approval names those files
 in its request, so the approver decides on them.
 
-An agent's scoped `shoal land` needs the user's approval for the branch at its
-current commit unless `[permissions] land = "direct"` and
+An agent's scoped `shoal merge` needs the user's approval for the branch at its
+current commit unless `[permissions] merge = "direct"` and
 [`[permissions] push`](#approval-for-agent-pushes) is `"direct"` too. The first run records a
-`land` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
-after approval, running it again lands that commit with every check above. A new
+`merge` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
+after approval, running it again merges that commit with every check above. A new
 commit replaces the request with one for the new commit, approving a request
 after its branch moved is refused as stale, and a denied commit stays refused
 with `"approval_denied"`.
 
-With `[land] push`, or `--push` for one run, Shoal pushes the default branch to
-its upstream after merging; `--no-push` keeps one landing local. A default branch without an
-upstream is refused before merging, and a failed push keeps the landed merge.
+With `[merge] push`, or `--push` for one run, Shoal pushes the default branch to
+its upstream after merging; `--no-push` keeps one merge local. A default branch without an
+upstream is refused before merging, and a failed push keeps the merge.
 
 ```toml
-[land]
+[merge]
 push = false             # Default: false
 
 [permissions]
-land = "propose"         # Default: "propose"; "direct" lands at once
+merge = "propose"        # Default: "propose"; "direct" merges at once
 ```
 
 ### Diff
@@ -2678,7 +2678,7 @@ the copy, and `[step.copy-ignored] exclude` in `.config/wt.toml` narrows it furt
 
 `setup.command` runs through the tracked execution wrapper with workspace scope and
 your CLI environment. Setup and the post-setup hook, like the push of `shoal pr open`
-and `shoal land`, run in a process the daemon starts: the command shows their output,
+and `shoal merge`, run in a process the daemon starts: the command shows their output,
 and interrupting the command interrupts them, while they go on when the command ends
 otherwise, such as when its terminal closes. `shoal add` waits for setup before
 entering the worktree or launching an agent; the workspace stays `preparing` until it exits 0 with no
@@ -3651,7 +3651,7 @@ and notifies you; approve it again to retry. While the push runs, denying or
 withdrawing the request, and new push requests and PR proposals from the
 workspace, are refused until it ends. The agent hears the outcome as an
 [agent message](#agent-messages). Unless `push` is `"direct"`, a scoped
-`shoal land` also needs your approval, since it may push the default branch, and
+`shoal merge` also needs your approval, since it may push the default branch, and
 `shoal pr revert` through the forge is refused, since the forge pushes its
 branch at once.
 
@@ -4721,7 +4721,7 @@ PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `work setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.
-They `land` only with [approval](#land-into-the-default-branch) and cannot reach worktrees outside the workspaces split
+They `merge` only with [approval](#merge-into-the-default-branch) and cannot reach worktrees outside the workspaces split
 from theirs, create workspaces other than by `split`, remove workspaces other than those below theirs without holds, read
 notifications, or administer repositories or the daemon service; nested commands
 keep the scope. A command whose ancestor carries scope for the same state directory
@@ -4917,7 +4917,7 @@ the installed device/runtime and whether a clean device was requested; clean req
 still need a reason and the usual audit before mutations.
 
 Agents use the normal acquire command with `--reason`. `shoal approvals` shows
-these requests, land requests from a scoped `shoal land`,
+these requests, merge requests from a scoped `shoal merge`,
 [proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --space <workspace>` filters
 by workspace, and `--space <chat>` lists the requests a chat decides. Scoped callers can inspect requests in their workspace tree. On a terminal,
 `shoal approvals` opens a picker; selecting a pending request or naming its number
@@ -4930,7 +4930,7 @@ reviews the recorded settings and uses `shoal approvals --approve [number]` or
 `shoal approvals --deny [number]`; without a number, they pick among pending requests, shown
 with their workspace, reason and settings, and a request that took the chosen
 number meanwhile is refused. A request takes the smallest number no
-stored request holds. A keep or land request that no longer applies, because a request
+stored request holds. A keep or merge request that no longer applies, because a request
 for a newer commit replaced it, its completion was withdrawn or it was found stale,
 stays listed as `outdated` until the workspace is removed, so its number is not reused and deciding it is refused. Approval reserves no capacity: retry acquisition after
 the decision. Pending requests produce a daemon notification, collapsed until read;
@@ -4958,7 +4958,7 @@ workspace, which needs none; otherwise `--approve` is refused and it denies or
 passes the request up. It never approves a proposal or denies one as a
 duplicate, which write to the forge. A chat runs with your authority and may
 approve anything.
-A land request names its own branch and commit, which no other workspace holds
+A merge request names its own branch and commit, which no other workspace holds
 a grant for, so its parent workspace passes it up. When a chat's agent stops,
 or a space deciding a request is removed, such as below an issue
 proposal that outlives its workspace, the requests it had not decided go to

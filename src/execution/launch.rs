@@ -97,7 +97,7 @@ impl TrackedLaunch {
                 Err(error) => break Err(error),
             }
         };
-        let result = roll_back_failed_land(&self.plan, result).await;
+        let result = roll_back_failed_merge(&self.plan, result).await;
         self.finish(mode, result).await
     }
 
@@ -281,12 +281,12 @@ impl TrackedLaunch {
     }
 }
 
-/// Undo the land of a command that failed; a failed rollback replaces the
+/// Undo the merge of a command that failed; a failed rollback replaces the
 /// result.
-async fn roll_back_failed_land(plan: &ExecutionPlan, result: Result<i32>) -> Result<i32> {
+async fn roll_back_failed_merge(plan: &ExecutionPlan, result: Result<i32>) -> Result<i32> {
     if !matches!(result, Ok(0))
-        && let Some(land) = &plan.land
-        && let Err(error) = crate::git::repo::rollback_land(land).await
+        && let Some(merge) = &plan.merge
+        && let Err(error) = crate::git::repo::rollback_merge(merge).await
     {
         return Err(error);
     }
@@ -593,15 +593,15 @@ fn execution_command(
     command: Vec<OsString>,
     mode: &Mode,
 ) -> Result<Vec<OsString>> {
-    if let Some(land) = &plan.land {
-        let Mode::Land { push, result } = mode else {
-            anyhow::bail!("only a landing execution lands");
+    if let Some(merge) = &plan.merge {
+        let Mode::Merge { push, result } = mode else {
+            anyhow::bail!("only a merge execution merges");
         };
         return internal_command(
             paths,
             false,
-            Worker::Land {
-                plan: &serde_json::to_string(land)?,
+            Worker::Merge {
+                plan: &serde_json::to_string(merge)?,
                 push: *push,
                 result,
             },

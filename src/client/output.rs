@@ -114,7 +114,7 @@ outputs!(
     crate::model::Checkpoint,
     crate::model::Completion,
     crate::model::ConflictCheck,
-    crate::model::LandedBranch,
+    crate::model::MergedBranch,
     crate::model::LocalConfigEdit,
     crate::model::MovedEntry,
     crate::model::MovedRepository,

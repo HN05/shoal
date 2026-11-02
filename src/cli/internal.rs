@@ -14,7 +14,7 @@ use crate::{
 pub const GROUP: &str = "internal";
 pub const HERDR_WATCH: &str = "herdr-watch";
 pub const PLACE_WATCH: &str = "place-watch";
-pub const LAND: &str = "land";
+pub const MERGE: &str = "merge";
 pub const DETACHED: &str = "detached";
 pub const SESSION: &str = "session";
 pub const DEMO: &str = "demo";
@@ -43,7 +43,7 @@ pub enum Worker<'a> {
         instance: Option<&'a str>,
         kept_at: Option<&'a str>,
     },
-    Land {
+    Merge {
         plan: &'a str,
         push: bool,
         result: &'a Path,
@@ -188,9 +188,9 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
                 args.extend(["--kept-at".into(), head.into()]);
             }
         }
-        Worker::Land { plan, push, result } => {
+        Worker::Merge { plan, push, result } => {
             args.extend([
-                LAND.into(),
+                MERGE.into(),
                 "--result".into(),
                 result.as_os_str().to_owned(),
             ]);

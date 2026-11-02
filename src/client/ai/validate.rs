@@ -209,7 +209,7 @@ pub const BUILT_IN_COMMANDS: &[&str] = &[
     "diff",
     "conflicts",
     "review",
-    "land",
+    "merge",
     "forge",
     "pr",
     "issue",

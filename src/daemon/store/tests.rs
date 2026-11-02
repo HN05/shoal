@@ -1403,3 +1403,26 @@ fn a_workspaces_questions_keep_their_numbers_as_questions_of_spaces() -> Result<
     assert_eq!(kept, ("workspace".to_owned(), None, 4));
     Ok(())
 }
+
+#[test]
+fn land_requests_become_merge_requests() -> Result<()> {
+    let mut db = historical_database(119)?;
+    db.execute_batch(
+        r#"INSERT INTO access_requests(id,workspace_id,target_key,name,record,number) VALUES
+            ('land','workspace','land','branch','{"target":"land","name":"branch"}',1),
+            ('port','workspace','port/web','web','{"target":"port/web","name":"web"}',2);"#,
+    )?;
+    migrate(&mut db)?;
+    let requests = db
+        .prepare("SELECT id,target_key,json_extract(record,'$.target') FROM access_requests ORDER BY number")?
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(
+        requests,
+        [
+            ("land".into(), "merge".into(), "merge".into()),
+            ("port".into(), "port/web".into(), "port/web".into()),
+        ]
+    );
+    Ok(())
+}

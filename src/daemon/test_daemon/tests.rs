@@ -410,15 +410,15 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
 async fn following_ends_once_the_followers_scope_token_is_revoked() {
     let daemon = TestDaemon::start().await;
     let own = daemon.workspace("own").await;
-    let land = OperationMethod::StartOperation {
-        spec: OperationSpec::Land {
+    let merge = OperationMethod::StartOperation {
+        spec: OperationSpec::Merge {
             workspace: "own".into(),
             push: None,
         },
         env: None,
     };
     let started: crate::protocol::operations::Started =
-        connection::request(&daemon.connector(), land)
+        connection::request(&daemon.connector(), merge)
             .await
             .unwrap();
     let mut worker = fake::take(&started.id);

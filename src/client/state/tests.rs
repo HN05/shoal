@@ -81,7 +81,7 @@ fn migrated_enums_preserve_spellings_and_defaults() {
     assert_spellings(&[(AgentMode::Cli, "cli"), (AgentMode::App, "app")]);
     assert_spellings(&[
         (ExecutionKind::Command, "command"),
-        (ExecutionKind::Land, "land"),
+        (ExecutionKind::Merge, "merge"),
         (ExecutionKind::Setup, "setup"),
     ]);
     #[cfg(feature = "happy")]

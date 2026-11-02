@@ -111,10 +111,10 @@ async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Re
                 .await
                 .map(Outcome::Opened)
         }
-        OperationSpec::Land { workspace, push } => {
-            workspaces::land_branch(ctx, workspace, push, reporter)
+        OperationSpec::Merge { workspace, push } => {
+            workspaces::merge_branch(ctx, workspace, push, reporter)
                 .await
-                .map(Outcome::Landed)
+                .map(Outcome::Merged)
         }
         OperationSpec::Push {
             workspace,

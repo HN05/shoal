@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 119;
+pub(super) const SCHEMA_VERSION: i64 = 120;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -382,6 +382,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (117, WORKSPACE_COMMITS, Some(allow_branchless_workspaces)),
     (118, SKIPPED_SETUP, None),
     (119, DISPOSABLE_WORKSPACES, None),
+    (120, MERGE_REQUESTS, None),
 ];
 
 /// Whether every removal deletes a workspace whatever it holds.
@@ -427,6 +428,12 @@ pub(super) fn allow_branchless_workspaces(db: &Connection) -> Result<()> {
 pub(super) const SENT_FILES: &str =
     "ALTER TABLE notifications ADD COLUMN files TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE questions ADD COLUMN files TEXT NOT NULL DEFAULT '[]';";
+
+/// `shoal land` became `shoal merge`, so its requests become merge requests.
+const MERGE_REQUESTS: &str = "UPDATE access_requests SET target_key='merge',
+        record=CASE WHEN json_valid(record)
+            THEN json_set(record, '$.target', 'merge') ELSE record END
+    WHERE target_key='land';";
 
 /// The replies to a review's findings, which every read of the review loads.
 pub(super) const REVIEW_REPLY_LOOKUPS: &str =

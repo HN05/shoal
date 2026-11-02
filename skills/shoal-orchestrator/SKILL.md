@@ -168,8 +168,8 @@ on the other machine. `shoal cleanup spaces` removes every space automatic
 cleanup would remove without waiting for its idle delay; `shoal cleanup --dry-run`
 lists those, kept branches and shared caches, and why it keeps each other space,
 as `status` gives in `cleanup_reason`; `shoal cleanup caches` empties shared tool
-caches nothing is using. When the repository has no remote, `shoal land <workspace>`
-merges a finished branch into the default branch; an agent's own `shoal land`
+caches nothing is using. When the repository merges locally instead of through PRs, `shoal merge <workspace>`
+merges a finished branch into the default branch; an agent's own `shoal merge`
 asks for that through `shoal approvals` first.
 
 ## Install skills

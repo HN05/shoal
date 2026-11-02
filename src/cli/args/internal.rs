@@ -98,12 +98,12 @@ pub enum InternalCommand {
     /// Mark the child workspace at the worktree Claude Code removes done;
     /// Shoal's Claude Code `WorktreeRemove` hook runs it.
     WorktreeRemove,
-    /// Finish a planned landing inside its tracked execution.
-    #[command(name = internal::LAND)]
-    Land {
+    /// Finish a planned merge inside its tracked execution.
+    #[command(name = internal::MERGE)]
+    Merge {
         #[arg(long)]
         push: bool,
-        /// Where to write what it landed, or why it could not.
+        /// Where to write what it merged, or why it could not.
         #[arg(long)]
         result: PathBuf,
         plan: String,

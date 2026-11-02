@@ -1,4 +1,4 @@
-//! Branch naming, upstream lookup and landing merges for a registered repository.
+//! Branch naming, upstream lookup and merges into the default branch for a registered repository.
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail, ensure};
 use crate::{
     fsutil::off_runtime,
     git::{self, run_isolated as git_run, worktrunk},
-    model::{LandPlan, LandedBranch, Repository},
+    model::{MergePlan, MergedBranch, Repository},
 };
 
 /// The `(remote, refs/heads/...)` upstream of a local branch, if configured.
@@ -89,7 +89,7 @@ pub(crate) async fn clean_branch(path: &Path, branch: &str) -> Result<()> {
     Ok(())
 }
 
-/// The first Git operation a landing must not merge over in `checkout`: an
+/// The first Git operation a merge must not run over in `checkout`: an
 /// unfinished merge, cherry-pick, revert, rebase or sequencer run, or a held
 /// index lock.
 pub(crate) async fn unfinished_operation(checkout: &Path) -> Result<Option<&'static str>> {
@@ -110,10 +110,10 @@ pub(crate) async fn unfinished_operation(checkout: &Path) -> Result<Option<&'sta
     Ok(None)
 }
 
-/// Executed only by the landing worker, inside the tracked process group.
+/// Executed only by the merge worker, inside the tracked process group.
 /// With `push`, the default branch then goes to its upstream; a missing
 /// upstream is refused before anything merges.
-pub async fn finish_land(plan: LandPlan, push: bool) -> Result<LandedBranch> {
+pub async fn finish_merge(plan: MergePlan, push: bool) -> Result<MergedBranch> {
     let default = plan.default_refresh.branch.clone();
     let target = if push {
         let target = upstream(&plan.repo, &git::local_ref(&default)).await?;
@@ -122,7 +122,7 @@ pub async fn finish_land(plan: LandPlan, push: bool) -> Result<LandedBranch> {
         None
     };
     let repo = plan.repo.path.clone();
-    let mut landed = merge_land(plan).await?;
+    let mut merged = merge_branch(plan).await?;
     if let Some((remote, reference)) = target {
         git_run(
             &repo,
@@ -130,23 +130,23 @@ pub async fn finish_land(plan: LandPlan, push: bool) -> Result<LandedBranch> {
                 "push",
                 "--",
                 &remote,
-                &format!("{}:{reference}", landed.commit),
+                &format!("{}:{reference}", merged.commit),
             ],
         )
         .await
         .with_context(|| {
             format!(
-                "{} landed in {default} ({}), but pushing {default} to {remote} failed",
-                landed.branch, landed.commit
+                "{} merged into {default} ({}), but pushing {default} to {remote} failed",
+                merged.branch, merged.commit
             )
         })?;
-        landed.pushed_to = Some(remote);
+        merged.pushed_to = Some(remote);
     }
-    Ok(landed)
+    Ok(merged)
 }
 
-async fn merge_land(plan: LandPlan) -> Result<LandedBranch> {
-    let LandPlan {
+async fn merge_branch(plan: MergePlan) -> Result<MergedBranch> {
+    let MergePlan {
         workspace,
         branch,
         repo,
@@ -164,17 +164,17 @@ async fn merge_land(plan: LandPlan) -> Result<LandedBranch> {
             .await?
             .trim()
             == source,
-        "workspace branch changed before landing; retry"
+        "workspace branch changed before merging; retry"
     );
     ensure!(
         git_run(&repo.path, &["rev-parse", &default_ref])
             .await?
             .trim()
             == default_refresh.commit,
-        "default branch changed before landing; retry"
+        "default branch changed before merging; retry"
     );
     let previous = default_refresh.commit.clone();
-    let landed = |commit: String, updated: bool, fast_forward: bool| LandedBranch {
+    let merged = |commit: String, updated: bool, fast_forward: bool| MergedBranch {
         workspace_id: workspace.id.clone(),
         repository_id: repo.id.clone(),
         branch: branch.to_owned(),
@@ -187,7 +187,7 @@ async fn merge_land(plan: LandPlan) -> Result<LandedBranch> {
         pushed_to: None,
     };
     if git::is_ancestor(&repo.path, &source, &previous, git::isolated_command).await? {
-        return Ok(landed(previous.clone(), false, true));
+        return Ok(merged(previous.clone(), false, true));
     }
     let fast_forward =
         git::is_ancestor(&repo.path, &previous, &source, git::isolated_command).await?;
@@ -220,19 +220,19 @@ async fn merge_land(plan: LandPlan) -> Result<LandedBranch> {
         .await?
         .trim()
         .to_owned();
-    Ok(landed(commit, true, fast_forward))
+    Ok(merged(commit, true, fast_forward))
 }
 
 /// The wrapper runs rollback only after stopping the merge process group. Keep
 /// a completed merge, and refuse to reset a checkout whose branch/HEAD changed.
-pub async fn rollback_land(plan: &LandPlan) -> Result<()> {
+pub async fn rollback_merge(plan: &MergePlan) -> Result<()> {
     let Some(checkout) = &plan.checkout else {
         return Ok(());
     };
     let branch = &plan.default_refresh.branch;
     ensure!(
         git::head_branch(checkout, true, git_run).await?.as_deref() == Some(branch),
-        "landing checkout changed branches; recover it manually"
+        "default checkout changed branches during the merge; recover it manually"
     );
     let head = git_run(checkout, &["rev-parse", "HEAD"]).await?;
     if head.trim() != plan.default_refresh.commit {
@@ -245,7 +245,7 @@ pub async fn rollback_land(plan: &LandPlan) -> Result<()> {
         &["reset", "--merge", &plan.default_refresh.commit],
     )
     .await
-    .context("could not roll back interrupted landing; inspect the default checkout")?;
+    .context("could not roll back interrupted merge; inspect the default checkout")?;
     // Git's external merge drivers use these temporary inputs in the checkout.
     // A signal can bypass Git's normal unlink; preserve any that predated us.
     for path in merge_temporaries(checkout)? {

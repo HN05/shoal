@@ -271,8 +271,8 @@ To move changes between your workspace and the default branch:
 ```sh
 shoal repo sync                    # Fetch and fast-forward the default branch
 git rebase main               # Or git merge; use your repo's branch name
-shoal land                    # Merge your branch into the default branch; no remote needed
-shoal land --push             # Then push the default branch instead of opening a PR
+shoal merge                   # Merge your branch into the default branch; no remote needed
+shoal merge --push            # Then push the default branch instead of opening a PR
 ```
 
 To have an agent review a workspace's committed changes or a PR:
@@ -432,7 +432,7 @@ on no remote and not on the default branch; Shoal deletes such a kept branch onc
 they are, and `shoal cleanup branches` deletes kept branches, several at a time, with
 their commits. `shoal stop` keeps the workspace.
 
-Automatic cleanup removes idle, clean, pushed or landed workspaces after 10 minutes,
+Automatic cleanup removes idle, clean, pushed or merged workspaces after 10 minutes,
 merged workspaces after 4 idle hours whether or not their agent ran `shoal done`,
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
 A chat whose agent stopped goes by the same rules.

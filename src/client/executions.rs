@@ -19,8 +19,8 @@ states!(
     ExecutionKind {
         /// A caller-chosen command in a ready workspace.
         Command => "command",
-        /// A landing authorized by an unscoped caller; the daemon holds its Git gate.
-        Land => "land",
+        /// A merge authorized by an unscoped caller; the daemon holds its Git gate.
+        Merge => "merge",
         /// The repository's setup command; exclusive apart from the execution that
         /// requested it, and its exit decides whether the workspace becomes ready.
         Setup => "setup",

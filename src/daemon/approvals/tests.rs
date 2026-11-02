@@ -214,7 +214,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
 }
 
 #[tokio::test]
-async fn replaced_land_requests_keep_their_numbers_and_refuse_decisions() -> Result<()> {
+async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Result<()> {
     let (_root, manager) = crate::test_support::manager().await;
     manager
         .store
@@ -225,16 +225,16 @@ async fn replaced_land_requests_keep_their_numbers_and_refuse_decisions() -> Res
             for head in ["first", "second", "third"] {
                 let request = ApprovalRequest::new(
                     "owner",
-                    Target::Land,
-                    LAND,
-                    Specification::Land(LandSpecification {
+                    Target::Merge,
+                    MERGE,
+                    Specification::Merge(MergeSpecification {
                         branch: "feature".into(),
                         head: head.into(),
                     }),
                     Lifetime::Lease,
-                    Some("land it"),
+                    Some("merge it"),
                 );
-                requests.push(request_land(&tx, request)?.unwrap());
+                requests.push(request_merge(&tx, request)?.unwrap());
             }
             let numbers: Vec<_> = requests.iter().map(|request| request.id).collect();
             assert_eq!(numbers, [1, 2, 3]);
@@ -460,14 +460,14 @@ fn decision_messages_name_the_request_target_and_next_step() {
         request.decision_message(),
         "Approval 7 for port web (workspace) was denied: do not retry it."
     );
-    request.target = Target::Land;
-    request.specification = Specification::Land(LandSpecification {
+    request.target = Target::Merge;
+    request.specification = Specification::Merge(MergeSpecification {
         branch: "feature".into(),
         head: "abc".into(),
     });
     assert_eq!(
         request.decision_message(),
-        "Approval 7 for land feature at abc was denied: do not retry it."
+        "Approval 7 for merge feature at abc was denied: do not retry it."
     );
     crate::validate::message(&request.decision_message()).unwrap();
 }
@@ -704,7 +704,7 @@ fn targets_keep_their_stored_spelling() -> Result<()> {
         (Target::Simulator, "simulator"),
         (Target::Secret("TOKEN".into()), "secret/TOKEN"),
         (Target::Hold("review".into()), "hold/review"),
-        (Target::Land, "land"),
+        (Target::Merge, "merge"),
     ] {
         assert_eq!(target.to_string(), text);
         assert_eq!(text.parse::<Target>()?, target);
@@ -751,7 +751,7 @@ fn specifications_round_trip_recorded_json_and_reject_mixed_shapes() -> Result<(
     }
     assert!(matches!(
         serde_json::from_value(serde_json::json!({"branch": "feature", "head": "abc"}))?,
-        Specification::Land(_)
+        Specification::Merge(_)
     ));
     assert!(matches!(
         serde_json::from_value(serde_json::json!({"preferred": 8080, "env": "PORT_WEB",

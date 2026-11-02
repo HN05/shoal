@@ -243,7 +243,7 @@ pub(super) fn spawn(
     }
     // Shoal authorized these pushes itself, so an enclosing agent's push
     // rewrites would only ask again.
-    if matches!(mode, Mode::Publish | Mode::Land { .. }) {
+    if matches!(mode, Mode::Publish | Mode::Merge { .. }) {
         crate::push_gate::strip(&mut process);
     }
     export_execution(&mut process, paths, plan);

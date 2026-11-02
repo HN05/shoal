@@ -253,7 +253,7 @@ copy_ignored = true
 # pre_remove = "/path/to/detach" # Before removal, in the daemon without a terminal.
 
 [cleanup.auto]
-# Remove idle, clean, pushed or landed workspaces automatically.
+# Remove idle, clean, pushed or merged workspaces automatically.
 enabled = true
 idle_minutes = 10
 
@@ -327,8 +327,8 @@ require_for_ready = false
 [messages]
 settle_seconds = 5
 
-# Push the default branch to its upstream after shoal land; --push and --no-push override it.
-[land]
+# Push the default branch to its upstream after shoal merge; --push and --no-push override it.
+[merge]
 push = false
 
 # Files that hold a number each change picks for itself, such as a schema or
@@ -345,10 +345,10 @@ issue_open = "direct"
 pr_open = "direct"
 # Issues in other repositories than the workspace's: "deny", "propose" or "direct".
 issue_other_repositories = "propose"
-# shoal land: "propose" or "direct".
-land = "propose"
+# shoal merge: "propose" or "direct".
+merge = "propose"
 # Pushes to the repository's remotes, by shoal pr open or git push: "direct",
-# "propose" or "deny". Unless "direct", shoal land needs your approval too.
+# "propose" or "deny". Unless "direct", shoal merge needs your approval too.
 push = "direct"
 # Requests through shoal forge api that are not reads, which you may always
 # send: "deny" or "direct".

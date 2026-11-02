@@ -65,8 +65,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             };
             terminal::watch_place(&ctx, HostName::Herdr, place, None).await
         }
-        InternalCommand::Land { push, result, plan } => {
-            workspaces::land_worker(&ctx, plan, push, result).await
+        InternalCommand::Merge { push, result, plan } => {
+            workspaces::merge_worker(&ctx, plan, push, result).await
         }
         InternalCommand::CopyIgnored { setup_cmd } => {
             workspaces::copy_ignored_worker(&ctx, setup_cmd).await

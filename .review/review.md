@@ -162,7 +162,7 @@ instead of the PR delivery guidance below.
   notification instead of producing lookup failures. Pending deliveries remain
   replayable until CLI output succeeds and is acknowledged. Files a repository
   lists as `[conflicts] sensitive` that a branch and its target both changed are
-  reported apart from conflicts, beside a linked PR too; `pr merge` and `land`
+  reported apart from conflicts, beside a linked PR too; `pr merge` and `merge`
   read only the recorded check and ask, never block.
   Registration variants preserve existing stored and JSON shapes and reject ambiguous
   records and conflicting actions without blocking other workspaces' cleanup;
@@ -176,9 +176,9 @@ instead of the PR delivery guidance below.
   removes the subtree, deepest first, through the shared path whatever keeps it,
   and a child that fails retains the parent. A standing completion with cleanup
   removes the workspaces below it that nothing of their own keeps, whatever
-  their work, after the grace period. A scoped land
-  is an approval request bound to the branch HEAD unless `[permissions] land`
-  and `[permissions] push` are both `"direct"`; approval never skips a landing check and lands only the approved commit.
+  their work, after the grace period. A scoped merge
+  is an approval request bound to the branch HEAD unless `[permissions] merge`
+  and `[permissions] push` are both `"direct"`; approval never skips a merge check and merges only the approved commit.
   Under `[permissions] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
   `pr open` records a proposal instead of opening, routed like other approval
   requests, though only the user or a chat approves it; approval opens it as the agent
@@ -526,7 +526,7 @@ configured command for another agent, plus proven child
   beyond execution deletion and retry at startup or cleanup. The daemon owns
   state and prepares each execution kind before shared registration through one
   request. A reported agent or command exit first stops its identity-verified
-  processes outside its process group; setup and landing do not. Reported exits clear executions and permit setup readiness only after
+  processes outside its process group; setup and merges do not. Reported exits clear executions and permit setup readiness only after
   marker, child and group survivors are gone and environment visibility is complete;
   a settled empty environment is readable evidence, not an unreadable process; the
   reporting wrapper may remain alive awaiting acknowledgement.

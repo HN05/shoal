@@ -17,14 +17,14 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
             workspaces::conflicts(&ctx, workspace, target).await
         }
         ChangesCommand::Review { command } => review::run(&ctx, command).await,
-        ChangesCommand::Land {
+        ChangesCommand::Merge {
             workspace,
             push,
             no_push,
             confirmation,
         } => {
             let push = (push || no_push).then_some(push);
-            workspaces::land(&ctx, workspace, push, confirmation.yes).await
+            workspaces::merge(&ctx, workspace, push, confirmation.yes).await
         }
     }
 }

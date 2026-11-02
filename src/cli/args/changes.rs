@@ -1,4 +1,4 @@
-//! Arguments of commands for a workspace's branch and changes, its PRs and issues, and landing it.
+//! Arguments of commands for a workspace's branch and changes, its PRs and issues, and merging it.
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
@@ -87,12 +87,12 @@ pub enum ChangesCommand {
         command: crate::cli::args::ci::CiCommand,
     },
     /// Merge this workspace into the default branch, then optionally push it.
-    Land {
+    Merge {
         workspace: Option<String>,
-        /// Push the default branch to its upstream after landing, overriding [land] push.
+        /// Push the default branch to its upstream after merging, overriding [merge] push.
         #[arg(long, overrides_with = "no_push")]
         push: bool,
-        /// Keep the landing local, overriding [land] push.
+        /// Keep the merge local, overriding [merge] push.
         #[arg(long, overrides_with = "push")]
         no_push: bool,
         #[command(flatten)]

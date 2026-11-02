@@ -348,7 +348,7 @@ fn tracked_execution_requests_require_a_known_kind() {
     for (kind, spelling) in [
         (ExecutionKind::Command, "command"),
         (ExecutionKind::Setup, "setup"),
-        (ExecutionKind::Land, "land"),
+        (ExecutionKind::Merge, "merge"),
     ] {
         let method = ExecutionMethod::Execute {
             model: Default::default(),
@@ -382,7 +382,7 @@ fn tracked_execution_requests_require_a_known_kind() {
         }
         assert!(serde_json::from_value::<Method>(request).is_err());
     }
-    for method in ["prepare", "land_workspace"] {
+    for method in ["prepare", "merge_workspace"] {
         assert!(
             serde_json::from_value::<Method>(json!({
                 method: {"workspace": "worker", "wrapper": wrapper}

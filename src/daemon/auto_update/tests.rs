@@ -23,7 +23,7 @@ async fn restart_waits_for_background_work_and_executions_that_cannot_reattach()
             Ok(())
         }).await.unwrap();
     assert!(quiesce(&manager).is_some());
-    // Connected setup and landing stop with the daemon.
+    // Connected setup and merges stop with the daemon.
     manager.executions.mark_unattachable("setup");
     assert!(quiesce(&manager).is_none());
 }

@@ -18,7 +18,7 @@ use crate::{
 pub mod proposals;
 
 pub(crate) use crate::client::approvals::{
-    ApprovalRequest, DecisionStatus, HoldSpecification, LAND, LandSpecification, Lifetime,
+    ApprovalRequest, DecisionStatus, HoldSpecification, Lifetime, MERGE, MergeSpecification,
     PortSpecification, PushSpecification, ResourceSpecification, SecretSpecification,
     SimulatorSpecification, Specification, Target,
 };
@@ -437,15 +437,15 @@ pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -
     Ok(true)
 }
 
-/// Replace a land request for an earlier commit with `request`. Returns the
+/// Replace a merge request for an earlier commit with `request`. Returns the
 /// request still awaiting or refused a decision; an approval for the same
-/// commit lets the landing proceed.
-pub fn request_land(
+/// commit lets the merge proceed.
+pub fn request_merge(
     tx: &Transaction<'_>,
     request: ApprovalRequest,
 ) -> Result<Option<ApprovalRequest>> {
     let owner = request.workspace_id.clone();
-    if let Some(existing) = current(tx, &owner, &Target::Land, LAND)?
+    if let Some(existing) = current(tx, &owner, &Target::Merge, MERGE)?
         .filter(|existing| existing.specification != request.specification)
     {
         retire(tx, &existing)?;
@@ -535,15 +535,15 @@ impl Manager {
             .await
     }
 
-    /// [`request_land`] in its own transaction.
-    pub async fn request_land_approval(
+    /// [`request_merge`] in its own transaction.
+    pub async fn request_merge_approval(
         &self,
         request: ApprovalRequest,
     ) -> Result<Option<ApprovalRequest>> {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let undecided = request_land(&tx, request)?;
+                let undecided = request_merge(&tx, request)?;
                 tx.commit()?;
                 Ok(undecided)
             })
@@ -880,8 +880,8 @@ impl Manager {
     /// Decide the stored `request` the user chose; later requests reusing its
     /// number are not affected.
     async fn record_decision(&self, request: ApprovalRequest, approve: bool) -> Result<Decision> {
-        if request.target == Target::Land && approve && request.status == DecisionStatus::Pending {
-            self.ensure_land_current(&request).await?;
+        if request.target == Target::Merge && approve && request.status == DecisionStatus::Pending {
+            self.ensure_merge_current(&request).await?;
         }
         let _hold = self.hold_decision_guard(&request, approve).await?;
         let key = request.key;

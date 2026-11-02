@@ -46,7 +46,7 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
             token: token.clone(),
         }
         .into(),
-        ExecutionMethod::CheckLanding.into(),
+        ExecutionMethod::CheckMerge.into(),
         NotificationMethod::ListNotifications {
             unread_only: true,
             limit: 50,

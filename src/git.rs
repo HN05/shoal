@@ -1,4 +1,4 @@
-//! Git invocations shared by workspace creation, removal, branch refreshes, and landing.
+//! Git invocations shared by workspace creation, removal, branch refreshes, and merging.
 pub mod branch;
 pub mod bundle;
 pub mod config;

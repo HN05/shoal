@@ -63,7 +63,7 @@ compatibility promise: its version and exact-match rule refuse a client of
 another release with `protocol_mismatch` naming both versions, and an app
 updates with Shoal. Without a scope token an app is the user; with one, it is
 that workspace's agent, under the scope checks and approvals of its `shoal`
-commands. Creating or splitting a workspace, opening a PR and landing start
+commands. Creating or splitting a workspace, opening a PR and merging start
 operations, below, whose ID a client follows for typed progress, then a result
 or a typed failure. A subscription sends a snapshot of the records of its
 topics, then each record that changed or was removed, comparing again after
@@ -103,7 +103,7 @@ expose. Linking the same issue again records a newly supplied title.
 Their `running` flag says whether a tracked execution is running; unverified
 executions after a daemon restart do not count. Their `done` flag says whether a
 completion is recorded.
-Workspace setup with the post-setup hook, `pr open`'s push and landing are
+Workspace setup with the post-setup hook, `pr open`'s push and `merge` are
 operations: the daemon starts their work in a worker process of its own,
 detached as it starts queued agents, so the work goes on when the CLI or app that
 asked for it goes. The worker acts with the caller's scope and, from the CLI, its
@@ -115,7 +115,7 @@ drift. An interrupt or termination of the CLI cancels the operation, which
 interrupts the worker as it interrupted the CLI; a CLI that ends otherwise leaves
 it running. The daemon keeps an operation in memory until ten minutes after it
 ends, so a client follows it again by its ID from any event; a restart forgets
-it, and setup and landing fail with their daemon as before.
+it, and setup and merges fail with their daemon as before.
 
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
 command process groups. It retains buffered daemon controls across start, stop,
@@ -136,7 +136,7 @@ meanwhile reports once reattached. A refusal stops the command as manual stop
 does. Reattachment is a permanent protocol method accepted at every version, and
 wrappers advertise it when they register: a restart or an update detaches those and
 stops the rest as manual stop does, within the workspace stop timeout. Setup and
-landing hold daemon gates, so they never reattach.
+merges hold daemon gates, so they never reattach.
 Only a planned exit, a restart or an update, keeps work running. The daemon
 cannot tell a service command's SIGTERM from a shutdown's, a logout's or a
 `kill`, so a signal stops
@@ -364,7 +364,7 @@ environments without a service manager. The service captures the installing shel
 `PATH`.
 Managed daemons record their stable executable path before startup work and restart
 after a replacement, including one during startup, once daemon operations are idle
-and no setup or landing runs; commands reattach.
+and no setup or merge runs; commands reattach.
 Retain the ownership lock and listening socket across exec so queued requests reach
 the replacement under the same service PID. The lock file names the owning
 process by PID and birth, so a client refused by the socket tells a live daemon
@@ -781,20 +781,20 @@ a workspace from it stays plain Git. Commands that only read the default branch
 never sync, so none waits on a fetch or handles a failed sync; workspace
 status shows a failing sync, and one failing for 30 minutes of awake time, which
 a brief outage or a wake before the network does not reach, needs the user and
-joins the inbox with one alert. Shoal has no merge or rebase command: Git
-already does both in a workspace. `land`,
-the local substitute for a pull request, merges the workspace branch into the default
+joins the inbox with one alert. Git already merges and rebases a workspace onto the
+default branch, so Shoal has no command for that direction. `merge`, the guarded
+local substitute for a pull request, merges the workspace branch into the default
 branch, first refreshing a configured upstream while preserving an ahead branch and
 refusing divergence or fetch failure. It pushes the default branch to that upstream
 only on request, checking the upstream before merging and keeping the merge when the
 push fails. The default branch cannot be
-held by a managed workspace, and any checkout of it must be clean. Land aborts a merge
+held by a managed workspace, and any checkout of it must be clean. It aborts a merge
 that does not apply cleanly, leaving conflicts to a Git merge of the default branch into
-the workspace. Landing holds the repository Git gate for the tracked execution; the
+the workspace. Merging holds the repository Git gate for the tracked execution; the
 daemon validates and refreshes, and the CLI worker merges.
 After cancellation, the wrapper rolls back incomplete merges after stopping the
 process group, preserving completed merges and reporting unsafe recovery failures.
-Refresh fetches use private temporary refs; landing merges run in the tracked wrapper.
+Refresh fetches use private temporary refs; merges run in the tracked wrapper.
 A fetch of a whole remote also deletes the tracking refs of branches the remote no
 longer has, since cleanup counts commits on a stale ref as pushed.
 
@@ -853,9 +853,9 @@ confines them to their own workspace and the child workspaces split from it:
 status, inspect, execute, setup, and resources.
 Creation other than splitting a child, removal other than of a descendant the user holds nothing below,
 reconciliation, other workspaces, repository administration, and service control need an
-unscoped caller. A scoped `land` is an
-approval request bound to the branch and its HEAD unless `[permissions] land`
-and `push` are `"direct"`; approval lets the agent's retry land that commit through the normal checks,
+unscoped caller. A scoped `merge` is an
+approval request bound to the branch and its HEAD unless `[permissions] merge`
+and `push` are `"direct"`; approval lets the agent's retry merge that commit through the normal checks,
 so it replaces only the user typing the command. PR registration,
 manual merge acknowledgement, assignment completion and its withdrawal, and syncing the
 caller's own repository are own-workspace exceptions.
@@ -1651,7 +1651,7 @@ while one Shoal submits does not.
 Questions and approval requests are named by the smallest number no stored one
 holds, because the user types them; their records keep a separate internal key
 that is never shown. A wait follows its question's number and text, so a later
-question reusing the number cannot answer it, and a keep or land request that no
+question reusing the number cannot answer it, and a keep or merge request that no
 longer applies stays as outdated until the workspace goes, so its number is never
 reused and a decision meant for it cannot approve a newer commit. An agent may
 withdraw a pending request it no longer needs, as it may a question: it stays as
@@ -2068,7 +2068,7 @@ Approvals are the daemon-owned way a scoped caller asks the user for a yes or no
 shows its details and prompts for a decision. Ctrl-A approves and Ctrl-D denies
 the highlighted request inside the list, which fzf updates in place rather than
 closing and reopening. Decisions bind to the displayed or
-authorized record through mutation, including when a coordinating agent decides. Explicit `--approve` and `--deny` flags decide every kind: landing
+authorized record through mutation, including when a coordinating agent decides. Explicit `--approve` and `--deny` flags decide every kind: merging
 a branch (see scope), resource access, and issues and PRs an agent proposed.
 
 In a shared repository everything an agent opens is seen by other people, so
@@ -2091,7 +2091,7 @@ A decided proposal is deleted, since the message carries the outcome. An issue
 proposal belongs to the repository rather than the workspace, because agents file
 follow-ups just before `done`; it opens through the repository's checkout and agent
 account once the workspace is gone. A PR proposal is bound to the branch and its
-commit like a land request: the push still happens unless `[permissions] push`
+commit like a merge request: the push still happens unless `[permissions] push`
 holds it back, and a renamed branch or another
 commit, locally or where the push went, outdates it at approval or when the agent
 proposes again, and a pending one keeps the workspace
@@ -2120,10 +2120,10 @@ leave those pushes unheld. Approval runs the push without the agent, in an
 operation whose end decides the request, with the agent's Git profile as
 `pr open`'s push has. Nothing decides, withdraws or replaces a request while its
 push runs, since the push lands regardless. Pushes Shoal authorized itself run
-without the rewrites. Unless `push` is `"direct"`, a scoped `land` needs approval
-whatever `[permissions] land` says, since it may push the default branch, and a
+without the rewrites. Unless `push` is `"direct"`, a scoped `merge` needs approval
+whatever `[permissions] merge` says, since it may push the default branch, and a
 forge's `pr revert`, which pushes at once, is refused for scoped callers. A
-pending push request keeps the workspace from unattended removal. Approving a land
+pending push request keeps the workspace from unattended removal. Approving a merge
 request whose branch moved since it was requested is refused as stale and marks it outdated.
 Agents also find problems that belong to another repository, such as a tool the
 project uses, so `issue open --repo` files an issue there, on any forge, as the

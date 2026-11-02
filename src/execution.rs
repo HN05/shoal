@@ -167,14 +167,14 @@ pub async fn publish(paths: &Paths, workspace: String, command: Vec<OsString>) -
     run_tracked(paths, workspace, command, Mode::Publish, None).await
 }
 
-/// Land the workspace's branch; its worker writes the result as a
-/// [`LandResult`] to `result`.
-pub async fn land(paths: &Paths, workspace: String, push: bool, result: PathBuf) -> Result<i32> {
-    run_tracked(paths, workspace, vec![], Mode::Land { push, result }, None).await
+/// Merge the workspace's branch; its worker writes the result as a
+/// [`MergeResult`] to `result`.
+pub async fn merge(paths: &Paths, workspace: String, push: bool, result: PathBuf) -> Result<i32> {
+    run_tracked(paths, workspace, vec![], Mode::Merge { push, result }, None).await
 }
 
-/// What a landing worker writes: what it landed, or why it could not.
-pub type LandResult = std::result::Result<crate::model::LandedBranch, String>;
+/// What a merge worker writes: what it merged, or why it could not.
+pub type MergeResult = std::result::Result<crate::model::MergedBranch, String>;
 
 pub async fn setup(paths: &Paths, workspace: String) -> Result<i32> {
     run_tracked(paths, workspace, vec![], Mode::Setup, None).await

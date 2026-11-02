@@ -9,7 +9,7 @@ use crate::{
         links::OpenOutcome,
     },
     forge::items::create::PullOptions,
-    model::{LandedBranch, QueueEntry, Workspace},
+    model::{MergedBranch, QueueEntry, Workspace},
 };
 
 /// Requests about operations: work the daemon starts in a worker process of
@@ -110,8 +110,8 @@ pub enum OperationSpec {
         workspace: String,
         options: PullOptions,
     },
-    /// Land the workspace's branch; `push` overrides `[land] push` when given.
-    Land {
+    /// Merge the workspace's branch; `push` overrides `[merge] push` when given.
+    Merge {
         workspace: String,
         push: Option<bool>,
     },
@@ -149,7 +149,7 @@ impl OperationSpec {
         match self {
             Self::Prepare { workspace, .. }
             | Self::OpenPull { workspace, .. }
-            | Self::Land { workspace, .. }
+            | Self::Merge { workspace, .. }
             | Self::Push { workspace, .. } => workspace,
         }
     }
@@ -163,7 +163,7 @@ crate::state::states!(Step {
     AgentQueued => "agent_queued",
     PushStarted => "push_started",
     Pushed => "pushed",
-    LandStarted => "land_started",
+    MergeStarted => "merge_started",
 });
 
 crate::state::states!(Stream {
@@ -215,7 +215,7 @@ pub enum Ended {
 pub enum Outcome {
     Prepared(Prepared),
     Opened(OpenOutcome),
-    Landed(LandedBranch),
+    Merged(MergedBranch),
     Decided(Box<crate::client::approvals::ApprovalRequest>),
 }
 
@@ -245,7 +245,7 @@ macro_rules! outcomes {
 outcomes!(
     Prepared(Prepared),
     Opened(OpenOutcome),
-    Landed(LandedBranch),
+    Merged(MergedBranch),
     Decided(Box<crate::client::approvals::ApprovalRequest>)
 );
 
@@ -269,7 +269,7 @@ pub enum Failure {
     PushFailed {
         message: String,
     },
-    /// Landing waits for the user's decision on `request`, or was denied.
+    /// Merging waits for the user's decision on `request`, or was denied.
     Approval {
         request: Box<ApprovalRequest>,
     },

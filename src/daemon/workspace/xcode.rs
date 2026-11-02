@@ -108,7 +108,7 @@ impl Manager {
     /// may be regenerating, and an absent repository directory, such as an
     /// unmounted volume, proves nothing gone. Creating, restoring and
     /// renaming a workspace hold the repository's Git gate, so holding it
-    /// keeps a worktree from coming back meanwhile; landing holds it through
+    /// keeps a worktree from coming back meanwhile; merging holds it through
     /// a whole build, so a busy gate leaves the deletion to a later pass.
     async fn delete_left_derived_data(&self, repo: &Repository, location: PathBuf) -> bool {
         let name = crate::repository::name(repo);

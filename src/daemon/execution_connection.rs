@@ -670,7 +670,7 @@ async fn finish(
     };
     // A restart whose stop the agent never took saved a handoff for nothing.
     let restarting = agent.is_some() && manager.restart_before_resume(&execution_id).await;
-    // Setup instead fails on what it leaves running, and landing runs Git.
+    // Setup instead fails on what it leaves running, and merge runs Git.
     if kind == ExecutionKind::Command && result.is_ok() {
         manager
             .executions

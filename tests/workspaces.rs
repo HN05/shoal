@@ -17355,11 +17355,11 @@ fn manual_removal_keeps_a_branch_its_hooks_committed_to() {
 }
 
 #[test]
-fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes() {
+fn merge_into_main_without_a_remote_needs_approval_in_scoped_processes() {
     let fixture = Fixture::new();
     let worker = fixture.add("worker");
     let path = Path::new(worker["path"].as_str().unwrap());
-    commit_file(path, "landed", "from the workspace\n");
+    commit_file(path, "merged", "from the workspace\n");
     let expected = git(path, &["rev-parse", "HEAD"]);
     let before = git(&fixture.repo, &["rev-parse", "main"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
@@ -17370,14 +17370,14 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
         "--",
         binary,
         "--json",
-        "land",
+        "merge",
     ]);
     assert_eq!(pending.status.code(), Some(2));
     let pending: serde_json::Value = serde_json::from_slice(&pending.stdout).unwrap();
     assert_eq!(pending["code"], "approval_pending");
-    assert_eq!(pending["request"]["target"], "land");
+    assert_eq!(pending["request"]["target"], "merge");
     assert_eq!(pending["request"]["specification"]["head"], expected.trim());
-    let refusal = fixture.root.path().join("land-result.json");
+    let refusal = fixture.root.path().join("merge-result.json");
     let denied = fixture.run(&[
         "run",
         "--workspace",
@@ -17385,24 +17385,24 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
         "--",
         binary,
         "internal",
-        "land",
+        "merge",
         "--result",
         refusal.to_str().unwrap(),
         "{}",
     ]);
     assert!(!denied.status.success());
     let refusal = fs::read_to_string(&refusal).unwrap();
-    assert!(refusal.contains("only an authorized landing"), "{refusal}");
+    assert!(refusal.contains("only an authorized merge"), "{refusal}");
     let repo = fixture.ok(&["repo", "ls"])[0]["id"].clone();
     fixture.ok(&[
         "config",
         "set",
-        "land.push",
+        "merge.push",
         "true",
         "--repo",
         repo.as_str().unwrap(),
     ]);
-    let unpushable = fixture.run(&["land", "worker"]);
+    let unpushable = fixture.run(&["merge", "worker"]);
     assert!(!unpushable.status.success());
     assert!(
         String::from_utf8_lossy(&unpushable.stderr).contains("main has no upstream to push to")
@@ -17413,18 +17413,18 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
         "--approve",
         &pending["request"]["id"].to_string(),
     ]);
-    let landed = fixture.run(&[
+    let merged = fixture.run(&[
         "run",
         "--workspace",
         "worker",
         "--",
         binary,
         "--json",
-        "land",
+        "merge",
         "--no-push",
     ]);
-    assert!(landed.status.success(), "{landed:?}");
-    let result: serde_json::Value = serde_json::from_slice(&landed.stdout).unwrap();
+    assert!(merged.status.success(), "{merged:?}");
+    let result: serde_json::Value = serde_json::from_slice(&merged.stdout).unwrap();
     assert_eq!(result["updated"], true);
     assert_eq!(result["fast_forward"], true);
     assert_eq!(result["default_branch"], "main");
@@ -17432,14 +17432,14 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
     assert_eq!(result["commit"], expected.trim());
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), expected);
     assert_eq!(
-        fs::read_to_string(fixture.repo.join("landed")).unwrap(),
+        fs::read_to_string(fixture.repo.join("merged")).unwrap(),
         "from the workspace\n"
     );
     assert_eq!(
-        fixture.ok(&["land", "--no-push", "worker"])["updated"],
+        fixture.ok(&["merge", "--no-push", "worker"])["updated"],
         false
     );
-    // Landed work is on the default branch, so its branch goes.
+    // Merged work is on the default branch, so its branch goes.
     assert_eq!(fixture.ok(&["rm", "worker"])["branch_deleted"], true);
 }
 
@@ -17469,7 +17469,7 @@ fn invalid_item_actions_fail_before_a_picker_asks_for_their_space() {
 }
 
 #[test]
-fn land_asks_before_merging_files_changed_on_both_sides() {
+fn merge_asks_before_merging_files_changed_on_both_sides() {
     let fixture = Fixture::new();
     commit_file(
         &fixture.repo,
@@ -17499,7 +17499,7 @@ fn land_asks_before_merging_files_changed_on_both_sides() {
         serde_json::json!(["version"])
     );
 
-    let refused = fixture.run(&["land", "worker"]);
+    let refused = fixture.run(&["merge", "worker"]);
     assert!(!refused.status.success());
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(
@@ -17507,11 +17507,11 @@ fn land_asks_before_merging_files_changed_on_both_sides() {
         "{stderr}"
     );
     assert!(stderr.contains("--yes"), "{stderr}");
-    let (declined, transcript) = fixture.interactive(&["land", "worker"], "n\n");
+    let (declined, transcript) = fixture.interactive(&["merge", "worker"], "n\n");
     assert!(!declined.status.success());
     assert!(transcript.contains("Are you sure? [y/N]"), "{transcript}");
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
-    // An agent's --yes leaves the question to whoever approves the landing.
+    // An agent's --yes leaves the question to whoever approves the merge.
     let binary = env!("CARGO_BIN_EXE_shoal");
     let scoped = [
         "run",
@@ -17520,7 +17520,7 @@ fn land_asks_before_merging_files_changed_on_both_sides() {
         "--",
         binary,
         "--json",
-        "land",
+        "merge",
         "--yes",
     ];
     let pending = fixture.run(&scoped);
@@ -17531,13 +17531,13 @@ fn land_asks_before_merging_files_changed_on_both_sides() {
         "merge worker into main; sensitive files changed on both sides by worker and main: version"
     );
 
-    // Landing makes a merge commit in the checkout, which needs an identity.
+    // Merging makes a merge commit in the checkout, which needs an identity.
     git(&fixture.repo, &["config", "user.name", "Test"]);
     git(
         &fixture.repo,
         &["config", "user.email", "test@example.invalid"],
     );
-    assert_eq!(fixture.ok(&["land", "--yes", "worker"])["updated"], true);
+    assert_eq!(fixture.ok(&["merge", "--yes", "worker"])["updated"], true);
     assert_eq!(
         fs::read_to_string(fixture.repo.join("feature")).unwrap(),
         "new\n"
@@ -17877,7 +17877,7 @@ while True:
 }
 
 #[test]
-fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
+fn merge_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
     for interruption in ["stop", "daemon", "interrupt"] {
         let mut fixture = Fixture::new();
         git(&fixture.repo, &["config", "user.name", "Test"]);
@@ -17904,28 +17904,28 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
             &[
                 "config",
                 "merge.slow.driver",
-                "echo $$ > .git/land-driver.pid.tmp; mv .git/land-driver.pid.tmp .git/land-driver.pid; exec sleep 60",
+                "echo $$ > .git/merge-driver.pid.tmp; mv .git/merge-driver.pid.tmp .git/merge-driver.pid; exec sleep 60",
             ],
         );
-        let stderr_path = fixture.root.path().join("land.stderr");
-        let mut land = fixture
+        let stderr_path = fixture.root.path().join("merge.stderr");
+        let mut merge = fixture
             .command()
-            .args(["land", "worker"])
+            .args(["merge", "worker"])
             .stdout(Stdio::null())
             .stderr(fs::File::create(&stderr_path).unwrap())
             .spawn()
             .unwrap();
         wait_until("merge driver to start", || {
-            if fixture.repo.join(".git/land-driver.pid").exists() {
+            if fixture.repo.join(".git/merge-driver.pid").exists() {
                 return true;
             }
             assert!(
-                land.try_wait().unwrap().is_none(),
-                "land exited before merge driver"
+                merge.try_wait().unwrap().is_none(),
+                "merge exited before merge driver"
             );
             false
         });
-        let pid: i32 = fs::read_to_string(fixture.repo.join(".git/land-driver.pid"))
+        let pid: i32 = fs::read_to_string(fixture.repo.join(".git/merge-driver.pid"))
             .unwrap()
             .trim()
             .parse()
@@ -17933,19 +17933,19 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         let during = fixture.ok(&["status", "worker"]);
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
         assert!(during["executions"][0]["child"].is_object());
-        // The daemon starts the landing, whose wrapper restores the checkout
+        // The daemon starts the merge, whose wrapper restores the checkout
         // before it exits; a killed daemon leaves it to do that after the CLI.
         let wrapper = during["executions"][0]["wrapper"]["pid"].as_u64().unwrap() as u32;
         if interruption == "daemon" {
             fixture.daemon.kill();
         } else if interruption == "interrupt" {
-            assert_eq!(unsafe { libc::kill(land.id() as i32, libc::SIGINT) }, 0);
+            assert_eq!(unsafe { libc::kill(merge.id() as i32, libc::SIGINT) }, 0);
         } else {
             fixture.ok(&["stop", "worker"]);
         }
-        let status = wait_for("land to fail", || land.try_wait().unwrap());
+        let status = wait_for("merge to fail", || merge.try_wait().unwrap());
         assert!(!status.success());
-        wait_until("landing wrapper to stop", || !process_running(wrapper));
+        wait_until("merge wrapper to stop", || !process_running(wrapper));
         wait_until("merge driver to stop", || !process_running(pid as u32));
         assert_eq!(git(&fixture.repo, &["rev-parse", "HEAD"]), before);
         assert_eq!(
@@ -23692,7 +23692,7 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
     let before = git(&fixture.repo, &["rev-parse", "main"]);
     install_failing_git(&fixture);
     for (failure, args) in [
-        ("--is-ancestor", vec!["land", "worker"]),
+        ("--is-ancestor", vec!["merge", "worker"]),
         (
             "show-ref",
             vec!["add", fixture.repo.to_str().unwrap(), "--existing", "main"],
@@ -29945,7 +29945,7 @@ fn branch_only_commands_refuse_a_workspace_at_a_commit() {
         &["pr", "open"][..],
         &["ready"],
         &["done"],
-        &["land"],
+        &["merge"],
         &["branch", "rename", "renamed"],
     ] {
         let output = run(args);

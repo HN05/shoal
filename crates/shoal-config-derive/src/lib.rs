@@ -131,7 +131,8 @@ impl Declaration {
                     }
                 }
 
-                fn merge(&mut self, top: Self, merge: crate::config::options::Merge) {
+                // Fields bind by their names, so the layering takes a name no field has.
+                fn merge(&mut self, top: Self, __layering: crate::config::options::Merge) {
                     let Self { #(#bindings),* } = top;
                     #(#merges)*
                 }
@@ -361,15 +362,15 @@ impl Field {
         match self.kind {
             Kind::Scalar => quote!(crate::config::options::scalar(&mut self.#ident, #ident);),
             Kind::Section => quote! {
-                crate::config::options::Options::merge(&mut self.#ident, #ident, merge);
+                crate::config::options::Options::merge(&mut self.#ident, #ident, __layering);
             },
             Kind::Named => quote!(self.#ident.extend(#ident);),
             Kind::NamedSections => quote! {
-                crate::config::options::named_sections(&mut self.#ident, #ident, merge);
+                crate::config::options::named_sections(&mut self.#ident, #ident, __layering);
             },
             Kind::List => quote!(crate::config::options::list(&mut self.#ident, #ident);),
             Kind::Template => {
-                quote!(crate::config::options::template(&mut self.#ident, #ident, merge);)
+                quote!(crate::config::options::template(&mut self.#ident, #ident, __layering);)
             }
         }
     }

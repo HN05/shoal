@@ -13,7 +13,7 @@ async fn read<T: serde::de::DeserializeOwned>(stream: &mut BufReader<UnixStream>
 }
 
 #[tokio::test]
-async fn scoped_landing_answers_with_its_approval_request() {
+async fn scoped_merge_answers_with_its_approval_request() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -21,7 +21,7 @@ async fn scoped_landing_answers_with_its_approval_request() {
         .await
         .unwrap();
     let workspace = manager
-        .create_workspace(&repo.id, "lander".into(), None, None, None)
+        .create_workspace(&repo.id, "merger".into(), None, None, None)
         .await
         .unwrap();
     let (client, server) = UnixStream::pair().unwrap();
@@ -34,7 +34,7 @@ async fn scoped_landing_answers_with_its_approval_request() {
             wrapper: crate::process::identity::capture(std::process::id())
                 .unwrap()
                 .unwrap(),
-            kind: ExecutionKind::Land,
+            kind: ExecutionKind::Merge,
             agent: None,
             recover: false,
             reattach: false,
@@ -51,9 +51,9 @@ async fn scoped_landing_answers_with_its_approval_request() {
     let response: Response = read(&mut BufReader::new(client)).await;
     bounded(executing).await.unwrap().unwrap();
     let Body::ApprovalRequest(request) = response.body else {
-        panic!("landing was not held for approval: {:?}", response.body);
+        panic!("merge was not held for approval: {:?}", response.body);
     };
-    assert_eq!(request.target, crate::daemon::approvals::Target::Land);
+    assert_eq!(request.target, crate::daemon::approvals::Target::Merge);
     let notifications = manager.notifications(true, 10).await.unwrap();
     assert!(
         notifications

@@ -863,7 +863,7 @@ pub struct ExecutionPlan {
     pub ports: Vec<PortReservation>,
     #[serde(default)]
     pub environment: std::collections::BTreeMap<String, std::ffi::OsString>,
-    pub land: Option<Box<LandPlan>>,
+    pub merge: Option<Box<MergePlan>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1017,7 +1017,7 @@ pub struct SyncedRepository {
 
 /// A workspace branch merged into its repository's default branch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LandedBranch {
+pub struct MergedBranch {
     pub workspace_id: String,
     pub repository_id: String,
     pub branch: String,
@@ -1030,16 +1030,16 @@ pub struct LandedBranch {
     pub fast_forward: bool,
     /// How the default branch was refreshed from its upstream first.
     pub default_refresh: PulledBranch,
-    /// The remote the default branch was pushed to after landing.
+    /// The remote the default branch was pushed to after merging.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pushed_to: Option<String>,
 }
 
-/// A daemon-authorized landing, held under the repository Git gate.
+/// A daemon-authorized merge, held under the repository Git gate.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct LandPlan {
+pub struct MergePlan {
     pub workspace: Workspace,
-    /// The workspace's branch, which lands.
+    /// The workspace's branch, which merges.
     pub branch: String,
     pub repo: Repository,
     pub source: String,

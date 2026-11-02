@@ -16,7 +16,7 @@ use crate::{
     fsutil::off_runtime,
     hooks::HookKind,
     model::{
-        Execution, ExecutionPlan, LandPlan, PortReservation, QueueEntry, Repository, Workspace,
+        Execution, ExecutionPlan, MergePlan, PortReservation, QueueEntry, Repository, Workspace,
     },
     process::{
         execution::Processes,
@@ -218,7 +218,7 @@ struct PreparedExecution {
     pre_setup: Option<PathBuf>,
     registration_guard: Option<OwnedMutexGuard<()>>,
     lifetime_guard: Option<OwnedMutexGuard<()>>,
-    land: Option<Box<LandPlan>>,
+    merge: Option<Box<MergePlan>>,
     _resources: Option<ResourceGuard>,
 }
 
@@ -283,7 +283,7 @@ impl ExecutionKind {
     pub fn start_timeout(self) -> Duration {
         match self {
             Self::Command => timing::EXECUTION_START_TIMEOUT,
-            Self::Land | Self::Setup => timing::PREPARED_EXECUTION_START_TIMEOUT,
+            Self::Merge | Self::Setup => timing::PREPARED_EXECUTION_START_TIMEOUT,
         }
     }
 
@@ -298,7 +298,7 @@ impl ExecutionKind {
         // would otherwise accept.
         store::ensure_no_pending_move(tx, workspace_id)?;
         match self {
-            Self::Command | Self::Land => store::require_ready(tx, workspace_id)?,
+            Self::Command | Self::Merge => store::require_ready(tx, workspace_id)?,
             Self::Setup => {
                 let blocking: Option<String> = tx.query_row(
                     "SELECT id FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
@@ -382,7 +382,7 @@ impl Manager {
             pre_setup,
             registration_guard,
             lifetime_guard,
-            land,
+            merge,
             _resources,
         } = preparation;
         let registered = self
@@ -396,7 +396,7 @@ impl Manager {
             )
             .await?;
         // Setup releases its Git gate before the hook; resources remain guarded
-        // until pre-setup completes, while landing's gate travels with the plan.
+        // until pre-setup completes, while merge's gate travels with the plan.
         drop(registration_guard);
         self.run_pre_setup(&registered, kind, pre_setup.as_deref())
             .await?;
@@ -409,7 +409,7 @@ impl Manager {
                 copy_ignored,
                 ports: registered.ports,
                 environment: registered.environment,
-                land,
+                merge,
             },
             stop: registered.stop,
             _git_guard: lifetime_guard,
@@ -505,7 +505,7 @@ impl Manager {
             Some(_) => Some(self.place_ownership.lock().await),
             None => None,
         };
-        // Only commands may reattach: setup and landing hold daemon gates
+        // Only commands may reattach: setup and merge hold daemon gates
         // that a restart releases.
         let reattach_token = (kind == ExecutionKind::Command).then_some(scope_token);
         self.store
@@ -605,14 +605,14 @@ impl Manager {
     ) -> Result<PreparedExecution> {
         match kind {
             ExecutionKind::Command => Ok(PreparedExecution::default()),
-            ExecutionKind::Land => {
+            ExecutionKind::Merge => {
                 let guard = self.gates.lock_git(&workspace.repository_id).await;
-                let land = self.prepare_land(&workspace.id).await?;
+                let merge = self.prepare_merge(&workspace.id).await?;
                 if scoped {
-                    self.authorize_scoped_land(&land).await?;
+                    self.authorize_scoped_merge(&merge).await?;
                 }
                 Ok(PreparedExecution {
-                    land: Some(Box::new(land)),
+                    merge: Some(Box::new(merge)),
                     lifetime_guard: Some(guard),
                     ..Default::default()
                 })
@@ -1209,7 +1209,7 @@ impl Manager {
             .await
     }
 
-    /// Wrappers decide what to save; setup and landing save nothing.
+    /// Wrappers decide what to save; setup and merge save nothing.
     async fn stop_executions_keeping(
         &self,
         id: &str,

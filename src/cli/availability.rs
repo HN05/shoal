@@ -31,7 +31,7 @@ impl Need {
             ["release", "hold"] => Self::Holds,
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,
             [
-                "run" | "edit" | "claude" | "codex" | "t3" | "happy" | "land" | "split" | "done"
+                "run" | "edit" | "claude" | "codex" | "t3" | "happy" | "merge" | "split" | "done"
                 | "watch" | "ready" | "acquire" | "release",
                 ..,
             ]

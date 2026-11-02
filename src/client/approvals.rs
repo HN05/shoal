@@ -39,7 +39,7 @@ states!(DecisionStatus {
 
 /// What a decision authorizes; one active request per workspace, target and
 /// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>`, `hold/<name>`, `land`, `issue_open`, `pr_open` or `push`.
+/// `secret/<name>`, `hold/<name>`, `merge`, `issue_open`, `pr_open` or `push`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -50,8 +50,8 @@ pub enum Target {
     Simulator,
     /// Fetching a configured secret; the daemon records the grant, never the value.
     Secret(String),
-    /// Landing a workspace branch into the default branch.
-    Land,
+    /// Merging a workspace branch into the default branch.
+    Merge,
     /// Opening an issue a scoped caller proposed; the repository owns the
     /// request, so it outlives the workspace.
     IssueOpen,
@@ -64,8 +64,8 @@ pub enum Target {
     Hold(String),
 }
 
-/// The name of a workspace's single land request.
-pub const LAND: &str = "branch";
+/// The name of a workspace's single merge request.
+pub const MERGE: &str = "branch";
 
 impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -74,7 +74,7 @@ impl fmt::Display for Target {
             Self::Port(name) => write!(f, "port/{name}"),
             Self::Simulator => f.write_str("simulator"),
             Self::Secret(name) => write!(f, "secret/{name}"),
-            Self::Land => f.write_str("land"),
+            Self::Merge => f.write_str("merge"),
             Self::IssueOpen => f.write_str("issue_open"),
             Self::PrOpen => f.write_str("pr_open"),
             Self::Push => f.write_str("push"),
@@ -89,7 +89,7 @@ impl FromStr for Target {
     fn from_str(text: &str) -> Result<Self> {
         match text {
             "simulator" => return Ok(Self::Simulator),
-            "land" => return Ok(Self::Land),
+            "merge" => return Ok(Self::Merge),
             "issue_open" => return Ok(Self::IssueOpen),
             "pr_open" => return Ok(Self::PrOpen),
             "push" => return Ok(Self::Push),
@@ -137,7 +137,7 @@ pub enum Specification {
     Port(PortSpecification),
     Simulator(SimulatorSpecification),
     Secret(SecretSpecification),
-    Land(LandSpecification),
+    Merge(MergeSpecification),
     Issue(IssueSpecification),
     Pull(PullSpecification),
     Push(PushSpecification),
@@ -172,10 +172,10 @@ pub struct SimulatorSpecification {
     pub profile: Profile,
 }
 
-/// A land decision covers the branch at one commit; later commits need a new one.
+/// A merge decision covers the branch at one commit; later commits need a new one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LandSpecification {
+pub struct MergeSpecification {
     pub branch: String,
     pub head: String,
 }
@@ -451,12 +451,12 @@ impl ProposalDecision {
 
 impl ApprovalRequest {
     /// What the user is asked to decide: the access and how long it lasts,
-    /// the branch and commit to land, the issue or PR to open, or the hold
+    /// the branch and commit to merge, the issue or PR to open, or the hold
     /// to place.
     pub fn subject(&self) -> String {
         match (&self.target, &self.specification) {
-            (Target::Land, Specification::Land(land)) => {
-                format!("land {} at {}", land.branch, land.head)
+            (Target::Merge, Specification::Merge(merge)) => {
+                format!("merge {} at {}", merge.branch, merge.head)
             }
             (Target::IssueOpen, Specification::Issue(issue)) => {
                 let title = &issue.issue.title;

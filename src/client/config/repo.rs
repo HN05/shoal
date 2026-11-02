@@ -113,7 +113,7 @@ pub struct RepoConfig {
     #[option(section)]
     pub messages: MessagesConfig,
     #[option(section)]
-    pub land: LandConfig,
+    pub merge: MergeConfig,
     #[option(section)]
     pub conflicts: ConflictsConfig,
     #[option(section)]
@@ -650,11 +650,11 @@ pub struct IssueConfig {
     pub planned_label: Option<String>,
 }
 
-/// Whether `shoal land` pushes the default branch to its upstream afterwards.
+/// Whether `shoal merge` pushes the default branch to its upstream afterwards.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
-#[options(resolved = Land)]
-pub struct LandConfig {
+#[options(resolved = Merge)]
+pub struct MergeConfig {
     #[option(default = false)]
     pub push: Option<bool>,
 }
@@ -741,9 +741,9 @@ pub struct PermissionsConfig {
     /// Opening an issue in another repository than the workspace's.
     #[option(default = OtherRepositories::Propose)]
     pub issue_other_repositories: Option<OtherRepositories>,
-    /// Landing a branch with `shoal land`.
+    /// Merging a branch with `shoal merge`.
     #[option(default = Opening::Propose)]
-    pub land: Option<Opening>,
+    pub merge: Option<Opening>,
     /// Pushing to the workspace repository's remotes, with `shoal pr open`
     /// or plain `git push`.
     #[option(default = Pushes::Direct)]

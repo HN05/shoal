@@ -46,8 +46,8 @@ pub(super) async fn handle(
                 execution_connection::execute(stream, request_id, manager, context, guard)
             }));
         }
-        ExecutionMethod::CheckLanding => {
-            require_landing(caller, "landing execution required")?;
+        ExecutionMethod::CheckMerge => {
+            require_merging(caller, "merge execution required")?;
             Body::Ok
         }
         ExecutionMethod::ListAgents => Body::RunningAgents(manager.running_agents().await?),
@@ -72,16 +72,16 @@ impl Scoped for ExecutionMethod {
             ExecutionMethod::ListAgents | ExecutionMethod::RestartAgent { .. } => {
                 return Err(denied());
             }
-            ExecutionMethod::CheckLanding => {
-                require_landing(
+            ExecutionMethod::CheckMerge => {
+                require_merging(
                     Some(caller),
-                    "only an authorized landing execution may run the land worker",
+                    "only an authorized merge execution may run the merge worker",
                 )?;
                 None
             }
             ExecutionMethod::Execute {
                 workspace,
-                kind: ExecutionKind::Command | ExecutionKind::Land,
+                kind: ExecutionKind::Command | ExecutionKind::Merge,
                 ..
             } => Some(workspace),
             ExecutionMethod::Execute {
@@ -96,10 +96,10 @@ impl Scoped for ExecutionMethod {
     }
 }
 
-/// Refuse a caller other than a landing execution; `refusal` says why.
-fn require_landing(caller: Option<&Caller>, refusal: &str) -> Result<()> {
+/// Refuse a caller other than a merge execution; `refusal` says why.
+fn require_merging(caller: Option<&Caller>, refusal: &str) -> Result<()> {
     ensure!(
-        caller.is_some_and(|caller| caller.kind() == Some(ExecutionKind::Land)),
+        caller.is_some_and(|caller| caller.kind() == Some(ExecutionKind::Merge)),
         "{refusal}"
     );
     Ok(())

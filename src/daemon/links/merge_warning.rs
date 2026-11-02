@@ -1,4 +1,4 @@
-//! What merging a PR or landing a branch warns about: the sensitive files
+//! What merging a PR or a branch warns about: the sensitive files
 //! that the last conflict check of the merged head found changed on both
 //! sides. It reads that record and checks nothing again, so merging stays as
 //! fast without one.
@@ -38,10 +38,10 @@ impl Manager {
         }))
     }
 
-    /// The warning for landing the workspace's HEAD in the default branch,
+    /// The warning for merging the workspace's HEAD into the default branch,
     /// as its last check against that branch found it; a stacked
     /// workspace's check is against its base's branch instead.
-    pub async fn land_warning(&self, selector: &str) -> Result<Option<MergeWarning>> {
+    pub async fn branch_merge_warning(&self, selector: &str) -> Result<Option<MergeWarning>> {
         let workspace = self.workspace(selector).await?;
         let recorded = self.recorded_changed_on_both_sides(&workspace.id).await?;
         let Some(recorded) = recorded.filter(|recorded| !recorded.files.is_empty()) else {
@@ -51,7 +51,7 @@ impl Manager {
         let target = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
         let head = git::resolve_commit(&workspace.path, "HEAD", git::run_isolated).await?;
         let merged = Merged { head, target };
-        let branch = workspace.require_branch("landing")?.to_owned();
+        let branch = workspace.require_branch("merging")?.to_owned();
         Ok(warning(branch, vec![recorded], &merged))
     }
 

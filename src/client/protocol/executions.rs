@@ -34,8 +34,8 @@ pub enum ExecutionMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<Box<crate::client::sessions::Origin>>,
     },
-    /// Verify that this worker belongs to an unscoped caller's landing execution.
-    CheckLanding,
+    /// Verify that this worker belongs to an unscoped caller's merge execution.
+    CheckMerge,
     /// Connected agents, and executions whose wrapper is gone, which may run one.
     ListAgents,
     /// Stop the agent of `execution` and start its session again in its
@@ -57,7 +57,7 @@ impl ExecutionMethod {
             Self::Execute { .. } => Lifetime::Open,
             // A restart waits for requests of the wrapper it restores.
             Self::RestartAgent { .. } => Lifetime::Open,
-            Self::CheckLanding | Self::ListAgents => Lifetime::Reply,
+            Self::CheckMerge | Self::ListAgents => Lifetime::Reply,
         }
     }
 }

@@ -146,7 +146,7 @@ activity lookup and repeats every 10 minutes while it persists; until that sourc
 recovers, check what it covers yourself, such as merge conflicts with
 `shoal conflicts`. Waiting also
 reports PR closure or merging and grants no permission to merge. A
-`base_merged` update means your base workspace landed. It says whether Shoal
+`base_merged` update means your base workspace merged. It says whether Shoal
 retargeted your PR; run the rebase command it gives and push with
 `git push --force-with-lease`. For the current
 state instead of changes, `shoal status` lists each watched PR in `prs`
@@ -360,9 +360,9 @@ brings in their latest commits; use `origin/feature/api` for pushed work after
 `shoal repo sync`. Stay on your workspace's recorded branch. When it builds on
 another workspace's branch, record that with `shoal branch base set <workspace>`;
 `shoal branch base` shows it.
-When the repository has no remote, `shoal land` merges your committed
-branch into the default branch. Unless the repository sets `[permissions]
-land = "direct"`, it first exits 2 with `approval_pending` for your
+When the repository merges locally instead of through PRs, `shoal merge`
+merges your committed branch into the default branch. Unless the repository sets
+`[permissions] merge = "direct"`, it first exits 2 with `approval_pending` for your
 current HEAD: wait for the decision message, then run it again without new
 commits. A new commit needs a new request; stop on `approval_denied`.
 
