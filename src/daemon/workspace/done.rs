@@ -220,17 +220,18 @@ impl Manager {
         Ok(true)
     }
 
-    /// Each workspace's PR gate is held only while that workspace is handled.
-    /// A workspace below a completed one goes by that completion.
+    /// Each space's PR gate is held only while that space is handled. A
+    /// workspace below a completed one goes by that completion.
     pub async fn sweep_completed(&self) -> Result<()> {
-        // A failure in one workspace, such as an unreadable completion of
-        // its ancestor, does not skip the others.
-        let mut failed = crate::daemon::cleanup::WorkspaceFailures::default();
+        // A failure in one space, such as an unreadable completion of its
+        // ancestor, does not skip the others.
+        let mut failed = crate::daemon::cleanup::SpaceFailures::default();
         for listed in self.list_workspaces().await? {
             if let Err(error) = self.sweep_completed_workspace(&listed).await {
                 failed.push(&listed.id, &listed.name, &error);
             }
         }
+        self.sweep_completed_chats(&mut failed).await?;
         failed.into_result()
     }
 

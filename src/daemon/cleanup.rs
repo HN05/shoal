@@ -1,6 +1,8 @@
-//! Automatic removal of idle, clean, fully pushed worktrees, of merged ones,
-//! and of workspaces whose directory was deleted outside Shoal; the user can
-//! remove the idle candidates on request.
+//! Space cleanup: automatic removal of idle spaces, clean and fully pushed
+//! where they have a worktree, of merged ones, and of workspaces whose
+//! directory was deleted outside Shoal; the user can remove the idle
+//! candidates on request. A chat has no worktree, so it meets every condition
+//! on one, and goes once its agent stopped and nothing keeps it.
 use anyhow::{Result, ensure};
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
@@ -22,7 +24,7 @@ use crate::{
         workspace::Manager,
     },
     fsutil::off_runtime,
-    model::{CleanupReason, Workspace},
+    model::{Chat, CleanupReason, Workspace},
     process::DirectoryUsers,
     state::WorkspaceState,
 };
@@ -33,12 +35,12 @@ mod health;
 mod kept_branches;
 mod merged;
 
-pub(crate) use failures::{SweepFailures, WorkspaceFailures};
+pub(crate) use failures::{SpaceFailures, SweepFailures};
 pub(crate) use health::CleanupHealth;
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 
-/// The rules that made a workspace a cleanup candidate, rechecked during removal.
+/// The rules that made a space a cleanup candidate, rechecked during removal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rule {
     /// Clean, unused, every commit pushed or merged, and no assignment state.
@@ -70,17 +72,18 @@ impl Rule {
     }
 }
 
-/// What automatic cleanup must see unchanged before removing a workspace.
+/// What automatic cleanup must see unchanged before removing a space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Snapshot {
     pub rule: Rule,
     /// HEAD and recorded activity, cheap enough to compare on every pass.
     pub signals: u64,
-    /// The metadata of every file in the worktree, which takes a full walk.
+    /// The metadata of every file in the worktree, which takes a full walk;
+    /// a chat has none.
     pub tree: u64,
 }
 
-/// When a workspace was last seen unchanged in a removable state.
+/// When a space was last seen unchanged in a removable state.
 struct Idle {
     snapshot: Snapshot,
     since: Instant,
@@ -244,21 +247,86 @@ async fn is_dir(path: &std::path::Path) -> bool {
     )
 }
 
-/// Each workspace's idle delay comes from its own layered config; a disabled
-/// one gets only deleted-directory cleanup. A failure in one workspace does
-/// not skip the others.
+/// Each space's idle delay comes from its own layered config, a chat's from
+/// its repository's; a disabled workspace gets only deleted-directory
+/// cleanup. A failure in one space does not skip the others.
 async fn sweep_idle(manager: &Manager, timers: &mut Timers, users: &DirectoryUsers) -> Result<()> {
     let workspaces = manager.list_workspaces().await?;
-    timers
-        .idle
-        .retain(|id, _| workspaces.iter().any(|workspace| &workspace.id == id));
-    let mut failed = WorkspaceFailures::default();
+    let chats = manager.chats().await?;
+    timers.idle.retain(|id, _| {
+        workspaces.iter().any(|workspace| &workspace.id == id)
+            || chats.iter().any(|chat| &chat.id == id)
+    });
+    let mut failed = SpaceFailures::default();
     for workspace in workspaces {
         if let Err(error) = sweep_workspace(manager, timers, &workspace, users).await {
             failed.push(&workspace.id, &workspace.name, &error);
         }
     }
+    for chat in chats {
+        if let Err(error) = sweep_chat(manager, timers, &chat).await {
+            failed.push(&chat.id, &chat.name, &error);
+        }
+    }
     failed.into_result()
+}
+
+/// Remove `chat` once idle cleanup has seen it unchanged for its idle delay
+/// and its grace period ended.
+async fn sweep_chat(manager: &Manager, timers: &mut Timers, chat: &Chat) -> Result<()> {
+    let settings = manager.repository_settings(&chat.repository_id).await?;
+    let snapshot = match settings.cleanup.auto.delay() {
+        Some(delay) => (manager.chat_cleanup_snapshot(chat, Rule::Idle).await?)
+            .map(|snapshot| (delay, snapshot)),
+        None => None,
+    };
+    let Some((delay, snapshot)) = snapshot else {
+        timers.idle.remove(&chat.id);
+        return Ok(());
+    };
+    let now = Instant::now();
+    match timers.expired(&chat.id, snapshot.signals, now, delay) {
+        Expiry::Running => return Ok(()),
+        Expiry::Expired(started) if started == snapshot => {}
+        Expiry::Restart | Expiry::Expired(_) => {
+            timers.start(&chat.id, snapshot, now);
+            return Ok(());
+        }
+    }
+    let removal = (manager.remove_unused_chat(chat, snapshot, EventCause::Idle)).await;
+    if matches!(removal, Ok(false)) {
+        return Ok(());
+    }
+    timers.idle.remove(&chat.id);
+    notify_chat_removal(manager, chat, "idle cleanup", removal).await;
+    Ok(())
+}
+
+/// Tell the user that `cleanup` removed `chat`, or why it kept it.
+pub(crate) async fn notify_chat_removal(
+    manager: &Manager,
+    chat: &Chat,
+    cleanup: &str,
+    removal: Result<bool>,
+) {
+    let about = crate::daemon::notifications::About::workspace(&chat.name, &chat.id);
+    let (kind, message) = match removal {
+        Ok(_) => {
+            log!("{cleanup} removed chat {}", chat.name);
+            (
+                NotificationKind::WorkspaceRemoved,
+                format!("chat removed by {cleanup}"),
+            )
+        }
+        Err(error) => {
+            log!("{cleanup} retained chat {}: {error:#}", chat.name);
+            (
+                NotificationKind::CleanupFailed,
+                format!("{cleanup} retained the chat: {error:#}"),
+            )
+        }
+    };
+    manager.notify_about(about, kind, message).await;
 }
 
 async fn sweep_workspace(

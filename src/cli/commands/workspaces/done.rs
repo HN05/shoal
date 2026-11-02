@@ -51,7 +51,7 @@ pub(in crate::cli::commands) struct Done {
 }
 
 /// Stop the workspace's demos unless `keep_demos`, then record completion;
-/// a chat only records it, since it has no cleanup, branch or demos.
+/// a chat only records it, since it has no branch or demos.
 pub(in crate::cli::commands) async fn done(
     ctx: &Context,
     space: Option<String>,
@@ -61,8 +61,8 @@ pub(in crate::cli::commands) async fn done(
     let space = match &selected {
         Selected::Chat(chat) => {
             anyhow::ensure!(
-                !options.cleanup && !options.integrated && !options.keep_demos,
-                "a chat has no cleanup, branch or demos; --cleanup, --integrated and --keep-demos apply to workspaces"
+                !options.integrated && !options.keep_demos,
+                "a chat has no branch or demos; --integrated and --keep-demos apply to workspaces"
             );
             chat.clone()
         }
@@ -83,7 +83,11 @@ pub(in crate::cli::commands) async fn done(
     };
     let completion: Completion = request(&ctx.paths, method).await?;
     let message = match selected {
-        Selected::Chat(_) => "Chat marked done; its agent keeps running.".to_owned(),
+        Selected::Chat(_) if completion.cleanup => {
+            "Chat marked done; cleanup requested. Its agent may stop and the chat may be removed."
+                .to_owned()
+        }
+        Selected::Chat(_) => "Chat marked done; no cleanup requested.".to_owned(),
         Selected::Workspace(_) => done_message(&completion),
     };
     ctx.emit(&message, &completion)?;

@@ -435,6 +435,7 @@ their commits. `shoal stop` keeps the workspace.
 Automatic cleanup removes idle, clean, pushed or landed workspaces after 10 minutes,
 merged workspaces after 4 idle hours whether or not their agent ran `shoal done`,
 and forgets workspaces whose directory you deleted yourself, keeping the branch.
+A chat whose agent stopped goes by the same rules.
 `shoal cleanup` lists what Shoal left behind: those workspaces, kept branches, and
 shared caches nothing is using, with why it keeps the other workspaces. On a terminal
 it opens a picker, where Tab selects several, and removes what you pick.

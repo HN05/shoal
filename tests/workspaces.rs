@@ -21357,16 +21357,17 @@ awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker
 
 #[test]
 fn a_chat_records_its_work_done_and_withdraws_it() {
-    let fixture = Fixture::new();
+    // Kept, so the chat stays to show its completion.
+    let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));
     let (mut agent, chat) = start_test_chat(&fixture, "planning");
     let report = fixture.root.path().join("report.md");
     fs::write(&report, "plan\n").unwrap();
-    // The cleanup options are a workspace's.
-    for flag in ["--cleanup", "--integrated", "--keep-demos"] {
+    // The branch and demo options are a workspace's.
+    for flag in ["--integrated", "--keep-demos"] {
         let output = fixture.run(&["done", "planning", flag]);
         assert!(!output.status.success(), "{flag}: {output:?}");
         assert!(
-            String::from_utf8_lossy(&output.stderr).contains("a chat has no cleanup"),
+            String::from_utf8_lossy(&output.stderr).contains("a chat has no branch or demos"),
             "{output:?}"
         );
     }
@@ -21417,6 +21418,36 @@ fn a_chat_records_its_work_done_and_withdraws_it() {
     assert!(!output.status.success(), "{output:?}");
     agent.kill().unwrap();
     agent.wait().unwrap();
+}
+
+#[test]
+fn completion_cleanup_removes_a_done_chat_with_the_workspaces_below_it() {
+    let fixture = Fixture::new();
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
+    let output = fixture
+        .command()
+        .args(["--json", "add", fixture.repo.to_str().unwrap(), "opened"])
+        .env("SHOAL_CHAT", &chat)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+
+    let completion = fixture.ok(&["done", "planning"]);
+    assert_eq!(completion["cleanup"], true, "{completion}");
+    wait_until("completion cleanup to remove the chat", || {
+        fixture.ok(&["work", "--chats"]) == serde_json::json!([])
+    });
+    // The workspace below it went first, and its agent stopped.
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+    assert!(!agent.wait().unwrap().success());
+    let alerts = fixture.ok(&["alerts", "--all"]);
+    assert!(
+        alerts
+            .to_string()
+            .contains("chat removed by completion cleanup"),
+        "{alerts}"
+    );
 }
 
 #[test]
@@ -26579,15 +26610,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
 #[test]
 fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
     let fixture = Fixture::new();
-    let repository = fixture.ok(&["repo", "ls"])[0].clone();
-    // The sleep stands in for the chat's agent.
-    let mut agent = Command::new("sleep").arg("600").spawn().unwrap();
-    let response = fixture.request(serde_json::json!({"start_chat":{
-        "repository": repository["id"], "name": "planning", "agent": "claude",
-        "pid": agent.id()
-    }}));
-    assert_eq!(response["type"], "chat", "{response}");
-    let chat = response["data"]["id"].as_str().unwrap().to_owned();
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
     // The chat's agent opens a workspace, and a child is split from it.
     let output = fixture
         .command()

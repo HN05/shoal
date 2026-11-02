@@ -118,6 +118,11 @@ when behavior changes, distinguishing decisions from proposals.
   remote in the background, and `shoal repo sync` syncs it at once; commands that
   only read the default branch use what the checkout has. Syncing never pushes or
   moves workspace branches; agents update their branch from it with plain Git.
+- Cleanup is space cleanup: chats follow the workspace rules below, with their
+  repository's config, meeting every condition on a worktree; a running agent
+  is use, and a restore that waits to run its agent keeps a chat as a queued
+  launch keeps a workspace. A chat's agent exiting stops the chat, which ends
+  only by removal.
 - `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,
   240 idle minutes, persisted across restarts) removes merged, unused workspaces

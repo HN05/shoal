@@ -1,11 +1,12 @@
 //! A chat's `shoal done`: it records the chat's work as finished, while its
-//! agent and session keep running. A chat has no cleanup and no parent, so
-//! completion only tells the user.
+//! agent and session keep running until completion cleanup, when requested,
+//! removes the chat as it removes a workspace.
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
     daemon::{
+        cleanup::{SpaceFailures, notify_chat_removal},
         notifications::{About, NotificationKind},
         questions,
         workspace::{Manager, done::push_closed_and_results},
@@ -18,15 +19,19 @@ impl Manager {
     /// Record the running chat `selector` names as done at its checkout's
     /// HEAD, with copies of the files `results` handed back, attached by
     /// `attacher`; its open questions close, as a finished workspace's do.
+    /// `cleanup` requests cleanup even when `[cleanup.done] enabled` is
+    /// false.
     pub async fn mark_chat_done(
         &self,
         selector: &str,
+        cleanup: bool,
         results: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Completion> {
         workspace_files::check_results(&results)?;
         let chat = self.done_chat(selector).await?;
         let _guard = self.gates.lock_prs([&chat.id]).await;
+        let settings = self.repository_settings(&chat.repository_id).await?;
         let checkout = self.repository(&chat.repository_id).await?;
         let (head, _) = crate::git::head_and_branch(&checkout.path)
             .await
@@ -35,7 +40,7 @@ impl Manager {
         let results = self.keep_results(&space, results, attacher).await?;
         let completion = Completion {
             head,
-            cleanup: false,
+            cleanup: cleanup || settings.cleanup.done.enabled,
             integrated: false,
             results,
             error: None,
@@ -47,11 +52,48 @@ impl Manager {
         if !closed.is_empty() {
             self.signals.question_changed();
         }
-        let mut notice = String::from("chat finished");
+        let mut notice = String::from(match completion.cleanup {
+            true => "chat finished; cleanup requested",
+            false => "chat finished; no cleanup requested",
+        });
         push_closed_and_results(&mut notice, &chat.name, &completion, &closed);
         let about = About::workspace(&chat.name, &chat.id);
         (self.notify_about(about, NotificationKind::WorkspaceDone, notice)).await;
+        self.signals.wake_cleanup();
         Ok(completion)
+    }
+
+    /// Remove each chat whose completion requested cleanup once its grace
+    /// period ends, unless something keeps it. A PR it watches does not: a
+    /// chat has no branch whose work an unmerged PR would keep. A failure in
+    /// one chat does not skip the others.
+    pub(crate) async fn sweep_completed_chats(&self, failed: &mut SpaceFailures) -> Result<()> {
+        for listed in self.chats().await? {
+            if let Err(error) = self.sweep_completed_chat(&listed).await {
+                failed.push(&listed.id, &listed.name, &error);
+            }
+        }
+        Ok(())
+    }
+
+    /// Remove `listed` for its completion, under its PR gate, which a
+    /// completion changes under.
+    async fn sweep_completed_chat(&self, listed: &Chat) -> Result<()> {
+        let _guard = self.gates.lock_prs([&listed.id]).await;
+        let Some(chat) = self.recorded_chat(&listed.id).await? else {
+            return Ok(());
+        };
+        let Some(completion) = chat.completion.clone() else {
+            return Ok(());
+        };
+        if !completion.cleanup || self.keep_reason(&chat.id).await?.is_some() {
+            return Ok(());
+        }
+        let removal = self.remove_completed_chat(&chat, &completion).await;
+        if !matches!(removal, Ok(false)) {
+            notify_chat_removal(self, &chat, "completion cleanup", removal).await;
+        }
+        Ok(())
     }
 
     /// Withdraw the completion the running chat `selector` names recorded.

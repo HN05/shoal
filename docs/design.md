@@ -1835,11 +1835,15 @@ process before signalling it, so a later stop and the check before a restore or
 discard follow the lineage of what it signalled after an interrupted stop
 forgot them. A stop that fails leaves it running only while its agent does: a
 stop before a shutdown or a signal's saves it to come back on its own, and `shoal daemon stop`
-for `shoal resume`. A saved chat keeps its record, and with it its name, files,
-messages, workspaces and temporary directory, until a restore runs it again in
-a new process or a discard ends it. `shoal resume` resolves each target to a
-saved chat or a workspace in one lookup over the shared namespace, so its
-picker, `--all` and a list of names act on both. Restores and discards wait for a save
+for `shoal resume`, where an agent that exits leaves it too. A stopped chat keeps its record, and with it its name, links, files,
+messages, questions, workspaces and temporary directory, until a restore runs it again in
+a new process. Only removal ends a chat: `shoal rm`, `shoal resume --discard`
+for one with no workspace below it, or space cleanup, which treats a chat as a
+workspace whose worktree is always clean, pushed and merged, its running agent
+as use and a restore waiting to run as a queued agent, and takes the idle time
+of merged cleanup from when its agent stopped. `shoal resume` resolves each target to a
+stopped chat or a workspace in one lookup over the shared namespace, so its
+picker, `--all` and a list of names act on both. Restores and removals wait for a save
 under way and refuse while a process the chat owns still runs, since two agents
 would write one session and a removal would delete files in use, and a restore
 whose agent does not start leaves the chat stopped and tells the user, who may
@@ -2107,7 +2111,9 @@ with `--link`, and its item actions default to its linked items.
 A chat holds links as a workspace does: the link tables name the space, a
 workspace or chat, with IDs from their shared namespace, and go with it. Its
 assigned items neither complete a chat nor clean it up: only its own `done`
-records completion, and a chat has no cleanup; and
+records completion, and a watched PR keeps a chat from idle cleanup but not a
+done one from completion cleanup, since a chat has no branch whose work an
+unmerged PR would keep; and
 the activity Shoal polls for them waits on the chat's own cursor, which the
 chat's hooks deliver with its messages, waking its agent; a watch in the chat
 and those hooks share one delivery, so the newest takes what is pending.
@@ -2192,10 +2198,11 @@ among the space's files, which the user already sees and Quay may show, until
 `shoal files rm` or the retention removes them. The alert or question names them by their records rather than by path,
 so a file `shoal files rm` deleted drops out and a moved repository directory
 moves them, and a coordinating agent that receives the alert or question
-instead receives their paths as the message's attached files. A chat's `done` records its completion on the chat
-and nothing more: it has no cleanup to request, no branch another could
-integrate and no parent to tell, so it notifies the user and its agent keeps
-running, with the done state shown until `--undo` withdraws it. A workspace or a chat is a space: the user returns to both by name, from
+instead receives their paths as the message's attached files. A chat's `done` records its completion on the chat as a
+workspace's does, with cleanup by the same setting and override, but no branch
+another could integrate and no parent to tell, so it notifies the user and its
+agent keeps running until completion cleanup removes the chat after the grace
+period, with the done state shown until `--undo` withdraws it. A workspace or a chat is a space: the user returns to both by name, from
 one namespace, so what applies to both is named for
 the space, and the flag that selects one is `--space`. A chat owns attached
 files as a workspace does, since its

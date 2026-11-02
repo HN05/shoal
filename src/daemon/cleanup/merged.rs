@@ -1,7 +1,8 @@
-//! Removal of workspaces whose branch merged into the default branch once
-//! nothing has used them for the configured idle period, whether or not their
+//! Removal of spaces whose work merged into the default branch once nothing
+//! has used them for the configured idle period, whether or not their
 //! assignment was marked done. Idle time comes from recorded activity and file
-//! change times, so it survives daemon restarts.
+//! change times, so it survives daemon restarts. A chat has no branch, so it
+//! goes once its agent has been stopped for that period.
 use std::{
     collections::HashMap,
     fs,
@@ -15,7 +16,7 @@ use tokio::time::Instant;
 use super::{Rule, Snapshot, Tree, change_time};
 use crate::{
     daemon::{events::EventCause, log, notifications::NotificationKind, workspace::Manager},
-    model::Workspace,
+    model::{Chat, Workspace},
     process::DirectoryUsers,
     state::WorkspaceState,
     time::unix_seconds,
@@ -60,15 +61,18 @@ impl State {
         self.changed.insert(id.to_owned(), changed.min(now));
     }
 
-    fn forget_removed(&mut self, workspaces: &[Workspace]) {
-        let present = |id: &String| workspaces.iter().any(|workspace| &workspace.id == id);
+    fn forget_removed(&mut self, workspaces: &[Workspace], chats: &[Chat]) {
+        let present = |id: &String| {
+            workspaces.iter().any(|workspace| &workspace.id == id)
+                || chats.iter().any(|chat| &chat.id == id)
+        };
         self.retained.retain(|id, _| present(id));
         self.changed.retain(|id, _| present(id));
     }
 }
 
 /// One pass over every ready workspace, reading the processes in each from
-/// `users`; a failure in one does not skip the others.
+/// `users`, and every chat; a failure in one does not skip the others.
 pub async fn sweep(manager: &Manager, state: &mut State, users: &DirectoryUsers) -> Result<()> {
     sweep_at(manager, state, unix_seconds(), users).await
 }
@@ -81,8 +85,9 @@ async fn sweep_at(
     users: &DirectoryUsers,
 ) -> Result<()> {
     let workspaces = manager.list_workspaces().await?;
-    state.forget_removed(&workspaces);
-    let mut failed = super::WorkspaceFailures::default();
+    let chats = manager.chats().await?;
+    state.forget_removed(&workspaces, &chats);
+    let mut failed = super::SpaceFailures::default();
     for workspace in workspaces {
         if workspace.state != WorkspaceState::Ready || manager.sweep_skips(&workspace.path).await {
             continue;
@@ -91,7 +96,49 @@ async fn sweep_at(
             failed.push(&workspace.id, &workspace.name, &error);
         }
     }
+    for chat in chats {
+        if let Err(error) = sweep_chat(manager, state, &chat, now).await {
+            failed.push(&chat.id, &chat.name, &error);
+        }
+    }
     failed.into_result()
+}
+
+/// Remove `chat` once its agent has been stopped for the merged idle period
+/// and nothing keeps it.
+async fn sweep_chat(manager: &Manager, state: &mut State, chat: &Chat, now: u64) -> Result<()> {
+    let settings = manager.repository_settings(&chat.repository_id).await?;
+    let Some(delay) = settings.cleanup.merged.delay() else {
+        return Ok(());
+    };
+    let idle = (manager.chat_stopped_at(&chat.id).await?)
+        .is_some_and(|stopped_at| stopped_at <= now.saturating_sub(delay.as_secs()));
+    if !idle {
+        return Ok(());
+    }
+    let Some(snapshot) = manager
+        .chat_cleanup_snapshot(chat, super::Rule::Merged)
+        .await?
+    else {
+        return Ok(());
+    };
+    if state.waits(&chat.id, snapshot.signals) {
+        return Ok(());
+    }
+    let removal = (manager.remove_unused_chat(chat, snapshot, EventCause::Merged)).await;
+    match &removal {
+        Ok(false) => return Ok(()),
+        Ok(true) => {
+            state.retained.remove(&chat.id);
+        }
+        Err(_) => {
+            state
+                .retained
+                .insert(chat.id.clone(), (snapshot.signals, Instant::now()));
+        }
+    }
+    super::notify_chat_removal(manager, chat, "merged cleanup", removal).await;
+    Ok(())
 }
 
 async fn sweep_workspace(

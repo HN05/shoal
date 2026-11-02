@@ -267,6 +267,22 @@ impl Manager {
             .collect())
     }
 
+    /// When the chat `id`'s agent stopped, in Unix seconds, while it is
+    /// stopped.
+    pub(crate) async fn chat_stopped_at(&self, id: &str) -> Result<Option<u64>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                let stopped_at: Option<Option<i64>> = db
+                    .query_row("SELECT stopped_at FROM chats WHERE id=?1", [id], |row| {
+                        row.get(0)
+                    })
+                    .optional()?;
+                Ok(stopped_at.flatten().map(|at| at.max(0) as u64))
+            })
+            .await
+    }
+
     /// Stop the running chats whose process has exited, other than those a
     /// stop is under way for, which stop once it finishes.
     pub(crate) async fn stop_finished_chats(&self) -> Result<()> {

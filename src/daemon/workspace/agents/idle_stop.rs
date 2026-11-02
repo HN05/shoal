@@ -34,7 +34,7 @@ impl Manager {
         let turns = self.reported_turns().await?;
         let now = i64::try_from(crate::time::unix_seconds())?;
         let mut chosen = HashMap::new();
-        let mut failed = crate::daemon::cleanup::WorkspaceFailures::default();
+        let mut failed = crate::daemon::cleanup::SpaceFailures::default();
         for candidate in self.idle_candidates(&turns, now).await {
             match self.idle_stop(&candidate).await {
                 Ok(Some(protection)) => {

@@ -24,8 +24,7 @@ impl Manager {
 
     /// Record the work of the workspace or running chat `selector` names as
     /// done, as [`Self::mark_done`] or [`Self::mark_chat_done`] does; only a
-    /// workspace has the cleanup and branch `cleanup` and `integrated` are
-    /// about.
+    /// workspace has the branch `integrated` is about.
     pub async fn mark_space_done(
         &self,
         selector: &str,
@@ -40,10 +39,11 @@ impl Manager {
             }
             PresentSpace::Chat(chat) => {
                 ensure!(
-                    !cleanup && !integrated,
-                    "a chat has no cleanup or branch; cleanup and integrated apply to workspaces"
+                    !integrated,
+                    "a chat has no branch; integrated applies to workspaces"
                 );
-                self.mark_chat_done(&chat.id, results, attacher).await
+                self.mark_chat_done(&chat.id, cleanup, results, attacher)
+                    .await
             }
         }
     }

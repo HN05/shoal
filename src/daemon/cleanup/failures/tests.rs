@@ -6,7 +6,7 @@ fn steps_failing_in_workspaces_are_recorded_for_each_workspace() {
     failed.step("checkpoint expiry", Ok(()));
     failed.step("result expiry", Err(anyhow::anyhow!("disk is full")));
     for step in ["idle agents", "merged cleanup"] {
-        let mut workspaces = WorkspaceFailures::default();
+        let mut workspaces = SpaceFailures::default();
         workspaces.push("id-a", "a", &anyhow::anyhow!("{step} failed in a"));
         if step == "idle agents" {
             workspaces.push("id-b", "b", &anyhow::anyhow!("bad config"));
@@ -19,11 +19,11 @@ fn steps_failing_in_workspaces_are_recorded_for_each_workspace() {
         Some("result expiry: disk is full")
     );
     assert_eq!(
-        failed.workspace("id-a").as_deref(),
+        failed.space("id-a").as_deref(),
         Some("idle agents: idle agents failed in a; merged cleanup: merged cleanup failed in a")
     );
     assert_eq!(
-        failed.workspace("id-b").as_deref(),
+        failed.space("id-b").as_deref(),
         Some("idle agents: bad config")
     );
     assert_eq!(
@@ -37,6 +37,6 @@ fn steps_failing_in_workspaces_are_recorded_for_each_workspace() {
 #[test]
 fn a_pass_without_failures_succeeds() {
     let mut failed = SweepFailures::default();
-    failed.step("idle cleanup", WorkspaceFailures::default().into_result());
+    failed.step("idle cleanup", SpaceFailures::default().into_result());
     assert!(failed.into_result().is_ok());
 }

@@ -190,7 +190,7 @@ impl Health {
             failure
         });
         let mut previous = std::mem::take(&mut self.workspaces);
-        for (id, name, error) in failures.workspaces() {
+        for (id, name, error) in failures.spaces() {
             let failure = Failure::continued(previous.remove(id), now, error);
             if !failure.notified {
                 unreported.push(Unreported {

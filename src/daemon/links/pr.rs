@@ -236,7 +236,7 @@ impl Manager {
     /// are held only while that workspace is handled. A failure in one
     /// workspace does not skip the others.
     pub async fn sweep_prs(&self) -> Result<()> {
-        let mut failed = crate::daemon::cleanup::WorkspaceFailures::default();
+        let mut failed = crate::daemon::cleanup::SpaceFailures::default();
         for listed in self.list_workspaces().await? {
             if let Err(error) = self.sweep_listed_prs(&listed).await {
                 failed.push(&listed.id, &listed.name, &error);

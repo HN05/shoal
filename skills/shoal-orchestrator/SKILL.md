@@ -134,8 +134,11 @@ your watch then follows. `shoal review run` from the chat reviews your linked
 PR in the workspace that owns its branch, and `shoal review list` lists your
 linked PRs' reviews.
 When the work you were given in the chat is finished, run `shoal done`, with
-`--attach FILE` for a report; your agent keeps running, and the user sees the
-chat as finished until `shoal done --undo`.
+`--attach FILE` for a report; the user sees the chat as finished until
+`shoal done --undo`, and unless cleanup is off, Shoal removes the chat after the
+grace period, with the workspaces below it, stopping your agent. A chat stays
+after its agent exits until it is removed: the user continues it with
+`shoal resume <chat>`.
 
 To ask the user something in a chat, run `shoal questions ask --in-chat`, then
 write the question as your final message and end your turn: it also reaches

@@ -1744,11 +1744,12 @@ stops when it exits: it waits for `shoal resume <chat>`, as does one
 `chat_restore_failed` notification. A chat running when the daemon stops for a
 shutdown, a logout or a signal is saved and stopped, and comes back on its own
 once the daemon runs again: under its name, in a background place where a
-restored agent opens, continuing its session. One `shoal daemon stop` saved
-waits for `shoal resume <chat>`, as does one whose restore failed, which records
-a `chat_restore_failed` notification. A saved chat keeps its files, messages,
-workspaces and `TMPDIR`, `shoal work` lists it as `stopped`, and
-`shoal resume <chat> --discard` ends it. Workspaces and chats share one set of names across
+restored agent opens, continuing its session. A stopped chat keeps its links,
+files, messages, questions, workspaces and `TMPDIR`, and `shoal work` lists it
+as `stopped`. A chat ends only when it is removed: by `shoal rm <chat>`, which
+first removes the workspaces below it and stops its agent, by
+`shoal resume <chat> --discard`, or by [cleanup](#automatic-cleanup), as a workspace is.
+Workspaces and chats share one set of names across
 repositories: a chat cannot take a workspace's name or a name an unfinished
 rename reserves, and a workspace cannot be created or renamed to a chat's name.
 The name frees once the chat is removed.
@@ -3034,9 +3035,11 @@ merged workspace nobody uses is removed by [merged cleanup](#merged-workspaces)
 whether or not its agent ran `done`.
 
 A [chat](#chats), named or the one this runs in, records that its work is
-finished at its checkout's HEAD, and its agent and session keep running. It has
-no cleanup, branch or demos, so `--cleanup`, `--integrated` and `--keep-demos`
-are refused. `--attach` hands files back into the chat's attached files, its
+finished at its checkout's HEAD, and its agent and session keep running until
+completion cleanup, requested as for a workspace, removes the chat and the
+workspaces below it after the grace period, stopping its agent, whatever PRs it
+watches. It has no branch or demos, so `--integrated` and
+`--keep-demos` are refused. `--attach` hands files back into the chat's attached files, its
 open questions close, and the user is notified, since a chat has no parent. Its
 closed linked items stop being polled, as a finished workspace's do. `work
 --chats` shows the chat as `finished`, `shoal inbox` and the menu list it, and
@@ -3825,9 +3828,11 @@ Linking an issue records its title for workspace lists; when the forge cannot be
 read, the link is recorded without one and a warning names the error.
 Assigned PRs accumulate without duplicates and must name the recorded workspace
 branch. Assigned items suppress idle cleanup.
-A chat links items the same way in its repository's registered checkout. It has
-no completion or cleanup, so its assigned items drive neither, and its assigned PRs
-name no branch; the activity Shoal polls for its items reaches its agent with its
+A chat links items the same way in its repository's registered checkout. Its
+assigned items neither complete nor remove it: only its own `done` records
+completion, an assigned issue or a watched PR keeps it from idle cleanup as they
+keep a workspace, and its assigned PRs name no branch, so they do not keep a done
+chat from completion cleanup; the activity Shoal polls for its items reaches its agent with its
 messages, through the chat's hooks, and wakes it as they do. Its links go with it
 when it is removed. `shoal plan` assigns its chat the issue it plans.
 
@@ -4077,6 +4082,14 @@ it and keeps the agent stopped, so `shoal work restore` brings it back for
 `shoal resume`.
 Sweeps run about every 30 seconds; a failed step does not skip the others, and
 timers reset on restart. The daemon needs `lsof` on PATH.
+
+[Chats](#chats) follow the same rules, with their repository's settings and
+none of the conditions on a worktree: a chat goes once its agent stopped, with
+the workspaces below it, unless a restore waits to run it, a hold, an open
+question, or for idle cleanup a completion, a linked issue or a watched PR
+keeps it. Merged cleanup removes one whose agent has been stopped for its
+`idle_minutes`, and cleanup after `shoal done` removes a done chat, stopping its
+agent.
 
 #### Grace period
 

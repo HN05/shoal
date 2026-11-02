@@ -41,7 +41,10 @@ instead of the PR delivery guidance below.
   its PR says why it cannot apply to chats. A space is a workspace or a chat:
   flag a flag, text or name that says workspace for something a chat also
   takes.
-- Safety of user work: removal goes through the one shared path, preserves
+- Safety of user work: removal of any space goes through the one shared path,
+  which removes the workspaces below it first and never lets one outlive its
+  parent; chats follow the workspace cleanup rules with none of the worktree
+  conditions, and a chat whose agent exits stops rather than ends. It preserves
   work and leases on failure, never adopts moved or replaced worktrees, stops
   every verified process carrying the workspace identity, and never signals a
   process whose recorded identity was not verified. Herdr

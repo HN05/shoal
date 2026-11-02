@@ -1,25 +1,25 @@
-//! What failed in a cleanup pass, each failure in the workspace it concerns
+//! What failed in a cleanup pass, each failure in the space it concerns
 //! where it concerns one.
 use anyhow::Result;
 use std::{collections::BTreeMap, fmt};
 
-/// A step's failures in the workspaces they concern. A step returns it as
-/// its error so that the pass records each failure for its workspace rather
-/// than for every workspace.
+/// A step's failures in the spaces they concern. A step returns it as
+/// its error so that the pass records each failure for its space rather
+/// than for every space.
 #[derive(Debug, Default)]
-pub(crate) struct WorkspaceFailures(Vec<WorkspaceFailure>);
+pub(crate) struct SpaceFailures(Vec<SpaceFailure>);
 
 #[derive(Debug)]
-struct WorkspaceFailure {
+struct SpaceFailure {
     id: String,
     name: String,
     error: String,
 }
 
-impl WorkspaceFailures {
-    /// Record that the step failed in the workspace `id`, named `name`.
+impl SpaceFailures {
+    /// Record that the step failed in the space `id`, named `name`.
     pub(crate) fn push(&mut self, id: &str, name: &str, error: &anyhow::Error) {
-        self.0.push(WorkspaceFailure {
+        self.0.push(SpaceFailure {
             id: id.to_owned(),
             name: name.to_owned(),
             error: format!("{error:#}"),
@@ -35,7 +35,7 @@ impl WorkspaceFailures {
     }
 }
 
-impl fmt::Display for WorkspaceFailures {
+impl fmt::Display for SpaceFailures {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let failures: Vec<_> = (self.0.iter())
             .map(|failure| format!("{}: {}", failure.name, failure.error))
@@ -44,18 +44,18 @@ impl fmt::Display for WorkspaceFailures {
     }
 }
 
-impl std::error::Error for WorkspaceFailures {}
+impl std::error::Error for SpaceFailures {}
 
-/// The failed steps of one pass: those that concern no workspace, and each
-/// workspace's own.
+/// The failed steps of one pass: those that concern no space, and each
+/// space's own.
 #[derive(Debug, Default)]
 pub struct SweepFailures {
     general: Vec<String>,
-    /// By workspace ID.
-    workspaces: BTreeMap<String, Failed>,
+    /// By space ID.
+    spaces: BTreeMap<String, Failed>,
 }
 
-/// A workspace's failed steps in one pass.
+/// A space's failed steps in one pass.
 #[derive(Debug)]
 struct Failed {
     name: String,
@@ -68,10 +68,10 @@ impl SweepFailures {
         let Err(error) = result else {
             return;
         };
-        match error.downcast::<WorkspaceFailures>() {
+        match error.downcast::<SpaceFailures>() {
             Ok(failures) => {
                 for failure in failures.0 {
-                    let failed = self.workspaces.entry(failure.id).or_insert(Failed {
+                    let failed = self.spaces.entry(failure.id).or_insert(Failed {
                         name: failure.name,
                         errors: Vec::new(),
                     });
@@ -84,29 +84,27 @@ impl SweepFailures {
 
     /// Fails with the recorded failures, if there are any.
     pub(super) fn into_result(self) -> Result<(), Self> {
-        match self.general.is_empty() && self.workspaces.is_empty() {
+        match self.general.is_empty() && self.spaces.is_empty() {
             true => Ok(()),
             false => Err(self),
         }
     }
 
-    /// The failures that concern no workspace.
+    /// The failures that concern no space.
     pub(super) fn general(&self) -> Option<String> {
         (!self.general.is_empty()).then(|| self.general.join("; "))
     }
 
-    /// The ID, name and failures of each workspace with failures.
-    pub(super) fn workspaces(&self) -> impl Iterator<Item = (&str, &str, String)> {
-        (self.workspaces.iter())
+    /// The ID, name and failures of each space with failures.
+    pub(super) fn spaces(&self) -> impl Iterator<Item = (&str, &str, String)> {
+        (self.spaces.iter())
             .map(|(id, failed)| (id.as_str(), failed.name.as_str(), failed.errors.join("; ")))
     }
 
-    /// The failures of the workspace `id`.
+    /// The failures of the space `id`.
     #[cfg(test)]
-    pub(super) fn workspace(&self, id: &str) -> Option<String> {
-        self.workspaces
-            .get(id)
-            .map(|failed| failed.errors.join("; "))
+    pub(super) fn space(&self, id: &str) -> Option<String> {
+        self.spaces.get(id).map(|failed| failed.errors.join("; "))
     }
 }
 
@@ -114,7 +112,7 @@ impl fmt::Display for SweepFailures {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let failures: Vec<_> = (self.general.iter().cloned())
             .chain(
-                self.workspaces()
+                self.spaces()
                     .map(|(_, name, errors)| format!("{name}: {errors}")),
             )
             .collect();

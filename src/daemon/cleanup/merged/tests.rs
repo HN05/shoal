@@ -515,3 +515,44 @@ async fn a_future_modification_time_defers_walks_no_later_than_the_walk() {
         .unwrap();
     assert_eq!(state.changed[&f.workspace.id], now);
 }
+
+#[tokio::test]
+async fn merged_cleanup_removes_a_chat_stopped_for_its_idle_period() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let mut state = State::default();
+    let now = unix_seconds();
+    // Running, it is in use.
+    sweep_at(&manager, &mut state, now + 300 * HOUR, &Default::default())
+        .await
+        .unwrap();
+    assert_eq!(manager.chats().await.unwrap().len(), 1);
+    process.kill();
+    manager.stop_finished_chats().await.unwrap();
+    // Stopped just now, it is not idle yet.
+    sweep_at(&manager, &mut state, now, &Default::default())
+        .await
+        .unwrap();
+    assert_eq!(manager.chats().await.unwrap().len(), 1);
+    sweep_at(&manager, &mut state, now + 5 * HOUR, &Default::default())
+        .await
+        .unwrap();
+    assert!(manager.chats().await.unwrap().is_empty());
+}

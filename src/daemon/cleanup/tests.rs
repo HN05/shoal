@@ -181,7 +181,7 @@ async fn failed_step_does_not_skip_later_steps_and_is_named() {
     );
     let failed = sweep(&manager, &mut timers).await.unwrap_err();
     assert_eq!(failed.general(), None);
-    let error = failed.workspace(&done.id).unwrap();
+    let error = failed.space(&done.id).unwrap();
     assert!(
         error.starts_with("completion cleanup: ") && error.contains("disk is full"),
         "{error}"
@@ -1112,4 +1112,166 @@ async fn pr_cleanup_passes_over_a_stacked_workspace_it_removed_earlier() {
     manager.sweep_prs().await.unwrap();
 
     assert!(!stacked.path.exists());
+}
+
+/// A chat with a workspace below it, whose agent `process` runs.
+async fn chat_with_workspace(
+    temp: &tempfile::TempDir,
+    manager: &Manager,
+    process: &crate::test_support::ProcessGroup,
+) -> (crate::model::Chat, Workspace) {
+    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let opened = manager
+        .create_workspace_for_chat(
+            repo.id.into(),
+            "opened".into(),
+            None,
+            None,
+            None,
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
+    (chat, opened)
+}
+
+#[tokio::test]
+async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    // A running chat is in use.
+    assert_eq!(
+        manager
+            .chat_cleanup_snapshot(&chat, Rule::Idle)
+            .await
+            .unwrap(),
+        None
+    );
+    process.kill();
+    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let snapshot = (manager.chat_cleanup_snapshot(&stopped, Rule::Idle))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snapshot.tree, 0);
+    let mut timers = Timers::default();
+    timers.idle.insert(
+        chat.id.clone(),
+        Idle {
+            snapshot,
+            since: Instant::now() - Duration::from_secs(3600),
+        },
+    );
+    sweep(&manager, &mut timers).await.unwrap();
+    assert!(manager.chats().await.unwrap().is_empty());
+    assert!(manager.workspace(&opened.id).await.is_err());
+    assert!(!opened.path.exists());
+}
+
+#[tokio::test]
+async fn a_chat_waiting_for_its_restore_or_with_assignment_state_is_kept_from_idle_cleanup() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (chat, _) = chat_with_workspace(&temp, &manager, &process).await;
+    manager
+        .mark_chat_done(&chat.id, false, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+    // A save to come back on its own keeps it, as a queued agent does.
+    manager
+        .save_chats(crate::state::ChatRestore::Automatic)
+        .await;
+    let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    assert_eq!(
+        manager
+            .chat_cleanup_snapshot(&saved, Rule::Idle)
+            .await
+            .unwrap(),
+        None
+    );
+    // Waiting for `shoal resume`, its completion still keeps it from idle
+    // cleanup, which merged cleanup disregards.
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE chats SET restore='resume' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    assert_eq!(
+        manager
+            .chat_cleanup_snapshot(&stopped, Rule::Idle)
+            .await
+            .unwrap(),
+        None
+    );
+    assert!(
+        manager
+            .chat_cleanup_snapshot(&stopped, Rule::Merged)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    let record = serde_json::json!({
+        "kind": "watch",
+        "urls": ["https://github.com/team/repo/pull/1"],
+        "error": null,
+    })
+    .to_string();
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
+                rusqlite::params![id, record],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(manager.pr_registration(&chat.id).await.unwrap().is_some());
+    manager
+        .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+
+    manager.sweep_completed().await.unwrap();
+    assert!(manager.chats().await.unwrap().is_empty());
+    assert!(manager.workspace(&opened.id).await.is_err());
+    assert!(!process_wait(process).success());
+}
+
+/// How `process` exited.
+fn process_wait(mut process: crate::test_support::ProcessGroup) -> std::process::ExitStatus {
+    process.wait().unwrap()
 }

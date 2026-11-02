@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::cleanup::WorkspaceFailures;
+use crate::daemon::cleanup::SpaceFailures;
 
 /// A pass whose `step` failed with `error`, in the workspace `id` named
 /// after it when one is given.
@@ -7,7 +7,7 @@ fn failed(step: &str, workspace: Option<&str>, error: &str) -> Result<(), SweepF
     let error = anyhow::anyhow!("{error}");
     let result = match workspace {
         Some(id) => {
-            let mut failures = WorkspaceFailures::default();
+            let mut failures = SpaceFailures::default();
             failures.push(id, id, &error);
             failures.into_result()
         }
@@ -116,7 +116,7 @@ async fn failing_passes_notify_once_and_show_where_they_belong() {
     }
     let (failing, other) = (&workspaces[0], &workspaces[1]);
     let pass = || {
-        let mut failures = WorkspaceFailures::default();
+        let mut failures = SpaceFailures::default();
         failures.push(&failing.id, &failing.name, &anyhow::anyhow!("bad config"));
         let mut failed = SweepFailures::default();
         failed.step("result expiry", Err(anyhow::anyhow!("disk is full")));
