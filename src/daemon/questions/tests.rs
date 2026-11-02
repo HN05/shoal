@@ -931,4 +931,11 @@ async fn files_sent_with_a_question_are_listed_with_it_and_its_notification() {
         .await
         .unwrap_err();
     assert!(error.to_string().contains("different details"), "{error:#}");
+    // The refused question's copies go, and the asked one's stay.
+    let after = manager.attached_files(&workspace.name).await.unwrap();
+    assert_eq!(after, attached);
+    let workspace_results = asked.files[0].path.ancestors().nth(3).unwrap();
+    let messages = std::fs::read_dir(workspace_results).unwrap().count();
+    assert_eq!(messages, 1, "{workspace_results:?}");
+    assert!(asked.files.iter().all(|file| file.path.exists()));
 }

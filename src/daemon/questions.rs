@@ -592,17 +592,17 @@ impl Manager {
     ) -> Result<Question> {
         ask.validate()?;
         let space = self.present_space(selector).await?;
-        let files = (self.keep_sent(
+        let question = ask.question.clone();
+        let asked = (self.send_with_files(
             &space.clone().into(),
             FileSource::Question,
-            &ask.question,
+            &question,
             attachments,
             attacher,
+            |files| self.record_question(space, Asking { ask, files }, Asker::Command),
         ))
         .await?;
-        self.record_question(space, Asking { ask, files }, Asker::Command)
-            .await?
-            .context("a question asked on the command line is always recorded")
+        asked.context("a question asked on the command line is always recorded")
     }
 
     /// Record the question in its turn's final `message` when the agent

@@ -91,6 +91,20 @@ pub(crate) async fn keep(
     tokio::task::spawn_blocking(move || layout.keep(&id, &message, &files)).await?
 }
 
+/// Copies of `files` that the workspace or chat `space_id` hands the user
+/// with `message`, apart from its other files since they outlive its
+/// removal, made off the async runtime. Callers hold the gate of the
+/// repository's attached files.
+async fn keep_for_user(
+    layout: Layout,
+    space_id: &str,
+    message: &str,
+    files: Vec<NewFile>,
+) -> Result<Kept> {
+    let (id, message) = (space_id.to_owned(), message.to_owned());
+    tokio::task::spawn_blocking(move || layout.keep_results(&id, &message, &files)).await?
+}
+
 /// Delete the copies of files that were refused, such as ones for a
 /// workspace removed while they were made. Failure only logs: the workspace's
 /// removal deletes whatever is left.
@@ -220,27 +234,51 @@ impl Manager {
             .collect())
     }
 
-    /// Copies of the files `files` that `space` sends the user with
-    /// `message`, an alert or a question, recorded as coming from `source`
-    /// and attached by `attacher`, which outlive its removal.
-    pub(crate) async fn keep_sent(
+    /// Send the user `message`, an alert or a question, from `space` with
+    /// `send`, passing it copies of the files `files` recorded as coming from
+    /// `source` and attached by `attacher`, which outlive its removal. When
+    /// `send` refuses the message, the copies and records made for it go;
+    /// those an identical earlier message made stay with it.
+    pub(crate) async fn send_with_files<T, Send, Sent>(
         &self,
         space: &Space,
         source: FileSource,
         message: &str,
         files: Vec<NewFile>,
         attacher: &Attacher,
-    ) -> Result<Vec<SentFile>> {
-        let records = (self.keep_for_user(space, source, message, files, attacher)).await?;
-        Ok(records
-            .into_iter()
-            .map(|file| SentFile {
-                id: file.id,
-                name: file.name,
-                title: file.title,
-                path: file.path,
-            })
-            .collect())
+        send: Send,
+    ) -> Result<T>
+    where
+        Send: FnOnce(Vec<SentFile>) -> Sent,
+        Sent: Future<Output = Result<T>>,
+    {
+        if files.is_empty() {
+            return send(Vec::new()).await;
+        }
+        let (layout, _files) = self.lock_files(space).await?;
+        let kept = keep_for_user(layout, &space.id, message, files).await?;
+        let records = self
+            .record_or_discard(&space.id, source, attacher, kept.clone())
+            .await?;
+        let sent = send(records.iter().map(SentFile::from).collect()).await;
+        if sent.is_err() {
+            self.forget_unsent(kept, records).await;
+        }
+        sent
+    }
+
+    /// Delete the copies `kept` and their records `records` once the message
+    /// they were made for was refused, unless the copies were reused.
+    /// Failure only logs, as the message's refusal is what its sender hears.
+    async fn forget_unsent(&self, kept: Kept, records: Vec<AttachedFile>) {
+        if kept.reused() {
+            return;
+        }
+        let ids: Vec<i64> = records.iter().map(|file| file.id).collect();
+        if let Err(error) = self.store.run(move |db| records::forget(db, &ids)).await {
+            crate::daemon::log!("records of refused files not deleted: {error:#}");
+        }
+        discard(kept).await;
     }
 
     /// Copies of the files `files` that `space` hands the user with
@@ -259,9 +297,7 @@ impl Manager {
             return Ok(Vec::new());
         }
         let (layout, _files) = self.lock_files(space).await?;
-        let (id, message) = (space.id.clone(), message.to_owned());
-        let kept = tokio::task::spawn_blocking(move || layout.keep_results(&id, &message, &files))
-            .await??;
+        let kept = keep_for_user(layout, &space.id, message, files).await?;
         self.record_or_discard(&space.id, source, attacher, kept)
             .await
     }

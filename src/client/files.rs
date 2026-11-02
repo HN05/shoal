@@ -117,6 +117,17 @@ pub struct SentFile {
     pub path: PathBuf,
 }
 
+impl From<&AttachedFile> for SentFile {
+    fn from(file: &AttachedFile) -> Self {
+        Self {
+            id: file.id,
+            name: file.name.clone(),
+            title: file.title.clone(),
+            path: file.path.clone(),
+        }
+    }
+}
+
 /// A file attached to a workspace or chat: Shoal's copy and how it came.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttachedFile {

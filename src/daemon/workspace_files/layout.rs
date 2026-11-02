@@ -265,7 +265,7 @@ pub(crate) struct Copy {
 }
 
 /// The copies [`Layout::keep`] made or reused for one message.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Kept {
     pub(crate) copies: Vec<Copy>,
     /// The directory of copies made for this message, rather than reused.
@@ -275,6 +275,11 @@ pub(crate) struct Kept {
 }
 
 impl Kept {
+    /// Whether the copies were made for an identical message before.
+    pub(crate) fn reused(&self) -> bool {
+        self.created.is_none()
+    }
+
     /// Delete the copies made for a message that was not queued, and the
     /// workspace's directory when nothing else is left in it, as when the
     /// workspace was removed while they were copied.

@@ -273,17 +273,16 @@ impl Manager {
         crate::validate::message(&message)?;
         let space = self.present_space(selector).await?;
         let about = About::workspace(space.name(), space.id());
-        let files = (self.keep_sent(
+        let (kind, text) = (NotificationKind::AgentMessage, message.clone());
+        let notification = (self.send_with_files(
             &space.into(),
             FileSource::Alert,
-            &message,
+            &text,
             attachments,
             attacher,
+            |files| async move { self.record_sent(about, kind, message, &files).await },
         ))
         .await?;
-        let notification = self
-            .record_sent(about, NotificationKind::AgentMessage, message, &files)
-            .await?;
         Ok(Sent { notification })
     }
 
