@@ -396,12 +396,25 @@ command uses it internally.
 ## Terminal recordings
 
 A PR that changes what Shoal prints or draws in the terminal, such as a picker,
-menu, listing or message, shows examples of the new interface, recorded as the
-shoal-worker skill describes. Record it with `python3 scripts/record.py <tape>`,
-which runs the tape against a development build in a sandbox beside it, under
-`target/`, and stops every process the recording started; `--help` shows how a
-setup script prepares the sandbox. Commit the tape and its output only when a
-document uses them.
+menu, listing or message, shows examples of the new interface, recorded with a
+[VHS](https://github.com/charmbracelet/vhs) tape. Record it with
+`python3 scripts/record.py <tape>`, which runs the tape against a development
+build in a sandbox beside it, under `target/`, and stops every process the
+recording started; `--help` shows how a setup script prepares the sandbox. Keep
+the tape and its output under `target/`, and commit them only when a document
+uses them.
+
+The tape types the keys a user would and shows what each command prints. Leave
+that output whole, without piping it through `grep`, `head` or the like, unless
+the rest buries what the recording shows; then keep enough of it to read in
+context. `Screenshot` captures a screen, `Output <file>.mp4` records a video,
+never a GIF, and `Output <file>.txt` writes each frame as text. Pace a video so
+the viewer can read each screen before the next key, about two to three seconds
+on a screen and longer on a dense one, without idle stretches. VHS renders
+headlessly, so look at the screenshots yourself before sharing them. Attach the
+video and screenshots to the PR with `shoal pr comment --attach`, and put text
+frames in code blocks.
+
 For a change to try rather than watch, offer `python3 scripts/demo.py` as a
 demo (`shoal demo start shoal -- python3 scripts/demo.py`): it runs a
 development build against sample workspaces, questions and approvals in a

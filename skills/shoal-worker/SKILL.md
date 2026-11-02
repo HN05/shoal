@@ -35,13 +35,10 @@ Open your PR with `shoal pr open`: it pushes your branch, then links the
 branch's open PR or opens one (`--title`, `--body-file`, `--label`, `--draft`).
 A linked issue supplies the default title and, when no body is supplied,
 `Closes #<number>`. A supplied body is used verbatim; include a closing reference
-yourself when the PR completes the issue. A PR can close several issues, one
-`Closes #<number>` line each, so work it does beyond its issue can close the
-open issue that tracks it, which `shoal issue list <words>` finds. Before
-opening an issue or PR, read the repository's contribution rules and forge
-template for what the description needs, and choose labels from
-`shoal repo labels` (`--repo` for another repository), which lists each with
-its meaning.
+yourself when the PR completes the issue. Before opening an issue or PR, read
+the repository's contribution rules and forge template for what the description
+needs, and choose labels from `shoal repo labels` (`--repo` for another
+repository), which lists each with its meaning.
 Opening refuses an item without a label `required_labels` asks for; `pr open`,
 `issue open` and `ready` report `warnings` for missing labels or template
 headings, which you fix with `edit`. Change your PR or issue through Shoal,
@@ -524,27 +521,6 @@ workspace's simulator and passes its UDID as `SHOAL_SIM_UDID`. While the user
 tries it, read the screen and type into it to look at the same state they do.
 `shoal done` stops your demos; pass `--keep-demos` when the user is still trying
 one.
-
-## Recordings
-
-To show how a terminal interface looks, record it with a
-[VHS](https://github.com/charmbracelet/vhs) tape that types the keys a user
-would and shows what each command prints. Leave that output whole, without
-piping it through `grep`, `head` or the like, unless the rest buries what the
-recording shows; then keep enough of it to read in context. `Screenshot`
-captures a screen, `Output <file>.mp4` records a video, never a GIF, and
-`Output <file>.txt` writes each frame as text. Pace a video so
-the viewer can read each screen before the next key, about two to three seconds
-on a screen and longer on a dense one, without idle stretches. VHS renders
-headlessly, so look at the screenshots yourself before sharing them. Keep the
-tape, its output and any temporary state under the workspace's ignored build
-directory, such as `target/`, never in `/tmp` or elsewhere outside the
-workspace, so they go with it. Use the repository's recording helper when it
-has one. Otherwise start what the recording needs from the tape or from a setup
-step that finishes before it, never in the background with `&` or `nohup`, and
-stop anything still running from it once the recording ends: a process left
-behind outlives your workspace. Attach screenshots
-and videos with `shoal pr comment --attach`, and put text frames in code blocks.
 
 ## Secrets
 
