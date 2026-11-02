@@ -20,7 +20,7 @@ mod records;
 mod retention;
 
 pub(crate) use records::{
-    forget_removed, ids_at, keep_ended_chat, rebase, record, sent_files, sent_ids,
+    count, forget_removed, ids_at, keep_ended_chat, rebase, record, sent_files, sent_ids,
 };
 
 use layout::{Kept, Layout};

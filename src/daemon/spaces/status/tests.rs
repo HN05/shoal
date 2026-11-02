@@ -29,7 +29,7 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
         )
         .await
         .unwrap();
-    let unread = |status: SpaceStatus| status.unread_notifications;
+    let unread = |status: SpaceStatus| status.attention.unread_notifications;
     let before = unread(manager.space_status("own").await.unwrap());
 
     for (workspace, message) in [
@@ -54,4 +54,46 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
     };
     assert_eq!(shown.id, chat.id);
     assert_eq!(unread(status), 1);
+}
+
+#[tokio::test]
+async fn status_counts_the_spaces_own_open_questions() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager
+        .create_workspace(&repo.id, "own".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let ask = crate::client::questions::Ask {
+        question: "Use SQLite?".into(),
+        recommendation: "yes".into(),
+        reason: None,
+        choices: Vec::new(),
+    };
+    manager
+        .ask_question("planning", ask, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+
+    let questions = |status: SpaceStatus| status.attention.open_questions;
+    assert_eq!(
+        questions(manager.space_status("planning").await.unwrap()),
+        1
+    );
+    assert_eq!(questions(manager.space_status("own").await.unwrap()), 0);
 }

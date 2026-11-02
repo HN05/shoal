@@ -784,7 +784,11 @@ and each watched PR as the forge reports it now: open, merged or closed, merge
 conflicts, each CI check's result, the CI runs on an open PR's head that
 [wait for approval](#ci-runs) in `waiting_runs`, and a review state from each
 reviewer's latest approval or change request. A failed lookup reports its error
-on that item without failing the command. When a step
+on that item without failing the command. Status counts the space's open
+[questions](#questions) in `open_questions`, the approval requests that wait for a
+decision, a workspace's own or those a chat decides, in `pending_approvals`, its
+[attached files](#attached-files) in `attached_files` and its unread notifications in
+`unread_notifications`. When a step
 of the daemon's automatic cleanup fails in the workspace, status says so in
 `cleanup_error`. `Last sync` shows when the repository's
 default branch last [synced](#repositories) and why the syncs since then failed,

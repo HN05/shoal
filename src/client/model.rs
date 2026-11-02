@@ -594,14 +594,31 @@ pub struct SpaceStatus {
     pub issue: Option<crate::client::links::issue::Registration>,
     pub completion: Option<Completion>,
     pub pr_cleanup: Option<crate::client::links::pr::Registration>,
-    /// Unread notifications about this space.
-    pub unread_notifications: u64,
+    #[serde(flatten)]
+    pub attention: Attention,
     /// The current state of each watched PR.
     #[serde(default)]
     pub prs: Vec<crate::forge::review::status::PrStatus>,
     /// The linked issue's current state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_status: Option<IssueStatus>,
+}
+
+/// What awaits the user about a space.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Attention {
+    /// Unread notifications about the space.
+    pub unread_notifications: u64,
+    /// Questions its agents asked that wait for an answer.
+    #[serde(default)]
+    pub open_questions: usize,
+    /// Approval requests that wait for a decision: those a workspace made,
+    /// or those a chat decides.
+    #[serde(default)]
+    pub pending_approvals: usize,
+    /// Files attached to it, including those its completion handed back.
+    #[serde(default)]
+    pub attached_files: usize,
 }
 
 /// The space a status describes: a workspace with what its worktree adds,

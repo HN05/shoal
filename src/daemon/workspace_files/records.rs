@@ -174,6 +174,16 @@ pub(super) fn list(db: &Connection, space_id: &str) -> Result<Vec<AttachedFile>>
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// How many files the space `space_id` has.
+pub(crate) fn count(db: &Connection, space_id: &str) -> Result<usize> {
+    let count: i64 = db.query_row(
+        "SELECT COUNT(*) FROM workspace_files WHERE space_id=?1",
+        [space_id],
+        |row| row.get(0),
+    )?;
+    Ok(usize::try_from(count)?)
+}
+
 /// The files of repository `repository_id` whose workspace has no recorded
 /// execution, running or unresolved, and that no running chat owns, oldest
 /// first.

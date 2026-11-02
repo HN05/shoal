@@ -395,6 +395,17 @@ fn queue_answer(tx: &Transaction<'_>, question: &Question, message: &str) -> Res
     }
 }
 
+/// How many questions of the workspace or chat `space_id` are open.
+pub(crate) fn open_count(db: &Connection, space_id: &str) -> Result<usize> {
+    let count: i64 = db.query_row(
+        "SELECT COUNT(*) FROM questions
+            WHERE COALESCE(workspace_id,chat_id)=?1 AND answer IS NULL AND closed_at IS NULL",
+        [space_id],
+        |row| row.get(0),
+    )?;
+    Ok(usize::try_from(count)?)
+}
+
 /// Close the space's open questions, which its finished assignment no
 /// longer waits on, and return their numbers.
 pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<i64>> {

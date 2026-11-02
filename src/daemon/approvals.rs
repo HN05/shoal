@@ -86,6 +86,17 @@ fn list_decided(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
     .collect()
 }
 
+/// How many requests of the space `id` wait for a decision: those a
+/// workspace made, or those a `chat` decides, since a chat requests none.
+pub(crate) fn pending_count(db: &Connection, id: &str, chat: bool) -> Result<usize> {
+    let requests = match chat {
+        true => list_decided(db, id)?,
+        false => list(db, Some(id))?,
+    };
+    let pending = |request: &&ApprovalRequest| request.status == DecisionStatus::Pending;
+    Ok(requests.iter().filter(pending).count())
+}
+
 /// Give the pending requests the space `id` decides back to the user, as
 /// it ends, is saved or is removed, in the caller's transaction; the
 /// requests given back.

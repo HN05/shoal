@@ -6,9 +6,12 @@ use anyhow::Result;
 
 use crate::{
     client::links::{issue, pr::Registration},
-    daemon::{forge_hosts::ForgeHosts, links::pr, workspace::Manager},
+    daemon::{
+        approvals, forge_hosts::ForgeHosts, links::pr, questions, workspace::Manager,
+        workspace_files,
+    },
     forge::{ForgeRepo, account::Account, review::status::PrStatus},
-    model::{Completion, IssueStatus, PresentSpace, SpaceDetail, SpaceStatus},
+    model::{Attention, Completion, IssueStatus, PresentSpace, SpaceDetail, SpaceStatus},
     repository,
 };
 
@@ -27,13 +30,13 @@ impl Manager {
         let space = self.present_space(selector).await?;
         let (space, records, origin) = self.space_detail(space).await?;
         let (prs, issue_status) = self.linked_states(&origin, &records).await;
-        let unread_notifications = self.unread_space_notifications(space.id()).await?;
+        let attention = self.attention(&space).await?;
         Ok(SpaceStatus {
             space,
             issue: records.issue,
             completion: records.completion,
             pr_cleanup: records.pr_cleanup,
-            unread_notifications,
+            attention,
             prs,
             issue_status,
         })
@@ -56,6 +59,23 @@ impl Manager {
                 (SpaceDetail::Chat { chat }, records, checkout)
             }
         })
+    }
+
+    /// What awaits the user about `space`.
+    async fn attention(&self, space: &SpaceDetail) -> Result<Attention> {
+        let unread_notifications = self.unread_space_notifications(space.id()).await?;
+        let id = space.id().to_owned();
+        let chat = space.worktree().is_none();
+        self.store
+            .run(move |db| {
+                Ok(Attention {
+                    unread_notifications,
+                    open_questions: questions::open_count(db, &id)?,
+                    pending_approvals: approvals::pending_count(db, &id, chat)?,
+                    attached_files: workspace_files::count(db, &id)?,
+                })
+            })
+            .await
     }
 
     /// What the chat `id` records about its links, with its `completion`.

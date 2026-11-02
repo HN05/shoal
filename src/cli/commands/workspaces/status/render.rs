@@ -319,7 +319,8 @@ fn render_cleanup(status: &WorktreeStatus, palette: Palette) {
     }
 }
 
-/// What awaits the user: the review mark and unread notifications.
+/// What awaits the user: the review mark, questions, approval requests,
+/// attached files and unread notifications.
 fn render_attention(status: &SpaceStatus) {
     let review = status.space.review();
     if review.is_empty() {
@@ -328,7 +329,11 @@ fn render_attention(status: &SpaceStatus) {
         outln!("Review:        ready for review");
         outln!("{}", links::review_lines(review, status.space.kind()));
     }
-    outln!("Notifications: {} unread", status.unread_notifications);
+    let attention = &status.attention;
+    outln!("Questions:     {} open", attention.open_questions);
+    outln!("Approvals:     {} pending", attention.pending_approvals);
+    outln!("Files:         {} attached", attention.attached_files);
+    outln!("Notifications: {} unread", attention.unread_notifications);
 }
 
 fn render_recorded(label: &str, items: &[crate::model::LinkedItem]) {
