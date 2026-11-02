@@ -17,7 +17,7 @@ use crate::{
         repo::{clean_branch, merge_temporaries, unfinished_operation, upstream},
         run_isolated as git_run,
     },
-    model::{MergePlan, MergeWarning, PulledBranch, Repository},
+    model::{MergePlan, MergeWarning, PulledBranch, Repository, Workspace},
 };
 
 impl Manager {
@@ -25,6 +25,7 @@ impl Manager {
     /// gate. The gate must stay held until the tracked execution completes.
     pub async fn prepare_merge(&self, selector: &str) -> Result<MergePlan> {
         let workspace = self.workspace(selector).await?;
+        self.ensure_merging_enabled(&workspace).await?;
         let repo = self.repository(&workspace.repository_id).await?;
         ensure!(
             off_runtime::is_dir(&workspace.path).await?,
@@ -91,6 +92,16 @@ impl Manager {
             merge_temporaries,
             default_refresh,
         })
+    }
+
+    /// Refuse to merge where `[merge] enabled` turns merging off, as in a
+    /// repository that merges only through PRs.
+    async fn ensure_merging_enabled(&self, workspace: &Workspace) -> Result<()> {
+        ensure!(
+            self.workspace_settings(workspace).await?.merge.enabled,
+            "shoal merge is turned off for this repository ([merge] enabled = false); merge the workspace's PR with shoal pr merge"
+        );
+        Ok(())
     }
 
     /// A scoped merge needs the user's approval for the branch at the commit

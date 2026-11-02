@@ -792,6 +792,8 @@ held by a managed workspace, and any checkout of it must be clean. It aborts a m
 that does not apply cleanly, leaving conflicts to a Git merge of the default branch into
 the workspace. Merging holds the repository Git gate for the tracked execution; the
 daemon validates and refreshes, and the CLI worker merges.
+A repository that merges only through PRs turns it off with `[merge] enabled =
+false`, which refuses agents' requests to merge too.
 After cancellation, the wrapper rolls back incomplete merges after stopping the
 process group, preserving completed merges and reporting unsafe recovery failures.
 Refresh fetches use private temporary refs; merges run in the tracked wrapper.

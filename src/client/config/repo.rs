@@ -650,11 +650,16 @@ pub struct IssueConfig {
     pub planned_label: Option<String>,
 }
 
-/// Whether `shoal merge` pushes the default branch to its upstream afterwards.
+/// Whether `shoal merge` merges into the default branch, and whether it
+/// pushes the default branch to its upstream afterwards.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Merge)]
 pub struct MergeConfig {
+    /// False refuses `shoal merge`, as in a repository that merges only
+    /// through PRs.
+    #[option(default = true)]
+    pub enabled: Option<bool>,
     #[option(default = false)]
     pub push: Option<bool>,
 }

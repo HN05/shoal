@@ -1694,6 +1694,29 @@ async fn scoped_merge_needs_approval_while_pushes_do() {
 }
 
 #[tokio::test]
+async fn merge_turned_off_refuses_runs_and_agent_requests() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[merge]\nenabled = false\n",
+    )
+    .unwrap();
+    commit(&workspace.path, ".shoal.toml");
+    let error = f.manager.merge_workspace("worker").await.unwrap_err();
+    assert!(format!("{error:#}").contains("shoal pr merge"), "{error:#}");
+    let error = merge_as_agent(&f, &workspace).await.unwrap_err();
+    assert!(format!("{error:#}").contains("shoal pr merge"), "{error:#}");
+    assert!(
+        f.manager
+            .approval_requests(Some("worker"))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn merge_refreshes_the_default_branch_and_needs_it_outside_workspaces() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;

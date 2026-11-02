@@ -2560,8 +2560,13 @@ With `[merge] push`, or `--push` for one run, Shoal pushes the default branch to
 its upstream after merging; `--no-push` keeps one merge local. A default branch without an
 upstream is refused before merging, and a failed push keeps the merge.
 
+`[merge] enabled = false` turns `shoal merge` off for a repository that merges only
+through PRs: it refuses both a merge and an agent's request for one, pointing to
+`shoal pr merge`.
+
 ```toml
 [merge]
+enabled = true           # Default: true
 push = false             # Default: false
 
 [permissions]
