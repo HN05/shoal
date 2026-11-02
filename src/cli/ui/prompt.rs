@@ -89,7 +89,8 @@ fn read_answer(input: &mut impl io::BufRead) -> Result<Option<String>> {
 pub fn confirm(ctx: &Context, action: &str, flag: &str) -> Result<bool> {
     ensure!(
         ctx.interactive(),
-        "{action}; confirmation required in non-interactive mode; pass {flag}"
+        "{}; confirmation required in non-interactive mode; pass {flag}",
+        action.trim_end_matches('.')
     );
     confirm_with_io(action, &mut io::stdin().lock(), &mut io::stderr().lock())
 }
