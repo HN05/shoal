@@ -1317,3 +1317,43 @@ async fn idle_cleanup_takes_a_disposable_workspace_whatever_it_holds() {
         CleanupReason::Idle { .. }
     ));
 }
+
+#[tokio::test]
+async fn a_disposable_workspace_deletes_only_its_own_new_branch() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    git(&path, &["branch", "kept"]);
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let disposable = || super::super::NewWorkspace {
+        options: crate::protocol::CreationOptions {
+            disposable: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    // Its removal would delete a branch the user had before it.
+    let existing = manager
+        .open_branch_with(&repo.id, "kept", None, disposable())
+        .await;
+    assert!(existing.unwrap_err().to_string().contains("--disposable"));
+
+    // A disposable workspace switched to another branch leaves that one.
+    let workspace = manager
+        .create_workspace_with(&repo.id, "scratch".into(), None, disposable())
+        .await
+        .unwrap();
+    git(&workspace.path, &["switch", "-q", "kept"]);
+    let removed = manager
+        .remove_workspace(
+            &workspace.id,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!removed.branch_outcome.is_deleted(), "{removed:?}");
+    assert!(!git(&path, &["branch", "--list", "kept"]).is_empty());
+}

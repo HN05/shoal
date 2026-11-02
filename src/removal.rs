@@ -109,9 +109,10 @@ pub(crate) async fn inspect(
         return Ok(check);
     }
     // Nothing in a disposable workspace is worth keeping, so nothing is
-    // inspected for unsaved work; whether it is in use still is.
+    // inspected for unsaved work; which branch it is on, which removal may
+    // delete, and whether it is in use still are.
     if check.workspace.disposable {
-        check.branch = check.workspace.branch.clone();
+        check.branch = checked_out_branch(&check.workspace.path).await?;
         if policy == InspectionPolicy::IncludeDirectoryProcesses {
             check
                 .load_directory_processes(&process::DirectoryUsers::default())
@@ -121,9 +122,7 @@ pub(crate) async fn inspect(
     }
     let path = &check.workspace.path;
     check.dirty = !git::status::porcelain(path).await?.is_empty();
-    let branch = git::current_branch(path).await?;
-    let branch = branch.trim_end_matches('\n');
-    check.branch = (!branch.is_empty()).then(|| branch.to_owned());
+    check.branch = checked_out_branch(path).await?;
     check.head = Some(git::resolve_commit(path, "HEAD", git::run).await?);
     let tree = git::status::head_tree(path).await?;
     // The default branch may be absent locally (workspaces created from another ref).
@@ -149,6 +148,13 @@ pub(crate) async fn inspect(
             .await?;
     }
     Ok(check)
+}
+
+/// The branch the worktree at `path` is on; `None` when detached.
+async fn checked_out_branch(path: &std::path::Path) -> Result<Option<String>> {
+    let branch = git::current_branch(path).await?;
+    let branch = branch.trim_end_matches('\n');
+    Ok((!branch.is_empty()).then(|| branch.to_owned()))
 }
 
 /// What keeps a workspace's commits besides the remotes: the local default

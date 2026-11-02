@@ -516,6 +516,11 @@ impl Manager {
             path,
             options,
         } = new;
+        // Its removal would delete a branch the user had before it.
+        ensure!(
+            !options.disposable || matches!(source, WorkspaceSource::New { .. }),
+            "--disposable applies only to a new branch; {branch} already exists"
+        );
         if let Some(name) = git_profile {
             self.config().machine.git_profiles.profile(name)?;
         }
