@@ -136,7 +136,14 @@ impl Manager {
         );
         let fetched = pull_head(repo, head).await?;
         git::detached::move_to(&workspace.path, &fetched.at.commit).await?;
-        let (id, commit) = (workspace.id.clone(), fetched.at.commit);
+        self.record_starting_commit(&workspace.id, fetched.at.commit)
+            .await
+    }
+
+    /// Record `commit` as where the workspace `id` started, which is also
+    /// what its diff compares with.
+    async fn record_starting_commit(&self, id: &str, commit: String) -> Result<()> {
+        let id = id.to_owned();
         self.store
             .run(move |db| {
                 db.execute(
