@@ -896,6 +896,36 @@ impl PresentSpace {
         }
     }
 
+    pub fn repository_id(&self) -> &str {
+        match self {
+            Self::Workspace(workspace) => &workspace.repository_id,
+            Self::Chat(chat) => &chat.repository_id,
+        }
+    }
+
+    /// The issues, PRs and CI runs it links.
+    pub fn links(&self) -> &SpaceLinks {
+        match self {
+            Self::Workspace(workspace) => &workspace.links,
+            Self::Chat(chat) => &chat.links,
+        }
+    }
+
+    pub fn into_links(self) -> SpaceLinks {
+        match self {
+            Self::Workspace(workspace) => workspace.links,
+            Self::Chat(chat) => chat.links,
+        }
+    }
+
+    /// What user-facing text calls it: `workspace` or `chat`.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Workspace(_) => "workspace",
+            Self::Chat(_) => "chat",
+        }
+    }
+
     /// Whether it is a chat Shoal saved to restore, which does not run.
     pub fn is_saved_chat(&self) -> bool {
         matches!(self, Self::Chat(chat) if chat.restore.is_some())

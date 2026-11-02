@@ -6,10 +6,7 @@ use rusqlite::{OptionalExtension, params};
 
 pub(crate) use crate::client::notifications::{Cleared, Notification, NotificationKind, Sent};
 use crate::daemon::log;
-use crate::{
-    daemon::workspace::{Manager, Source},
-    model::PresentSpace,
-};
+use crate::daemon::workspace::{Manager, Source};
 
 /// Rows kept before older read notifications are pruned; unread ones stay.
 const RETAINED: usize = 500;
@@ -254,10 +251,8 @@ impl Manager {
     /// The workspace or running chat `selector` names, as its messages to
     /// the user name their sender.
     async fn space_about(&self, selector: &str) -> Result<About> {
-        Ok(match self.present_space(selector).await? {
-            PresentSpace::Workspace(workspace) => About::workspace(&workspace.name, &workspace.id),
-            PresentSpace::Chat(chat) => About::workspace(&chat.name, &chat.id),
-        })
+        let space = self.present_space(selector).await?;
+        Ok(About::workspace(space.name(), space.id()))
     }
 
     /// Tell the user that a turn-state report of the workspace's agent failed

@@ -169,11 +169,9 @@ async fn linked_kind(ctx: &Context, space: &str, number: u64) -> Result<Option<L
         },
     )
     .await?;
-    let links = match client::present_space(&ctx.paths, space).await? {
-        Some(PresentSpace::Workspace(workspace)) => workspace.links,
-        Some(PresentSpace::Chat(chat)) => chat.links,
-        None => Default::default(),
-    };
+    let links = (client::present_space(&ctx.paths, space).await?)
+        .map(PresentSpace::into_links)
+        .unwrap_or_default();
     let recorded = links.opened.into_iter().chain(links.related);
     linked.items.extend(recorded.map(|item| SelectedItem {
         url: item.url,
@@ -264,18 +262,14 @@ async fn issue_title(ctx: &Context, space: &str, input: &str) -> Option<String> 
 
 /// The registered repository of the workspace or running chat `space` names.
 async fn space_repository(ctx: &Context, space: &str) -> Result<Repository> {
-    let repository = match client::present_space(&ctx.paths, space).await? {
-        Some(PresentSpace::Workspace(workspace)) => workspace.repository_id,
-        Some(PresentSpace::Chat(chat)) => chat.repository_id,
-        None => {
-            let unknown = format!("no workspace or running chat {space}");
-            return Err(Refusal::new(Reason::NotFound, unknown).into());
-        }
+    let Some(space) = client::present_space(&ctx.paths, space).await? else {
+        let unknown = format!("no workspace or running chat {space}");
+        return Err(Refusal::new(Reason::NotFound, unknown).into());
     };
     client::repositories(&ctx.paths)
         .await?
         .into_iter()
-        .find(|repo| repo.id == repository)
+        .find(|repo| repo.id == space.repository_id())
         .context("the space's repository is missing")
 }
 
@@ -383,10 +377,7 @@ pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>)
 /// What a mark on the space `space` itself is called: `workspace` or
 /// `chat`.
 async fn space_kind(ctx: &Context, space: &str) -> Result<&'static str> {
-    Ok(match client::present_space(&ctx.paths, space).await? {
-        Some(PresentSpace::Chat(_)) => "chat",
-        _ => "workspace",
-    })
+    Ok((client::present_space(&ctx.paths, space).await?).map_or("workspace", |space| space.kind()))
 }
 
 /// One indented line per mark: its item, or the space itself, called
