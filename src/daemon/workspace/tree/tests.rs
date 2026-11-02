@@ -776,15 +776,15 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         choices: vec![],
     };
     let below = manager
-        .ask_question(&child.id, ask("Use SQLite?"))
+        .ask_question(&child.id, ask("Use SQLite?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let own = manager
-        .ask_question(&parent.id, ask("Merge now?"))
+        .ask_question(&parent.id, ask("Merge now?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let beside = manager
-        .ask_question(&sibling.id, ask("Rename it?"))
+        .ask_question(&sibling.id, ask("Rename it?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let messages = manager.agent_messages(&parent.id).await.unwrap();
@@ -972,7 +972,7 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         choices: vec![],
     };
     let asked = manager
-        .ask_question(&child.id, ask("Use SQLite?"))
+        .ask_question(&child.id, ask("Use SQLite?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     manager
@@ -1008,7 +1008,7 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         .await
         .unwrap();
     let reused = manager
-        .ask_question(&sibling.id, ask("Rename it?"))
+        .ask_question(&sibling.id, ask("Rename it?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     assert_eq!(reused.id, asked.id);
@@ -1982,6 +1982,8 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                     reason: None,
                     choices: vec![],
                 },
+                Vec::new(),
+                &Attacher::User,
             )
             .await
             .unwrap();

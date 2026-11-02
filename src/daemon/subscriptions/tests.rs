@@ -170,7 +170,10 @@ mod streams {
             .unwrap();
         until(&mut subscription, changed(RecordKind::Link)).await;
 
-        let question = manager.ask_question(&workspace.id, ask()).await.unwrap();
+        let question = manager
+            .ask_question(&workspace.id, ask(), Vec::new(), &Attacher::User)
+            .await
+            .unwrap();
         until_each(
             &mut subscription,
             &[RecordKind::Question, RecordKind::Notification],
@@ -294,7 +297,11 @@ mod streams {
             )
             .await
             .unwrap();
-        let question = daemon.manager.ask_question(&chat.id, ask()).await.unwrap();
+        let question = daemon
+            .manager
+            .ask_question(&chat.id, ask(), Vec::new(), &Attacher::User)
+            .await
+            .unwrap();
         let mut subscription = subscribe(daemon.connector(), &[Topic::Questions]).await;
         let records = snapshot(&mut subscription).await;
         let [Record::Question(shown)] = records.as_slice() else {
@@ -308,7 +315,11 @@ mod streams {
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
         let other = daemon.workspace("other").await;
-        daemon.manager.ask_question(&other.id, ask()).await.unwrap();
+        daemon
+            .manager
+            .ask_question(&other.id, ask(), Vec::new(), &Attacher::User)
+            .await
+            .unwrap();
         let elsewhere = crate::test_support::repository(&daemon.manager.paths.home, "elsewhere");
         daemon
             .manager
@@ -344,7 +355,7 @@ mod streams {
         for workspace in [&own, &other] {
             daemon
                 .manager
-                .ask_question(&workspace.id, ask())
+                .ask_question(&workspace.id, ask(), Vec::new(), &Attacher::User)
                 .await
                 .unwrap();
             daemon

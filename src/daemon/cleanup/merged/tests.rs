@@ -2,7 +2,7 @@ use std::{fs, os::unix::fs::MetadataExt, path::Path, sync::Arc};
 
 use super::*;
 use crate::test_support::{commit, git, manager, repository};
-use crate::{execution::recovery, model::CleanupReason};
+use crate::{daemon::workspace_files::Attacher, execution::recovery, model::CleanupReason};
 
 const HOUR: u64 = 3600;
 
@@ -352,7 +352,10 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
         reason: None,
         choices: vec![],
     };
-    let question = manager.ask_question(id, ask).await.unwrap();
+    let question = manager
+        .ask_question(id, ask, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
     assert!(f.kept_after(5).await, "an open question");
     manager
         .answer_question(question.id, "No".into(), None)

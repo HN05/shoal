@@ -40,6 +40,9 @@ pub struct Question {
     /// question; it recommends nothing.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub in_chat: bool,
+    /// The files the agent sent with it, such as screenshots of the choices.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<crate::client::files::SentFile>,
 }
 
 /// Questions that fit one response, and how many older ones were left out.

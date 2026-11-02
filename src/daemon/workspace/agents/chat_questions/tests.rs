@@ -1,7 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    daemon::workspace::{ExecutionKind, Manager},
+    daemon::{
+        workspace::{ExecutionKind, Manager},
+        workspace_files::Attacher,
+    },
     model::Workspace,
     protocol::TurnEnd,
     test_support::{manager, repository},
@@ -337,7 +340,10 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         reason: None,
         choices: Vec::new(),
     };
-    let asked = manager.ask_question(&chat.name, ask).await.unwrap();
+    let asked = manager
+        .ask_question(&chat.name, ask, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
     assert_eq!((&*asked.space_id, &*asked.space), (&*chat.id, "planning"));
     let listed = manager.questions(Some(&chat.name)).await.unwrap();
     assert_eq!(listed.questions, std::slice::from_ref(&asked));

@@ -4325,8 +4325,10 @@ add row, asks for a file to add. Workspace processes cannot open files.
 terminal, lists them: each one's name, title, size,
 how it came (`message` for a file sent with `shoal messages send --attach`,
 `added` for one from `shoal files add`, `result` for one handed back with
-`shoal done --attach`), when, and the path of Shoal's copy in the repository
-directory's `.attachments`. Results outlive the workspace: they stay for as
+`shoal done --attach`, `alert` and `question` for one sent with
+`shoal alerts send --attach` and `shoal questions ask --attach`), when, and the path of Shoal's copy in the repository
+directory's `.attachments`. Results, and the files sent with alerts and
+questions, outlive the workspace: they stay for as
 long as its removal record, `cleanup.restore.retention_days` like its
 [checkpoints](#checkpoints-and-restore), and `shoal files <name>` still lists
 them, with when they go, and deletes them with `rm`. A chat's files outlive
@@ -4361,7 +4363,7 @@ reach a chat's files.
 ### Questions
 
 ```sh
-shoal questions ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--wait]
+shoal questions ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--attach FILE]... [--wait]
 shoal questions ask --in-chat        # The turn's final message in the chat is the question
 shoal questions [--space S]          # Pick an open question on a terminal
 shoal questions withdraw <number>    # Close a question the agent no longer needs answered
@@ -4372,8 +4374,10 @@ shoal questions <number> --answer <answer> # Answer text or a choice number
 `shoal questions ask` records a question for the user from the agents of a space, a
 workspace or chat: the
 decision, the recommended answer, an optional reason and optional choices, each
-one line with the same limits as `alerts send`. It raises a `question_asked`
-notification and prints the question number. `shoal questions <number> --answer <answer>` records the answer,
+one line with the same limits as `alerts send`, and files sent with `--attach`
+as `alerts send` sends them, such as screenshots of the choices. It raises a `question_asked`
+notification and prints the question number. Listings and the inbox name its
+files, and `--json` lists them as `files` as alerts do. `shoal questions <number> --answer <answer>` records the answer,
 resolving a choice number to that choice, and queues it for the space's agents
 as a message naming the question, so the [agent messages](#agent-messages) hooks
 deliver it and wake an idle agent; it confirms with the question text, since a
@@ -4401,7 +4405,7 @@ also delivers its message; it survives daemon restarts, waiting up to two minute
 for a daemon that went away to return and know the caller's scope again, or 10
 seconds for one that was not running. Asking an identical
 question again returns it while it is open or its answer is undelivered, so an
-interrupted `--wait` can be rerun; the same question with other details is refused.
+interrupted `--wait` can be rerun; the same question with other details or files is refused.
 A listing returns the newest open questions that fit one response and counts the older
 ones it leaves out. Only unscoped callers answer, except that a workspace process
 answers, by number, the questions asked in the [workspaces below its own](#child-workspaces).

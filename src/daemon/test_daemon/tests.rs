@@ -12,6 +12,7 @@ use crate::{
         approvals::{Lifetime, PortSpecification, Specification, Target},
         operations::fake,
         questions::Ask,
+        workspace_files::Attacher,
     },
     forge::items::link::LinkKind,
     model::{
@@ -178,7 +179,7 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
     };
     let question = daemon
         .manager
-        .ask_question(&workspace.name, ask)
+        .ask_question(&workspace.name, ask, Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let app = daemon.connector();

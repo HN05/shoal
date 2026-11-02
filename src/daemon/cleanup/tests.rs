@@ -319,7 +319,10 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
-    let question = manager.ask_question(&workspace.name, ask).await.unwrap();
+    let question = manager
+        .ask_question(&workspace.name, ask, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
     assert_eq!(reason().await, CleanupReason::Held);
     manager
         .release_hold(

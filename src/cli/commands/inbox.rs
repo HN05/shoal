@@ -367,15 +367,30 @@ impl Item {
 
     fn note(&self) -> String {
         match self {
-            Self::Question { question } => question
-                .recommendation()
-                .map(|recommendation| format!("recommends {recommendation}"))
-                .unwrap_or_default(),
+            Self::Question { question } => question_note(question),
             Self::Untracked { .. } => "adopt it with shoal work adopt".to_owned(),
             Self::SyncFailed { .. } => "retry with shoal repo sync".to_owned(),
             _ => String::new(),
         }
     }
+}
+
+/// The question's recommendation and the names of the files sent with it.
+fn question_note(question: &Question) -> String {
+    let recommendation = question
+        .recommendation()
+        .map(|recommendation| format!("recommends {recommendation}"));
+    let names: Vec<&str> = question
+        .files
+        .iter()
+        .map(|file| file.name.as_str())
+        .collect();
+    let files = (!names.is_empty()).then(|| format!("files: {}", names.join(", ")));
+    recommendation
+        .into_iter()
+        .chain(files)
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 /// The marked item, with the title of the space's issue when it has one.

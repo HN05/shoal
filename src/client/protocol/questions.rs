@@ -11,6 +11,12 @@ pub enum QuestionMethod {
     AskQuestion {
         space: String,
         ask: crate::client::questions::Ask,
+        /// Files to send with it by absolute path, which the daemon copies.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<crate::client::files::NewFile>,
+        /// The chat whose agent asks, which attaches its files.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sender_chat: Option<String>,
     },
     /// Open questions, in every space unless one is named.
     ListQuestions { space: Option<String> },

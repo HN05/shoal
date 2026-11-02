@@ -295,7 +295,9 @@ shoal questions ask "Which database should the cache use?" --recommend SQLite \
 ```
 
 State the decision in one line and always recommend an answer, so the user can
-reply with a word or a choice number; `--choice` is optional. The answer arrives
+reply with a word or a choice number; `--choice` is optional. `--attach FILE`,
+repeated for more, sends files with the question, such as a screenshot of each
+choice; `--in-chat` takes none. The answer arrives
 as a message naming the question. Continue with other
 work meanwhile, or end your turn to wait. When you cannot continue without the
 answer, add `--wait`: it blocks without a time limit and prints the answer, so run

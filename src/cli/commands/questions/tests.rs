@@ -22,6 +22,7 @@ fn question(text: &str, in_chat: bool) -> Question {
         closed_at: None,
         withdrawn: false,
         in_chat,
+        files: Vec::new(),
     }
 }
 
@@ -54,5 +55,31 @@ fn other_questions_show_their_recommendation() {
     assert_eq!(
         summary(&asked),
         "3  cache: Which database?  Recommended: SQLite"
+    );
+}
+
+#[test]
+fn questions_show_the_files_sent_with_them() {
+    let mut asked = question("Which layout?", false);
+    asked.files = ["a.png", "b.png"]
+        .into_iter()
+        .zip(1..)
+        .map(|(name, id)| crate::client::files::SentFile {
+            id,
+            name: name.into(),
+            title: None,
+            path: format!("/files/{name}").into(),
+        })
+        .collect();
+    let plain = Palette::stdout(true);
+    assert_eq!(
+        details(&asked, plain),
+        "Question 3: Which layout?\n  Space        cache\n  Recommended  SQLite\n  \
+            Files        /files/a.png\n               /files/b.png"
+    );
+    assert_eq!(
+        render(&asked, plain),
+        "3 [open] cache: Which layout?\n  Recommended: SQLite\n  \
+            Attached file: /files/a.png\n  Attached file: /files/b.png"
     );
 }
