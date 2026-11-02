@@ -332,6 +332,44 @@ mod streams {
     }
 
     #[tokio::test]
+    async fn a_scoped_subscription_without_workspace_records_names_its_tree() {
+        let daemon = TestDaemon::start().await;
+        let own = daemon.workspace("own").await;
+        let other = daemon.workspace("other").await;
+        for workspace in [&own, &other] {
+            daemon
+                .manager
+                .ask_question(&workspace.id, ask())
+                .await
+                .unwrap();
+            daemon
+                .manager
+                .send_agent_message(
+                    &workspace.id,
+                    "Rebase on main".into(),
+                    Vec::new(),
+                    &Attacher::User,
+                )
+                .await
+                .unwrap();
+        }
+        let topics = [Topic::Questions, Topic::Messages];
+        let mut subscription = subscribe(daemon.scoped(&own).await, &topics).await;
+        let records = snapshot(&mut subscription).await;
+        assert_eq!(records.len(), 2, "{records:?}");
+        for record in &records {
+            match record {
+                Record::Question(question) => assert_eq!(question.space_id, own.id),
+                Record::Message(message) => {
+                    assert_eq!(message.workspace_id.as_ref(), Some(&own.id));
+                    assert_eq!(message.workspace.as_ref(), Some(&own.name));
+                }
+                other => panic!("unexpected record: {other:?}"),
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn a_revoked_scope_token_ends_its_subscriptions() {
         let daemon = TestDaemon::start().await;
         let workspace = daemon.workspace("revoked").await;

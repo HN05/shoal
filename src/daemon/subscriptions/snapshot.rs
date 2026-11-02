@@ -52,26 +52,26 @@ pub(super) async fn take(
     caller: Option<&Caller>,
     topics: &Topics,
 ) -> Result<Records> {
-    let workspaces = visible_workspaces(manager, caller).await?;
+    let visible = Visible::load(manager, caller, topics).await?;
     let mut found = Vec::new();
     if topics.has(Topic::Repositories) {
         found.extend(repositories(manager, caller).await?);
     }
     if topics.has(Topic::Workspaces) {
-        found.extend(workspace_records(manager, &workspaces).await?);
+        found.extend(workspace_records(manager, &visible.workspaces).await?);
     }
     if topics.has(Topic::Links) {
-        found.extend(links(manager, &workspaces).await?);
+        found.extend(links(manager, &visible.workspaces).await?);
     }
     if topics.has(Topic::Questions) {
         let chats = manager.visible_chats(caller).await?;
-        found.extend(questions(manager, &workspaces, &chats).await?);
+        found.extend(questions(manager, &visible, &chats).await?);
     }
     if topics.has(Topic::Approvals) {
-        found.extend(approvals(manager, caller, &workspaces).await?);
+        found.extend(approvals(manager, caller, &visible).await?);
     }
     if topics.has(Topic::Messages) {
-        found.extend(messages(manager, caller, &workspaces).await?);
+        found.extend(messages(manager, caller, &visible).await?);
     }
     if topics.has(Topic::Notifications) {
         found.extend(notifications(manager).await?);
@@ -82,6 +82,51 @@ pub(super) async fn take(
         records.insert(record.key(), (record, value));
     }
     Ok(records)
+}
+
+/// The workspaces a caller may read: every workspace, or a scoped caller's
+/// own and those split from it, loaded only as far as the topics need.
+#[derive(Default)]
+struct Visible {
+    /// Each workspace with its details, for the topics that show them.
+    workspaces: Vec<Workspace>,
+    /// Each workspace's name by ID, for the topics that filter or name
+    /// records by workspace.
+    names: HashMap<String, String>,
+}
+
+impl Visible {
+    async fn load(manager: &Manager, caller: Option<&Caller>, topics: &Topics) -> Result<Self> {
+        let root = caller.map(|caller| caller.workspace_id.as_str());
+        if topics.has(Topic::Workspaces) || topics.has(Topic::Links) {
+            let workspaces = manager.list_workspaces_within(root).await?;
+            let names = workspaces
+                .iter()
+                .map(|workspace| (workspace.id.clone(), workspace.name.clone()))
+                .collect();
+            return Ok(Self { workspaces, names });
+        }
+        if topics.has(Topic::Questions)
+            || topics.has(Topic::Approvals)
+            || topics.has(Topic::Messages)
+        {
+            let names = manager
+                .workspace_refs_within(root)
+                .await?
+                .into_iter()
+                .map(|workspace| (workspace.id, workspace.name))
+                .collect();
+            return Ok(Self {
+                workspaces: Vec::new(),
+                names,
+            });
+        }
+        Ok(Self::default())
+    }
+
+    fn contains(&self, id: &str) -> bool {
+        self.names.contains_key(id)
+    }
 }
 
 /// Every repository, or a scoped caller's own, as listing them shows.
@@ -185,18 +230,15 @@ fn lookup_errors(observed: &Snapshot) -> Vec<LookupError> {
 }
 
 /// The open questions of the visible workspaces and chats.
-async fn questions(
-    manager: &Manager,
-    workspaces: &[Workspace],
-    chats: &[Chat],
-) -> Result<Vec<Record>> {
-    let mut visible = ids(workspaces);
-    visible.extend(chats.iter().map(|chat| chat.id.as_str()));
+async fn questions(manager: &Manager, visible: &Visible, chats: &[Chat]) -> Result<Vec<Record>> {
+    let chats: HashSet<&str> = chats.iter().map(|chat| chat.id.as_str()).collect();
     Ok(manager
         .open_questions()
         .await?
         .into_iter()
-        .filter(|question| visible.contains(question.space_id.as_str()))
+        .filter(|question| {
+            visible.contains(&question.space_id) || chats.contains(question.space_id.as_str())
+        })
         .map(Record::Question)
         .collect())
 }
@@ -207,34 +249,33 @@ async fn questions(
 async fn approvals(
     manager: &Manager,
     caller: Option<&Caller>,
-    workspaces: &[Workspace],
+    visible: &Visible,
 ) -> Result<Vec<Record>> {
-    let visible = ids(workspaces);
     Ok(manager
         .approval_requests(None)
         .await?
         .into_iter()
         .filter(|request| {
             request.status == DecisionStatus::Pending
-                && (caller.is_none() || visible.contains(request.workspace_id.as_str()))
+                && (caller.is_none() || visible.contains(&request.workspace_id))
         })
         .map(|request| Record::Approval(Box::new(request)))
         .collect())
 }
 
-/// Messages queued for the agents of `workspaces`, and for the user, who
-/// alone reads the messages agents send it.
+/// Messages queued for the agents of the visible workspaces, and for the
+/// user, who alone reads the messages agents send it.
 async fn messages(
     manager: &Manager,
     caller: Option<&Caller>,
-    workspaces: &[Workspace],
+    visible: &Visible,
 ) -> Result<Vec<Record>> {
     let mut messages: Vec<Record> = agent_messages(manager)
         .await?
         .into_iter()
         .filter_map(|(workspace_id, message)| {
-            let workspace = workspaces.iter().find(|w| w.id == workspace_id)?;
-            Some(Record::Message(agent_message(message, workspace)))
+            let name = visible.names.get(&workspace_id)?.clone();
+            Some(Record::Message(agent_message(message, workspace_id, name)))
         })
         .collect();
     if caller.is_none() {
@@ -250,13 +291,13 @@ async fn messages(
     Ok(messages)
 }
 
-/// A message queued for the agent of `workspace`.
-fn agent_message(message: AgentMessage, workspace: &Workspace) -> Message {
+/// A message queued for the agent of the workspace with this ID and name.
+fn agent_message(message: AgentMessage, workspace_id: String, workspace: String) -> Message {
     Message {
         id: format!("agent/{}", message.id),
         recipient: MessageRecipient::Agent,
-        workspace_id: Some(workspace.id.clone()),
-        workspace: Some(workspace.name.clone()),
+        workspace_id: Some(workspace_id),
+        workspace: Some(workspace),
         text: message.message,
         attachments: message.attachments,
         created_at: message.created_at,
@@ -283,23 +324,6 @@ async fn notifications(manager: &Manager) -> Result<Vec<Record>> {
         .into_iter()
         .map(Record::Notification)
         .collect())
-}
-
-fn ids(workspaces: &[Workspace]) -> HashSet<&str> {
-    workspaces
-        .iter()
-        .map(|workspace| workspace.id.as_str())
-        .collect()
-}
-
-/// Every workspace, or a scoped caller's own and those split from it.
-async fn visible_workspaces(manager: &Manager, caller: Option<&Caller>) -> Result<Vec<Workspace>> {
-    let mut workspaces = manager.list_workspaces().await?;
-    if let Some(caller) = caller {
-        let subtree = manager.subtree(&caller.workspace_id).await?;
-        workspaces.retain(|workspace| subtree.contains(&workspace.id));
-    }
-    Ok(workspaces)
 }
 
 /// What the daemon last observed of each linked item on its forge, by

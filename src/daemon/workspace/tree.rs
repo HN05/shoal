@@ -51,6 +51,20 @@ impl Manager {
         self.store.run(move |db| subtree(db, &id)).await
     }
 
+    /// The ID, name and branch of `root` and every workspace below it, or
+    /// of every workspace without `root`, by name.
+    pub async fn workspace_refs_within(&self, root: Option<&str>) -> Result<Vec<WorkspaceRef>> {
+        let root = root.map(str::to_owned);
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .prepare(&subtree_query("id,name,branch"))?
+                    .query_map([root], row)?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+    }
+
     /// Queue `message` about the workspace named `name` for its coordinator:
     /// the agent of its nearest ancestor that has one, or the running chat
     /// that owns it or a nearer ancestor. `kind` is the notification the
@@ -158,6 +172,19 @@ pub(super) fn ensure_parent(db: &Connection, repository_id: &str, parent: &str) 
         "parent workspace is {state}; split from a ready workspace"
     );
     Ok(())
+}
+
+/// A query of `columns` from the workspace whose ID is parameter 1 and those
+/// below it, or from every workspace when the parameter is NULL, by name.
+pub(super) fn subtree_query(columns: &str) -> String {
+    format!(
+        "WITH RECURSIVE tree(id) AS (
+            SELECT ?1
+            UNION SELECT workspaces.id FROM workspaces
+                JOIN tree ON workspaces.parent_workspace_id=tree.id
+        ) SELECT {columns} FROM workspaces
+            WHERE ?1 IS NULL OR id IN (SELECT id FROM tree) ORDER BY name"
+    )
 }
 
 fn subtree(db: &Connection, id: &str) -> Result<Vec<String>> {

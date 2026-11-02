@@ -230,14 +230,18 @@ impl Manager {
     }
 
     pub async fn list_workspaces(&self) -> Result<Vec<Workspace>> {
+        self.list_workspaces_within(None).await
+    }
+
+    /// `root` and every workspace below it, or every workspace without
+    /// `root`, by name. Only the selected workspaces load their details.
+    pub async fn list_workspaces_within(&self, root: Option<&str>) -> Result<Vec<Workspace>> {
+        let root = root.map(str::to_owned);
         self.store
-            .run(|db| {
+            .run(move |db| {
                 let mut workspaces = db
-                    .prepare(&format!(
-                        "SELECT {} FROM workspaces ORDER BY name",
-                        store::WORKSPACE_COLUMNS
-                    ))?
-                    .query_map([], store::workspace)?
+                    .prepare(&tree::subtree_query(store::WORKSPACE_COLUMNS))?
+                    .query_map([root], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 for workspace in &mut workspaces {
                     load_details(db, workspace)?;
@@ -268,10 +272,8 @@ impl Manager {
     /// HEAD. A workspace process sees its own subtree with its own workspace
     /// first, since scoped commands without a target act on the first one.
     pub async fn visible_workspaces(&self, owner: Option<&str>) -> Result<Vec<Workspace>> {
-        let mut workspaces = self.list_workspaces().await?;
+        let mut workspaces = self.list_workspaces_within(owner).await?;
         if let Some(owner) = owner {
-            let subtree = self.subtree(owner).await?;
-            workspaces.retain(|w| subtree.contains(&w.id));
             workspaces.sort_by_key(|w| w.id != owner);
         }
         let deadline = review::check_deadline();
