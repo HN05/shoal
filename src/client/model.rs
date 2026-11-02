@@ -357,6 +357,10 @@ pub struct RemovedWorkspace {
     pub checkpoint: Checkpoint,
     pub base_ref: Option<String>,
     pub base_commit: Option<String>,
+    /// Where it started, for a workspace at a commit, which restore opens
+    /// without a branch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<StartingCommit>,
     pub links: SpaceLinks,
     /// Agents stopped by the removal or before it, which `shoal resume`
     /// continues once the workspace is restored.

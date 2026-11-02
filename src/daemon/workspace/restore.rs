@@ -11,8 +11,8 @@ use crate::{
     daemon::events::EventCause,
     git,
     model::{
-        CheckpointCause, Relation, RemovedWorkspace, Repository, RestoredWorkspace, SpaceLinks,
-        Workspace,
+        CheckpointCause, OpenedWorkspace, Relation, RemovedWorkspace, Repository,
+        RestoredWorkspace, SpaceLinks, Workspace,
     },
     time::unix_seconds,
 };
@@ -47,6 +47,7 @@ impl Manager {
             checkpoint,
             base_ref: workspace.base_ref.clone(),
             base_commit: workspace.base_commit.clone(),
+            at: workspace.at.clone(),
             links,
             agents,
             last_sessions,
@@ -104,29 +105,18 @@ impl Manager {
     /// record goes once the files are back.
     pub async fn restore_workspace(&self, selector: &str) -> Result<RestoredWorkspace> {
         let removed = self.claim_removed_workspace(selector).await?;
-        let branch = self.restore_branch(&removed).await?;
         let checkpoint = &removed.checkpoint;
         let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
             head: checkpoint.head.clone(),
             snapshot: checkpoint.commit.clone(),
         });
-        let base = self.restore_base(&removed).await?;
-        let opened = self
-            .open_branch_restoring(
-                removed.repository_id.as_str(),
-                &branch,
-                base,
-                Default::default(),
-                files,
-            )
-            .await?;
-        // The branch check released the repository gate, so another request
-        // may have opened the branch meanwhile; that workspace got no files.
-        ensure!(
-            !opened.reused,
-            "workspace {} opened branch {branch} during the restore",
-            opened.workspace.name
-        );
+        let opened = match removed.at.clone() {
+            Some(at) => OpenedWorkspace {
+                workspace: self.restore_commit_workspace(&removed, at, files).await?,
+                reused: false,
+            },
+            None => self.restore_branch_workspace(&removed, files).await?,
+        };
         let mut warnings = self.relink(&opened.workspace.id, &removed.links).await;
         if let Err(error) = crate::execution::recovery::save_stopped_agents(
             &self.paths,
@@ -151,6 +141,34 @@ impl Manager {
             removed,
             warnings,
         })
+    }
+
+    /// Open the removed workspace `removed` again on its branch at the
+    /// removed HEAD, with `files` from its checkpoint.
+    async fn restore_branch_workspace(
+        &self,
+        removed: &RemovedWorkspace,
+        files: Option<RestoredFiles>,
+    ) -> Result<OpenedWorkspace> {
+        let branch = self.restore_branch(removed).await?;
+        let base = self.restore_base(removed).await?;
+        let opened = self
+            .open_branch_restoring(
+                removed.repository_id.as_str(),
+                &branch,
+                base,
+                Default::default(),
+                files,
+            )
+            .await?;
+        // The branch check released the repository gate, so another request
+        // may have opened the branch meanwhile; that workspace got no files.
+        ensure!(
+            !opened.reused,
+            "workspace {} opened branch {branch} during the restore",
+            opened.workspace.name
+        );
+        Ok(opened)
     }
 
     /// Open a workspace another Shoal exported: record it as removed here

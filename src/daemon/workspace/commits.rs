@@ -4,10 +4,10 @@
 //! Worktrunk like any workspace's.
 use anyhow::{Context, Result};
 
-use super::{Manager, derive_workspace_name};
+use super::{Manager, derive_workspace_name, restore::RestoredFiles};
 use crate::{
     git,
-    model::{MadeFor, Repository, StartingCommit, Workspace},
+    model::{MadeFor, RemovedWorkspace, Repository, StartingCommit, Workspace},
     protocol::{CommitStart, CreationOptions},
     state::WorkspaceState,
 };
@@ -38,35 +38,72 @@ impl Manager {
         };
         let (repo, _guard) = self.lock_repository(repository).await?;
         let start = self.resolve_start(&repo, start).await?;
-        let name = self.free_workspace_name(&start.name).await?;
-        let path = self.new_workspace_path(&repo, &name, None).await?;
+        let head = start.at.commit.clone();
+        let workspace = self
+            .record_commit_workspace(&repo, &start.name, start.at, parent, options)
+            .await?;
+        let result = self
+            .materialize_commit_worktree(&repo, &workspace, &head, None)
+            .await;
+        let created = self.settle_creation(&workspace, result).await?;
+        self.give_to_chat(&created.id, chat).await
+    }
+
+    /// Open the removed workspace at a commit `removed` again, without a
+    /// branch, at its removed HEAD with `files` from its checkpoint; it keeps
+    /// the commit it started `at`.
+    pub(super) async fn restore_commit_workspace(
+        &self,
+        removed: &RemovedWorkspace,
+        at: StartingCommit,
+        files: Option<RestoredFiles>,
+    ) -> Result<Workspace> {
+        let (repo, _guard) = self.lock_repository(removed.repository_id.as_str()).await?;
+        let workspace = self
+            .record_commit_workspace(&repo, &removed.name, at, None, CreationOptions::default())
+            .await?;
+        let head = &removed.checkpoint.head;
+        let result = self
+            .materialize_commit_worktree(&repo, &workspace, head, files.as_ref())
+            .await;
+        self.settle_creation(&workspace, result).await
+    }
+
+    /// Record a new workspace at a commit named after `name`, which started
+    /// `at`, below `parent`. The caller holds the repository's Git gate.
+    async fn record_commit_workspace(
+        &self,
+        repo: &Repository,
+        name: &str,
+        at: StartingCommit,
+        parent: Option<String>,
+        options: CreationOptions,
+    ) -> Result<Workspace> {
+        let name = self.free_workspace_name(name).await?;
+        let path = self.new_workspace_path(repo, &name, None).await?;
         let workspace = Workspace {
-            base_commit: Some(start.at.commit.clone()),
-            at: Some(start.at),
+            base_commit: Some(at.commit.clone()),
+            at: Some(at),
             setup_skipped: options.skip_setup,
             disposable: options.disposable,
             ..Workspace::new_record(repo.id.clone(), name, path, None, WorkspaceState::Preparing)
         };
         self.insert_workspace(workspace.clone(), None, parent)
             .await?;
-        let result = self.materialize_commit_worktree(&repo, &workspace).await;
-        let created = self.settle_creation(&workspace, result).await?;
-        self.give_to_chat(&created.id, chat).await
+        Ok(workspace)
     }
 
-    /// Check out the recorded starting commit and configure the worktree,
-    /// returning whether setup is still needed.
+    /// Check out `head` and configure the worktree with `files` written into
+    /// it, returning whether setup is still needed.
     async fn materialize_commit_worktree(
         &self,
         repo: &Repository,
         workspace: &Workspace,
+        head: &str,
+        files: Option<&RestoredFiles>,
     ) -> Result<bool> {
-        let at = workspace
-            .at
-            .as_ref()
-            .context("workspace records no starting commit")?;
-        git::detached::add_workspace(&repo.path, &workspace.path, &at.commit).await?;
-        self.configure_worktree(repo, workspace, None, None).await
+        git::detached::add_workspace(&repo.path, &workspace.path, head).await?;
+        self.configure_worktree(repo, workspace, files, None).await
     }
 
     /// Resolve `start` in `repo`: the commit, what it was made for and the

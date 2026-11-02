@@ -64,13 +64,9 @@ pub async fn commits_since(repo: &Path, base: &str) -> Result<u64> {
 }
 
 /// Commits on `revision` that are reachable from neither a remote nor the given ref.
-pub async fn unretained_commits(
-    repo: &Path,
-    revision: &str,
-    retained_ref: Option<&str>,
-) -> Result<u64> {
+pub async fn unretained_commits(repo: &Path, revision: &str, retained: &[&str]) -> Result<u64> {
     let mut args = vec!["rev-list", "--count", revision, "--not", "--remotes"];
-    args.extend(retained_ref);
+    args.extend(retained);
     Ok(run(repo, &args).await?.trim().parse()?)
 }
 
@@ -175,7 +171,8 @@ pub async fn unkept_commits(repo: &Path, commit: &str, default: &str) -> Result<
     if retains(repo, &references, commit, &tree).await? {
         return Ok(0);
     }
-    unretained_commits(repo, commit, references.first().map(String::as_str)).await
+    let retained: Vec<_> = references.first().map(String::as_str).into_iter().collect();
+    unretained_commits(repo, commit, &retained).await
 }
 
 /// Commits of `commit` that neither a branch in `present` nor the default

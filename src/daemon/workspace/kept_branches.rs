@@ -340,7 +340,7 @@ async fn kept_status(
         (Some(default), Evidence::TrackingRefs) => {
             git::status::unkept_commits(repo, &record.head, default).await?
         }
-        (None, _) => git::status::unretained_commits(repo, &record.head, None).await?,
+        (None, _) => git::status::unretained_commits(repo, &record.head, &[]).await?,
     };
     Ok(Status::Kept { unkept_commits })
 }

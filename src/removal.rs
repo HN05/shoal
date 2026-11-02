@@ -134,9 +134,12 @@ pub(crate) async fn inspect(
     check.matches_default_branch = git::status::retains(path, &default_refs, "HEAD", &tree).await?;
     // Merged changes are on the default branch even when their commits are not.
     if !check.matches_default_branch {
-        check.unpushed_commits =
-            git::status::unretained_commits(path, "HEAD", default_refs.first().map(String::as_str))
-                .await?;
+        check.unpushed_commits = git::status::unretained_commits(
+            path,
+            "HEAD",
+            &kept_refs(&check.workspace, &default_refs),
+        )
+        .await?;
         check.integrated = check.unpushed_commits > 0
             && start_branch_retains_head(&check.workspace, default_branch, &tree).await?;
     }
@@ -146,6 +149,18 @@ pub(crate) async fn inspect(
             .await?;
     }
     Ok(check)
+}
+
+/// What keeps a workspace's commits besides the remotes: the local default
+/// branch, and for a workspace at a commit the commit it started at, such as
+/// a fork PR's head or a local commit no remote has.
+fn kept_refs<'a>(workspace: &'a Workspace, default_refs: &'a [String]) -> Vec<&'a str> {
+    default_refs
+        .first()
+        .map(String::as_str)
+        .into_iter()
+        .chain(workspace.at.as_ref().map(|at| at.commit.as_str()))
+        .collect()
 }
 
 /// Whether the local branch the workspace builds on, unless it is the

@@ -242,3 +242,78 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
         assert_eq!(authorized.is_ok(), allowed, "{parent:?}");
     }
 }
+
+#[tokio::test]
+async fn its_starting_commit_counts_as_kept_and_later_commits_do_not() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    // A commit no remote or branch has, as a fork PR's head would be.
+    git(&checkout, &["checkout", "-q", "--detach"]);
+    std::fs::write(checkout.join("local"), "local\n").unwrap();
+    commit(&checkout, "local");
+    let local = git(&checkout, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(&checkout, &["checkout", "-q", "main"]);
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = create(&manager, &repo.id, None, CommitStart::Revision(Some(local)))
+        .await
+        .unwrap();
+    let check = manager
+        .check_removal(&workspace.id, crate::removal::InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    assert!(check.safe() && check.unsaved_work().is_empty(), "{check:?}");
+    assert!(matches!(
+        manager.cleanup_reason(&workspace).await,
+        crate::model::CleanupReason::Idle { .. }
+    ));
+
+    std::fs::write(workspace.path.join("later"), "later\n").unwrap();
+    commit(&workspace.path, "later");
+    let check = manager
+        .check_removal(&workspace.id, crate::removal::InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    assert_eq!(check.unpushed_commits, 1);
+    assert_eq!(check.unsaved_work().len(), 1, "{check:?}");
+}
+
+#[tokio::test]
+async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = create(&manager, &repo.id, None, CommitStart::Revision(None))
+        .await
+        .unwrap();
+    std::fs::write(workspace.path.join("later"), "later\n").unwrap();
+    commit(&workspace.path, "later");
+    let removed_head = head(&workspace.path).0;
+    std::fs::write(workspace.path.join("draft"), "draft\n").unwrap();
+    manager
+        .remove_workspace(
+            &workspace.id,
+            crate::removal::UnsavedWork::All,
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(!workspace.path.exists());
+    assert!(git(&checkout, &["branch", "--list", &workspace.name]).is_empty());
+
+    let restored = manager.restore_workspace(&workspace.name).await.unwrap();
+    let reopened = restored.opened.workspace;
+    assert_eq!(reopened.branch, None);
+    assert_eq!(reopened.at, workspace.at);
+    assert_eq!(head(&reopened.path), (removed_head, String::new()));
+    assert_eq!(
+        std::fs::read_to_string(reopened.path.join("draft")).unwrap(),
+        "draft\n"
+    );
+    assert!(git(&checkout, &["branch", "--list", &workspace.name]).is_empty());
+}

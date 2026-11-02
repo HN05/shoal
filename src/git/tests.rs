@@ -35,7 +35,7 @@ async fn a_clone_with_a_fork_pushes_there_and_counts_the_push() {
     std::fs::write(clone_path.join("change"), "change\n").unwrap();
     commit(&clone_path, "change");
     assert_eq!(
-        status::unretained_commits(&clone_path, "HEAD", None)
+        status::unretained_commits(&clone_path, "HEAD", &[])
             .await
             .unwrap(),
         1
@@ -44,7 +44,7 @@ async fn a_clone_with_a_fork_pushes_there_and_counts_the_push() {
     let args: Vec<&str> = push[1..].iter().map(|arg| arg.to_str().unwrap()).collect();
     git(&clone_path, &args);
     assert_eq!(
-        status::unretained_commits(&clone_path, "HEAD", None)
+        status::unretained_commits(&clone_path, "HEAD", &[])
             .await
             .unwrap(),
         0

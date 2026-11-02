@@ -2858,6 +2858,12 @@ first, or with `--yes`. Large previews show an omitted-entry count; use
 `git status` for the full list. Every removal of an existing worktree first keeps
 them, with HEAD, in a [checkpoint](#checkpoints-and-restore).
 
+A [workspace at a commit](#child-workspaces) has no branch to delete or keep. The
+commit it started at counts as kept, so a fork PR's head or a local commit it was
+created at never keeps it from cleanup; commits made on top of it and uncommitted
+changes are unsaved work as on a detached HEAD. `shoal work restore` reopens it
+without a branch at the checkpoint's HEAD.
+
 `--disposable` on `shoal add` and `shoal split` creates a workspace that holds
 nothing worth keeping, such as one a CI job runs in: every removal, `shoal rm`,
 its parent's removal and idle or other cleanup, deletes it without inspecting its
