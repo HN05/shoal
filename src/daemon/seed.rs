@@ -514,14 +514,26 @@ const GROUP_EXIT_WARNING: Duration = Duration::from_secs(30);
 async fn group_gone(group: i32) {
     let started = tokio::time::Instant::now();
     let mut warned = false;
-    // A failed check counts as alive, so nothing writes once this returns.
-    while crate::process::identity::group_alive(group as u32)
-        .await
-        .unwrap_or(true)
-    {
-        if !warned && started.elapsed() >= GROUP_EXIT_WARNING {
-            log!("seed build group {group} survives SIGKILL; waiting for it to exit");
-            warned = true;
+    let mut check_failed = false;
+    loop {
+        match crate::process::identity::group_alive(group as u32).await {
+            Ok(false) => return,
+            Ok(true) => {
+                if !warned && started.elapsed() >= GROUP_EXIT_WARNING {
+                    log!("seed build group {group} survives SIGKILL; waiting for it to exit");
+                    warned = true;
+                }
+            }
+            // A failed check counts as alive, so nothing writes once this
+            // returns.
+            Err(error) => {
+                if !check_failed {
+                    log!(
+                        "cannot check seed build group {group}; waiting for it to exit: {error:#}"
+                    );
+                    check_failed = true;
+                }
+            }
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
