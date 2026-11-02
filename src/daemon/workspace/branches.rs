@@ -24,6 +24,7 @@ pub(crate) struct NewWorktreeOptions<'a> {
     pub git_profile: Option<&'a str>,
     pub path: Option<&'a Path>,
     pub base: Option<&'a str>,
+    pub disposable: bool,
 }
 
 /// What opening an existing branch does.
@@ -389,6 +390,7 @@ impl Manager {
             git_profile: new.git_profile,
             path: new.path.as_deref(),
             base: base.as_deref(),
+            disposable: new.options.disposable,
         };
         let branch = match self.open_target(&repo, selector, options).await? {
             OpenTarget::Reopen(workspace) => {

@@ -675,6 +675,7 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
         git_profile,
         path,
         base,
+        disposable: false,
     };
     let none = NewWorktreeOptions::default();
     let new_path = f.root.path().join("elsewhere");
@@ -711,6 +712,16 @@ async fn creation_check_refuses_what_creation_refuses_without_creating() {
             Some("owned"),
             options(Some("main"), None, None),
             "only to new worktrees",
+        ),
+        (
+            &*f.repo_id,
+            None,
+            Some("topic"),
+            NewWorktreeOptions {
+                disposable: true,
+                ..none
+            },
+            "only to a new branch",
         ),
         (
             &*f.repo_id,

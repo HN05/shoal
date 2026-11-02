@@ -105,6 +105,7 @@ pub(super) async fn handle(
             base,
             git_profile,
             path,
+            options,
         } => {
             manager
                 .check_creation(
@@ -115,6 +116,7 @@ pub(super) async fn handle(
                         git_profile: git_profile.as_deref(),
                         path: path.as_deref(),
                         base: base.as_deref(),
+                        disposable: options.disposable,
                     },
                 )
                 .await?;

@@ -466,6 +466,7 @@ impl Manager {
     ) -> Result<()> {
         let repo = self.repository(repository).await?;
         self.ensure_repository_available(&repo.id).await?;
+        ensure_disposable_new(options.disposable, existing)?;
         let (name, opened) = match (branch, existing) {
             (Some(name), _) => {
                 git::check_branch_name(Some(&repo.path), name).await?;
@@ -516,11 +517,11 @@ impl Manager {
             path,
             options,
         } = new;
-        // Its removal would delete a branch the user had before it.
-        ensure!(
-            !options.disposable || matches!(source, WorkspaceSource::New { .. }),
-            "--disposable applies only to a new branch; {branch} already exists"
-        );
+        let existing = match &source {
+            WorkspaceSource::Existing { .. } => Some(branch.as_str()),
+            WorkspaceSource::New { .. } => None,
+        };
+        ensure_disposable_new(options.disposable, existing)?;
         if let Some(name) = git_profile {
             self.config().machine.git_profiles.profile(name)?;
         }
@@ -1016,6 +1017,17 @@ pub(crate) fn derive_workspace_name(branch: &str) -> String {
         "workspace".into()
     } else {
         name.chars().take(crate::validate::MAX_NAME_LEN).collect()
+    }
+}
+
+/// Refuse a disposable workspace on the `existing` branch, which its removal
+/// would delete although the user had it before.
+fn ensure_disposable_new(disposable: bool, existing: Option<&str>) -> Result<()> {
+    match (disposable, existing) {
+        (true, Some(branch)) => {
+            bail!("--disposable applies only to a new branch; {branch} already exists")
+        }
+        _ => Ok(()),
     }
 }
 

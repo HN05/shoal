@@ -77,6 +77,8 @@ pub enum WorkspaceMethod {
         base: Option<String>,
         git_profile: Option<String>,
         path: Option<std::path::PathBuf>,
+        #[serde(default)]
+        options: CreationOptions,
     },
     /// Refuse the work `after` names that a queued launch in `repository`
     /// could not wait for, without queuing anything.

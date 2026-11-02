@@ -266,6 +266,7 @@ pub(super) async fn check_add_creation(
             base: creation.base.clone(),
             git_profile: creation.git_profile.clone(),
             path: creation.path.clone(),
+            options: creation.options,
         },
     )
     .await
