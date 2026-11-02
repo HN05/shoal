@@ -198,6 +198,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     // journal, so they go with it.
     db.execute_batch(
         "DROP TRIGGER workspace_chat_changed; DROP INDEX workspaces_chat;
+         DROP TRIGGER workspace_grace_removed; DROP TRIGGER chat_grace_removed;
          ALTER TABLE workspaces DROP COLUMN chat_id; DROP TABLE chats;",
     )?;
     db.execute_batch(

@@ -243,7 +243,7 @@ fn save(db: &mut Connection, restore: ChatRestore) -> Result<Saved> {
     let mut released = Vec::new();
     for (id, process) in &running {
         tx.execute(
-            "UPDATE chats SET restore=?2,unique_id=?3 WHERE id=?1",
+            "UPDATE chats SET restore=?2,unique_id=?3,stopped_at=unixepoch(),saved=1 WHERE id=?1",
             params![id, restore, unique_id(process)?],
         )?;
         released.extend(release_decided_by(&tx, id)?);
@@ -268,7 +268,8 @@ fn unique_id(process: &Identity) -> Result<Option<String>> {
 fn resave(db: &mut Connection, id: &str, pid: u32) -> Result<(Chat, Vec<ApprovalRequest>)> {
     let tx = db.transaction()?;
     tx.execute(
-        "UPDATE chats SET restore=?3 WHERE id=?1 AND pid=?2 AND restore IS NULL",
+        "UPDATE chats SET restore=?3,stopped_at=unixepoch(),saved=1
+         WHERE id=?1 AND pid=?2 AND restore IS NULL",
         params![id, pid, ChatRestore::Resume],
     )?;
     let chat = recorded(&tx)?
@@ -288,7 +289,8 @@ fn resave(db: &mut Connection, id: &str, pid: u32) -> Result<(Chat, Vec<Approval
 /// Return the chat `id`, saved while it ran as `process`, to running.
 fn unsave(db: &mut Connection, id: &str, process: &Identity) -> Result<()> {
     db.execute(
-        "UPDATE chats SET restore=NULL WHERE id=?1 AND pid=?2 AND birth=?3",
+        "UPDATE chats SET restore=NULL,stopped_at=NULL,saved=0
+         WHERE id=?1 AND pid=?2 AND birth=?3",
         params![id, process.pid, process.birth],
     )?;
     Ok(())
@@ -325,7 +327,7 @@ fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
     let tx = db.transaction()?;
     ensure_checkout_free(&tx, &restored.repository)?;
     let updated = tx.execute(
-        "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL
+        "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0
          WHERE id=?1 AND restore IS NOT NULL",
         params![
             restored.id,

@@ -380,6 +380,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 115 {
         db.execute_batch(include_str!("changed_on_both_sides.sql"))?;
     }
+    if version >= 116 {
+        db.execute_batch(include_str!("space_cleanup.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

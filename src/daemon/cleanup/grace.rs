@@ -6,12 +6,12 @@ use std::time::Duration;
 use crate::{daemon::workspace::Manager, time::unix_seconds};
 
 impl Manager {
-    /// When the workspace's grace period ends, starting it now when none
-    /// runs, and recording that this pass still wants to remove it.
+    /// When the space's grace period ends, starting it now when none runs,
+    /// and recording that this pass still wants to remove it.
     pub(crate) async fn claim_grace(&self, id: &str, grace: Duration) -> Result<u64> {
         self.claim(
-            "INSERT INTO cleanup_grace(workspace_id, cleanup_at, claimed) VALUES (?1, ?2, 1)
-             ON CONFLICT(workspace_id) DO UPDATE SET claimed=1
+            "INSERT INTO cleanup_grace(space_id, cleanup_at, claimed) VALUES (?1, ?2, 1)
+             ON CONFLICT(space_id) DO UPDATE SET claimed=1
              RETURNING cleanup_at",
             id,
             grace,
@@ -45,14 +45,14 @@ impl Manager {
             .await
     }
 
-    /// When automatic cleanup removes the workspace, while its grace period runs.
+    /// When automatic cleanup removes the space, while its grace period runs.
     pub(crate) async fn cleanup_at(&self, id: &str) -> Result<Option<u64>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 let cleanup_at: Option<i64> = db
                     .query_row(
-                        "SELECT cleanup_at FROM cleanup_grace WHERE workspace_id=?1",
+                        "SELECT cleanup_at FROM cleanup_grace WHERE space_id=?1",
                         [id],
                         |row| row.get(0),
                     )
@@ -75,7 +75,7 @@ impl Manager {
     }
 
     /// End the grace periods no attempt in this pass claimed: those
-    /// workspaces and contributions stopped qualifying, so a later attempt
+    /// spaces and contributions stopped qualifying, so a later attempt
     /// starts a new one.
     pub(super) async fn end_unclaimed_grace(&self) -> Result<()> {
         self.store

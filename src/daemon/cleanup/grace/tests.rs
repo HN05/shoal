@@ -33,7 +33,7 @@ async fn end_grace(manager: &Manager, workspace: &Workspace) {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE cleanup_grace SET cleanup_at=0 WHERE workspace_id=?1",
+                "UPDATE cleanup_grace SET cleanup_at=0 WHERE space_id=?1",
                 [id],
             )?;
             Ok(())

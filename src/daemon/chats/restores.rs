@@ -79,7 +79,10 @@ fn claim_automatic(db: &mut Connection) -> Result<Vec<Chat>> {
             false => Some(ChatRestore::Resume),
         };
         tx.execute(
-            "UPDATE chats SET restore=?2 WHERE id=?1",
+            "UPDATE chats SET restore=?2,
+                stopped_at=CASE WHEN ?2 IS NULL THEN NULL ELSE stopped_at END,
+                saved=CASE WHEN ?2 IS NULL THEN 0 ELSE saved END
+             WHERE id=?1",
             params![chat.id, restore],
         )?;
         if restore.is_some() {

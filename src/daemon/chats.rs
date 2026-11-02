@@ -558,7 +558,7 @@ fn stop(db: &mut Connection, exited: &[(String, Identity)]) -> Result<Vec<Approv
     let mut released = Vec::new();
     for (id, process) in exited {
         let stopped = tx.execute(
-            "UPDATE chats SET restore=?4,starting=0
+            "UPDATE chats SET restore=?4,starting=0,stopped_at=unixepoch(),saved=0
              WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
             params![id, process.pid, process.birth, ChatRestore::Resume],
         )?;

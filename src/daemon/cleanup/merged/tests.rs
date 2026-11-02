@@ -219,7 +219,7 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE cleanup_grace SET cleanup_at=0 WHERE workspace_id=?1",
+                "UPDATE cleanup_grace SET cleanup_at=0 WHERE space_id=?1",
                 [id],
             )?;
             Ok(())
