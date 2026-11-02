@@ -349,6 +349,12 @@ without touching the worktree. Without a watched PR, `shoal watch`
 returns a `merge_conflict` update when that check newly fails. After rebasing a pushed branch, push it with
 `git push --force-with-lease`.
 
+A repository can list files that hold a number each change picks for itself,
+such as a schema migration or protocol version. `shoal conflicts` lists such a
+file under "Changed on both sides" when your branch and its base both changed
+it, even though Git merges them cleanly, and the watch reports it with or
+without a PR. Update from the base, renumber past the base's value, and push.
+
 Branches of other workspaces are shared refs, so `git merge feature/api`
 brings in their latest commits; use `origin/feature/api` for pushed work after
 `shoal repo sync`. Stay on your workspace's recorded branch. When it builds on
