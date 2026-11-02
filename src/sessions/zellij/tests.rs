@@ -148,6 +148,27 @@ fn a_missing_session_lists_nothing() {
     assert!(!nothing_to_list("Permission denied"));
 }
 
+#[test]
+fn a_session_without_an_answer_is_reported_missing() {
+    let missing = "No session named \"busy\" found.\n  help: Did you mean `busy`?\n";
+    assert_eq!(killed(&exited(1, missing, "")).ok(), Some(Kill::Missing));
+    assert_eq!(killed(&exited(0, "", "")).ok(), Some(Kill::Sent));
+    let none = "No active zellij sessions found.";
+    assert_eq!(killed(&exited(1, "", none)).ok(), Some(Kill::Sent));
+    let failed = killed(&exited(1, "Permission denied\n", "")).map_err(|error| error.to_string());
+    assert_eq!(failed, Err("zellij failed: Permission denied".to_owned()));
+}
+
+/// What a command that exited with `code`, printing `stdout` and `stderr`,
+/// leaves.
+fn exited(code: i32, stdout: &str, stderr: &str) -> std::process::Output {
+    std::process::Output {
+        status: std::os::unix::process::ExitStatusExt::from_raw(code << 8),
+        stdout: stdout.into(),
+        stderr: stderr.into(),
+    }
+}
+
 /// A Zellij session of its own, in a socket directory short enough for its
 /// socket path, started without the runner's Zellij config, home or shell
 /// and ended on drop, with a client on a terminal of its own showing it,
