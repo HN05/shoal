@@ -7802,6 +7802,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         (&["status"], "missing workspace; pass <target>"),
         (&["stop"], "missing workspaces; pass <space>"),
         (&["diff"], workspace),
+        (&["view", "pr", "12"], "pass --space or --repo"),
         (&["done"], workspace),
         (&["check"], workspace),
     ] {

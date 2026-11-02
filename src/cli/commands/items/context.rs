@@ -16,6 +16,10 @@ use crate::{
 const NO_CONTEXT: &str =
     "no current workspace or registered checkout; run this in one, or pass --workspace or --repo";
 
+/// [`NO_CONTEXT`] for a command that acts on a space.
+const NO_SPACE_CONTEXT: &str =
+    "no current workspace, chat or registered checkout; run this in one, or pass --space or --repo";
+
 /// What is missing when nothing gives a non-interactive command that takes
 /// only `--repo` its repository.
 const NO_REPOSITORY: &str =
@@ -63,7 +67,7 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     {
         return Ok(ItemContext::Checkout(repo.id.clone()));
     }
-    ensure!(ctx.interactive(), "{NO_CONTEXT}");
+    ensure!(ctx.interactive(), "{NO_SPACE_CONTEXT}");
     let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?;
     space_context(ctx, space).await
 }
