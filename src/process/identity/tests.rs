@@ -686,7 +686,7 @@ fn list_unreaped_child(
     child: &mut std::process::Child,
 ) -> Result<(Vec<(u32, u32, u32)>, Vec<u32>, Vec<(u32, u32, u32)>)> {
     let identity = capture(child.id())?.context("identify live child")?;
-    let live = same_user_processes()?;
+    let live = list_same_user()?;
     let own = list_processes()?.own;
     drop(child.stdin.take());
     let deadline = std::time::Instant::now() + Duration::from_secs(60);
@@ -694,7 +694,7 @@ fn list_unreaped_child(
         ensure!(std::time::Instant::now() < deadline, "child never exited");
         std::thread::sleep(Duration::from_millis(10));
     }
-    Ok((live, own, same_user_processes()?))
+    Ok((live, own, list_same_user()?))
 }
 
 #[test]
@@ -751,7 +751,7 @@ fn a_process_named_with_invalid_utf8_is_listed_and_identified() -> Result<()> {
         .args(["-c", "read line"])
         .stdin(std::process::Stdio::piped())
         .spawn()?;
-    let listed = same_user_processes();
+    let listed = list_same_user();
     let identity = capture(child.id());
     drop(child.stdin.take());
     child.wait()?;

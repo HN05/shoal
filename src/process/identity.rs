@@ -1589,7 +1589,7 @@ pub async fn started_by(identities: &[Identity], wrappers: &[Identity]) -> Resul
     if roots.is_empty() {
         return Ok(Vec::new());
     }
-    let rows = same_user_processes()?;
+    let rows = same_user_processes().await?;
     let wrappers = wrappers.to_vec();
     tokio::task::spawn_blocking(move || {
         let mut lineages = Vec::new();
@@ -1633,7 +1633,7 @@ pub async fn related(
     let Some(group) = group else {
         return Ok((vec![], vec![]));
     };
-    let rows = same_user_processes()?;
+    let rows = same_user_processes().await?;
     let live = child.map(alive).transpose()?.unwrap_or(false);
     let mut pids: HashSet<u32> = rows
         .iter()
@@ -1670,7 +1670,13 @@ pub async fn related(
 
 /// Same-user processes other than init and the daemon, as (PID, process
 /// group, parent PID).
-fn same_user_processes() -> Result<Vec<(u32, u32, u32)>> {
+async fn same_user_processes() -> Result<Vec<(u32, u32, u32)>> {
+    tokio::task::spawn_blocking(list_same_user)
+        .await
+        .context("process listing worker failed")?
+}
+
+fn list_same_user() -> Result<Vec<(u32, u32, u32)>> {
     let user = unsafe { libc::geteuid() };
     Ok(listed()?
         .into_iter()
