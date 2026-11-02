@@ -136,7 +136,9 @@ impl Target {
     /// Where the daemon recorded the target running, with its agents.
     fn places(&self) -> Vec<Recorded<'_>> {
         match self {
-            Self::Workspace(inspection) => Recorded::workspace(inspection),
+            Self::Workspace(inspection) => {
+                Recorded::workspace(&inspection.executions, &inspection.places)
+            }
             Self::Chat(chat) => Recorded::chat(chat),
         }
     }

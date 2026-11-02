@@ -1,5 +1,5 @@
 use super::*;
-use crate::model::{Execution, Workspace};
+use crate::model::Execution;
 
 #[test]
 fn a_place_repeats_only_in_the_same_host_and_server() {
@@ -77,29 +77,14 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
         origin: None,
         ..execution(&agent, Some("codex"))
     };
-    let inspection = Inspection {
-        issue: None,
-        completion: None,
-        pr_cleanup: None,
-        workspace: Workspace::new_record(
-            "repo".into(),
-            "workspace".into(),
-            "/workspace".into(),
-            Some("topic".into()),
-            crate::state::WorkspaceState::Ready,
-        ),
-        executions: vec![
-            execution(&agent, Some("claude")),
-            execution(&setup, None),
-            detached,
-        ],
-        places: vec![shell.clone()],
-        ports: Vec::new(),
-        resources: Vec::new(),
-        simulators: Vec::new(),
-    };
+    let executions = [
+        execution(&agent, Some("claude")),
+        execution(&setup, None),
+        detached,
+    ];
+    let places = [shell.clone()];
     assert_eq!(
-        Recorded::workspace(&inspection),
+        Recorded::workspace(&executions, &places),
         [
             Recorded {
                 place: &agent,
@@ -157,26 +142,9 @@ fn a_workspace_records_where_a_stopped_agent_waits() {
         agent: Some("claude".into()),
         stopped: Some(stopped_by_load()),
     };
-    let inspection = Inspection {
-        issue: None,
-        completion: None,
-        pr_cleanup: None,
-        workspace: Workspace::new_record(
-            "repo".into(),
-            "workspace".into(),
-            "/workspace".into(),
-            Some("topic".into()),
-            crate::state::WorkspaceState::Ready,
-        ),
-        executions: vec![execution],
-        places: Vec::new(),
-        ports: Vec::new(),
-        resources: Vec::new(),
-        simulators: Vec::new(),
-    };
     let protection = stopped_by_load();
     assert_eq!(
-        Recorded::workspace(&inspection),
+        Recorded::workspace(&[execution], &[]),
         [Recorded {
             place: &place,
             agent: Some("claude"),

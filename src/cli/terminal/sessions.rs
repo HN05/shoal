@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     config::Effective,
-    model::{Chat, Inspection},
+    model::{Chat, Execution},
     protocol::Protection,
     sessions::{HostName, Origin},
 };
@@ -114,17 +114,17 @@ pub(in crate::cli) struct Recorded<'a> {
 }
 
 impl<'a> Recorded<'a> {
-    /// Where `inspection` recorded its workspace's executions running, with
-    /// their agents, and the places Shoal created for it.
-    pub fn workspace(inspection: &'a Inspection) -> Vec<Self> {
-        let executions = inspection.executions.iter().filter_map(|execution| {
+    /// Where a workspace's `executions` were recorded running, with their
+    /// agents, and the `places` Shoal created for it.
+    pub fn workspace(executions: &'a [Execution], places: &'a [Origin]) -> Vec<Self> {
+        let executions = executions.iter().filter_map(|execution| {
             Some(Self {
                 place: execution.origin.as_ref()?,
                 agent: execution.agent.as_deref(),
                 stopped: execution.stopped.as_ref(),
             })
         });
-        let created = inspection.places.iter().map(|place| Self {
+        let created = places.iter().map(|place| Self {
             place,
             agent: None,
             stopped: None,

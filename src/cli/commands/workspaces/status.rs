@@ -53,7 +53,7 @@ async fn status_view(ctx: &Context, workspace: String) -> Result<StatusView> {
         request::<WorkspaceStatus>(&ctx.paths, WorkspaceMethod::WorkspaceStatus { workspace })
             .await?;
     let chat = chat_name(&chats, &status.inspection.workspace);
-    let places = Recorded::workspace(&status.inspection);
+    let places = Recorded::workspace(&status.inspection.executions, &status.inspection.places);
     let (sessions, sessions_error) =
         match sessions(ctx, &status.inspection.workspace, &places).await {
             Ok(sessions) => (sessions, None),
