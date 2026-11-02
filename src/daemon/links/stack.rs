@@ -13,7 +13,7 @@ use crate::{
     },
     forge::{
         items::link::ItemKind,
-        updates::{Update, UpdateKind},
+        updates::{Edited, Update, UpdateKind},
     },
     model::{Workspace, WorkspaceRef},
 };
@@ -99,26 +99,30 @@ impl Manager {
             .run(move |db| wait::linked_items(db, &id, None))
             .await?;
         let mut updates = Vec::new();
+        let mut retargeted = Vec::new();
         for (url, kind) in items {
-            let retargeted = match kind {
+            let outcome = match kind {
                 ItemKind::Pr => {
                     self.retarget_stacked(&workspace, &url, base, head, target)
                         .await?
                 }
                 ItemKind::Issue => None,
             };
-            updates.push(base_merged_update(url, base, target, head, retargeted));
+            if matches!(outcome, Some(Retarget::Done)) {
+                retargeted.push((url.clone(), Edited::retarget(&base.branch, target)));
+            }
+            updates.push(base_merged_update(url, base, target, head, outcome));
         }
         self.ensure_base_unchanged(base, head).await?;
         let (id, base_id) = (workspace.id, base.id.clone());
         self.store
-            .run(move |db| record_restack(db, &id, &base_id, updates))
+            .run(move |db| record_restack(db, &id, &base_id, updates, retargeted))
             .await
     }
 
-    /// Retarget a stacked PR that still targets the merged base branch,
-    /// describing the outcome for the agent's update. Changed ownership or
-    /// base HEAD aborts the restack instead.
+    /// Retarget a stacked PR that still targets the merged base branch;
+    /// `None` when it targets another. Changed ownership or base HEAD aborts
+    /// the restack instead.
     async fn retarget_stacked(
         &self,
         workspace: &Workspace,
@@ -126,7 +130,7 @@ impl Manager {
         base: &Workspace,
         head: &str,
         target: &str,
-    ) -> Result<Option<String>> {
+    ) -> Result<Option<Retarget>> {
         let lookup = async {
             let (forge, number, _) = self.pr_forge(&workspace.path, url).await?;
             let current = forge.pull_request(&self.user_account(), url).await?.base;
@@ -136,19 +140,15 @@ impl Manager {
         let (forge, number) = match lookup {
             Ok(Some(pr)) => pr,
             Ok(None) => return Ok(None),
-            Err(error) => {
-                return Ok(Some(format!(
-                    "; retargeting this PR to {target} failed: {error:#}"
-                )));
-            }
+            Err(error) => return Ok(Some(Retarget::Failed(error))),
         };
         // Lookups take time; recheck what authorizes the write right before it.
         self.verify_checked(workspace).await?;
         self.ensure_base_unchanged(base, head).await?;
         Ok(Some(
             match forge.retarget(&self.user_account(), number, target).await {
-                Ok(()) => format!("; Shoal retargeted this PR to {target}"),
-                Err(error) => format!("; retargeting this PR to {target} failed: {error:#}"),
+                Ok(()) => Retarget::Done,
+                Err(error) => Retarget::Failed(error),
             },
         ))
     }
@@ -175,6 +175,12 @@ impl Manager {
     }
 }
 
+/// How retargeting a stacked PR to the branch its base merged into went.
+enum Retarget {
+    Done,
+    Failed(anyhow::Error),
+}
+
 /// The `base_merged` update telling a stacked workspace's agent to rebase
 /// past `head` onto `target`, with the outcome of retargeting its PR.
 fn base_merged_update(
@@ -182,12 +188,18 @@ fn base_merged_update(
     base: &Workspace,
     target: &str,
     head: &str,
-    retargeted: Option<String>,
+    retargeted: Option<Retarget>,
 ) -> Update {
+    let retargeted = match retargeted {
+        None => String::new(),
+        Some(Retarget::Done) => format!("; Shoal retargeted this PR to {target}"),
+        Some(Retarget::Failed(error)) => {
+            format!("; retargeting this PR to {target} failed: {error:#}")
+        }
+    };
     let message = format!(
-        "Base workspace {} merged into {target}{}. Rebase onto it: git fetch origin && git rebase --onto origin/{target} {head}",
+        "Base workspace {} merged into {target}{retargeted}. Rebase onto it: git fetch origin && git rebase --onto origin/{target} {head}",
         base.name,
-        retargeted.unwrap_or_default()
     );
     Update {
         url,
@@ -199,14 +211,17 @@ fn base_merged_update(
     }
 }
 
-/// Atomically stack `id` on the base of `base_id`, journal the change and
-/// queue `updates` for its next watch. Does nothing once `id` no longer
-/// builds on `base_id`: another sweep or a manual change already moved it.
+/// Atomically stack `id` on the base of `base_id`, journal the change,
+/// queue `updates` for its next watch and take the PRs Shoal `retargeted`
+/// as changed already, since the updates say so. Does nothing once `id` no
+/// longer builds on `base_id`: another sweep or a manual change already
+/// moved it.
 fn record_restack(
     db: &mut Connection,
     id: &str,
     base_id: &str,
     updates: Vec<Update>,
+    retargeted: Vec<(String, Edited)>,
 ) -> Result<()> {
     let tx = db.transaction()?;
     let changed = tx.execute(
@@ -220,6 +235,15 @@ fn record_restack(
     record_base_changed(&tx, id, EventCause::Pr)?;
     for update in updates {
         wait::queue_update(&tx, id, update)?;
+    }
+    for (url, edited) in retargeted {
+        let change = wait::OwnChange {
+            url: &url,
+            authored: Vec::new(),
+            state: None,
+            edited,
+        };
+        wait::record_own_change(&tx, id, change)?;
     }
     tx.commit()?;
     Ok(())

@@ -29,6 +29,8 @@ pub(crate) const DISCUSSION: &str = "discussion";
 
 mod comments;
 pub(crate) use comments::{Entry, verdict_entries};
+mod details;
+pub use details::{Edited, ItemDetails};
 
 crate::state::states!(UpdateKind {
     Comment => "comment",
@@ -37,6 +39,8 @@ crate::state::states!(UpdateKind {
     Closed => "closed",
     Merged => "merged",
     Reopened => "reopened",
+    /// The title, description, labels or other details changed.
+    Edited => "edited",
     LookupFailed => "lookup_failed",
     /// The base workspace's PRs merged; rebase onto their target branch.
     BaseMerged => "base_merged",
@@ -96,6 +100,10 @@ pub struct Snapshot {
     #[serde(skip)]
     pub(crate) conflict_exact: bool,
     pub(crate) state: String,
+    /// What people edit of an issue or PR; `None` for a CI run or branch,
+    /// and in snapshots saved before details were recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) details: Option<ItemDetails>,
     /// A failed run's failed jobs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) failed_jobs: Vec<FailedJob>,
@@ -204,6 +212,11 @@ impl Snapshot {
         }
         if let Some(message) = self.new_conflict(next) {
             emit(UpdateKind::MergeConflict, message, None);
+        }
+        if let (Some(seen), Some(details)) = (&self.details, &next.details)
+            && let Some(summary) = seen.summary(details)
+        {
+            emit(UpdateKind::Edited, summary, None);
         }
         if next.state != self.state {
             match next.state.as_str() {
@@ -511,11 +524,20 @@ impl ForgeRepo {
 }
 
 impl Snapshot {
-    /// A snapshot of an item in `state`, before anything else is recorded.
+    /// A snapshot of a run in `state`, before anything else is recorded.
     pub(crate) fn new(state: &str) -> Self {
         Self {
             state: state.into(),
             ..Self::default()
+        }
+    }
+
+    /// A snapshot of the issue or PR `current`, before its discussion and
+    /// checks are recorded.
+    pub(crate) fn item(current: &Current) -> Self {
+        Self {
+            details: Some(ItemDetails::of(current)),
+            ..Self::new(current.item.state.as_str())
         }
     }
 

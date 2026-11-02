@@ -14,6 +14,7 @@ use crate::{
     items::{action::Acted, comment, link::ItemKind},
     review::view::Details,
     transport::api::Request,
+    updates::Edited,
 };
 
 /// Reaction lists read at once for a view.
@@ -147,6 +148,7 @@ impl ForgeRepo {
         Ok(Acted {
             item,
             authored: Vec::new(),
+            edited: Edited::default(),
         })
     }
 

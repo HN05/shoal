@@ -20,6 +20,7 @@ use crate::{
             item::{Item, ItemState, Opened},
             link::ItemKind,
         },
+        updates::Edited,
     },
     model::{Relation, ReviewMark, Workspace},
     protocol::ItemContext,
@@ -218,9 +219,12 @@ impl Manager {
                 return Err(self.record_failed_post(id, target, action, error).await);
             }
         };
-        let own = own_state(action).then(|| acted.item.state.as_str());
-        let authored = own_posts(action, acted.authored);
-        self.record_own_action(id, target, action.name(), own, authored)
+        let own = Own {
+            state: own_state(action).then(|| acted.item.state.as_str()),
+            authored: own_posts(action, acted.authored),
+            edited: own_edits(action, acted.edited),
+        };
+        self.record_own_action(id, target, action.name(), own)
             .await
             .map_err(|error| crate::forge::items::action::after_send(error, true))?;
         Ok(acted.item)
@@ -242,10 +246,12 @@ impl Manager {
         else {
             return error;
         };
-        match self
-            .record_own_action(id, target, action.name(), None, authored)
-            .await
-        {
+        let own = Own {
+            state: None,
+            authored,
+            edited: Edited::default(),
+        };
+        match self.record_own_action(id, target, action.name(), own).await {
             Ok(()) => error,
             Err(recording) => error.context(format!(
                 "recording what was posted also failed: {recording:#}"
@@ -260,11 +266,15 @@ impl Manager {
         id: &str,
         target: Target,
         name: &'static str,
-        state: Option<&'static str>,
-        authored: Vec<String>,
+        own: Own,
     ) -> Result<()> {
         let id = id.to_owned();
         let Target { kind, url, .. } = target;
+        let Own {
+            state,
+            authored,
+            edited,
+        } = own;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
@@ -273,6 +283,7 @@ impl Manager {
                     url: &url,
                     authored,
                     state,
+                    edited,
                 };
                 record_own_change(&tx, &id, change)?;
                 tx.commit()?;
@@ -288,6 +299,13 @@ pub(super) struct Target {
     pub kind: ItemKind,
     pub number: u64,
     pub url: String,
+}
+
+/// What an applied action changed that is the agent's own.
+struct Own {
+    state: Option<&'static str>,
+    authored: Vec<String>,
+    edited: Edited,
 }
 
 /// Whether the state an action leaves is the agent's own change. Merging is
@@ -318,6 +336,16 @@ fn own_posts(action: &Action, authored: Vec<String>) -> Vec<String> {
         Vec::new()
     } else {
         authored
+    }
+}
+
+/// What `action` changed of the item's details that is the agent's own:
+/// none of the user's decisions.
+fn own_edits(action: &Action, edited: Edited) -> Edited {
+    if users_decision(action) {
+        Edited::default()
+    } else {
+        edited
     }
 }
 

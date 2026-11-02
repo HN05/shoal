@@ -27,7 +27,7 @@ pub(crate) async fn issue_activity(
     number: u64,
 ) -> Result<Snapshot> {
     let issue = repo.read(account, ItemKind::Issue, number).await?;
-    let mut snapshot = Snapshot::new(issue.item.state.as_str());
+    let mut snapshot = Snapshot::item(&issue);
     snapshot.record_comments(DISCUSSION, discussion(repo, account, number).await);
     Ok(snapshot)
 }
@@ -39,7 +39,7 @@ pub(crate) async fn pr_activity(
     branch: Option<&str>,
 ) -> Result<Snapshot> {
     let pull = branch_pull(repo, account, number, branch).await?;
-    let mut snapshot = Snapshot::new(pull.item.state.as_str());
+    let mut snapshot = Snapshot::item(&pull);
     let (discussion, reviews, inline) = tokio::join!(
         discussion(repo, account, number),
         reviews(repo, account, number),

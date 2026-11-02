@@ -9,6 +9,7 @@ use crate::{
     backends::Backend,
     items::{action::Acted, link::ItemKind, reaction::Subject},
     review::view::Details,
+    updates::Edited,
 };
 
 /// A new body for a comment or inline comment.
@@ -102,7 +103,11 @@ impl ForgeRepo {
             self.replace_body(account, kind, number, &found, &edit.body)
                 .await?
         };
-        Ok(Acted { item, authored })
+        Ok(Acted {
+            item,
+            authored,
+            edited: Edited::default(),
+        })
     }
 
     /// Refuse a comment that the login of `account` did not write, which

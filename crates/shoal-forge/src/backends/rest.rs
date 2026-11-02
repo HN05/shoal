@@ -82,7 +82,7 @@ pub(crate) async fn issue_activity(
 ) -> Result<Snapshot> {
     async {
         let issue = repo.read(account, ItemKind::Issue, number).await?;
-        let mut snapshot = Snapshot::new(issue.item.state.as_str());
+        let mut snapshot = Snapshot::item(&issue);
         let discussion = reads
             .discussion(repo, account, ItemKind::Issue, number)
             .await;
@@ -103,7 +103,7 @@ pub(crate) async fn pr_activity(
     branch: Option<&str>,
 ) -> Result<Snapshot> {
     let pull = branch_pull(repo, account, number, branch).await?;
-    let mut snapshot = Snapshot::new(pull.item.state.as_str());
+    let mut snapshot = Snapshot::item(&pull);
     let discussion = reads.discussion(repo, account, ItemKind::Pr, number).await;
     snapshot.record_comments(DISCUSSION, discussion);
     let reviews = reads.review_activity(repo, account, number).await;

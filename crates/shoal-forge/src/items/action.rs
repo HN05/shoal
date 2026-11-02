@@ -20,6 +20,7 @@ use crate::{
     },
     review::submit::{NewReview, ReviewVerdict},
     transport::api::Request,
+    updates::{Edited, ItemDetails},
 };
 
 /// Marks a failure after an action's first request reached the forge, such
@@ -434,6 +435,9 @@ pub struct Acted {
     /// The activity keys of the comments, replies or reviews the action
     /// posted.
     pub authored: Vec<String>,
+    /// What the action changed of the item's title, labels and other
+    /// details.
+    pub edited: Edited,
 }
 
 impl ForgeRepo {
@@ -474,18 +478,24 @@ impl ForgeRepo {
         }
         let per_item = self.check_uploads(account, action.attachments()).await?;
         let current = self.read(account, kind, number).await?;
+        let before = ItemDetails::of(&current);
         let (action, pending) = self
             .upload_attachments(account, &current, action, per_item)
             .await?;
         let requests = self.requests(account, current, &action).await?;
         let receipt = self.execute(account, &action, requests).await?;
-        let item = self
+        let after = self
             .settle(account, kind, number, &action, pending, &receipt)
             .await
             .map_err(|error| receipt.failed(error))?;
+        let edited = Edited {
+            before,
+            after: ItemDetails::of(&after),
+        };
         Ok(Acted {
-            item,
+            item: after.item,
             authored: receipt.authored,
+            edited,
         })
     }
 
@@ -524,15 +534,15 @@ impl ForgeRepo {
         action: &Action,
         pending: Option<Pending>,
         receipt: &Receipt,
-    ) -> Result<Item> {
+    ) -> Result<Current> {
         if let (Some(pending), Some(comment)) = (pending, &receipt.first) {
             self.attach_to_comment(account, kind, number, comment, pending)
                 .await
                 .context("the comment was posted, but attaching its files failed")?;
         }
-        let item = self.read(account, kind, number).await?.item;
-        action.ensure_applied(&item, self.kind.label_names_fold_case())?;
-        Ok(item)
+        let current = self.read(account, kind, number).await?;
+        action.ensure_applied(&current.item, self.kind.label_names_fold_case())?;
+        Ok(current)
     }
 
     /// `action` with its attachments uploaded and embedded in its body, and

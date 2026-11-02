@@ -1467,7 +1467,7 @@ issues and PRs share one sequence. Where they do not, an unlinked number stays
 ambiguous and needs its kind rather than a guess between two reads.
 Ready workspaces with linked issues or PRs are polled every 30 seconds; the
 daemon keeps a separate activity snapshot for each item and appends an
-`item_activity` event for each newly observed comment, completed check,
+`item_activity` event for each newly observed comment, edit, completed check,
 conflict, closure, merge, reopen, or lookup failure. The first observation
 establishes the baseline, and watch acknowledgements do not affect this stream.
 The same poll queues each change on the workspace's watch cursor, holding
@@ -2405,7 +2405,17 @@ acknowledgements; legacy single-watch records retain their stored and JSON shape
 Ambiguous records and conflicting actions are rejected. Own-workspace `watch`
 polls linked issue and PR activity independently of cleanup, with kind filters
 or an explicit item that does not change associations. It reports comments or
-reviews, completed CI checks, new merge conflicts, closure, reopening or merging.
+reviews, edits, completed CI checks, new merge conflicts, closure, reopening or
+merging. An edit is a change to what the item's own read reports besides its
+state: its title, description, labels, assignees, milestone and, for a PR, its
+draft state and base branch, named in one update per poll. Comparing what that
+read already returns costs no request per kind of event, as following the
+forge's timeline would, and works the same on every forge; changes no read
+reports, such as requested reviewers, are not followed. A snapshot saved before
+details were recorded takes the next read as its baseline. Edits a workspace
+makes through Shoal, and Shoal's retargeting of a stacked PR, are taken as seen
+on its cursor, field by field, as its own comments and state changes are, so
+another edit read in the same poll is still reported.
 Passing checks wait on the cursor while another check on the PR's head commit is
 pending, since a pass asks nothing of the agent until the rest finish and each
 wake costs it a turn: a check that does not pass delivers them at once, the last

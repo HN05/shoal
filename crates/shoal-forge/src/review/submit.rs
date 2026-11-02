@@ -20,6 +20,7 @@ use crate::{
     review::diff::{Bases, Diff, Placed},
     state::states,
     transport::api::Request,
+    updates::Edited,
 };
 
 /// A review of a PR. A review that requests changes needs a body; any
@@ -295,7 +296,11 @@ impl ForgeRepo {
             .await
             .map_err(|error| after_post(error, true, &authored))?
             .item;
-        Ok(Acted { item, authored })
+        Ok(Acted {
+            item,
+            authored,
+            edited: Edited::default(),
+        })
     }
 
     /// The activity keys of what `submitted` posted of `review`. Without

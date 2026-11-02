@@ -603,3 +603,59 @@ fn a_conflict_kept_from_an_earlier_head_or_base_is_unknown_at_the_new_one() {
     snapshot.head = "2".into();
     assert_eq!(snapshot.head_conflict(), None);
 }
+
+#[test]
+fn edits_to_an_items_details_are_reported_together() {
+    let details = |details: serde_json::Value| -> Snapshot {
+        serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
+                "state": "open", "errors": {}, "details": details}))
+        .unwrap()
+    };
+    let before = details(
+        json!({"title": "Fix", "body": "Steps", "labels": ["bug", "wip"],
+            "assignees": [], "draft": true, "base": "main"}),
+    );
+    let after = details(json!({"title": "Fix the parser", "body": "Steps\n\nMore",
+            "labels": ["bug", "docs"], "assignees": ["alice"], "milestone": "v1",
+            "draft": false, "base": "release"}));
+    let updates = before.changes(&after, "pr");
+    assert_eq!(updates.len(), 1);
+    assert_eq!(updates[0].kind, UpdateKind::Edited);
+    assert_eq!(
+        updates[0].message,
+        "Title changed to \"Fix the parser\"; description edited; labels added: docs; \
+         labels removed: wip; assignees added: alice; milestone set to v1; \
+         marked ready for review; base branch changed to release"
+    );
+    assert!(after.changes(&after, "pr").is_empty());
+    let mut cleared = after.clone();
+    cleared.details.as_mut().unwrap().milestone = None;
+    assert_eq!(
+        after.changes(&cleared, "pr")[0].message,
+        "Milestone removed"
+    );
+    // A snapshot saved before details were recorded takes them as the
+    // baseline.
+    let saved = details(serde_json::Value::Null);
+    assert!(saved.details.is_none());
+    assert!(saved.changes(&after, "pr").is_empty());
+}
+
+#[test]
+fn own_edits_are_taken_as_seen_leaving_other_changes_reported() {
+    let snapshot = |base: &str, labels: serde_json::Value| -> Snapshot {
+        serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
+                "state": "open", "errors": {}, "details": {"title": "Fix", "body": "",
+                "labels": labels, "assignees": [], "base": base}}))
+        .unwrap()
+    };
+    let mut seen = snapshot("feature", json!([]));
+    seen.adopt_edited(&Edited::retarget("feature", "main"));
+    assert!(seen.changes(&snapshot("main", json!([])), "pr").is_empty());
+    let labelled = seen.changes(&snapshot("main", json!(["bug"])), "pr");
+    assert_eq!(labelled[0].message, "Labels added: bug");
+    // An item not observed yet takes its details from its first observation.
+    let mut unobserved = Snapshot::default();
+    unobserved.adopt_edited(&Edited::retarget("feature", "main"));
+    assert!(unobserved.details.is_none());
+}

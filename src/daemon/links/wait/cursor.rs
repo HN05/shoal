@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use super::held::HeldPasses;
-use crate::forge::updates::{Snapshot, Update};
+use crate::forge::updates::{Edited, Snapshot, Update};
 
 #[derive(Default, Serialize, Deserialize)]
 pub(super) struct ActivityRecord {
@@ -19,10 +19,15 @@ pub(super) struct ActivityRecord {
     /// poll has seen change yet.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     authored: BTreeSet<String>,
-    /// Unix seconds when the workspace last set the item's state through
-    /// Shoal; observations that started by then cannot show it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    own_state_at: Option<u64>,
+    /// Unix seconds when the workspace last set the item's state or edited
+    /// its details through Shoal; observations that started by then cannot
+    /// show it.
+    #[serde(
+        default,
+        alias = "own_state_at",
+        skip_serializing_if = "Option::is_none"
+    )]
+    own_change_at: Option<u64>,
     #[serde(default, skip_serializing_if = "HeldPasses::is_empty")]
     held: HeldPasses,
 }
@@ -53,22 +58,33 @@ impl ActivityRecord {
     /// shows as already seen, so its watch does not report them back.
     fn discount_own_changes(&mut self, snapshot: &mut Snapshot, observed_at: u64) {
         self.snapshot.adopt_authored(snapshot, &mut self.authored);
-        // A poll that started by the agent's own state change may have read
-        // the state before it.
-        if self.own_state_at.is_some_and(|at| observed_at <= at) {
+        // A poll that started by the agent's own change may have read the
+        // item before it.
+        if self.own_change_at.is_some_and(|at| observed_at <= at) {
             snapshot.adopt_state(self.snapshot.state());
+            snapshot.adopt_details(&self.snapshot);
         } else {
-            self.own_state_at = None;
+            self.own_change_at = None;
         }
     }
 
-    /// Note the comments and reviews in `authored` and the `state` the
-    /// workspace set through Shoal, so no watch reports them back.
-    pub(super) fn adopt_own_change(&mut self, authored: Vec<String>, state: Option<&str>) {
+    /// Note the comments and reviews in `authored`, the `state` and the
+    /// details `edited` that the workspace changed through Shoal, so no
+    /// watch reports them back.
+    pub(super) fn adopt_own_change(
+        &mut self,
+        authored: Vec<String>,
+        state: Option<&str>,
+        edited: &Edited,
+    ) {
         self.authored.extend(authored);
         if let Some(state) = state {
             self.snapshot.adopt_state(state);
-            self.own_state_at = Some(crate::time::unix_seconds());
+            self.own_change_at = Some(crate::time::unix_seconds());
+        }
+        if !edited.is_empty() {
+            self.snapshot.adopt_edited(edited);
+            self.own_change_at = Some(crate::time::unix_seconds());
         }
     }
 }

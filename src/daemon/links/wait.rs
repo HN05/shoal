@@ -22,7 +22,7 @@ use crate::{
             link::{ItemKind, LinkKind, Selection},
         },
         transport::limits::rate_limited,
-        updates::{MergeCheck, Snapshot, Update, UpdateKind},
+        updates::{Edited, MergeCheck, Snapshot, Update, UpdateKind},
     },
     model::{ConflictCheck, Workspace, WorkspaceRef},
     repository,
@@ -1084,12 +1084,13 @@ fn receiving<'a>(id: &'a str, children: &'a [WorkspaceRef]) -> impl Iterator<Ite
 }
 
 /// A change the workspace's agent made to `url` through Shoal, which its
-/// watches do not report back: the comments, replies or reviews it posted
-/// and the state it set.
+/// watches do not report back: the comments, replies or reviews it posted,
+/// the state it set and the details it edited.
 pub(crate) struct OwnChange<'a> {
     pub url: &'a str,
     pub authored: Vec<String>,
     pub state: Option<&'a str>,
+    pub edited: Edited,
 }
 
 /// Record `change` on the workspace's cursor. The caller holds the workspace's
@@ -1101,7 +1102,7 @@ pub(crate) fn record_own_change(
     change: OwnChange<'_>,
 ) -> Result<()> {
     let mut record = cursor_record(db, workspace_id, change.url)?.unwrap_or_default();
-    record.adopt_own_change(change.authored, change.state);
+    record.adopt_own_change(change.authored, change.state, &change.edited);
     save_cursor_record(db, workspace_id, change.url, &record)
 }
 

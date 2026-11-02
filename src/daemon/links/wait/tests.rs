@@ -1142,6 +1142,7 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
                 url: "pr",
                 authored: vec!["discussion:2".into()],
                 state: Some("closed"),
+                edited: Edited::default(),
             };
             record_own_change(db, &id, change)
         })
@@ -1162,6 +1163,73 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
     assert_eq!(
         updates.iter().map(|update| update.kind).collect::<Vec<_>>(),
         [UpdateKind::Comment]
+    );
+}
+
+#[tokio::test]
+async fn edits_are_reported_except_the_workspaces_own() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "edits".into(), None, None, None)
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, "pr").await;
+    let snapshot = |base: &str, labels: Value| -> Snapshot {
+        serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
+                "state": "open", "errors": {}, "details": {"title": "Fix", "body": "",
+                "labels": labels, "assignees": [], "draft": false, "base": base}}))
+        .unwrap()
+    };
+    let all = Selection::default();
+    let observe = |snapshot: Snapshot, at: u64| {
+        manager.record_observed(&workspace.id, vec![("pr".into(), snapshot)], &all, at)
+    };
+    let now = crate::time::unix_seconds();
+    assert!(
+        observe(snapshot("feature", json!([])), now)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            let change = OwnChange {
+                url: "pr",
+                authored: Vec::new(),
+                state: None,
+                edited: Edited::retarget("feature", "main"),
+            };
+            record_own_change(db, &id, change)
+        })
+        .await
+        .unwrap();
+    // A poll that read the PR before Shoal retargeted it does not report
+    // the old base, and the one after does not report the new one.
+    let stale = observe(snapshot("feature", json!([])), 0);
+    assert!(stale.await.unwrap().is_empty());
+    let later = crate::time::unix_seconds() + 1;
+    assert!(
+        observe(snapshot("main", json!([])), later)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let labelled = observe(snapshot("main", json!(["bug"])), later)
+        .await
+        .unwrap();
+    assert_eq!(
+        labelled
+            .iter()
+            .map(|update| (update.kind, update.message.as_str()))
+            .collect::<Vec<_>>(),
+        [(UpdateKind::Edited, "Labels added: bug")]
     );
 }
 
