@@ -195,6 +195,20 @@ jobs:
           done
           mkdir -p /ci-target
 
+      # Tests detach thousands of processes. Unreaped, they stay zombies that
+      # every process inventory in the tests reads, which doubled the job's
+      # system CPU. The image runs tini as PID 1 (see its Containerfile).
+      - name: PID 1 reaps orphans
+        if: env.DOCS_ONLY != 'true'
+        run: |
+          orphan=$(sh -c 'sleep 0.1 >/dev/null 2>&1 & echo $!')
+          for _ in $(seq 50); do
+            [ -e "/proc/$orphan" ] || exit 0
+            sleep 0.1
+          done
+          echo "PID 1 ($(ps -p 1 -o args=)) left orphan $orphan unreaped; rebuild the CI image with .forgejo/ci-image/build.sh on the runner host"
+          exit 1
+
       - name: Release script tests
         if: env.DOCS_ONLY != 'true'
         run: python3 -m unittest discover -s scripts -p 'test_*.py'

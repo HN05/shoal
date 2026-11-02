@@ -15,7 +15,8 @@ FROM docker.io/library/rust:${RUST}-trixie
 # fixture and the release scripts, tmux for the tmux host's tests against an
 # isolated server. curl and jq serve the label gate in ci.yml,
 # deps.yml and the Zig download below; xz-utils unpacks it. pkg-config and
-# libssl-dev build cargo-outdated, which links the cargo crate.
+# libssl-dev build cargo-outdated, which links the cargo crate. tini reaps
+# orphans as the job container's first process (see below).
 RUN rustup component add rustfmt clippy \
  && apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends \
@@ -30,7 +31,17 @@ RUN rustup component add rustfmt clippy \
       xz-utils \
       pkg-config \
       libssl-dev \
+      tini \
  && rm -rf /var/lib/apt/lists/*
+
+# The runner starts every job container with `tail -f /dev/null` as PID 1,
+# which never reaps: each process a test detaches would stay a zombie once it
+# exits, thousands by the end of `cargo test`, and every process inventory the
+# tests' daemons and fixtures take would read them all. The workflow's
+# `container.options: --init` is ignored. The runner finds `tail` on this
+# image's PATH, where this one comes before /usr/bin and runs tail under tini
+# when it is PID 1. ci.yml checks that PID 1 reaps.
+COPY --chmod=755 .forgejo/ci-image/tail /usr/local/bin/tail
 
 # Zellij serves the Zellij host's tests against isolated sessions. Debian does
 # not package it, so the static release binary for this host's architecture is
@@ -97,4 +108,5 @@ RUN rustc --version && cargo clippy --version && cargo fmt --version \
  && wt --version && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version \
  && tmux -V && zellij --version \
  && zig version && cargo-zigbuild --version && rcodesign --version \
- && cargo audit --version && cargo outdated --version
+ && cargo audit --version && cargo outdated --version \
+ && tini --version && [ "$(command -v tail)" = /usr/local/bin/tail ]
