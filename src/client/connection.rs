@@ -471,18 +471,17 @@ pub async fn link_item(
     request::<()>(daemon, method).await
 }
 
-/// The workspace or running chat `selector` names, by ID or name.
+/// The workspace or chat `selector` names, by ID or name.
 pub async fn present_space(daemon: &impl Daemon, selector: &str) -> Result<Option<PresentSpace>> {
-    let space = spaces(daemon).await?.find(selector);
-    Ok(space.filter(|space| !space.is_saved_chat()))
+    Ok(spaces(daemon).await?.find(selector))
 }
 
-/// Running chats and those Shoal saved to restore.
+/// Running and stopped chats.
 pub async fn recorded_chats(daemon: &impl Daemon) -> Result<Vec<Chat>> {
     request(daemon, ChatMethod::ListChats).await
 }
 
-/// The workspaces and chats, running or saved, visible to this caller.
+/// The workspaces and chats, running or stopped, visible to this caller.
 pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
     Ok(Spaces {
         workspaces: workspaces(daemon).await?,
@@ -490,7 +489,7 @@ pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
     })
 }
 
-/// [`start_chat`], or for a start that `restores` a saved chat, by ID,
+/// [`start_chat`], or for a start that `restores` a stopped chat, by ID,
 /// [`restore_chat`], which keeps the chat's own name and agent.
 pub async fn record_chat(
     daemon: &impl Daemon,
@@ -507,7 +506,7 @@ pub async fn record_chat(
     }
 }
 
-/// Run the saved chat `chat`, by ID, again in this process, as
+/// Run the stopped chat `chat`, by ID, again in this process, as
 /// [`start_chat`] records a new chat.
 pub async fn restore_chat(
     daemon: &impl Daemon,
@@ -527,7 +526,7 @@ pub async fn restore_chat(
     .await
 }
 
-/// Report that this process could not restore the saved chat `chat`, which
+/// Report that this process could not restore the stopped chat `chat`, which
 /// waits for `shoal resume` again if this process had taken it over.
 pub async fn save_chat(daemon: &impl Daemon, chat: &str, error: &anyhow::Error) -> Result<()> {
     request::<()>(
@@ -542,7 +541,7 @@ pub async fn save_chat(daemon: &impl Daemon, chat: &str, error: &anyhow::Error) 
 }
 
 /// `ran`, a start in this process, after reporting its failure when it
-/// `restores` a saved chat: the chat waits for `shoal resume` again, if this
+/// `restores` a stopped chat: the chat waits for `shoal resume` again, if this
 /// process had taken it over, and the user learns why.
 pub async fn keep_failed_restore<T>(
     daemon: &impl Daemon,
@@ -557,7 +556,7 @@ pub async fn keep_failed_restore<T>(
     ran
 }
 
-/// End the saved chat `chat`, by ID or name, without restoring it.
+/// End the stopped chat `chat`, by ID or name, without restoring it.
 pub async fn discard_chat(daemon: &impl Daemon, chat: &str) -> Result<Chat> {
     request(
         daemon,

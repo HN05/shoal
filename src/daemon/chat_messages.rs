@@ -1,5 +1,5 @@
 //! Messages for a chat about the workspaces it coordinates, and from the
-//! user. Like agent messages, delivery deletes them; a chat that ends before
+//! user. Like agent messages, delivery deletes them; a chat removed before
 //! receiving them gives them to the user as the notifications they would
 //! have been.
 use anyhow::{Context as _, Result, ensure};
@@ -20,10 +20,10 @@ use crate::daemon::{
 const GATE_RETRY: std::time::Duration = std::time::Duration::from_millis(500);
 
 impl Manager {
-    /// Queue a message from the user for the running chat `chat` names by ID
+    /// Queue a message from the user for the chat `chat` names by ID
     /// or name, with copies of `attachments`, which the chat's attached files
     /// list from then on as attached by `attacher`; without text, the files
-    /// are the message. It is dropped if the chat ends first.
+    /// are the message. It is dropped if the chat is removed first.
     pub async fn send_chat_message(
         &self,
         chat: &str,
@@ -35,9 +35,9 @@ impl Manager {
             crate::validate::agent_message(&message)?;
         }
         let chat = self
-            .running_chat(chat)
+            .recorded_chat(chat)
             .await?
-            .with_context(|| format!("no running chat {chat}"))?;
+            .with_context(|| format!("no chat {chat}"))?;
         if attachments.is_empty() {
             return self
                 .queue_chat_message(&chat.id, None, None, None, message, Vec::new())
@@ -83,7 +83,7 @@ impl Manager {
     /// Queue `message` for the chat, about the workspace named `workspace`
     /// it coordinates, if any, with Shoal's copies `attachments` of the files
     /// that workspace sent. `kind` is the notification the user receives
-    /// instead if the chat ends first; without one the message is dropped
+    /// instead if the chat is removed first; without one the message is dropped
     /// then. An identical unread message is not repeated.
     pub(crate) async fn queue_chat_message(
         &self,
@@ -308,7 +308,7 @@ pub(crate) fn rebase_attachments(
     agent_messages::rewrite_attachments(tx, "chat_messages", attached, source, destination)
 }
 
-/// Give the user the notifications that the ended chat's unread messages
+/// Give the user the notifications that the removed chat's unread messages
 /// stand for, with the files they attach, in the transaction that deletes
 /// the chat and with it the messages. Returns the last notification
 /// recorded.

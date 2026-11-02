@@ -195,12 +195,13 @@ states!(QueueKind {
     Restore => "restore",
 });
 states!(
-    /// How a chat Shoal stopped with its session saved comes back.
+    /// How a stopped chat comes back.
     ChatRestore {
         /// The daemon restores it once it starts agents again, as after a
         /// shutdown or a logout.
         Automatic => "automatic",
-        /// It waits for `shoal resume`, as after `shoal daemon stop`.
+        /// It waits for `shoal resume`, as after `shoal daemon stop` or once
+        /// its agent exited.
         Resume => "resume",
     }
 );

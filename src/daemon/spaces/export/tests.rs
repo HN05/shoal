@@ -114,7 +114,7 @@ async fn a_chat_without_a_session_keeps_running() {
     let chat = manager.chats().await.unwrap().remove(0);
     assert!(identity::capture(pid).unwrap().is_some());
     assert!(!file.exists());
-    manager.end_chat(&chat.id).await.unwrap();
+    manager.stop_chat(&chat.id).await.unwrap();
 }
 
 #[tokio::test]

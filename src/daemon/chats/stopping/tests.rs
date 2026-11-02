@@ -16,7 +16,7 @@ use crate::{
 /// signals it, so a second round stops that process after the agent exited.
 /// A listing and a sweep in between find the agent exited.
 #[tokio::test]
-async fn a_chat_keeps_its_record_and_directory_until_its_stop_finishes() {
+async fn a_chat_runs_until_its_stop_finishes() {
     let (root, manager) = manager().await;
     // Its group's end at the test's end takes what the agent started.
     let (_repo, chat, _agent) = running_chat(root.path(), &manager).await;
@@ -26,7 +26,7 @@ async fn a_chat_keeps_its_record_and_directory_until_its_stop_finishes() {
     let between_rounds = Mutex::new(None);
 
     manager
-        .end_chat_recording(&chat.id, |found: Vec<Identity>| {
+        .stop_chat_recording(&chat.id, |found: Vec<Identity>| {
             let (manager, chat, tmp_dir) = (&manager, &chat, &tmp_dir);
             let (rounds, started, between_rounds) = (&rounds, &started, &between_rounds);
             async move {
@@ -38,9 +38,12 @@ async fn a_chat_keeps_its_record_and_directory_until_its_stop_finishes() {
                         .spawn()?;
                     started.lock().unwrap().push(child);
                 } else {
-                    let listed = manager.recorded_chat(&chat.id).await?.is_some();
-                    manager.end_finished_chats().await?;
-                    let swept = manager.recorded_chat(&chat.id).await?.is_some();
+                    let running = |listed: Option<crate::model::Chat>| {
+                        listed.is_some_and(|chat| chat.restore.is_none())
+                    };
+                    let listed = running(manager.recorded_chat(&chat.id).await?);
+                    manager.stop_finished_chats().await?;
+                    let swept = running(manager.recorded_chat(&chat.id).await?);
                     *between_rounds.lock().unwrap() = Some((listed, swept, tmp_dir.exists()));
                 }
                 Ok(())
@@ -51,8 +54,9 @@ async fn a_chat_keeps_its_record_and_directory_until_its_stop_finishes() {
 
     assert_eq!(rounds.load(Ordering::SeqCst), 2);
     assert_eq!(*between_rounds.lock().unwrap(), Some((true, true, true)));
-    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_none());
-    assert!(!tmp_dir.exists());
+    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    assert_eq!(stopped.restore, Some(crate::state::ChatRestore::Resume));
+    assert!(tmp_dir.exists());
     for mut child in started.into_inner().unwrap() {
         child.wait().unwrap();
     }

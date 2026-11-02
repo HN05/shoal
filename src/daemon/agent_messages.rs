@@ -199,7 +199,7 @@ impl Manager {
     }
 
     /// [`Self::send_agent_message`] to the workspace, or
-    /// [`Self::send_chat_message`] to the running chat, `selector` names.
+    /// [`Self::send_chat_message`] to the chat, `selector` names.
     pub async fn send_space_message(
         &self,
         selector: &str,

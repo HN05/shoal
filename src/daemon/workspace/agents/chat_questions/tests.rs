@@ -380,7 +380,7 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
     let closed = manager.reply_in_chat(&chat.name, None).await.unwrap();
     assert_eq!(closed, [asked[0].id]);
 
-    // An open question goes with the chat.
+    // An open question stays while the chat is stopped and goes with it.
     manager.mark_chat_question(&chat.name, None).await.unwrap();
     manager
         .end_agent_turn(&chat.name, None, None, ending("Which queue?"))
@@ -388,6 +388,8 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         .unwrap();
     assert_eq!(manager.questions(None).await.unwrap().questions.len(), 1);
     process.kill();
-    manager.end_finished_chats().await.unwrap();
+    manager.stop_finished_chats().await.unwrap();
+    assert_eq!(manager.questions(None).await.unwrap().questions.len(), 1);
+    manager.discard_saved_chat(&chat.id).await.unwrap();
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
 }

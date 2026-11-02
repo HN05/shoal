@@ -231,11 +231,11 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
         )
         .await
         .unwrap_err();
-    assert_eq!(error.to_string(), "no running chat missing");
+    assert_eq!(error.to_string(), "no chat missing");
 }
 
 #[tokio::test]
-async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
+async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;
     let process =
@@ -282,8 +282,15 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
     );
     assert!(user(&manager).await.is_empty());
 
+    // A stopped chat keeps them for its restore.
     process.kill();
-    manager.end_finished_chats().await.unwrap();
+    manager.stop_finished_chats().await.unwrap();
+    assert_eq!(
+        received(&manager, &chat).await,
+        ["worker: unread", "worker: marked ready"]
+    );
+    assert!(user(&manager).await.is_empty());
+    manager.discard_saved_chat(&chat.id).await.unwrap();
     assert!(received(&manager, &chat).await.is_empty());
     let unread = (
         Some("worker".to_owned()),
@@ -310,7 +317,7 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
 }
 
 #[tokio::test]
-async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
+async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;
     let process =
@@ -339,7 +346,7 @@ async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
     // The worker is renamed and a new workspace takes its name before the
-    // chat ends.
+    // chat is removed.
     manager
         .rename_workspace(&worker.id, "renamed", None)
         .await
@@ -356,7 +363,8 @@ async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
         .unwrap();
 
     process.kill();
-    manager.end_finished_chats().await.unwrap();
+    manager.stop_finished_chats().await.unwrap();
+    manager.discard_saved_chat(&chat.id).await.unwrap();
     let handed = manager.notifications(true, 50).await.unwrap();
     assert_eq!(handed.len(), 1);
     let id = handed[0].id;
@@ -441,8 +449,10 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         destination.join(copy.strip_prefix(&source).unwrap())
     );
 
+    // Discarded once stopped, the chat hands the files to the user.
     process.kill();
-    manager.end_finished_chats().await.unwrap();
+    manager.stop_finished_chats().await.unwrap();
+    manager.discard_saved_chat(&chat.id).await.unwrap();
     let notifications = manager.notifications(false, 100).await.unwrap();
     let [notification] = notifications.as_slice() else {
         panic!("{notifications:?}");

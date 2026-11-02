@@ -242,7 +242,8 @@ async fn a_chats_file_events_name_the_chat() {
         .await
         .unwrap();
     process.kill();
-    manager.end_finished_chats().await.unwrap();
+    manager.stop_finished_chats().await.unwrap();
+    manager.discard_saved_chat(&chat.id).await.unwrap();
     manager
         .store
         .run(|db| {

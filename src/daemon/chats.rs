@@ -1,9 +1,9 @@
 //! Chats: agents the user talks with in a repository's registered checkout.
 //! They are records, not tracked executions, so they never queue or stop
-//! under pressure; a chat lasts while its process lives, or once saved, until
-//! it is restored or discarded.
+//! under pressure. A chat runs while its process lives; once its agent exits
+//! or Shoal saves it, the chat is stopped until it is restored, and it lasts
+//! until it is removed.
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -15,16 +15,17 @@ use uuid::Uuid;
 
 use crate::{
     daemon::{
-        chat_messages, log, store,
+        approvals::{ApprovalRequest, release_decided_by},
+        log, store,
         workspace::{Manager, derive_workspace_name},
-        workspace_files,
     },
     model::{Chat, OpenedWorkspace, RenamedChat, Repository, SpaceLinks, Workspace},
     process::identity::{self, Identity},
+    state::ChatRestore,
     tmp_dirs,
 };
 
-/// How soon a chat's end reaches the journal when nothing lists chats, and
+/// How soon a chat's stop reaches the journal when nothing lists chats, and
 /// a saved chat comes back once agents may start.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -32,7 +33,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
     loop {
         tokio::time::sleep(SWEEP_INTERVAL).await;
         let _operation = manager.gates.operation().await;
-        if let Err(error) = manager.end_finished_chats().await {
+        if let Err(error) = manager.stop_finished_chats().await {
             log!("chats: {error:#}");
         }
         if let Err(error) = restores::restore_automatic(&manager).await.map(drop) {
@@ -66,7 +67,6 @@ impl Manager {
             "Shoal is stopping work for a shutdown or a daemon stop; start the chat once it is over"
         );
         let started_at = i64::try_from(crate::time::unix_seconds())?;
-        self.end_finished_chats().await?;
         // A place Shoal created for a workspace is the chat's now.
         if let Some(origin) = &origin {
             self.release_place(origin).await?;
@@ -95,7 +95,8 @@ impl Manager {
     }
 
     /// `chat`, just recorded with `process`, with its temporary directory,
-    /// created now; a chat that cannot have one ends.
+    /// created now; a chat that cannot have one is forgotten, having never
+    /// run.
     async fn give_tmp_dir(
         &self,
         mut chat: Chat,
@@ -108,7 +109,9 @@ impl Manager {
                 Ok(chat)
             }
             Err(error) => {
-                self.end_chats(vec![(chat.id, Over::Exited(process))])
+                let id = chat.id.clone();
+                self.store
+                    .run(move |db| forget_unstarted(db, &id, &process))
                     .await?;
                 Err(error)
             }
@@ -118,7 +121,6 @@ impl Manager {
     /// Refuse a name a new chat could not take now.
     pub async fn check_chat_name(&self, name: String) -> Result<()> {
         crate::validate::name("chat", &name)?;
-        self.end_finished_chats().await?;
         self.store
             .run(move |db| store::ensure_name_available(db, &name, None))
             .await
@@ -128,15 +130,13 @@ impl Manager {
     /// that a new chat could take now.
     pub async fn free_chat_name(&self, name: String) -> Result<String> {
         let base = derive_workspace_name(&name);
-        self.end_finished_chats().await?;
         self.store.run(move |db| free_name(db, &base)).await
     }
 
-    /// Give the running chat `chat`, by ID or name, the name `name`, which
-    /// must be free as a new chat's, and move its files to that name.
+    /// Give the chat `chat`, by ID or name, the name `name`, which must be
+    /// free as a new chat's, and move its files to that name.
     pub async fn rename_chat(&self, chat: String, name: String) -> Result<RenamedChat> {
         crate::validate::name("chat", &name)?;
-        self.end_finished_chats().await?;
         let paths = self.paths.clone();
         // The store's one thread moves the files after the rename commits,
         // so no other rename or chat start reaches either name in between.
@@ -179,10 +179,10 @@ impl Manager {
             .await
     }
 
-    /// Running and saved chats in start order, after ending those whose
+    /// Running and stopped chats in start order, after stopping those whose
     /// process exited.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
-        self.end_finished_chats().await?;
+        self.stop_finished_chats().await?;
         self.store.run(|db| recorded(db)).await
     }
 
@@ -200,7 +200,7 @@ impl Manager {
             .filter(|chat| chat.restore.is_none()))
     }
 
-    /// The running or saved chat `selector` names, by ID or name.
+    /// The running or stopped chat `selector` names, by ID or name.
     pub(crate) async fn recorded_chat(&self, selector: &str) -> Result<Option<Chat>> {
         Ok(self
             .chats()
@@ -210,7 +210,7 @@ impl Manager {
     }
 
     /// The running chat `selector` names, by ID or name, as recorded: unlike
-    /// [`Self::running_chat`], it ends no chat whose process exited, which
+    /// [`Self::running_chat`], it stops no chat whose process exited, which
     /// passes its approval requests up, so a caller holding the approval
     /// announcement gate may look one up.
     pub(crate) async fn recorded_running_chat(&self, selector: &str) -> Result<Option<Chat>> {
@@ -221,18 +221,18 @@ impl Manager {
             .find(|chat| chat.restore.is_none() && (chat.id == selector || chat.name == selector)))
     }
 
-    /// End the running chat `id`: stop every process it owns, so none goes
-    /// on writing the agent's session, then end its record as when the
-    /// process it lasts while exits. Until the stop finishes, the chat
-    /// keeps its record and temporary directory.
-    pub(crate) async fn end_chat(&self, id: &str) -> Result<()> {
-        self.end_chat_recording(id, |found| self.record_chat_stopping(id, found))
+    /// Stop the running chat `id`: stop every process it owns, so none goes
+    /// on writing the agent's session, then record the chat stopped, as when
+    /// the process it runs as exits. Until the stop finishes, the chat stays
+    /// running, so nothing restores it meanwhile.
+    pub(crate) async fn stop_chat(&self, id: &str) -> Result<()> {
+        self.stop_chat_recording(id, |found| self.record_chat_stopping(id, found))
             .await
     }
 
-    /// [`Self::end_chat`], with `record` keeping what each round of the
+    /// [`Self::stop_chat`], with `record` keeping what each round of the
     /// stop signals before it does.
-    async fn end_chat_recording<R>(
+    async fn stop_chat_recording<R>(
         &self,
         id: &str,
         record: impl Fn(Vec<Identity>) -> R,
@@ -246,15 +246,15 @@ impl Manager {
             .store
             .run(move |db| recorded_process(db, &chat))
             .await?
-            .context("the chat has ended")?;
+            .context("the chat is not running")?;
         let wrappers = self.execution_wrappers().await?;
         let stopped = self.stopped_chat_processes(id).await?;
         processes::ChatProcesses::of(id, &recorded, wrappers)?
-            .context("the chat has ended")?
+            .context("the chat is not running")?
             .stop(stopped, record)
             .await?;
         drop(stopping);
-        self.end_finished_chats().await
+        self.stop_finished_chats().await
     }
 
     /// The wrappers of the executions running, which belong to their
@@ -267,60 +267,25 @@ impl Manager {
             .collect())
     }
 
-    /// End running chats whose process has exited, other than those a stop
-    /// is ending, which end once it finishes.
-    pub(crate) async fn end_finished_chats(&self) -> Result<()> {
-        let ended = finished(self.store.run(|db| recorded_processes(db)).await?)
+    /// Stop the running chats whose process has exited, other than those a
+    /// stop is under way for, which stop once it finishes.
+    pub(crate) async fn stop_finished_chats(&self) -> Result<()> {
+        let exited: Vec<_> = finished(self.store.run(|db| recorded_processes(db)).await?)
             .into_iter()
             // Read after the processes: a stop's hold begins before it
             // signals the agent.
             .filter(|(id, _)| !self.chat_stops.under_way(id))
-            .map(|(id, process)| (id, Over::Exited(process)))
             .collect();
-        self.end_chats(ended).await
-    }
-
-    /// End the chats still recorded as `ended` found them: return their
-    /// workspaces to the user along with the messages the chats had not
-    /// received and the approval requests they had not decided, keep their
-    /// attached files for the retention period, and delete their records and
-    /// temporary directories. A chat moved to
-    /// another process, saved or restored since keeps its record.
-    async fn end_chats(&self, ended: Vec<(String, Over)>) -> Result<()> {
-        if ended.is_empty() {
+        if exited.is_empty() {
             return Ok(());
         }
-        let expiries = self.files_expiries(&ended).await?;
-        let deleted = self
-            .store
-            .run(move |db| delete(db, &ended, &expiries))
-            .await?;
-        for (repository_id, id) in deleted.chats {
-            if let Err(error) = self.delete_tmp_dir(&repository_id, &id).await {
-                log!("chat {id}: temporary directory not deleted: {error:#}");
-            }
-        }
-        self.ask_user_about(&deleted.released).await;
-        if let Some(id) = deleted.notification {
-            self.signals.notification_recorded(id);
-        }
+        let released = self.store.run(move |db| stop(db, &exited)).await?;
+        self.ask_user_about(&released).await;
         Ok(())
     }
 
-    /// When the attached files of each chat in `ended` expire if it ends
-    /// now, by its repository's retention.
-    async fn files_expiries(&self, ended: &[(String, Over)]) -> Result<HashMap<String, i64>> {
-        let ids: Vec<String> = ended.iter().map(|(id, _)| id.clone()).collect();
-        let repositories = self.store.run(move |db| repositories(db, &ids)).await?;
-        let mut expiries = HashMap::new();
-        for (chat, repository_id) in repositories {
-            expiries.insert(chat, self.chat_files_expiry(&repository_id).await);
-        }
-        Ok(expiries)
-    }
-
-    /// Give `workspace` to the running chat that opened it, or to the user
-    /// when it was opened outside one or the chat has ended.
+    /// Give `workspace` to the chat that opened it, or to the user when it
+    /// was opened outside one or the chat is gone.
     pub async fn assign_chat(&self, workspace: &str, chat: Option<String>) -> Result<()> {
         let workspace = workspace.to_owned();
         self.store
@@ -432,7 +397,7 @@ pub(crate) fn suffixed(base: &str, suffix: u64) -> String {
     name
 }
 
-/// Rename the running or saved chat `chat`, by ID or name, to `name` unless
+/// Rename the running or stopped chat `chat`, by ID or name, to `name` unless
 /// another holds it. Returns the chat before and after.
 fn rename(db: &mut Connection, chat: &str, name: &str) -> Result<(Chat, Chat)> {
     let tx = db.transaction()?;
@@ -466,7 +431,7 @@ fn rename(db: &mut Connection, chat: &str, name: &str) -> Result<(Chat, Chat)> {
 }
 
 /// Move the files kept under `old`'s name to `renamed`'s, replacing those
-/// an ended chat of that name left. A running session keeps writing to the
+/// a removed chat of that name left. A running session keeps writing to the
 /// log it holds open.
 fn move_chat_files(paths: &crate::paths::Paths, old: &Chat, renamed: &Chat) -> Result<()> {
     let (from, to) = (paths.chat_files(old), paths.chat_files(renamed));
@@ -480,7 +445,7 @@ fn move_chat_files(paths: &crate::paths::Paths, old: &Chat, renamed: &Chat) -> R
     Ok(())
 }
 
-/// Make `process` the one the running chat `chat` lasts while. A saved
+/// Make `process` the one the running chat `chat` runs as. A stopped
 /// chat's agent was stopped, so a session started for it is refused, which
 /// its launcher then stops.
 fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> {
@@ -495,7 +460,7 @@ fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> 
         .context("the chat ended")
 }
 
-/// The running and saved chats in start order.
+/// The running and stopped chats in start order.
 fn recorded(db: &Connection) -> Result<Vec<Chat>> {
     db.prepare(
         "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
@@ -536,7 +501,7 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
     .collect()
 }
 
-/// The process the chat `id` lasts while, unless it has ended or was saved.
+/// The process the chat `id` runs as, unless it is stopped.
 fn recorded_process(db: &mut Connection, id: &str) -> Result<Option<Identity>> {
     Ok(db
         .query_row(
@@ -553,7 +518,7 @@ fn recorded_process(db: &mut Connection, id: &str) -> Result<Option<Identity>> {
         .optional()?)
 }
 
-/// The process each running chat lasts while.
+/// The process each running chat runs as.
 fn recorded_processes(db: &Connection) -> Result<Vec<(String, Identity)>> {
     Ok(db
         .prepare("SELECT id,pid,birth FROM chats WHERE restore IS NULL")?
@@ -585,95 +550,34 @@ fn finished(recorded: Vec<(String, Identity)>) -> Vec<(String, Identity)> {
         .collect()
 }
 
-/// The chat records [`delete`] deleted.
-struct Deleted {
-    /// The last notification recorded.
-    notification: Option<i64>,
-    /// The repository and ID of each chat.
-    chats: Vec<(String, String)>,
-    /// The approval requests the chats had not decided, the user's now.
-    released: Vec<crate::daemon::approvals::ApprovalRequest>,
-}
-
-/// The repository of each recorded chat of `ids`, by chat.
-fn repositories(db: &mut Connection, ids: &[String]) -> Result<Vec<(String, String)>> {
-    let mut statement = db.prepare("SELECT repository_id FROM chats WHERE id=?1")?;
-    let mut repositories = Vec::new();
-    for id in ids {
-        if let Some(repository_id) = statement.query_row([id], |row| row.get(0)).optional()? {
-            repositories.push((id.clone(), repository_id));
+/// Record the chats still running as the processes `exited` found ended
+/// stopped, to wait for `shoal resume`, returning the requests they decided,
+/// given back to the user, since a stopped chat decides none.
+fn stop(db: &mut Connection, exited: &[(String, Identity)]) -> Result<Vec<ApprovalRequest>> {
+    let tx = db.transaction()?;
+    let mut released = Vec::new();
+    for (id, process) in exited {
+        let stopped = tx.execute(
+            "UPDATE chats SET restore=?4,starting=0
+             WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
+            params![id, process.pid, process.birth, ChatRestore::Resume],
+        )?;
+        if stopped == 1 {
+            released.extend(release_decided_by(&tx, id)?);
         }
     }
-    Ok(repositories)
-}
-
-/// How a chat to end was found over.
-enum Over {
-    /// The process it ran as exited.
-    Exited(Identity),
-    /// It was saved, and is not to be restored.
-    Discarded,
-}
-
-impl Over {
-    /// The repository of the chat `id` while it is still recorded as `self`
-    /// found it.
-    fn repository(&self, tx: &rusqlite::Transaction<'_>, id: &str) -> Result<Option<String>> {
-        let repository = match self {
-            Self::Exited(process) => tx.query_row(
-                "SELECT repository_id FROM chats
-                 WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
-                params![id, process.pid, process.birth],
-                |row| row.get(0),
-            ),
-            Self::Discarded => tx.query_row(
-                "SELECT repository_id FROM chats WHERE id=?1 AND restore IS NOT NULL",
-                [id],
-                |row| row.get(0),
-            ),
-        };
-        Ok(repository.optional()?)
-    }
-}
-
-/// Delete the records of the chats still recorded as `ended` found them,
-/// giving the user their unread messages and keeping their attached files
-/// until `expiries` says, by chat.
-fn delete(
-    db: &mut Connection,
-    ended: &[(String, Over)],
-    expiries: &HashMap<String, i64>,
-) -> Result<Deleted> {
-    let tx = db.transaction()?;
-    let mut last = None;
-    let mut deleted = Vec::new();
-    let mut released = Vec::new();
-    for (id, over) in ended {
-        let Some(repository_id) = over.repository(&tx, id)? else {
-            continue;
-        };
-        let expires_at = expiries.get(id).copied().unwrap_or_default();
-        last = end_record(&tx, id, expires_at)?.or(last);
-        // With the record, so no request is left with an ended decider.
-        released.extend(crate::daemon::approvals::release_decided_by(&tx, id)?);
-        deleted.push((repository_id, id.clone()));
-    }
     tx.commit()?;
-    Ok(Deleted {
-        notification: last,
-        chats: deleted,
-        released,
-    })
+    Ok(released)
 }
 
-/// Delete the record of the chat `id`, giving the user its unread messages
-/// and keeping its attached files until `expires_at`. Returns the last
-/// notification recorded.
-fn end_record(tx: &rusqlite::Transaction<'_>, id: &str, expires_at: i64) -> Result<Option<i64>> {
-    let last = chat_messages::hand_to_user(tx, id)?;
-    workspace_files::keep_ended_chat(tx, id, expires_at)?;
-    tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
-    Ok(last)
+/// Delete the record of the chat `id`, just started as `process`, which
+/// never ran.
+fn forget_unstarted(db: &mut Connection, id: &str, process: &Identity) -> Result<()> {
+    db.execute(
+        "DELETE FROM chats WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
+        params![id, process.pid, process.birth],
+    )?;
+    Ok(())
 }
 
 /// An unknown chat leaves the workspace to the user.
@@ -687,6 +591,7 @@ fn assign(db: &mut Connection, workspace: &str, chat: Option<&str>) -> Result<()
 
 mod done;
 mod processes;
+mod removal;
 mod restores;
 mod saved;
 mod stopped;

@@ -113,7 +113,7 @@ pub struct Workspace {
     /// Workspaces split from this one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub child_workspaces: Vec<WorkspaceRef>,
-    /// The running chat that opened this workspace.
+    /// The chat that opened this workspace.
     #[serde(default)]
     pub chat: Option<String>,
     /// What its processes use, while any run.
@@ -893,7 +893,7 @@ pub struct LandPlan {
 }
 
 /// An agent the user talks with in a repository's registered checkout,
-/// outside any workspace, while its process runs.
+/// outside any workspace, until it is removed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Chat {
     pub id: String,
@@ -913,8 +913,8 @@ pub struct Chat {
     /// The agent session its hooks reported last, which an export continues.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
-    /// How the chat comes back once Shoal stopped it with its session saved;
-    /// none while it runs.
+    /// How the chat comes back once its agent stopped, by exiting or as
+    /// Shoal saved its session; none while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restore: Option<crate::state::ChatRestore>,
     /// The issues, PRs and CI runs it links.
@@ -928,14 +928,14 @@ pub struct Chat {
     pub completion: Option<Completion>,
 }
 
-/// A running chat after a rename, with the name it had before.
+/// A chat after a rename, with the name it had before.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RenamedChat {
     pub chat: Chat,
     pub previous_name: String,
 }
 
-/// A space as it exists: a workspace or a chat, running or saved, which
+/// A space as it exists: a workspace or a chat, running or stopped, which
 /// share one namespace of IDs and names.
 #[derive(Debug, Clone)]
 #[allow(
@@ -991,15 +991,10 @@ impl PresentSpace {
             Self::Chat(_) => "chat",
         }
     }
-
-    /// Whether it is a chat Shoal saved to restore, which does not run.
-    pub fn is_saved_chat(&self) -> bool {
-        matches!(self, Self::Chat(chat) if chat.restore.is_some())
-    }
 }
 
 /// The spaces a caller sees: its workspaces, and its chats, running or
-/// saved.
+/// stopped.
 #[derive(Debug, Clone, Default)]
 pub struct Spaces {
     pub workspaces: Vec<Workspace>,

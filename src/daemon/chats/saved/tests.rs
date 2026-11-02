@@ -116,7 +116,7 @@ async fn a_saved_chat_keeps_its_record_until_it_is_restored() {
         .restore_chat(&chat.id, std::process::id(), None, false)
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("no saved chat"), "{error:#}");
+    assert!(error.to_string().contains("no stopped chat"), "{error:#}");
     assert_eq!(
         chat_events(&manager).await,
         ["chat_started talk", "chat_saved talk", "chat_restored talk"]
@@ -128,7 +128,7 @@ async fn a_discarded_saved_chat_ends() {
     let (root, manager) = manager().await;
     let (_repo, chat, _process) = running_chat(root.path(), &manager).await;
     let error = manager.discard_saved_chat("talk").await.unwrap_err();
-    assert!(error.to_string().contains("no saved chat"), "{error:#}");
+    assert!(error.to_string().contains("no stopped chat"), "{error:#}");
 
     manager.save_chats(ChatRestore::Resume).await;
     let discarded = manager.discard_saved_chat("talk").await.unwrap();
@@ -452,18 +452,19 @@ async fn a_survivor_that_left_the_chats_group_holds_it_saved() {
 }
 
 #[tokio::test]
-async fn a_chat_that_ended_before_the_save_is_not_saved() {
+async fn a_chat_whose_agent_exited_before_the_save_waits_for_resume() {
     let (root, manager) = manager().await;
     let (_repo, chat, process) = running_chat(root.path(), &manager).await;
     process.kill();
 
     manager.save_chats(ChatRestore::Automatic).await;
 
-    assert!(manager.chats().await.unwrap().is_empty());
-    assert!(!chat.tmp_dir.unwrap().exists());
+    let chats = manager.chats().await.unwrap();
+    assert_eq!(chats[0].restore, Some(ChatRestore::Resume));
+    assert!(chat.tmp_dir.unwrap().exists());
     assert_eq!(
         chat_events(&manager).await,
-        ["chat_started talk", "chat_ended talk"]
+        ["chat_started talk", "chat_saved talk"]
     );
 }
 

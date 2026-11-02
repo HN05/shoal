@@ -69,8 +69,9 @@ impl Manager {
 
     /// Queue `message` about the workspace named `name` for its coordinator,
     /// with Shoal's copies `attachments` of the files it sent: the agent of
-    /// its nearest ancestor that has one, or the running chat that owns it
-    /// or a nearer ancestor. `kind` is the notification the event would be
+    /// its nearest ancestor that has one, or the chat that owns it or a
+    /// nearer ancestor, while that chat runs or waits for its automatic
+    /// restore. `kind` is the notification the event would be
     /// for the user. Returns false when there is no coordinator, its
     /// messages are full, or the event comes from an agent and the workspace
     /// has none of its own, since the coordinator itself or the user acted
@@ -330,8 +331,8 @@ pub(crate) fn spaces_above(
 /// The space directly above a workspace.
 enum Above {
     Workspace(String),
-    /// The running chat that opened it; a chat's end clears its ownership,
-    /// and a saved chat, which keeps it, is passed by.
+    /// The running chat that opened it; a stopped chat, which keeps it, is
+    /// passed by.
     Chat(String),
     User,
 }
@@ -339,7 +340,7 @@ enum Above {
 /// The space directly above the workspace `id`: its parent workspace, else
 /// the chat that opened it.
 fn space_above(db: &Connection, id: &str) -> Result<Above> {
-    // A saved chat keeps its workspaces but has no agent to tell.
+    // A stopped chat keeps its workspaces but has no agent to tell.
     let above: Option<(Option<String>, Option<String>)> = db
         .query_row(
             "SELECT parent_workspace_id,
@@ -373,14 +374,16 @@ fn has_running_agent(db: &Connection, id: &str, agents: &TrackedAgents) -> Resul
 enum Coordinator {
     /// The workspace whose agent does.
     Agent(String),
-    /// The running chat that does.
+    /// The chat that does.
     Chat(String),
 }
 
 /// The coordinator of the workspace named `name` for an event from `source`:
 /// going up from the workspace, the first ancestor with an agent or the
-/// first running chat that owns a workspace on the way, whichever comes
-/// first. A chat's end clears its ownership, so an owning chat is running.
+/// first chat that owns a workspace on the way, whichever comes first,
+/// while that chat runs or waits for its automatic restore, which receives
+/// what arrived once it runs. Another stopped chat keeps its workspaces but
+/// has no agent to tell.
 fn coordinator(
     db: &Connection,
     name: &str,
@@ -406,9 +409,12 @@ fn coordinator(
                 UNION SELECT workspaces.parent_workspace_id, up.depth + 1 FROM up
                     JOIN workspaces ON workspaces.id=up.id
                     WHERE workspaces.parent_workspace_id IS NOT NULL
-            ) SELECT up.id, up.depth > 0 AND {}, workspaces.chat_id FROM up
-                JOIN workspaces ON workspaces.id=up.id ORDER BY up.depth",
-            has_agent("up.id")
+            ) SELECT up.id, up.depth > 0 AND {},
+                    (SELECT id FROM chats WHERE id=workspaces.chat_id
+                        AND (restore IS NULL OR restore='{}'))
+                FROM up JOIN workspaces ON workspaces.id=up.id ORDER BY up.depth",
+            has_agent("up.id"),
+            crate::state::ChatRestore::Automatic
         ))?
         .query_map(params![name, agents.parameter()], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))

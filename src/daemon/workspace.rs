@@ -137,7 +137,7 @@ pub struct Manager {
     /// launcher waits for the handoff and keeps it a tracked descendant.
     pub(crate) chat_handoffs: tokio::sync::RwLock<()>,
     /// Held while chats are saved and their processes stopped, and to
-    /// restore or discard a saved chat, so neither overlaps a stop.
+    /// restore or remove a stopped chat, so neither overlaps a stop.
     pub(crate) chat_saves: tokio::sync::Mutex<()>,
     pub(crate) chat_stops: crate::daemon::chats::Stopping,
     pub(crate) seeds: super::seed::Seeds,
@@ -456,7 +456,6 @@ impl Manager {
         }
         let name = name.map(|name| derive_workspace_name(&name));
         if let Some(name) = name.clone() {
-            self.end_finished_chats().await?;
             self.store
                 .run(move |db| store::ensure_name_available(db, &name, None))
                 .await?;
@@ -537,8 +536,6 @@ impl Manager {
             Some(git_dir) => off_runtime::run(move || identity::marked_owner(&git_dir)).await?,
             None => None,
         };
-        // A chat that ended no longer holds its name.
-        self.end_finished_chats().await?;
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;

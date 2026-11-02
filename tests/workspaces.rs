@@ -7506,10 +7506,10 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
         fs::read_to_string(home.join("chat-tmpdir")).unwrap().trim(),
         tmp_dir.to_str().unwrap()
     );
-    // The resumed agent exited, which ends the chat at last; listing chats
+    // The resumed agent exited, which stops the chat again; listing chats
     // finds that.
-    assert_eq!(fixture.ok(&["work", "--chats"]), Value::Array(vec![]));
-    assert!(!tmp_dir.exists());
+    assert_eq!(fixture.ok(&["work", "--chats"])[0]["restore"], "resume");
+    assert!(tmp_dir.exists());
     assert_eq!(
         chat_kinds(&fixture),
         [
@@ -7519,7 +7519,7 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
             "chat_restored",
             "chat_saved",
             "chat_restored",
-            "chat_ended"
+            "chat_saved"
         ]
     );
 }
@@ -7576,6 +7576,11 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
     save_chat(&mut fixture);
     stop_agent(&fixture, &worker);
     install_test_script(home.join("bin").join("zmx"), terminal_zmx());
+    let saves = |fixture: &Fixture| {
+        let kinds = chat_kinds(fixture);
+        kinds.iter().filter(|kind| *kind == "chat_saved").count()
+    };
+    let saved = saves(&fixture);
     let (output, transcript) =
         fixture.interactive_command(fixture.command().args(["resume", "--all", "--now"]), "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -7585,11 +7590,9 @@ fn a_resume_takes_saved_chats_and_workspaces_together() {
             && stdout.contains("shoal resume worker --execution worker-agent --focus"),
         "{output:?}"
     );
-    // The restored agent only records how it ran, which ends the chat.
-    wait_until("the restored chat to end", || {
-        fixture.ok(&["work", "--chats"]) == Value::Array(vec![])
-    });
-    fixture.ok(&["resume", "worker", "--discard"]);
+    // The restored agent only records how it ran, which stops the chat.
+    wait_until("the restored chat to stop", || saves(&fixture) > saved);
+    fixture.ok(&["resume", "talk", "worker", "--discard"]);
     // The picker offers the saved chats after the workspaces with stopped
     // work.
     let chat = save_chat(&mut fixture);
@@ -7641,13 +7644,10 @@ fn a_chat_a_signal_saved_comes_back_on_its_own() {
         fs::read_to_string(home.join("chat-id"))
             .is_ok_and(|id| id.trim() == chat["id"].as_str().unwrap())
     });
-    wait_until("restored chat ended", || {
-        fixture.ok(&["work", "--chats"]) == Value::Array(vec![])
+    wait_until("restored chat stopped", || {
+        chat_kinds(&fixture) == ["chat_started", "chat_saved", "chat_restored", "chat_saved"]
     });
-    assert_eq!(
-        chat_kinds(&fixture),
-        ["chat_started", "chat_saved", "chat_restored", "chat_ended"]
-    );
+    assert_eq!(fixture.ok(&["work", "--chats"])[0]["restore"], "resume");
 }
 
 /// A [`PASSTHROUGH_ZMX`] whose sessions run their command on a terminal of
@@ -21603,9 +21603,13 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
         "{output:?}"
     );
 
-    // Once the chat ends, its files stay listed with when they go.
+    // A stopped chat keeps its files; once it is removed, they stay listed
+    // with when they go.
     agent.kill().unwrap();
     agent.wait().unwrap();
+    let stopped = fixture.ok(&["files", "planning"]);
+    assert!(stopped[0]["expires_at"].is_null(), "{stopped}");
+    fixture.ok(&["resume", "planning", "--discard"]);
     let kept = fixture.ok(&["files", "planning"]);
     assert_eq!(kept[0]["path"], added[0]["path"], "{kept}");
     assert!(kept[0]["expires_at"].is_i64(), "{kept}");
@@ -26549,14 +26553,15 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         "{status}"
     );
 
-    // Once its agent exits the chat ends, and its workspace returns to the user.
-    assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
-    assert_eq!(fixture.ok(&["work"])[0]["chat"], Value::Null);
-    let ended = journal(&fixture)
+    // Once its agent exits the chat stops, keeping its workspace.
+    let chats = fixture.ok(&["work", "--chats"]);
+    assert_eq!(chats[0]["restore"], "resume", "{chats}");
+    assert_eq!(fixture.ok(&["work"])[0]["chat"], chats[0]["id"]);
+    let stopped = journal(&fixture)
         .into_iter()
-        .find(|event| event["kind"] == "chat_ended")
+        .find(|event| event["kind"] == "chat_saved")
         .unwrap();
-    assert_eq!(ended["chat"], started["chat"]);
+    assert_eq!(stopped["chat"]["id"], started["chat"]["id"]);
 
     // Opening it outside a chat gives it back to the user.
     let reopened = fixture.ok(&[
@@ -26998,14 +27003,15 @@ fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
             .starts_with("Plan issue #12: Clarify retries"),
         "{args:?}"
     );
-    // The chat is named after the issue without asking.
+    // The chat is named after the issue without asking, beside the stopped
+    // chat that planned it before, which keeps its name.
     let started = journal(&fixture)
         .into_iter()
         .rfind(|event| event["kind"] == "chat_started")
         .unwrap();
     assert_eq!(
         started["chat"]["name"],
-        "repo-with---quotes----literal-plan-12"
+        "repo-with---quotes----literal-plan-12-2"
     );
 }
 
@@ -27099,8 +27105,8 @@ done
         .status()
         .unwrap();
     assert!(stopped.success());
-    wait_until("the daemon to record the chat ended", || {
-        fixture.ok(&["work", "--chats"]) == serde_json::json!([])
+    wait_until("the daemon to record the chat stopped", || {
+        fixture.ok(&["work", "--chats"])[0]["restore"] == "resume"
     });
     fs::write(fixture.root.path().join("setup-release"), "").unwrap();
     let output = setup.wait_with_output().unwrap();
@@ -27219,8 +27225,10 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     for pid in [pid, started["chat"]["pid"].as_u64().unwrap()] {
         Command::new("kill").arg(pid.to_string()).status().unwrap();
     }
-    wait_until("the chats to end", || {
-        fixture.ok(&["work", "--chats"]) == serde_json::json!([])
+    wait_until("the chats to stop", || {
+        let chats = fixture.ok(&["work", "--chats"]);
+        let chats = chats.as_array().unwrap();
+        !chats.is_empty() && chats.iter().all(|chat| chat["restore"] == "resume")
     });
 }
 

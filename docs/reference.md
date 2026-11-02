@@ -1734,9 +1734,12 @@ the `chat`, `log`, `prompt_file`, `prompt_delivered`, `happy_session_id` and
 authority, not a workspace scope, and workspace processes cannot start one.
 Chats are not tracked executions, so they are never queued or stopped under
 pressure. The daemon records each chat under its
-name while its agent process runs, with the session the agent's session-start
+name, with the session the agent's session-start
 hook last reported, which [`shoal move`](#move-a-space-to-another-machine)
-continues on another machine. A chat running when the daemon stops for a
+continues on another machine. The chat runs while its agent process runs, and
+stops when it exits: it waits for `shoal resume <chat>`, as does one
+`shoal daemon stop` saved or whose restore failed, which records a
+`chat_restore_failed` notification. A chat running when the daemon stops for a
 shutdown, a logout or a signal is saved and stopped, and comes back on its own
 once the daemon runs again: under its name, in a background place where a
 restored agent opens, continuing its session. One `shoal daemon stop` saved
@@ -1760,12 +1763,14 @@ asks the chat's agent to choose the name and set it instead. Workspace processes
 cannot rename chats.
 
 `shoal work` lists the chat by name with the workspaces it
-opened, and [workspace events](#workspace-events) report its start, renames and end. A workspace
+opened, and [workspace events](#workspace-events) report its start, renames, stops,
+restores and removal. A workspace
 belongs to the chat whose agent last opened it with `shoal add`: its `chat`
-field and `shoal status` name that chat until the chat ends or the workspace is opened outside a
-chat, which returns it to you. While it runs, the chat
-[coordinates](#child-workspaces) the workspaces it owns; one that ends before
-receiving their events gives you the notifications they stand for.
+field and `shoal status` name that chat until the workspace is opened outside a
+chat, which returns it to you. While it runs, or waits to come back on its own,
+the chat [coordinates](#child-workspaces) the workspaces it owns; while it is
+otherwise stopped, their events reach you, and one removed before receiving
+their events gives you the notifications they stand for.
 
 ### Planning issues
 
@@ -4183,11 +4188,12 @@ when inapplicable; `error` describes setup or cleanup failures. Branch changes
 are observed during daemon sweeps; detached HEAD has a null branch, and the
 recorded workspace branch remains unchanged.
 
-A `type: "chat"` line records a chat's start, rename, save, restore or end:
-its `id`, `created_at`, `kind` (`chat_started`, `chat_renamed`, `chat_saved`,
-`chat_restored` or `chat_ended`) and a `chat` object with its `id`,
+A `type: "chat"` line records a chat's start, rename, stop, restore or removal:
+its `id`, `created_at`, `kind` (`chat_started`, `chat_renamed`, `chat_saved`
+when it stops, whether Shoal saved it or its agent exited, `chat_restored`, or
+`chat_ended` when it is removed) and a `chat` object with its `id`,
 `repository_id`, `name` (the new one after a rename), `agent`, `pid` and
-Unix-seconds `started_at`, and on a save its `restore`: `automatic` or `resume`.
+Unix-seconds `started_at`, and on a stop its `restore`: `automatic` or `resume`.
 
 A `type: "file"` line records a file [attached](#attached-files) to a workspace
 or chat by any route (`kind: "file_added"`) or deleted by any route, including
@@ -4259,7 +4265,7 @@ shoal messages [space]     # New messages, oldest first, shown once
 
 `shoal messages send` queues a message of at most 8 KiB, without control characters
 other than newlines and tabs, for the agents working in a space, a workspace or
-running chat, and is refused while the workspace is being removed; output
+chat, which receives it once it runs, and is refused while the workspace is being removed; output
 indents a message's later lines under its first. Workspace processes send only
 to the workspaces below their own. `--attach` copies a file of at most 100 MiB into the
 repository directory's `.attachments`, which agents can read, and the message
@@ -4444,8 +4450,8 @@ ones it leaves out. Only unscoped callers answer, except that a workspace proces
 answers, by number, the questions asked in the [workspaces below its own](#child-workspaces).
 Scoped callers ask, list and withdraw only their own workspace's questions, or a
 child's with `--space`. An open question keeps the workspace from idle
-cleanup; removing the workspace or ending the chat deletes its questions, which a
-saved chat keeps. `shoal done` closes the
+cleanup; removing the workspace or chat deletes its questions, which a
+stopped chat keeps. `shoal done` closes the
 workspace's open questions, and `withdraw` closes one of them: answers to a closed
 question are refused, waits on it fail, and `shoal done --undo` does not reopen it.
 Withdrawing deletes the question's `question_asked` notification while it is
@@ -4869,8 +4875,8 @@ passes the request up. It never approves a proposal or denies one as a
 duplicate, which write to the forge. A chat runs with your authority and may
 approve anything.
 A land request names its own branch and commit, which no other workspace holds
-a grant for, so its parent workspace passes it up. When a chat ends or is
-saved, or a workspace deciding a request is removed, such as below an issue
+a grant for, so its parent workspace passes it up. When a chat's agent stops,
+or a space deciding a request is removed, such as below an issue
 proposal that outlives its workspace, the requests it had not decided go to
 the user. Without a deciding
 space, the user is notified as above. The request records its `decider`, the

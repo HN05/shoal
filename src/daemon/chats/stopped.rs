@@ -51,8 +51,7 @@ fn stopped(db: &mut Connection, id: &str) -> Result<Vec<Identity>> {
 }
 
 /// Record that a stop of the chat `id` signals `processes`, unless the chat
-/// ended while it stops, as when a listing finds its agent exited: then no
-/// later stop or check follows them.
+/// was removed while it stops: then no later stop or check follows them.
 fn record(db: &mut Connection, id: &str, processes: &[Identity]) -> Result<()> {
     let tx = db.transaction()?;
     for process in processes {

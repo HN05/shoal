@@ -91,7 +91,7 @@ impl Manager {
     }
 
     /// Applies `change` to the PR registration of the chat `id`, unless the
-    /// chat ended meanwhile, whose end deleted its registration.
+    /// chat was removed meanwhile, which deleted its registration.
     async fn record_chat_registration(&self, id: String, change: RegistrationChange) -> Result<()> {
         self.store
             .run(move |db| record_chat_change(db, &id, change))
@@ -613,13 +613,13 @@ pub(crate) fn origin<'a>(
 }
 
 /// Apply `change` to the PR registration of the chat `id` in a transaction
-/// that finds the chat still recorded: one that ended has no registration
+/// that finds the chat still recorded: a removed one has no registration
 /// to change, and writing one would outlive it.
 fn record_chat_change(db: &mut Connection, id: &str, change: RegistrationChange) -> Result<()> {
     let tx = db.transaction()?;
     ensure!(
         super::space::is_chat(&tx, id)?,
-        "the chat ended before its PR links changed"
+        "the chat was removed before its PR links changed"
     );
     change.apply(&tx, id)?;
     tx.commit()?;

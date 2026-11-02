@@ -9,14 +9,14 @@ use super::{
 use crate::model::{Completion, PresentSpace};
 
 impl Manager {
-    /// The workspace or running chat `selector` names, by name or ID; the
-    /// error is the workspace lookup's when neither has it.
+    /// The workspace or chat `selector` names, by name or ID; the error is
+    /// the workspace lookup's when neither has it.
     pub(crate) async fn present_space(&self, selector: &str) -> Result<PresentSpace> {
         let error = match self.workspace(selector).await {
             Ok(workspace) => return Ok(PresentSpace::Workspace(workspace)),
             Err(error) => error,
         };
-        match self.running_chat(selector).await? {
+        match self.recorded_chat(selector).await? {
             Some(chat) => Ok(PresentSpace::Chat(chat)),
             None => Err(error),
         }

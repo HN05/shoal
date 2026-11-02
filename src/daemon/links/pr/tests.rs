@@ -155,7 +155,7 @@ async fn a_failed_branch_check_does_not_claim_another_branch() {
 }
 
 #[tokio::test]
-async fn a_chat_that_ended_before_its_pr_link_is_written_keeps_none() {
+async fn a_chat_removed_before_its_pr_link_is_written_keeps_none() {
     let (_temp, manager) = crate::test_support::manager().await;
     let url = "https://forge.example/team/repo/pulls/8".to_owned();
     let change = RegistrationChange::new(
@@ -168,19 +168,19 @@ async fn a_chat_that_ended_before_its_pr_link_is_written_keeps_none() {
             error: None,
         }),
     );
-    // The chat's end, which deletes its registration, ran first.
+    // The chat's removal, which deletes its registration, ran first.
     let refused = manager
         .store
-        .run(move |db| record_chat_change(db, "ended-chat", change))
+        .run(move |db| record_chat_change(db, "removed-chat", change))
         .await
         .unwrap_err();
     assert!(
-        format!("{refused:#}").contains("the chat ended"),
+        format!("{refused:#}").contains("the chat was removed"),
         "{refused:#}"
     );
     assert!(
         manager
-            .pr_registration("ended-chat")
+            .pr_registration("removed-chat")
             .await
             .unwrap()
             .is_none()

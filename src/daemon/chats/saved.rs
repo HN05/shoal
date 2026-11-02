@@ -1,13 +1,14 @@
-//! Chats Shoal stops with their sessions saved, as a shutdown, a logout or
-//! `shoal daemon stop` stops a workspace's agent. A saved chat keeps its
-//! record, and with it its name, files, messages, workspaces and temporary
-//! directory, until a start restores it in a new process or it is discarded.
+//! Stopped chats: those Shoal stops with their sessions saved, as a
+//! shutdown, a logout or `shoal daemon stop` stops a workspace's agent, and
+//! those whose agent exited. A stopped chat keeps its record, and with it its
+//! name, files, messages, workspaces and temporary directory, until a start
+//! restores it in a new process or it is removed.
 use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
 use rusqlite::{Connection, params};
 
 use super::{
-    Over, ensure_checkout_free,
+    ensure_checkout_free,
     processes::{self, ChatProcesses},
     recorded, stopped,
 };
@@ -32,10 +33,10 @@ impl Manager {
         let _saving = self.chat_saves.lock().await;
         // A handoff would replace the process the stop below ends.
         let _handoffs = self.chat_handoffs.write().await;
-        // A chat whose agent exited since the last sweep has ended, and
-        // would otherwise come back.
-        if let Err(error) = self.end_finished_chats().await {
-            log!("ended chats not found before saving: {error:#}");
+        // A chat whose agent exited since the last sweep waits for
+        // `shoal resume`, and would otherwise come back on its own.
+        if let Err(error) = self.stop_finished_chats().await {
+            log!("exited chats not found before saving: {error:#}");
         }
         let Saved {
             running: saved,
@@ -62,9 +63,8 @@ impl Manager {
 
     /// Settle the chat `id`, saved while it ran as `process`, after a stop
     /// that failed: it runs on while that process lives, and otherwise stays
-    /// saved, since running with its process ended would end it, deleting
-    /// its temporary directory. A restore or discard waits for what the stop
-    /// left running.
+    /// saved to come back as the save said. A restore or removal waits for
+    /// what the stop left running.
     async fn keep_after_failed_stop(&self, id: String, process: Identity) {
         match identity::alive(&process) {
             Ok(true) => {
@@ -94,7 +94,7 @@ impl Manager {
         processes::stop_owned(id, &recorded, stopped, &wrappers, record).await
     }
 
-    /// Run the saved chat `id` again as process `pid`, at `origin` in a
+    /// Run the stopped chat `id` again as process `pid`, at `origin` in a
     /// terminal host when it runs in one, or when `hands_over`, in a session
     /// `pid` starts and [`Self::move_chat`] names, as
     /// [`Self::start_chat`] records a new chat. It keeps its ID, name,
@@ -180,28 +180,27 @@ impl Manager {
         Ok(())
     }
 
-    /// End the saved chat `selector` names, by ID or name, without
-    /// restoring it, as if its process had exited.
+    /// Remove the stopped chat `selector` names, by ID or name, without
+    /// restoring it.
     pub(crate) async fn discard_saved_chat(&self, selector: &str) -> Result<Chat> {
         let _saving = self.chat_saves.lock().await;
         let chat = self.saved_chat(selector).await?;
         self.ensure_ended(&chat, std::process::id()).await?;
-        self.end_chats(vec![(chat.id.clone(), Over::Discarded)])
-            .await?;
+        self.delete_chat(&chat).await?;
         Ok(chat)
     }
 
-    /// The saved chat `selector` names, by ID or name.
+    /// The stopped chat `selector` names, by ID or name.
     async fn saved_chat(&self, selector: &str) -> Result<Chat> {
         self.recorded_chat(selector)
             .await?
             .filter(|chat| chat.restore.is_some())
-            .with_context(|| format!("no saved chat {selector}"))
+            .with_context(|| format!("no stopped chat {selector}"))
     }
 
-    /// Refuse the saved `chat` while a process it owns still runs, other
+    /// Refuse the stopped `chat` while a process it owns still runs, other
     /// than `caller`, as after a stop that did not end them: a restore would
-    /// have two agents write one session, and a discard would delete files
+    /// have two agents write one session, and a removal would delete files
     /// they use.
     async fn ensure_ended(&self, chat: &Chat, caller: u32) -> Result<()> {
         let id = chat.id.clone();
@@ -224,7 +223,7 @@ impl Manager {
     }
 }
 
-/// The process the saved chat `id` ran as.
+/// The process the stopped chat `id` ran as.
 fn saved_process(db: &mut Connection, id: &str) -> Result<Identity> {
     let (pid, birth, unique): (u32, String, Option<String>) = db.query_row(
         "SELECT pid,birth,unique_id FROM chats WHERE id=?1",
@@ -305,7 +304,7 @@ fn unsave(db: &mut Connection, id: &str, process: &Identity) -> Result<()> {
     Ok(())
 }
 
-/// Whether the process the saved `chat` ran as still runs, as one a stop
+/// Whether the process the stopped `chat` ran as still runs, as one a stop
 /// left running.
 pub(super) fn still_runs(db: &Connection, chat: &Chat) -> Result<bool> {
     let birth: String = db.query_row("SELECT birth FROM chats WHERE id=?1", [&chat.id], |row| {
@@ -318,7 +317,7 @@ pub(super) fn still_runs(db: &Connection, chat: &Chat) -> Result<bool> {
     })
 }
 
-/// A saved chat that runs again.
+/// A stopped chat that runs again.
 struct Restored {
     id: String,
     repository: String,
@@ -328,7 +327,7 @@ struct Restored {
     hands_over: bool,
 }
 
-/// Record that the saved chat `restored` names runs again, starting until it
+/// Record that the stopped chat `restored` names runs again, starting until it
 /// is moved when it hands over, unless a restore took it first. The check
 /// before it found nothing its stops signalled still running, nor anything
 /// they started.
@@ -350,7 +349,7 @@ fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
             restored.hands_over
         ],
     )?;
-    ensure!(updated == 1, "the chat is no longer saved");
+    ensure!(updated == 1, "the chat is no longer stopped");
     stopped::forget(&tx, &restored.id)?;
     let chat = recorded(&tx)?
         .into_iter()

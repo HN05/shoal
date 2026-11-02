@@ -33,7 +33,7 @@ pub(crate) use crate::client::files::{
 mod tests;
 
 /// The space, a workspace or chat, whose attached files a request names:
-/// one that exists, or a removed workspace or ended chat whose files are
+/// one that exists, or a removed workspace or removed chat whose files are
 /// kept.
 #[derive(Debug, Clone)]
 pub(crate) struct Space {
@@ -169,7 +169,7 @@ impl Manager {
     }
 
     /// The running chat `sender_chat` as an attacher, else the user, as for
-    /// a chat that has ended or a request from outside any chat.
+    /// a chat that is stopped or a request from outside any chat.
     async fn chat_attacher(&self, sender_chat: Option<&str>) -> Attacher {
         let running = match sender_chat {
             Some(chat) => self.running_chat(chat).await,
@@ -189,23 +189,19 @@ impl Manager {
     }
 
     /// The files attached to the workspace or chat `selector` names, or
-    /// kept for a removed workspace or ended chat of that name, oldest first.
+    /// kept for a removed space of that name, oldest first.
     pub async fn attached_files(&self, selector: &str) -> Result<Vec<AttachedFile>> {
         let space = self.file_space(selector).await?;
         self.store.run(move |db| records::list(db, &space.id)).await
     }
 
-    /// The workspace or running chat `selector` names, else a saved chat,
-    /// which keeps its files until it ends, or else the latest removed
-    /// workspace or ended chat of that name or ID whose files are kept.
+    /// The workspace or chat `selector` names, or else the latest removed
+    /// space of that name or ID whose files are kept.
     pub(crate) async fn file_space(&self, selector: &str) -> Result<Space> {
         let error = match self.present_space(selector).await {
             Ok(space) => return Ok(space.into()),
             Err(error) => error,
         };
-        if let Some(saved) = self.recorded_chat(selector).await? {
-            return Ok(crate::model::PresentSpace::Chat(saved).into());
-        }
         let selector = selector.to_owned();
         let gone = self
             .store
@@ -319,7 +315,7 @@ impl Manager {
 
     /// Delete the attached files of every workspace without a running agent
     /// or command, or one whose end is unresolved, and of every removed
-    /// workspace and ended chat, and return their records.
+    /// workspace and removed chat, and return their records.
     /// No execution starts while a repository's files are chosen and deleted.
     pub async fn remove_idle_files(&self) -> Result<Vec<AttachedFile>> {
         let mut deleted = Vec::new();
@@ -434,14 +430,14 @@ impl Manager {
     }
 
     /// Refuse attaching files to the space `space_id` once the
-    /// workspace is being removed or is gone, or the chat has ended.
+    /// workspace is being removed or is gone, or the chat was removed.
     async fn ensure_attachable(&self, space_id: &str) -> Result<()> {
         match self.workspace(space_id).await {
             Ok(workspace) => ensure!(
                 workspace.state != WorkspaceState::Removing,
                 "the workspace is being removed"
             ),
-            Err(error) if self.running_chat(space_id).await?.is_none() => return Err(error),
+            Err(error) if self.recorded_chat(space_id).await?.is_none() => return Err(error),
             Err(_) => {}
         }
         Ok(())

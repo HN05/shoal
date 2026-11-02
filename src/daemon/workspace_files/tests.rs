@@ -1215,7 +1215,8 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
     );
 
     process.kill();
-    manager.end_finished_chats().await.unwrap();
+    manager.stop_finished_chats().await.unwrap();
+    manager.discard_saved_chat(&chat.id).await.unwrap();
     manager.expire_results().await.unwrap();
     let files = manager.attached_files("planning").await.unwrap();
     let [kept] = files.as_slice() else {
@@ -1224,7 +1225,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
     assert_eq!(kept.source, FileSource::Added);
     assert!(kept.expires_at.is_some(), "{kept:?}");
     assert!(copy.exists());
-    // An ended chat takes no more files.
+    // A removed chat takes no more files.
     let late = temp.path().join("late.md");
     std::fs::write(&late, "Late").unwrap();
     assert!(

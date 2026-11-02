@@ -4,7 +4,8 @@ use crate::{
     test_support::{manager, repository},
 };
 
-/// Chat starts and ends, and workspace chat changes, in journal order.
+/// Chat starts, stops and removals, and workspace chat changes, in journal
+/// order.
 async fn chat_events(manager: &Manager) -> Vec<String> {
     manager
         .workspace_events(None, 100)
@@ -22,7 +23,7 @@ async fn chat_events(manager: &Manager) -> Vec<String> {
 }
 
 #[tokio::test]
-async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() {
+async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -38,7 +39,7 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
     let ending = manager
         .start_chat(
             repo.id.clone().into(),
-            "ending".into(),
+            "stopping".into(),
             "claude".into(),
             process.id(),
             None,
@@ -59,7 +60,7 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
         .unwrap();
     assert_eq!(
         (ending.name.as_str(), running.name.as_str()),
-        ("ending", "running")
+        ("stopping", "running")
     );
     assert_eq!(
         manager.chats().await.unwrap(),
@@ -85,34 +86,38 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
         .await
         .unwrap();
 
-    // The chat ends with its process, returning its workspace to the user,
-    // and its name is free again.
+    // The chat stops with its process, waiting for `shoal resume` with its
+    // workspace and its name.
     process.kill();
-    assert_eq!(manager.chats().await.unwrap(), [running]);
-    assert_eq!(manager.workspace(&workspace.id).await.unwrap().chat, None);
-    let next = manager
-        .start_chat(
-            repo.id.clone().into(),
-            "ending".into(),
-            "claude".into(),
-            std::process::id(),
-            None,
-            false,
-        )
+    let stopped = Chat {
+        restore: Some(ChatRestore::Resume),
+        ..ending.clone()
+    };
+    assert_eq!(
+        manager.chats().await.unwrap(),
+        [stopped.clone(), running.clone()]
+    );
+    assert_eq!(
+        manager.workspace(&workspace.id).await.unwrap().chat,
+        Some(ending.id.clone())
+    );
+    let error = manager
+        .check_chat_name("stopping".into())
         .await
-        .unwrap();
-    assert_eq!(next.name, "ending");
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("already has the name"),
+        "{error:#}"
+    );
     assert_eq!(
         chat_events(&manager).await,
         [
-            format!("{} ending", ChatEventKind::Started),
+            format!("{} stopping", ChatEventKind::Started),
             format!("{} running", ChatEventKind::Started),
             format!("worker {:?}", Some(&ending.id)),
             "worker None".to_owned(),
             format!("worker {:?}", Some(&ending.id)),
-            "worker None".to_owned(),
-            format!("{} ending", ChatEventKind::Ended),
-            format!("{} ending", ChatEventKind::Started),
+            format!("{} stopping", ChatEventKind::Saved),
         ]
     );
 }
@@ -195,7 +200,7 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
 }
 
 #[tokio::test]
-async fn a_moved_chat_lasts_while_its_new_process_runs() {
+async fn a_moved_chat_runs_while_its_new_process_runs() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -225,9 +230,9 @@ async fn a_moved_chat_lasts_while_its_new_process_runs() {
     );
     assert_eq!(manager.chats().await.unwrap(), [moved]);
 
-    // The recording process still runs, but the chat ends with the new one.
+    // The recording process still runs, but the chat stops with the new one.
     process.kill();
-    assert!(manager.chats().await.unwrap().is_empty());
+    assert!(manager.chats().await.unwrap()[0].restore.is_some());
     let error = manager
         .move_chat(&chat.id, std::process::id())
         .await
@@ -303,21 +308,19 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
         .await
         .unwrap();
     recording.kill();
-    let ended: Vec<_> = finished(recorded)
-        .into_iter()
-        .map(|(id, process)| (id, Over::Exited(process)))
-        .collect();
-    assert_eq!(ended.len(), 1);
+    let exited = finished(recorded);
+    assert_eq!(exited.len(), 1);
     // ...while the chat moves to its session's process.
     let moved = manager
         .move_chat(&chat.id, std::process::id())
         .await
         .unwrap();
-    manager
+    let released = manager
         .store
-        .run(move |db| delete(db, &ended, &Default::default()))
+        .run(move |db| stop(db, &exited))
         .await
         .unwrap();
+    assert!(released.is_empty());
     assert_eq!(manager.chats().await.unwrap(), [moved]);
 }
 
@@ -397,8 +400,16 @@ async fn chats_and_workspaces_share_one_namespace() {
         "{error:#}"
     );
 
-    // The name frees once the chat's process ends, without listing chats.
+    // The name frees once the chat is removed; a stopped chat keeps it.
     process.kill();
+    manager.stop_finished_chats().await.unwrap();
+    assert!(
+        manager
+            .check_creation(&repo.id, Some("talk"), None, options)
+            .await
+            .is_err()
+    );
+    manager.discard_saved_chat("talk").await.unwrap();
     manager
         .check_creation(&repo.id, Some("talk"), None, options)
         .await
@@ -582,7 +593,7 @@ fn suffixed_names_fit_the_name_limit() {
 }
 
 #[tokio::test]
-async fn a_chat_has_its_own_tmpdir_until_it_ends() {
+async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     use std::os::unix::fs::PermissionsExt;
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -614,11 +625,15 @@ async fn a_chat_has_its_own_tmpdir_until_it_ends() {
     );
     std::fs::write(tmp_dir.join("scratch"), "garbage").unwrap();
 
+    // A stopped chat keeps it.
     process.kill();
+    assert!(manager.chats().await.unwrap()[0].restore.is_some());
+    assert!(tmp_dir.exists());
+    manager.discard_saved_chat(&chat.id).await.unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
     assert!(!tmp_dir.exists());
 
-    // A chat that cannot have one ends at once.
+    // A chat that cannot have one is forgotten at once.
     std::fs::remove_dir_all(directory.join(".tmp")).unwrap();
     std::fs::create_dir(directory.join(".tmp")).unwrap();
     let error = manager

@@ -643,9 +643,9 @@ without a running agent, else the chat that opened the workspace, since each
 knows best what its children need. A parent workspace approves only what it
 holds an approved grant for, or a hold on its child, and otherwise denies or
 passes the request up; a chat runs with the user's authority and approves
-anything; the user decides at the top, and a deciding space that ends, is saved
-or is removed hands the user what it had not decided, since none of them can
-decide any more.
+anything; the user decides at the top, and a chat whose agent stops or a
+deciding space that is removed hands the user what it had not decided, since
+neither can decide any more.
 The worker skill steers agents to a subagent working in the child's directory
 over `--agent`: the child then has no agent of its own, so its activity reaches
 the parent, and the subagent reports to the parent directly, supervision Shoal
@@ -1600,7 +1600,7 @@ until its answer is delivered, which makes an interrupted wait safe to rerun.
 Delivery deletes the question: the agent's transcript keeps the exchange, and
 nothing in Shoal reads it again. An open question means an agent is waiting on the
 user or its coordinator, so it keeps the workspace from idle cleanup; questions belong to the
-space, a workspace or chat, whose agent asked them and go with it, while a saved chat
+space, a workspace or chat, whose agent asked them and go with it, while a stopped chat
 keeps them. Marking the assignment done closes its open questions,
 since the finished work waits on no answer and a question it made pointless would
 otherwise keep the workspace until the user answers. An agent that no longer needs
@@ -1825,9 +1825,10 @@ repositories can extend like the other prompt templates; the orchestrator skill 
 to no workspace, a chat is not a tracked execution: queuing and overload stops
 serve unattended agents, while the user attends a chat. It is still a
 daemon record, so lists and integrations can follow it: the agent replaces Shoal's
-process, leaving no wrapper to report its exit, so the record lasts while a
+process, leaving no wrapper to report its exit, so the chat runs while a
 process with the registered identity lives, checked periodically and before
-chats are listed. With no wrapper to save it, the daemon saves a chat itself
+chats are listed, and is stopped after, as a workspace stays when its agent
+exits. With no wrapper to save it, the daemon saves a chat itself
 where it saves workspaces' agents, marking its record before stopping its
 processes so the end of the process does not end the chat. A stop records each
 process before signalling it, so a later stop and the check before a restore or
@@ -1852,8 +1853,8 @@ messages stand for, and its workers return to the user even if it is resumed.
 A chat passes a question up by asking the user, who attends it. The approval
 requests of the workspaces it opened come to it when no parent workspace above
 them has an agent, and with the user's authority it may approve them; those it
-has not decided go to the user when it ends or is saved, as with any deciding
-space. A repository may have several chats, so each call starts a new
+has not decided go to the user when its agent stops or it is removed, as with
+any deciding space. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
 ends or is renamed. Renaming changes the record and the files kept under the

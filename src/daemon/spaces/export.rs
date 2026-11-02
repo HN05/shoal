@@ -1,6 +1,6 @@
-//! Packages of spaces for `shoal move`: the daemon ends a space here, a
-//! workspace by its removal and a chat by stopping its agent, and writes
-//! what continues it on another machine.
+//! Packages of spaces for `shoal move`: the daemon removes a space here,
+//! stopping a chat's agent first, and writes what continues it on another
+//! machine.
 use anyhow::{Context, Result, ensure};
 
 use crate::{
@@ -25,9 +25,8 @@ struct Ended {
 }
 
 impl Manager {
-    /// Write a space for another Shoal to the new file `file`, ending it
-    /// here first: a workspace by its removal, a running chat by stopping
-    /// its agent. A selector that names neither exports the latest removal
+    /// Write a space for another Shoal to the new file `file`, removing it
+    /// here first, a running chat once its agent stopped. A selector that names neither exports the latest removal
     /// record with that name or ID. The daemon writes the file, so closing
     /// the caller's terminal with the space cannot cut the export short; it
     /// checks that it can before ending anything, since its file access can
@@ -125,9 +124,10 @@ impl Manager {
         })
     }
 
-    /// End the running `chat` for its export once its agent has reported
-    /// the session the package continues and its package is made, so the
-    /// session's files stop changing and only writing them is left.
+    /// Remove `chat` for its export once its agent has reported the
+    /// session the package continues and its package is made, stopping a
+    /// running one first, so the session's files stop changing and only
+    /// writing them is left.
     async fn end_chat_for_export(&self, chat: Chat) -> Result<Ended> {
         let repo = self.repository(&chat.repository_id).await?;
         let Some(continues) = crate::transfer::continue_chat(&chat, crate::repository::name(&repo))
@@ -137,9 +137,12 @@ impl Manager {
                 chat.name
             );
         };
-        let id = chat.id.clone();
+        let (id, running) = (chat.id.clone(), chat.restore.is_none());
         let manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
-        self.end_chat(&id).await?;
+        if running {
+            self.stop_chat(&id).await?;
+        }
+        self.discard_saved_chat(&id).await?;
         Ok(Ended {
             repo,
             manifest,

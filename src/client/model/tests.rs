@@ -121,7 +121,6 @@ fn spaces_find_a_workspace_or_a_running_or_saved_chat_by_id_or_name() {
     assert_eq!(found("w1").as_deref(), Some("worker"));
     assert_eq!(found("worker").as_deref(), Some("worker"));
     assert_eq!(found("c1").as_deref(), Some("talk"));
-    assert!(!spaces.find("talk").unwrap().is_saved_chat());
-    assert!(spaces.find("saved").unwrap().is_saved_chat());
+    assert_eq!(found("saved").as_deref(), Some("saved"));
     assert!(spaces.find("missing").is_none());
 }
