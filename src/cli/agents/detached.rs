@@ -399,7 +399,7 @@ pub(super) async fn start_chat(
     // this terminal.
     let record = client::record_chat(
         &ctx.paths,
-        repository,
+        crate::model::ChatHome::Checkout(repository),
         chat_name,
         name,
         None,

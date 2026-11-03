@@ -1,11 +1,12 @@
-//! Chats: agents the user talks with in a repository's registered checkout.
+//! Chats: agents the user talks with in a repository's registered checkout,
+//! or in a workspace's worktree, where they are not the workspace's agent.
 //! They are records, not tracked executions, so they never queue or stop
 //! under pressure. A chat runs while its process lives; once its agent exits
 //! or Shoal saves it, the chat is stopped until it is restored, and it lasts
 //! until it is removed.
 use std::{path::Path, sync::Arc, time::Duration};
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use uuid::Uuid;
 
@@ -15,7 +16,11 @@ use crate::{
         log, spaces, store,
         workspace::{self, Manager, NewWorkspace, derive_workspace_name},
     },
-    model::{Chat, OpenedWorkspace, RenamedChat, Repository, SpaceKind, SpaceLinks, Workspace},
+    fsutil::off_runtime,
+    model::{
+        Chat, OpenedWorkspace, RenamedChat, Repository, SpaceKind, SpaceLinks, Workspace,
+        WorkspaceRef,
+    },
     process::identity::{self, Identity},
     state::ChatRestore,
     tmp_dirs,
@@ -51,8 +56,77 @@ impl Manager {
         origin: Option<crate::sessions::Origin>,
         hands_over: bool,
     ) -> Result<Chat> {
-        crate::validate::name("chat", &name)?;
         let repository = self.repository(repository).await?.id;
+        let new = NewChat {
+            name,
+            agent,
+            pid,
+            origin,
+            hands_over,
+        };
+        self.record_new_chat(repository, None, new).await
+    }
+
+    /// [`Self::start_chat`] in the worktree of the workspace `workspace`
+    /// names, which must be ready, in the workspace's repository.
+    pub async fn start_chat_in_workspace(
+        &self,
+        workspace: &str,
+        name: String,
+        agent: String,
+        pid: u32,
+        origin: Option<crate::sessions::Origin>,
+        hands_over: bool,
+    ) -> Result<Chat> {
+        let workspace = self.chat_workspace(workspace).await?;
+        let new = NewChat {
+            name,
+            agent,
+            pid,
+            origin,
+            hands_over,
+        };
+        let repository = workspace.repository_id.clone();
+        self.record_new_chat(repository, Some(workspace_ref(&workspace)), new)
+            .await
+    }
+
+    /// The workspace `selector` names, once a chat may run in it: it is
+    /// ready and its worktree is there.
+    pub(crate) async fn chat_workspace(&self, selector: &str) -> Result<Workspace> {
+        let workspace = self.workspace(selector).await?;
+        ensure!(
+            workspace.state == crate::state::WorkspaceState::Ready,
+            "workspace {} is {}, and a chat runs only in a ready workspace",
+            workspace.name,
+            workspace.state
+        );
+        let path = &workspace.path;
+        ensure!(
+            self.check_access(path, off_runtime::is_dir(path)).await?,
+            "the worktree of workspace {} is missing at {}",
+            workspace.name,
+            path.display()
+        );
+        Ok(workspace)
+    }
+
+    /// Record `new` as a chat of the repository `repository`, in the
+    /// worktree of `workspace` when given.
+    async fn record_new_chat(
+        &self,
+        repository: String,
+        workspace: Option<WorkspaceRef>,
+        new: NewChat,
+    ) -> Result<Chat> {
+        let NewChat {
+            name,
+            agent,
+            pid,
+            origin,
+            hands_over,
+        } = new;
+        crate::validate::name("chat", &name)?;
         // Its temporary directory goes in the repository's directory.
         let repository = self.reserve_repository_directory(&repository).await?;
         let process = identity::capture(pid)?.context("the chat process is not running")?;
@@ -72,6 +146,7 @@ impl Manager {
             repository_id: repository.id.clone(),
             name,
             agent,
+            workspace,
             pid: process.pid,
             started_at,
             origin,
@@ -377,16 +452,41 @@ impl Manager {
     }
 }
 
-/// Insert `chat` unless its name is taken or the repository is being removed,
-/// starting until it is moved when it `hands_over`.
+/// What a process records to start a chat as itself: the chat's name and
+/// agent, where it runs in a terminal host, and whether it `hands_over` to
+/// a session it starts.
+struct NewChat {
+    name: String,
+    agent: String,
+    pid: u32,
+    origin: Option<crate::sessions::Origin>,
+    hands_over: bool,
+}
+
+/// The reference a chat's record gives to the workspace it runs in.
+fn workspace_ref(workspace: &Workspace) -> WorkspaceRef {
+    WorkspaceRef {
+        id: workspace.id.clone(),
+        name: workspace.name.clone(),
+        branch: workspace.branch.clone(),
+    }
+}
+
+/// Insert `chat` unless its name is taken, or the repository or the
+/// workspace it runs in is being removed, starting until it is moved when
+/// it `hands_over`.
 fn insert(db: &mut Connection, chat: Chat, process: &Identity, hands_over: bool) -> Result<Chat> {
     let tx = db.transaction()?;
-    ensure_checkout_free(&tx, &chat.repository_id)?;
+    let workspace = chat
+        .workspace
+        .as_ref()
+        .map(|workspace| workspace.id.as_str());
+    ensure_place_free(&tx, &chat.repository_id, workspace)?;
     store::ensure_name_available(&tx, &chat.name, None)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
-            unique_id)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            unique_id,workspace_id)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
         params![
             chat.id,
             chat.repository_id,
@@ -400,7 +500,8 @@ fn insert(db: &mut Connection, chat: Chat, process: &Identity, hands_over: bool)
                 .map(serde_json::to_string)
                 .transpose()?,
             hands_over,
-            unique_id(process)?
+            unique_id(process)?,
+            workspace
         ],
     )?;
     tx.commit()?;
@@ -419,14 +520,36 @@ pub(super) fn unique_id(process: &Identity) -> Result<Option<String>> {
 }
 
 /// Refuse a chat in the repository `repository_id` while it is being
-/// removed or moved.
-fn ensure_checkout_free(tx: &rusqlite::Transaction<'_>, repository_id: &str) -> Result<()> {
+/// removed or moved, or in the workspace `workspace` unless it is ready, as
+/// it is not while it is being removed.
+fn ensure_place_free(
+    tx: &rusqlite::Transaction<'_>,
+    repository_id: &str,
+    workspace: Option<&str>,
+) -> Result<()> {
     ensure!(
         !store::repository_removing(tx, repository_id)?,
         "the repository is being removed"
     );
     // A chat edits the checkout, which a move may be copying.
-    store::ensure_repository_not_moving(tx, repository_id)
+    store::ensure_repository_not_moving(tx, repository_id)?;
+    let Some(workspace) = workspace else {
+        return Ok(());
+    };
+    let state: Option<crate::state::WorkspaceState> = tx
+        .query_row(
+            "SELECT state FROM workspaces WHERE id=?1",
+            [workspace],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match state {
+        Some(crate::state::WorkspaceState::Ready) => Ok(()),
+        Some(state) => {
+            bail!("the chat's workspace is {state}, and a chat runs only in a ready one")
+        }
+        None => bail!("the chat's workspace was removed"),
+    }
 }
 
 /// `base`, or `base-<suffix>` from 2 on, shortened to fit the name limit.
@@ -509,8 +632,10 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
     db.prepare(
         "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
-                    chats.restore,chats.completion
+                    chats.restore,chats.completion,
+                    workspaces.id,workspaces.name,workspaces.branch
              FROM chats JOIN repositories ON repositories.id=chats.repository_id
+                LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
              ORDER BY chats.started_at, chats.rowid",
     )?
     .query_map([], |row| {
@@ -524,6 +649,14 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
             repository_id,
             name: row.get(2)?,
             agent: row.get(3)?,
+            workspace: match row.get::<_, Option<String>>(11)? {
+                Some(id) => Some(WorkspaceRef {
+                    id,
+                    name: row.get(12)?,
+                    branch: row.get(13)?,
+                }),
+                None => None,
+            },
             pid: row.get(4)?,
             started_at: row.get(5)?,
             origin: store::json_column(row, "origin")?,

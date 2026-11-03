@@ -6,9 +6,12 @@ use super::Lifetime;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChatMethod {
-    /// Record a chat named `name` whose agent replaces process `pid`.
+    /// Record a chat named `name` whose agent replaces process `pid`, in
+    /// the worktree of `workspace` when given, which is in `repository`.
     StartChat {
         repository: crate::client::repository::Selector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace: Option<String>,
         name: String,
         agent: String,
         pid: u32,

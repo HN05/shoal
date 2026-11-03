@@ -1261,8 +1261,8 @@ fn count_commits(count: u64) -> String {
     }
 }
 
-/// An agent the user talks with in a repository's registered checkout,
-/// outside any workspace, until it is removed.
+/// An agent the user talks with in a repository's registered checkout, or
+/// in a workspace's worktree without being its agent, until it is removed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Chat {
     pub id: String,
@@ -1270,6 +1270,10 @@ pub struct Chat {
     /// Unique among workspace names and the names of other chats.
     pub name: String,
     pub agent: String,
+    /// The workspace whose worktree it runs in; none for a chat in the
+    /// registered checkout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceRef>,
     pub pid: u32,
     pub started_at: i64,
     /// Where it runs in a terminal host, when it runs in one.
@@ -1301,6 +1305,38 @@ pub struct Chat {
     /// The spaces below it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<SpaceRef>,
+}
+
+/// Where a new chat runs: its repository's registered checkout, or the
+/// worktree of a workspace in it.
+#[derive(Debug, Clone, Copy)]
+pub enum ChatHome<'a> {
+    Checkout(&'a Repository),
+    Workspace(&'a Workspace),
+}
+
+impl ChatHome<'_> {
+    /// The directory the chat's agent runs in.
+    pub fn path(&self) -> &std::path::Path {
+        match self {
+            Self::Checkout(repository) => &repository.path,
+            Self::Workspace(workspace) => &workspace.path,
+        }
+    }
+
+    pub fn repository_id(&self) -> &str {
+        match self {
+            Self::Checkout(repository) => &repository.id,
+            Self::Workspace(workspace) => &workspace.repository_id,
+        }
+    }
+
+    pub fn workspace(&self) -> Option<&Workspace> {
+        match self {
+            Self::Checkout(_) => None,
+            Self::Workspace(workspace) => Some(workspace),
+        }
+    }
 }
 
 /// A chat after a rename, with the name it had before.

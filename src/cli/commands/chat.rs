@@ -265,7 +265,7 @@ pub(super) async fn launch(
     agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
     let chat = client::record_chat(
         &ctx.paths,
-        &repo,
+        crate::model::ChatHome::Checkout(&repo),
         &name,
         agent.name(),
         terminal::current_place().await,

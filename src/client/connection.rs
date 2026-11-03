@@ -17,7 +17,7 @@ use tokio::{
 use crate::{
     client::{paths::Paths, processes::Identity},
     config::repo::ConfigLayers,
-    model::{Chat, Inspection, LinkedItem, PresentSpace, Repository, Spaces, Workspace},
+    model::{Chat, ChatHome, Inspection, LinkedItem, PresentSpace, Repository, Spaces, Workspace},
     protocol::{
         self, Body, ChatMethod, DaemonMethod, DaemonStatus, ErrorCode, Exit, ItemMethod, Method,
         RepositoryMethod, Request, Response, WorkspaceMethod, timing,
@@ -394,12 +394,13 @@ pub async fn workspaces(daemon: &impl Daemon) -> Result<Vec<Workspace>> {
     request(daemon, WorkspaceMethod::ListWorkspaces).await
 }
 
-/// Record the chat `name` whose agent replaces this process, running at
-/// `origin` in a terminal host when it runs in one, or when `hands_over`
-/// runs in a session this process starts and [`move_chat`] names.
+/// Record the chat `name` whose agent replaces this process at `home`,
+/// running at `origin` in a terminal host when it runs in one, or when
+/// `hands_over` runs in a session this process starts and [`move_chat`]
+/// names.
 pub async fn start_chat(
     daemon: &impl Daemon,
-    repository: &Repository,
+    home: ChatHome<'_>,
     name: &str,
     agent: &str,
     origin: Option<crate::client::sessions::Origin>,
@@ -408,7 +409,8 @@ pub async fn start_chat(
     request(
         daemon,
         ChatMethod::StartChat {
-            repository: repository.id.clone().into(),
+            repository: home.repository_id().to_owned().into(),
+            workspace: home.workspace().map(|workspace| workspace.id.clone()),
             name: name.to_owned(),
             agent: agent.to_owned(),
             pid: std::process::id(),
@@ -493,7 +495,7 @@ pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
 /// [`restore_chat`], which keeps the chat's own name and agent.
 pub async fn record_chat(
     daemon: &impl Daemon,
-    repository: &Repository,
+    home: ChatHome<'_>,
     name: &str,
     agent: &str,
     origin: Option<crate::client::sessions::Origin>,
@@ -502,7 +504,7 @@ pub async fn record_chat(
 ) -> Result<Chat> {
     match restores {
         Some(chat) => restore_chat(daemon, chat, origin, hands_over).await,
-        None => start_chat(daemon, repository, name, agent, origin, hands_over).await,
+        None => start_chat(daemon, home, name, agent, origin, hands_over).await,
     }
 }
 

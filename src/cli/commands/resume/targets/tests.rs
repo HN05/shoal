@@ -16,6 +16,7 @@ fn spaces() -> Spaces {
         repository_id: "repo".into(),
         name: name.into(),
         agent: "claude".into(),
+        workspace: None,
         pid: 1,
         started_at: 0,
         origin: None,

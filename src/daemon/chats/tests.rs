@@ -750,3 +750,102 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
 fn process_wait(mut process: crate::test_support::ProcessGroup) -> std::process::ExitStatus {
     process.wait().unwrap()
 }
+
+/// A registered repository with the ready workspace `worker`.
+async fn workspace(root: &std::path::Path, manager: &Manager) -> (Repository, Workspace) {
+    let checkout = repository(root, "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    (repo, workspace)
+}
+
+#[tokio::test]
+async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_there() {
+    let (temp, manager) = manager().await;
+    let (repo, workspace) = workspace(temp.path(), &manager).await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat_in_workspace(
+            &workspace.name,
+            "worker-chat".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let named = Some(WorkspaceRef {
+        id: workspace.id.clone(),
+        name: workspace.name.clone(),
+        branch: workspace.branch.clone(),
+    });
+    assert_eq!((&chat.repository_id, &chat.workspace), (&repo.id, &named));
+    // The chat is no child of the workspace, whose agent it is not.
+    let recorded = manager.workspace(&workspace.id).await.unwrap();
+    assert!(recorded.children.is_empty());
+
+    // A stopped chat keeps naming the workspace.
+    process.kill();
+    let stopped = manager.chats().await.unwrap();
+    assert_eq!(stopped[0].restore, Some(ChatRestore::Resume));
+    assert_eq!(stopped[0].workspace, named);
+
+    let moved = temp.path().join("moved");
+    std::fs::rename(&workspace.path, &moved).unwrap();
+    let error = manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("is missing"), "{error:#}");
+    std::fs::rename(&moved, &workspace.path).unwrap();
+    let restored = manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap();
+    assert_eq!((restored.restore, restored.workspace), (None, named));
+}
+
+#[tokio::test]
+async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
+    let (temp, manager) = manager().await;
+    let (_, workspace) = workspace(temp.path(), &manager).await;
+    let start = |name: &str| {
+        manager.start_chat_in_workspace(
+            &workspace.id,
+            name.into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+    };
+    let moved = temp.path().join("moved");
+    std::fs::rename(&workspace.path, &moved).unwrap();
+    let missing = start("missing").await.unwrap_err();
+    assert!(format!("{missing:#}").contains("is missing"), "{missing:#}");
+    std::fs::rename(&moved, &workspace.path).unwrap();
+
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE workspaces SET state='failed' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let failed = start("failed").await.unwrap_err();
+    assert!(
+        format!("{failed:#}").contains("runs only in a ready workspace"),
+        "{failed:#}"
+    );
+    assert!(manager.chats().await.unwrap().is_empty());
+}
