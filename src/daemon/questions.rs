@@ -473,13 +473,22 @@ fn record(
     space: &PresentSpace,
     asking: &Asking,
     asker: &Asker,
+    removing: &crate::daemon::chats::Removing,
 ) -> Result<Recorded> {
     let Asking { ask, files } = asking;
     let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    // A workspace reserved for removal takes no question its cleanup checks
-    // have not seen.
-    if let PresentSpace::Workspace(workspace) = space {
-        crate::daemon::store::require_ready(&tx, &workspace.id)?;
+    // A space reserved for removal takes no question its cleanup checks have
+    // not seen. A chat's reservation precedes the removal's next read here,
+    // on the store's one thread, so the removal sees any question before it.
+    match space {
+        PresentSpace::Workspace(workspace) => {
+            crate::daemon::store::require_ready(&tx, &workspace.id)?
+        }
+        PresentSpace::Chat(chat) => ensure!(
+            !removing.reserved(&chat.id),
+            "chat {} is being removed",
+            chat.name
+        ),
     }
     if let Asker::Chat(turn) = asker
         && !set_chat_mark(&tx, turn, false)?
@@ -632,9 +641,10 @@ impl Manager {
         asking: Asking,
         asker: Asker,
     ) -> Result<Option<Question>> {
+        let removing = self.chat_removals.clone();
         let recorded = self
             .store
-            .run(move |db| record(db, &space, &asking, &asker))
+            .run(move |db| record(db, &space, &asking, &asker, &removing))
             .await?;
         match recorded {
             Recorded::Unmarked => Ok(None),

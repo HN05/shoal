@@ -1,16 +1,18 @@
 //! The chats a removal has reserved: from before it removes the spaces below
-//! a chat until it deletes the chat or gives up, nothing restores the chat,
-//! so a removal that took its workspaces is not left with a running chat.
+//! a chat until it deletes the chat or gives up, nothing restores the chat
+//! and its agent asks no new question, so a removal that took its
+//! workspaces is not left with a chat something keeps.
 use std::{
     collections::HashSet,
-    sync::{Mutex, PoisonError},
+    sync::{Arc, Mutex, PoisonError},
 };
 
 use anyhow::{Result, ensure};
 
-/// The IDs of the chats being removed.
-#[derive(Default)]
-pub(crate) struct Removing(Mutex<HashSet<String>>);
+/// The IDs of the chats being removed, shared with the store's thread, which
+/// reads them in the transaction that records a question.
+#[derive(Clone, Default)]
+pub(crate) struct Removing(Arc<Mutex<HashSet<String>>>);
 
 impl Removing {
     /// Reserve the chat `id` for a removal until the returned reservation
@@ -27,7 +29,7 @@ impl Removing {
     }
 
     /// Whether a removal holds the chat `id`.
-    pub(super) fn reserved(&self, id: &str) -> bool {
+    pub(crate) fn reserved(&self, id: &str) -> bool {
         self.lock().contains(id)
     }
 

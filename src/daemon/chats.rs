@@ -319,8 +319,9 @@ impl Manager {
     /// was opened outside one or the chat is gone.
     pub async fn assign_chat(&self, workspace: &str, chat: Option<String>) -> Result<()> {
         let workspace = workspace.to_owned();
+        let removing = self.chat_removals.clone();
         self.store
-            .run(move |db| assign(db, &workspace, chat.as_deref()))
+            .run(move |db| assign(db, &workspace, chat.as_deref(), &removing))
             .await
     }
 
@@ -611,12 +612,38 @@ fn forget_unstarted(db: &mut Connection, id: &str, process: &Identity) -> Result
     Ok(())
 }
 
-/// An unknown chat leaves the workspace to the user.
-fn assign(db: &mut Connection, workspace: &str, chat: Option<&str>) -> Result<()> {
-    db.execute(
+/// An unknown chat, or one being removed, leaves the workspace to the user.
+/// A workspace below a chat being removed stays there: the removal listed
+/// it after reserving the chat, on this one thread, and takes it.
+fn assign(
+    db: &mut Connection,
+    workspace: &str,
+    chat: Option<&str>,
+    removing: &Removing,
+) -> Result<()> {
+    let tx = db.transaction()?;
+    let current: Option<String> = tx
+        .query_row(
+            "SELECT chat_id FROM workspaces WHERE id=?1",
+            [workspace],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+    if let Some(current) = current.as_deref().filter(|current| Some(*current) != chat) {
+        ensure!(
+            !removing.reserved(current),
+            "the chat that opened the workspace is being removed with it"
+        );
+    }
+    // A chat being removed takes no new workspace; one already below it
+    // stays there.
+    let chat = chat.filter(|chat| !removing.reserved(chat) || current.as_deref() == Some(*chat));
+    tx.execute(
         "UPDATE workspaces SET chat_id=(SELECT id FROM chats WHERE id=?2) WHERE id=?1",
         params![workspace, chat],
     )?;
+    tx.commit()?;
     Ok(())
 }
 

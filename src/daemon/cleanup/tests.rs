@@ -1171,6 +1171,22 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
         .unwrap()
         .unwrap();
     assert_eq!(snapshot.tree, 0);
+    // A restore and a new stop between two passes is another snapshot.
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE chats SET stopped_at=stopped_at+1 WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let restarted = (manager.chat_cleanup_snapshot(&stopped, Rule::Idle))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(restarted, snapshot);
+    let snapshot = restarted;
     let mut timers = Timers::default();
     timers.idle.insert(
         chat.id.clone(),
@@ -1286,4 +1302,40 @@ async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
 /// How `process` exited.
 fn process_wait(mut process: crate::test_support::ProcessGroup) -> std::process::ExitStatus {
     process.wait().unwrap()
+}
+
+#[tokio::test]
+async fn a_stopped_chat_whose_processes_run_on_starts_no_grace_period() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    // As a stop that never ended the agent left it.
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE chats SET restore='resume',stopped_at=0 WHERE id=?1",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let snapshot = (manager.chat_cleanup_snapshot(&stopped, Rule::Merged))
+        .await
+        .unwrap()
+        .unwrap();
+    let error = manager
+        .remove_unused_chat(&stopped, snapshot, EventCause::Merged)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("still has processes running"),
+        "{error:#}"
+    );
+    assert_eq!(manager.cleanup_at(&chat.id).await.unwrap(), None);
+    assert!(manager.workspace(&opened.id).await.is_ok());
 }

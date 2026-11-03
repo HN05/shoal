@@ -79,9 +79,13 @@ impl Manager {
                 return Ok(Err(reason));
             }
         }
+        // When its agent stopped, so a restore and a new stop between two
+        // passes start the idle period over.
+        let stopped_at = self.chat_stopped_at(&chat.id).await?.unwrap_or_default();
+        let activity = self.usage.activity(&chat.id);
         Ok(Ok(Snapshot {
             rule,
-            signals: crate::daemon::cleanup::signals("", self.usage.activity(&chat.id)),
+            signals: crate::daemon::cleanup::signals(&stopped_at.to_string(), activity),
             tree: 0,
         }))
     }
@@ -214,13 +218,18 @@ impl Manager {
     }
 
     /// Refuse `removal` of `chat` as it is now: an unattended one while
-    /// something keeps it; idle or merged cleanup once it changed from the
+    /// something keeps it; any while a stopped chat's processes run on; idle or merged cleanup once it changed from the
     /// snapshot it took; completion cleanup once the completion changed.
     async fn check_chat_removal(&self, chat: &Chat, removal: Removal<'_>) -> Result<()> {
         if removal.unattended()
             && let Some(retention) = self.chat_keep_reason(chat).await?
         {
             bail!("{retention}; retaining the chat");
+        }
+        // Processes a stopped chat left running refuse its removal, so they
+        // start no grace period and no space below it goes before they end.
+        if chat.restore.is_some() {
+            self.ensure_ended(chat, std::process::id()).await?;
         }
         match removal {
             Removal::Automatic { snapshot, .. } => ensure!(

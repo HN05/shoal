@@ -171,7 +171,18 @@ async fn a_detaching_daemon_leaves_chats_running() {
 #[tokio::test]
 async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
     let (root, manager) = manager().await;
-    let (_repo, chat, _process) = running_chat(root.path(), &manager).await;
+    let (repo, chat, _process) = running_chat(root.path(), &manager).await;
+    let opened = manager
+        .create_workspace_for_chat(
+            repo.id.into(),
+            "opened".into(),
+            None,
+            None,
+            None,
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
     // As a save whose stop never ended the agent left it.
     manager
         .store
@@ -193,13 +204,15 @@ async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
     );
     let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.pid, chat.pid);
-    // Nor is it discarded, which would delete the files its agent uses.
+    // Nor is it removed, which would delete the files its agent uses, and
+    // the workspace below it stays too.
     let error = manager.remove_chat("talk", None).await.unwrap_err();
     assert!(
         error.to_string().contains(&format!("kill {}", chat.pid)),
         "{error:#}"
     );
     assert!(chat.tmp_dir.unwrap().exists());
+    assert!(manager.workspace(&opened.id).await.is_ok());
 }
 
 #[tokio::test]
@@ -837,4 +850,71 @@ async fn a_chat_a_removal_holds_is_not_restored() {
         .await
         .unwrap();
     assert!(restored.restore.is_none());
+}
+
+#[tokio::test]
+async fn a_chat_a_removal_holds_takes_no_question() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, _process) = running_chat(root.path(), &manager).await;
+    let ask = || crate::daemon::questions::Ask {
+        question: "Which database?".into(),
+        recommendation: "SQLite".into(),
+        reason: None,
+        choices: Vec::new(),
+    };
+    let attacher = crate::daemon::workspace_files::Attacher::User;
+    let reservation = manager.chat_removals.reserve(&chat.id).unwrap();
+    let error = manager
+        .ask_question(&chat.name, ask(), Vec::new(), &attacher)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("is being removed"), "{error:#}");
+    assert!(manager.questions(None).await.unwrap().questions.is_empty());
+    drop(reservation);
+    manager
+        .ask_question(&chat.name, ask(), Vec::new(), &attacher)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_chat_a_removal_holds_neither_gives_up_nor_takes_workspaces() {
+    let (root, manager) = manager().await;
+    let (repo, chat, _process) = running_chat(root.path(), &manager).await;
+    let below = manager
+        .create_workspace_for_chat(
+            repo.id.clone().into(),
+            "below".into(),
+            None,
+            None,
+            None,
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
+    let other = manager
+        .create_workspace(&repo.id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    let reservation = manager.chat_removals.reserve(&chat.id).unwrap();
+    // The workspace the removal takes stays below the chat, opened outside
+    // it or from it again...
+    let error = manager.assign_chat(&below.id, None).await.unwrap_err();
+    assert!(error.to_string().contains("is being removed"), "{error:#}");
+    manager
+        .assign_chat(&below.id, Some(chat.id.clone()))
+        .await
+        .unwrap();
+    assert_eq!(
+        manager.workspace(&below.id).await.unwrap().chat,
+        Some(chat.id.clone())
+    );
+    // ...and one opened from it meanwhile is the user's.
+    manager
+        .assign_chat(&other.id, Some(chat.id.clone()))
+        .await
+        .unwrap();
+    assert_eq!(manager.workspace(&other.id).await.unwrap().chat, None);
+    drop(reservation);
+    manager.assign_chat(&below.id, None).await.unwrap();
 }
