@@ -29,7 +29,12 @@ impl Operation {
                 | Self::Execution(ExecutionMethod::CheckMerge | ExecutionMethod::ListAgents)
                 | Self::File(FileMethod::ListFiles { .. })
                 | Self::Hold(HoldMethod::HoldList { .. })
-                | Self::Item(ItemMethod::ListItems { .. } | ItemMethod::ForgeDownload { .. })
+                | Self::Item(
+                    ItemMethod::ListItems { .. }
+                        | ItemMethod::Labels { .. }
+                        | ItemMethod::Reviewers { .. }
+                        | ItemMethod::ForgeDownload { .. }
+                )
                 | Self::Notification(NotificationMethod::ListNotifications { .. })
                 | Self::Port(PortMethod::PortOverview { .. } | PortMethod::PortCatalog { .. })
                 | Self::Question(

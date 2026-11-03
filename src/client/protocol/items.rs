@@ -98,6 +98,21 @@ pub enum ItemMethod {
         search: crate::forge::items::list::Search,
         repository: Option<String>,
     },
+    /// The labels of the context's repository, or of the one `repository`
+    /// names, answered in one or more `labels` frames and then `ok`.
+    Labels {
+        #[serde(flatten)]
+        context: ItemContext,
+        repository: Option<String>,
+    },
+    /// Who the PR `item` names in the context's repository, or the space's
+    /// linked PR, can ask for a review, answered in one or more `reviewers`
+    /// frames and then `ok`.
+    Reviewers {
+        #[serde(flatten)]
+        context: ItemContext,
+        item: Option<String>,
+    },
     /// A request to the forge API of the context's repository, or the one
     /// `repository` names, answered with the response's JSON text in one or
     /// more `api_response` frames and then `ok`.

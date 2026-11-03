@@ -5,7 +5,10 @@ use anyhow::Result;
 
 use crate::{
     daemon::workspace::Manager,
-    forge::{ForgeRepo, account::Account},
+    forge::{
+        ForgeRepo, account::Account, conventions::labels::Label, items::link::ItemKind,
+        review::reviewers::Reviewer,
+    },
     protocol::ItemContext,
 };
 
@@ -28,5 +31,33 @@ impl Manager {
     ) -> Result<ForgeRepo> {
         let place = self.place(context).await?;
         self.place_forge(&place).await
+    }
+
+    /// The labels of the repository of `context`, or of the one
+    /// `repository` names.
+    pub async fn labels(
+        &self,
+        context: &ItemContext,
+        repository: Option<&str>,
+        scoped: bool,
+    ) -> Result<Vec<Label>> {
+        let own = self.context_forge(context).await?;
+        let forge = self.named_forge(own, repository).await?;
+        forge.labels(&self.read_account(scoped)).await
+    }
+
+    /// Who the PR `item` names in the repository of `context`, or the
+    /// space's linked PR, can ask for a review.
+    pub async fn reviewers(
+        &self,
+        context: &ItemContext,
+        item: Option<String>,
+        scoped: bool,
+    ) -> Result<Vec<Reviewer>> {
+        let place = self.place(context).await?;
+        let input = self.named_or_linked(item, &place, ItemKind::Pr).await?;
+        let forge = self.place_forge(&place).await?;
+        let (number, _) = forge.pull(&input)?;
+        forge.reviewers(&self.read_account(scoped), number).await
     }
 }

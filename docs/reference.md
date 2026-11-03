@@ -3394,7 +3394,9 @@ except its author, by the `name` that `--add-reviewer` takes, with the forge's
 `display_name` and whether it is a `team`. Users are GitHub's assignable
 users, Forgejo's review candidates, GitLab's project members and the members
 of a Bitbucket workspace, named by account ID; teams are those with access to
-an organization's repository on GitHub and Forgejo.
+an organization's repository on GitHub and Forgejo. Processes inside a
+workspace and a chat's agent read them as the [agent account](#agent-accounts),
+anyone else with your own logins.
 `open`, `edit` and `comment` also take repeated `--attach FILE` or
 `--attach 'FILE#ALT TEXT'`: a non-empty file of at most 10 MiB for an image and
 100 MiB otherwise, checked before anything is sent; the forge decides which types
@@ -3694,7 +3696,9 @@ as the forge reports them, including a group's or organization's labels, with
 each one's description, and `exclusive` for a label that allows no other of its
 scope: Forgejo's exclusive labels and GitLab's `key::value` labels. Reading a
 Forgejo organization's labels needs a token with the `read:organization`
-scope; Bitbucket has no labels.
+scope; Bitbucket has no labels. Processes inside a workspace and a chat's agent
+read them as the [agent account](#agent-accounts), anyone else with your own
+logins.
 
 `[pr] required_labels` and `[issue] required_labels` name entries that every new
 item's labels must each start with, so `area/` takes any area label. `pr open`

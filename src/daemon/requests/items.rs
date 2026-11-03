@@ -61,6 +61,19 @@ pub(super) async fn handle(
                 .await;
             return Ok(Answer::pages(listed, Body::Items));
         }
+        ItemMethod::Labels {
+            context,
+            repository,
+        } => {
+            let labels = manager
+                .labels(&context, repository.as_deref(), caller.is_some())
+                .await;
+            return Ok(Answer::pages(labels, Body::Labels));
+        }
+        ItemMethod::Reviewers { context, item } => {
+            let reviewers = manager.reviewers(&context, item, caller.is_some()).await;
+            return Ok(Answer::pages(reviewers, Body::Reviewers));
+        }
         ItemMethod::ForgeApi {
             context,
             request: raw,
@@ -212,6 +225,8 @@ impl Scoped for ItemMethod {
             ),
             ItemMethod::OpenIssue { context, .. }
             | ItemMethod::ListItems { context, .. }
+            | ItemMethod::Labels { context, .. }
+            | ItemMethod::Reviewers { context, .. }
             | ItemMethod::ForgeApi { context, .. }
             | ItemMethod::ForgeDownload { context, .. }
             | ItemMethod::ItemAction {
