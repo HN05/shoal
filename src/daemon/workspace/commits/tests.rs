@@ -471,3 +471,58 @@ async fn removing_one_switched_onto_a_branch_leaves_that_branch() {
     assert!(!removed.branch_outcome.is_deleted(), "{removed:?}");
     assert!(!git(&checkout, &["branch", "--list", "topic"]).is_empty());
 }
+
+#[tokio::test]
+async fn reopening_a_prs_workspace_records_the_prs_base() {
+    let (temp, manager) = manager().await;
+    let origin = repository(temp.path(), "origin");
+    git(
+        temp.path(),
+        &["clone", "-q", origin.to_str().unwrap(), "clone"],
+    );
+    std::fs::write(origin.join("fork"), "fork\n").unwrap();
+    commit(&origin, "fork");
+    let head = git(&origin, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(&origin, &["update-ref", "refs/pull/5/head", &head]);
+    let repo = manager
+        .register_repository(
+            temp.path().join("clone").to_str().unwrap().into(),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let open = |base: Option<&str>| {
+        manager.open_pull_head(
+            repo.id.as_str().into(),
+            "https://forge.example/team/repo/pulls/5".into(),
+            crate::protocol::PullHead {
+                number: 5,
+                reference: "refs/pull/5/head".into(),
+                commit: head.clone(),
+                base: base.map(str::to_owned),
+            },
+            None,
+            Default::default(),
+        )
+    };
+    let opened = open(None).await.unwrap();
+    assert_eq!(opened.workspace.base_ref, None);
+    let reopened = open(Some("refs/remotes/origin/main")).await.unwrap();
+    assert!(reopened.reused);
+    assert_eq!(
+        reopened.workspace.base_ref.as_deref(),
+        Some("refs/remotes/origin/main")
+    );
+    let main = git(&repo.path, &["rev-parse", "origin/main"])
+        .trim()
+        .to_owned();
+    assert_eq!(
+        manager
+            .diff_base(&opened.workspace.id)
+            .await
+            .unwrap()
+            .commit,
+        main
+    );
+}

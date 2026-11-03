@@ -58,6 +58,9 @@ impl Manager {
         let (repo, _guard) = self.lock_repository(repository).await?;
         if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
             self.move_to_pull_head(&repo, &workspace, &head).await?;
+            if let Some(base) = head.base {
+                self.record_diff_ref(&workspace.id, base).await?;
+            }
             return Ok(OpenedWorkspace {
                 workspace: self.workspace(&workspace.id).await?,
                 reused: true,
@@ -180,6 +183,21 @@ impl Manager {
                 db.execute(
                     "UPDATE workspaces SET start_commit=?2,base_commit=?2 WHERE id=?1",
                     rusqlite::params![id, commit],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Record `reference` as what the workspace `id`'s diff compares with,
+    /// such as the base branch a PR now targets.
+    async fn record_diff_ref(&self, id: &str, reference: String) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE workspaces SET base_ref=?2 WHERE id=?1",
+                    rusqlite::params![id, reference],
                 )?;
                 Ok(())
             })
