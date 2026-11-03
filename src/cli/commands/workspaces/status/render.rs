@@ -140,16 +140,20 @@ fn render_activity(view: &StatusView, palette: Palette) {
     if let Some(worktree) = view.status.space.worktree() {
         render_processes(worktree, palette);
     }
+    render_sessions(view, palette);
+    if let Some(worktree) = view.status.space.worktree() {
+        render_agent(worktree, view.chat.as_deref());
+    }
+}
+
+/// The agent sessions found for the space, or why they could not be listed.
+fn render_sessions(view: &StatusView, palette: Palette) {
     outln!("Sessions:      {}", view.sessions.len());
     for session in &view.sessions {
         outln!("  {}", session.label());
     }
     if let Some(error) = &view.sessions_error {
         outln!("  {}", palette.paint(Style::Warning, error));
-    }
-    if let Some(worktree) = view.status.space.worktree() {
-        render_agent(worktree);
-        outln!("Chat:          {}", view.chat.as_deref().unwrap_or("none"));
     }
 }
 
@@ -191,8 +195,9 @@ fn render_processes(status: &WorktreeStatus, palette: Palette) {
     }
 }
 
-/// The turn state the workspace's agent reported, and its retries.
-fn render_agent(status: &WorktreeStatus) {
+/// The turn state the workspace's agent reported, its retries, and the
+/// `chat` that opened the workspace.
+fn render_agent(status: &WorktreeStatus, chat: Option<&str>) {
     let agent_state = status.workspace.agent_state;
     outln!(
         "Agent state:   {}",
@@ -207,6 +212,7 @@ fn render_agent(status: &WorktreeStatus) {
     if let Some(retry) = &status.turn_retry {
         outln!("Turn retry:    {}", turn_retry_label(retry));
     }
+    outln!("Chat:          {}", chat.unwrap_or("none"));
 }
 
 /// The ports, simulators and resources the workspace holds.
