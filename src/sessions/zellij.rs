@@ -36,8 +36,8 @@ const MAX_SESSION_LEN: usize = 20;
 /// socket directory and the session's name.
 const MAX_SOCKET_PATH: usize = 103;
 const CONTRACT_DIR: &str = "/contract_version_1/";
-/// How often, and how many times, Shoal reads a new tab's or session's
-/// panes until its pane shows; only a hang guard, since Zellij lists it
+/// How often, and how many times, Shoal reads a new tab's, split's or
+/// session's panes until its pane shows; only a hang guard, since Zellij lists it
 /// soon after it answers.
 const PANE_POLL: Duration = Duration::from_millis(100);
 const PANE_POLLS: u32 = 100;
@@ -385,12 +385,17 @@ impl Zellij {
         self.opened(session, pane.id).await
     }
 
-    /// Open `shell` in a pane splitting `beside`, in its tab.
+    /// Open `shell` in a pane splitting `beside`, in its tab, which Zellij
+    /// can list only after it answers.
     pub async fn open_split(&self, beside: PaneRef<'_>, shell: &Shell<'_>) -> Result<Opened> {
         let pane = run(self.new_split(beside, shell)?)
             .await
             .context("open a Zellij pane")?;
-        self.opened(beside.session, pane.trim().to_owned()).await
+        let pane = pane.trim();
+        self.new_pane(beside.session, |listed| listed.id == pane)
+            .await
+            .with_context(|| format!("the Zellij pane {pane} does not show"))?;
+        self.opened(beside.session, pane.to_owned()).await
     }
 
     /// Open `shell` as the first pane of a new background session, named

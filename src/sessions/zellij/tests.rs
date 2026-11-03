@@ -443,6 +443,13 @@ async fn a_place_recorded_without_its_directory_reaches_its_server() {
     let Some(server) = Isolated::start() else {
         return;
     };
+    // A background session lists its first pane only once it lays out its
+    // first tab, which can be after the command that created it returned.
+    server
+        .zellij
+        .new_pane(&server.session, |pane| pane.id == "terminal_0")
+        .await
+        .unwrap();
     let recorded = Zellij::recorded(&BTreeMap::new());
     assert_eq!(recorded.socket_dir(), None);
     let reached = recorded.reaching(&server.session).await.unwrap();
