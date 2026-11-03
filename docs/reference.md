@@ -1793,7 +1793,8 @@ below the chat, unless it was split from a workspace, below which it stays: its 
 workspace is opened outside a chat, which returns it to you. The chat opens
 workspaces only in its own repository; one in another repository is refused.
 While it runs, or waits to come back on its own, the chat
-[coordinates](#child-workspaces) the spaces below it; while it is otherwise stopped, their
+[coordinates](#child-workspaces) the spaces below it and receives the activity
+of those without an agent of their own; while it is otherwise stopped, their
 events go on up, to you at the top, and one removed before receiving their
 events gives you the notifications they stand for. The chat's `parent` and
 `children` fields name the spaces above and below it.
@@ -2211,8 +2212,8 @@ give `branch` null and `at` with `commit` and `made_for` (`{"ref": name}` or
 `{"pr": number}`). `{branch}` is empty for it in configured commands and agent
 templates, and place names use its name instead.
 
-The parent's agent receives the issue and PR activity of the spaces below it
-that have no agent of their own, and of those
+The parent's agent, a workspace's or a chat's, receives the issue and PR
+activity of the spaces below it that have no agent of their own, and of those
 below them in turn, through its hooks and an unfiltered or kind-filtered
 `watch`; each such update names its space in `workspace`. A child with an agent of its own, one that reports its turn state,
 any agent Shoal tracks there or one whose restore waits in the

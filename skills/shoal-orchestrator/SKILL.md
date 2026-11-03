@@ -117,8 +117,9 @@ In a `shoal chat`, you coordinate only the spaces below the chat: the
 workspaces you open, which must be in the chat's repository, and those below
 them. Their agents report to you instead of the user: their messages,
 questions, completion, ready marks and exits arrive as Shoal messages naming
-the workspace, and `shoal files <name>` shows the files a finished workspace
-handed back. Their approval requests come to you
+the workspace, the activity of those without an agent of their own arrives with
+your Shoal messages, and `shoal files <name>` shows the files a finished
+workspace handed back. Their approval requests come to you
 too: decide them with `shoal approvals --approve <number>` or `--deny <number>`,
 or hand one to the user with `shoal approvals --escalate <number>`; `shoal
 approvals --space <chat>` lists them. Proposed issues and PRs come too, and

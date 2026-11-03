@@ -393,6 +393,79 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
 }
 
 #[tokio::test]
+async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agent() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let worker = manager
+        .create_workspace_for_chat(
+            repo.id.clone().into(),
+            "worker".into(),
+            None,
+            Default::default(),
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
+    register_watch(&manager, &worker.id, "worker-pr").await;
+    manager
+        .queue_background_updates(
+            &worker.id,
+            vec![("worker-pr".into(), snapshot("first"))],
+            crate::time::unix_seconds(),
+        )
+        .await
+        .unwrap();
+    let delivered = manager.chat_updates(&chat.id).await.unwrap();
+    assert_eq!(delivered.updates.len(), 1);
+    assert_eq!(delivered.updates[0].workspace.as_deref(), Some("worker"));
+    let deliveries = vec![delivered.updates[0].delivery.clone()];
+    let pending = || async { manager.pending_pr_activity(&worker.id).await.unwrap().len() };
+    // A newer watch in the workspace below keeps what the chat acknowledges.
+    let worker_wait = manager.item_waits.start(&worker.id);
+    manager
+        .acknowledge_pr_updates(&chat.id, deliveries.clone())
+        .await
+        .unwrap();
+    assert_eq!(pending().await, 1);
+    drop(worker_wait);
+    // And a newer wait in the chat keeps what the workspace acknowledges.
+    let chat_wait = manager.chat_waits.start(&chat.id);
+    manager
+        .acknowledge_pr_updates(&worker.id, deliveries.clone())
+        .await
+        .unwrap();
+    assert_eq!(pending().await, 1);
+    drop(chat_wait);
+    manager
+        .acknowledge_pr_updates(&chat.id, deliveries)
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .chat_updates(&chat.id)
+            .await
+            .unwrap()
+            .updates
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn a_chats_wait_takes_activity_an_item_change_held_back() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");

@@ -628,9 +628,9 @@ and asks each space one question, whether it has an agent: a workspace's
 agent, a chat's running agent, or a queued restore of either. A scope reaches
 its workspace and every space below it, the CLI resolves a scoped command to the
 child whose directory it runs in, and agent hooks always report for the agent's
-own workspace. The parent's agent receives the issue and PR activity of the
-spaces below it without an agent of their own, and theirs in turn, each update
-naming its space, through the same cursors,
+own workspace. The parent's agent, a workspace's or a chat's, receives the
+issue and PR activity of the spaces below it without an agent of their own,
+and theirs in turn, each update naming its space, through the same cursors,
 deliveries and acknowledgements as its own; a child's own agent, which reports its turn state or which Shoal tracks
 there, as it tracks custom and Happy agents that report none, takes over its
 subtree, and so does one whose restore is queued, since it receives what

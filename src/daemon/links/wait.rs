@@ -818,15 +818,17 @@ impl Manager {
         Ok(())
     }
 
-    /// The updates queued on the chat's cursor that fit one response beside
+    /// The updates queued on the chat's cursor, then those of the spaces
+    /// below it whose activity it receives, that fit one response beside
     /// `reserved` bytes of its other content, or `None` while an item change
-    /// holds its PR gate, when they wait for a later delivery.
+    /// holds one of their PR gates, when they wait for a later delivery.
     pub(crate) async fn queued_chat_updates(
         &self,
         chat: &str,
         reserved: usize,
     ) -> Result<Option<Vec<Update>>> {
-        let Some(_gate) = self.gates.try_lock_prs([chat]) else {
+        let children = self.delegated_spaces(chat).await?;
+        let Some(_gate) = self.gates.try_lock_prs(receiving(chat, &children)) else {
             return Ok(None);
         };
         let id = chat.to_owned();
@@ -835,11 +837,9 @@ impl Manager {
             .into_iter()
             .map(|(url, _)| url)
             .collect();
-        let pending = self.pending_activity(chat, &keys).await?;
-        Ok(Some(
-            self.fit_response(own_batch(chat, pending), reserved)
-                .await?,
-        ))
+        let mut batch = own_batch(chat, self.pending_activity(chat, &keys).await?);
+        batch.extend(self.delegated_pending(&children, None).await?);
+        Ok(Some(self.fit_response(batch, reserved).await?))
     }
 
     /// Queue `observations` on the workspace's cursor, so its agent receives
