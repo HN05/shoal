@@ -624,11 +624,12 @@ async fn a_place_recorded_without_its_directory_reaches_its_server() {
         same_dir(dir, server.dir.path().join("s").as_path()),
         "{dir:?}"
     );
-    let users = PaneRef {
-        session: &server.session,
-        pane: "terminal_0",
-    };
-    open_pane(&reached, users, None).await;
+    // A new session lists its background plugins before it lays out its
+    // first tab, whose pane is the user's.
+    reached
+        .new_pane(&server.session, |pane| pane.id == "terminal_0")
+        .await
+        .unwrap();
 }
 
 /// A listing Zellij reports missing is asked again only while the server
