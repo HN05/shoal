@@ -23729,7 +23729,10 @@ fn benchmark_daemon_reads() {
     }
     let protocol = fixture.protocol();
     println!("method,clients,requests_per_s,p50_us,p95_us,p99_us");
-    for method in ["inspect_workspace", "workspace_status"] {
+    for (method, argument, body) in [
+        ("inspect_workspace", "workspace", "inspection"),
+        ("space_status", "space", "space_status"),
+    ] {
         for clients in [1, 16] {
             let start = Instant::now();
             let mut latencies = thread::scope(|scope| {
@@ -23743,10 +23746,10 @@ fn benchmark_daemon_reads() {
                             let response = fixture.raw_request(
                                 protocol,
                                 1,
-                                serde_json::json!({method: {"workspace": format!("bench{}", client % 4)}}),
+                                serde_json::json!({method: {argument: format!("bench{}", client % 4)}}),
                             );
-                            assert_eq!(response["type"], if method == "workspace_status" { "workspace_status" } else { "inspection" }, "{response}");
-                            if method == "workspace_status" {
+                            assert_eq!(response["type"], body, "{response}");
+                            if method == "space_status" {
                                 assert!(response["data"]["diff_error"].is_null(), "{response}");
                             }
                             samples.push(start.elapsed().as_micros());
