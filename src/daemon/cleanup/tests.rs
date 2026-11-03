@@ -1492,3 +1492,55 @@ async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces
     assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
     assert!(manager.workspace(&opened.id).await.is_ok());
 }
+
+#[tokio::test]
+async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_while_saved() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "kept".into(), None, None, None)
+        .await
+        .unwrap();
+    let reason = || async { manager.cleanup_reason(&workspace).await };
+    let merged = || async { manager.merged_snapshot(&workspace.id).await.unwrap() };
+    assert!(merged().await.is_some());
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat_in_workspace(
+            &workspace.id,
+            "kept-chat".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    // A running chat keeps it from every unattended removal.
+    assert_eq!(reason().await, CleanupReason::ChatRunning);
+    assert!(merged().await.is_none());
+
+    // A chat Shoal saved keeps it from idle cleanup, as a saved agent does,
+    // but not from merged cleanup.
+    manager.save_chats(crate::state::ChatRestore::Resume).await;
+    assert_eq!(reason().await, CleanupReason::Recovering);
+    assert!(merged().await.is_some());
+
+    // One whose agent exited keeps it from neither.
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE chats SET saved=0 WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert_eq!(reason().await, CleanupReason::Idle { minutes: 10 });
+    drop(process);
+}

@@ -45,6 +45,8 @@ pub(crate) enum Retention {
     PushRequest,
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
+    /// A chat runs in the workspace's worktree.
+    ChatRunning,
 }
 
 impl From<Retention> for CleanupReason {
@@ -55,6 +57,7 @@ impl From<Retention> for CleanupReason {
             Retention::PrProposal => Self::PrProposal,
             Retention::PushRequest => Self::PushRequest,
             Retention::QueuedAgent => Self::QueuedAgent,
+            Retention::ChatRunning => Self::ChatRunning,
         }
     }
 }
@@ -68,6 +71,7 @@ impl std::fmt::Display for Retention {
             Self::PrProposal => "a PR proposal waits for approval",
             Self::PushRequest => "a push waits for approval",
             Self::QueuedAgent => "an agent launch in it waits in the agent queue",
+            Self::ChatRunning => "a chat runs in it",
         })
     }
 }
@@ -855,6 +859,10 @@ impl Manager {
         })? {
             return Ok(Some(CleanupReason::Recovering));
         }
+        // A saved chat in it comes back there, as a saved agent does.
+        if self.chat_saved_in(id).await? {
+            return Ok(Some(CleanupReason::Recovering));
+        }
         self.usage_reason(id, executions).await
     }
 
@@ -872,6 +880,9 @@ impl Manager {
         }
         if self.has_pending_push(id).await? {
             return Ok(Some(Retention::PushRequest));
+        }
+        if self.chat_runs_in(id).await? {
+            return Ok(Some(Retention::ChatRunning));
         }
         Ok(self
             .has_queued_launch(id)

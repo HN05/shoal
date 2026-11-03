@@ -343,6 +343,35 @@ impl Manager {
             .await
     }
 
+    /// Whether a chat runs in the worktree of the workspace `id`.
+    pub(crate) async fn chat_runs_in(&self, id: &str) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                store::exists(
+                    db,
+                    "SELECT 1 FROM chats WHERE workspace_id=?1 AND restore IS NULL",
+                    [id],
+                )
+            })
+            .await
+    }
+
+    /// Whether Shoal saved the session of a stopped chat in the worktree of
+    /// the workspace `id`.
+    pub(crate) async fn chat_saved_in(&self, id: &str) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                store::exists(
+                    db,
+                    "SELECT 1 FROM chats WHERE workspace_id=?1 AND restore IS NOT NULL AND saved",
+                    [id],
+                )
+            })
+            .await
+    }
+
     /// When the chat `id`'s agent stopped, in Unix seconds, while it is
     /// stopped.
     pub(crate) async fn chat_stopped_at(&self, id: &str) -> Result<Option<u64>> {
