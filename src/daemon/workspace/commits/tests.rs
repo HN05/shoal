@@ -374,9 +374,20 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
             .commit,
         base
     );
+    // Reusing it counts as activity, which an idle period starts over from.
+    let id = opened.workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE workspaces SET active_at=1 WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
     let again = open(first).await.unwrap();
     assert!(again.reused);
     assert_eq!(again.workspace.id, opened.workspace.id);
+    assert!(manager.active_at(&again.workspace.id).await.unwrap() > 1);
 
     let second = push_head("second");
     let moved = open(second.clone()).await.unwrap();

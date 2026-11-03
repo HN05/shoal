@@ -132,7 +132,8 @@ impl Manager {
         workspace: &Workspace,
         head: &PullHead,
     ) -> Result<()> {
-        self.check_reopen(workspace, None).await?;
+        // Reopening is activity, which restarts its idle cleanup timers.
+        self.reopen_owned_workspace(workspace, None).await?;
         let at = workspace
             .at
             .as_ref()
