@@ -55,19 +55,25 @@ async fn current_root() -> Result<Option<std::path::PathBuf>> {
     }
 }
 
-/// The registered repository whose origin the issue URL belongs to.
+/// The registered repository whose origin the issue URL belongs to, which
+/// the user may register when none has it, if `offer`.
 pub(super) async fn repository_for(
     ctx: &Context,
     repos: &mut Vec<Repository>,
     url: &str,
+    offer: bool,
 ) -> Result<String> {
-    registered_remote(
-        ctx,
-        repos,
+    let (forge, retry) = (
         ForgeRepo::from_issue_url(url)?,
         "shoal add <repository> --issue <url>",
-    )
-    .await
+    );
+    if !offer {
+        return Ok(repository_with_remote(repos, forge, retry)
+            .await?
+            .id
+            .clone());
+    }
+    registered_remote(ctx, repos, forge, retry).await
 }
 
 /// The only registered repository whose origin the issue or PR at `url`

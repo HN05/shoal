@@ -24,7 +24,7 @@ pub(super) async fn restore_here(ctx: &Context, chat: &Chat) -> Result<i32> {
 }
 
 /// Remove each of the stopped `chats` without restoring it, returning
-/// those it removed and those it failed for. One with workspaces below it,
+/// those it removed and those it failed for. One with spaces below it,
 /// which its removal would take, is left to `shoal rm`, which shows them.
 pub(super) async fn discard_each(ctx: &Context, chats: &[Chat]) -> (Vec<Chat>, Vec<Failure>) {
     let mut report = ui::Report::new("discard");
@@ -46,14 +46,14 @@ pub(super) async fn discard_each(ctx: &Context, chats: &[Chat]) -> (Vec<Chat>, V
     report.into_parts()
 }
 
-/// Remove the stopped `chat` unless workspaces are below it.
+/// Remove the stopped `chat` unless spaces are below it.
 async fn discard(ctx: &Context, chat: &Chat, spaces: &Spaces) -> Result<Chat> {
-    let below: Vec<&str> = (spaces.below_chat(&chat.id).iter())
-        .map(|workspace| workspace.name.as_str())
+    let below: Vec<String> = (spaces.below(&chat.id).into_iter())
+        .map(|space| space.name)
         .collect();
     ensure!(
         below.is_empty(),
-        "removing it also removes the workspaces below it ({}); remove it with shoal rm {}",
+        "removing it also removes the spaces below it ({}); remove it with shoal rm {}",
         below.join(", "),
         chat.name
     );

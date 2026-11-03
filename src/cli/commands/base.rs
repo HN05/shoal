@@ -10,7 +10,7 @@ use crate::{
         ui::{self, Fallback},
     },
     daemon::refusal::{Reason, Refusal},
-    model::{Workspace, WorkspaceRef},
+    model::{SpaceKind, SpaceRef, Workspace, WorkspaceRef},
     protocol::WorkspaceMethod,
 };
 
@@ -94,6 +94,17 @@ pub(super) fn render(workspace: &Workspace) {
     if !workspace.stacked_workspaces.is_empty() {
         let stacked: Vec<_> = workspace.stacked_workspaces.iter().map(describe).collect();
         outln!("Stacked workspaces: {}", stacked.join(", "));
+    }
+}
+
+/// `space` by name, with a workspace's branch when it differs, or as a chat.
+pub(super) fn describe_space(space: &SpaceRef) -> String {
+    match (space.kind, &space.branch) {
+        (SpaceKind::Chat, _) => format!("{} (chat)", space.name),
+        (SpaceKind::Workspace, Some(branch)) if *branch != space.name => {
+            format!("{} ({branch})", space.name)
+        }
+        (SpaceKind::Workspace, _) => space.name.clone(),
     }
 }
 

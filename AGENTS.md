@@ -39,6 +39,12 @@ when behavior changes, distinguishing decisions from proposals.
   for what needs a worktree. A command's flag becomes `--space` in the change
   that lets it act on a chat. Command names stay short: `shoal work` for
   workspaces, `shoal chat` for chats.
+- Spaces form one tree in `space_parents`: every space has at most one parent,
+  a ready workspace or a chat of its own repository, never one below it; a
+  child in another repository is refused. Scope, approvals, coordinator and
+  delegated messages, removal and cleanup take one walk up or down that link
+  and one check for an agent, with no branch on kind; messages to a space go
+  through one operation.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
   operations, except creating a workspace at a commit's worktree, which plain
   Git creates since Worktrunk only makes worktrees on a branch, and preserve
@@ -94,7 +100,7 @@ when behavior changes, distinguishing decisions from proposals.
   explicit conflicts.
 - Workspace commands inherit a scope token; CLI refusals also follow process
   ancestry for the same state directory, so a cleared token does not unscope. A scope covers its
-  workspace and the child workspaces split from it, recursively; targets name one of them, and
+  workspace and the spaces below it, recursively; targets name one of them, and
   the agent's hooks report for its own. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery other than splitting a child and removing one the user holds nothing below, and shared
   repository/service administration. For the workspaces below their own, scoped callers may hold them, queue
@@ -145,9 +151,9 @@ when behavior changes, distinguishing decisions from proposals.
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
   preserves associations and watches but never defers cleanup; only holds,
   open questions and queued agent launches keep a workspace. Children never keep
-  their parent: every removal of a space first removes the workspaces below it
+  their parent: every removal of a space first removes the spaces below it
   through the same path, whatever keeps them, and a child that cannot go retains
-  the parent; a chat's are those it opened that no workspace was split from. A standing completion with cleanup also removes the workspaces below
+  the parent. A standing completion with cleanup also removes the workspaces below
   that nothing of their own keeps, whatever their work.
   Completion cleanup without a PR registration requires every commit kept that way,
   retaining dirty or newer work through the same
@@ -178,9 +184,9 @@ when behavior changes, distinguishing decisions from proposals.
   in the same workspace. User scripts own underlying resource integrations.
 - Approvals are daemon-owned: scoped callers request and inspect their own;
   only unscoped callers approve or deny, except that a request from a workspace
-  with an agent goes to its direct parent space: its parent workspace, skipping
-  one without a running agent, else the chat that opened it. That space decides
-  it or passes it up, the parent's parent next and the user at the top; a parent
+  with an agent goes to the nearest space above it with an agent, of either
+  kind. That space decides it or passes it up, the next such space above and
+  the user at the top; a parent
   workspace without an approved grant for the same target and settings may only
   deny or pass it up, while a chat, being unscoped, may approve anything.
   Proposals route the same way, but only the user or a chat approves one; a

@@ -18,7 +18,7 @@ use crate::{
     },
     daemon::space_processes::{Selection, Stopped},
     execution::recovery,
-    model::{QueueEntry, Workspace},
+    model::{QueueEntry, SpaceKind, Workspace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError, RemovalMethod},
 };
 
@@ -214,39 +214,22 @@ pub(super) async fn stop(
 }
 
 /// The IDs of the workspaces `selectors` name, each followed by the
-/// workspaces below it, which a stop of it stops too: their agents work for
-/// it.
+/// workspaces below it, through spaces of either kind, which a stop of it
+/// stops too: their agents work for it.
 async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<String>> {
-    let workspaces = client::workspaces(&ctx.paths).await?;
-    let mut ids = Vec::new();
-    for selector in selectors {
-        ids.push(client::inspect(&ctx.paths, selector).await?.workspace.id);
-    }
-    Ok(with_descendants(ids, &workspaces))
-}
-
-/// `ids` once each, followed by every workspace of `workspaces` below them.
-fn with_descendants(ids: Vec<String>, workspaces: &[Workspace]) -> Vec<String> {
+    let spaces = client::spaces(&ctx.paths).await?;
     let mut found: Vec<String> = Vec::new();
-    for id in ids {
-        if !found.contains(&id) {
-            found.push(id);
-        }
-    }
-    let mut next = 0;
-    while let Some(parent) = found.get(next).cloned() {
-        for workspace in workspaces {
-            let child = workspace
-                .parent_workspace
-                .as_ref()
-                .is_some_and(|reference| reference.id == parent);
-            if child && !found.contains(&workspace.id) {
-                found.push(workspace.id.clone());
+    for selector in selectors {
+        let id = client::inspect(&ctx.paths, selector).await?.workspace.id;
+        let below = spaces.below(&id).into_iter();
+        let workspaces = below.filter(|space| space.kind == SpaceKind::Workspace);
+        for id in std::iter::once(id).chain(workspaces.map(|space| space.id)) {
+            if !found.contains(&id) {
+                found.push(id);
             }
         }
-        next += 1;
     }
-    found
+    Ok(found)
 }
 
 /// Refuse a stop in a workspace process that `selected` includes its own

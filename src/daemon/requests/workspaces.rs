@@ -106,7 +106,9 @@ pub(super) async fn handle(
             git_profile,
             path,
             options,
+            chat,
         } => {
+            (manager.ensure_chat_repository(&repository, chat.as_deref())).await?;
             manager
                 .check_creation(
                     &repository,

@@ -115,10 +115,10 @@ pub fn workspace_rows(
     rows_with_status(workspaces, repositories, statuses, palette, width, true)
 }
 
-/// `workspace_rows` for workspaces and the running and stopped chats that
-/// opened some of them: the user's own workspaces, then each chat followed by its
-/// workspaces, indented. Child workspaces follow their parent, indented
-/// below it. A chat row names the chat, its status and its agent.
+/// `workspace_rows` for workspaces and the running and stopped chats in one
+/// tree: the spaces whose parent is not listed, workspaces first, each
+/// followed by the spaces below it, indented. A chat row names the chat, its
+/// status and its agent.
 pub fn workspace_tree_rows(
     workspaces: &[Workspace],
     chats: &[Chat],
@@ -126,25 +126,15 @@ pub fn workspace_tree_rows(
     palette: Palette,
     width: Option<usize>,
 ) -> Vec<String> {
-    let tree = WorkspaceTree {
+    let tree = SpaceTree {
         workspaces,
+        chats,
         stopped,
         palette,
     };
-    let opened_by = |w: &Workspace, chat: &Chat| w.chat.as_ref() == Some(&chat.id);
-    let roots = tree.roots();
     let mut rows = Vec::new();
-    for root in roots
-        .iter()
-        .filter(|w| !chats.iter().any(|chat| opened_by(w, chat)))
-    {
+    for root in tree.roots() {
         tree.push(&mut rows, root, 0);
-    }
-    for chat in chats {
-        rows.push(chat_row(chat, palette));
-        for root in roots.iter().filter(|w| opened_by(w, chat)) {
-            tree.push(&mut rows, root, 1);
-        }
     }
     let (markers, cells): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
     markers
@@ -154,41 +144,75 @@ pub fn workspace_tree_rows(
         .collect()
 }
 
-/// Listed workspaces arranged under their listed parents.
-struct WorkspaceTree<'a> {
+/// A listed space.
+#[derive(Clone, Copy)]
+enum Listed<'a> {
+    Workspace(&'a Workspace),
+    Chat(&'a Chat),
+}
+
+impl<'a> Listed<'a> {
+    fn id(&self) -> &'a str {
+        match self {
+            Self::Workspace(workspace) => &workspace.id,
+            Self::Chat(chat) => &chat.id,
+        }
+    }
+
+    fn parent(&self) -> Option<&'a str> {
+        let parent = match self {
+            Self::Workspace(workspace) => workspace.parent.as_ref(),
+            Self::Chat(chat) => chat.parent.as_ref(),
+        };
+        parent.map(|parent| parent.id.as_str())
+    }
+}
+
+/// Listed spaces arranged under their listed parents.
+struct SpaceTree<'a> {
     workspaces: &'a [Workspace],
+    chats: &'a [Chat],
     stopped: &'a HashSet<String>,
     palette: Palette,
 }
 
-impl<'a> WorkspaceTree<'a> {
-    /// The workspaces whose parent is not listed.
-    fn roots(&self) -> Vec<&'a Workspace> {
-        self.workspaces
-            .iter()
-            .filter(|w| {
-                w.parent_workspace
-                    .as_ref()
-                    .is_none_or(|parent| !self.workspaces.iter().any(|p| p.id == parent.id))
-            })
+impl<'a> SpaceTree<'a> {
+    /// Every listed space, workspaces first.
+    fn spaces(&self) -> impl Iterator<Item = Listed<'a>> + use<'a> {
+        let workspaces = self.workspaces.iter().map(Listed::Workspace);
+        workspaces.chain(self.chats.iter().map(Listed::Chat))
+    }
+
+    /// The spaces whose parent is not listed.
+    fn roots(&self) -> Vec<Listed<'a>> {
+        let listed: HashSet<&str> = self.spaces().map(|space| space.id()).collect();
+        (self.spaces())
+            .filter(|space| space.parent().is_none_or(|parent| !listed.contains(parent)))
             .collect()
     }
 
-    /// The row of `workspace` at `depth`, then those of its children below it.
-    fn push(&self, rows: &mut Vec<(String, [Cell; 5])>, workspace: &Workspace, depth: usize) {
-        rows.push(tree_workspace_row(
-            workspace,
-            depth,
-            self.stopped,
-            self.palette,
-        ));
-        for child in self.workspaces.iter().filter(|w| {
-            w.parent_workspace
-                .as_ref()
-                .is_some_and(|parent| parent.id == workspace.id)
-        }) {
+    /// The row of `space` at `depth`, then those of the spaces below it.
+    fn push(&self, rows: &mut Vec<(String, [Cell; 5])>, space: Listed<'a>, depth: usize) {
+        rows.push(match space {
+            Listed::Workspace(workspace) => {
+                tree_workspace_row(workspace, depth, self.stopped, self.palette)
+            }
+            Listed::Chat(chat) => chat_row(chat, depth, self.palette),
+        });
+        for child in self
+            .spaces()
+            .filter(|child| child.parent() == Some(space.id()))
+        {
             self.push(rows, child, depth + 1);
         }
+    }
+}
+
+/// `name` at `depth` in a tree, below its parent's row.
+fn indented(name: &str, depth: usize) -> String {
+    match depth {
+        0 => name.to_owned(),
+        depth => format!("{}└ {name}", "  ".repeat(depth - 1)),
     }
 }
 
@@ -198,10 +222,7 @@ fn tree_workspace_row(
     stopped: &HashSet<String>,
     palette: Palette,
 ) -> (String, [Cell; 5]) {
-    let name = match depth {
-        0 => workspace.name.clone(),
-        depth => format!("{}└ {}", "  ".repeat(depth - 1), workspace.name),
-    };
+    let name = indented(&workspace.name, depth);
     let status = ListStatus::of_workspace(workspace, stopped.contains(&workspace.id));
     (
         status.marker(palette),
@@ -221,7 +242,7 @@ fn tree_workspace_row(
 /// Picker entries for running chats, labelled as lists show them.
 pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> Entries {
     let (markers, cells): (Vec<_>, Vec<_>) =
-        chats.iter().map(|chat| chat_row(chat, palette)).unzip();
+        chats.iter().map(|chat| chat_row(chat, 0, palette)).unzip();
     let labels = markers
         .into_iter()
         .zip(aligned_to(cells, palette, title_limit(width)))
@@ -233,12 +254,12 @@ pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> E
         .collect()
 }
 
-fn chat_row(chat: &Chat, palette: Palette) -> (String, [Cell; 5]) {
+fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 5]) {
     let status = ListStatus::of_chat(chat);
     (
         palette.paint(Style::Heading, "◆"),
         [
-            (chat.name.clone(), Some(Style::Heading)),
+            (indented(&chat.name, depth), Some(Style::Heading)),
             (String::new(), None),
             (status.label().into(), Some(status.style())),
             (String::new(), None),

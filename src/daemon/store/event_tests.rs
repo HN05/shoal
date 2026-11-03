@@ -197,9 +197,11 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     // Ready-for-review marks, agent states and chats record into the
     // journal, so they go with it.
     db.execute_batch(
-        "DROP TRIGGER workspace_chat_changed; DROP INDEX workspaces_chat;
+        "DROP TRIGGER space_parent_set; DROP TRIGGER space_parent_changed;
+         DROP TRIGGER space_parent_cleared; DROP TRIGGER workspace_left_tree;
+         DROP TRIGGER chat_left_tree; DROP TABLE space_parents;
          DROP TRIGGER workspace_grace_removed; DROP TRIGGER chat_grace_removed;
-         ALTER TABLE workspaces DROP COLUMN chat_id; DROP TABLE chats;",
+         DROP TABLE chats;",
     )?;
     db.execute_batch(
         "DROP TRIGGER workspace_review_removed; DROP TABLE space_review;
@@ -245,9 +247,6 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     )?;
     db.execute_batch(
         "DROP INDEX workspaces_base; ALTER TABLE workspaces DROP COLUMN base_workspace_id;",
-    )?;
-    db.execute_batch(
-        "DROP INDEX workspaces_parent; ALTER TABLE workspaces DROP COLUMN parent_workspace_id;",
     )?;
     db.execute_batch("ALTER TABLE workspace_issue DROP COLUMN title;")?;
     db.execute_batch("DROP TABLE agent_queue;")?;

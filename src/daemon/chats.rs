@@ -12,10 +12,10 @@ use uuid::Uuid;
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, release_decided_by},
-        log, store,
-        workspace::{Manager, NewWorkspace, derive_workspace_name},
+        log, spaces, store,
+        workspace::{self, Manager, NewWorkspace, derive_workspace_name},
     },
-    model::{Chat, OpenedWorkspace, RenamedChat, Repository, SpaceLinks, Workspace},
+    model::{Chat, OpenedWorkspace, RenamedChat, Repository, SpaceKind, SpaceLinks, Workspace},
     process::identity::{self, Identity},
     state::ChatRestore,
     tmp_dirs,
@@ -81,6 +81,8 @@ impl Manager {
             links: SpaceLinks::default(),
             review: Vec::new(),
             completion: None,
+            parent: None,
+            children: Vec::new(),
         };
         let recorded = process.clone();
         let chat = self
@@ -205,18 +207,6 @@ impl Manager {
             .find(|chat| chat.id == selector || chat.name == selector))
     }
 
-    /// The running chat `selector` names, by ID or name, as recorded: unlike
-    /// [`Self::running_chat`], it stops no chat whose process exited, which
-    /// passes its approval requests up, so a caller holding the approval
-    /// announcement gate may look one up.
-    pub(crate) async fn recorded_running_chat(&self, selector: &str) -> Result<Option<Chat>> {
-        let selector = selector.to_owned();
-        let chats = self.store.run(|db| recorded(db)).await?;
-        Ok(chats
-            .into_iter()
-            .find(|chat| chat.restore.is_none() && (chat.id == selector || chat.name == selector)))
-    }
-
     /// Stop the running chat `id`: stop every process it owns, so none goes
     /// on writing the agent's session, then record the chat stopped, as when
     /// the process it runs as exits. Until the stop finishes, the chat stays
@@ -312,7 +302,8 @@ impl Manager {
     }
 
     /// Give `workspace` to the chat that opened it, or to the user when it
-    /// was opened outside one or the chat is gone.
+    /// was opened outside one or the chat is gone. A workspace split from
+    /// another stays below it.
     pub async fn assign_chat(&self, workspace: &str, chat: Option<String>) -> Result<()> {
         let workspace = workspace.to_owned();
         let held = [self.chat_removals.clone(), self.chat_owners.clone()];
@@ -322,7 +313,7 @@ impl Manager {
     }
 
     /// [`Self::open_branch`] for `chat` where and as `new` says, returning
-    /// the workspace with its chat.
+    /// the workspace with its parent.
     pub async fn open_branch_for_chat(
         &self,
         repository: crate::repository::Selector,
@@ -331,13 +322,15 @@ impl Manager {
         new: NewWorkspace<'_>,
         chat: Option<String>,
     ) -> Result<OpenedWorkspace> {
+        self.ensure_chat_repository(&repository, chat.as_deref())
+            .await?;
         let mut opened = self.open_branch_with(repository, branch, base, new).await?;
         opened.workspace = self.give_to_chat(&opened.workspace.id, chat).await?;
         Ok(opened)
     }
 
-    /// [`Self::create_workspace`] for `chat`, returning the workspace with its
-    /// chat.
+    /// [`Self::create_workspace`] for `chat`, returning the workspace with
+    /// its parent.
     pub async fn create_workspace_for_chat(
         &self,
         repository: crate::repository::Selector,
@@ -346,10 +339,31 @@ impl Manager {
         new: NewWorkspace<'_>,
         chat: Option<String>,
     ) -> Result<Workspace> {
+        self.ensure_chat_repository(&repository, chat.as_deref())
+            .await?;
         let workspace = self
             .create_workspace_with(repository, name, base, new)
             .await?;
         self.give_to_chat(&workspace.id, chat).await
+    }
+
+    /// Refuse a workspace for `chat` in another repository than the chat's,
+    /// before creating anything.
+    pub(crate) async fn ensure_chat_repository(
+        &self,
+        repository: &crate::repository::Selector,
+        chat: Option<&str>,
+    ) -> Result<()> {
+        let Some(chat) = chat.map(str::to_owned) else {
+            return Ok(());
+        };
+        let repository = self.repository(repository.clone()).await?;
+        self.store
+            .run(move |db| {
+                crate::daemon::workspace::parent_in_repository(db, &repository.id, &chat)?;
+                Ok(())
+            })
+            .await
     }
 
     /// Assign `workspace` to `chat` and read it again.
@@ -519,6 +533,8 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
             links: SpaceLinks::default(),
             review: Vec::new(),
             completion: store::json_column(row, "completion")?,
+            parent: None,
+            children: Vec::new(),
         })
     })?
     .collect::<rusqlite::Result<Vec<Chat>>>()?
@@ -526,6 +542,8 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
     .map(|mut chat| {
         chat.links = store::space_links(db, &chat.id)?;
         chat.review = crate::daemon::workspace::review::list(db, &chat.id)?;
+        chat.parent = workspace::parent(db, &chat.id)?;
+        chat.children = workspace::children(db, &chat.id)?;
         Ok(chat)
     })
     .collect()
@@ -629,27 +647,36 @@ fn assign(
         )?,
         "the workspace is being removed"
     );
-    let current: Option<String> = tx
-        .query_row(
-            "SELECT chat_id FROM workspaces WHERE id=?1",
-            [workspace],
-            |row| row.get(0),
-        )
-        .optional()?
-        .flatten();
+    let current = workspace::parent_id(&tx, workspace)?;
+    if let Some(current) = &current
+        && spaces::space_kind(&tx, current)? == Some(SpaceKind::Workspace)
+    {
+        return Ok(());
+    }
     if let Some(current) = current.as_deref().filter(|current| Some(*current) != chat) {
         ensure!(
             !removing.reserved(current) && !owners.reserved(current),
             "a removal of the chat that opened the workspace, or of its workspaces, holds it"
         );
     }
-    // A chat being removed takes no new workspace; one already below it
-    // stays there.
-    let chat = chat.filter(|chat| !removing.reserved(chat) || current.as_deref() == Some(*chat));
-    tx.execute(
-        "UPDATE workspaces SET chat_id=(SELECT id FROM chats WHERE id=?2) WHERE id=?1",
-        params![workspace, chat],
-    )?;
+    // A chat being removed takes no new workspace, nor a chat gone; one
+    // already below it stays there.
+    let chat =
+        match chat.filter(|chat| !removing.reserved(chat) || current.as_deref() == Some(*chat)) {
+            Some(chat) if spaces::space_kind(&tx, chat)? == Some(SpaceKind::Chat) => Some(chat),
+            _ => None,
+        };
+    if chat != current.as_deref() {
+        if let Some(chat) = chat {
+            let repository: String = tx.query_row(
+                "SELECT repository_id FROM workspaces WHERE id=?1",
+                [workspace],
+                |row| row.get(0),
+            )?;
+            workspace::ensure_parent(&tx, &repository, workspace, chat)?;
+        }
+        workspace::set_parent(&tx, workspace, chat)?;
+    }
     tx.commit()?;
     Ok(())
 }

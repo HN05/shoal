@@ -241,6 +241,8 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
         links: Default::default(),
         review: Vec::new(),
         completion: None,
+        parent: None,
+        children: Vec::new(),
     };
     assert_eq!(
         chat_dir_args(&defaults, "codex", home.path(), &chat, &[]),

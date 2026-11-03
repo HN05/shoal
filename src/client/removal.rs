@@ -45,10 +45,10 @@ pub struct RemovalCheck {
     #[cfg(feature = "cli")]
     #[serde(skip)]
     pub(crate) default_branch: Option<String>,
-    /// The workspaces below it, which removal takes first, each after those
+    /// The spaces below it, which removal takes first, each after those
     /// below it; filled in for a manual removal's check.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<crate::model::WorkspaceRef>,
+    pub children: Vec<crate::model::SpaceRef>,
     /// The IDs of the `children` that are disposable, which removal takes
     /// without asking.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -69,7 +69,7 @@ pub enum UnsavedWork {
     /// and the commits of a detached HEAD while HEAD is still that commit.
     /// `files_restorable` records that the caller was told the checkpoint
     /// keeps the files, so removal refuses when it cannot after all.
-    /// `children` are the IDs of the workspaces below it the caller saw, the
+    /// `children` are the IDs of the spaces below it the caller saw, the
     /// only ones it may take; without them it takes whatever is below.
     Confirmed {
         files: bool,

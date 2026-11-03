@@ -60,7 +60,7 @@ fn delete(db: &mut Connection, id: &str, expires_at: i64) -> Result<Deleted> {
     );
     // The spaces below go first; none may outlive it.
     ensure!(
-        crate::daemon::workspace::chat_children(&tx, id)?.is_empty(),
+        crate::daemon::workspace::children(&tx, id)?.is_empty(),
         "workspaces were opened from it during removal; retaining it"
     );
     let notification = chat_messages::hand_to_user(&tx, id)?;

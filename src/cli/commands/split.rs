@@ -18,7 +18,7 @@ use crate::{
         ui::{self, Fallback},
     },
     daemon::refusal::{Reason, Refusal},
-    model::{AgentSession, QueueEntry, Workspace},
+    model::{AgentSession, QueueEntry, SpaceRef, Workspace},
     protocol::{
         AgentMethod, CommitStart, ConfigTarget, CreationOptions, ItemMethod, WorkspaceMethod,
     },
@@ -287,17 +287,13 @@ async fn load_issue(ctx: &Context, parent: &str, input: &str) -> Result<Issue> {
     super::issues::load(ctx, &repository, input).await
 }
 
-/// The parent and child workspaces, when the workspace has any.
-pub(super) fn render(workspace: &Workspace) {
-    if let Some(parent) = &workspace.parent_workspace {
-        outln!("Parent workspace: {}", super::base::describe(parent));
+/// The parent and child spaces of a space, when it has any.
+pub(super) fn render(parent: &Option<SpaceRef>, children: &[SpaceRef]) {
+    if let Some(parent) = parent {
+        outln!("Parent space:  {}", super::base::describe_space(parent));
     }
-    if !workspace.child_workspaces.is_empty() {
-        let children: Vec<_> = workspace
-            .child_workspaces
-            .iter()
-            .map(super::base::describe)
-            .collect();
-        outln!("Child workspaces: {}", children.join(", "));
+    if !children.is_empty() {
+        let children: Vec<_> = (children.iter()).map(super::base::describe_space).collect();
+        outln!("Child spaces:  {}", children.join(", "));
     }
 }

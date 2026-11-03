@@ -105,17 +105,19 @@ fn tree_rows_list_children_below_their_parent() {
         workspace("a", "orphan", "orphan", WorkspaceState::Ready),
         workspace("a", "parent", "parent", WorkspaceState::Ready),
     ];
-    let reference = |w: &Workspace| crate::model::WorkspaceRef {
+    let reference = |w: &Workspace| crate::model::SpaceRef {
         id: w.id.clone(),
         name: w.name.clone(),
+        kind: crate::model::SpaceKind::Workspace,
         branch: w.branch.clone(),
     };
-    workspaces[0].parent_workspace = Some(reference(&workspaces[3]));
-    workspaces[1].parent_workspace = Some(reference(&workspaces[0]));
+    workspaces[0].parent = Some(reference(&workspaces[3]));
+    workspaces[1].parent = Some(reference(&workspaces[0]));
     // A parent left out of the list leaves its child at the top level.
-    workspaces[2].parent_workspace = Some(crate::model::WorkspaceRef {
+    workspaces[2].parent = Some(crate::model::SpaceRef {
         id: "unlisted".into(),
         name: "unlisted".into(),
+        kind: crate::model::SpaceKind::Workspace,
         branch: Some("unlisted".into()),
     });
     let rows = workspace_tree_rows(&workspaces, &[], &HashSet::new(), plain, None);

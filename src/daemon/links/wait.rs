@@ -28,7 +28,7 @@ use crate::{
         transport::limits::rate_limited,
         updates::{Edited, MergeCheck, Snapshot, Update, UpdateKind},
     },
-    model::{ConflictCheck, PresentSpace, Workspace, WorkspaceRef},
+    model::{ConflictCheck, PresentSpace, SpaceRef, Workspace},
     repository,
 };
 
@@ -86,18 +86,22 @@ impl ActiveWaits {
 }
 
 impl ActiveWaits {
-    /// Run `operation` with the workspace at the end of each of `paths` that
-    /// no wait runs in anywhere along its path, since a wait there receives
-    /// its updates too; no wait can start while it runs.
+    /// Run `operation` with the space at the end of each of `paths` that no
+    /// wait of `registries`, the workspaces' then the chats', runs in
+    /// anywhere along its path, since a wait there receives its updates too,
+    /// whatever the kind of the space it runs in; no wait can start in
+    /// either while it runs. Every caller locks them in that order.
     fn with_unwatched(
-        &self,
+        [workspaces, chats]: [&Self; 2],
         paths: &[Vec<String>],
         operation: impl FnOnce(&[String]) -> Result<()>,
     ) -> Result<()> {
-        let waits = self.0.lock().expect("active waits lock");
+        let workspaces = workspaces.0.lock().expect("active waits lock");
+        let chats = chats.0.lock().expect("active waits lock");
+        let waiting = |space: &String| workspaces.contains_key(space) || chats.contains_key(space);
         let unwatched = paths
             .iter()
-            .filter(|path| !path.iter().any(|workspace| waits.contains_key(workspace)))
+            .filter(|path| !path.iter().any(waiting))
             .filter_map(|path| path.last().cloned())
             .collect::<Vec<_>>();
         operation(&unwatched)
@@ -249,7 +253,7 @@ impl Manager {
             .leftovers
             .undelivered(&workspace_id, RESPONSE_LIMIT.saturating_sub(messages_size))?;
         let reserved = messages_size + serde_json::to_vec(&leftovers)?.len();
-        let children = self.delegated_workspaces(&workspace.id).await?;
+        let children = self.delegated_spaces(&workspace.id).await?;
         let updates = match self.gates.try_lock_prs(receiving(&workspace.id, &children)) {
             Some(_gate) => {
                 self.gated_agent_updates(workspace, &children, reserved)
@@ -271,12 +275,12 @@ impl Manager {
 
     /// The updates queued for the workspace's agent that fit one response
     /// beside `reserved` bytes of its other content: those on its own cursor
-    /// for an unfiltered watch, then those of the child workspaces it works
+    /// for an unfiltered watch, then those of the spaces below it it works
     /// on. The caller holds the PR gates of the workspace and its `children`.
     async fn gated_agent_updates(
         &self,
         workspace: Workspace,
-        children: &[WorkspaceRef],
+        children: &[SpaceRef],
         reserved: usize,
     ) -> Result<Vec<Update>> {
         let id = workspace.id.clone();
@@ -307,12 +311,12 @@ impl Manager {
         Ok(batch.into_iter().map(|(_, update)| update).collect())
     }
 
-    /// The updates queued on the cursors of `children`, child workspaces
-    /// whose activity an agent receives, for their items of `kind`, or every
-    /// kind and their branches, each naming its workspace.
+    /// The updates queued on the cursors of `children`, spaces below whose
+    /// activity an agent receives, for their items of `kind`, or every kind
+    /// and their branches, each naming its space.
     async fn delegated_pending(
         &self,
-        children: &[WorkspaceRef],
+        children: &[SpaceRef],
         kind: Option<LinkKind>,
     ) -> Result<Batch> {
         let mut updates = Vec::new();
@@ -324,7 +328,7 @@ impl Manager {
                 .await?
                 .into_iter()
                 .map(|(url, _)| url)
-                .chain(kind.is_none().then(|| child.branch.clone()).flatten())
+                .chain(child.branch.clone().filter(|_| kind.is_none()))
                 .collect::<Vec<_>>();
             let pending = self.pending_activity(&child.id, &keys).await?;
             updates.extend(pending.into_iter().map(|mut update| {
@@ -409,7 +413,7 @@ impl Manager {
     /// of the workspaces whose activity it receives, rather than waiting for
     /// them for minutes.
     async fn updates_deliverable(&self, workspace: Workspace) -> Result<bool> {
-        let children = self.delegated_workspaces(&workspace.id).await?;
+        let children = self.delegated_spaces(&workspace.id).await?;
         let Some(_gate) = self.gates.try_lock_prs(receiving(&workspace.id, &children)) else {
             return Ok(false);
         };
@@ -434,7 +438,7 @@ impl Manager {
     /// Whether updates are queued for the workspace's agent, read without
     /// the PR gates.
     async fn updates_recorded(&self, workspace: Workspace) -> Result<bool> {
-        let children = self.delegated_workspaces(&workspace.id).await?;
+        let children = self.delegated_spaces(&workspace.id).await?;
         Ok(!self.queued_updates(workspace).await?.is_empty()
             || !self.delegated_pending(&children, None).await?.is_empty())
     }
@@ -547,7 +551,7 @@ impl Manager {
         // A selected item is the workspace's own.
         let children = match selection.input {
             Some(_) => Vec::new(),
-            None => self.delegated_workspaces(id).await?,
+            None => self.delegated_spaces(id).await?,
         };
         let guard = self.gates.lock_prs(receiving(id, &children)).await;
         let space = self.link_space(id).await?;
@@ -1082,22 +1086,21 @@ impl Manager {
         // One transaction removes exactly the acknowledged deliveries, so
         // whatever a poll or a split queues meanwhile stays pending. A chat's
         // watch shares its delivery with the chat's hooks.
-        let waits = match space {
-            LinkSpace::Workspace(_) => self.item_waits.clone(),
-            LinkSpace::Chat { .. } => self.chat_waits.clone(),
-        };
+        let waits = [self.item_waits.clone(), self.chat_waits.clone()];
         let agents = self.tracked_agents().await;
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 require_ready_space(&tx, &id)?;
-                // The agent also received the updates of the child workspaces
-                // it works on.
+                // The agent also received the updates of the spaces below it
+                // that it works on.
                 let delivered = crate::daemon::workspace::receiving_paths(&tx, &id, &agents)?;
                 // A delivering wait has ended, so a wait running in one of
-                // these workspaces, or in one receiving their activity above
-                // them, started after it and must report their updates as well.
-                waits.with_unwatched(&delivered, |unwatched| {
+                // these spaces, or in one receiving their activity above them,
+                // whatever its kind, started after it and must report their
+                // updates as well.
+                let [workspaces, chats] = &waits;
+                ActiveWaits::with_unwatched([workspaces, chats], &delivered, |unwatched| {
                     acknowledge_deliveries(&tx, unwatched, &deliveries)?;
                     Ok(tx.commit()?)
                 })
@@ -1195,9 +1198,9 @@ fn workspace_branch(db: &rusqlite::Connection, id: &str) -> Result<Option<String
         .flatten())
 }
 
-/// The IDs of workspace `id` and of `children`, whose activity its agent
+/// The IDs of space `id` and of `children`, whose activity its agent
 /// receives: the PR gates a delivery to that agent holds.
-fn receiving<'a>(id: &'a str, children: &'a [WorkspaceRef]) -> impl Iterator<Item = &'a str> {
+fn receiving<'a>(id: &'a str, children: &'a [SpaceRef]) -> impl Iterator<Item = &'a str> {
     children.iter().map(|child| child.id.as_str()).chain([id])
 }
 

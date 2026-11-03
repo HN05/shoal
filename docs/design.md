@@ -618,35 +618,43 @@ work needs another PR gets another branch and worktree instead of switching
 branches or creating worktrees Shoal does not own. Splitting creates a new
 branch in the parent's repository, from the default branch or a `--base` that
 stacks it as usual, records the parent, and links an `--issue`; it is the only
-creation a scoped caller may do. Children form a tree: a scope reaches its
-workspace and every workspace below it, the CLI resolves a scoped command to the
+creation a scoped caller may do. Spaces form one tree through one parent link,
+`space_parents`, which records a workspace split from another and one a chat
+opened alike: every space has at most one parent, a ready workspace or a chat
+of its own repository, never one below it, and a child in another repository
+is refused, since spaces across repositories need a space without one. Every
+reader takes one walk up or one walk down that link, with no branch on kind,
+and asks each space one question, whether it has an agent: a workspace's
+agent, a chat's running agent, or a queued restore of either. A scope reaches
+its workspace and every space below it, the CLI resolves a scoped command to the
 child whose directory it runs in, and agent hooks always report for the agent's
 own workspace. The parent's agent receives the issue and PR activity of the
-children without an agent of their own, and theirs in turn, each update naming
-its workspace, through the same cursors, deliveries and acknowledgements as its
-own; a child's own agent, which reports its turn state or which Shoal tracks
+spaces below it without an agent of their own, and theirs in turn, each update
+naming its space, through the same cursors,
+deliveries and acknowledgements as its own; a child's own agent, which reports its turn state or which Shoal tracks
 there, as it tracks custom and Happy agents that report none, takes over its
 subtree, and so does one whose restore is queued, since it receives what
 arrived once it starts. A child never keeps its parent and never outlives it:
 the parent is cleaned up by its own rules, and every removal of it, manual or
-unattended, first removes the workspaces below it, deepest first, through the
-shared removal path, each but a disposable one with a checkpoint and kept branch, whatever their work,
-holds or questions; one that cannot go retains the parent, and the journal and
+unattended, first removes the spaces below it, deepest first, through the
+shared removal path, with a checkpoint and kept branch for each workspace but a
+disposable one, whatever their work, holds or questions; one that cannot go
+retains the parent, and the journal and
 the removal's output name those taken. While a parent's completion with cleanup
 stands at its HEAD, its children go too after the grace period, whatever their
 own work, unless one of their own keep-reasons, or a workspace still below them,
 keeps them; a child's own `done` follows the usual rules. The parent owns its
 children, so its processes may remove and hold them, except that the user's
 holds anywhere below refuse the removal. `work` lists children below their
-parent, and `status` names both. `split --agent` gives a child an agent of its
+parent, and `status` names the parent and children of either kind. `split --agent` gives a child an agent of its
 own through the agent queue, and `split --fork` gives it the parent's agent
 from a fork of its session, the one the caller's agent or else the parent's only
 agent reported last, so the parent need not restate what it learned; the daemon starts every launch in an existing
 workspace itself, detached, so the agent never inherits the caller's scope, and
 scoped callers may queue only for the workspaces below theirs, and cancel those
 entries or move them back, but never ahead of other work. A workspace's
-coordinator is the agent of its nearest ancestor that has one, or the chat that
-owns the workspace or an ancestor nearer than that agent: the events about
+coordinator is the agent of the nearest space above it that has one, whatever
+its kind, which one operation queues a message for: the events about
 it that notify the user, the child agent's messages, questions and completion
 and its agent's exits and stops, plus its ready marks, become that agent's
 messages instead, falling back to the user without a coordinator or when its
@@ -660,9 +668,8 @@ daemon starts them detached; resuming what the user or Shoal stopped, and
 confirming that an execution Shoal cannot prove ended did, stay the user's.
 Stopping a workspace stops the workspaces below it unless `--skip-children`
 says otherwise, since their agents work for it. Approval
-requests go to the direct parent space too: the parent workspace, skipping one
-without a running agent, else the chat that opened the workspace, since each
-knows best what its children need. A parent workspace approves only what it
+requests go up the same tree: to the nearest space above with an agent, of
+either kind, since each knows best what its children need. A parent workspace approves only what it
 holds an approved grant for, or a hold on its child, and otherwise denies or
 passes the request up; a chat runs with the user's authority and approves
 anything; the user decides at the top, and a chat whose agent stops or a
@@ -859,7 +866,7 @@ race a start.
 
 Tracked executions and processes started with exported workspace environments
 inherit a daemon-validated scope token that
-confines them to their own workspace and the child workspaces split from it:
+confines them to their own workspace and the spaces below it:
 status, inspect, execute, setup, and resources.
 Creation other than splitting a child, removal other than of a descendant the user holds nothing below,
 reconciliation, other workspaces, repository administration, and service control need an
@@ -1885,18 +1892,19 @@ under way and refuse while a process the chat owns still runs, since two agents
 would write one session and a removal would delete files in use, and a restore
 whose agent does not start leaves the chat stopped and tells the user, who may
 not see the place it opened. Starts, renames, stops, restores and removals
-are journal events. A workspace belongs to the
-chat that last opened it, and opening it outside a chat
-returns it to the user, so Shoal knows which chat coordinates which workers;
-removing the chat first removes them through the removal path of a workspace's
-children, and a stopped chat passes their events to the user unless it waits
-for its automatic restore.
+are journal events. A workspace a chat opens is its child in the one tree of
+spaces, unless it was split from a workspace, below which it stays; opening it
+outside a chat returns it to the user, so Shoal knows which chat coordinates
+which workers. Removing the chat first removes the spaces below it through the
+removal path of any space's children, and a stopped chat passes their events
+on up, to the user at the top, unless it waits for its automatic restore. A
+chat opens workspaces only in its own repository.
 Having no workspace, a chat keeps its messages in its own queue, which the same
 hooks deliver, including the user's request to rename it; a removed chat gives the user the notifications its unread
 messages stand for.
 A chat passes a question up by asking the user, who attends it. The approval
-requests of the workspaces it opened come to it when no parent workspace above
-them has an agent, and with the user's authority it may approve them; those it
+requests of the spaces below it come to it when it is the nearest space above
+them with an agent, and with the user's authority it may approve them; those it
 has not decided go to the user when its agent stops or it is removed, as with
 any deciding space. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
@@ -2088,8 +2096,8 @@ A proposal is an approval request whose record carries the command's options wit
 their defaults resolved, the workspace, branch, commit and agent, and copies of its
 attachments in the state directory until no pending proposal uses them; the command
 reports it and exits 0, because the agent goes on with its work and hears the
-decision as a message. A proposal is routed like any request, to the direct parent
-space and up to the user, but publishing to a forge other people see is the review
+decision as a message. A proposal is routed like any request, to the nearest
+space above with an agent and up to the user, but publishing to a forge other people see is the review
 the setting asks for, so only the user or a chat, which runs with the user's
 authority, approves one. A parent workspace may deny it with a reason or pass it
 up; marking it a duplicate comments on the forge too, so that is not a workspace's
@@ -2168,11 +2176,10 @@ an assignment's cleanup follows the workspace's repository. A proposal records
 the repository it opens in.
 Configured resources may require human approval for scoped acquisition. The daemon
 persists a request with a caller-supplied reason and the effective allocation settings;
-only an unscoped caller decides it, or the direct parent space of the requesting
-workspace: its parent workspace with an agent, which approves only what it holds
-an approved grant for with the same target and settings and otherwise denies or
-passes the request up, else the chat that opened it, which may approve anything;
-the user decides at the top. The decision is sent to the requesting
+only an unscoped caller decides it, or the nearest space above the requesting
+workspace with an agent: a workspace approves only what it holds an approved
+grant for with the same target and settings and otherwise denies or passes the
+request up, and a chat may approve anything; the user decides at the top. The decision is sent to the requesting
 workspace's agents as a message so they need not poll. Pending requests consume no capacity. Approval
 lasts until release by default, or for the workspace when configured, limited to the
 same resource and access settings. Changed settings require a new request; approval
@@ -2411,7 +2418,7 @@ setup and guidance, told the workspace moved. Moving a chat removes it here,
 stopping its agent, since a session that kept growing here would fork from the one that
 continues there, and the user attends a chat, so export asks first; a chat whose
 agent reported no session refuses before stopping it, since nothing could continue
-it, and so does one with workspaces below it, which its removal would take. Import starts the chat through `shoal chat`'s launch with the agent's resume
+it, and so does one with spaces below it, which its removal would take. Import starts the chat through `shoal chat`'s launch with the agent's resume
 arguments, under a free name since its own may be taken there, in the background
 when no terminal attends the import, as queued agents start. A chat keeps no
 record once it is removed, so a failed `move ssh` keeps its package where a workspace

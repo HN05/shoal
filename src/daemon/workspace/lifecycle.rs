@@ -14,7 +14,7 @@ use crate::{
         worktrunk::{self, BranchRemoval, FileRemoval},
     },
     hooks::{self, Hook, HookKind},
-    model::{CleanupReason, Workspace, WorkspaceRef},
+    model::{CleanupReason, SpaceKind, SpaceRef, Workspace},
     process,
     removal::{
         self, BranchOutcome, IdleRestore, InspectionPolicy, NOTHING, RemovalCheck, RemovalResult,
@@ -407,7 +407,7 @@ struct PostRemoveHook {
 
 impl Manager {
     /// What removing the workspace at the user's request would do, with the
-    /// workspaces below it it takes, and its changed files and whether
+    /// spaces below it it takes, deepest first, and its changed files and whether
     /// removal archives them when `include_changes` is set and it has any.
     pub async fn check_manual_removal(
         &self,
@@ -417,22 +417,14 @@ impl Manager {
         let mut check = self
             .check_removal(selector, InspectionPolicy::GitOnly)
             .await?;
-        for id in self
-            .subtree(&check.workspace.id)
-            .await?
-            .into_iter()
-            .skip(1)
-            .rev()
-        {
-            let child = self.workspace(&id).await?;
-            if child.disposable {
+        check.children = self.spaces_below(&check.workspace.id).await?;
+        check.children.reverse();
+        for child in &check.children {
+            if child.kind == crate::model::SpaceKind::Workspace
+                && self.workspace(&child.id).await?.disposable
+            {
                 check.disposable_children.push(child.id.clone());
             }
-            check.children.push(crate::model::WorkspaceRef {
-                id: child.id,
-                name: child.name,
-                branch: child.branch,
-            });
         }
         if include_changes && check.dirty {
             check.load_changed_files().await?;
@@ -1171,10 +1163,10 @@ impl Manager {
                 ensure!(
                     !crate::daemon::store::exists(
                         &tx,
-                        "SELECT 1 FROM workspaces WHERE parent_workspace_id=?1",
+                        "SELECT 1 FROM space_parents WHERE parent_id=?1",
                         [&id],
                     )?,
-                    "workspaces were split from it during removal; retaining it"
+                    "spaces were opened below it during removal; retaining it"
                 );
                 events::record(&tx, &id, EventKind::Removed, cause, None)?;
                 tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
@@ -1376,7 +1368,7 @@ impl Manager {
             bail!("{retention}; retaining workspace");
         }
         if matches!(stage, Stage::Initial) {
-            let below = check.workspace.child_workspaces.clone();
+            let below = check.workspace.children.clone();
             self.ensure_none_stalled_below(below, removal).await?;
         }
         removal.verify(&check, stage)?;
@@ -1409,8 +1401,8 @@ impl Manager {
             // none that something keeps goes with this one.
             (Removal::UnderCompleted { ancestor }, _) => {
                 ensure!(
-                    check.workspace.child_workspaces.is_empty(),
-                    "workspaces split from it remain; retaining it until they go"
+                    check.workspace.children.is_empty(),
+                    "spaces below it remain; retaining it until they go"
                 );
                 // A chat's worker may have been opened elsewhere since; the
                 // reservation keeps it where it is from here on.
@@ -1433,7 +1425,7 @@ impl Manager {
     /// rechecks it.
     async fn ensure_none_stalled_below(
         &self,
-        children: Vec<WorkspaceRef>,
+        children: Vec<SpaceRef>,
         removal: Removal<'_>,
     ) -> Result<()> {
         if !removal.skips_stalled() {
@@ -1441,13 +1433,16 @@ impl Manager {
         }
         let mut pending = children;
         while let Some(child) = pending.pop() {
-            let child = self.workspace(&child.id).await?;
-            ensure!(
-                self.file_access.stalled(&child.path).is_none(),
-                "file access stalled in the directory of {}, below it; retaining workspace",
-                child.name
-            );
-            pending.extend(child.child_workspaces);
+            // A chat has no directory of its own; those below it may.
+            if child.kind == SpaceKind::Workspace {
+                let workspace = self.workspace(&child.id).await?;
+                ensure!(
+                    self.file_access.stalled(&workspace.path).is_none(),
+                    "file access stalled in the directory of {}, below it; retaining workspace",
+                    child.name
+                );
+            }
+            pending.extend(self.children(&child.id).await?);
         }
         Ok(())
     }
@@ -1474,7 +1469,7 @@ impl Manager {
                 "commands are recorded; stop them with shoal stop or shoal rm"
             );
         }
-        let below = workspace.child_workspaces.clone();
+        let below = workspace.children.clone();
         self.ensure_none_stalled_below(below, removal).await?;
         self.stop_executions(
             &workspace.id,
@@ -1503,14 +1498,14 @@ impl Manager {
         })
     }
 
-    /// [`Self::remove_children`] for the workspaces split from `workspace`,
-    /// listed once it was reserved, so no split can follow.
+    /// [`Self::remove_children`] for the spaces below `workspace`, listed
+    /// once it was reserved, so no child can follow.
     async fn remove_workspace_children(
         &self,
         workspace: &Workspace,
         removal: Removal<'_>,
     ) -> Result<Vec<String>> {
-        let children = self.workspace(&workspace.id).await?.child_workspaces;
+        let children = self.children(&workspace.id).await?;
         self.remove_children(&workspace.name, children, removal)
             .await
     }
@@ -1519,12 +1514,12 @@ impl Manager {
     /// `removal` of it, each after those below it, returning their names in
     /// that order. The first that fails stops the rest and retains the
     /// parent, so no space outlives its parent. Each reservation refuses
-    /// splits from its workspace, so none appears below one whose children
+    /// children below its space, so none appears below one whose children
     /// were listed.
     async fn remove_children(
         &self,
         parent: &str,
-        children: Vec<WorkspaceRef>,
+        children: Vec<SpaceRef>,
         removal: Removal<'_>,
     ) -> Result<Vec<String>> {
         let mut removed = Vec::new();
@@ -1536,12 +1531,19 @@ impl Manager {
                 "{} was opened below {parent} after the removal was confirmed; retaining both",
                 child.name,
             );
-            let result = Box::pin(self.remove(&child.id, removal.of_child()))
-                .await
-                .with_context(|| {
-                    format!("{} below it was retained, so {parent} is too", child.name)
-                })?;
-            removed.extend(result.children);
+            let below = match child.kind {
+                SpaceKind::Workspace => Box::pin(self.remove(&child.id, removal.of_child()))
+                    .await
+                    .map(|result| result.children),
+                SpaceKind::Chat => match self.recorded_chat(&child.id).await? {
+                    Some(chat) => Box::pin(self.remove_chat_for(&chat, removal.of_child())).await,
+                    None => continue,
+                },
+            };
+            let below = below.with_context(|| {
+                format!("{} below it was retained, so {parent} is too", child.name)
+            })?;
+            removed.extend(below);
             if removal.announces_children() {
                 self.notify(
                     Some(&child.name),

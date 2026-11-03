@@ -248,13 +248,15 @@ impl AddPlan {
 
 /// Refuse what creation would refuse in the given repository, branch and
 /// options before a prompt asks for the rest of the addition. Only a terminal
-/// prompts; without one, creation refuses the arguments itself.
+/// prompts; without one, creation refuses the arguments itself, except that
+/// a repository other than the chat's is refused before a launch is queued.
 pub(super) async fn check_add_creation(
     ctx: &Context,
     target: &AddTarget,
     creation: &Creation,
 ) -> Result<()> {
-    if !ctx.interactive() {
+    let chat = env::chat();
+    if !ctx.interactive() && chat.is_none() {
         return Ok(());
     }
     request::<()>(
@@ -267,6 +269,7 @@ pub(super) async fn check_add_creation(
             git_profile: creation.git_profile.clone(),
             path: creation.path.clone(),
             options: creation.options,
+            chat,
         },
     )
     .await

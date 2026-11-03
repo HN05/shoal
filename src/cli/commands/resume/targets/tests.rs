@@ -25,6 +25,8 @@ fn spaces() -> Spaces {
         links: Default::default(),
         review: Vec::new(),
         completion: None,
+        parent: None,
+        children: Vec::new(),
     };
     Spaces {
         workspaces: vec![workspace],

@@ -109,6 +109,8 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_id_or_name() {
         links: Default::default(),
         review: Vec::new(),
         completion: None,
+        parent: None,
+        children: Vec::new(),
     };
     let spaces = Spaces {
         workspaces: vec![workspace],
@@ -126,38 +128,51 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_id_or_name() {
 }
 
 #[test]
-fn the_workspaces_below_a_chat_include_those_split_from_them() {
-    let workspace = |id: &str, chat: Option<&str>, parent: Option<&str>| -> Workspace {
-        serde_json::from_value(serde_json::json!({
+fn the_spaces_below_a_space_include_those_below_them() {
+    let space = |id: &str, kind: SpaceKind| SpaceRef {
+        id: id.into(),
+        name: id.into(),
+        kind,
+        branch: (kind == SpaceKind::Workspace).then(|| id.into()),
+    };
+    let workspace = |id: &str, children: Vec<SpaceRef>| -> Workspace {
+        let mut workspace: Workspace = serde_json::from_value(serde_json::json!({
             "id": id,
             "repository_id": "repo",
             "name": id,
             "path": format!("/{id}"),
             "branch": id,
             "state": "ready",
-            "chat": chat,
-            "parent_workspace": parent.map(|parent| serde_json::json!({
-                "id": parent, "name": parent, "branch": parent,
-            })),
         }))
-        .unwrap()
+        .unwrap();
+        workspace.children = children;
+        workspace
+    };
+    let chat = |id: &str, children: Vec<SpaceRef>| -> Chat {
+        let mut chat: Chat = serde_json::from_value(serde_json::json!({
+            "id": id, "repository_id": "repo", "name": id, "agent": "claude",
+            "pid": 1, "started_at": 1,
+        }))
+        .unwrap();
+        chat.children = children;
+        chat
     };
     let spaces = Spaces {
         workspaces: vec![
-            workspace("grandchild", Some("talk"), Some("opened")),
-            workspace("opened", Some("talk"), None),
-            workspace("other", None, None),
-            // Split from a workspace the chat did not open, it stays with that one.
-            workspace("adopted", Some("talk"), Some("other")),
+            workspace("opened", vec![space("planning", SpaceKind::Chat)]),
+            workspace("grandchild", Vec::new()),
+            workspace("other", Vec::new()),
         ],
-        chats: Vec::new(),
+        chats: vec![
+            chat("talk", vec![space("opened", SpaceKind::Workspace)]),
+            chat("planning", vec![space("grandchild", SpaceKind::Workspace)]),
+        ],
     };
-    let below: Vec<&str> = spaces
-        .below_chat("talk")
-        .iter()
-        .map(|workspace| workspace.id.as_str())
+    let below: Vec<String> = (spaces.below("talk").into_iter())
+        .map(|space| space.id)
         .collect();
-    assert_eq!(below, ["opened", "grandchild"]);
+    assert_eq!(below, ["opened", "planning", "grandchild"]);
+    assert!(spaces.below("other").is_empty());
 }
 
 #[test]

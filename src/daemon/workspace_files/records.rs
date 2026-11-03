@@ -121,9 +121,12 @@ pub(crate) fn record(
                 (space_id,space,parent_id,repository_id,source,name,title,path,bytes,
                     created_at,attached_by)
                 SELECT id,name,parent,repository_id,?2,?3,?4,?5,?6,unixepoch(),?7
-                FROM (SELECT id,name,parent_workspace_id AS parent,repository_id
+                FROM (SELECT id,name,(SELECT parent_id FROM space_parents WHERE space_id=?1)
+                            AS parent,repository_id
                         FROM workspaces WHERE id=?1
-                    UNION ALL SELECT id,name,NULL,repository_id FROM chats WHERE id=?1)
+                    UNION ALL SELECT id,name,(SELECT parent_id FROM space_parents WHERE space_id=?1),
+                            repository_id
+                        FROM chats WHERE id=?1)
                 WHERE true
                 ON CONFLICT(path) DO UPDATE SET title=COALESCE(excluded.title,title)",
             params![
@@ -263,14 +266,15 @@ pub(super) fn forget_space(db: &mut Connection, space_id: &str) -> Result<()> {
 }
 
 /// Keep the files of the chat `chat_id`, which keep its last name, until
-/// `expires_at`, in the transaction that deletes the chat, before its row
-/// goes.
+/// `expires_at`, and move those it was the parent of to its own parent, in
+/// the transaction that deletes the chat, before its row goes.
 pub(crate) fn keep_ended_chat(tx: &Transaction<'_>, chat_id: &str, expires_at: i64) -> Result<()> {
     tx.execute(
         "UPDATE workspace_files SET space=(SELECT name FROM chats WHERE id=?1)
             WHERE space_id=?1",
         [chat_id],
     )?;
+    reparent(tx, chat_id)?;
     tx.execute(
         "INSERT OR REPLACE INTO ended_chats(chat_id,expires_at) SELECT ?1,?2
             WHERE EXISTS(SELECT 1 FROM workspace_files WHERE space_id=?1)",
@@ -305,11 +309,18 @@ pub(crate) fn forget_removed(tx: &Transaction<'_>, workspace_id: &str) -> Result
             WHERE space_id=?1",
         [workspace_id],
     )?;
+    reparent(tx, workspace_id)?;
+    Ok(())
+}
+
+/// Move the records of files whose space was below the space `id`, which
+/// goes, to its own parent.
+fn reparent(tx: &Transaction<'_>, id: &str) -> Result<()> {
     tx.execute(
         "UPDATE workspace_files
-            SET parent_id=(SELECT parent_workspace_id FROM workspaces WHERE id=?1)
+            SET parent_id=(SELECT parent_id FROM space_parents WHERE space_id=?1)
             WHERE parent_id=?1",
-        [workspace_id],
+        [id],
     )?;
     Ok(())
 }

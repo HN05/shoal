@@ -321,7 +321,7 @@ finishes waiting agents at once, keeping their records for `shoal resume`.
 
 `shoal stop [workspace...]` stops tracked agents and commands through their wrappers,
 which print what stopped them and how to restore them, retaining work and resource leases. It stops
-the workspaces split from each selected one too, unless `--skip-children`. Its agents, and those
+the workspaces below each selected one too, through spaces of either kind, unless `--skip-children`. Its agents, and those
 stopped there before, stay down until `shoal resume` continues them: each
 becomes a last session, as an agent that exits on its own leaves, which holds
 no agent slot, keeps nothing from cleanup and nothing restores on its own. To
@@ -670,7 +670,7 @@ shoal status resource devices            # Workspaces that hold a devices lease
 shoal stop fix-login                     # Stop agents and commands until shoal resume
 shoal rm fix-login                       # Remove; choose what to keep if work differs
 shoal rm fix-login old-spike             # Remove several, confirming once for all
-shoal rm plan-cache                      # Remove a chat and the workspaces below it
+shoal rm plan-cache                      # Remove a chat and the spaces below it
 ```
 
 Bare `shoal` opens an fzf picker on the [inbox](#inbox) when something needs you,
@@ -757,8 +757,8 @@ place a focused `add` opened. Scoped callers keep no such history.
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers
-remain confined to their own workspace and the [child workspaces](#child-workspaces)
-split from it: without a target, a scoped command acts on the child whose
+remain confined to their own workspace and the spaces below it
+([child workspaces](#child-workspaces) and those a chat below opened): without a target, a scoped command acts on the child whose
 directory it runs in, otherwise on the caller's own workspace, and agent hooks
 always report for the caller's own. Another omitted required argument that
 names an existing record opens a picker of those records, under the same
@@ -1768,7 +1768,7 @@ once the daemon runs again: under its name, in a background place where a
 restored agent opens, continuing its session. A stopped chat keeps its links,
 files, messages, questions, workspaces and `TMPDIR`, and `shoal work` lists it
 as `stopped`. A chat ends only when it is removed: by `shoal rm <chat>`, which
-first removes the workspaces below it and stops its agent, by
+first removes the spaces below it and stops its agent, by
 `shoal resume <chat> --discard`, or by [cleanup](#automatic-cleanup), as a workspace is.
 Workspaces and chats share one set of names across
 repositories: a chat cannot take a workspace's name or a name an unfinished
@@ -1786,15 +1786,17 @@ one; one the user named keeps its label. `shoal chat rename --request [chat]`
 asks the chat's agent to choose the name and set it instead. Workspace processes
 cannot rename chats.
 
-`shoal work` lists the chat by name with the workspaces it
-opened, and [workspace events](#workspace-events) report its start, renames, stops,
-restores and removal. A workspace
-belongs to the chat whose agent last opened it with `shoal add`: its `chat`
-field and `shoal status` name that chat until the workspace is opened outside a
-chat, which returns it to you. While it runs, or waits to come back on its own,
-the chat [coordinates](#child-workspaces) the workspaces it owns; while it is
-otherwise stopped, their events reach you, and one removed before receiving
-their events gives you the notifications they stand for.
+`shoal work` lists the chat by name with the spaces below it, and
+[workspace events](#workspace-events) report its start, renames, stops,
+restores and removal. A workspace the chat's agent opens with `shoal add` is
+below the chat, unless it was split from a workspace, below which it stays: its `parent` field and `shoal status` name the chat until the
+workspace is opened outside a chat, which returns it to you. The chat opens
+workspaces only in its own repository; one in another repository is refused.
+While it runs, or waits to come back on its own, the chat
+[coordinates](#child-workspaces) the spaces below it; while it is otherwise stopped, their
+events go on up, to you at the top, and one removed before receiving their
+events gives you the notifications they stand for. The chat's `parent` and
+`children` fields name the spaces above and below it.
 
 ### Planning issues
 
@@ -2209,21 +2211,21 @@ give `branch` null and `at` with `commit` and `made_for` (`{"ref": name}` or
 `{"pr": number}`). `{branch}` is empty for it in configured commands and agent
 templates, and place names use its name instead.
 
-The parent's agent receives the issue and PR activity of its children that have
-no agent of their own, and of their children in turn, through its hooks and an
-unfiltered or kind-filtered `watch`; each such update names its workspace in
-`workspace`. A child with an agent of its own, one that reports its turn state,
+The parent's agent receives the issue and PR activity of the spaces below it
+that have no agent of their own, and of those
+below them in turn, through its hooks and an unfiltered or kind-filtered
+`watch`; each such update names its space in `workspace`. A child with an agent of its own, one that reports its turn state,
 any agent Shoal tracks there or one whose restore waits in the
 [agent queue](#agent-queue), receives its own activity
 and its subtree's instead.
 
 A child never keeps its parent: the parent's idle, merged, completion and PR
 cleanup follow its own state. Every removal of a parent, `shoal rm`, cleanup or
-the cleanup of its deleted directory, first removes the workspaces below it,
-deepest first, whatever their work, holds or questions: each stops its agents,
-and unless it is disposable keeps a checkpoint of its HEAD and unsaved files, and
-its branch unless a remote or the default branch has its commits, so `shoal work
-restore` brings it back. A child that cannot go retains the parent. `shoal rm` names the children
+the cleanup of its deleted directory, first removes the spaces below it,
+deepest first, whatever their work, holds or questions: each workspace stops its
+agents, and unless it is disposable keeps a checkpoint of its HEAD and unsaved
+files, and its branch unless a remote or the default branch has its commits, so
+`shoal work restore` brings it back, and each chat stops its agent. A child that cannot go retains the parent. `shoal rm` names the children
 before asking, and its result names them in `children`; each child's journal
 records a `removed` event with the cause `parent`, and the user is notified of
 those an unattended removal took. Exporting one workspace with children is
@@ -2237,7 +2239,8 @@ workspaces still below it until they go. `undone`, a commit after `done`, or a
 `done` without cleanup leaves the children. A child's own `done` follows the
 usual rules. `work` lists children indented below their parent;
 `status` shows both directions, and `work --json` and `status --json` give
-`parent_workspace` (`id`, `name`, `branch`, or null) and `child_workspaces`.
+`parent` (`id`, `name`, `kind`, `workspace` or `chat`, and a workspace's
+`branch`, or null) and `children`, the spaces below it, as do chats.
 
 `--agent` starts an agent of its own in the ready child, prompted with the
 issue or the arguments after `--`. It goes through the [agent queue](#agent-queue)
@@ -3116,7 +3119,7 @@ whether or not its agent ran `done`.
 A [chat](#chats), named or the one this runs in, records that its work is
 finished at its checkout's HEAD, and its agent and session keep running until
 completion cleanup, requested as for a workspace, removes the chat and the
-workspaces below it after the grace period, stopping its agent, whatever PRs it
+spaces below it after the grace period, stopping its agent, whatever PRs it
 watches. It has no branch or demos, so `--integrated` and
 `--keep-demos` are refused. `--attach` hands files back into the chat's attached files, its
 open questions close, and the user is notified, since a chat has no parent. Its
@@ -3193,9 +3196,9 @@ in `placed_by` whether the user or an app hosting an external session placed it
 (`user`), or an agent (`agent`). Workspace processes hold and release the
 workspaces below their own directly. Holding their own workspace is an approval
 request with the target `hold/<name>`, which needs `--reason` and goes to the
-direct parent space, as other [approval requests](#resource-approvals) do: the
-parent workspace with a running agent, which needs no grant to decide it, else
-the chat that opened the workspace, else the user; approval places the hold,
+nearest space above with an agent, as other [approval requests](#resource-approvals)
+do: a workspace, which needs no grant to decide it, or a chat, else the user;
+approval places the hold,
 and acquiring again returns it.
 Workspace processes release only the holds agents placed, on their own workspace
 or below it; the user's stay theirs to release. `status` and `work --json` show holds on the workspace record. `rm` lists holders before
@@ -3554,8 +3557,8 @@ Files given with `--attach` are copied into Shoal's state directory, since the
 agent's copies may be gone when you decide, and deleted once no pending proposal
 uses them, by the next decision or proposal or by the cleanup sweep. Both commands exit 0 with JSON `proposed`, the request, and the agent
 continues its work. A proposal is routed like other
-[approval requests](#resource-approvals): a workspace with an agent above it, or
-the chat that opened it, decides it before you do. Only you or a chat approve
+[approval requests](#resource-approvals): the nearest space above with an agent,
+a workspace or a chat, decides it before you do. Only you or a chat approve
 one; a parent workspace may deny it with `--reason` or pass it up.
 
 ```sh
@@ -4164,7 +4167,7 @@ timers reset on restart. The daemon needs `lsof` on PATH.
 
 [Chats](#chats) follow the same rules, with their repository's settings and
 none of the conditions on a worktree: a chat goes once its agent stopped, with
-the workspaces below it, unless a restore waits to run it, a hold, an open
+the spaces below it, unless a restore waits to run it, a hold, an open
 question, or for idle cleanup a session Shoal saved, as saved agents keep a
 workspace, a completion, a linked issue or a watched PR keeps it. Merged cleanup removes one whose agent has been stopped for its
 `idle_minutes`, and cleanup after `shoal done` removes a done chat, stopping its
@@ -4258,7 +4261,7 @@ Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at
 workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`,
 `branch`, `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `chat_changed`, `demo_started`, `demo_stopped`, `simulator_acquired` and `simulator_released`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
+`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `parent_changed`, `demo_started`, `demo_stopped`, `simulator_acquired` and `simulator_released`; history from earlier versions may also contain `continued` and `chat_changed`. Review events add a `review` object with the mark's `kind`,
 `url` (both null for a workspace mark) and `head`. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. Agent state
 events add `agent_state` with the reported `state`, null when its execution ended.
@@ -4267,8 +4270,11 @@ of a change Shoal made to an issue or PR. `item_activity` events add an
 `item_activity` object with the item's `kind` and `url`, and an `update` object
 with the observed update's `kind` and `message`. `created` and `base_changed`
 events add `base_workspace` with the base's `id`, `name` and `branch`, or null.
-`chat_changed` events add `chat`, the ID of the [chat](#chats) that opened the
-workspace, or null once it returned to you.
+`created` and `parent_changed` events add `parent`, the space above the
+workspace with its `id`, `name`, `kind` and a workspace's `branch`, or null once
+a [chat](#chats) that opened it returned it to you. Earlier versions recorded
+`parent_workspace` on these events and `chat`, the chat's ID, on
+`chat_changed` events.
 `demo_started` events, when a [demo](#demos)'s command first runs, and
 `demo_stopped` events, when a demo that ran ends, add `demo` with its `name`,
 `preset` and, for a simulator demo, the device's `udid`.
@@ -4489,8 +4495,8 @@ only the copies of those files. It asks first when an agent or command runs in
 the workspace, or the chat runs. `--all` deletes the files of every workspace
 and chat where none runs, after asking; noninteractive and JSON calls confirm with `--yes`. Sending files
 again copies any deleted copy anew. Scoped agents may list, add and delete the
-files of their own workspace and those split from it, and the results of a
-removed workspace that was split from one of those, but not use `--all` or
+files of their own workspace and the spaces below it, and the results of a
+removed space that was below one of those, but not use `--all` or
 reach a chat's files.
 
 ### Questions
@@ -4731,8 +4737,9 @@ PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `diff`, `work setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.
-They `merge` only with [approval](#merge-into-the-default-branch) and cannot reach worktrees outside the workspaces split
-from theirs, create workspaces other than by `split`, remove workspaces other than those below theirs without holds, read
+They `merge` only with [approval](#merge-into-the-default-branch) and cannot
+reach spaces other than the ones below theirs, create workspaces other than by
+`split`, remove spaces other than those below theirs without holds, read
 notifications, or administer repositories or the daemon service; nested commands
 keep the scope. A command whose ancestor carries scope for the same state directory
 gets the CLI's scoped refusals even after the token is removed from its
@@ -4956,13 +4963,13 @@ unread; otherwise its deciding coordinator is told, or the user gets
 `approval_withdrawn`. A command that retries the request, such as a queued
 `acquire`, requests it again.
 
-A request from a workspace with an agent of its own goes to its direct parent
-space first: its parent [workspace](#child-workspaces), skipping one without a
-running agent, else the running [chat](#chats) that opened it. That space's
+A request from a workspace with an agent of its own goes first to the nearest
+space above it with an agent: a parent [workspace](#child-workspaces) or a
+[chat](#chats), whichever comes first. That space's
 agent is told and decides it instead of the user, by number with
 `shoal approvals --approve <number>` or `shoal approvals --deny <number>`, or
-passes it up with `shoal approvals --escalate <number>`, to the parent's parent
-and at the top to the user. A parent workspace approves only what it holds an
+passes it up with `shoal approvals --escalate <number>`, to the next such
+space above and at the top to the user. A parent workspace approves only what it holds an
 approved grant for, with the same target and settings, or a request to hold the
 workspace, which needs none; otherwise `--approve` is refused and it denies or
 passes the request up. It never approves a proposal or denies one as a

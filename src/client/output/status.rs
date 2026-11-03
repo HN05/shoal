@@ -12,9 +12,6 @@ pub struct StatusView {
     /// Why sessions could not be listed; status still reports the rest.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sessions_error: Option<String>,
-    /// How text names the chat that opened a workspace; JSON gives its ID.
-    #[serde(skip)]
-    pub chat: Option<String>,
 }
 
 /// A running agent session that `shoal attach` can reach.

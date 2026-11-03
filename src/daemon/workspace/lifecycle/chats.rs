@@ -182,7 +182,7 @@ impl Manager {
             self.recheck_chat(&chat.id, removal).await?;
             reservation
         };
-        let below = self.chat_children(&chat.id).await?;
+        let below = self.children(&chat.id).await?;
         let children = self.remove_children(&chat.name, below, removal).await?;
         // A save or restore under way would run the agent the removal stops.
         let _saving = self.chat_saves.lock().await;
@@ -234,7 +234,7 @@ impl Manager {
         if chat.restore.is_some() {
             self.ensure_ended(chat, std::process::id()).await?;
         }
-        let below = self.chat_children(&chat.id).await?;
+        let below = self.children(&chat.id).await?;
         self.ensure_none_stalled_below(below, removal).await?;
         match removal {
             Removal::Automatic { snapshot, .. } => ensure!(

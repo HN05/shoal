@@ -66,7 +66,8 @@ pub(crate) use restore::removal_notice;
 pub(crate) use stack::record_base_changed;
 pub use stopped_work::Discarded;
 pub(crate) use tree::{
-    Source, TrackedAgents, chat_children, deciders, delegated, receiving_paths, spaces_above,
+    Source, TrackedAgents, children, deciders, delegated, ensure_parent, parent, parent_id,
+    parent_in_repository, receiving_paths, set_parent, spaces_above,
 };
 
 use crate::daemon::refusal::{Reason, Refusal};
@@ -630,11 +631,13 @@ impl Manager {
                     Some(branch) => stack::owner(&tx, &record.repository_id, branch)?,
                     None => None,
                 };
+                // Recorded first, so the workspace's creation names it.
                 if let Some(parent) = &parent {
-                    tree::ensure_parent(&tx, &record.repository_id, parent)?;
+                    tree::ensure_parent(&tx, &record.repository_id, &record.id, parent)?;
+                    tree::set_parent(&tx, &record.id, Some(parent))?;
                 }
                 tx.execute(
-                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,parent_workspace_id,start_commit,made_for,setup_skipped,disposable) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15,?16,?17)",
+                    "INSERT INTO workspaces (id,repository_id,name,path,branch,state,git_dir,git_dir_id,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?5,?12,?13,?14,?15,?16)",
                     params![
                         record.id,
                         record.repository_id,
@@ -648,7 +651,6 @@ impl Manager {
                         record.base_ref,
                         record.state == WorkspaceState::Ready,
                         base_workspace,
-                        parent,
                         record.at.as_ref().map(|at| &at.commit),
                         record.at.as_ref().and_then(|at| at.made_for.as_ref()).map(serde_json::to_string).transpose()?,
                         record.setup_skipped,
@@ -1136,11 +1138,6 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     stack::load(db, workspace)?;
     tree::load(db, workspace)?;
     workspace.links = store::space_links(db, &workspace.id)?;
-    workspace.chat = db.query_row(
-        "SELECT chat_id FROM workspaces WHERE id=?1",
-        [&workspace.id],
-        |row| row.get(0),
-    )?;
     workspace.running = store::exists(
         db,
         "SELECT 1 FROM executions WHERE workspace_id=?1 AND state=?2",

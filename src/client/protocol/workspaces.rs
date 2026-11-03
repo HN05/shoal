@@ -79,6 +79,10 @@ pub enum WorkspaceMethod {
         path: Option<std::path::PathBuf>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
+        /// The chat the workspace would be below, which must be in the
+        /// repository.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        chat: Option<String>,
     },
     /// Refuse the work `after` names that a queued launch in `repository`
     /// could not wait for, without queuing anything.

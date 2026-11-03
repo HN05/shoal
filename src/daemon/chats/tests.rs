@@ -1,11 +1,12 @@
 use super::*;
 use crate::{
     daemon::events::{ChatEventKind, EventItem, EventKind},
+    model::SpaceRef,
     test_support::{manager, repository},
 };
 
-/// Chat starts, stops and removals, and workspace chat changes, in journal
-/// order.
+/// Chat starts, stops and removals, and workspace parent changes, in
+/// journal order.
 async fn chat_events(manager: &Manager) -> Vec<String> {
     manager
         .workspace_events(None, 100)
@@ -14,9 +15,10 @@ async fn chat_events(manager: &Manager) -> Vec<String> {
         .into_iter()
         .filter_map(|item| match item {
             EventItem::Chat(event) => Some(format!("{} {}", event.kind, event.chat.name)),
-            EventItem::Event(event) if event.details.kind == EventKind::ChatChanged => Some(
-                format!("{} {:?}", event.details.name, event.details.chat.flatten()),
-            ),
+            EventItem::Event(event) if event.details.kind == EventKind::ParentChanged => {
+                let parent = event.details.parent.flatten().map(|parent| parent.id);
+                Some(format!("{} {parent:?}", event.details.name))
+            }
             EventItem::Event(_) | EventItem::File(_) | EventItem::Gap { .. } => None,
         })
         .collect()
@@ -72,7 +74,12 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         .await
         .unwrap();
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().chat,
+        manager
+            .workspace(&workspace.id)
+            .await
+            .unwrap()
+            .parent
+            .map(|parent| parent.id),
         Some(ending.id.clone())
     );
     // An unknown chat gives the workspace to the user rather than failing.
@@ -80,7 +87,15 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         .assign_chat(&workspace.id, Some("gone".into()))
         .await
         .unwrap();
-    assert_eq!(manager.workspace(&workspace.id).await.unwrap().chat, None);
+    assert_eq!(
+        manager
+            .workspace(&workspace.id)
+            .await
+            .unwrap()
+            .parent
+            .map(|parent| parent.id),
+        None
+    );
     manager
         .assign_chat(&workspace.id, Some(ending.id.clone()))
         .await
@@ -89,8 +104,15 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     // The chat stops with its process, waiting for `shoal resume` with its
     // workspace and its name.
     process.kill();
+    let worker = SpaceRef {
+        id: workspace.id.clone(),
+        name: workspace.name.clone(),
+        kind: SpaceKind::Workspace,
+        branch: workspace.branch.clone(),
+    };
     let stopped = Chat {
         restore: Some(ChatRestore::Resume),
+        children: vec![worker],
         ..ending.clone()
     };
     assert_eq!(
@@ -98,7 +120,12 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         [stopped.clone(), running.clone()]
     );
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().chat,
+        manager
+            .workspace(&workspace.id)
+            .await
+            .unwrap()
+            .parent
+            .map(|parent| parent.id),
         Some(ending.id.clone())
     );
     let error = manager

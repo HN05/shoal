@@ -34,7 +34,11 @@ pub(super) async fn resolve_add_target(
 ) -> Result<AddTarget> {
     // Load on first use so explicit targets keep their original failure order.
     let mut repositories = None;
+    // A chat opens workspaces only in its own repository, which is
+    // registered, so registering another is never offered there.
+    let offer = crate::env::chat().is_none();
     let selector = match repository {
+        Some(repo) if !offer => ui::repository_selector(repo)?,
         Some(repo) => {
             let selector = ui::repository_selector(repo)?;
             repositories::offer_unregistered(ctx, &selector)
@@ -45,7 +49,7 @@ pub(super) async fn resolve_add_target(
             let repos = repositories.insert(client::repositories(&ctx.paths).await?);
             match issue {
                 Some(url) if IssueInput::parse(url) == IssueInput::Url => {
-                    issues::repository_for(ctx, repos, url).await?.into()
+                    issues::repository_for(ctx, repos, url, offer).await?.into()
                 }
                 Some(_) => issues::current_repository(ctx, repos.clone(), issues::REPO_OR_URL)
                     .await?

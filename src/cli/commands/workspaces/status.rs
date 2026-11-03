@@ -13,7 +13,7 @@ use crate::{
         ui::{self, Fallback},
     },
     forge::{IssueInput, items::link::Selection},
-    model::{Chat, PresentSpace, SpaceDetail, SpaceStatus, SpaceTarget, Workspace},
+    model::{PresentSpace, SpaceDetail, SpaceStatus, SpaceTarget},
     protocol::{ConfigTarget, WorkspaceMethod},
 };
 
@@ -47,14 +47,8 @@ pub(in crate::cli::commands) async fn status(
 
 /// The status of `space`, with the sessions its terminal hosts keep.
 async fn status_view(ctx: &Context, space: String) -> Result<StatusView> {
-    // Listing chats first ends finished ones, returning their workspaces to the user.
-    let chats = client::recorded_chats(&ctx.paths).await?;
     let status =
         *request::<Box<SpaceStatus>>(&ctx.paths, WorkspaceMethod::SpaceStatus { space }).await?;
-    let chat = status
-        .space
-        .worktree()
-        .and_then(|worktree| chat_name(&chats, &worktree.workspace));
     let (sessions, sessions_error) = match sessions(ctx, &status.space).await {
         Ok(sessions) => (sessions, None),
         Err(error) => (Vec::new(), Some(format!("{error:#}"))),
@@ -66,7 +60,6 @@ async fn status_view(ctx: &Context, space: String) -> Result<StatusView> {
             .map(terminal::Session::output)
             .collect(),
         sessions_error,
-        chat,
     })
 }
 
@@ -85,16 +78,6 @@ async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<terminal::Se
     };
     let settings = client::settings(&ctx.paths, target).await?;
     terminal::sessions(&settings, &places).await
-}
-
-/// The listed chat that opened `workspace` with its agent, else its ID, which
-/// scoped callers see without the chat.
-fn chat_name(chats: &[Chat], workspace: &Workspace) -> Option<String> {
-    let id = workspace.chat.as_ref()?;
-    Some(match chats.iter().find(|chat| chat.id == *id) {
-        Some(chat) => format!("{} ({})", chat.name, chat.agent),
-        None => id.clone(),
-    })
 }
 
 /// Linked items find the spaces that link them, and resources the

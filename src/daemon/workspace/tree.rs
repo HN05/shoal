@@ -1,5 +1,7 @@
-//! Child workspaces: workspaces split from a parent, whose agent works on them
-//! or coordinates their agents. Children form a tree within one repository.
+//! The tree of spaces. Every space has at most one parent, a workspace or a
+//! chat in its repository, whose agent works on it or coordinates its agent;
+//! `space_parents` records it. Every reader takes one walk up or one walk
+//! down that link, whatever each space's kind.
 use std::path::PathBuf;
 
 use anyhow::{Result, bail, ensure};
@@ -8,9 +10,14 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
-    model::{Workspace, WorkspaceRef},
-    state::WorkspaceState,
+    model::{SpaceRef, Workspace, WorkspaceRef},
+    state::{ChatRestore, WorkspaceState},
 };
+
+/// Every space as `id, repository_id, name, kind, branch`; a chat has no
+/// branch.
+const SPACES: &str = "(SELECT id,repository_id,name,'workspace' AS kind,branch FROM workspaces
+    UNION ALL SELECT id,repository_id,name,'chat' AS kind,NULL AS branch FROM chats)";
 
 impl Manager {
     /// Create a workspace on a new branch named `name` in `parent`'s
@@ -53,7 +60,7 @@ impl Manager {
         .await
     }
 
-    /// Whether `id` is `ancestor` or a workspace below it.
+    /// Whether `id` is `ancestor` or a space below it.
     pub async fn within_subtree(&self, ancestor: &str, id: &str) -> Result<bool> {
         let (ancestor, id) = (ancestor.to_owned(), id.to_owned());
         self.store
@@ -61,10 +68,45 @@ impl Manager {
             .await
     }
 
-    /// `id` and every workspace below it, `id` first.
+    /// `id` and every space below it, `id` first.
     pub async fn subtree(&self, id: &str) -> Result<Vec<String>> {
         let id = id.to_owned();
         self.store.run(move |db| subtree(db, &id)).await
+    }
+
+    /// The spaces below `id`, nearest first.
+    pub(crate) async fn spaces_below(&self, id: &str) -> Result<Vec<SpaceRef>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .prepare(&format!(
+                        "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM down
+                            JOIN {SPACES} AS spaces USING(id)
+                            WHERE depth > 0 ORDER BY depth, spaces.id",
+                        down("true")
+                    ))?
+                    .query_map([id], space_ref)?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+    }
+
+    /// The spaces above `id`, nearest first.
+    pub(crate) async fn ancestors(&self, id: &str) -> Result<Vec<SpaceRef>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .prepare(&format!(
+                        "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM up
+                            JOIN {SPACES} AS spaces USING(id) WHERE depth > 0 ORDER BY depth",
+                        up("true")
+                    ))?
+                    .query_map([id], space_ref)?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
     }
 
     /// The ID, name and branch of `root` and every workspace below it, or
@@ -75,25 +117,29 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .prepare(&subtree_query("id,name,branch"))?
-                    .query_map([root], row)?
+                    .query_map([root], |row| {
+                        Ok(WorkspaceRef {
+                            id: row.get(0)?,
+                            name: row.get(1)?,
+                            branch: row.get(2)?,
+                        })
+                    })?
                     .collect::<rusqlite::Result<_>>()?)
             })
             .await
     }
 
-    /// The workspaces directly below the chat `id`: those it opened that no
-    /// workspace was split from.
-    pub(crate) async fn chat_children(&self, id: &str) -> Result<Vec<WorkspaceRef>> {
+    /// The spaces directly below the space `id`, by name.
+    pub(crate) async fn children(&self, id: &str) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
-        self.store.run(move |db| chat_children(db, &id)).await
+        self.store.run(move |db| children(db, &id)).await
     }
 
     /// Queue `message` about the workspace named `name` for its coordinator,
-    /// with Shoal's copies `attachments` of the files it sent: the agent of
-    /// its nearest ancestor that has one, or the chat that owns it or a
-    /// nearer ancestor, while that chat runs or waits for its automatic
-    /// restore. `kind` is the notification the event would be
-    /// for the user. Returns false when there is no coordinator, its
+    /// with Shoal's copies `attachments` of the files it sent: the nearest
+    /// space above it with an agent, which receives what arrived once a
+    /// queued restore starts it. `kind` is the notification the event would
+    /// be for the user. Returns false when there is no coordinator, its
     /// messages are full, or the event comes from an agent and the workspace
     /// has none of its own, since the coordinator itself or the user acted
     /// there; the user then receives the event instead.
@@ -112,22 +158,22 @@ impl Manager {
             .store
             .run(move |db| coordinator(db, &lookup, source, &agents))
             .await;
-        let queued = match found {
-            Ok(Some(Coordinator::Agent(workspace))) => {
-                let message = format!("{name}: {message}");
-                (self.queue_agent_message_attached(&workspace, message, attachments)).await
-            }
-            Ok(Some(Coordinator::Chat(chat))) => {
-                let about = Some(name);
-                (self.queue_chat_message(&chat, about, workspace_id, kind, message, attachments))
-                    .await
-            }
+        let coordinator = match found {
+            Ok(Some(coordinator)) => coordinator,
             Ok(None) => return false,
             Err(error) => {
                 crate::daemon::log!("coordinator of {name}: {error:#}");
                 return false;
             }
         };
+        let about = super::super::spaces::About {
+            name,
+            id: workspace_id,
+            kind,
+        };
+        let queued = self
+            .queue_space_message(&coordinator, Some(about), message, attachments)
+            .await;
         match queued {
             Ok(()) => true,
             Err(error) => {
@@ -137,9 +183,9 @@ impl Manager {
         }
     }
 
-    /// The workspaces below `id` whose activity its agent receives: children
+    /// The spaces below `id` whose activity its agent receives: children
     /// without an agent of their own, and theirs in turn.
-    pub(crate) async fn delegated_workspaces(&self, id: &str) -> Result<Vec<WorkspaceRef>> {
+    pub(crate) async fn delegated_spaces(&self, id: &str) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         let agents = self.tracked_agents().await;
         self.store.run(move |db| delegated(db, &id, &agents)).await
@@ -163,93 +209,196 @@ impl TrackedAgents {
     }
 }
 
-/// SQL true when the workspace in `column` has an agent: one reporting its
-/// turn state, one whose restore is queued, which receives what arrived once
-/// it starts, or one in the tracked agents bound as parameter `?2`.
+/// The one walk up: a recursive query `up(id, depth)` of the space `?1` at
+/// depth 0 and the spaces above it, nearest first, going on above a space
+/// only while `climb`, an SQL condition on `up.id`, holds.
+fn up(climb: &str) -> String {
+    format!(
+        "WITH RECURSIVE up(id, depth) AS (
+            SELECT ?1, 0
+            UNION ALL SELECT space_parents.parent_id, up.depth + 1 FROM up
+                JOIN space_parents ON space_parents.space_id=up.id
+                WHERE {climb}
+        )"
+    )
+}
+
+/// The one walk down: a recursive query `down(id, depth, path)` of the
+/// space `?1` at depth 0 and the spaces below it, each with the IDs from
+/// `?1` down to it joined by commas, entering a space below only while
+/// `descend`, an SQL condition on its `space_parents.space_id`, holds.
+fn down(descend: &str) -> String {
+    format!(
+        "WITH RECURSIVE down(id, depth, path) AS (
+            SELECT ?1, 0, ?1
+            UNION ALL SELECT space_parents.space_id, down.depth + 1,
+                    down.path || ',' || space_parents.space_id
+                FROM down JOIN space_parents ON space_parents.parent_id=down.id
+                WHERE {descend}
+        )"
+    )
+}
+
+/// SQL true when the space in `column` has an agent: a workspace's agent
+/// reporting its turn state, or among the tracked agents bound as parameter
+/// `?2`, or a chat's running agent, or a queued restore of either, whose
+/// agent receives what arrived once it starts.
 fn has_agent(column: &str) -> String {
     format!(
         "(EXISTS (SELECT 1 FROM workspace_agent_state WHERE workspace_agent_state.workspace_id={column})
             OR EXISTS (SELECT 1 FROM agent_queue
                 WHERE agent_queue.workspace_id={column} AND agent_queue.kind='{}')
-            OR {column} IN (SELECT value FROM json_each(?2)))",
-        crate::state::QueueKind::Restore
+            OR {column} IN (SELECT value FROM json_each(?2))
+            OR EXISTS (SELECT 1 FROM chats WHERE chats.id={column}
+                AND (chats.restore IS NULL OR chats.restore='{}')))",
+        crate::state::QueueKind::Restore,
+        ChatRestore::Automatic,
     )
 }
 
-/// Check that `parent` is a ready workspace of `repository_id` before
-/// recording it. Removal reserves the parent first and rechecks its children
-/// afterwards, so a split either precedes that recheck or is refused here.
-pub(super) fn ensure_parent(db: &Connection, repository_id: &str, parent: &str) -> Result<()> {
-    let recorded: Option<(String, WorkspaceState)> = db
-        .query_row(
-            "SELECT repository_id,state FROM workspaces WHERE id=?1",
-            [parent],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
-    let Some((repository, state)) = recorded else {
-        bail!("parent workspace {parent} no longer exists");
-    };
+/// Check that `parent` may take the new or top-level space `space` of
+/// `repository_id` as its child: a ready workspace or a chat of the same
+/// repository, not below `space`. Removal reserves the parent first and
+/// rechecks its children afterwards, so a child either precedes that recheck
+/// or is refused here.
+pub(crate) fn ensure_parent(
+    db: &Connection,
+    repository_id: &str,
+    space: &str,
+    parent: &str,
+) -> Result<()> {
+    let (name, state) = parent_in_repository(db, repository_id, parent)?;
+    if let Some(state) = state {
+        ensure!(
+            state == WorkspaceState::Ready,
+            "parent workspace is {state}; open a child below a ready workspace"
+        );
+    }
     ensure!(
-        repository == repository_id,
-        "parent workspace {parent} is not a workspace of this repository"
-    );
-    ensure!(
-        state == WorkspaceState::Ready,
-        "parent workspace is {state}; split from a ready workspace"
+        !subtree(db, space)?.iter().any(|below| below == parent),
+        "{name} is below the space it would take as a child"
     );
     Ok(())
 }
 
-/// A query of `columns` from the workspace whose ID is parameter 1 and those
-/// below it, or from every workspace when the parameter is NULL, by name.
+/// The name of the space `parent` and, for a workspace, its state, once it
+/// is a space of `repository_id`, where every child of it must be.
+pub(crate) fn parent_in_repository(
+    db: &Connection,
+    repository_id: &str,
+    parent: &str,
+) -> Result<(String, Option<WorkspaceState>)> {
+    let recorded: Option<(String, String, Option<WorkspaceState>)> = db
+        .query_row(
+            &format!(
+                "SELECT spaces.repository_id,spaces.name,workspaces.state FROM {SPACES} AS spaces
+                    LEFT JOIN workspaces USING(id) WHERE spaces.id=?1"
+            ),
+            [parent],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+    let Some((repository, name, state)) = recorded else {
+        bail!("parent space {parent} no longer exists");
+    };
+    ensure!(
+        repository == repository_id,
+        "{name} is in another repository, and a space's children are in its repository; \
+         #1326 tracks spaces across repositories"
+    );
+    Ok((name, state))
+}
+
+/// Record `parent` as the parent of the space `space`, or make it top-level.
+pub(crate) fn set_parent(db: &Connection, space: &str, parent: Option<&str>) -> Result<()> {
+    match parent {
+        Some(parent) => db.execute(
+            "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)
+                ON CONFLICT(space_id) DO UPDATE SET parent_id=excluded.parent_id",
+            [space, parent],
+        )?,
+        None => db.execute("DELETE FROM space_parents WHERE space_id=?1", [space])?,
+    };
+    Ok(())
+}
+
+/// The ID of the space directly above the space `id`.
+pub(crate) fn parent_id(db: &Connection, id: &str) -> Result<Option<String>> {
+    Ok(db
+        .query_row(
+            "SELECT parent_id FROM space_parents WHERE space_id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+/// A query of `columns` from the workspace whose ID is parameter 1 and the
+/// workspaces below it, through spaces of either kind, or from every
+/// workspace when the parameter is NULL, by name.
 pub(super) fn subtree_query(columns: &str) -> String {
     format!(
-        "WITH RECURSIVE tree(id) AS (
-            SELECT ?1
-            UNION SELECT workspaces.id FROM workspaces
-                JOIN tree ON workspaces.parent_workspace_id=tree.id
-        ) SELECT {columns} FROM workspaces
-            WHERE ?1 IS NULL OR id IN (SELECT id FROM tree) ORDER BY name"
+        "{} SELECT {columns} FROM workspaces
+            WHERE ?1 IS NULL OR id IN (SELECT id FROM down) ORDER BY name",
+        down("true")
     )
 }
 
 fn subtree(db: &Connection, id: &str) -> Result<Vec<String>> {
     Ok(db
-        .prepare(
-            "WITH RECURSIVE tree(id, depth) AS (
-                SELECT ?1, 0
-                UNION SELECT workspaces.id, tree.depth + 1 FROM workspaces
-                    JOIN tree ON workspaces.parent_workspace_id=tree.id
-            ) SELECT id FROM tree ORDER BY depth, id",
-        )?
+        .prepare(&format!(
+            "{} SELECT id FROM down ORDER BY depth, id",
+            down("true")
+        ))?
         .query_map([id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The workspaces below `id` whose activity its agent receives.
+/// The spaces directly below the space `id`, by name.
+pub(crate) fn children(db: &Connection, id: &str) -> Result<Vec<SpaceRef>> {
+    Ok(db
+        .prepare(&format!(
+            "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM space_parents
+                JOIN {SPACES} AS spaces ON spaces.id=space_parents.space_id
+                WHERE space_parents.parent_id=?1 ORDER BY spaces.name"
+        ))?
+        .query_map([id], space_ref)?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The space directly above the space `id`.
+pub(crate) fn parent(db: &Connection, id: &str) -> Result<Option<SpaceRef>> {
+    Ok(db
+        .query_row(
+            &format!(
+                "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM space_parents
+                    JOIN {SPACES} AS spaces ON spaces.id=space_parents.parent_id
+                    WHERE space_parents.space_id=?1"
+            ),
+            [id],
+            space_ref,
+        )
+        .optional()?)
+}
+
+/// The spaces below `id` whose activity its agent receives.
 pub(crate) fn delegated(
     db: &Connection,
     id: &str,
     agents: &TrackedAgents,
-) -> Result<Vec<WorkspaceRef>> {
+) -> Result<Vec<SpaceRef>> {
     Ok(db
         .prepare(&format!(
-            "WITH RECURSIVE delegated(id, depth) AS (
-                SELECT ?1, 0
-                UNION SELECT workspaces.id, delegated.depth + 1 FROM workspaces
-                    JOIN delegated ON workspaces.parent_workspace_id=delegated.id
-                    WHERE NOT {}
-            ) SELECT workspaces.id,workspaces.name,workspaces.branch FROM delegated
-                JOIN workspaces USING(id) WHERE depth > 0 ORDER BY depth, name",
-            has_agent("workspaces.id")
+            "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM down
+                JOIN {SPACES} AS spaces USING(id) WHERE depth > 0 ORDER BY depth, name",
+            down(&format!("NOT {}", has_agent("space_parents.space_id")))
         ))?
-        .query_map(params![id, agents.parameter()], row)?
+        .query_map(params![id, agents.parameter()], space_ref)?
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The workspace `id` and those below it whose activity its agent receives,
-/// each as the path of workspaces down to it from the topmost workspace that
+/// The space `id` and those below it whose activity its agent receives,
+/// each as the path of spaces down to it from the topmost space that
 /// receives `id`'s own activity: `id` itself when it has an agent, otherwise
 /// the nearest ancestor that has one, or the root.
 pub(crate) fn receiving_paths(
@@ -265,35 +414,23 @@ pub(crate) fn receiving_paths(
 }
 
 /// The ancestors that receive `id`'s activity, topmost first: each parent
-/// while the workspace below it has no agent of its own.
+/// while the space below it has no agent of its own.
 fn receiving_ancestors(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<Vec<String>> {
     Ok(db
         .prepare(&format!(
-            "WITH RECURSIVE up(id, depth) AS (
-                SELECT ?1, 0
-                UNION SELECT workspaces.parent_workspace_id, up.depth + 1 FROM up
-                    JOIN workspaces ON workspaces.id=up.id
-                    WHERE workspaces.parent_workspace_id IS NOT NULL AND NOT {}
-            ) SELECT id FROM up WHERE depth > 0 ORDER BY depth DESC",
-            has_agent("up.id")
+            "{} SELECT id FROM up WHERE depth > 0 ORDER BY depth DESC",
+            up(&format!("NOT {}", has_agent("up.id")))
         ))?
         .query_map(params![id, agents.parameter()], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The workspace `id` and those below it whose activity its agent receives,
-/// each as the path of workspaces from `id` down to it.
+/// The space `id` and those below it whose activity its agent receives,
+/// each as the path of spaces from `id` down to it.
 fn delegation_paths(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<Vec<Vec<String>>> {
     db.prepare(&format!(
-        "WITH RECURSIVE delegated(id, depth, path) AS (
-                SELECT ?1, 0, ?1
-                UNION SELECT workspaces.id, delegated.depth + 1,
-                        delegated.path || ',' || workspaces.id
-                    FROM workspaces
-                    JOIN delegated ON workspaces.parent_workspace_id=delegated.id
-                    WHERE NOT {}
-            ) SELECT path FROM delegated ORDER BY depth, id",
-        has_agent("workspaces.id")
+        "{} SELECT path FROM down ORDER BY depth, id",
+        down(&format!("NOT {}", has_agent("space_parents.space_id")))
     ))?
     .query_map(params![id, agents.parameter()], |row| {
         row.get::<_, String>(0)
@@ -311,11 +448,9 @@ pub(crate) enum Source {
     Agent,
 }
 
-/// The spaces that decide the requests of the workspace `id`, nearest first:
-/// each workspace's parent workspace, else the running chat that opened it,
-/// which ends the chain since a chat has no parent. Workspaces without an
-/// agent are skipped, and a workspace without an agent of its own has none,
-/// since its coordinator or the user acts there.
+/// The spaces that decide the requests of the space `id`, nearest first:
+/// those above it with an agent. A space without an agent of its own has
+/// none, since its coordinator or the user acts there.
 pub(crate) fn deciders(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<Vec<String>> {
     if !has_running_agent(db, id, agents)? {
         return Ok(Vec::new());
@@ -323,165 +458,69 @@ pub(crate) fn deciders(db: &Connection, id: &str, agents: &TrackedAgents) -> Res
     spaces_above(db, id, agents)
 }
 
-/// The spaces above the space `id` that may decide what it passes up,
-/// nearest first, as [`deciders`] walks them; none above a chat.
+/// The spaces above the space `id` with an agent, which may decide what it
+/// passes up, nearest first.
 pub(crate) fn spaces_above(
     db: &Connection,
     id: &str,
     agents: &TrackedAgents,
 ) -> Result<Vec<String>> {
-    let mut deciders = Vec::new();
-    let mut current = id.to_owned();
-    loop {
-        match space_above(db, &current)? {
-            Above::Workspace(parent) => {
-                if has_running_agent(db, &parent, agents)? {
-                    deciders.push(parent.clone());
-                }
-                current = parent;
-            }
-            Above::Chat(chat) => {
-                deciders.push(chat);
-                return Ok(deciders);
-            }
-            Above::User => return Ok(deciders),
-        }
-    }
+    Ok(db
+        .prepare(&format!(
+            "{} SELECT id FROM up WHERE depth > 0 AND {} ORDER BY depth",
+            up("true"),
+            has_agent("up.id")
+        ))?
+        .query_map(params![id, agents.parameter()], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The space directly above a workspace.
-enum Above {
-    Workspace(String),
-    /// The running chat that opened it; a stopped chat, which keeps it, is
-    /// passed by.
-    Chat(String),
-    User,
-}
-
-/// The space directly above the workspace `id`: its parent workspace, else
-/// the chat that opened it.
-fn space_above(db: &Connection, id: &str) -> Result<Above> {
-    // A stopped chat keeps its workspaces but has no agent to tell.
-    let above: Option<(Option<String>, Option<String>)> = db
-        .query_row(
-            "SELECT parent_workspace_id,
-                    (SELECT id FROM chats WHERE id=workspaces.chat_id AND restore IS NULL)
-                FROM workspaces WHERE id=?1",
-            [id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
-    Ok(match above {
-        Some((Some(parent), _)) => Above::Workspace(parent),
-        Some((None, Some(chat))) => Above::Chat(chat),
-        Some((None, None)) | None => Above::User,
-    })
-}
-
-/// Whether the workspace `id` has an agent among `agents`.
+/// Whether the space `id` has an agent among `agents`.
 fn has_running_agent(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<bool> {
     crate::daemon::store::exists(
         db,
-        &format!(
-            "SELECT 1 FROM workspaces WHERE id=?1 AND {}",
-            has_agent("workspaces.id")
-        ),
+        &format!("SELECT 1 WHERE {}", has_agent("?1")),
         params![id, agents.parameter()],
     )
 }
 
-/// Who coordinates a workspace's work.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Coordinator {
-    /// The workspace whose agent does.
-    Agent(String),
-    /// The chat that does.
-    Chat(String),
-}
-
-/// The coordinator of the workspace named `name` for an event from `source`:
-/// going up from the workspace, the first ancestor with an agent or the
-/// first chat that owns a workspace on the way, whichever comes first,
-/// while that chat runs or waits for its automatic restore, which receives
-/// what arrived once it runs. Another stopped chat keeps its workspaces but
-/// has no agent to tell.
+/// The coordinator of the space named `name` for an event from `source`:
+/// the nearest space above it with an agent.
 fn coordinator(
     db: &Connection,
     name: &str,
     source: Source,
     agents: &TrackedAgents,
-) -> Result<Option<Coordinator>> {
-    if source == Source::Agent
-        && !crate::daemon::store::exists(
-            db,
-            &format!(
-                "SELECT 1 FROM workspaces WHERE name=?1 AND {}",
-                has_agent("workspaces.id")
-            ),
-            params![name, agents.parameter()],
-        )?
-    {
+) -> Result<Option<String>> {
+    let id: Option<String> = db
+        .query_row(
+            &format!("SELECT id FROM {SPACES} WHERE name=?1"),
+            [name],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(id) = id else {
+        return Ok(None);
+    };
+    if source == Source::Agent && !has_running_agent(db, &id, agents)? {
         return Ok(None);
     }
-    let path = db
-        .prepare(&format!(
-            "WITH RECURSIVE up(id, depth) AS (
-                SELECT id, 0 FROM workspaces WHERE name=?1
-                UNION SELECT workspaces.parent_workspace_id, up.depth + 1 FROM up
-                    JOIN workspaces ON workspaces.id=up.id
-                    WHERE workspaces.parent_workspace_id IS NOT NULL
-            ) SELECT up.id, up.depth > 0 AND {},
-                    (SELECT id FROM chats WHERE id=workspaces.chat_id
-                        AND (restore IS NULL OR restore='{}'))
-                FROM up JOIN workspaces ON workspaces.id=up.id ORDER BY up.depth",
-            has_agent("up.id"),
-            crate::state::ChatRestore::Automatic
-        ))?
-        .query_map(params![name, agents.parameter()], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })?
-        .collect::<rusqlite::Result<Vec<(String, bool, Option<String>)>>>()?;
-    Ok(path.into_iter().find_map(|(id, agent, chat)| match agent {
-        true => Some(Coordinator::Agent(id)),
-        false => chat.map(Coordinator::Chat),
-    }))
-}
-
-/// The workspaces directly below the chat `id`.
-pub(crate) fn chat_children(db: &Connection, id: &str) -> Result<Vec<WorkspaceRef>> {
-    Ok(db
-        .prepare(
-            "SELECT id,name,branch FROM workspaces
-             WHERE chat_id=?1 AND parent_workspace_id IS NULL ORDER BY name",
-        )?
-        .query_map([id], row)?
-        .collect::<rusqlite::Result<_>>()?)
+    Ok(spaces_above(db, &id, agents)?.into_iter().next())
 }
 
 /// Fill in the workspace's parent and its children.
 pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
-    workspace.parent_workspace = db
-        .query_row(
-            "SELECT parent.id,parent.name,parent.branch FROM workspaces child
-             JOIN workspaces parent ON parent.id=child.parent_workspace_id WHERE child.id=?1",
-            [&workspace.id],
-            row,
-        )
-        .optional()?;
-    workspace.child_workspaces = db
-        .prepare(
-            "SELECT id,name,branch FROM workspaces WHERE parent_workspace_id=?1 ORDER BY name",
-        )?
-        .query_map([&workspace.id], row)?
-        .collect::<rusqlite::Result<_>>()?;
+    workspace.parent = parent(db, &workspace.id)?;
+    workspace.children = children(db, &workspace.id)?;
     Ok(())
 }
 
-fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceRef> {
-    Ok(WorkspaceRef {
+fn space_ref(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpaceRef> {
+    Ok(SpaceRef {
         id: row.get(0)?,
         name: row.get(1)?,
-        branch: row.get(2)?,
+        kind: row.get(2)?,
+        branch: row.get(3)?,
     })
 }
 

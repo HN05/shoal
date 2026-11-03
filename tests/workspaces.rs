@@ -6490,7 +6490,7 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     let again = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(again.status.success(), "{again:?}");
     assert_eq!(
-        fixture.ok(&["status", "child"])["workspace"]["parent_workspace"]["name"],
+        fixture.ok(&["status", "child"])["workspace"]["parent"]["name"],
         "parent"
     );
     assert_eq!(
@@ -6517,7 +6517,7 @@ fn claude_worktree_hooks_split_and_finish_a_child_workspace() {
     let path = created.lines().last().unwrap();
     let child = fixture.ok(&["status", "agent-a1b2"]);
     assert_eq!(child["workspace"]["path"], path, "{created}");
-    assert_eq!(child["workspace"]["parent_workspace"]["name"], "parent");
+    assert_eq!(child["workspace"]["parent"]["name"], "parent");
     assert!(child["completion"].is_null());
     hook(
         "worktree-remove",
@@ -26644,12 +26644,16 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     let chat = &started["chat"]["id"];
     let added: Value =
         serde_json::from_str(&fs::read_to_string(home.join("chat-add")).unwrap()).unwrap();
-    assert_eq!(added["chat"], *chat, "{added}");
+    assert_eq!(added["parent"]["id"], *chat, "{added}");
+    assert_eq!(added["parent"]["kind"], "chat", "{added}");
     let changed = journal(&fixture)
         .into_iter()
-        .find(|event| event["kind"] == "chat_changed")
+        .find(|event| event["kind"] == "parent_changed")
         .unwrap();
-    assert_eq!((&changed["name"], &changed["chat"]), (&added["name"], chat));
+    assert_eq!(
+        (&changed["name"], &changed["parent"]["id"]),
+        (&added["name"], chat)
+    );
 
     // While it runs, `work` lists the chat with its workspaces under it, and
     // the zmx session it runs in.
@@ -26664,6 +26668,10 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         "{tmp_dir}"
     );
     listed["tmp_dir"] = tmp_dir.into();
+    listed["parent"] = Value::Null;
+    listed["children"] = serde_json::json!([{
+        "id": added["id"], "name": "chat-worker", "kind": "workspace", "branch": added["branch"],
+    }]);
     assert_eq!(chats, serde_json::json!([listed]));
     let rows = fs::read_to_string(home.join("chat-work")).unwrap();
     let rows: Vec<Vec<&str>> = rows
@@ -26689,14 +26697,14 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
 
     let status = fs::read_to_string(home.join("chat-status")).unwrap();
     assert!(
-        status.contains(&format!("Chat:          {CHAT_NAME} (claude)\n")),
+        status.contains(&format!("Parent space:  {CHAT_NAME} (chat)\n")),
         "{status}"
     );
 
     // Once its agent exits the chat stops, keeping its workspace.
     let chats = fixture.ok(&["work", "--chats"]);
     assert_eq!(chats[0]["restore"], "resume", "{chats}");
-    assert_eq!(fixture.ok(&["work"])[0]["chat"], chats[0]["id"]);
+    assert_eq!(fixture.ok(&["work"])[0]["parent"]["id"], chats[0]["id"]);
     let stopped = journal(&fixture)
         .into_iter()
         .find(|event| event["kind"] == "chat_saved")
@@ -26711,7 +26719,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         "--existing",
         "chat-worker",
     ]);
-    assert_eq!(reopened["chat"], Value::Null);
+    assert_eq!(reopened["parent"], Value::Null);
     let removed = fixture.ok(&["rm", CHAT_NAME]);
     assert_eq!(removed["chat"]["id"], *chat, "{removed}");
     assert!(removed["children"].is_null(), "{removed}");
@@ -26739,8 +26747,7 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
     let prompt = prompt.replace("\r\n", "\n");
     assert!(prompt.contains("Remove chat: planning"), "{prompt}");
     assert!(
-        prompt.contains("Removes the workspaces below it first")
-            && prompt.contains("opened, below"),
+        prompt.contains("Removes the spaces below it first") && prompt.contains("opened, below"),
         "{prompt}"
     );
     assert!(prompt.contains("Stops its agent"), "{prompt}");
@@ -26751,6 +26758,91 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
     assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
     assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
     assert!(!agent.wait().unwrap().success());
+}
+
+#[test]
+fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
+    let fixture = Fixture::new();
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
+    let add = |repository: &Path, name: &str| {
+        fixture
+            .command()
+            .args(["--json", "add", repository.to_str().unwrap(), name])
+            .env("SHOAL_CHAT", &chat)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap()
+    };
+    let output = add(&fixture.repo, "opened");
+    assert!(output.status.success(), "{output:?}");
+    fixture.ok(&["split", "below", "--workspace", "opened"]);
+
+    // One parent link names the chat or the workspace above, of either kind.
+    let opened = fixture.ok(&["status", "opened"]);
+    assert_eq!(opened["workspace"]["parent"]["id"], chat.as_str());
+    assert_eq!(opened["workspace"]["parent"]["kind"], "chat");
+    assert_eq!(opened["workspace"]["children"][0]["name"], "below");
+    let text = String::from_utf8(fixture.run(&["--text", "status", "opened"]).stdout).unwrap();
+    assert!(text.contains("Parent space:  planning (chat)"), "{text}");
+    assert!(text.contains("Child spaces:  below"), "{text}");
+    let chats = fixture.ok(&["work", "--chats"]);
+    let listed = chats
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == chat.as_str());
+    assert_eq!(listed.unwrap()["children"][0]["name"], "opened", "{chats}");
+
+    // A child is in its parent's repository.
+    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    let output = add(&other, "foreign");
+    assert!(!output.status.success(), "{output:?}");
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("planning is in another repository"),
+        "{error}"
+    );
+    assert!(error.contains("#1326"), "{error}");
+    // Refused before an agent's launch is planned or queued.
+    let output = fixture
+        .command()
+        .args(["--json", "add", other.to_str().unwrap(), "queued"])
+        .args(["--agent", "missing-agent"])
+        .env("SHOAL_CHAT", &chat)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("planning is in another repository"),
+        "{error}"
+    );
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
+    // Nor is registering another repository offered there.
+    let unregistered = init_repo(fixture.root.path(), "third", &[("tracked", "third\n")]);
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .args([
+                "--text",
+                "add",
+                unregistered.to_str().unwrap(),
+                "third-work",
+            ])
+            .env("SHOAL_CHAT", &chat),
+        "y\n",
+        true,
+    );
+    assert!(!output.status.success(), "{transcript}");
+    assert!(!transcript.contains("Register"), "{transcript}");
+    assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 2);
+    let names: Vec<_> = (fixture.ok(&["work"]).as_array().unwrap().iter())
+        .map(|workspace| workspace["name"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(!names.contains(&"foreign".to_owned()), "{names:?}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
 }
 
 #[test]
@@ -29827,14 +29919,14 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
     assert_eq!(top["branch"], Value::Null);
     assert_eq!(top["at"]["commit"], main.trim());
     assert_eq!(top["at"]["made_for"], serde_json::json!({"ref": "main"}));
-    assert_eq!(top["parent_workspace"], Value::Null);
+    assert_eq!(top["parent"], Value::Null);
     let path = top["path"].as_str().unwrap();
     assert_eq!(
         git(Path::new(path), &["branch", "--show-current"]).trim(),
         ""
     );
     let child = fixture.ok(&["split", "--no-branch", "--workspace", "parent"]);
-    assert_eq!(child["parent_workspace"]["name"], "parent");
+    assert_eq!(child["parent"]["name"], "parent");
     assert_eq!(child["name"], format!("main-{short}-2"));
     let status = fixture.run(&["status", &format!("main-{short}")]);
     let status = String::from_utf8_lossy(&status.stdout);

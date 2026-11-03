@@ -7,7 +7,10 @@ use anyhow::{Context, Result};
 use super::{Manager, derive_workspace_name, restore::RestoredFiles};
 use crate::{
     git,
-    model::{MadeFor, OpenedWorkspace, RemovedWorkspace, Repository, StartingCommit, Workspace},
+    model::{
+        MadeFor, OpenedWorkspace, RemovedWorkspace, Repository, SpaceKind, StartingCommit,
+        Workspace,
+    },
     protocol::{CommitStart, CreationOptions, PullHead},
     state::WorkspaceState,
 };
@@ -34,6 +37,9 @@ impl Manager {
         chat: Option<String>,
         options: CreationOptions,
     ) -> Result<Workspace> {
+        // A child belongs to its parent and the chat goes unused.
+        let owner = chat.as_deref().filter(|_| parent.is_none());
+        self.ensure_chat_repository(&repository, owner).await?;
         let parent = match parent {
             Some(parent) => Some(self.workspace(&parent).await?),
             None => None,
@@ -65,17 +71,21 @@ impl Manager {
         chat: Option<String>,
         options: CreationOptions,
     ) -> Result<OpenedWorkspace> {
+        self.ensure_chat_repository(&repository, chat.as_deref())
+            .await?;
         let (repo, _guard) = self.lock_repository(repository).await?;
         if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
             self.move_to_pull_head(&repo, &workspace, &head).await?;
             if let Some(base) = head.base {
                 self.record_diff_ref(&workspace.id, base).await?;
             }
-            // Its last opener owns it, as a reopened branch's does; a child
-            // stays its parent's.
-            let workspace = match workspace.parent_workspace {
-                None => self.give_to_chat(&workspace.id, chat).await?,
-                Some(_) => self.workspace(&workspace.id).await?,
+            // Its last opener owns it, as a reopened branch's does; a
+            // workspace's child stays its parent's.
+            let workspace = match workspace.parent {
+                Some(parent) if parent.kind == SpaceKind::Workspace => {
+                    self.workspace(&workspace.id).await?
+                }
+                _ => self.give_to_chat(&workspace.id, chat).await?,
             };
             return Ok(OpenedWorkspace {
                 workspace,

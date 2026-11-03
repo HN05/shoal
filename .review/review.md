@@ -41,8 +41,13 @@ instead of the PR delivery guidance below.
   its PR says why it cannot apply to chats. A space is a workspace or a chat:
   flag a flag, text or name that says workspace for something a chat also
   takes.
+- Space tree: every space has at most one parent in `space_parents`, a ready
+  workspace or a chat of its own repository and never one below it; flag a
+  write of a parent that skips that check, a child in another repository, and
+  a reader of the tree that branches on kind instead of taking the one walk up
+  or down and the one check for an agent.
 - Safety of user work: removal of any space goes through the one shared path,
-  which removes the workspaces below it first and never lets one outlive its
+  which removes the spaces below it first and never lets one outlive its
   parent; chats follow the workspace cleanup rules with none of the worktree
   conditions, and a chat whose agent exits stops rather than ends. It preserves
   work and leases on failure, never adopts moved or replaced worktrees, stops
@@ -108,7 +113,7 @@ instead of the PR delivery guidance below.
   its ownership verifies.
 - Scope: tracked executions and externally launched processes with exported
   environments carry a scope token and get access to their own worktree and the
-  child workspaces split from it, recursively, only (CLI refusals also follow ancestry
+  spaces below it, recursively, only (CLI refusals also follow ancestry
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
   Workspace allocation other than `split`, removal other than of a workspace below their own
@@ -116,7 +121,7 @@ instead of the PR delivery guidance below.
   which the daemon starts detached so they never inherit the caller's scope, cancel their queue
   entries or move them back, send agent messages,
   answer questions, stop their executions, queue restores of the agents they or the workspaces below them stopped and
-  discard stopped work; the nearest ancestor with an agent receives a child agent's messages,
+  discard stopped work; the nearest space above with an agent, of either kind, receives a child agent's messages,
   questions, completion and ready marks and its agent's exits and stops instead of the user,
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
   linking and watching CI runs of the own repository,
@@ -216,10 +221,10 @@ instead of the PR delivery guidance below.
 - Numbered questions and approvals inspect records without mutation in JSON or
   nonterminal output; interactive prompts preserve the shown request when deciding.
 - Resource approvals bind effective allocation settings and require an unscoped
-  decision, or one by the direct parent space the request was routed to: a parent
-  workspace with an agent approves only with an approved grant for the same target
-  and settings and otherwise denies or passes it up, and the chat that opened the
-  workspace may approve anything. That decision, which queues an agent message for the requester; failing to queue it
+  decision, or one by the nearest space above with an agent, of either kind, that
+  the request was routed to: a workspace approves only with an approved grant
+  for the same target and settings and otherwise denies or passes it up, and a
+  chat may approve anything. That decision, which queues an agent message for the requester; failing to queue it
   never fails the decision. Pending requests reserve nothing; grant lifetime follows configuration
   and approval never bypasses capacity or simulator cleanup rules. Approval lookups
   validate their selected ID or active workspace/target/name record; grant reuse

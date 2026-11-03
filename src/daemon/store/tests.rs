@@ -393,6 +393,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 119 {
         db.execute_batch(DISPOSABLE_WORKSPACES)?;
     }
+    if version >= 121 {
+        db.execute_batch(include_str!("space_parents.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -499,7 +502,7 @@ fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
     );
     assert_eq!(
         db.query_row(
-            "SELECT chat_id FROM workspaces WHERE id='workspace'",
+            "SELECT parent_id FROM space_parents WHERE space_id='workspace'",
             [],
             |r| { r.get::<_, String>(0) }
         )?,
@@ -520,6 +523,51 @@ fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
     assert_eq!(
         started,
         [("repo-chat".into(), None), ("repo-chat-3".into(), None)]
+    );
+    Ok(())
+}
+
+#[test]
+fn migration_keeps_one_parent_for_each_space() -> Result<()> {
+    let mut db = historical_database(116)?;
+    db.execute_batch(
+        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('chat','repo','planning','claude',1,'b',1);
+         INSERT INTO repositories(id,path,source,last_used) VALUES ('other','/other','/other',2);
+         INSERT INTO workspaces(id,repository_id,name,path,branch,state,parent_workspace_id,chat_id)
+             VALUES ('split','repo','split','/split','split','ready','workspace','chat'),
+                ('opened','repo','opened','/opened','opened','ready',NULL,'chat'),
+                ('orphan','repo','orphan','/orphan','orphan','ready','gone',NULL),
+                ('foreign','other','foreign','/foreign','foreign','ready',NULL,'chat');",
+    )?;
+    let events: i64 = db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r.get(0))?;
+    migrate(&mut db)?;
+
+    // The workspace a workspace was split from wins over the chat that
+    // opened it; a parent that no longer exists, or one in another
+    // repository, leaves it top-level, the user's.
+    let parents = db
+        .prepare("SELECT space_id,parent_id FROM space_parents ORDER BY space_id")?
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(
+        parents,
+        [
+            ("opened".into(), "chat".into()),
+            ("split".into(), "workspace".into())
+        ]
+    );
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r
+            .get::<_, i64>(0))?,
+        events
+    );
+    // A removed parent's children leave the tree with it.
+    db.execute("DELETE FROM chats WHERE id='chat'", [])?;
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM space_parents", [], |r| r
+            .get::<_, i64>(0))?,
+        1
     );
     Ok(())
 }
@@ -940,8 +988,8 @@ fn mappers_use_named_columns() -> Result<()> {
             "branch": "feature", "state": "failed", "error": "setup error",
             "base_commit": "abc", "base_ref": "refs/heads/main",
             "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",
-            "base_workspace": null, "parent_workspace": null, "links": {"issue": null, "prs": [], "opened": [], "related": []}, "running": false, "done": false,
-            "setup_skipped": false, "disposable": false, "chat": null
+            "base_workspace": null, "parent": null, "links": {"issue": null, "prs": [], "opened": [], "related": []}, "running": false, "done": false,
+            "setup_skipped": false, "disposable": false
         }),
     )?;
     check_columns(

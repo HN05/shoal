@@ -4,7 +4,7 @@ use crate::{
         scope::{Caller, ScopedExecution},
         workspace_files::Attacher,
     },
-    model::{CleanupReason, Workspace, WorkspaceRef},
+    model::{CleanupReason, SpaceKind, SpaceRef, Workspace, WorkspaceRef},
     protocol::{
         AgentMethod, ApprovalMethod, AssignmentMethod, Operation, QuestionMethod, QueueMethod,
         RemovalMethod, WorkspaceMethod,
@@ -12,6 +12,15 @@ use crate::{
     removal::{InspectionPolicy, UnsavedWork},
     test_support::{manager, repository},
 };
+
+fn space(workspace: &Workspace) -> SpaceRef {
+    SpaceRef {
+        id: workspace.id.clone(),
+        name: workspace.name.clone(),
+        kind: SpaceKind::Workspace,
+        branch: workspace.branch.clone(),
+    }
+}
 
 fn reference(workspace: &Workspace) -> WorkspaceRef {
     WorkspaceRef {
@@ -42,12 +51,12 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
         .split_workspace(&middle.id, "leaf".into(), Some("middle".into()))
         .await
         .unwrap();
-    assert_eq!(middle.parent_workspace, Some(reference(&root)));
-    assert_eq!(leaf.parent_workspace, Some(reference(&middle)));
+    assert_eq!(middle.parent, Some(space(&root)));
+    assert_eq!(leaf.parent, Some(space(&middle)));
     assert_eq!(leaf.base_workspace, Some(reference(&middle)));
     assert_eq!(
-        manager.workspace("root").await.unwrap().child_workspaces,
-        [reference(&middle)]
+        manager.workspace("root").await.unwrap().children,
+        [space(&middle)]
     );
     assert_eq!(
         manager.subtree(&root.id).await.unwrap(),
@@ -149,7 +158,7 @@ async fn a_child_that_cannot_go_retains_its_parent() {
     let kept = manager.workspace(&parent.id).await.unwrap();
     assert_eq!(kept.state, crate::state::WorkspaceState::Ready);
     assert!(kept.path.exists());
-    assert_eq!(kept.child_workspaces, [reference(&child)]);
+    assert_eq!(kept.children, [space(&child)]);
 }
 
 #[tokio::test]
@@ -525,7 +534,7 @@ async fn children_never_keep_their_parent_and_go_with_it() {
 }
 
 #[tokio::test]
-async fn a_parent_must_be_a_workspace_of_the_same_repository() {
+async fn a_parent_must_be_a_space_of_the_same_repository() {
     let (temp, manager) = manager().await;
     let mut repos = Vec::new();
     for name in ["repo", "other"] {
@@ -543,10 +552,14 @@ async fn a_parent_must_be_a_workspace_of_the_same_repository() {
         .unwrap();
     let error = manager
         .store
-        .run(move |db| super::ensure_parent(db, &repos[0].id, &foreign.id))
+        .run(move |db| super::ensure_parent(db, &repos[0].id, "new", &foreign.id))
         .await
         .unwrap_err();
-    assert!(format!("{error:#}").contains("not a workspace of this repository"));
+    assert!(
+        format!("{error:#}").contains("foreign is in another repository"),
+        "{error:#}"
+    );
+    assert!(format!("{error:#}").contains("#1326"), "{error:#}");
 }
 
 #[tokio::test]
@@ -579,7 +592,7 @@ async fn a_parent_reserved_for_removal_refuses_splits() {
             .workspace(&parent.id)
             .await
             .unwrap()
-            .child_workspaces
+            .children
             .is_empty()
     );
 }
@@ -916,7 +929,7 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
     // The child's own agent receives its activity instead of the parent's.
     assert!(
         manager
-            .delegated_workspaces(&parent.id)
+            .delegated_spaces(&parent.id)
             .await
             .unwrap()
             .is_empty()
@@ -959,12 +972,12 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
             .stop_agent_for_overload("critical memory pressure")
             .await
     );
-    let delegated = manager.delegated_workspaces(&parent.id).await.unwrap();
+    let delegated = manager.delegated_spaces(&parent.id).await.unwrap();
     assert_eq!(delegated.len(), 1, "a stopped agent receives nothing");
     manager.queue_agent_restore(&started.plan.id).await.unwrap();
     assert!(
         manager
-            .delegated_workspaces(&parent.id)
+            .delegated_spaces(&parent.id)
             .await
             .unwrap()
             .is_empty()
@@ -2236,7 +2249,7 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
         .check_manual_removal(&parent.id, false)
         .await
         .unwrap();
-    assert_eq!(check.children, [reference(&child)]);
+    assert_eq!(check.children, [space(&child)]);
     let confirmed = UnsavedWork::confirming(&check);
     // Splits after the confirmation, directly or below a confirmed child,
     // keep the whole tree.
@@ -2278,3 +2291,5 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
         .unwrap();
     assert_eq!(removed.children, ["late", "child"]);
 }
+
+mod mixed;

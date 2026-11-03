@@ -1091,16 +1091,10 @@ impl Manager {
         }
     }
 
-    /// Queue `message` for the agent of the workspace or chat `space`; false
-    /// when it cannot be. Callers hold the announcement gate, so the chat is
-    /// looked up without ending one that exited, which would take the gate.
+    /// Queue `message` for the agent of the space `space`; false when it
+    /// cannot be.
     async fn tell_agent(&self, space: &str, message: String) -> bool {
-        let queued = match self.recorded_running_chat(space).await {
-            Ok(Some(chat)) => {
-                (self.queue_chat_message(&chat.id, None, None, None, message, Vec::new())).await
-            }
-            _ => self.queue_agent_message(space, message).await,
-        };
+        let queued = (self.queue_space_message(space, None, message, Vec::new())).await;
         match queued {
             Ok(()) => true,
             Err(error) => {

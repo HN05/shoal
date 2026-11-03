@@ -80,7 +80,12 @@ async fn a_saved_chat_keeps_its_record_until_it_is_restored() {
     assert_eq!(saved[0].restore, Some(ChatRestore::Automatic));
     assert!(manager.running_chat("talk").await.unwrap().is_none());
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().chat,
+        manager
+            .workspace(&workspace.id)
+            .await
+            .unwrap()
+            .parent
+            .map(|parent| parent.id),
         Some(chat.id.clone())
     );
     assert!(manager.check_chat_name("talk".into()).await.is_err());
@@ -904,7 +909,12 @@ async fn a_chat_a_removal_holds_neither_gives_up_nor_takes_workspaces() {
         .await
         .unwrap();
     assert_eq!(
-        manager.workspace(&below.id).await.unwrap().chat,
+        manager
+            .workspace(&below.id)
+            .await
+            .unwrap()
+            .parent
+            .map(|parent| parent.id),
         Some(chat.id.clone())
     );
     // ...and one opened from it meanwhile is the user's.
@@ -912,7 +922,15 @@ async fn a_chat_a_removal_holds_neither_gives_up_nor_takes_workspaces() {
         .assign_chat(&other.id, Some(chat.id.clone()))
         .await
         .unwrap();
-    assert_eq!(manager.workspace(&other.id).await.unwrap().chat, None);
+    assert_eq!(
+        manager
+            .workspace(&other.id)
+            .await
+            .unwrap()
+            .parent
+            .map(|parent| parent.id),
+        None
+    );
     drop(reservation);
     manager.assign_chat(&below.id, None).await.unwrap();
 }

@@ -118,15 +118,13 @@ pub struct Workspace {
     /// Workspaces that record this one as their base.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stacked_workspaces: Vec<WorkspaceRef>,
-    /// The workspace this one was split from.
+    /// The space above this one: the workspace it was split from or the
+    /// chat that opened it.
     #[serde(default)]
-    pub parent_workspace: Option<WorkspaceRef>,
-    /// Workspaces split from this one.
+    pub parent: Option<SpaceRef>,
+    /// The spaces below this one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub child_workspaces: Vec<WorkspaceRef>,
-    /// The chat that opened this workspace.
-    #[serde(default)]
-    pub chat: Option<String>,
+    pub children: Vec<SpaceRef>,
     /// What its processes use, while any run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<WorkspaceUsage>,
@@ -178,6 +176,25 @@ pub struct WorkspaceRef {
     pub name: String,
     pub branch: Option<String>,
 }
+
+/// Another space a record refers to, with its current name, and its branch
+/// when it is a workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpaceRef {
+    pub id: String,
+    pub name: String,
+    pub kind: SpaceKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+}
+
+crate::state::states!(
+    /// Whether a space is a workspace, with a worktree, or a chat.
+    SpaceKind {
+        Workspace => "workspace",
+        Chat => "chat",
+    }
+);
 
 /// Canonical issue and pull-request links associated with a space, a
 /// workspace or chat.
@@ -470,9 +487,8 @@ impl Workspace {
             agent_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),
-            parent_workspace: None,
-            child_workspaces: Vec::new(),
-            chat: None,
+            parent: None,
+            children: Vec::new(),
             links: SpaceLinks::default(),
             running: false,
             done: false,
@@ -1234,6 +1250,12 @@ pub struct Chat {
     /// What `shoal done` recorded, until `shoal done --undo`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion: Option<Completion>,
+    /// The space above it.
+    #[serde(default)]
+    pub parent: Option<SpaceRef>,
+    /// The spaces below it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<SpaceRef>,
 }
 
 /// A chat after a rename, with the name it had before.
@@ -1328,22 +1350,20 @@ impl Spaces {
             .map(|chat| PresentSpace::Chat(chat.clone()))
     }
 
-    /// The workspaces below the chat `id`, nearest first: those it opened
-    /// that no workspace was split from, and those split from them in turn.
-    pub fn below_chat(&self, id: &str) -> Vec<&Workspace> {
-        let mut below: Vec<&Workspace> = self
-            .workspaces
-            .iter()
-            .filter(|workspace| {
-                workspace.chat.as_deref() == Some(id) && workspace.parent_workspace.is_none()
-            })
-            .collect();
+    /// The spaces below the space `id`, nearest first.
+    pub fn below(&self, id: &str) -> Vec<SpaceRef> {
+        let children = |id: &str| {
+            let workspace = self.workspaces.iter().find(|workspace| workspace.id == id);
+            let chat = self.chats.iter().find(|chat| chat.id == id);
+            (workspace.map(|workspace| workspace.children.clone()))
+                .or_else(|| chat.map(|chat| chat.children.clone()))
+                .unwrap_or_default()
+        };
+        let mut below = children(id);
         let mut next = 0;
-        while let Some(parent) = below.get(next) {
-            let children = self.workspaces.iter().filter(|workspace| {
-                (workspace.parent_workspace.as_ref()).is_some_and(|above| above.id == parent.id)
-            });
-            below.extend(children);
+        while let Some(space) = below.get(next) {
+            let id = space.id.clone();
+            below.extend(children(&id));
             next += 1;
         }
         below

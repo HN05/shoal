@@ -203,7 +203,7 @@ async fn a_child_at_its_parents_branch_starts_at_the_parents_commit_without_stac
     .unwrap();
     assert_eq!(head(&child.path).0, head(&parent.path).0);
     assert_eq!(
-        child.parent_workspace.map(|parent| parent.id),
+        child.parent.map(|parent| parent.id),
         Some(parent.id.clone())
     );
     assert_eq!(child.base_workspace, None);
@@ -448,9 +448,12 @@ async fn a_chat_owns_its_top_level_workspace_at_a_commit_but_not_a_child() {
         )
     };
     let top = create(None).await.unwrap();
-    assert_eq!(top.chat.as_deref(), Some(chat.id.as_str()));
+    assert_eq!(top.parent.map(|parent| parent.id), Some(chat.id.clone()));
     let child = create(Some(parent.name.clone())).await.unwrap();
-    assert_eq!(child.chat, None);
+    assert_eq!(
+        child.parent.map(|parent| parent.id),
+        Some(parent.id.clone())
+    );
 }
 
 #[tokio::test]
@@ -653,11 +656,17 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
         )
     };
     let opened = open(Some(first.id.clone())).await.unwrap().workspace;
-    assert_eq!(opened.chat.as_deref(), Some(first.id.as_str()));
+    assert_eq!(
+        opened.parent.map(|parent| parent.id),
+        Some(first.id.clone())
+    );
     let reopened = open(Some(second.id.clone())).await.unwrap().workspace;
-    assert_eq!(reopened.chat.as_deref(), Some(second.id.as_str()));
+    assert_eq!(
+        reopened.parent.map(|parent| parent.id),
+        Some(second.id.clone())
+    );
     let by_user = open(None).await.unwrap().workspace;
-    assert_eq!(by_user.chat, None);
+    assert_eq!(by_user.parent, None);
 }
 
 #[tokio::test]
@@ -728,4 +737,64 @@ async fn a_parent_of_another_repository_is_refused_before_any_fetch() {
             .contains("not a workspace of this repository")
     );
     assert!(git(&other, &["tag", "--list", "remote-only"]).is_empty());
+}
+
+#[tokio::test]
+async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
+    let (temp, manager) = manager().await;
+    let mut repos = Vec::new();
+    for name in ["repo", "other"] {
+        let checkout = repository(temp.path(), name);
+        repos.push(
+            manager
+                .register_repository(checkout.to_str().unwrap().into(), None, None)
+                .await
+                .unwrap(),
+        );
+    }
+    let chat = manager
+        .start_chat(
+            repos[0].id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let other = &repos[1];
+    let created = manager
+        .create_commit_workspace(
+            other.id.as_str().into(),
+            None,
+            CommitStart::Revision(None),
+            Some(chat.id.clone()),
+            Default::default(),
+        )
+        .await
+        .unwrap_err();
+    let opened = manager
+        .open_pull_head(
+            other.id.as_str().into(),
+            "https://forge.example/team/other/pulls/3".into(),
+            crate::protocol::PullHead {
+                number: 3,
+                reference: "refs/pull/3/head".into(),
+                commit: "0000000".into(),
+                base: None,
+            },
+            Some(chat.id.clone()),
+            Default::default(),
+        )
+        .await
+        .unwrap_err();
+    for error in [created, opened] {
+        assert!(
+            format!("{error:#}").contains("planning is in another repository"),
+            "{error:#}"
+        );
+    }
+    // Refused before anything was created.
+    assert!(manager.list_workspaces().await.unwrap().is_empty());
 }

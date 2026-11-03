@@ -46,7 +46,7 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
         (None, None) => {}
     }
     base::render(workspace);
-    split::render(workspace);
+    split::render(&workspace.parent, &workspace.children);
     outln!(
         "Setup:         {}",
         match (workspace.setup_skipped, status.setup_finished) {
@@ -104,7 +104,8 @@ fn render_changed_on_both_sides(status: &WorktreeStatus, palette: Palette) {
     outln!("  {}", palette.paint(Style::Warning, &line));
 }
 
-/// The chat, its status as listings show it, and its agent.
+/// The chat, its status as listings show it, its agent, and the spaces
+/// around it.
 fn render_chat(chat: &Chat, palette: Palette) {
     let status = ListStatus::of_chat(chat);
     outln!(
@@ -113,6 +114,7 @@ fn render_chat(chat: &Chat, palette: Palette) {
         palette.paint(status.style(), status.label())
     );
     outln!("Agent:         {}", chat.agent);
+    split::render(&chat.parent, &chat.children);
 }
 
 /// When the repository's default branch last synced with its remote, and
@@ -142,7 +144,7 @@ fn render_activity(view: &StatusView, palette: Palette) {
     }
     render_sessions(view, palette);
     if let Some(worktree) = view.status.space.worktree() {
-        render_agent(worktree, view.chat.as_deref());
+        render_agent(worktree);
     }
 }
 
@@ -195,9 +197,8 @@ fn render_processes(status: &WorktreeStatus, palette: Palette) {
     }
 }
 
-/// The turn state the workspace's agent reported, its retries, and the
-/// `chat` that opened the workspace.
-fn render_agent(status: &WorktreeStatus, chat: Option<&str>) {
+/// The turn state the workspace's agent reported and its retries.
+fn render_agent(status: &WorktreeStatus) {
     let agent_state = status.workspace.agent_state;
     outln!(
         "Agent state:   {}",
@@ -212,7 +213,6 @@ fn render_agent(status: &WorktreeStatus, chat: Option<&str>) {
     if let Some(retry) = &status.turn_retry {
         outln!("Turn retry:    {}", turn_retry_label(retry));
     }
-    outln!("Chat:          {}", chat.unwrap_or("none"));
 }
 
 /// The ports, simulators and resources the workspace holds.

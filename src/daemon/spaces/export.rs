@@ -145,8 +145,8 @@ impl Manager {
             );
         };
         ensure!(
-            self.chat_children(&chat.id).await?.is_empty(),
-            "chat {} has workspaces below it; move or remove them first",
+            self.children(&chat.id).await?.is_empty(),
+            "chat {} has spaces below it; move or remove them first",
             chat.name
         );
         let id = chat.id.clone();

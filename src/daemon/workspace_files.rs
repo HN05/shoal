@@ -40,7 +40,7 @@ pub(crate) struct Space {
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) repository_id: String,
-    /// The workspace's parent when it attached the files; a chat has none.
+    /// The space's parent when it attached the files.
     pub(crate) parent_id: Option<String>,
 }
 
@@ -50,7 +50,7 @@ impl From<Workspace> for Space {
             id: workspace.id,
             name: workspace.name,
             repository_id: workspace.repository_id,
-            parent_id: workspace.parent_workspace.map(|parent| parent.id),
+            parent_id: workspace.parent.map(|parent| parent.id),
         }
     }
 }
@@ -70,7 +70,7 @@ impl From<Chat> for Space {
             id: chat.id,
             name: chat.name,
             repository_id: chat.repository_id,
-            parent_id: None,
+            parent_id: chat.parent.map(|parent| parent.id),
         }
     }
 }

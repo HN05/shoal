@@ -16,8 +16,8 @@ text despite the setting comes from a Shoal that predates it; pass `--json` too.
 own checkout. Change or remove another agent's workspace only when the user asks.
 
 Sessions launched through Shoal are scoped to their own workspace and the
-child workspaces they split from it with `shoal split`, which they work on
-themselves; they cannot create other workspaces or start sessions elsewhere;
+spaces below it, such as child workspaces they split from it with `shoal
+split`, which they work on themselves; they cannot create other workspaces or start sessions elsewhere;
 you and the user do. Unscoped
 commands also decide approval requests, so act on those only as the user directs.
 
@@ -113,10 +113,12 @@ recommendation and any choices, or, asked in the agent's chat, is its final mess
 there. Relay them to the user and answer as the user
 decides; the answer reaches the agent as a message.
 
-In a `shoal chat`, the agents of the workspaces you open report to you instead
-of the user: their messages, questions, completion, ready marks and exits
-arrive as Shoal messages naming the workspace, and `shoal files <name>` shows the
-files a finished workspace handed back. Their approval requests come to you
+In a `shoal chat`, you coordinate only the spaces below the chat: the
+workspaces you open, which must be in the chat's repository, and those below
+them. Their agents report to you instead of the user: their messages,
+questions, completion, ready marks and exits arrive as Shoal messages naming
+the workspace, and `shoal files <name>` shows the files a finished workspace
+handed back. Their approval requests come to you
 too: decide them with `shoal approvals --approve <number>` or `--deny <number>`,
 or hand one to the user with `shoal approvals --escalate <number>`; `shoal
 approvals --space <chat>` lists them. Proposed issues and PRs come too, and
@@ -156,7 +158,7 @@ new SHAs,
 `shoal stop <workspace>` to stop its commands, or `shoal rm <workspace>` to
 remove it, which asks what to do with unmerged work. To keep one for review,
 hold it with `shoal acquire hold --workspace <workspace> --name review` and release the hold
-afterwards. Removing a workspace removes the child workspaces below it first,
+afterwards. Removing a workspace removes the spaces below it first,
 held ones included, and its `done` with cleanup removes the unheld ones after
 the grace period. `shoal work restore <workspace>` reopens a removed one, or lists an
 existing one's checkpoints, and `shoal work restore <workspace> <number>` returns it

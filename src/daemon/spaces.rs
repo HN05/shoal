@@ -1,12 +1,24 @@
 //! Spaces: workspaces and chats, which share one namespace of IDs and names,
 //! so a request naming a space acts on whichever of them it names.
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use super::{
     workspace::Manager,
     workspace_files::{Attacher, NewFile},
 };
-use crate::model::{Completion, PresentSpace};
+use crate::{
+    daemon::notifications::NotificationKind,
+    model::{Completion, PresentSpace, SpaceKind},
+};
+
+/// The space a message for another space's agent is about.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct About<'a> {
+    pub name: &'a str,
+    pub id: Option<&'a str>,
+    /// The notification the event would be for the user.
+    pub kind: Option<NotificationKind>,
+}
 
 impl Manager {
     /// The workspace or chat `selector` names, by name or ID; the error is
@@ -48,6 +60,39 @@ impl Manager {
         }
     }
 
+    /// Queue `message` for the agent of the space `id`, with Shoal's copies
+    /// `attachments` of files another space's files already keep, `about`
+    /// another space when it concerns one. A space whose agent is not
+    /// running receives it once its agent starts. It reads the space as
+    /// recorded, stopping no chat, so a caller holding the approval
+    /// announcement gate may queue one.
+    pub(crate) async fn queue_space_message(
+        &self,
+        id: &str,
+        about: Option<About<'_>>,
+        message: String,
+        attachments: Vec<std::path::PathBuf>,
+    ) -> Result<()> {
+        let space = id.to_owned();
+        let kind = self.store.run(move |db| space_kind(db, &space)).await?;
+        match kind.with_context(|| format!("no space {id}"))? {
+            SpaceKind::Workspace => {
+                let message = match about {
+                    Some(about) => format!("{}: {message}", about.name),
+                    None => message,
+                };
+                (self.queue_agent_message_attached(id, message, attachments)).await
+            }
+            SpaceKind::Chat => {
+                let (name, about_id, kind) = match about {
+                    Some(about) => (Some(about.name), about.id, about.kind),
+                    None => (None, None, None),
+                };
+                (self.queue_chat_message(id, name, about_id, kind, message, attachments)).await
+            }
+        }
+    }
+
     /// Withdraw the completion the workspace or chat `selector`
     /// names recorded.
     pub async fn undo_space_done(&self, selector: &str) -> Result<Completion> {
@@ -56,6 +101,19 @@ impl Manager {
             PresentSpace::Chat(chat) => self.undo_chat_done(&chat.id).await,
         }
     }
+}
+
+/// The kind of the space `id`, while it exists.
+pub(crate) fn space_kind(db: &rusqlite::Connection, id: &str) -> Result<Option<SpaceKind>> {
+    use rusqlite::OptionalExtension as _;
+    Ok(db
+        .query_row(
+            "SELECT 'workspace' FROM workspaces WHERE id=?1
+                UNION ALL SELECT 'chat' FROM chats WHERE id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
 }
 
 mod export;
