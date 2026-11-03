@@ -147,9 +147,14 @@ impl Manager {
         push: PushSpecification,
     ) -> Result<Proposed> {
         let name = push.request_name();
-        let request = proposal(workspace, Target::Push, &name, Specification::Push(push));
+        let request = proposal(
+            &workspace.id,
+            Target::Push,
+            &name,
+            Specification::Push(push),
+        );
         let files = self.gates.lock_proposal_files().await;
-        self.record_proposal(workspace, request, proposals::propose_push, files)
+        self.record_proposal(&workspace.name, request, proposals::propose_push, files)
             .await
     }
 
@@ -201,7 +206,7 @@ impl Manager {
             request.id,
             request.subject()
         );
-        self.tell_workspace(&request.space_id, message).await;
+        self.tell_space(&request.space_id, message).await;
         anyhow!(
             "approval request {} is outdated: the branch moved since it was requested; the agent was told to push again",
             request.id
@@ -269,6 +274,7 @@ impl Manager {
         if let Some(push) = request.pending_push() {
             track_pushed_branch(&workspace, push).await;
         }
+        let workspace = super::LinkSpace::from(workspace);
         let (request, message) = match request.target {
             Target::PrOpen => {
                 let decision = ProposalDecision::default();

@@ -12,7 +12,7 @@ pub(crate) use crate::client::approvals::{
     PushSpecification,
 };
 use crate::{
-    daemon::store,
+    daemon::{links::space::require_ready_space, store},
     forge::{items::action::Edit, items::attach::Attachment},
 };
 
@@ -108,15 +108,11 @@ impl ApprovalRequest {
 /// A stored proposal, and whether this call recorded it.
 pub type Recorded = (ApprovalRequest, bool);
 
-/// Record a proposed issue for the workspace's repository, or return the
-/// identical one the workspace proposed before and the user has not decided.
+/// Record a proposed issue for the space's repository, or return the
+/// identical one the space proposed before and the user has not decided.
 pub fn propose_issue(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Recorded> {
-    store::require_ready(tx, &request.space_id)?;
-    let repository: String = tx.query_row(
-        "SELECT repository_id FROM workspaces WHERE id=?1",
-        [&request.space_id],
-        |r| r.get(0),
-    )?;
+    require_ready_space(tx, &request.space_id)?;
+    let (_, repository) = space_record(tx, &request.space_id)?;
     let existing = repository_proposals(tx, &repository)?
         .into_iter()
         .find(|r| {
@@ -193,15 +189,11 @@ pub fn propose_push(tx: &Transaction<'_>, request: ApprovalRequest) -> Result<Re
 }
 
 fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<ApprovalRequest> {
-    request.space = tx.query_row(
-        "SELECT name FROM workspaces WHERE id=?1",
-        [&request.space_id],
-        |r| r.get(0),
-    )?;
+    (request.space, _) = space_record(tx, &request.space_id)?;
     request.key = uuid::Uuid::new_v4().to_string();
     request.id = store::free_number(tx, "access_requests")?;
     // A repository-owned request names no workspace row, so it stays when
-    // the workspace goes.
+    // the space goes.
     let workspace = request.repository_id.is_none().then_some(&request.space_id);
     tx.execute(
         "INSERT INTO access_requests(id,workspace_id,repository_id,target_key,name,record,number)
@@ -217,6 +209,16 @@ fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Approval
         ],
     )?;
     Ok(request)
+}
+
+/// The name and repository of the space `id`, a workspace or a chat.
+fn space_record(db: &Connection, id: &str) -> Result<(String, String)> {
+    Ok(db.query_row(
+        "SELECT name,repository_id FROM workspaces WHERE id=?1
+            UNION ALL SELECT name,repository_id FROM chats WHERE id=?1",
+        [id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?)
 }
 
 /// The issue proposals of a repository, oldest first.

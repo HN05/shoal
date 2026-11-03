@@ -4889,7 +4889,7 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
     assert_eq!(denied["url"], format!("{}/issues/12", fixture.web));
     let finding = |title: &str, body: &str| {
         format!(
-            "Workspace topic proposed this as a separate issue, which was marked as a duplicate.\n\n### {title}\n{body}"
+            "Space topic proposed this as a separate issue, which was marked as a duplicate.\n\n### {title}\n{body}"
         )
     };
     assert_eq!(

@@ -904,14 +904,15 @@ impl Manager {
 
     /// Failure only logs; the decision stands.
     async fn tell_requester(&self, request: &ApprovalRequest) {
-        self.tell_workspace(&request.space_id, request.decision_message())
+        self.tell_space(&request.space_id, request.decision_message())
             .await;
     }
 
-    /// Queue `message` for the requesting workspace's agents. Failure only
+    /// Queue `message` for the agent of the requesting space. Failure only
     /// logs; the decision stands.
-    pub(crate) async fn tell_workspace(&self, workspace_id: &str, message: String) {
-        if let Err(error) = self.queue_agent_message(workspace_id, message).await {
+    pub(crate) async fn tell_space(&self, id: &str, message: String) {
+        let queued = self.queue_space_message(id, None, message, Vec::new());
+        if let Err(error) = queued.await {
             log!("approval decision message not queued: {error:#}");
         }
     }

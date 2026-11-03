@@ -280,11 +280,14 @@ pub struct IssueSpecification {
     /// workspace's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository: Option<String>,
-    /// Whether approval also assigns the issue to the workspace.
+    /// Whether approval also assigns the issue to the space.
     pub link: bool,
-    /// The proposing workspace's branch; `None` for one at a commit.
+    /// The proposing workspace's branch; `None` for one at a commit and for
+    /// a chat.
     pub branch: Option<String>,
-    pub commit: String,
+    /// The proposing workspace's commit; `None` for a chat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
     /// Findings of proposals the user marked as duplicates of this one,

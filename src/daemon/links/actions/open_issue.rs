@@ -10,7 +10,11 @@ use crate::{
         repo::{Opening, OtherRepositories},
         resolve::Effective,
     },
-    daemon::{links::proposals::OpenOutcome, scope::Caller, workspace::Manager},
+    daemon::{
+        links::{LinkSpace, proposals::OpenOutcome},
+        scope::Caller,
+        workspace::Manager,
+    },
     forge::{
         ForgeRepo,
         account::Account,
@@ -151,7 +155,13 @@ impl Manager {
             forge.check_uploads(&account, &issue.attachments).await?;
             let repository = destination.repository();
             let proposed = self
-                .propose_issue(&workspace, issue, repository, link, proposer)
+                .propose_issue(
+                    &LinkSpace::from(workspace.clone()),
+                    issue,
+                    repository,
+                    link,
+                    proposer,
+                )
                 .await?;
             return Ok(OpenOutcome::Proposed(proposed));
         }

@@ -35,7 +35,7 @@ async fn the_sweep_keeps_only_files_pending_proposals_attach() {
         follow_up: None,
         push: None,
     });
-    let request = proposal(&workspace, Target::PrOpen, PR, specification);
+    let request = proposal(&workspace.id, Target::PrOpen, PR, specification);
     manager
         .store_proposal(request, proposals::propose_pull)
         .await
@@ -77,13 +77,13 @@ async fn a_decision_refuses_a_proposal_changed_while_it_waited() {
         repository: None,
         link: false,
         branch: Some("topic".into()),
-        commit: "head".into(),
+        commit: Some("head".into()),
         agent: None,
         duplicates: Vec::new(),
         follow_up: None,
     });
     let request = proposal(
-        &workspace,
+        &workspace.id,
         Target::IssueOpen,
         proposals::ISSUE,
         specification,
@@ -172,13 +172,13 @@ pub(crate) async fn store_issue_proposal(
         repository: None,
         link: false,
         branch: workspace.branch.clone(),
-        commit: "head".into(),
+        commit: Some("head".into()),
         agent: None,
         duplicates: Vec::new(),
         follow_up: None,
     });
     let request = proposal(
-        workspace,
+        &workspace.id,
         Target::IssueOpen,
         proposals::ISSUE,
         specification,
@@ -210,13 +210,13 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
         repository: None,
         link: false,
         branch: Some("topic".into()),
-        commit: "head".into(),
+        commit: Some("head".into()),
         agent: None,
         duplicates: Vec::new(),
         follow_up: None,
     });
     let request = proposal(
-        &workspace,
+        &workspace.id,
         Target::IssueOpen,
         proposals::ISSUE,
         specification,
@@ -280,12 +280,17 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
         repository: None,
         link: false,
         branch: Some("child".into()),
-        commit: "head".into(),
+        commit: Some("head".into()),
         agent: None,
         duplicates: Vec::new(),
         follow_up: None,
     });
-    let request = proposal(&child, Target::IssueOpen, proposals::ISSUE, specification);
+    let request = proposal(
+        &child.id,
+        Target::IssueOpen,
+        proposals::ISSUE,
+        specification,
+    );
     let (proposed, _) = manager
         .store_proposal(request, proposals::propose_issue)
         .await
@@ -341,12 +346,17 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
         repository: None,
         link: false,
         branch: Some("child".into()),
-        commit: "head".into(),
+        commit: Some("head".into()),
         agent: None,
         duplicates: Vec::new(),
         follow_up: None,
     });
-    let request = proposal(&child, Target::IssueOpen, proposals::ISSUE, specification);
+    let request = proposal(
+        &child.id,
+        Target::IssueOpen,
+        proposals::ISSUE,
+        specification,
+    );
     let (pending, _) = manager
         .store_proposal(request, proposals::propose_issue)
         .await

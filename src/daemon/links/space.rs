@@ -106,6 +106,18 @@ impl Manager {
         })
     }
 
+    /// The space `id`, while it exists.
+    pub(crate) async fn find_link_space(&self, id: &str) -> Result<Option<LinkSpace>> {
+        let owned = id.to_owned();
+        let kind = (self.store)
+            .run(move |db| crate::daemon::spaces::space_kind(db, &owned))
+            .await?;
+        match kind {
+            Some(_) => self.link_space(id).await.map(Some),
+            None => Ok(None),
+        }
+    }
+
     /// Verify a workspace's worktree before a request relies on it; a
     /// chat's checkout is the registered one.
     pub(crate) async fn verify_space(&self, space: &LinkSpace) -> Result<()> {
