@@ -155,8 +155,15 @@ impl ZellijServer {
             .collect()
     }
 
-    /// Every terminal pane of `session`, with its tab's name.
+    /// Every terminal pane of `session`, with its tab's name. Zellij can
+    /// list nothing while it closes a tab, which is asked again.
     fn panes(&self, session: &str) -> Vec<(String, String)> {
+        wait_for("Zellij to list the panes", || self.listed_panes(session))
+    }
+
+    /// The terminal panes Zellij lists of `session`, none when the session
+    /// is gone, and `None` when it lists nothing.
+    fn listed_panes(&self, session: &str) -> Option<Vec<(String, String)>> {
         let output = self
             .zellij()
             .args([
@@ -170,10 +177,14 @@ impl ZellijServer {
             .output()
             .unwrap();
         if !output.status.success() {
-            return Vec::new();
+            return Some(Vec::new());
         }
-        let panes: Value = serde_json::from_slice(&output.stdout).unwrap();
-        panes
+        if output.stdout.trim_ascii().is_empty() {
+            return None;
+        }
+        let panes: Value = serde_json::from_slice(&output.stdout)
+            .unwrap_or_else(|error| panic!("zellij list-panes: {error}: {output:?}"));
+        let panes = panes
             .as_array()
             .unwrap()
             .iter()
@@ -184,7 +195,8 @@ impl ZellijServer {
                     pane["tab_name"].as_str().unwrap_or_default().to_owned(),
                 )
             })
-            .collect()
+            .collect();
+        Some(panes)
     }
 
     fn pane_open(&self, session: &str, pane: &str) -> bool {
