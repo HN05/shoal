@@ -722,14 +722,15 @@ impl Manager {
             .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown question {id}")).into())
     }
 
-    pub async fn has_open_questions(&self, workspace_id: &str) -> Result<bool> {
-        let id = workspace_id.to_owned();
+    pub async fn has_open_questions(&self, space_id: &str) -> Result<bool> {
+        let id = space_id.to_owned();
         self.store
             .run(move |db| {
                 crate::daemon::store::exists(
                     db,
                     "SELECT 1 FROM questions
-                        WHERE workspace_id=?1 AND answer IS NULL AND closed_at IS NULL",
+                        WHERE (workspace_id=?1 OR chat_id=?1)
+                            AND answer IS NULL AND closed_at IS NULL",
                     [id],
                 )
             })

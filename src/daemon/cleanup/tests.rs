@@ -1397,3 +1397,32 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
     assert_eq!(stopped.completion, None);
     assert!(manager.workspace(&opened.id).await.is_ok());
 }
+
+#[tokio::test]
+async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (chat, _) = chat_with_workspace(&temp, &manager, &process).await;
+    let ask = crate::daemon::questions::Ask {
+        question: "Which database?".into(),
+        recommendation: "SQLite".into(),
+        reason: None,
+        choices: Vec::new(),
+    };
+    manager
+        .ask_question(&chat.name, ask, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+    process.kill();
+    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    for rule in [Rule::Idle, Rule::Merged] {
+        assert_eq!(
+            (manager.chat_cleanup_candidacy(&stopped, rule))
+                .await
+                .unwrap()
+                .unwrap_err(),
+            CleanupReason::Question
+        );
+    }
+}
