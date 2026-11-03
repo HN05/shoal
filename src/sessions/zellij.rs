@@ -41,11 +41,11 @@ const CONTRACT_DIR: &str = "/contract_version_1/";
 /// soon after it answers.
 const PANE_POLL: Duration = Duration::from_millis(100);
 const PANE_POLLS: u32 = 100;
-/// How often, and how many times, Shoal asks Zellij again about a session it
-/// reports as missing while its server still runs; only a hang guard, since
-/// Zellij finds the session once its server answers in time.
-const MISSING_RETRY: Duration = Duration::from_millis(100);
-const MISSING_ATTEMPTS: u32 = 100;
+/// How often, and how many times, Shoal asks Zellij again about a session
+/// whose server does not answer while it still runs; only a hang guard,
+/// since Zellij finds the session once its server answers in time.
+const UNANSWERED_RETRY: Duration = Duration::from_millis(100);
+const UNANSWERED_ATTEMPTS: u32 = 100;
 
 /// How long a `zellij` command may run before it is stopped; only a hang
 /// guard, since each one answers at once.
@@ -286,26 +286,31 @@ impl Zellij {
     /// Every pane of `session` while its server is the instance `instance`,
     /// or any instance without one; none once it is not.
     async fn panes_on(&self, session: &str, instance: Option<&str>) -> Result<Vec<Pane>> {
+        let list = ["list-panes", "--all", "--json"];
         let listed = self
-            .session_listing(session, instance, &["list-panes", "--all", "--json"])
+            .session_listing(session, instance, &list, lists_panes)
             .await?;
         parse_panes(&listed)
     }
 
     /// What the `zellij action` listing `args` prints for `session` while
-    /// its server is the instance `instance`, or any instance without one;
-    /// empty once it is not.
+    /// its server is the instance `instance`, or any instance without one,
+    /// once it is `answered`; empty once the server is not.
     async fn session_listing(
         &self,
         session: &str,
         instance: Option<&str>,
         args: &[&str],
+        answered: fn(&str) -> bool,
     ) -> Result<String> {
         let listed = asked_while_running(
-            || {
+            || async {
                 let mut list = self.action(session);
                 list.args(args);
-                listing(list)
+                Ok(match listing(list).await? {
+                    Reply::Answered(listed) if !answered(&listed) => Reply::Unanswered,
+                    reply => reply,
+                })
             },
             || self.runs(session, instance),
         )
@@ -357,7 +362,7 @@ impl Zellij {
     /// The pane each client attached to `session` shows.
     pub async fn clients(&self, session: &str) -> Result<Vec<String>> {
         let listed = self
-            .session_listing(session, None, &["list-clients"])
+            .session_listing(session, None, &["list-clients"], |_| true)
             .await?;
         Ok(parse_clients(&listed))
     }
@@ -645,8 +650,9 @@ enum Reply<T> {
     /// The session's server answered; for `kill-session`, also when no
     /// session runs at all.
     Answered(T),
-    /// Zellij found no answering server of that name.
-    Missing,
+    /// Zellij found no answering server of that name, or, for a pane
+    /// listing, the server listed nothing.
+    Unanswered,
 }
 
 impl<T> Reply<T> {
@@ -654,15 +660,16 @@ impl<T> Reply<T> {
     fn answer(self) -> Option<T> {
         match self {
             Self::Answered(answer) => Some(answer),
-            Self::Missing => None,
+            Self::Unanswered => None,
         }
     }
 }
 
-/// What `ask` answers once Zellij finds the session, or `None` once
-/// `running` says the session's server no longer runs. Zellij counts a
-/// session only when its server answers a probe in time, so it can report a
-/// busy one as missing: Shoal asks again while the server still runs.
+/// What `ask` answers once the session's server answers, or `None` once
+/// `running` says the server no longer runs. Zellij counts a session only
+/// when its server answers a probe in time, so it can report a busy one as
+/// missing, and a running session can list no pane: Shoal asks again while
+/// the server still runs.
 async fn asked_while_running<T, Asked, Running>(
     mut ask: impl FnMut() -> Asked,
     mut running: impl FnMut() -> Running,
@@ -671,16 +678,16 @@ where
     Asked: Future<Output = Result<Reply<T>>>,
     Running: Future<Output = Result<bool>>,
 {
-    for _ in 0..MISSING_ATTEMPTS {
+    for _ in 0..UNANSWERED_ATTEMPTS {
         if let Reply::Answered(answer) = ask().await? {
             return Ok(Some(answer));
         }
         if !running().await? {
             return Ok(None);
         }
-        tokio::time::sleep(MISSING_RETRY).await;
+        tokio::time::sleep(UNANSWERED_RETRY).await;
     }
-    bail!("Zellij reported the running session as missing")
+    bail!("the running session does not answer")
 }
 
 /// The arguments that run `shell`'s command in a new pane, which closes
@@ -715,7 +722,7 @@ fn listed(output: &Output) -> Result<Reply<String>> {
     }
     let error = crate::subprocess::diagnostic(&output.stderr);
     if nothing_to_list(&error) || nothing_to_list(&stdout) {
-        return Ok(Reply::Missing);
+        return Ok(Reply::Unanswered);
     }
     let reason = if error.trim().is_empty() {
         crate::subprocess::diagnostic(&output.stdout)
@@ -809,6 +816,16 @@ fn parse_panes(listed: &str) -> Result<Vec<Pane>> {
             exited: pane.exited,
         })
         .collect())
+}
+
+/// Whether `listed`, what `list-panes --json` printed, lists a pane. A
+/// session lists none before it lays out its first tab, and a busy one can
+/// list none, though every tab holds a pane or its layout's plugins. What is
+/// no JSON array counts, so that reading it reports it.
+fn lists_panes(listed: &str) -> bool {
+    !listed.trim().is_empty()
+        && serde_json::from_str::<Vec<serde::de::IgnoredAny>>(listed)
+            .map_or(true, |panes| !panes.is_empty())
 }
 
 /// Whether `pane` is the only one of `panes` in its tab.
@@ -907,7 +924,7 @@ fn killed(output: &Output) -> Result<Reply<()>> {
     if !output.status.success()
         && String::from_utf8_lossy(&output.stdout).contains("No session named ")
     {
-        return Ok(Reply::Missing);
+        return Ok(Reply::Unanswered);
     }
     listed(output)?;
     Ok(Reply::Answered(()))

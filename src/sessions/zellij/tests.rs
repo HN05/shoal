@@ -147,7 +147,10 @@ fn a_missing_session_lists_nothing() {
     ));
     assert!(!nothing_to_list("Permission denied"));
     let missing = "Session 'busy' not found. The following sessions are active:\n";
-    assert_eq!(listed(&exited(1, "", missing)).ok(), Some(Reply::Missing));
+    assert_eq!(
+        listed(&exited(1, "", missing)).ok(),
+        Some(Reply::Unanswered)
+    );
     assert_eq!(
         listed(&exited(0, "[]", "")).ok(),
         Some(Reply::Answered("[]".to_owned()))
@@ -157,7 +160,10 @@ fn a_missing_session_lists_nothing() {
 #[test]
 fn a_session_without_an_answer_is_reported_missing() {
     let missing = "No session named \"busy\" found.\n  help: Did you mean `busy`?\n";
-    assert_eq!(killed(&exited(1, missing, "")).ok(), Some(Reply::Missing));
+    assert_eq!(
+        killed(&exited(1, missing, "")).ok(),
+        Some(Reply::Unanswered)
+    );
     assert_eq!(killed(&exited(0, "", "")).ok(), Some(Reply::Answered(())));
     let none = "No active zellij sessions found.";
     assert_eq!(killed(&exited(1, "", none)).ok(), Some(Reply::Answered(())));
@@ -165,14 +171,25 @@ fn a_session_without_an_answer_is_reported_missing() {
     assert_eq!(failed, Err("zellij failed: Permission denied".to_owned()));
 }
 
+#[test]
+fn a_pane_listing_without_panes_is_no_answer() {
+    assert!(!lists_panes(""));
+    assert!(!lists_panes("[]\n"));
+    assert!(!lists_panes("[\n]"));
+    assert!(lists_panes(
+        r#"[{"id": 0, "is_plugin": false, "tab_id": 0}]"#
+    ));
+    assert!(lists_panes("not a listing"));
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_session_reported_missing_is_asked_again_while_its_server_runs() {
-    let mut replies = vec![Reply::Missing, Reply::Missing, Reply::Answered("[]")].into_iter();
+    let mut replies = vec![Reply::Unanswered, Reply::Unanswered, Reply::Answered("[]")].into_iter();
     let mut asked = 0;
     let answer = asked_while_running(
         || {
             asked += 1;
-            std::future::ready(Ok(replies.next().unwrap_or(Reply::Missing)))
+            std::future::ready(Ok(replies.next().unwrap_or(Reply::Unanswered)))
         },
         || async { Ok(true) },
     )
@@ -181,22 +198,19 @@ async fn a_session_reported_missing_is_asked_again_while_its_server_runs() {
     assert_eq!(asked, 3);
 
     let ended = asked_while_running(
-        || async { Ok(Reply::<&str>::Missing) },
+        || async { Ok(Reply::<&str>::Unanswered) },
         || async { Ok(false) },
     )
     .await;
     assert_eq!(ended.ok(), Some(None));
 
     let busy = asked_while_running(
-        || async { Ok(Reply::<&str>::Missing) },
+        || async { Ok(Reply::<&str>::Unanswered) },
         || async { Ok(true) },
     )
     .await;
     let busy = busy.map_err(|error| error.to_string());
-    assert_eq!(
-        busy,
-        Err("Zellij reported the running session as missing".to_owned())
-    );
+    assert_eq!(busy, Err("the running session does not answer".to_owned()));
 }
 
 /// What a command that exited with `code`, printing `stdout` and `stderr`,
@@ -447,13 +461,6 @@ async fn a_place_recorded_without_its_directory_reaches_its_server() {
     let Some(server) = Isolated::start() else {
         return;
     };
-    // A background session lists its first pane only once it lays out its
-    // first tab, which can be after the command that created it returned.
-    server
-        .zellij
-        .new_pane(&server.session, |pane| pane.id == "terminal_0")
-        .await
-        .unwrap();
     let recorded = Zellij::recorded(&BTreeMap::new());
     assert_eq!(recorded.socket_dir(), None);
     let reached = recorded.reaching(&server.session).await.unwrap();
