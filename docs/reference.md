@@ -2212,9 +2212,9 @@ A child never keeps its parent: the parent's idle, merged, completion and PR
 cleanup follow its own state. Every removal of a parent, `shoal rm`, cleanup or
 the cleanup of its deleted directory, first removes the workspaces below it,
 deepest first, whatever their work, holds or questions: each stops its agents,
-keeps a checkpoint of its HEAD and unsaved files, and keeps its branch unless a
-remote or the default branch has its commits, so `shoal work restore` brings it
-back. A child that cannot go retains the parent. `shoal rm` names the children
+and unless it is disposable keeps a checkpoint of its HEAD and unsaved files, and
+its branch unless a remote or the default branch has its commits, so `shoal work
+restore` brings it back. A child that cannot go retains the parent. `shoal rm` names the children
 before asking, and its result names them in `children`; each child's journal
 records a `removed` event with the cause `parent`, and the user is notified of
 those an unattended removal took. Exporting one workspace with children is
@@ -3083,8 +3083,8 @@ how many more. A missing file
 fails before anything is stopped or recorded. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
-idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is
-reversible with [`shoal work restore`](#checkpoints-and-restore); to review in a workspace,
+idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal, except
+a disposable workspace's, is reversible with [`shoal work restore`](#checkpoints-and-restore); to review in a workspace,
 [hold](#workspace-holds) it. `done` closes the workspace's open
 [questions](#questions), so completion and PR cleanup wait only while a hold, a
 question asked afterwards or a [PR proposal](#approval-for-agent-issues-and-prs)

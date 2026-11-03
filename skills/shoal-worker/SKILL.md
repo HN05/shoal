@@ -175,8 +175,8 @@ A PR from a fork or first-time contributor can show runs that wait for approval
 instead of checks; approving them is the user's, so ask with `shoal alerts send`.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
-period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user
-can reopen a removed workspace with `shoal work restore`. Cleanup waits while one of
+period (`[cleanup] grace_minutes`) has passed. Removal is reversible, except a
+disposable workspace's: the user can reopen a removed workspace with `shoal work restore`. Cleanup waits while one of
 your questions is open, so ask with `shoal questions ask` when you need the user before the
 workspace goes. `shoal done` closes your open questions, and `shoal done --undo` does
 not reopen them. To keep your own workspace past cleanup, `shoal acquire hold
@@ -393,7 +393,7 @@ your own workspace, and the child's issue and PR activity reaches you like your
 own, each update naming the child workspace. Run `shoal done` in each child once
 its work is finished. A child never outlives your workspace: removing yours
 removes the children first, and your `done` with cleanup removes them after the
-grace period whatever their work, with a checkpoint and kept branch each. To keep
+grace period whatever their work, each but a disposable one with a checkpoint and kept branch. To keep
 one, hold it with `shoal acquire hold --workspace <child> --name <name>` and
 release the hold when it may go. To discard a child, or one a split left
 `preparing` when it was interrupted, run `shoal rm <child>`, then split again;

@@ -441,7 +441,7 @@ shared caches nothing is using, with why it keeps the other spaces. On a termina
 it opens a picker, where Tab selects several, and removes what you pick.
 `shoal cleanup spaces`, `branches` or `caches` acts on one kind, and `shoal status`
 shows why it keeps one workspace.
-Every workspace removal can be undone for 30 days: `shoal work restore` picks a removed workspace,
+Every workspace removal, except a disposable workspace's, can be undone for 30 days: `shoal work restore` picks a removed workspace,
 and `shoal work restore <workspace>` opens one again with its uncommitted files and links;
 `shoal resume` then continues the agents the removal stopped. Removal keeps the
 workspace's HEAD and unsaved files in a checkpoint, as `shoal work checkpoint` does and

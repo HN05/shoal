@@ -630,7 +630,7 @@ subtree, and so does one whose restore is queued, since it receives what
 arrived once it starts. A child never keeps its parent and never outlives it:
 the parent is cleaned up by its own rules, and every removal of it, manual or
 unattended, first removes the workspaces below it, deepest first, through the
-shared removal path with a checkpoint and kept branch each, whatever their work,
+shared removal path, each but a disposable one with a checkpoint and kept branch, whatever their work,
 holds or questions; one that cannot go retains the parent, and the journal and
 the removal's output name those taken. While a parent's completion with cleanup
 stands at its HEAD, its children go too after the grace period, whatever their
