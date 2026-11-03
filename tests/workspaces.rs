@@ -29947,6 +29947,17 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         String::from_utf8_lossy(&output.stderr).contains("holds no agent"),
         "{output:?}"
     );
+    // On a terminal too, the PR settles what the addition opens.
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(["add", url])
+            .current_dir(&fixture.repo)
+            .env("PATH", &path),
+        "",
+    );
+    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(!transcript.contains("Workspace>"), "{transcript}");
     let output = run(&["add", url, "--git-profile", "work"]);
     assert!(!output.status.success());
     assert!(

@@ -24,6 +24,7 @@ pub(super) async fn pick_add_source(
     if creation.branch.is_some()
         || creation.existing.is_some()
         || creation.base.is_some()
+        || creation.pull_head.is_some()
         || !ctx.interactive()
     {
         return Ok(None);
