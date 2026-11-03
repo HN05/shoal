@@ -1,4 +1,4 @@
-use std::{fs, os::unix::fs::MetadataExt, path::Path, sync::Arc};
+use std::{fs, sync::Arc};
 
 use super::*;
 use crate::test_support::{commit, git, manager, repository};
@@ -423,18 +423,30 @@ fn a_walk_sees_changes_of_nested_files_and_worktree_git_state() {
     let git_dir = root.path().join("git");
     fs::create_dir_all(tree.join("a/b")).unwrap();
     fs::create_dir_all(git_dir.join("logs")).unwrap();
-    fs::write(tree.join("a/b/file"), "").unwrap();
-    let newest = |path: &Path| {
-        let metadata = fs::symlink_metadata(path).unwrap();
-        metadata.ctime().max(metadata.mtime()) as u64
-    };
-    let before = walk_with_git_state(&tree, Some(&git_dir)).unwrap().changed;
-    assert!(before >= newest(&tree.join("a/b/file")));
-    fs::write(git_dir.join("HEAD"), "").unwrap();
-    assert!(
-        walk_with_git_state(&tree, Some(&git_dir)).unwrap().changed
-            >= newest(&git_dir.join("HEAD"))
-    );
+    // Future modification times, each newer than every change time the
+    // fixture's own writes leave, so only reading that file reports it.
+    let now = unix_seconds();
+    let changes = [
+        (tree.join("a/b/file"), now + 1000),
+        (git_dir.join("HEAD"), now + 2000),
+        (git_dir.join("index"), now + 3000),
+        (git_dir.join("logs/HEAD"), now + 4000),
+    ];
+    for (path, modified) in changes {
+        fs::write(&path, "").unwrap();
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(modified))
+            .unwrap();
+        assert_eq!(
+            walk_with_git_state(&tree, Some(&git_dir)).unwrap().changed,
+            modified,
+            "{}",
+            path.display()
+        );
+    }
 }
 
 #[tokio::test]
