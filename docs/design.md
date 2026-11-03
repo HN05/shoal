@@ -1259,9 +1259,11 @@ terminal; noninteractive and JSON calls require it.
 An agent whose executables are not on PATH
 is refused before any work starts and left out of pickers, the workspace menu
 and completion; pickers offer “No agent” to continue without launching one. `config show` reports effective repository values with their winning layers and uses a registered checkout
-before a workspace exists, then the picker; `--repo` names a repository's checkout directly. `status` combines lifecycle, fork-point changes, active work,
-leases and watched PR state in one workspace view; the daemon looks PRs up on each request
-and keeps a failed lookup on its PR. Human output uses `Display` for enum values and a shared
+before a workspace exists, then the picker; `--repo` names a repository's checkout directly. `status` shows any space,
+a workspace or a chat, running or stopped, through one path: links, watched PR state,
+completion, sessions and what awaits the user for both, and for a workspace also
+lifecycle, fork-point changes, active work and leases; the daemon looks PRs up on each
+request and keeps a failed lookup on its PR. Human output uses `Display` for enum values and a shared
 semantic palette at the CLI presentation layer; machine output and stored values
 stay unstyled. The output format resolves once after parsing, from `--json` or
 `--text`, then `SHOAL_OUTPUT`, then text, so results, errors and prompts agree;
