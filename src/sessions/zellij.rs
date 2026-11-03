@@ -36,11 +36,11 @@ const MAX_SESSION_LEN: usize = 20;
 /// socket directory and the session's name.
 const MAX_SOCKET_PATH: usize = 103;
 const CONTRACT_DIR: &str = "/contract_version_1/";
-/// How often, and how many times, Shoal reads a new tab's, split's or
-/// session's panes until its pane shows; only a hang guard, since Zellij lists it
-/// soon after it answers.
+/// How often, and for how long, Shoal reads a new tab's, split's or
+/// session's panes until its pane shows; only a hang guard, since Zellij
+/// lists it soon after it answers, though a loaded machine can take seconds.
 const PANE_POLL: Duration = Duration::from_millis(100);
-const PANE_POLLS: u32 = 100;
+const PANE_WAIT: Duration = Duration::from_secs(30);
 /// How often, and how many times, Shoal asks Zellij again about a session
 /// whose server does not answer while it still runs; only a hang guard,
 /// since Zellij finds the session once its server answers in time.
@@ -435,14 +435,17 @@ impl Zellij {
     /// The first pane of `session` that is `new`, which Shoal just opened,
     /// once Zellij lists it.
     async fn new_pane(&self, session: &str, new: impl Fn(&Pane) -> bool) -> Result<Pane> {
-        for _ in 0..PANE_POLLS {
+        let deadline = tokio::time::Instant::now() + PANE_WAIT;
+        loop {
             let panes = self.panes(session).await?;
-            if let Some(pane) = panes.into_iter().find(&new) {
-                return Ok(pane);
+            if let Some(pane) = panes.iter().find(|pane| new(pane)) {
+                return Ok(pane.clone());
+            }
+            if tokio::time::Instant::now() >= deadline {
+                bail!("Zellij lists no new pane; it lists {}", pane_ids(&panes));
             }
             tokio::time::sleep(PANE_POLL).await;
         }
-        bail!("Zellij lists no new pane")
     }
 
     /// The command that opens `shell` in a new tab of `session`.
@@ -901,6 +904,18 @@ fn alone_in_tab(pane: &Pane, panes: &[Pane]) -> bool {
     panes
         .iter()
         .all(|other| other.id == pane.id || other.tab != pane.tab)
+}
+
+/// The IDs of `panes`, for a message; `none` without any.
+fn pane_ids(panes: &[Pane]) -> String {
+    if panes.is_empty() {
+        return "none".to_owned();
+    }
+    panes
+        .iter()
+        .map(|pane| pane.id.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Whether the plugin `pane` is one Zellij's layouts put in every tab.
