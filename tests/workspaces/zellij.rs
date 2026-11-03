@@ -86,16 +86,6 @@ impl ZellijServer {
         command
     }
 
-    fn lines(&self, args: &[&str]) -> Vec<String> {
-        let output = self.zellij().args(args).output().unwrap();
-        assert!(output.status.success(), "zellij {args:?}: {output:?}");
-        String::from_utf8(output.stdout)
-            .unwrap()
-            .lines()
-            .map(str::to_owned)
-            .collect()
-    }
-
     /// A client attached to `session` on a terminal of its own.
     fn attach(&self, session: &str) -> Child {
         let (master, slave) = pty::open();
@@ -151,23 +141,34 @@ impl ZellijServer {
         wait_until("the client to leave", || self.clients("caller").is_empty());
     }
 
-    /// The pane each client of `session` shows.
+    /// The pane each client of `session` shows; none while Zellij reports
+    /// the session missing, as it can a busy one or one starting.
     fn clients(&self, session: &str) -> Vec<String> {
-        self.lines(&["--session", session, "action", "list-clients"])
-            .iter()
+        let output = self
+            .zellij()
+            .args(["--session", session, "action", "list-clients"])
+            .output()
+            .unwrap();
+        if reported_missing(&output) {
+            return Vec::new();
+        }
+        assert!(output.status.success(), "zellij list-clients: {output:?}");
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
             .skip(1)
             .filter_map(|line| line.split_whitespace().nth(1).map(str::to_owned))
             .collect()
     }
 
-    /// Every terminal pane of `session`, with its tab's name. Zellij can
-    /// list nothing while it closes a tab, which is asked again.
+    /// Every terminal pane of `session`, which lasts the test, with its
+    /// tab's name. Zellij can list nothing while it closes a tab, or report
+    /// a busy session missing, which is asked again.
     fn panes(&self, session: &str) -> Vec<(String, String)> {
         wait_for("Zellij to list the panes", || self.listed_panes(session))
     }
 
-    /// The terminal panes Zellij lists of `session`, none when the session
-    /// is gone, and `None` when it lists nothing.
+    /// The terminal panes Zellij lists of `session`, and `None` when it
+    /// lists nothing or reports the session missing.
     fn listed_panes(&self, session: &str) -> Option<Vec<(String, String)>> {
         let output = self
             .zellij()
@@ -181,12 +182,10 @@ impl ZellijServer {
             ])
             .output()
             .unwrap();
-        if !output.status.success() {
-            return Some(Vec::new());
-        }
-        if output.stdout.trim_ascii().is_empty() {
+        if reported_missing(&output) || output.stdout.trim_ascii().is_empty() {
             return None;
         }
+        assert!(output.status.success(), "zellij list-panes: {output:?}");
         let panes: Value = serde_json::from_slice(&output.stdout)
             .unwrap_or_else(|error| panic!("zellij list-panes: {error}: {output:?}"));
         let panes = panes
@@ -264,6 +263,13 @@ impl Drop for ZellijServer {
         let _ = self.client.wait();
         let _ = self.zellij().args(["kill-all-sessions", "--yes"]).output();
     }
+}
+
+/// Whether Zellij reported the session missing, as it can one busy or
+/// starting; among several other sessions it lists them and succeeds.
+fn reported_missing(output: &std::process::Output) -> bool {
+    let error = String::from_utf8_lossy(&output.stderr);
+    error.contains("There is no active session") || error.contains("' not found")
 }
 
 /// The names of `workspace`'s sessions, as `shoal status` lists them.
@@ -355,7 +361,10 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
     add_inside(&fixture, &zellij, "placed");
     // The split leaves the user's tab its name.
     assert_eq!(zellij.tabs(), tabs);
-    assert_eq!(zellij.panes("caller").len(), 2);
+    // A listing can still miss the pane Shoal saw open.
+    wait_until("the split Shoal opened to show", || {
+        zellij.panes("caller").len() == 2
+    });
 
     fixture.ok(&["rm", "placed", "--yes"]);
     wait_until("the split Shoal opened to close", || {
