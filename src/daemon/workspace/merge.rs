@@ -289,10 +289,7 @@ async fn synced_to(
 async fn unpushed(path: &Path, default: &str, default_commit: &str) -> Result<u64> {
     match tracking_ref(path, default).await? {
         Some(tracking) => git::status::commits_between(path, &tracking, default_commit).await,
-        None => Ok(git_run(path, &["rev-list", "--count", default_commit])
-            .await?
-            .trim()
-            .parse()?),
+        None => git::status::commits_of(path, default_commit).await,
     }
 }
 

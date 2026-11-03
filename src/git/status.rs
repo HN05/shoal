@@ -58,6 +58,14 @@ pub async fn commits_since(repo: &Path, base: &str) -> Result<u64> {
     commits_between(repo, base, "HEAD").await
 }
 
+/// Commits reachable from `revision`.
+pub async fn commits_of(repo: &Path, revision: &str) -> Result<u64> {
+    Ok(run(repo, &["rev-list", "--count", revision])
+        .await?
+        .trim()
+        .parse()?)
+}
+
 /// Commits on `revision` that `base` does not contain.
 pub async fn commits_between(repo: &Path, base: &str, revision: &str) -> Result<u64> {
     let range = format!("{base}..{revision}");
