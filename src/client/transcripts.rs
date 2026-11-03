@@ -1,6 +1,8 @@
 //! Where agent tools keep their sessions' files on this machine, such as a
 //! session's transcript. Shoal finds them by name and never reads them: an
-//! app that shows a conversation reads its tool's own format.
+//! app that shows a conversation reads its tool's own format. The daemon
+//! says which sessions a space's agents reported, and
+//! [`space_transcripts`] finds their files.
 mod claude;
 mod codex;
 
@@ -10,10 +12,14 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::client::ai::IntegrationKind;
+use crate::client::{
+    ai::IntegrationKind,
+    connection::{Daemon, request},
+    protocol::WorkspaceMethod,
+};
 
 /// A session an agent of a space reported. Sessions its hooks never
 /// reported, such as those before a `/clear`, stay unknown.
@@ -38,6 +44,76 @@ pub struct SpaceSessions {
     pub integrations: BTreeMap<String, IntegrationKind>,
     /// The `[env]` values the repository's tracked agents ran with.
     pub environments: Vec<BTreeMap<String, String>>,
+}
+
+/// A session a space's agent reported, with its files on this machine.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Transcript {
+    #[serde(flatten)]
+    pub session: ReportedSession,
+    /// The conversation's file, when this machine has it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<PathBuf>,
+    /// Every file of the session, the transcript included; none for a
+    /// session whose files are elsewhere, or of an agent whose tool Shoal
+    /// does not know.
+    #[serde(default)]
+    pub files: Vec<PathBuf>,
+    /// Why its files could not be looked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// The sessions the agents of the workspace or chat `space` reported, each
+/// with its files on this machine.
+pub async fn space_transcripts(daemon: &impl Daemon, space: String) -> Result<Vec<Transcript>> {
+    let sessions: SpaceSessions = request(daemon, WorkspaceMethod::SpaceSessions { space }).await?;
+    let home = daemon.paths().home.clone();
+    tokio::task::spawn_blocking(move || locate(&home, &sessions))
+        .await
+        .context("look for the sessions' files")
+}
+
+/// `sessions` with their files, wherever this process's environment under
+/// `home` or one their agents ran with put them.
+pub fn locate(home: &Path, sessions: &SpaceSessions) -> Vec<Transcript> {
+    let environments = Environments::new(home, &sessions.environments);
+    let environments = environments.each();
+    sessions
+        .sessions
+        .iter()
+        .map(|reported| {
+            let integration = sessions.integrations.get(&reported.agent).copied();
+            let store = store(integration.unwrap_or(IntegrationKind::None));
+            transcript(reported.clone(), store, &environments)
+        })
+        .collect()
+}
+
+/// `session` with its files, kept as `store` keeps them, in the first of
+/// `environments` that has them.
+fn transcript(
+    session: ReportedSession,
+    store: Option<&dyn Store>,
+    environments: &[AgentEnvironment],
+) -> Transcript {
+    let found = store.map(|store| find(store, environments, &session.session));
+    let (found, error) = match found.transpose() {
+        Ok(found) => (found.flatten(), None),
+        Err(error) => (None, Some(format!("{error:#}"))),
+    };
+    let (path, files) = found.map_or_else(Default::default, |found| {
+        let directory = found.directory;
+        let path = found.files.transcript.map(|path| directory.join(path));
+        let files = found.files.files.iter().map(|file| directory.join(file));
+        (path, files.collect())
+    });
+    Transcript {
+        session,
+        path,
+        files,
+        error,
+    }
 }
 
 /// What an agent runs with, which says where its tool keeps its files: this

@@ -2416,9 +2416,11 @@ Exporting every workspace of a repository checks each one before removing any, s
 one that cannot leave refuses the set while all stay; a failure once removals
 begin leaves the exported ones moved and the rest in place, each reported.
 Agent conversations are the agent tools' private files, which Shoal never
-reads or changes. An export copies each reported session's files unread, found
-by ID where the agent's integration says its tool keeps them, under the
-daemon's environment or one its agents ran with, and an import puts them at the
+reads or changes. Shoal tells clients where they are without reading them: the
+daemon reports the sessions a space's agents reported, and `shoal::client`
+finds each one's files by ID where its tool keeps them, under the client's
+environment or one the repository's agents ran with, as an export does. An
+export copies each reported session's files unread, and an import puts them at the
 same path under the importing agent's session directory, replacing a file there
 only with one that continues it, as a session that went away and came back does,
 and leaving that to the installed Shoal in a development build; a session whose

@@ -101,3 +101,84 @@ fn session_ids_name_one_file() {
         assert!(!is_file_name(id), "{id}");
     }
 }
+
+fn reported(agent: &str, session: &str, execution: Option<&str>) -> ReportedSession {
+    ReportedSession {
+        agent: agent.into(),
+        session: session.into(),
+        execution: execution.map(Into::into),
+        current: execution.is_none(),
+    }
+}
+
+#[test]
+fn each_session_comes_with_the_files_this_machine_has() {
+    let home = tempfile::tempdir().unwrap();
+    let claude = home.path().join(".claude/projects/-work");
+    write(&claude.join("s1.jsonl"));
+    write(&claude.join("s1/subagents/one.jsonl"));
+    let rollout = home
+        .path()
+        .join(".codex/sessions/2026/10/30/rollout-2026-10-30T01-02-03-s2.jsonl");
+    write(&rollout);
+    let sessions = SpaceSessions {
+        sessions: vec![
+            reported("claude", "s1", Some("e1")),
+            reported("codex", "s2", Some("e2")),
+            // Moved here from another machine, or deleted.
+            reported("claude", "gone", Some("e3")),
+            // An agent whose tool Shoal does not know.
+            reported("custom", "s4", Some("e4")),
+            // A chat's session, which no execution runs.
+            reported("claude", "s1", None),
+        ],
+        integrations: BTreeMap::from([
+            ("claude".into(), IntegrationKind::Claude),
+            ("codex".into(), IntegrationKind::Codex),
+            ("custom".into(), IntegrationKind::None),
+        ]),
+        environments: Vec::new(),
+    };
+    let transcripts = locate(home.path(), &sessions);
+    let found: Vec<_> = transcripts
+        .iter()
+        .map(|transcript| (transcript.path.clone(), transcript.files.clone()))
+        .collect();
+    let transcript = claude.join("s1.jsonl");
+    let claude_files = vec![transcript.clone(), claude.join("s1/subagents/one.jsonl")];
+    assert_eq!(
+        found,
+        [
+            (Some(transcript.clone()), claude_files.clone()),
+            (Some(rollout.clone()), vec![rollout]),
+            (None, Vec::new()),
+            (None, Vec::new()),
+            (Some(transcript), claude_files),
+        ]
+    );
+    let reported: Vec<_> = transcripts
+        .into_iter()
+        .map(|transcript| {
+            assert_eq!(transcript.error, None);
+            transcript.session
+        })
+        .collect();
+    assert_eq!(reported, sessions.sessions);
+}
+
+#[test]
+fn a_session_whose_directory_cannot_be_named_says_why() {
+    let home = tempfile::tempdir().unwrap();
+    let sessions = SpaceSessions {
+        sessions: vec![reported("claude", "s1", Some("e1"))],
+        integrations: BTreeMap::from([("claude".into(), IntegrationKind::Claude)]),
+        environments: vec![BTreeMap::from([(
+            crate::client::env::CLAUDE_CONFIG_DIR.to_owned(),
+            "relative".to_owned(),
+        )])],
+    };
+    let [transcript] = locate(home.path(), &sessions).try_into().unwrap();
+    let error = transcript.error.unwrap();
+    assert!(error.contains("absolute"), "{error}");
+    assert!(transcript.files.is_empty());
+}
