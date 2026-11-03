@@ -526,3 +526,58 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
         main
     );
 }
+
+#[tokio::test]
+async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
+    let (temp, manager) = manager().await;
+    let origin = repository(temp.path(), "origin");
+    git(
+        temp.path(),
+        &["clone", "-q", origin.to_str().unwrap(), "clone"],
+    );
+    std::fs::write(origin.join("fork"), "fork\n").unwrap();
+    commit(&origin, "fork");
+    let head = git(&origin, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(&origin, &["update-ref", "refs/pull/6/head", &head]);
+    let clone = temp.path().join("clone");
+    git(
+        &clone,
+        &["update-ref", "refs/remotes/origin/release", "main"],
+    );
+    let repo = manager
+        .register_repository(clone.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let opened = manager
+        .open_pull_head(
+            repo.id.as_str().into(),
+            "https://forge.example/team/repo/pulls/6".into(),
+            crate::protocol::PullHead {
+                number: 6,
+                reference: "refs/pull/6/head".into(),
+                commit: head.clone(),
+                base: Some("refs/remotes/origin/release".into()),
+            },
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    manager
+        .remove_workspace(
+            &opened.workspace.id,
+            crate::removal::UnsavedWork::All,
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    git(&clone, &["update-ref", "-d", "refs/remotes/origin/release"]);
+    let restored = manager
+        .restore_workspace(&opened.workspace.name)
+        .await
+        .unwrap()
+        .opened
+        .workspace;
+    assert_eq!(restored.base_ref, None);
+    assert_eq!(manager.diff_base(&restored.id).await.unwrap().commit, head);
+}

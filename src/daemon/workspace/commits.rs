@@ -214,12 +214,13 @@ impl Manager {
         files: Option<RestoredFiles>,
     ) -> Result<Workspace> {
         let (repo, _guard) = self.lock_repository(removed.repository_id.as_str()).await?;
+        let diff_ref = surviving_ref(&repo, removed.base_ref.as_deref()).await?;
         let workspace = self
             .record_commit_workspace(
                 &repo,
                 &removed.name,
                 at,
-                removed.base_ref.clone(),
+                diff_ref,
                 None,
                 CreationOptions::default(),
             )
@@ -307,6 +308,19 @@ impl Manager {
             .run(move |db| crate::daemon::store::free_name(db, &name))
             .await
     }
+}
+
+/// `reference` while `repo` still has it; a deleted one, such as a merged
+/// PR's base branch, leaves the diff comparing with the starting commit.
+async fn surviving_ref(repo: &Repository, reference: Option<&str>) -> Result<Option<String>> {
+    let Some(reference) = reference else {
+        return Ok(None);
+    };
+    Ok(
+        git::ref_exists(&repo.path, reference, git::isolated_command)
+            .await?
+            .then(|| reference.to_owned()),
+    )
 }
 
 /// A PR's `head`, fetched from `origin` and checked to be the commit the
