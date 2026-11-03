@@ -279,7 +279,7 @@ async fn export_the_daemon_cannot_write_keeps_the_workspace() {
 fn import_refuses_other_files_and_newer_formats() {
     let error = Import::read(&mut &b"not an export\n"[..]).err().unwrap();
     assert_eq!(error.to_string(), "not a Shoal export");
-    let error = Import::read(&mut &b"shoal workspace 4\n{}\n"[..])
+    let error = Import::read(&mut &b"shoal workspace 5\n{}\n"[..])
         .err()
         .unwrap();
     assert!(error.to_string().contains("newer format"), "{error}");
@@ -296,6 +296,16 @@ fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
     assert_eq!(version(&manifest), 1);
     manifest.session_files = vec![session_file("p/s1.jsonl", 1)];
     assert_eq!(version(&manifest), 2);
+    // A workspace at a commit needs an importer that opens it without a
+    // branch; one before it refuses the package.
+    let mut at_commit = manifest.clone();
+    if let Space::Workspace(packaged) = &mut at_commit.space {
+        packaged.workspace.at = Some(crate::model::StartingCommit {
+            commit: "abc".into(),
+            made_for: None,
+        });
+    }
+    assert_eq!(version(&at_commit), 4);
     // Earlier versions name no kind; their manifests hold a workspace.
     let mut value = serde_json::to_value(&manifest).unwrap();
     assert_eq!(value["kind"], "workspace");
@@ -347,8 +357,8 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         }),
         session_files: vec![session_file("p/s1.jsonl", 3)],
     };
-    assert_eq!(version(&manifest), VERSION);
-    let bytes = export_bytes(&header(VERSION), &manifest, &["abc"]);
+    assert_eq!(version(&manifest), 3);
+    let bytes = export_bytes(&header(3), &manifest, &["abc"]);
     let import = Import::read(&mut &bytes[..]).unwrap();
     assert!(import.bundle.is_none());
     assert_eq!(import.manifest.name(), "plan-cache");

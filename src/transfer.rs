@@ -22,15 +22,17 @@ use crate::{
 /// The first line of a package names its format and the version of it,
 /// the lowest that reads the package, so an older Shoal imports what it
 /// can: 1 holds a workspace, 2 a workspace with session files, which
-/// version 1 importers would read as part of the bundle, and 3 any space,
-/// naming its kind.
+/// version 1 importers would read as part of the bundle, 3 any space,
+/// naming its kind, and 4 a workspace at a commit, which earlier importers
+/// would open on a branch.
 const FORMAT: &str = "shoal workspace";
-const VERSION: u32 = 3;
+const VERSION: u32 = 4;
 
 /// The version of the format that reads the package `manifest` describes.
 fn version(manifest: &Manifest) -> u32 {
     match (&manifest.space, manifest.session_files.is_empty()) {
-        (Space::Chat(_), _) => VERSION,
+        (Space::Workspace(packaged), _) if packaged.workspace.at.is_some() => VERSION,
+        (Space::Chat(_), _) => 3,
         (Space::Workspace(_), false) => 2,
         (Space::Workspace(_), true) => 1,
     }
@@ -408,8 +410,8 @@ impl Import {
         input.read_line(&mut line)?;
         let mut manifest: serde_json::Value =
             serde_json::from_str(&line).context("read the export's manifest")?;
-        // Earlier versions hold a workspace without naming the kind.
-        if version < VERSION
+        // Versions before 3 hold a workspace without naming the kind.
+        if version < 3
             && let Some(manifest) = manifest.as_object_mut()
         {
             manifest.insert("kind".into(), "workspace".into());
