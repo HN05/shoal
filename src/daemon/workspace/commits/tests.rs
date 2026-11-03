@@ -102,6 +102,11 @@ async fn a_tag_only_origin_has_is_fetched_with_its_tags() {
         temp.path(),
         &["clone", "-q", origin.to_str().unwrap(), "clone"],
     );
+    // A branch origin deleted since the clone fetched it, and a local tag.
+    git(&origin, &["branch", "gone"]);
+    git(&checkout, &["fetch", "-q", "origin"]);
+    git(&origin, &["branch", "-D", "gone"]);
+    git(&checkout, &["tag", "local"]);
     std::fs::write(origin.join("released"), "1\n").unwrap();
     commit(&origin, "released");
     git(&origin, &["tag", "release"]);
@@ -119,6 +124,10 @@ async fn a_tag_only_origin_has_is_fetched_with_its_tags() {
     .await
     .unwrap();
     assert_eq!(head(&workspace.path).0, released);
+    // The fetch drops the stale tracking ref, which would count as pushed,
+    // and keeps the local tag.
+    assert!(git(&checkout, &["branch", "-r", "--list", "origin/gone"]).is_empty());
+    assert!(!git(&checkout, &["tag", "--list", "local"]).is_empty());
     assert!(
         create(
             &manager,

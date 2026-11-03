@@ -82,9 +82,10 @@ pub async fn materialize_branch(repo: &Path, remote: &str, branch: &str) -> Resu
 }
 
 /// Fetch `remote`'s branches and tags, so a tag or commit that does not
-/// resolve here may resolve afterwards.
+/// resolve here may resolve afterwards, deleting the tracking refs of
+/// branches it no longer has, as [`remote`] does; tags are not pruned.
 pub async fn with_tags(repo: &Path, remote: &str) -> Result<()> {
-    let args = [FETCH_SAFE_ARGS, &["--tags", "--", remote]].concat();
+    let args = [FETCH_SAFE_ARGS, &["--prune", "--tags", "--", remote]].concat();
     // `--tags` after `--no-tags` wins.
     super::run_isolated(repo, &args).await.map(drop)
 }
