@@ -674,16 +674,18 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
             .find_spaces(target, Some(subtree.clone()))
             .await
             .unwrap();
-        assert_eq!(found.ids(), std::slice::from_ref(&child.id), "{target:?}");
+        let found: Vec<_> = found.iter().map(|space| space.id()).collect();
+        assert_eq!(found, [child.id.as_str()], "{target:?}");
         // Unscoped, the chat links the items too, but holds no lease.
         let everywhere = manager.find_spaces(target, None).await.unwrap();
-        assert_eq!(everywhere.workspaces.len(), 2, "{target:?}");
-        let chats: Vec<_> = everywhere.chats.iter().map(|chat| &chat.id).collect();
+        let (workspaces, chats): (Vec<_>, Vec<_>) = everywhere
+            .iter()
+            .partition(|space| matches!(space, crate::model::PresentSpace::Workspace(_)));
+        assert_eq!(workspaces.len(), 2, "{target:?}");
+        let chats: Vec<_> = chats.iter().map(|space| space.id()).collect();
         let linked = matches!(target, crate::model::SpaceTarget::Item { .. });
-        assert_eq!(
-            chats,
-            linked.then_some(&chat.id).into_iter().collect::<Vec<_>>()
-        );
+        let expected: Vec<_> = linked.then_some(chat.id.as_str()).into_iter().collect();
+        assert_eq!(chats, expected, "{target:?}");
     }
 }
 

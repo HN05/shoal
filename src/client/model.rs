@@ -1092,8 +1092,10 @@ pub struct RenamedChat {
 }
 
 /// A space as it exists: a workspace or a chat, running or stopped, which
-/// share one namespace of IDs and names.
-#[derive(Debug, Clone)]
+/// share one namespace of IDs and names. JSON gives its record with its
+/// `kind`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 #[allow(
     clippy::large_enum_variant,
     reason = "a lookup's result, read once by the request that made it"
@@ -1149,23 +1151,15 @@ impl PresentSpace {
     }
 }
 
-/// Spaces a caller sees, such as all of them or those a lookup finds:
-/// workspaces, and chats, running or stopped.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// The spaces a caller sees: its workspaces, and its chats, running or
+/// stopped.
+#[derive(Debug, Clone, Default)]
 pub struct Spaces {
     pub workspaces: Vec<Workspace>,
     pub chats: Vec<Chat>,
 }
 
 impl Spaces {
-    /// Their IDs: the workspaces', then the chats'.
-    pub fn ids(self) -> Vec<String> {
-        let workspaces = self.workspaces.into_iter().map(|workspace| workspace.id);
-        workspaces
-            .chain(self.chats.into_iter().map(|chat| chat.id))
-            .collect()
-    }
-
     /// The space `selector` names, by ID or name.
     pub fn find(&self, selector: &str) -> Option<PresentSpace> {
         let named = |id: &str, name: &str| id == selector || name == selector;

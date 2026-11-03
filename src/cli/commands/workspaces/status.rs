@@ -13,7 +13,7 @@ use crate::{
         ui::{self, Fallback},
     },
     forge::{IssueInput, items::link::Selection},
-    model::{Chat, SpaceDetail, SpaceStatus, SpaceTarget, Spaces, Workspace},
+    model::{Chat, PresentSpace, SpaceDetail, SpaceStatus, SpaceTarget, Workspace},
     protocol::{ConfigTarget, WorkspaceMethod},
 };
 
@@ -28,10 +28,11 @@ pub(in crate::cli::commands) async fn status(
         ctx.show(&status, |status| render_status(status, ctx.json))?;
         return Ok(0);
     };
-    let spaces = request::<Spaces>(&ctx.paths, WorkspaceMethod::FindSpaces { target }).await?;
+    let method = WorkspaceMethod::FindSpaces { target };
+    let spaces = request::<Vec<PresentSpace>>(&ctx.paths, method).await?;
     let mut statuses = Vec::new();
-    for space in spaces.ids() {
-        statuses.push(status_view(ctx, space).await?);
+    for space in spaces {
+        statuses.push(status_view(ctx, space.id().to_owned()).await?);
     }
     ctx.show(&statuses, |statuses| {
         for (index, status) in statuses.iter().enumerate() {

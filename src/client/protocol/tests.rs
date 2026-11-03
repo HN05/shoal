@@ -483,6 +483,38 @@ async fn a_list_too_large_for_a_frame_arrives_in_pages_that_join() {
     );
 }
 
+/// The spaces a lookup finds arrive in pages when they outgrow a frame.
+#[tokio::test]
+async fn found_spaces_too_large_for_a_frame_arrive_in_pages() {
+    use crate::{model::PresentSpace, state::WorkspaceState};
+    let spaces: Vec<PresentSpace> = (0..1000)
+        .map(|n| {
+            PresentSpace::Workspace(Workspace::new_record(
+                "repo".into(),
+                format!("workspace-{n}"),
+                format!("/work/workspace-{n}").into(),
+                Some(format!("branch-{n}")),
+                WorkspaceState::Ready,
+            ))
+        })
+        .collect();
+    let frames = Response::new(7, Body::Spaces(spaces.clone()))
+        .frames()
+        .unwrap();
+    assert!(frames.len() > 1);
+    let mut wire = Vec::new();
+    for frame in &frames {
+        write(&mut wire, frame).await.unwrap();
+    }
+    let mut reader = tokio::io::BufReader::new(wire.as_slice());
+    let joined = read_response(&mut reader).await.unwrap();
+    let joined = Vec::<PresentSpace>::try_from(joined.body).unwrap();
+    let ids = |spaces: &[PresentSpace]| -> Vec<String> {
+        spaces.iter().map(|space| space.id().to_owned()).collect()
+    };
+    assert_eq!(ids(&joined), ids(&spaces));
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_response_read_cancelled_partway_keeps_what_it_read() {
     use std::time::Duration;

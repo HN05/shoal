@@ -7,30 +7,29 @@ use crate::{
         ForgeRepo, IssueInput,
         items::link::{self, LinkKind},
     },
-    model::{Relation, SpaceTarget, Spaces},
+    model::{PresentSpace, Relation, SpaceTarget},
 };
 
 impl Manager {
     /// The spaces that link an issue, PR or CI run, or the workspaces that
-    /// hold a lease on a resource, optionally only among those `within`.
+    /// hold a lease on a resource, optionally only among those `within`:
+    /// workspaces in listing order, then chats.
     pub async fn find_spaces(
         &self,
         target: &SpaceTarget,
         within: Option<Vec<String>>,
-    ) -> Result<Spaces> {
+    ) -> Result<Vec<PresentSpace>> {
         let ids = match target {
             SpaceTarget::Item { kind, input } => self.linking_spaces(*kind, input, within).await?,
             SpaceTarget::Resource { name } => self.holding_workspaces(name, within).await?,
         };
-        let mut spaces = Spaces {
-            workspaces: self.list_workspaces().await?,
-            chats: self.chats().await?,
-        };
-        spaces
-            .workspaces
-            .retain(|workspace| ids.contains(&workspace.id));
-        spaces.chats.retain(|chat| ids.contains(&chat.id));
-        Ok(spaces)
+        let workspaces = self.list_workspaces().await?;
+        let workspaces = workspaces.into_iter().map(PresentSpace::Workspace);
+        let chats = self.chats().await?.into_iter().map(PresentSpace::Chat);
+        Ok(workspaces
+            .chain(chats)
+            .filter(|space| ids.iter().any(|id| id == space.id()))
+            .collect())
     }
 
     async fn linking_spaces(

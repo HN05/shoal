@@ -7,7 +7,7 @@ use super::Caller;
 use crate::{
     daemon::{approvals::ApprovalRequest, questions::Question, workspace::Manager},
     execution::recovery,
-    model::{Chat, QueueEntry, QueueRequest, Repository, SpaceTarget, Spaces},
+    model::{Chat, PresentSpace, QueueEntry, QueueRequest, Repository, SpaceTarget},
     repository::Selector,
 };
 
@@ -33,7 +33,7 @@ impl Manager {
         &self,
         target: &SpaceTarget,
         caller: Option<&Caller>,
-    ) -> Result<Spaces> {
+    ) -> Result<Vec<PresentSpace>> {
         let within = match caller {
             Some(caller) => Some(self.subtree(&caller.workspace_id).await?),
             None => None,
