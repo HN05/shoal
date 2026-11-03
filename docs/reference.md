@@ -2573,8 +2573,9 @@ Are you sure? [y/N]
 ```
 
 The default answer is no. A merge is refused when, while the question was open,
-its branch moved, the default branch took commits other than its upstream's, or
-the push destination changed. `--yes` skips the question, and `[merge] confirm =
+its branch moved, the default branch took commits other than its upstream's, the
+push destination changed, or a conflict check found other files changed on both
+sides than the question named. `--yes` skips the question, and `[merge] confirm =
 false` skips it for a merge that pushes; without a terminal, as in scripts or
 with `--json`, a merge that would ask is refused unless the question is skipped.
 A merge that stays local asks only about files changed on both sides. An agent's

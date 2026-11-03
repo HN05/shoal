@@ -55,7 +55,9 @@ impl Manager {
     pub async fn prepare_merge(&self, selector: &str, options: &MergeOptions) -> Result<MergePlan> {
         let merge = self.validate_merge(selector, options.push).await?;
         if let Some(confirmed) = &options.confirmed {
-            ensure_confirmed(&merge, confirmed).await?;
+            let warning = self.branch_merge_warning(&merge.workspace.id).await?;
+            let warned = warning.map(|warning| warning.files).unwrap_or_default();
+            ensure_confirmed(&merge, confirmed, &warned).await?;
         }
         let MergeSource {
             workspace,
@@ -221,9 +223,19 @@ impl Manager {
 
 /// Refuse a merge that is no longer the one the user confirmed: the branch
 /// moved, the default branch took commits its upstream lacks, so the push
-/// would publish them too, or the default branch's upstream changed.
-async fn ensure_confirmed(merge: &MergeSource, confirmed: &MergeConfirmation) -> Result<()> {
+/// would publish them too, the default branch's upstream changed, or a
+/// conflict check found other sensitive files than the `warned` ones the
+/// question named.
+async fn ensure_confirmed(
+    merge: &MergeSource,
+    confirmed: &MergeConfirmation,
+    warned: &[String],
+) -> Result<()> {
     let (branch, default) = (&merge.branch, &merge.default);
+    ensure!(
+        confirmed.changed_on_both_sides == warned,
+        "a conflict check found other files changed on both sides since you confirmed the merge; run shoal merge again"
+    );
     ensure!(
         merge.source == confirmed.head,
         "{branch} moved since you confirmed the merge; run shoal merge again"

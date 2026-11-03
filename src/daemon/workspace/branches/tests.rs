@@ -1906,6 +1906,55 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
 }
 
 #[tokio::test]
+async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
+    let f = Fixture::new().await;
+    fs::write(
+        f.repo.join(".shoal.toml"),
+        "[conflicts]\nsensitive = ['version']\n",
+    )
+    .unwrap();
+    commit(&f.repo, ".shoal.toml");
+    let workspace = f.add("worker").await;
+    for (dir, file) in [(&workspace.path, "feature"), (&f.repo, "other")] {
+        fs::write(dir.join(file), "work\n").unwrap();
+        commit(dir, file);
+        fs::write(dir.join("version"), "2\n").unwrap();
+        commit(dir, "version");
+    }
+    let confirmed = async || crate::model::MergeOptions {
+        push: false,
+        confirmed: Some(
+            f.manager
+                .preview_merge("worker", false)
+                .await
+                .unwrap()
+                .confirmation(),
+        ),
+    };
+    // A conflict check records the files while the question is open, with
+    // the branch, main and the push unchanged.
+    let options = confirmed().await;
+    f.manager
+        .check_conflicts(&workspace.id, None)
+        .await
+        .unwrap();
+    let error = f
+        .manager
+        .prepare_merge("worker", &options)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("other files changed on both sides since you confirmed"),
+        "{error:#}"
+    );
+    // A question that named them lets the merge go ahead.
+    let options = confirmed().await;
+    let named = options.confirmed.as_ref().unwrap();
+    assert_eq!(named.changed_on_both_sides, ["version"]);
+    assert!(f.manager.prepare_merge("worker", &options).await.is_ok());
+}
+
+#[tokio::test]
 async fn merge_turned_off_refuses_runs_and_agent_requests() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;

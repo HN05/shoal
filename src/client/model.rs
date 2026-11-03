@@ -1084,7 +1084,7 @@ pub struct MergeOptions {
     pub confirmed: Option<MergeConfirmation>,
 }
 
-/// The commits and push destination a user confirmed for a merge.
+/// The commits, push destination and warning a user confirmed for a merge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MergeConfirmation {
     pub head: String,
@@ -1092,6 +1092,9 @@ pub struct MergeConfirmation {
     pub default_commit: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push: Option<MergePush>,
+    /// The sensitive files changed on both sides that the question named.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changed_on_both_sides: Vec<String>,
 }
 
 /// What merging a workspace branch into the default branch does, for the
@@ -1127,7 +1130,16 @@ impl MergePreview {
             head: self.head.clone(),
             default_commit: self.default_commit.clone(),
             push: self.push_to.clone(),
+            changed_on_both_sides: self.changed_on_both_sides(),
         }
+    }
+
+    /// The sensitive files the warning names, if there is one.
+    pub fn changed_on_both_sides(&self) -> Vec<String> {
+        self.warning
+            .as_ref()
+            .map(|warning| warning.files.clone())
+            .unwrap_or_default()
     }
 
     /// The merge, its direction and what follows it, one sentence a line:

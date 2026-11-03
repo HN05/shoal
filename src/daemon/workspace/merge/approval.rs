@@ -91,11 +91,7 @@ fn merge_request(plan: &MergePlan, preview: &MergePreview) -> ApprovalRequest {
             branch: plan.branch.clone(),
             head: plan.source.clone(),
             push: plan.push.clone(),
-            changed_on_both_sides: preview
-                .warning
-                .as_ref()
-                .map(|warning| warning.files.clone())
-                .unwrap_or_default(),
+            changed_on_both_sides: preview.changed_on_both_sides(),
         }),
         Lifetime::Lease,
         Some(&preview.reason()),
