@@ -47,6 +47,12 @@ const CURRENT: &str = "SELECT id,record,active,number FROM access_requests
 const CANDIDATES: &str = "SELECT id,record,active,number FROM access_requests
     WHERE workspace_id=?1 AND target_key=?2 ORDER BY rowid";
 
+/// Whether a request the repository owns, an issue proposal, was made by
+/// the space `?1`; a malformed record of another space's history stays out
+/// of the selection.
+const REPOSITORY_OWNED: &str = "(workspace_id IS NULL
+    AND CASE WHEN json_valid(record) THEN json_extract(record, '$.space_id') END=?1)";
+
 /// A stored request's key, record, active flag and number.
 type RecordRow = (String, String, bool, i64);
 
@@ -91,7 +97,7 @@ fn list_decided(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
 /// its issue proposals belong to its repository.
 fn list_of_chat(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
-        "{COLUMNS} WHERE (workspace_id IS NULL AND json_extract(record, '$.space_id')=?1)
+        "{COLUMNS} WHERE {REPOSITORY_OWNED}
             OR CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1
             ORDER BY rowid"
     ))?
@@ -155,7 +161,7 @@ fn by_number(db: &Connection, number: i64) -> Result<Option<ApprovalRequest>> {
 pub fn list(db: &Connection, owner: Option<&str>) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
         "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1
-            OR (workspace_id IS NULL AND json_extract(record, '$.space_id')=?1)
+            OR {REPOSITORY_OWNED}
         ORDER BY rowid"
     ))?
     .query_map([owner], record_row)?
