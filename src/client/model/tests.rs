@@ -196,6 +196,7 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
         PR https://forge/pulls/12 is open; shoal pr merge merges it on the forge instead."
     );
     assert_eq!(preview.reason(), preview.description().replace('\n', " "));
+    preview.warning = None;
     preview.open_prs.clear();
     preview.push_to.as_mut().unwrap().reference = "refs/heads/release".into();
     assert_eq!(

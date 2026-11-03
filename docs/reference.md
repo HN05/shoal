@@ -2541,18 +2541,15 @@ clean. The workspace must be clean and on its recorded branch. Git fast-forwards
 creates a merge commit in the default checkout. A merge that does not apply cleanly
 is aborted: merge the default branch into the workspace with Git (`git merge
 main`), resolve the conflicts there, and run `shoal merge` again.
-Merged commits count as pushed for `rm` and automatic cleanup. As
-[`pr merge`](#issue-and-pr-actions) does, `merge` asks before merging a HEAD whose last check found
-files [changed on both sides](#conflicts) with the default branch, and `--yes`
-merges without asking. An agent's merge that needs approval names those files
-in its request, so the approver decides on them.
+Merged commits count as pushed for `rm` and automatic cleanup.
 
 An agent's scoped `shoal merge` needs the user's approval for the branch at its
 current commit, and for where it pushes, unless `[permissions] merge = "direct"` and
 [`[permissions] push`](#approval-for-agent-pushes) is `"direct"` too. The first run records a
 `merge` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
 the request names the branch, the default branch it merges into, its commit count,
-the remote branch it pushes to and any open PR the workspace watches. After approval, running it again merges that commit with every check above. A new
+the remote branch it pushes to, any files changed on both sides as below, and
+any open PR the workspace watches. After approval, running it again merges that commit with every check above. A new
 commit or a change to where it pushes replaces the request, approving a request
 after its branch moved is refused as stale, and a denied commit stays refused
 with `"approval_denied"`.
@@ -2562,21 +2559,27 @@ its upstream after merging; `--no-push` keeps one merge local. A default branch 
 upstream is refused before merging, and a failed push keeps the merge.
 
 A merge that pushes asks first, after Shoal has checked it and before anything
-changes. The question names the direction, the commit count and where it pushes,
-and points to `shoal pr merge` for any open PR the workspace watches:
+changes. As [`pr merge`](#issue-and-pr-actions) does, so does a merge whose last
+check found files [changed on both sides](#conflicts) with the default branch.
+The question names the direction, the commit count, where it pushes and those
+files, and points to `shoal pr merge` for any open PR the workspace watches:
 
 ```text
 Merge fix-login (3 commits) into main, then push main to origin.
+Sensitive files changed on both sides by fix-login and main: src/version.rs.
 PR https://forge.example/team/app/pulls/12 is open; shoal pr merge merges it on the forge instead.
 Are you sure? [y/N]
 ```
 
 The default answer is no. A merge is refused when, while the question was open,
 its branch moved, the default branch took commits other than its upstream's, or
-the push destination changed. `--yes`, or `[merge] confirm = false`, skips the question;
-without a terminal, as in scripts or with `--json`, a merge that would push is
-refused unless one of them is given. A merge that stays local never asks. An
-agent's merge asks through its approval request instead.
+the push destination changed. `--yes` skips the question, and `[merge] confirm =
+false` skips it for a merge that pushes; without a terminal, as in scripts or
+with `--json`, a merge that would ask is refused unless the question is skipped.
+A merge that stays local asks only about files changed on both sides. An agent's
+merge asks about its push through its approval request instead; it still asks
+about files changed on both sides, so the agent passes `--yes` and the approver
+decides on them.
 
 `[merge] enabled = false` turns `shoal merge` off for a repository that merges only
 through PRs: it refuses both a merge and an agent's request for one, pointing to

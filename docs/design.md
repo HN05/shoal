@@ -792,11 +792,14 @@ held by a managed workspace, and any checkout of it must be clean. It aborts a m
 that does not apply cleanly, leaving conflicts to a Git merge of the default branch into
 the workspace. Merging holds the repository Git gate for the tracked execution; the
 daemon validates, resolves the push target and refreshes, and the CLI worker merges.
-Pushing publishes the merge where a local reset cannot reach it, so only a
-merge that pushes asks the user first, after the daemon's checks and before it
+Pushing publishes the merge where a local reset cannot reach it, so a merge
+that pushes asks the user first, after the daemon's checks and before it
 changes anything; it names the direction, since `git merge main` in a workspace
-merges the other way, and any open PR `shoal pr merge` would merge instead. An
-agent's approval request carries the same details and is its confirmation.
+merges the other way, and any open PR `shoal pr merge` would merge instead. A
+local merge asks only when the last check found sensitive files changed on both
+sides, which the same question names. An agent's approval request carries the
+same details and is its confirmation; the agent still answers the question about
+sensitive files with `--yes`, so the approver decides on them.
 A repository that merges only through PRs turns it off with `[merge] enabled =
 false`, which refuses agents' requests to merge too.
 After cancellation, the wrapper rolls back incomplete merges after stopping the

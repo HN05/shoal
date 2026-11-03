@@ -17528,7 +17528,7 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
     let pending: serde_json::Value = serde_json::from_slice(&pending.stdout).unwrap();
     assert_eq!(
         pending["request"]["reason"],
-        "merge worker into main; sensitive files changed on both sides by worker and main: version"
+        "Merge worker (2 commits) into main. Sensitive files changed on both sides by worker and main: version."
     );
 
     // Merging makes a merge commit in the checkout, which needs an identity.
@@ -17897,8 +17897,9 @@ fn a_merge_that_pushes_asks_first_unless_confirmed() {
     let refused = fixture.run(&["merge", "--push", "worker"]);
     assert!(!refused.status.success());
     let stderr = String::from_utf8_lossy(&refused.stderr);
+    let refusal = question.trim_end_matches('.');
     assert!(
-        stderr.contains(question) && stderr.contains("--yes"),
+        stderr.contains(refusal) && stderr.contains("--yes"),
         "{stderr}"
     );
     let (declined, transcript) = fixture.interactive(&["merge", "--push", "worker"], "n\n");
