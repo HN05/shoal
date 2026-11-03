@@ -471,7 +471,10 @@ async fn open_execution(
             _ => None,
         },
         origin: place.map(Box::new),
-        push: matches!(mode, Mode::Merge { push: true, .. }),
+        merge: match mode {
+            Mode::Merge { options, .. } => Some(options.clone()),
+            _ => None,
+        },
     };
     let kind = mode.kind();
     let (mut link, body) = Link::open(paths, method, kind.start_timeout()).await?;

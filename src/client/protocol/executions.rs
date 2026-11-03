@@ -33,9 +33,9 @@ pub enum ExecutionMethod {
         /// Where the wrapper runs in a terminal host.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<Box<crate::client::sessions::Origin>>,
-        /// A merge pushes the default branch to its upstream afterwards.
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        push: bool,
+        /// How a merge runs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        merge: Option<crate::model::MergeOptions>,
     },
     /// Verify that this worker belongs to an unscoped caller's merge execution.
     CheckMerge,

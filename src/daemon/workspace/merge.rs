@@ -13,7 +13,10 @@ use crate::{
         repo::{clean_branch, merge_temporaries, unfinished_operation, upstream},
         run_isolated as git_run,
     },
-    model::{MergePlan, MergePreview, MergePush, PulledBranch, Repository, Workspace},
+    model::{
+        MergeConfirmation, MergeOptions, MergePlan, MergePreview, MergePush, PulledBranch,
+        Repository, Workspace,
+    },
 };
 
 /// A workspace branch that passed every check a merge makes before it
@@ -38,6 +41,7 @@ impl Manager {
         self.merge_preview(
             &merge.workspace,
             &merge.branch,
+            &merge.source,
             &merge.default,
             &default_commit,
             merge.push.as_ref(),
@@ -45,10 +49,14 @@ impl Manager {
         .await
     }
 
-    /// Validate and refresh a merge while the caller holds the repository Git
-    /// gate. The gate must stay held until the tracked execution completes.
-    /// With `push`, the merge pushes the default branch afterwards.
-    pub async fn prepare_merge(&self, selector: &str, push: bool) -> Result<MergePlan> {
+    /// Validate and refresh a merge that runs as `options` say while the
+    /// caller holds the repository Git gate. The gate must stay held until the
+    /// tracked execution completes.
+    pub async fn prepare_merge(&self, selector: &str, options: &MergeOptions) -> Result<MergePlan> {
+        let merge = self.validate_merge(selector, options.push).await?;
+        if let Some(confirmed) = &options.confirmed {
+            ensure_confirmed(&merge, confirmed)?;
+        }
         let MergeSource {
             workspace,
             branch,
@@ -56,7 +64,7 @@ impl Manager {
             default,
             source,
             push,
-        } = self.validate_merge(selector, push).await?;
+        } = merge;
         let default_refresh = self.refresh_default(&repo, &default).await?;
         let checkout = git::checkout_of(&repo.path, &default, git::run)
             .await?
@@ -89,6 +97,7 @@ impl Manager {
         self.merge_preview(
             &plan.workspace,
             &plan.branch,
+            &plan.source,
             &plan.default_refresh.branch,
             &plan.default_refresh.commit,
             plan.push.as_ref(),
@@ -166,13 +175,15 @@ impl Manager {
             .with_context(|| format!("could not refresh {default} before merging"))
     }
 
-    /// What merging `workspace`'s `branch` into `default` at `default_commit`
-    /// does: its commits, where it pushes, the sensitive files it brings to
-    /// a default branch that changed them too, and the open PRs it bypasses.
+    /// What merging `workspace`'s `branch` at `head` into `default` at
+    /// `default_commit` does: its commits, where it pushes, the sensitive
+    /// files it brings to a default branch that changed them too, and the
+    /// open PRs it bypasses.
     async fn merge_preview(
         &self,
         workspace: &Workspace,
         branch: &str,
+        head: &str,
         default: &str,
         default_commit: &str,
         push: Option<&MergePush>,
@@ -186,6 +197,7 @@ impl Manager {
         Ok(MergePreview {
             workspace_id: workspace.id.clone(),
             branch: branch.to_owned(),
+            head: head.to_owned(),
             default_branch: default.to_owned(),
             commits: git::status::commits_since(&workspace.path, default_commit).await?,
             push_to: push.cloned(),
@@ -204,6 +216,22 @@ impl Manager {
         };
         self.managed_workspace_at(&path).await
     }
+}
+
+/// Refuse a merge that is no longer the one the user confirmed: the branch
+/// moved, or the default branch's upstream changed.
+fn ensure_confirmed(merge: &MergeSource, confirmed: &MergeConfirmation) -> Result<()> {
+    let branch = &merge.branch;
+    ensure!(
+        merge.source == confirmed.head,
+        "{branch} moved since you confirmed the merge; run shoal merge again"
+    );
+    ensure!(
+        merge.push == confirmed.push,
+        "where the merge pushes {} changed since you confirmed it; run shoal merge again",
+        merge.default
+    );
+    Ok(())
 }
 
 /// The commit of `repo`'s local `branch`.

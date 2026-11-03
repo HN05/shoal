@@ -15,8 +15,11 @@ pub(super) enum Mode {
     /// to `log`, and the launch reported on stdout for the spawning CLI.
     Detached { log: PathBuf },
     /// Merging, whose worker writes what it merged, or why it could not,
-    /// to `result`; with `push`, the default branch is pushed afterwards.
-    Merge { push: bool, result: PathBuf },
+    /// to `result`; `options` say how it runs.
+    Merge {
+        options: crate::model::MergeOptions,
+        result: PathBuf,
+    },
     /// A command publishing for the workspace under its agent account, with
     /// output on stderr so stdout stays for the caller's result.
     Publish,

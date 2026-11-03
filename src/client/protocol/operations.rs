@@ -110,9 +110,11 @@ pub enum OperationSpec {
         workspace: String,
         options: PullOptions,
     },
-    /// Merge the workspace's branch, then with `push` push the default
-    /// branch to its upstream.
-    Merge { workspace: String, push: bool },
+    /// Merge the workspace's branch as `options` say.
+    Merge {
+        workspace: String,
+        options: crate::model::MergeOptions,
+    },
     /// Run the push the user approved in request `approval`, then let the
     /// daemon decide the request, opening the PR it proposed.
     Push {

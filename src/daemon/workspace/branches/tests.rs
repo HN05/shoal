@@ -1325,7 +1325,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     queue_entry: None,
                     demo: None,
                     origin: None,
-                    push: false,
+                    merge: None,
                     wrapper: wrapper.clone(),
                 };
                 let allowed = target.id == workspace.id
@@ -1524,7 +1524,10 @@ async fn begin_merge_as_agent(
         workspace_id: workspace.id.clone(),
     };
     let request = crate::daemon::workspace::ExecutionRequest {
-        push,
+        merge: Some(crate::model::MergeOptions {
+            push,
+            confirmed: None,
+        }),
         ..Default::default()
     };
     f.manager
@@ -1800,6 +1803,54 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
 }
 
 #[tokio::test]
+async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    f.remote();
+    fs::write(workspace.path.join("feature"), "work\n").unwrap();
+    commit(&workspace.path, "feature");
+    let confirmed = async || crate::model::MergeOptions {
+        push: true,
+        confirmed: Some(
+            f.manager
+                .preview_merge("worker", true)
+                .await
+                .unwrap()
+                .confirmation(),
+        ),
+    };
+    let refusal = async |options: &crate::model::MergeOptions| {
+        let error = f
+            .manager
+            .prepare_merge("worker", options)
+            .await
+            .unwrap_err();
+        format!("{error:#}")
+    };
+    // An agent commits while the question is open.
+    let options = confirmed().await;
+    fs::write(workspace.path.join("feature"), "more\n").unwrap();
+    commit(&workspace.path, "feature");
+    let error = refusal(&options).await;
+    assert!(
+        error.contains("worker moved since you confirmed"),
+        "{error}"
+    );
+    // The default branch's upstream moves to another branch.
+    let options = confirmed().await;
+    git(&f.repo, &["push", "origin", "main:release"]);
+    git(&f.repo, &["fetch", "origin"]);
+    git(
+        &f.repo,
+        &["branch", "--set-upstream-to=origin/release", "main"],
+    );
+    let error = refusal(&options).await;
+    assert!(error.contains("changed since you confirmed"), "{error}");
+    let plan = f.manager.prepare_merge("worker", &confirmed().await).await;
+    assert!(plan.unwrap().push.is_some());
+}
+
+#[tokio::test]
 async fn merge_turned_off_refuses_runs_and_agent_requests() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
@@ -1924,7 +1975,11 @@ impl Manager {
     ) -> anyhow::Result<crate::model::MergedBranch> {
         let workspace = self.workspace(selector).await?;
         let _guard = self.gates.lock_git(&workspace.repository_id).await;
-        crate::git::repo::finish_merge(self.prepare_merge(selector, push).await?).await
+        let options = crate::model::MergeOptions {
+            push,
+            confirmed: None,
+        };
+        crate::git::repo::finish_merge(self.prepare_merge(selector, &options).await?).await
     }
 }
 

@@ -49,7 +49,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
             queue_entry: None,
             demo: None,
             origin: None,
-            push: false,
+            merge: None,
             caller: None,
         },
         manager.gates.owned_operation().await,

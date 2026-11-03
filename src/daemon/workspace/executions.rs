@@ -218,8 +218,8 @@ pub(crate) struct ExecutionRequest {
     pub demo: Option<Launch>,
     /// Where it runs in a terminal host.
     pub place: Option<ExecutionPlace>,
-    /// A merge pushes the default branch afterwards.
-    pub push: bool,
+    /// How a merge runs.
+    pub merge: Option<crate::model::MergeOptions>,
 }
 
 #[derive(Default)]
@@ -383,9 +383,9 @@ impl Manager {
         caller: Option<&Caller>,
         request: ExecutionRequest,
     ) -> Result<StartedExecution> {
-        let ExecutionRequest { demo, place, push } = request;
+        let ExecutionRequest { demo, place, merge } = request;
         let (workspace, preparation) = self
-            .prepare_execution(selector, wrapper.as_ref(), kind, caller.is_some(), push)
+            .prepare_execution(selector, wrapper.as_ref(), kind, caller.is_some(), merge)
             .await?;
         let agent = match caller {
             Some(caller) => self.caller_agent(caller).await.map(|agent| agent.execution),
@@ -595,7 +595,7 @@ impl Manager {
         wrapper: Option<&Identity>,
         kind: ExecutionKind,
         scoped: bool,
-        push: bool,
+        merge: Option<crate::model::MergeOptions>,
     ) -> Result<(Workspace, PreparedExecution)> {
         if let Some(wrapper) = wrapper {
             ensure!(
@@ -608,24 +608,26 @@ impl Manager {
         self.reserve_repository_directory(&workspace.repository_id)
             .await?;
         let preparation = self
-            .prepare_execution_kind(&workspace, kind, scoped, push)
+            .prepare_execution_kind(&workspace, kind, scoped, merge)
             .await?;
         Ok((workspace, preparation))
     }
 
-    /// With `push`, a merge pushes the default branch afterwards.
+    /// `merge` says how a merge runs.
     async fn prepare_execution_kind(
         &self,
         workspace: &Workspace,
         kind: ExecutionKind,
         scoped: bool,
-        push: bool,
+        merge: Option<crate::model::MergeOptions>,
     ) -> Result<PreparedExecution> {
         match kind {
             ExecutionKind::Command => Ok(PreparedExecution::default()),
             ExecutionKind::Merge => {
                 let guard = self.gates.lock_git(&workspace.repository_id).await;
-                let merge = self.prepare_merge(&workspace.id, push).await?;
+                let merge = self
+                    .prepare_merge(&workspace.id, &merge.unwrap_or_default())
+                    .await?;
                 if scoped {
                     self.authorize_scoped_merge(&merge).await?;
                 }

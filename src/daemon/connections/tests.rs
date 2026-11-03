@@ -105,7 +105,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         queue_entry: None,
         demo: None,
         origin: None,
-        push: false,
+        merge: None,
     };
     let watch = NotificationMethod::WatchNotifications {
         keep_unread: false,

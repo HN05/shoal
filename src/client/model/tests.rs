@@ -165,6 +165,7 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
     let mut preview = MergePreview {
         workspace_id: "id".into(),
         branch: "fix-login".into(),
+        head: "abc".into(),
         default_branch: "main".into(),
         commits: 1,
         push_to: None,

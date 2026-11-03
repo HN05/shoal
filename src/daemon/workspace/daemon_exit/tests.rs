@@ -65,7 +65,7 @@ impl Running {
                 queue_entry: None,
                 demo: None,
                 origin: None,
-                push: false,
+                merge: None,
                 caller: None,
             },
             manager.gates.owned_operation().await,

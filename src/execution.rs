@@ -169,8 +169,20 @@ pub async fn publish(paths: &Paths, workspace: String, command: Vec<OsString>) -
 
 /// Merge the workspace's branch; its worker writes the result as a
 /// [`MergeResult`] to `result`.
-pub async fn merge(paths: &Paths, workspace: String, push: bool, result: PathBuf) -> Result<i32> {
-    run_tracked(paths, workspace, vec![], Mode::Merge { push, result }, None).await
+pub async fn merge(
+    paths: &Paths,
+    workspace: String,
+    options: crate::model::MergeOptions,
+    result: PathBuf,
+) -> Result<i32> {
+    run_tracked(
+        paths,
+        workspace,
+        vec![],
+        Mode::Merge { options, result },
+        None,
+    )
+    .await
 }
 
 /// What a merge worker writes: what it merged, or why it could not.

@@ -17,7 +17,7 @@ use crate::{
     daemon::approvals::Undecided,
     env,
     execution::{self, MergeResult},
-    model::{MergePlan, MergePreview, MergedBranch},
+    model::{MergeConfirmation, MergeOptions, MergePlan, MergePreview, MergedBranch},
     paths::Paths,
     protocol::{
         ConfigTarget, ExecutionMethod, WorkspaceMethod,
@@ -37,13 +37,17 @@ pub(in crate::cli::commands) async fn merge(
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let push = push.unwrap_or(settings.merge.push);
-    if !yes {
+    let confirmed = match yes {
+        true => None,
         // An agent's merge asks the user through its approval instead, which
         // names the files the agent's --yes passed over.
-        let pushing = push && settings.merge.confirm && !env::is_scoped();
-        confirm_merge(ctx, &workspace, push, pushing).await?;
-    }
-    let spec = OperationSpec::Merge { workspace, push };
+        false => {
+            let pushing = push && settings.merge.confirm && !env::is_scoped();
+            confirm_merge(ctx, &workspace, push, pushing).await?
+        }
+    };
+    let options = MergeOptions { push, confirmed };
+    let spec = OperationSpec::Merge { workspace, options };
     match operations::run(ctx, spec).await {
         Ok(merged) => {
             show_merged(ctx, &merged)?;
@@ -58,21 +62,28 @@ pub(in crate::cli::commands) async fn merge(
 
 /// Ask before merging `workspace`, showing what the merge does, when it
 /// pushes and `pushing` asks for that, or when it brings the default branch
-/// sensitive files it changed too. The daemon checks the merge first, so a
-/// merge it refuses or the user declines changes nothing.
-async fn confirm_merge(ctx: &Context, workspace: &str, push: bool, pushing: bool) -> Result<()> {
+/// sensitive files it changed too; return what the user confirmed, if
+/// asked. The daemon checks the merge first, so a merge it refuses or the
+/// user declines changes nothing.
+async fn confirm_merge(
+    ctx: &Context,
+    workspace: &str,
+    push: bool,
+    pushing: bool,
+) -> Result<Option<MergeConfirmation>> {
     let method = WorkspaceMethod::PreviewMerge {
         workspace: workspace.to_owned(),
         push,
     };
     let preview: MergePreview = request(&ctx.paths, method).await?;
-    if pushing || preview.warning.is_some() {
-        anyhow::ensure!(
-            ui::confirm(ctx, &preview.description(), "--yes")?,
-            "merge canceled"
-        );
+    if !pushing && preview.warning.is_none() {
+        return Ok(None);
     }
-    Ok(())
+    anyhow::ensure!(
+        ui::confirm(ctx, &preview.description(), "--yes")?,
+        "merge canceled"
+    );
+    Ok(Some(preview.confirmation()))
 }
 
 fn show_merged(ctx: &Context, merged: &MergedBranch) -> Result<()> {
@@ -100,24 +111,27 @@ fn show_merged(ctx: &Context, merged: &MergedBranch) -> Result<()> {
     })
 }
 
-/// Merge `workspace` in an operation's worker, as a tracked execution whose
-/// worker writes what it merged to a file; with `push`, the default branch
-/// is pushed afterwards.
+/// Merge `workspace` as `options` say in an operation's worker, as a
+/// tracked execution whose worker writes what it merged to a file.
 pub(in crate::cli::commands) async fn merge_branch(
     ctx: &Context,
     workspace: String,
-    push: bool,
+    options: MergeOptions,
     reporter: &Reporter<'_>,
 ) -> Result<MergedBranch> {
     reporter.step(Step::MergeStarted).await?;
-    run_merge(&ctx.paths, workspace, push).await
+    run_merge(&ctx.paths, workspace, options).await
 }
 
 /// Merge `workspace` as a tracked execution, reading what its worker merged,
 /// or why it could not, from the file the worker writes.
-async fn run_merge(paths: &Paths, workspace: String, push: bool) -> Result<MergedBranch> {
+async fn run_merge(
+    paths: &Paths,
+    workspace: String,
+    options: MergeOptions,
+) -> Result<MergedBranch> {
     let result = tempfile::NamedTempFile::new().context("create the merge result file")?;
-    let code = execution::merge(paths, workspace, push, result.path().to_owned()).await?;
+    let code = execution::merge(paths, workspace, options, result.path().to_owned()).await?;
     let written = std::fs::read(result.path()).context("read the merge result")?;
     let merged: MergeResult = match written.is_empty() {
         true => Err(format!("merge exited with status {code}")),

@@ -111,8 +111,8 @@ async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Re
                 .await
                 .map(Outcome::Opened)
         }
-        OperationSpec::Merge { workspace, push } => {
-            workspaces::merge_branch(ctx, workspace, push, reporter)
+        OperationSpec::Merge { workspace, options } => {
+            workspaces::merge_branch(ctx, workspace, options, reporter)
                 .await
                 .map(Outcome::Merged)
         }

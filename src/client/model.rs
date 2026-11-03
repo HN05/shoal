@@ -1081,12 +1081,33 @@ impl MergePush {
     }
 }
 
+/// How a merge runs: whether it pushes, and the merge the user confirmed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MergeOptions {
+    /// Push the default branch to its upstream afterwards.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub push: bool,
+    /// What the user confirmed, which the merge must still be when it starts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmed: Option<MergeConfirmation>,
+}
+
+/// The commit and push destination a user confirmed for a merge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MergeConfirmation {
+    pub head: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push: Option<MergePush>,
+}
+
 /// What merging a workspace branch into the default branch does, for the
 /// user to confirm or approve before it happens.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MergePreview {
     pub workspace_id: String,
     pub branch: String,
+    /// The branch's commit that merges.
+    pub head: String,
     pub default_branch: String,
     /// Commits of the branch that the default branch lacks.
     pub commits: u64,
@@ -1104,6 +1125,14 @@ pub struct MergePreview {
 }
 
 impl MergePreview {
+    /// The merge as the user confirms it.
+    pub fn confirmation(&self) -> MergeConfirmation {
+        MergeConfirmation {
+            head: self.head.clone(),
+            push: self.push_to.clone(),
+        }
+    }
+
     /// The merge, its direction and what follows it, one sentence a line:
     /// `Merge fix-login (3 commits) into main, then push main to origin.`
     pub fn description(&self) -> String {

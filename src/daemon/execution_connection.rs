@@ -39,8 +39,8 @@ pub(super) struct ExecutionContext {
     pub demo: Option<crate::demos::Launch>,
     /// Where the wrapper runs in a terminal host.
     pub origin: Option<crate::sessions::Origin>,
-    /// A merge pushes the default branch afterwards.
-    pub push: bool,
+    /// How a merge runs.
+    pub merge: Option<crate::model::MergeOptions>,
     /// The scoped caller starting the execution.
     pub caller: Option<Caller>,
 }
@@ -93,7 +93,7 @@ pub(super) async fn execute(
         queue_entry,
         demo,
         origin,
-        push,
+        merge,
         caller,
     } = context;
     if kind == ExecutionKind::Command
@@ -133,7 +133,7 @@ pub(super) async fn execute(
                     origin,
                     agent: agent.is_some(),
                 }),
-                push,
+                merge,
             },
         )
         .await

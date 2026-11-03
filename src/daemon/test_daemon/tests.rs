@@ -413,7 +413,7 @@ async fn following_ends_once_the_followers_scope_token_is_revoked() {
     let merge = OperationMethod::StartOperation {
         spec: OperationSpec::Merge {
             workspace: "own".into(),
-            push: false,
+            options: Default::default(),
         },
         env: None,
     };
