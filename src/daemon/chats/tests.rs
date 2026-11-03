@@ -299,7 +299,11 @@ async fn a_chat_handoff_waits_for_a_process_stop_in_progress() {
         let pid = process.id();
         async move { manager.move_chat(&chat, pid).await }
     });
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    // The lock prefers writers, so new readers wait once the handoff queues.
+    while manager.chat_handoffs.try_read().is_ok() {
+        assert!(!handoff.is_finished());
+        tokio::task::yield_now().await;
+    }
     assert!(!handoff.is_finished());
     assert_eq!(manager.chats().await.unwrap()[0].pid, std::process::id());
     drop(stopping);
