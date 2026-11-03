@@ -3055,7 +3055,7 @@ leases, permits, approvals, grants and holds stay behind; setup rebuilds what th
 workspace needs. A chat's file holds its name, agent and session: the export
 refuses a chat whose agent reported no session, or the one it runs in, and asks
 before stopping the agent unless given `--yes`, and one with workspaces below
-it; the chat is then removed. The file's manifest names its `kind`, `workspace` or `chat`.
+it or in a workspace's worktree; the chat is then removed. The file's manifest names its `kind`, `workspace` or `chat`.
 
 `shoal move export <space>... -o <directory>`, for several spaces or those the
 picker selects when `-o` names an existing directory, and `shoal move export

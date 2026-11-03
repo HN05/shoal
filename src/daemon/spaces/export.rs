@@ -136,6 +136,13 @@ impl Manager {
     /// is made, stopping a running one, so the session's files stop changing
     /// and only writing them is left.
     async fn end_chat_for_export(&self, chat: Chat) -> Result<Ended> {
+        if let Some(workspace) = &chat.workspace {
+            anyhow::bail!(
+                "chat {} runs in workspace {}, and shoal move does not move a chat in a workspace",
+                chat.name,
+                workspace.name
+            );
+        }
         let repo = self.repository(&chat.repository_id).await?;
         let Some(continues) = crate::transfer::continue_chat(&chat, crate::repository::name(&repo))
         else {
