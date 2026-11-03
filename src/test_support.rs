@@ -12,8 +12,20 @@ use crate::{
     process::identity::{self, Identity},
 };
 
+#[cfg(test)]
+mod tests;
+
+/// Run Git in `repo` without the caller's Git variables, which a hook or
+/// wrapper running the tests may export to point Git at its own repository,
+/// index or command-scope configuration.
 pub fn git(repo: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
+    let mut command = Command::new("git");
+    for (name, _) in std::env::vars_os() {
+        if name.to_str().is_some_and(|name| name.starts_with("GIT_")) {
+            command.env_remove(name);
+        }
+    }
+    let output = command
         .arg("-C")
         .arg(repo)
         .args(args)
