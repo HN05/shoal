@@ -96,9 +96,11 @@ impl Manager {
         Ok(())
     }
 
-    /// Withdraw the completion the running chat `selector` names recorded.
+    /// Withdraw the completion the chat `selector` names recorded.
     pub async fn undo_chat_done(&self, selector: &str) -> Result<Completion> {
-        let chat = self.done_chat(selector).await?;
+        // A stopped chat withdraws it too, so completion cleanup leaves it.
+        let chat =
+            (self.recorded_chat(selector).await?).with_context(|| format!("no chat {selector}"))?;
         let _guard = self.gates.lock_prs([&chat.id]).await;
         let id = chat.id.clone();
         self.store.run(move |db| take_completion(db, &id)).await

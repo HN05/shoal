@@ -48,7 +48,7 @@ impl Manager {
         }
     }
 
-    /// Withdraw the completion the workspace or running chat `selector`
+    /// Withdraw the completion the workspace or chat `selector`
     /// names recorded.
     pub async fn undo_space_done(&self, selector: &str) -> Result<Completion> {
         match self.present_space(selector).await? {

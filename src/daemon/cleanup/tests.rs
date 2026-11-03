@@ -1376,3 +1376,24 @@ async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
     assert!(manager.cleanup_at(&chat.id).await.unwrap().is_some());
     assert!(manager.workspace(&opened.id).await.is_ok());
 }
+
+#[tokio::test]
+async fn a_stopped_chat_withdraws_its_completion_and_stays() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    manager
+        .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+    process.kill();
+    manager.stop_finished_chats().await.unwrap();
+
+    let withdrawn = manager.undo_space_done(&chat.name).await.unwrap();
+    assert!(withdrawn.cleanup);
+    manager.sweep_completed().await.unwrap();
+    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    assert_eq!(stopped.completion, None);
+    assert!(manager.workspace(&opened.id).await.is_ok());
+}
