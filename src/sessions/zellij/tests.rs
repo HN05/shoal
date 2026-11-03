@@ -28,20 +28,34 @@ fn places_name_their_session_and_pane() {
 
 #[test]
 fn servers_are_this_users_zellij_serving_the_session() {
-    let line = " 501 14016 /opt/homebrew/bin/zellij --server /tmp/z s/contract_version_1/my repo";
+    let line = " 501 14016 1 /opt/homebrew/bin/zellij --server /tmp/z s/contract_version_1/my repo";
     assert_eq!(
         parse_server(line, 501, "my repo"),
         Some(Server {
             pid: 14016,
+            parent: 1,
             socket_dir: PathBuf::from("/tmp/z s"),
         })
     );
     assert_eq!(parse_server(line, 502, "my repo"), None);
     assert_eq!(parse_server(line, 501, "repo"), None);
-    let client = " 501 14017 zellij attach my-repo";
+    let client = " 501 14017 900 zellij attach my-repo";
     assert_eq!(parse_server(client, 501, "my-repo"), None);
-    let other = " 501 14018 /bin/sh -c x --server /tmp/z/contract_version_1/repo";
+    let other = " 501 14018 900 /bin/sh -c x --server /tmp/z/contract_version_1/repo";
     assert_eq!(parse_server(other, 501, "repo"), None);
+}
+
+#[test]
+fn a_server_starting_a_pane_is_still_one_server() {
+    let server = |pid, parent, dir: &str| Server {
+        pid,
+        parent,
+        socket_dir: PathBuf::from(dir),
+    };
+    let forked = vec![server(10, 1, "/tmp/a"), server(11, 10, "/tmp/a")];
+    assert_eq!(without_forks(forked), [server(10, 1, "/tmp/a")]);
+    let separate = vec![server(10, 1, "/tmp/a"), server(20, 1, "/tmp/b")];
+    assert_eq!(without_forks(separate.clone()), separate);
 }
 
 #[test]

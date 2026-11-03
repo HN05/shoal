@@ -7,7 +7,7 @@
 //! command, so Shoal reads the instance just before each command on a
 //! recorded pane.
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     path::{Path, PathBuf},
     process::Output,
     time::Duration,
@@ -112,10 +112,12 @@ pub(crate) struct Shell<'a> {
     pub command: &'a [String],
 }
 
-/// A session's server: its instance and the socket directory it listens in.
+/// A session's server: its instance, the process that started it and the
+/// socket directory it listens in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Server {
     pid: u32,
+    parent: u32,
     socket_dir: PathBuf,
 }
 
@@ -257,19 +259,23 @@ impl Zellij {
     /// user's processes. Without a directory, the only one of that name.
     async fn server(&self, session: &str) -> Result<Option<Server>> {
         let mut ps = Command::new(Tool::Ps.program());
-        ps.args(["-A", "-o", "uid=", "-o", "pid=", "-o", "args="])
-            .stdin(std::process::Stdio::null());
+        ps.args([
+            "-A", "-o", "uid=", "-o", "pid=", "-o", "ppid=", "-o", "args=",
+        ])
+        .stdin(std::process::Stdio::null());
         let listed = run(ps).await?;
         // SAFETY: geteuid has no preconditions.
         let uid = unsafe { libc::geteuid() };
-        let mut servers = listed
+        let named = listed
             .lines()
             .filter_map(|line| parse_server(line, uid, session))
             .filter(|server| {
                 self.socket_dir
                     .as_deref()
                     .is_none_or(|dir| same_dir(dir, &server.socket_dir))
-            });
+            })
+            .collect();
+        let mut servers = without_forks(named).into_iter();
         let server = servers.next();
         ensure!(
             servers.next().is_none(),
@@ -779,12 +785,13 @@ fn same_dir(a: &Path, b: &Path) -> bool {
             .is_some_and(|(a, b)| a == b)
 }
 
-/// A `ps` line of `uid`'s Zellij server for `session`: `zellij --server
-/// <socket dir>/<contract>/<session>`.
+/// A `ps` line of `uid`'s Zellij server for `session`: its owner, process,
+/// parent and `zellij --server <socket dir>/<contract>/<session>`.
 fn parse_server(line: &str, uid: u32, session: &str) -> Option<Server> {
     let mut fields = line.split_whitespace();
     let owner: u32 = fields.next()?.parse().ok()?;
     let pid: u32 = fields.next()?.parse().ok()?;
+    let parent: u32 = fields.next()?.parse().ok()?;
     let program = fields.next()?;
     if owner != uid || Path::new(program).file_name()? != "zellij" {
         return None;
@@ -796,8 +803,19 @@ fn parse_server(line: &str, uid: u32, session: &str) -> Option<Server> {
     }
     Some(Server {
         pid,
+        parent,
         socket_dir: socket.parent()?.parent()?.to_owned(),
     })
+}
+
+/// `servers` without the children a server forks to start a pane's
+/// command, which carry the server's command line until they exec it.
+fn without_forks(servers: Vec<Server>) -> Vec<Server> {
+    let pids: HashSet<u32> = servers.iter().map(|server| server.pid).collect();
+    servers
+        .into_iter()
+        .filter(|server| !pids.contains(&server.parent))
+        .collect()
 }
 
 /// The terminals and the user's plugins `list-panes --json` lists, without
