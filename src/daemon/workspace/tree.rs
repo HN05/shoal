@@ -19,6 +19,12 @@ use crate::{
 const SPACES: &str = "(SELECT id,repository_id,name,'workspace' AS kind,branch FROM workspaces
     UNION ALL SELECT id,repository_id,name,'chat' AS kind,NULL AS branch FROM chats)";
 
+/// Each space a removal of another takes first, as `space_id, parent_id`:
+/// the spaces below it, and the chats in a workspace's worktree, which are
+/// not below it but cannot outlive it.
+const TAKEN_FIRST: &str = "(SELECT space_id,parent_id FROM space_parents
+    UNION ALL SELECT id,workspace_id FROM chats WHERE workspace_id IS NOT NULL)";
+
 impl Manager {
     /// Create a workspace on a new branch named `name` in `parent`'s
     /// repository and record `parent` as its parent.
@@ -74,17 +80,42 @@ impl Manager {
         self.store.run(move |db| subtree(db, &id)).await
     }
 
-    /// The spaces below `id`, nearest first.
-    pub(crate) async fn spaces_below(&self, id: &str) -> Result<Vec<SpaceRef>> {
+    /// Every space a removal of `id` takes before it, nearest first: those
+    /// below it and the chats in each workspace's worktree among them.
+    pub(crate) async fn spaces_taken_with(&self, id: &str) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 Ok(db
                     .prepare(&format!(
-                        "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM down
+                        "WITH RECURSIVE taken(id, depth) AS (
+                            SELECT ?1, 0
+                            UNION ALL SELECT first.space_id, taken.depth + 1
+                                FROM taken JOIN {TAKEN_FIRST} AS first
+                                    ON first.parent_id=taken.id
+                        )
+                        SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM taken
                             JOIN {SPACES} AS spaces USING(id)
-                            WHERE depth > 0 ORDER BY depth, spaces.id",
-                        down("true")
+                            WHERE depth > 0 ORDER BY depth, spaces.id"
+                    ))?
+                    .query_map([id], space_ref)?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+    }
+
+    /// The spaces a removal of `id` takes first, each before those below
+    /// it: the chats in its worktree, then the spaces directly below it.
+    pub(crate) async fn taken_first(&self, id: &str) -> Result<Vec<SpaceRef>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .prepare(&format!(
+                        "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch
+                            FROM {TAKEN_FIRST} AS first
+                            JOIN {SPACES} AS spaces ON spaces.id=first.space_id
+                            WHERE first.parent_id=?1 ORDER BY spaces.kind, spaces.name"
                     ))?
                     .query_map([id], space_ref)?
                     .collect::<rusqlite::Result<_>>()?)

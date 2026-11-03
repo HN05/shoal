@@ -11,7 +11,7 @@ use crate::{
         output::Style,
         ui,
     },
-    model::{Chat, PresentSpace, Spaces},
+    model::{Chat, PresentSpace, SpaceKind, SpaceRef, Spaces},
     protocol::RemovalMethod,
     removal::{RemovalCheck, RemovalResult, UnsavedWork},
 };
@@ -238,8 +238,9 @@ fn confirm_removals(
 }
 
 /// What removing the workspace `check` inspected loses: the workspaces
-/// below it, its unsaved work, with the changed files on a terminal, and its
-/// holds. Nothing in a disposable workspace counts.
+/// below it and the chats in it and in them, its unsaved work, with the
+/// changed files on a terminal, and its holds. Nothing in a disposable
+/// workspace counts.
 fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
     let mut lines = Vec::new();
     let unsaved = check.unsaved_work();
@@ -247,20 +248,26 @@ fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
         true => &[][..],
         false => &check.workspace.holds[..],
     };
-    let children: Vec<_> = check
+    let (chats, children): (Vec<_>, Vec<_>) = check
         .children
         .iter()
         .filter(|child| !check.disposable_children.contains(&child.id))
-        .map(|child| child.name.as_str())
-        .collect();
-    if unsaved.is_empty() && holds.is_empty() && children.is_empty() {
+        .partition(|child| child.kind == SpaceKind::Chat);
+    if unsaved.is_empty() && holds.is_empty() && children.is_empty() && chats.is_empty() {
         return lines;
     }
+    let names = |spaces: &[&SpaceRef]| {
+        let names: Vec<_> = spaces.iter().map(|space| space.name.as_str()).collect();
+        names.join(", ")
+    };
     if !children.is_empty() {
         lines.push(format!(
             "Removes the workspaces split from it first, whatever their work or holds; shoal work restore brings each back: {}",
-            children.join(", ")
+            names(&children)
         ));
+    }
+    if !chats.is_empty() {
+        lines.push(format!("Removes the chats in it first: {}", names(&chats)));
     }
     for work in &unsaved {
         lines.push(format!("Deletes: {work}"));

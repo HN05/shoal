@@ -525,9 +525,7 @@ async fn children_never_keep_their_parent_and_go_with_it() {
     assert!(
         notifications.iter().any(|notification| {
             notification.workspace.as_deref() == Some("child")
-                && notification
-                    .message
-                    .contains("removed with its parent parent")
+                && notification.message.contains("removed with parent")
         }),
         "{notifications:?}"
     );
