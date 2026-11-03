@@ -250,3 +250,32 @@ async fn a_chat_whose_package_cannot_be_written_names_how_it_continues() {
     assert_eq!(identity::capture(pid).unwrap(), None);
     assert_eq!(fs::read_to_string(&file).unwrap(), "kept");
 }
+
+#[tokio::test]
+async fn a_disposable_workspace_is_refused_before_its_removal() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let new = crate::daemon::workspace::NewWorkspace {
+        options: crate::protocol::CreationOptions {
+            disposable: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let workspace = manager
+        .create_workspace_with(&repo.id, "scratch".into(), None, new)
+        .await
+        .unwrap();
+    let refused = export(
+        &manager,
+        &workspace.name,
+        &temp.path().join("scratch.shoal"),
+    )
+    .await;
+    assert!(refused.unwrap_err().to_string().contains("disposable"));
+    assert!(workspace.path.exists());
+}

@@ -91,6 +91,13 @@ impl Manager {
     ) -> Result<Ended> {
         let (removal, settings) = match self.workspace(selector).await {
             Ok(workspace) => {
+                // The package is built from the removal record, which a
+                // disposable workspace's removal does not keep.
+                anyhow::ensure!(
+                    !workspace.disposable,
+                    "workspace {} is disposable, so its removal keeps nothing to export",
+                    workspace.name
+                );
                 // Its own config may describe its agents, and goes with it.
                 let settings = self.workspace_settings(&workspace).await;
                 let removal = self
