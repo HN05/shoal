@@ -1194,7 +1194,6 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
             repo.id.as_str().into(),
             None,
             crate::protocol::CommitStart::Revision(None),
-            None,
             Default::default(),
         )
         .await

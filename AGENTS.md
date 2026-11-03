@@ -106,10 +106,14 @@ when behavior changes, distinguishing decisions from proposals.
   cleared token does not unscope. A scope covers its space and the spaces below
   it, recursively; targets name one of them, and the agent's hooks report for
   its own. A chat's agent follows the workspace-agent rules below, without what
-  needs a worktree; it opens workspaces only below its chat, in its repository,
-  and renames its own chat. A chat in a workspace's worktree also reads that
-  workspace, with requests that only read state, and changes nothing there. Enforce own-worktree resource access
-  in the daemon and deny workspace allocation/removal/recovery other than splitting a child and removing one the user holds nothing below, and shared
+  needs a worktree; it renames its own chat. A chat in a workspace's worktree
+  also reads that workspace, with requests that only read state, and changes
+  nothing there. `shoal add`, `shoal split` and
+  `shoal chat` run inside a space create a child of that space, in its
+  repository, `split` from a workspace's branch; scoped callers create only
+  children, run chats only in worktrees of their tree, never take over a workspace outside their tree, and start chats in
+  a background place, waiting until the chat holds its own scope, and the user's terminal creates top-level spaces. Enforce own-worktree resource access
+  in the daemon and deny workspace allocation/removal/recovery other than creating a child of their own space and removing a space below it the user holds nothing below, and shared
   repository/service administration. For the workspaces below their own, scoped callers may hold them, queue
   agents and the restores of agents they or the workspaces below them stopped, which the daemon starts detached, cancel their queue
   entries or move them back, send agent messages, answer questions, stop their executions, and discard stopped work; they may also stop the untracked processes and leftovers of their own workspace and those below it; the agent
@@ -160,7 +164,7 @@ when behavior changes, distinguishing decisions from proposals.
   open questions and queued agent launches keep a workspace. Children never keep
   their parent: every removal of a space first removes the spaces below it
   through the same path, whatever keeps them, and a child that cannot go retains
-  the parent. A standing completion with cleanup also removes the workspaces below
+  the parent. A standing completion with cleanup also removes the workspaces and chats below
   that nothing of their own keeps, whatever their work.
   Completion cleanup without a PR registration requires every commit kept that way,
   retaining dirty or newer work through the same

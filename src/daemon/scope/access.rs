@@ -134,7 +134,7 @@ impl Manager {
         refusal: &str,
     ) -> Result<&'a mut String> {
         let workspace = self.workspace_below(caller, workspace, refusal).await?;
-        let id = self.workspace(workspace).await?.id;
+        let id = self.present_space(workspace).await?.id().to_owned();
         for id in self.subtree(&id).await? {
             // A chat below has no holds.
             let Some(held) = self.find_workspace(&id).await? else {

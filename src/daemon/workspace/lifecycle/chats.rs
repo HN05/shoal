@@ -92,19 +92,26 @@ impl Manager {
     }
 
     /// The assignment state of `chat` whose own cleanup decides its removal:
-    /// a completion, or a PR or issue it watches.
+    /// a completed ancestor's or its own completion, or a PR or issue it
+    /// watches.
     async fn chat_assignment_reason(&self, chat: &Chat) -> Result<Option<CleanupReason>> {
-        Ok(if self.pr_registration(&chat.id).await?.is_some() {
-            Some(CleanupReason::PrWatch)
-        } else if let Some(completion) = &chat.completion {
-            Some(CleanupReason::Completed {
-                integrated: completion.integrated,
-            })
-        } else if self.issue_registration(&chat.id).await?.is_some() {
-            Some(CleanupReason::Issue)
-        } else {
-            None
-        })
+        Ok(
+            if let Some(ancestor) = self.completed_ancestor(&chat.id).await? {
+                Some(CleanupReason::AncestorCompleted {
+                    workspace: ancestor.name().to_owned(),
+                })
+            } else if self.pr_registration(&chat.id).await?.is_some() {
+                Some(CleanupReason::PrWatch)
+            } else if let Some(completion) = &chat.completion {
+                Some(CleanupReason::Completed {
+                    integrated: completion.integrated,
+                })
+            } else if self.issue_registration(&chat.id).await?.is_some() {
+                Some(CleanupReason::Issue)
+            } else {
+                None
+            },
+        )
     }
 
     /// The snapshot of `chat` as a candidate of idle cleanup, else of merged
@@ -150,6 +157,25 @@ impl Manager {
             cause: EventCause::Completion,
         };
         self.remove_chat_after_grace(chat, removal).await
+    }
+
+    /// Remove `chat` below `ancestor`, whose completion with cleanup stands,
+    /// stopping its agent, once its grace period ends; `Ok(false)` while it
+    /// runs.
+    pub(crate) async fn remove_chat_under_completed(
+        &self,
+        chat: &Chat,
+        ancestor: &super::super::done::CompletedAncestor,
+    ) -> Result<bool> {
+        // The sweep holds the PR gates of the chat and the ancestor; a chat
+        // ancestor's spaces are held too, as for a workspace below it.
+        let _held = match ancestor {
+            super::super::done::CompletedAncestor::Chat(above) => {
+                Some(self.chat_owners.reserve(&above.id)?)
+            }
+            super::super::done::CompletedAncestor::Workspace(_) => None,
+        };
+        (self.remove_chat_after_grace(chat, Removal::UnderCompleted { ancestor })).await
     }
 
     /// Remove `chat` for `removal` unless its grace period still runs. The
@@ -247,6 +273,19 @@ impl Manager {
                     .is_some_and(|completion| completion.cleanup && completion.head == head),
                 "the chat withdrew its completion or changed since; retaining it"
             ),
+            // The spaces below go first, under the same completion.
+            Removal::UnderCompleted { ancestor } => {
+                ensure!(
+                    self.children(&chat.id).await?.is_empty(),
+                    "spaces below it remain; retaining it until they go"
+                );
+                let nearest = self.completed_ancestor(&chat.id).await?;
+                ensure!(
+                    nearest.is_some_and(|nearest| nearest.id() == ancestor.id()),
+                    "{} withdrew its completion, changed or no longer has the chat below it; retaining the chat",
+                    ancestor.name()
+                );
+            }
             _ => {}
         }
         Ok(())

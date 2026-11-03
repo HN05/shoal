@@ -216,6 +216,7 @@ impl Package {
             args: Vec::new(),
             session,
             restore: None,
+            handoff: None,
         })
     }
 }

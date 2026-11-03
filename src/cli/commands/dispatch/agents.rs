@@ -70,6 +70,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             model,
             session,
             restore,
+            handoff,
             args,
         } => {
             let options = chat::Options {
@@ -80,6 +81,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
                 args,
                 session,
                 restore,
+                handoff,
             };
             match workspace {
                 Some(workspace) => chat::start_in_workspace(&ctx, workspace, options).await,
@@ -95,6 +97,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             agent,
             name,
             model,
+            handoff,
             args,
         } => {
             let pick = match (oldest, newest) {
@@ -110,6 +113,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
                 args,
                 session: None,
                 restore: None,
+                handoff,
             };
             plan::start(&ctx, issue, repository, pick, options).await
         }

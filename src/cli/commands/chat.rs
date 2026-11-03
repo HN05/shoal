@@ -26,6 +26,7 @@ use crate::{
     repository,
 };
 
+pub(super) mod handoff;
 pub(super) mod removal;
 mod rename;
 
@@ -36,11 +37,11 @@ pub(super) async fn start(
     repository: Option<String>,
     options: Options,
 ) -> Result<i32> {
-    ensure_unscoped(ctx)?;
     // A restore runs where nobody may watch it, so any failure reaches the
     // user through the daemon.
     let restores = options.restore.clone();
     let started = async {
+        let options = options.for_caller(ctx)?;
         options.check_name(ctx).await?;
         let repo = chosen(ctx, repository).await?;
         let settings = settings(ctx, &repo).await?;
@@ -48,6 +49,7 @@ pub(super) async fn start(
         begin(ctx, repo, settings, topic, options).await
     }
     .await;
+    handoff::report(&started);
     client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
 }
 
@@ -58,9 +60,9 @@ pub(super) async fn start_in_workspace(
     workspace: Option<String>,
     options: Options,
 ) -> Result<i32> {
-    ensure_unscoped(ctx)?;
     let restores = options.restore.clone();
     let started = async {
+        let options = options.for_caller(ctx)?;
         options.check_name(ctx).await?;
         let workspace = chosen_workspace(ctx, workspace).await?;
         let repo = workspace_repository(ctx, &workspace).await?;
@@ -69,6 +71,7 @@ pub(super) async fn start_in_workspace(
         begin(ctx, repo, settings, topic, options).await
     }
     .await;
+    handoff::report(&started);
     client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
 }
 
@@ -138,6 +141,9 @@ pub(super) struct Options {
     /// The stopped chat, by ID, that this start restores under its own name
     /// instead of recording a new one.
     pub restore: Option<String>,
+    /// The handoff of a scoped starter that waits on this place to start
+    /// the chat with its scope.
+    pub handoff: Option<PathBuf>,
 }
 
 /// Where a chat runs.
@@ -163,6 +169,34 @@ impl ChatPlace {
 }
 
 impl Options {
+    /// These options as an agent's start takes them: its chat goes below
+    /// its own space, in a background place rather than beside it or here,
+    /// so its processes are not the agent's. Only that place runs it here,
+    /// with the scope its handoff carries.
+    pub fn for_caller(self, ctx: &Context) -> Result<Self> {
+        if let Some(path) = &self.handoff {
+            handoff::receive(path)?;
+        }
+        ensure_scope_token(ctx)?;
+        if !crate::env::is_scoped() {
+            return Ok(self);
+        }
+        Ok(match self.place {
+            ChatPlace::Beside => Self {
+                place: ChatPlace::Background,
+                ..self
+            },
+            ChatPlace::Here => {
+                ensure!(
+                    handoff::awaited(),
+                    "scoped processes start chats in a background place; leave out --here"
+                );
+                self
+            }
+            ChatPlace::Background => self,
+        })
+    }
+
     /// Refuse a `--name` the daemon would refuse, before any picker opens.
     /// A restored chat keeps its own.
     pub async fn check_name(&self, ctx: &Context) -> Result<()> {
@@ -232,11 +266,13 @@ impl Topic {
     }
 }
 
-/// Chats run with the user's authority, which a workspace process lacks.
-pub(super) fn ensure_unscoped(ctx: &Context) -> Result<()> {
+/// Refuse a workspace process that cleared its scope token, which the
+/// daemon would take for the user; with the token its chats go below its
+/// own space.
+pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
     ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot start or rename chats"
+        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        "workspace processes start and ask chats only with their scope token"
     );
     Ok(())
 }
@@ -293,6 +329,8 @@ pub(super) async fn launch(
         args,
         session,
         restore,
+        // Received with the caller's options.
+        handoff: _,
     } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
@@ -343,15 +381,24 @@ pub(super) async fn launch(
     };
     let home = topic.home(&repo);
     if place == ChatPlace::Background {
+        // A scoped starter's scope token, with which the place records the
+        // chat, may end with the starter, so it waits for the chat's own.
+        let handoff = (crate::env::scope_token().as_deref())
+            .map(handoff::Handoff::create)
+            .transpose()?;
+        let relaunch = beside(&name).relaunch(handoff.as_ref().map(handoff::Handoff::path));
         let note = terminal::start_chat_in_background(
             ctx,
             &settings,
             &repo,
             home.path(),
             &name,
-            &beside(&name).relaunch(),
+            &relaunch,
         )
         .await?;
+        if let Some(handoff) = handoff {
+            handoff.wait().await?;
+        }
         return Ok(Started::Background(BackgroundChat {
             chat: name,
             agent: agent.name().to_owned(),
@@ -405,6 +452,7 @@ pub(super) async fn launch(
     )?;
     terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
     let token = client::chat_scope(&ctx.paths, &chat).await?;
+    handoff::report(&Ok(()));
     run_here(
         ctx,
         home.path(),
@@ -559,8 +607,9 @@ struct Beside<'a> {
 }
 
 impl Beside<'_> {
-    /// The `shoal` arguments that start this chat in place where it opens.
-    fn relaunch(&self) -> Vec<OsString> {
+    /// The `shoal` arguments that start this chat in place where it opens,
+    /// reporting to the scoped starter's `handoff`.
+    fn relaunch(&self, handoff: Option<&Path>) -> Vec<OsString> {
         let mut chat = self.topic.relaunch.clone();
         chat.extend([
             "--here".into(),
@@ -583,6 +632,9 @@ impl Beside<'_> {
         if let Some(restore) = self.restore {
             chat.extend(["--restore".into(), restore.into()]);
         }
+        if let Some(handoff) = handoff {
+            chat.extend(["--handoff".into(), handoff.into()]);
+        }
         if !self.args.is_empty() {
             chat.push("--".into());
             chat.extend_from_slice(self.args);
@@ -600,7 +652,7 @@ async fn start_beside(
     repo: &Repository,
     beside: Beside<'_>,
 ) -> Result<bool> {
-    let chat = beside.relaunch();
+    let chat = beside.relaunch(None);
     let cwd = beside.topic.home(repo).path();
     terminal::start_chat(ctx, settings, repo, cwd, beside.name, &chat).await
 }

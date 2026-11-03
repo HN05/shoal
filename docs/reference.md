@@ -632,14 +632,15 @@ one, and points to `shoal view` for comments and later edits; options after
 PR links open their head branch against the refreshed remote base, reusing an
 owned workspace when present, and link the PR once the workspace is ready; a
 refused link only warns. A PR from a fork, which has no branch in the
-repository, opens in a top-level [workspace at a commit](#child-workspaces) at
-its head, named `pr-<number>`, fetched from the ref the forge serves it under
+repository, opens in a [workspace at a commit](#child-workspaces) at its head,
+below the space running `shoal add` or else top-level, named `pr-<number>`, fetched from the ref the forge serves it under
 (`refs/pull/<number>/head`, or `refs/merge-requests/<number>/head` on GitLab), with
 setup and its diff, `{diff_base}` included, compared with the PR's
 `origin/<base>`; a forge without such a ref refuses it, as does `--agent`, since no agent
 runs there. The workspace made for or linked to the PR is reused, so there is at
 most one per PR: when the PR's head moved, it moves to the new head, unless it has
-commits or changes of its own, which is refused. Branch URLs use
+commits or changes of its own, which is refused. A workspace's or chat's agent
+reuses it only when it is below that space. Branch URLs use
 GitHub's `/tree/<branch>`, GitLab's `/-/tree/<branch>`, Bitbucket's
 `/branch/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
@@ -1777,12 +1778,17 @@ the `chat`, `log`, `prompt_file`, `prompt_delivered`, `happy_session_id` and
 lasts as long as the chat, across stops and restores, so only your own terminal
 is unscoped. It acts on the chat and the spaces below it as a workspace's agent
 acts on its own, under the [scoped workspace commands](#scoped-workspace-commands)
-rules, without those that need a worktree. It opens workspaces only below the
-chat and in its repository, renames only its own chat, decides the requests
+rules, without those that need a worktree. It opens workspaces and chats only
+below the chat and in its repository, renames only its own chat, decides the requests
 routed to it only with a grant, and opens issues only where `[permissions]`
 lets agents open them directly. Merging, branch deletion, PR verdicts, CI
-approval, your notifications and administration stay with you. Workspace
-processes cannot start a chat.
+approval, your notifications and administration stay with you. A workspace's
+or a chat's agent that runs `shoal chat` starts the new chat below its own
+space, in the background, and returns once the chat holds its own scope, or
+with the error that stopped it. Such an agent's `--here` is refused, so the
+chat's processes are never the agent's. A workspace process that cleared its
+scope token cannot run `shoal add`, `shoal chat`, `shoal plan` or
+`shoal chat rename --request`.
 Chats are not tracked executions, so they are never queued or stopped under
 pressure. The daemon records each chat under its
 name, with the session the agent's session-start
@@ -1810,7 +1816,9 @@ ready workspaces. The repository is the workspace's, the default name
 `<workspace>-chat`, and a workspace that is not ready or whose worktree is
 missing is refused. The chat is not the workspace's agent: it runs as any chat
 does, with its own identity, scope, `TMPDIR` and messages, without the
-workspace's scope, `[env]` or leases, and is not below the workspace. Its
+workspace's scope, `[env]` or leases, and is not below the workspace, but
+below the space of the agent that started it, if any; such an agent names only
+its own workspace or one below it. Its
 scope also reads the workspace, such as its status, diff, links and CI runs,
 but refuses changes to it. Its instructions,
 Shoal's own in place of the chat template, which describes the checkout, name
@@ -2246,9 +2254,11 @@ runs its setup, and records the parent, so work that needs its own PR gets its
 own branch and worktree. The parent must be ready. `--base` works as for
 `shoal add`; naming the parent's branch also [stacks](#stacked-workspaces) the
 child on it. Children can be split from children. Workspace processes may split
-from their own workspace, act on every workspace below it and `shoal rm` one
-unless the user holds it or a workspace below it, which is the only workspace
-creation and removal scope allows; the rest stays with the user.
+from their own workspace, act on every space below it and `shoal rm` one unless
+the user holds it or a workspace below it. Run inside a workspace or a chat,
+`shoal add` and `shoal chat` likewise create a child of that space, in its
+repository, and a chat an agent starts opens in the background; that is the
+only creation and removal scope allows, and the rest stays with the user.
 
 `--no-branch` creates a workspace at a commit instead: a worktree at a detached
 HEAD with no branch, nothing to push and no agent of its own, for comparing with
@@ -2258,8 +2268,9 @@ branch; a tag or commit that does not resolve makes Shoal fetch origin with its
 tags once and try again, and naming the parent's branch starts it at the parent's
 commit without stacking it. It is named after the branch and its short commit
 (`main-3f2a9c1`), the tag or the commit, with the usual suffix when taken, and
-`shoal diff` compares with its starting commit. Run by a workspace process it is
-a child of the caller's workspace; run by the user it is a child of `--workspace`
+`shoal diff` compares with its starting commit. Run by a workspace's or a chat's
+process it is a child of the caller's space, or of `--workspace` when that names
+one below it; run by the user it is a child of `--workspace`
 or the current workspace, and outside one a top-level workspace of the current
 repository that the user owns. It does not take a branch name, `--issue`,
 `--agent` or `--fork`, and no agent runs there: its owner, a CI job, a reviewer
@@ -2292,11 +2303,12 @@ records a `removed` event with the cause `parent`, and the user is notified of
 those an unattended removal took. Exporting one workspace with children is
 refused; `export --all` exports each.
 
-While a parent's `done` with cleanup stands at its HEAD, each workspace below it
-has `cleanup_reason` `ancestor_completed` and goes after the grace period,
-whatever its own work, with the cause `parent_completion`; a hold, open
+While a parent's `done` with cleanup stands at its HEAD, each workspace and
+chat below it has `cleanup_reason` `ancestor_completed` and goes after the
+grace period, whatever its own work, with the cause `parent_completion`, a
+chat with its agent stopped; a hold, open
 question, pending PR proposal or push request, or queued agent launch of its own keeps it, as do
-workspaces still below it until they go. `undone`, a commit after `done`, or a
+spaces still below it until they go. `undone`, a commit after `done`, or a
 `done` without cleanup leaves the children. A child's own `done` follows the
 usual rules. `work` lists children indented below their parent;
 `status` shows both directions, and `work --json` and `status --json` give
@@ -3278,7 +3290,7 @@ completion cleanup, requested as for a workspace, removes the chat and the
 spaces below it after the grace period, stopping its agent, whatever PRs it
 watches. It has no branch or demos, so `--integrated` and
 `--keep-demos` are refused. `--attach` hands files back into the chat's attached files, its
-open questions close, and the user is notified, since a chat has no parent. Its
+open questions close, and its coordinator is told, else the user, as for a workspace. Its
 closed linked items stop being polled, as a finished workspace's do. `work
 --chats` shows the chat as `finished`, `shoal inbox` and the menu list it, and
 its record carries the `completion` until `shoal done --undo` withdraws it.
@@ -4908,8 +4920,8 @@ Processes carrying a Shoal scope token are confined to their own worktree:
 effective configuration for their own workspace and their space's repository,
 but cannot change configuration.
 They `merge` only with [approval](#merge-into-the-default-branch) and cannot
-reach spaces other than the ones below theirs, create workspaces other than by
-`split`, remove spaces other than those below theirs without holds, read
+reach spaces other than the ones below theirs, create spaces other than below
+theirs, remove spaces other than those below theirs without holds, read
 notifications, or administer repositories or the daemon service; nested commands
 keep the scope. A command whose ancestor carries scope for the same state directory
 gets the CLI's scoped refusals even after the token is removed from its

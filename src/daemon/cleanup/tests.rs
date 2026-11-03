@@ -1137,7 +1137,7 @@ async fn chat_with_workspace(
         .await
         .unwrap();
     let opened = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repo.id.into(),
             "opened".into(),
             None,

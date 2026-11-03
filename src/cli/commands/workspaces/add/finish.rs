@@ -219,7 +219,7 @@ async fn open_add_workspace(
             repository,
             url,
             head,
-            chat,
+            parent: chat,
             options,
         };
         return request(&ctx.paths, method).await;
@@ -233,7 +233,7 @@ async fn open_add_workspace(
                 branch,
                 git_profile,
                 base,
-                chat,
+                parent: chat,
                 options,
             },
         )
@@ -248,7 +248,7 @@ async fn open_add_workspace(
                 name,
                 base,
                 git_profile,
-                chat,
+                parent: chat,
                 options,
             },
         )

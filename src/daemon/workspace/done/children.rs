@@ -1,4 +1,4 @@
-//! The workspaces below a completed space: an ancestor's completion with
+//! The spaces below a completed space: an ancestor's completion with
 //! cleanup takes them whatever their own work, while it stands.
 use anyhow::Result;
 
@@ -36,13 +36,10 @@ impl CompletedAncestor {
 }
 
 impl Manager {
-    /// The nearest space above `workspace` whose completion with cleanup
-    /// stands, which takes the workspace.
-    pub(crate) async fn completed_ancestor(
-        &self,
-        workspace: &Workspace,
-    ) -> Result<Option<CompletedAncestor>> {
-        for ancestor in self.ancestors(&workspace.id).await? {
+    /// The nearest space above the space `id`, a workspace or a chat, whose
+    /// completion with cleanup stands, which takes the space.
+    pub(crate) async fn completed_ancestor(&self, id: &str) -> Result<Option<CompletedAncestor>> {
+        for ancestor in self.ancestors(id).await? {
             let found = match ancestor.kind {
                 SpaceKind::Workspace => {
                     (self.find_workspace(&ancestor.id).await?).map(CompletedAncestor::Workspace)

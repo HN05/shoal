@@ -271,7 +271,17 @@ pub fn apply_chat_identity(command: &mut Command, chat: &crate::model::Chat, pat
 /// workspace carries, and the shell's directive.
 pub fn not_chat_identity() -> Vec<OsString> {
     let mut names = inherited_port_exports();
-    names.extend([WORKSPACE_ID, RUN_ID, WORKSPACE_NAME, SHELL_DIRECTIVE].map(OsString::from));
+    names.extend(
+        [
+            EXECUTION_ID,
+            WORKSPACE_ID,
+            WORKSPACE_PATH,
+            RUN_ID,
+            WORKSPACE_NAME,
+            SHELL_DIRECTIVE,
+        ]
+        .map(OsString::from),
+    );
     names
 }
 

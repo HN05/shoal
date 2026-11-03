@@ -1,5 +1,5 @@
 //! Arguments of commands that start agents, apps and chats.
-use std::ffi::OsString;
+use std::{ffi::OsString, path::PathBuf};
 
 use clap::Subcommand;
 
@@ -81,6 +81,10 @@ pub enum AgentsCommand {
         /// which shoal resume passes.
         #[arg(long, hide = true, requires = "name")]
         restore: Option<String>,
+        /// Handoff of a scoped starter that waits on this background place,
+        /// which shoal chat passes.
+        #[arg(long, hide = true, requires = "here")]
+        handoff: Option<PathBuf>,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,
@@ -113,6 +117,10 @@ pub enum AgentsCommand {
         name: Option<String>,
         #[command(flatten)]
         model: ModelArgs,
+        /// Handoff of a scoped starter that waits on this background place,
+        /// which shoal plan passes.
+        #[arg(long, hide = true, requires = "here")]
+        handoff: Option<PathBuf>,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,

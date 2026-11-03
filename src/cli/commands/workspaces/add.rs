@@ -69,6 +69,12 @@ pub(in crate::cli::commands) async fn add(
     args: Vec<OsString>,
     options: AddOptions,
 ) -> Result<i32> {
+    // Without its token, the daemon would add a workspace process's
+    // workspace for the user instead of below its own.
+    ensure!(
+        crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
+        "workspace processes add workspaces only with their scope token"
+    );
     let mut creation = creation.absolute(ctx)?;
     let target = resolve_add_target(ctx, repository, issue.as_deref()).await?;
     check_add_creation(ctx, &target, &creation).await?;

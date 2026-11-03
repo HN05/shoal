@@ -79,3 +79,15 @@ fn a_host_serving_a_place_of_its_own_opens_places_beside_it_unless_it_cannot() {
             .is_some()
     );
 }
+
+#[test]
+fn a_place_keeps_none_of_its_openers_scope() {
+    for host in hosts() {
+        let dropped = foreign_place_variables(host.name());
+        assert!(
+            dropped.contains(&crate::env::SCOPE_TOKEN),
+            "{:?}",
+            host.name()
+        );
+    }
+}

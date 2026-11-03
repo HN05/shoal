@@ -13,13 +13,12 @@ use uuid::Uuid;
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, release_decided_by},
-        log, spaces, store,
-        workspace::{self, Manager, NewWorkspace, derive_workspace_name},
+        log, store,
+        workspace::{self, Manager, derive_workspace_name},
     },
     fsutil::off_runtime,
     model::{
-        Chat, OpenedWorkspace, RenamedChat, Repository, SpaceKind, SpaceLinks, SpaceRef, Workspace,
-        WorkspaceRef,
+        Chat, RenamedChat, Repository, SpaceKind, SpaceLinks, SpaceRef, Workspace, WorkspaceRef,
     },
     process::identity::{self, Identity},
     state::ChatRestore,
@@ -46,7 +45,8 @@ pub(super) async fn run(manager: Arc<Manager>) {
 impl Manager {
     /// Record the chat `name` whose agent replaces process `pid` in the
     /// repository's checkout, or when `hands_over`, runs in a session `pid`
-    /// starts and [`Self::move_chat`] names.
+    /// starts and [`Self::move_chat`] names, at the top.
+    #[cfg(test)]
     pub async fn start_chat(
         &self,
         repository: crate::repository::Selector,
@@ -56,19 +56,20 @@ impl Manager {
         origin: Option<crate::sessions::Origin>,
         hands_over: bool,
     ) -> Result<Chat> {
-        let repository = self.repository(repository).await?.id;
         let new = NewChat {
             name,
             agent,
             pid,
             origin,
             hands_over,
+            parent: None,
         };
-        self.record_new_chat(repository, None, new).await
+        self.start_new_chat(repository, None, new).await
     }
 
     /// [`Self::start_chat`] in the worktree of the workspace `workspace`
     /// names, which must be ready, in the workspace's repository.
+    #[cfg(test)]
     pub async fn start_chat_in_workspace(
         &self,
         workspace: &str,
@@ -85,10 +86,33 @@ impl Manager {
             pid,
             origin,
             hands_over,
+            parent: None,
         };
         let repository = workspace.repository_id.clone();
         self.record_new_chat(repository, Some(workspace_ref(&workspace)), new)
             .await
+    }
+
+    /// Record the chat `new` in the repository's checkout, or in the
+    /// worktree of the workspace `workspace` names, which must be ready, in
+    /// the workspace's repository.
+    pub async fn start_new_chat(
+        &self,
+        repository: crate::repository::Selector,
+        workspace: Option<&str>,
+        new: NewChat,
+    ) -> Result<Chat> {
+        let (repository, workspace) = match workspace {
+            Some(selector) => {
+                let workspace = self.chat_workspace(selector).await?;
+                (
+                    workspace.repository_id.clone(),
+                    Some(workspace_ref(&workspace)),
+                )
+            }
+            None => (self.repository(repository).await?.id, None),
+        };
+        self.record_new_chat(repository, workspace, new).await
     }
 
     /// The workspace `selector` names, once a chat may run in it: it is
@@ -114,7 +138,8 @@ impl Manager {
     }
 
     /// Record `new` as a chat of the repository `repository`, in the
-    /// worktree of `workspace` when given.
+    /// worktree of `workspace` when given, below its parent, which must be
+    /// in the repository, or at the top without one.
     async fn record_new_chat(
         &self,
         repository: String,
@@ -127,6 +152,7 @@ impl Manager {
             pid,
             origin,
             hands_over,
+            parent,
         } = new;
         crate::validate::name("chat", &name)?;
         // Its temporary directory goes in the repository's directory.
@@ -161,10 +187,11 @@ impl Manager {
             parent: None,
             children: Vec::new(),
         };
-        let recorded = process.clone();
+        let (recorded, removing) = (process.clone(), self.chat_removals.clone());
+        let below = parent.map(|parent| (parent, removing));
         let chat = self
             .store
-            .run(move |db| insert(db, chat, &recorded, hands_over))
+            .run(move |db| insert(db, chat, &recorded, hands_over, below))
             .await?;
         self.give_tmp_dir(chat, &repository, process).await
     }
@@ -451,109 +478,18 @@ impl Manager {
         let token = self.store.run(move |db| scope_token(db, &id)).await?;
         token.context("no such chat")
     }
-
-    /// Give `workspace` to the chat that opened it, or to the user when it
-    /// was opened outside one or the chat is gone. A workspace split from
-    /// another stays below it.
-    pub async fn assign_chat(&self, workspace: &str, chat: Option<String>) -> Result<()> {
-        let workspace = workspace.to_owned();
-        let held = [self.chat_removals.clone(), self.chat_owners.clone()];
-        self.store
-            .run(move |db| assign(db, &workspace, chat.as_deref(), &held))
-            .await
-    }
-
-    /// [`Self::open_branch`] for `chat` where and as `new` says, returning
-    /// the workspace with its parent. A `confined` chat, whose own agent
-    /// asks, takes over no existing workspace outside its subtree.
-    pub async fn open_branch_for_chat(
-        &self,
-        repository: crate::repository::Selector,
-        branch: &str,
-        base: Option<String>,
-        new: NewWorkspace<'_>,
-        chat: Option<String>,
-        confined: bool,
-    ) -> Result<OpenedWorkspace> {
-        self.ensure_chat_repository(&repository, chat.as_deref())
-            .await?;
-        let new = NewWorkspace {
-            parent: chat.clone(),
-            ..new
-        };
-        let mut opened = self.open_branch_with(repository, branch, base, new).await?;
-        if let Some(chat) = chat.as_deref().filter(|_| confined && opened.reused) {
-            ensure!(
-                self.within_subtree(chat, &opened.workspace.id).await?,
-                "{} is outside the chat; ask the user to open it",
-                opened.workspace.name
-            );
-        }
-        opened.workspace = self.give_to_chat(&opened.workspace.id, chat).await?;
-        Ok(opened)
-    }
-
-    /// [`Self::create_workspace`] for `chat`, returning the workspace with
-    /// its parent.
-    pub async fn create_workspace_for_chat(
-        &self,
-        repository: crate::repository::Selector,
-        name: String,
-        base: Option<String>,
-        new: NewWorkspace<'_>,
-        chat: Option<String>,
-    ) -> Result<Workspace> {
-        self.ensure_chat_repository(&repository, chat.as_deref())
-            .await?;
-        let new = NewWorkspace {
-            parent: chat.clone(),
-            ..new
-        };
-        let workspace = self
-            .create_workspace_with(repository, name, base, new)
-            .await?;
-        self.give_to_chat(&workspace.id, chat).await
-    }
-
-    /// Refuse a workspace for `chat` in another repository than the chat's,
-    /// before creating anything.
-    pub(crate) async fn ensure_chat_repository(
-        &self,
-        repository: &crate::repository::Selector,
-        chat: Option<&str>,
-    ) -> Result<()> {
-        let Some(chat) = chat.map(str::to_owned) else {
-            return Ok(());
-        };
-        let repository = self.repository(repository.clone()).await?;
-        self.store
-            .run(move |db| {
-                crate::daemon::workspace::parent_in_repository(db, &repository.id, &chat)?;
-                Ok(())
-            })
-            .await
-    }
-
-    /// Assign `workspace` to `chat` and read it again.
-    pub(crate) async fn give_to_chat(
-        &self,
-        workspace: &str,
-        chat: Option<String>,
-    ) -> Result<Workspace> {
-        self.assign_chat(workspace, chat).await?;
-        self.workspace(workspace).await
-    }
 }
 
 /// What a process records to start a chat as itself: the chat's name and
-/// agent, where it runs in a terminal host, and whether it `hands_over` to
-/// a session it starts.
-struct NewChat {
-    name: String,
-    agent: String,
-    pid: u32,
-    origin: Option<crate::sessions::Origin>,
-    hands_over: bool,
+/// agent, where it runs in a terminal host, whether it `hands_over` to a
+/// session it starts, and the space it goes below.
+pub struct NewChat {
+    pub name: String,
+    pub agent: String,
+    pub pid: u32,
+    pub origin: Option<crate::sessions::Origin>,
+    pub hands_over: bool,
+    pub parent: Option<String>,
 }
 
 /// The reference a chat's record gives to the workspace it runs in.
@@ -567,8 +503,15 @@ fn workspace_ref(workspace: &Workspace) -> WorkspaceRef {
 
 /// Insert `chat` unless its name is taken, or the repository or the
 /// workspace it runs in is being removed, starting until it is moved when
-/// it `hands_over`.
-fn insert(db: &mut Connection, chat: Chat, process: &Identity, hands_over: bool) -> Result<Chat> {
+/// it `hands_over`, below the space `parent` when given, which must take it
+/// and, as `removing` shows, not be a chat being removed.
+fn insert(
+    db: &mut Connection,
+    mut chat: Chat,
+    process: &Identity,
+    hands_over: bool,
+    parent: Option<(String, Removing)>,
+) -> Result<Chat> {
     let tx = db.transaction()?;
     let workspace = chat
         .workspace
@@ -598,6 +541,14 @@ fn insert(db: &mut Connection, chat: Chat, process: &Identity, hands_over: bool)
             workspace
         ],
     )?;
+    // Checked with the record, so a removal that began while the start
+    // waited finds the chat below the parent or refuses it.
+    if let Some((parent, removing)) = &parent {
+        ensure!(!removing.reserved(parent), "{parent} is being removed");
+        workspace::ensure_parent(&tx, &chat.repository_id, &chat.id, parent)?;
+        workspace::set_parent(&tx, &chat.id, Some(parent))?;
+        chat.parent = workspace::parent(&tx, &chat.id)?;
+    }
     tx.commit()?;
     Ok(chat)
 }
@@ -862,59 +813,6 @@ fn forget_unstarted(db: &mut Connection, id: &str, process: &Identity) -> Result
         "DELETE FROM chats WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
         params![id, process.pid, process.birth],
     )?;
-    Ok(())
-}
-
-/// An unknown chat, or one being removed, leaves the workspace to the user.
-/// A workspace below a chat being removed stays there: the removal listed
-/// it after reserving the chat, on this one thread, and takes it.
-fn assign(
-    db: &mut Connection,
-    workspace: &str,
-    chat: Option<&str>,
-    [removing, owners]: &[Removing; 2],
-) -> Result<()> {
-    let tx = db.transaction()?;
-    // A removal decided by the chat the workspace has keeps it there.
-    ensure!(
-        !store::exists(
-            &tx,
-            "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
-            params![workspace, crate::state::WorkspaceState::Removing]
-        )?,
-        "the workspace is being removed"
-    );
-    let current = workspace::parent_id(&tx, workspace)?;
-    if let Some(current) = &current
-        && spaces::space_kind(&tx, current)? == Some(SpaceKind::Workspace)
-    {
-        return Ok(());
-    }
-    if let Some(current) = current.as_deref().filter(|current| Some(*current) != chat) {
-        ensure!(
-            !removing.reserved(current) && !owners.reserved(current),
-            "a removal of the chat that opened the workspace, or of its workspaces, holds it"
-        );
-    }
-    // A chat being removed takes no new workspace, nor a chat gone; one
-    // already below it stays there.
-    let chat =
-        match chat.filter(|chat| !removing.reserved(chat) || current.as_deref() == Some(*chat)) {
-            Some(chat) if spaces::space_kind(&tx, chat)? == Some(SpaceKind::Chat) => Some(chat),
-            _ => None,
-        };
-    if chat != current.as_deref() {
-        if let Some(chat) = chat {
-            let repository: String = tx.query_row(
-                "SELECT repository_id FROM workspaces WHERE id=?1",
-                [workspace],
-                |row| row.get(0),
-            )?;
-            workspace::ensure_parent(&tx, &repository, workspace, chat)?;
-        }
-        workspace::set_parent(&tx, workspace, chat)?;
-    }
-    tx.commit()?;
     Ok(())
 }
 

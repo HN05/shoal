@@ -442,6 +442,8 @@ pub async fn start_chat(
             pid: std::process::id(),
             origin,
             hands_over,
+            // A scoped caller's daemon puts the chat below its own space.
+            parent: None,
         },
     )
     .await

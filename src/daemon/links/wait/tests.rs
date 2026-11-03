@@ -412,7 +412,7 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
         .await
         .unwrap();
     let worker = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repo.id.clone().into(),
             "worker".into(),
             None,

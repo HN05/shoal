@@ -604,8 +604,8 @@ or the user's shell, `shoal run` and `shoal demo`, and an agent that should work
 a commit gets a branch workspace from it instead. Everything else goes through the
 workspace paths: the seed clone, executions, leases, scope tokens, children, holds,
 checkpoints and removal. `split --no-branch` creates one, below the caller's
-workspace or as the user's top-level one, and a fork PR's head opens in one that
-is reused per PR and moved to its new head while it has nothing of its own. Its
+space or as the user's top-level one, and a fork PR's head opens in one, placed
+the same way, that is reused per PR and moved to its new head while it has nothing of its own. Its
 starting commit counts as kept on removal, since a fork's head or a local commit is
 on no remote, while commits made on top count as unsaved work; restore reopens it
 without a branch, and branch-only commands refuse it. `--skip-setup` and
@@ -618,8 +618,18 @@ A child workspace is split from a parent with `shoal split`, so an agent whose
 work needs another PR gets another branch and worktree instead of switching
 branches or creating worktrees Shoal does not own. Splitting creates a new
 branch in the parent's repository, from the default branch or a `--base` that
-stacks it as usual, records the parent, and links an `--issue`; it is the only
-creation a scoped caller may do. Spaces form one tree through one parent link,
+stacks it as usual, records the parent, and links an `--issue`. Any space opens
+a child of either kind the same way: `shoal add` and `shoal chat` run inside a
+space put the new workspace or chat below it, in its repository, and a scoped
+caller creates nothing else, while the user's terminal creates top-level spaces.
+A chat an agent starts opens in a background place, since the agent cannot
+hand over its terminal, and keeps the agent's scope until it records the chat
+below the agent's space. The scope token goes through a private directory the
+place's command names, never the place's environment, which a shell left there
+would keep. The agent waits for that handoff, since its scope may
+end with it, and may not run the chat in its own terminal, where the chat's
+processes would be its own; places drop the marks and scope token of the space
+that opened them, so what runs there is the new chat's. Spaces form one tree through one parent link,
 `space_parents`, which records a workspace split from another and one a chat
 opened alike: every space has at most one parent, a ready workspace or a chat
 of its own repository, never one below it, and a child in another repository
@@ -642,9 +652,9 @@ shared removal path, with a checkpoint and kept branch for each workspace but a
 disposable one, whatever their work, holds or questions; one that cannot go
 retains the parent, and the journal and
 the removal's output name those taken. While a parent's completion with cleanup
-stands at its HEAD, its children go too after the grace period, whatever their
-own work, unless one of their own keep-reasons, or a workspace still below them,
-keeps them; a child's own `done` follows the usual rules. The parent owns its
+stands at its HEAD, its children of either kind go too after the grace period,
+whatever their own work, unless one of their own keep-reasons, or a space still
+below them, keeps them; a child's own `done` follows the usual rules. The parent owns its
 children, so its processes may remove and hold them, except that the user's
 holds anywhere below refuse the removal. `work` lists children below their
 parent, and `status` names the parent and children of either kind. `split --agent` gives a child an agent of its
@@ -887,7 +897,7 @@ Tracked executions and processes started with exported workspace environments
 inherit a daemon-validated scope token that
 confines them to their own workspace and the spaces below it:
 status, inspect, execute, setup, and resources.
-Creation other than splitting a child, removal other than of a descendant the user holds nothing below,
+Creation other than of a child of the caller's space, removal other than of a descendant the user holds nothing below,
 reconciliation, other workspaces, repository administration, and service control need an
 unscoped caller. A scoped `merge` is an
 approval request bound to the branch and its HEAD unless `[permissions] merge`
@@ -1894,9 +1904,9 @@ work is one thing a chat may do. Every chat is scoped, as a workspace's
 processes are: its agent carries a scope token, kept with the chat across
 stops and restores, that covers the chat and the spaces below it, so only the
 user's own terminal acts unscoped. The agent follows the workspace-agent rules
-without what needs a worktree: it opens workspaces only below its chat and in
-its repository, never takes over one outside it, and renames only its own
-chat. It proposes issues where `[permissions]` says so, as a workspace's agent
+without what needs a worktree: it opens workspaces and chats only below its
+chat and in its repository, never takes over one outside it, and renames only
+its own chat. It proposes issues where `[permissions]` says so, as a workspace's agent
 does, recording no branch or commit, since it has none; approval opens the
 issue from the chat's checkout and records it as the chat's. It starts at once from the default branch the
 background sync keeps current, so an offline or diverged checkout still gets its

@@ -9,7 +9,10 @@ use crate::{
         cleanup::{SpaceFailures, notify_chat_removal},
         notifications::{About, NotificationKind},
         questions,
-        workspace::{Manager, done::push_closed_and_results},
+        workspace::{
+            Manager,
+            done::{CompletedAncestor, push_closed_and_results},
+        },
         workspace_files::{self, Attacher, NewFile},
     },
     model::{Chat, Completion, PresentSpace},
@@ -76,13 +79,25 @@ impl Manager {
         Ok(())
     }
 
-    /// Remove `listed` for its completion, under its PR gate, which a
-    /// completion changes under.
+    /// Remove `listed` for its own completion or a completed ancestor's,
+    /// under its PR gate, which a completion changes under.
     async fn sweep_completed_chat(&self, listed: &Chat) -> Result<()> {
-        let _guard = self.gates.lock_prs([&listed.id]).await;
+        // An ancestor's completion that takes the chat changes under the
+        // ancestor's gate, so that one is held too.
+        let gated = self.completed_ancestor(&listed.id).await?;
+        let gates = std::iter::once(listed.id.as_str()).chain(gated.as_ref().map(|a| a.id()));
+        let _guard = self.gates.lock_prs(gates).await;
         let Some(chat) = self.recorded_chat(&listed.id).await? else {
             return Ok(());
         };
+        if let Some(ancestor) = self.completed_ancestor(&chat.id).await? {
+            // Another ancestor's completion waits for the next sweep, which
+            // holds its gate.
+            if gated.is_some_and(|gated| gated.id() == ancestor.id()) {
+                self.sweep_chat_under_completed(&chat, &ancestor).await?;
+            }
+            return Ok(());
+        }
         let Some(completion) = chat.completion.clone() else {
             return Ok(());
         };
@@ -92,6 +107,27 @@ impl Manager {
         let removal = self.remove_completed_chat(&chat, &completion).await;
         if !matches!(removal, Ok(false)) {
             notify_chat_removal(self, &chat, "completion cleanup", removal).await;
+        }
+        Ok(())
+    }
+
+    /// Remove `chat` for its completed `ancestor` once its grace period
+    /// ends, unless something keeps it or spaces below it remain, which go
+    /// first under the same completion.
+    async fn sweep_chat_under_completed(
+        &self,
+        chat: &Chat,
+        ancestor: &CompletedAncestor,
+    ) -> Result<()> {
+        if !self.children(&chat.id).await?.is_empty()
+            || self.chat_keep_reason(chat).await?.is_some()
+        {
+            return Ok(());
+        }
+        let removal = self.remove_chat_under_completed(chat, ancestor).await;
+        if !matches!(removal, Ok(false)) {
+            let cleanup = format!("cleanup after {} was marked done", ancestor.name());
+            notify_chat_removal(self, chat, &cleanup, removal).await;
         }
         Ok(())
     }

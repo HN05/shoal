@@ -42,7 +42,7 @@ async fn mixed_tree(
         .await
         .unwrap();
     let worker = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repository_id.to_owned().into(),
             "worker".into(),
             None,
@@ -187,7 +187,7 @@ async fn a_space_never_takes_one_above_it_as_its_child() {
         .unwrap();
     let (root, chat, _, _process) = mixed_tree(&manager, &repo.id).await;
     let error = manager
-        .assign_chat(&root.id, Some(chat.id.clone()))
+        .assign_parent(&root.id, Some(chat.id.clone()))
         .await
         .unwrap_err();
     assert!(
@@ -222,7 +222,7 @@ async fn a_chat_opens_workspaces_only_in_its_own_repository() {
         .await
         .unwrap();
     let error = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repos[1].id.clone().into(),
             "foreign".into(),
             None,
@@ -272,7 +272,7 @@ async fn removing_a_workspace_removes_the_chats_in_it_first() {
         .unwrap();
     let (watching, mut process) = chat_in(&manager, &host, "watching").await;
     let opened = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repo.id.clone().into(),
             "opened".into(),
             None,
@@ -344,7 +344,7 @@ async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
     let (watching, _process) = chat_in(&manager, &split, "watching").await;
     // Removing host takes the chat first, so host cannot be below it.
     let error = manager
-        .assign_chat(&host.id, Some(watching.id.clone()))
+        .assign_parent(&host.id, Some(watching.id.clone()))
         .await
         .unwrap_err();
     assert!(
@@ -354,7 +354,7 @@ async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
     assert!(manager.workspace(&host.id).await.unwrap().parent.is_none());
     // A split workspace stays below the one it was split from.
     manager
-        .assign_chat(&split.id, Some(watching.id.clone()))
+        .assign_parent(&split.id, Some(watching.id.clone()))
         .await
         .unwrap();
     let parent = manager.workspace(&split.id).await.unwrap().parent;
@@ -366,4 +366,73 @@ async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
         .map(|space| space.name)
         .collect();
     assert_eq!(below, ["watching", "split"]);
+}
+
+#[tokio::test]
+async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (root, chat, worker, _process) = mixed_tree(&manager, &repo.id).await;
+    manager
+        .executions
+        .issue_scope(
+            "scope".into(),
+            crate::daemon::scope::Caller {
+                space_id: chat.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let start = |workspace: &Workspace| crate::protocol::ChatMethod::StartChat {
+        repository: repo.id.clone().into(),
+        workspace: Some(workspace.name.clone()),
+        name: "auditing".into(),
+        agent: "claude".into(),
+        pid: process.id(),
+        origin: None,
+        hands_over: false,
+        parent: None,
+    };
+    // The workspace above the chat is outside its tree...
+    let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut start(&root))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("their own space and those below it"),
+        "{error:#}"
+    );
+    // ...and the one below it is not.
+    let mut method = start(&worker);
+    crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+        .await
+        .unwrap();
+    let crate::protocol::ChatMethod::StartChat {
+        repository,
+        workspace,
+        parent,
+        ..
+    } = method
+    else {
+        unreachable!("the method stays a chat start");
+    };
+    assert_eq!(workspace.as_deref(), Some(worker.id.as_str()));
+    let new = crate::daemon::chats::NewChat {
+        name: "auditing".into(),
+        agent: "claude".into(),
+        pid: process.id(),
+        origin: None,
+        hands_over: false,
+        parent,
+    };
+    let auditing = manager
+        .start_new_chat(repository, workspace.as_deref(), new)
+        .await
+        .unwrap();
+    assert_eq!(auditing.workspace.map(|home| home.id), Some(worker.id));
+    assert_eq!(auditing.parent.map(|parent| parent.id), Some(chat.id));
 }

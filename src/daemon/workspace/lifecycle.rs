@@ -943,7 +943,7 @@ impl Manager {
     /// Assignment state whose own cleanup path decides removal.
     async fn assignment_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
         let workspace = self.workspace(id).await?;
-        if let Some(ancestor) = self.completed_ancestor(&workspace).await? {
+        if let Some(ancestor) = self.completed_ancestor(&workspace.id).await? {
             return Ok(Some(CleanupReason::AncestorCompleted {
                 workspace: ancestor.name().to_owned(),
             }));
@@ -1469,7 +1469,7 @@ impl Manager {
                 );
                 // A chat's worker may have been opened elsewhere since; the
                 // reservation keeps it where it is from here on.
-                let nearest = self.completed_ancestor(&check.workspace).await?;
+                let nearest = self.completed_ancestor(&check.workspace.id).await?;
                 ensure!(
                     nearest.is_some_and(|nearest| nearest.id() == ancestor.id()),
                     "{} withdrew its completion, changed or no longer has the workspace below it; retaining workspace",

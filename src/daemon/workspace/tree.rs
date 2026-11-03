@@ -568,5 +568,7 @@ fn space_ref(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpaceRef> {
     })
 }
 
+mod parents;
+
 #[cfg(test)]
 mod tests;

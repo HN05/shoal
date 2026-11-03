@@ -66,7 +66,7 @@ async fn a_saved_chat_keeps_its_record_until_it_is_restored() {
         .await
         .unwrap();
     manager
-        .assign_chat(&workspace.id, Some(chat.id.clone()))
+        .assign_parent(&workspace.id, Some(chat.id.clone()))
         .await
         .unwrap();
     let tmp_dir = chat.tmp_dir.clone().unwrap();
@@ -178,7 +178,7 @@ async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
     let (root, manager) = manager().await;
     let (repo, chat, _process) = running_chat(root.path(), &manager).await;
     let opened = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repo.id.into(),
             "opened".into(),
             None,
@@ -886,7 +886,7 @@ async fn a_chat_a_removal_holds_neither_gives_up_nor_takes_workspaces() {
     let (root, manager) = manager().await;
     let (repo, chat, _process) = running_chat(root.path(), &manager).await;
     let below = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repo.id.clone().into(),
             "below".into(),
             None,
@@ -902,10 +902,10 @@ async fn a_chat_a_removal_holds_neither_gives_up_nor_takes_workspaces() {
     let reservation = manager.chat_removals.reserve(&chat.id).unwrap();
     // The workspace the removal takes stays below the chat, opened outside
     // it or from it again...
-    let error = manager.assign_chat(&below.id, None).await.unwrap_err();
+    let error = manager.assign_parent(&below.id, None).await.unwrap_err();
     assert!(error.to_string().contains("holds it"), "{error:#}");
     manager
-        .assign_chat(&below.id, Some(chat.id.clone()))
+        .assign_parent(&below.id, Some(chat.id.clone()))
         .await
         .unwrap();
     assert_eq!(
@@ -919,7 +919,7 @@ async fn a_chat_a_removal_holds_neither_gives_up_nor_takes_workspaces() {
     );
     // ...and one opened from it meanwhile is the user's.
     manager
-        .assign_chat(&other.id, Some(chat.id.clone()))
+        .assign_parent(&other.id, Some(chat.id.clone()))
         .await
         .unwrap();
     assert_eq!(
@@ -932,7 +932,7 @@ async fn a_chat_a_removal_holds_neither_gives_up_nor_takes_workspaces() {
         None
     );
     drop(reservation);
-    manager.assign_chat(&below.id, None).await.unwrap();
+    manager.assign_parent(&below.id, None).await.unwrap();
 }
 
 /// [`a_survivor_that_left_the_chats_group_holds_it_saved`] for an agent that

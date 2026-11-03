@@ -1429,7 +1429,7 @@ async fn a_saved_chat_leaves_its_workspaces_requests_to_the_user() {
         .await
         .unwrap();
     manager
-        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .assign_parent(&worker.id, Some(chat.id.clone()))
         .await
         .unwrap();
     manager
@@ -1503,7 +1503,7 @@ async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
         .await
         .unwrap();
     manager
-        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .assign_parent(&worker.id, Some(chat.id.clone()))
         .await
         .unwrap();
     manager
@@ -1586,7 +1586,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap();
     manager
-        .assign_chat(&root.id, Some(chat.id.clone()))
+        .assign_parent(&root.id, Some(chat.id.clone()))
         .await
         .unwrap();
     let child = manager

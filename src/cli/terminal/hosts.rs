@@ -264,12 +264,18 @@ pub(super) fn beside(ctx: &Context, settings: &Effective) -> Configured {
 
 /// The variables naming places of hosts other than `host`, which a place
 /// `host` opens must drop: Shoal there would take the caller's place for its
-/// own, and record or close it.
+/// own, and record or close it. So must the marks of the space whose process
+/// opens it, since what runs there marks its own space, and processes that
+/// kept the opener's would count as the opener's, which its stop would end,
+/// and its scope token, which a shell left in the place would keep.
 pub(super) fn foreign_place_variables(host: HostName) -> Vec<&'static str> {
+    use crate::env::{CHAT, EXECUTION_ID, RUN_ID, SCOPE_TOKEN, WORKSPACE_ID};
+    let marks = [CHAT, EXECUTION_ID, WORKSPACE_ID, RUN_ID, SCOPE_TOKEN];
     hosts()
         .filter(|other| other.name() != host)
         .filter_map(Host::places)
         .flat_map(|other| other.place_variables().iter().copied())
+        .chain(marks)
         .collect()
 }
 

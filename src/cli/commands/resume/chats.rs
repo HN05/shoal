@@ -135,6 +135,7 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
         args: Vec::new(),
         session: chat.session.clone(),
         restore: Some(chat.id.clone()),
+        handoff: None,
     };
     chat::launch(ctx, repo, settings, topic, options).await
 }

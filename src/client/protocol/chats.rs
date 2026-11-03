@@ -22,6 +22,10 @@ pub enum ChatMethod {
         /// with [`Self::MoveChat`]; until then the chat keeps its name.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         hands_over: bool,
+        /// The space the chat goes below, which must be in the repository;
+        /// none puts it at the top.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent: Option<String>,
     },
     /// Run the stopped chat `chat`, by ID, again as process `pid`, as
     /// [`Self::StartChat`] records a new one.

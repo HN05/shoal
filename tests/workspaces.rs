@@ -16123,7 +16123,7 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
 }
 
 #[test]
-fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
+fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() {
     let fixture = Fixture::new();
     for hook in ["setup", "post"] {
         let path = fixture.repo.join(hook);
@@ -16166,6 +16166,9 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
         fs::read_to_string(path.join("runs")).unwrap(),
         "setup\npost\n"
     );
+    // A workspace process opens a workspace below its own, but takes over
+    // none outside it.
+    fixture.add("elsewhere");
     let output = fixture.run(&[
         "run",
         "--workspace",
@@ -16175,13 +16178,14 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
         "add",
         fixture.repo.to_str().unwrap(),
         "--existing",
-        "main",
+        "elsewhere",
     ]);
     assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("workspace processes"),
+        String::from_utf8_lossy(&output.stderr).contains("outside the space opening it"),
         "{output:?}"
     );
+    assert!(fixture.ok(&["status", "elsewhere"])["workspace"]["parent"].is_null());
     assert!(
         !fixture
             .run(&[
@@ -26176,8 +26180,13 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         let output = scoped(&args);
         assert!(output.status.success(), "{args:?}: {output:?}");
     }
+    // A process with the exported environment opens workspaces only below
+    // its own.
+    let below = scoped(&["add", fixture.repo.to_str().unwrap(), "below"]);
+    assert!(below.status.success(), "{below:?}");
+    let below = fixture.ok(&["status", "below"]);
+    assert_eq!(below["workspace"]["parent"]["name"], "external", "{below}");
     for args in [
-        vec!["add", fixture.repo.to_str().unwrap(), "forbidden"],
         vec!["rm", "external", "--yes"],
         vec!["rm", "other", "--yes"],
         vec!["alerts"],
@@ -27118,7 +27127,11 @@ run remove rm below --yes
         assert_ne!(code, "0", "{refused}: {error}");
     }
     assert!(status("outside").1.contains("own space and those below it"));
-    assert!(status("takeover").1.contains("outside is outside the chat"));
+    assert!(
+        status("takeover")
+            .1
+            .contains("outside is outside the space opening it")
+    );
     let chats = fixture.ok(&["work", "--chats"]);
     assert_eq!(chats[0]["name"], "renamed", "{chats}");
     let names: Vec<_> = (fixture.ok(&["work"]).as_array().unwrap().iter())
@@ -27199,6 +27212,187 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
             && call.iter().any(|arg| arg.contains(id))
     });
     assert_eq!(relabelled, None);
+}
+
+#[test]
+fn any_space_opens_any_kind_of_child() {
+    let fixture = Fixture::with_config(Some(
+        "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n",
+    ));
+    let home = fixture.root.path();
+    install_test_script(home.join("bin").join("zmx"), terminal_zmx());
+    // The first chat's agent starts a chat below its own; each records its
+    // chat and keeps running.
+    fs::write(
+        fixture.repo.join("chat-agent.sh"),
+        format!(
+            "shoal='{}'\n\
+             if [ ! -e \"$HOME/nested-started\" ]; then\n\
+             touch \"$HOME/nested-started\"\n\
+             \"$shoal\" chat --agent claude --name nested </dev/null > \"$HOME/nested-chat\" 2>&1\n\
+             fi\n\
+             echo \"$SHOAL_CHAT\" >> \"$HOME/chats-started\"\n\
+             trap 'exit 0' TERM\n\
+             while :; do sleep 1; done\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    fixture.add("parent");
+    // A workspace's agent opens a workspace below its own...
+    let repo = fixture.repo.to_str().unwrap();
+    let below = scoped_command(&fixture, "parent", &["add", repo, "below"]);
+    assert!(below.status.success(), "{below:?}");
+    let parent = |space: &Value| space["parent"]["name"].as_str().map(str::to_owned);
+    let status = fixture.ok(&["status", "below"]);
+    assert_eq!(parent(&status["workspace"]).as_deref(), Some("parent"));
+    // ...but not a chat in its own terminal, whose processes would be its
+    // own...
+    let here = scoped_command(&fixture, "parent", &["chat", "--here", "--agent", "claude"]);
+    assert!(!here.status.success(), "{here:?}");
+    let error = String::from_utf8_lossy(&here.stderr);
+    assert!(error.contains("leave out --here"), "{error}");
+    // ...nor one in the worktree of a workspace outside its tree...
+    fixture.add("other");
+    let args = ["chat", "--workspace", "other", "--agent", "claude"];
+    let outside = scoped_command(&fixture, "parent", &args);
+    assert!(!outside.status.success(), "{outside:?}");
+    let error = String::from_utf8_lossy(&outside.stderr);
+    assert!(error.contains("no workspace other"), "{error}");
+    // ...rather a chat below it, which opens in the background, as its agent
+    // cannot hand over a terminal; that chat's agent opens one below its own.
+    // The process returns once the chat holds its own scope, which outlasts
+    // the process's.
+    let sub = scoped_command(
+        &fixture,
+        "parent",
+        &["chat", "--agent", "claude", "--name", "sub"],
+    );
+    assert!(sub.status.success(), "{sub:?}");
+    wait_until("both chats started", || {
+        fs::read_to_string(home.join("chats-started")).is_ok_and(|ids| ids.lines().count() == 2)
+    });
+    let chats = fixture.ok(&["work", "--chats"]);
+    let chat = |name: &str| {
+        let found = chats
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|chat| chat["name"] == name);
+        found.unwrap_or_else(|| panic!("{name}: {chats}")).clone()
+    };
+    assert_eq!(parent(&chat("sub")).as_deref(), Some("parent"), "{chats}");
+    assert_eq!(chat("sub")["parent"]["kind"], "workspace");
+    assert_eq!(parent(&chat("nested")).as_deref(), Some("sub"), "{chats}");
+    assert_eq!(chat("nested")["parent"]["kind"], "chat");
+    // Removing the workspace takes every space below it, deepest first.
+    let removed = fixture.ok(&["rm", "parent", "--yes"]);
+    let children: Vec<_> = (removed["children"].as_array().unwrap().iter())
+        .map(|name| name.as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(children.len(), 3, "{removed}");
+    for name in ["below", "sub", "nested"] {
+        assert!(
+            children.iter().any(|child| child == name),
+            "{name}: {removed}"
+        );
+    }
+    assert!(
+        children.iter().position(|child| child == "nested")
+            < children.iter().position(|child| child == "sub")
+    );
+    assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
+}
+
+/// A chat between two workspaces decides for and coordinates the workspace
+/// below it, whose process reaches nothing above, and goes with the
+/// workspace above it.
+#[test]
+fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
+    let fixture = Fixture::with_config(Some(
+        "[agents.claude]\ncommand = ['sh', '-c', 'exec sh \"$HOME/agent.sh\"']\n",
+    ));
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    let home = fixture.root.path();
+    install_test_script(home.join("bin").join("zmx"), terminal_zmx());
+    // The chat's agent opens a workspace below its chat and keeps running;
+    // that workspace's agent asks for a port that needs approval.
+    fs::write(
+        home.join("agent.sh"),
+        format!(
+            "shoal='{}'\n\
+             if [ -n \"$SHOAL_WORKSPACE_ID\" ]; then\n\
+             \"$shoal\" --json acquire port web --reason 'serve preview' > \"$HOME/asked.tmp\" 2>&1\n\
+             mv \"$HOME/asked.tmp\" \"$HOME/asked\"\n\
+             while [ ! -e \"$HOME/release\" ]; do sleep 0.1; done\n\
+             exit 0\n\
+             fi\n\
+             \"$shoal\" add \"$PWD\" deep </dev/null > \"$HOME/deep\" 2>&1\n\
+             touch \"$HOME/chat-ready\"\n\
+             trap 'exit 0' TERM\n\
+             while :; do sleep 1; done\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    fixture.add("top");
+    let middle = scoped_command(
+        &fixture,
+        "top",
+        &["chat", "--agent", "claude", "--name", "middle"],
+    );
+    assert!(middle.status.success(), "{middle:?}");
+    wait_until("the chat's workspace", || home.join("chat-ready").exists());
+    let deep = fixture.ok(&["status", "deep"]);
+    assert_eq!(deep["workspace"]["parent"]["name"], "middle", "{deep}");
+    let chats = fixture.ok(&["work", "--chats"]);
+    let middle = chats[0]["id"].as_str().unwrap().to_owned();
+    assert_eq!(chats[0]["parent"]["name"], "top", "{chats}");
+
+    // The running chat, not the agentless workspace above it, decides what
+    // the agent of the workspace below asks for.
+    let mut worker = fixture
+        .command()
+        .args(["claude", "deep"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the worker's request", || home.join("asked").exists());
+    let asked: Value =
+        serde_json::from_str(&fs::read_to_string(home.join("asked")).unwrap()).unwrap();
+    let request = fixture.ok(&["approvals", &asked["request"]["id"].to_string()]);
+    assert_eq!(request["decider"], middle.as_str(), "{request}");
+    // The chat coordinates it: the workspace's activity reaches the chat.
+    fixture.ok(&["alerts", "send", "--space", "deep", "Tests pass"]);
+    let messages = fixture.ok(&["messages", "middle"]);
+    assert!(messages.to_string().contains("Tests pass"), "{messages}");
+    // The workspace's process reaches neither the chat nor the workspace
+    // above it.
+    for space in ["middle", "top"] {
+        let refused = scoped_command(
+            &fixture,
+            "deep",
+            &["messages", "send", "--space", space, "hi"],
+        );
+        assert!(!refused.status.success(), "{space}: {refused:?}");
+        let error = String::from_utf8_lossy(&refused.stderr);
+        assert!(
+            error.contains("own space and those below it"),
+            "{space}: {error}"
+        );
+    }
+    fs::write(home.join("release"), "").unwrap();
+    assert!(worker.wait().unwrap().success());
+    // Removing the top workspace takes the chat and the workspace below it.
+    let removed = fixture.ok(&["rm", "top", "--yes"]);
+    assert_eq!(
+        removed["children"],
+        serde_json::json!(["deep", "middle"]),
+        "{removed}"
+    );
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
 }
 
 #[test]
@@ -28061,25 +28255,6 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
             "the claude command uses {workspace}, which has no value outside a workspace"
         ),
         "{transcript}"
-    );
-    fs::remove_file(fixture.repo.join(".shoal.toml")).unwrap();
-    fixture.add("scoped");
-    let output = fixture.run(&[
-        "run",
-        "--workspace",
-        "scoped",
-        "--",
-        env!("CARGO_BIN_EXE_shoal"),
-        "chat",
-        repo,
-        "--agent",
-        "claude",
-    ]);
-    assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("workspace processes cannot start or rename chats"),
-        "{output:?}"
     );
 }
 

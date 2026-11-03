@@ -864,6 +864,53 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
 }
 
 #[tokio::test]
+async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
+    let (_root, manager, parent) = fixture().await;
+    manager
+        .acquire_hold(
+            &parent.id,
+            "review".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
+        .await
+        .unwrap();
+    let agents = [(); 2].map(|()| {
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"))
+    });
+    let mut above = parent.id.clone();
+    let mut chats = Vec::new();
+    for (name, agent) in ["sub", "nested"].into_iter().zip(&agents) {
+        let start = crate::daemon::chats::NewChat {
+            name: name.into(),
+            agent: "claude".into(),
+            pid: agent.id(),
+            origin: None,
+            hands_over: false,
+            parent: Some(above),
+        };
+        let chat = manager
+            .start_new_chat(parent.repository_id.clone().into(), None, start)
+            .await
+            .unwrap();
+        above = chat.id.clone();
+        chats.push(chat);
+    }
+
+    manager
+        .mark_done(&parent.id, false, false, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+    // The nested chat goes first, then the chat it was below.
+    manager.sweep_completed().await.unwrap();
+    assert!(manager.recorded_chat(&chats[1].id).await.unwrap().is_none());
+    assert!(manager.recorded_chat(&chats[0].id).await.unwrap().is_some());
+    manager.sweep_completed().await.unwrap();
+    assert!(manager.recorded_chat(&chats[0].id).await.unwrap().is_none());
+    assert!(manager.find_workspace(&parent.id).await.unwrap().is_some());
+}
+
+#[tokio::test]
 async fn children_stay_while_their_parents_completion_does_not_stand() {
     let (_root, manager, parent) = fixture().await;
     commit_file(&parent.path, "parent-work");
@@ -984,7 +1031,7 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
         .await
         .unwrap();
     let worker = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repo.id.into(),
             "worker".into(),
             None,
@@ -1002,11 +1049,15 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
         )
         .await
         .unwrap();
-    let ancestor = manager.completed_ancestor(&worker).await.unwrap().unwrap();
+    let ancestor = manager
+        .completed_ancestor(&worker.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(ancestor.id(), chat.id);
 
     // The user opens it outside the chat before the removal reserves it.
-    manager.assign_chat(&worker.id, None).await.unwrap();
+    manager.assign_parent(&worker.id, None).await.unwrap();
     let error = manager
         .remove_under_completed(&worker.id, &ancestor)
         .await
@@ -1040,7 +1091,7 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
         .await
         .unwrap();
     let root = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repo.id.into(),
             "root".into(),
             None,
@@ -1063,13 +1114,17 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
         .await
         .unwrap();
     let split = manager.workspace(&split.id).await.unwrap();
-    let ancestor = manager.completed_ancestor(&split).await.unwrap().unwrap();
+    let ancestor = manager
+        .completed_ancestor(&split.id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(ancestor.id(), chat.id);
 
     // While a removal under the chat holds its workspaces, the root that
     // puts the split child below the chat stays there...
     let held = manager.chat_owners.reserve(&chat.id).unwrap();
-    let error = manager.assign_chat(&root.id, None).await.unwrap_err();
+    let error = manager.assign_parent(&root.id, None).await.unwrap_err();
     assert!(error.to_string().contains("holds it"), "{error:#}");
     // ...and the removal takes that hold itself, so another one waits.
     let error = manager
@@ -1082,5 +1137,5 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
     );
     assert!(manager.workspace(&split.id).await.is_ok());
     drop(held);
-    manager.assign_chat(&root.id, None).await.unwrap();
+    manager.assign_parent(&root.id, None).await.unwrap();
 }

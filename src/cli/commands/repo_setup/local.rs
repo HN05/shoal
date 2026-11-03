@@ -26,7 +26,11 @@ pub(super) async fn start(
     settings: Effective,
     options: chat::Options,
 ) -> Result<i32> {
-    chat::ensure_unscoped(ctx)?;
+    // The chat changes the repository's local config, which is the user's.
+    anyhow::ensure!(
+        !crate::env::inherits_scope(&ctx.paths.state),
+        "scoped processes cannot change a repository's local config; ask the user to run this command"
+    );
     let config = config_file(ctx, repo.id.clone().into()).await?;
     let topic = topic(&repo, &config);
     chat::begin(ctx, repo, settings, topic, options).await

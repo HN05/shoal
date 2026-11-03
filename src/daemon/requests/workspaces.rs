@@ -1,7 +1,7 @@
 //! The daemon's answers to [`WorkspaceMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 use tokio::net::UnixStream;
 
 use super::super::{
@@ -29,7 +29,7 @@ pub(super) async fn handle(
             branch,
             git_profile,
             base,
-            chat,
+            parent,
             options,
         } => {
             let new = workspace::NewWorkspace {
@@ -40,7 +40,7 @@ pub(super) async fn handle(
             };
             Body::OpenedWorkspace(
                 manager
-                    .open_branch_for_chat(repository, &branch, base, new, chat, caller.is_some())
+                    .open_branch_below(repository, &branch, base, new, parent, caller.is_some())
                     .await?,
             )
         }
@@ -50,7 +50,7 @@ pub(super) async fn handle(
             name,
             base,
             git_profile,
-            chat,
+            parent,
             options,
         } => {
             let new = workspace::NewWorkspace {
@@ -61,7 +61,7 @@ pub(super) async fn handle(
             };
             Body::Workspace(
                 manager
-                    .create_workspace_for_chat(repository, name, base, new, chat)
+                    .create_workspace_below(repository, name, base, new, parent)
                     .await?,
             )
         }
@@ -69,22 +69,21 @@ pub(super) async fn handle(
             repository,
             parent,
             start,
-            chat,
             options,
         } => Body::Workspace(
             manager
-                .create_commit_workspace(repository, parent, start, chat, options)
+                .create_commit_workspace(repository, parent, start, options)
                 .await?,
         ),
         WorkspaceMethod::OpenPullHead {
             repository,
             url,
             head,
-            chat,
+            parent,
             options,
         } => Body::OpenedWorkspace(
             manager
-                .open_pull_head(repository, url, head, chat, options, caller.is_some())
+                .open_pull_head(repository, url, head, parent, options, caller.is_some())
                 .await?,
         ),
         WorkspaceMethod::ReopenWorkspace { workspace } => {
@@ -108,9 +107,9 @@ pub(super) async fn handle(
             git_profile,
             path,
             options,
-            chat,
+            parent,
         } => {
-            (manager.ensure_chat_repository(&repository, chat.as_deref())).await?;
+            (manager.ensure_parent_repository(&repository, parent.as_deref())).await?;
             manager
                 .check_creation(
                     &repository,
@@ -256,23 +255,20 @@ impl Scoped for WorkspaceMethod {
                     .await?;
                 None
             }
-            // A chat's agent opens workspaces below its chat, which must be
-            // in its repository; a workspace's splits them from its own.
-            WorkspaceMethod::OpenBranch { chat, .. }
-            | WorkspaceMethod::CreateWorkspace { chat, .. }
+            // A scoped caller opens workspaces only below its own space,
+            // which must be in their repository.
+            WorkspaceMethod::OpenBranch { parent, .. }
+            | WorkspaceMethod::CreateWorkspace { parent, .. }
             | WorkspaceMethod::CreateCommitWorkspace {
-                parent: None, chat, ..
+                parent: parent @ None,
+                ..
             }
-            | WorkspaceMethod::OpenPullHead { chat, .. }
-            | WorkspaceMethod::CheckCreation { chat, .. } => {
-                ensure!(manager.caller_is_chat(caller).await?, denied());
-                *chat = Some(caller.space_id.clone());
+            | WorkspaceMethod::OpenPullHead { parent, .. }
+            | WorkspaceMethod::CheckCreation { parent, .. } => {
+                *parent = Some(caller.space_id.clone());
                 None
             }
-            WorkspaceMethod::CheckDependencies { .. } => {
-                ensure!(manager.caller_is_chat(caller).await?, denied());
-                None
-            }
+            WorkspaceMethod::CheckDependencies { .. } => None,
             WorkspaceMethod::ListWorkspaces | WorkspaceMethod::FindSpaces { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
             | WorkspaceMethod::SetWorkspaceTitle { workspace, .. }

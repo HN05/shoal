@@ -17,9 +17,10 @@ own checkout. Change or remove another agent's workspace only when the user asks
 
 Sessions launched through Shoal are scoped to their own space and the spaces
 below it, such as child workspaces they split from it with `shoal split`, which
-they work on themselves; they cannot create other workspaces or start sessions
-elsewhere. A `shoal chat` is scoped the same way, to the chat and the spaces
-below it; only the user's own terminal is unscoped. Unscoped commands also
+they work on themselves; `shoal add` and `shoal chat` run there create children
+of their space too, and nothing else. A `shoal chat` is scoped the same way, to
+the chat and the spaces below it: the workspaces and chats it opens go below
+it; only the user's own terminal is unscoped and creates top-level spaces. Unscoped commands also
 decide approval requests, so act on those only as the user directs.
 
 ## Start work

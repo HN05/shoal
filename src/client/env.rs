@@ -179,11 +179,21 @@ pub const TMPDIR: &str = "TMPDIR";
 /// Variables a reserved port may never shadow when exported to a command.
 pub const PROTECTED: [&str; 4] = ["HOME", "PATH", "SHELL", TMPDIR];
 
+/// The scope token a starter handed this process with a chat to start,
+/// which stands in for [`SCOPE_TOKEN`] without entering any environment.
+static HANDED_SCOPE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Take `token`, which a starter handed this process, as its scope token;
+/// false when it already took one.
+pub fn take_handed_scope(token: String) -> bool {
+    HANDED_SCOPE.set(token).is_ok()
+}
+
 pub fn scope_token() -> Option<String> {
-    std::env::var(SCOPE_TOKEN).ok()
+    (HANDED_SCOPE.get().cloned()).or_else(|| std::env::var(SCOPE_TOKEN).ok())
 }
 
 /// True when this process carries cooperative workspace scope.
 pub fn is_scoped() -> bool {
-    std::env::var_os(SCOPE_TOKEN).is_some()
+    HANDED_SCOPE.get().is_some() || std::env::var_os(SCOPE_TOKEN).is_some()
 }

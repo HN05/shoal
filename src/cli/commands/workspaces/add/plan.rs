@@ -81,7 +81,7 @@ pub(super) async fn plan_addition(
         prompt: None,
         fork: None,
         queue_entry: None,
-        chat: env::chat(),
+        chat: env::in_chat(),
         workspace: None,
     })
 }
@@ -255,7 +255,7 @@ pub(super) async fn check_add_creation(
     target: &AddTarget,
     creation: &Creation,
 ) -> Result<()> {
-    let chat = env::chat();
+    let chat = env::in_chat();
     if !ctx.interactive() && chat.is_none() {
         return Ok(());
     }
@@ -268,8 +268,8 @@ pub(super) async fn check_add_creation(
             base: creation.base.clone(),
             git_profile: creation.git_profile.clone(),
             path: creation.path.clone(),
+            parent: chat,
             options: creation.options,
-            chat,
         },
     )
     .await

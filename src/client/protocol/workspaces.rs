@@ -14,8 +14,9 @@ pub enum WorkspaceMethod {
         branch: String,
         git_profile: Option<String>,
         base: Option<String>,
-        /// The chat opening the workspace; `None` gives it to the user.
-        chat: Option<String>,
+        /// The space opening the workspace, which it goes below; `None`
+        /// gives it to the user.
+        parent: Option<String>,
         /// Apply only when opening creates a new worktree.
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
@@ -26,8 +27,9 @@ pub enum WorkspaceMethod {
         name: String,
         base: Option<String>,
         git_profile: Option<String>,
-        /// The chat opening the workspace; `None` gives it to the user.
-        chat: Option<String>,
+        /// The space opening the workspace, which it goes below; `None`
+        /// gives it to the user.
+        parent: Option<String>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
@@ -44,26 +46,24 @@ pub enum WorkspaceMethod {
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
-    /// Create a workspace at a commit, without a branch: a child of
-    /// `parent`, or without one a top-level workspace given to `chat`, or
-    /// else to the user.
+    /// Create a workspace at a commit, without a branch: a child of the
+    /// space `parent`, or without one a top-level workspace of the user's.
     CreateCommitWorkspace {
         repository: crate::client::repository::Selector,
         parent: Option<String>,
         start: CommitStart,
-        chat: Option<String>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
     /// Open PR `url`'s `head` in a workspace at a commit: the one in
     /// `repository` made for or linked to the PR, moved to the head when the
-    /// PR's head moved, else a new top-level one given to `chat`, or else to
-    /// the user.
+    /// PR's head moved, else a new one below the space `parent`, or else a
+    /// top-level one of the user's.
     OpenPullHead {
         repository: crate::client::repository::Selector,
         url: String,
         head: PullHead,
-        chat: Option<String>,
+        parent: Option<String>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
@@ -79,10 +79,10 @@ pub enum WorkspaceMethod {
         path: Option<std::path::PathBuf>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
-        /// The chat the workspace would be below, which must be in the
+        /// The space the workspace would be below, which must be in the
         /// repository.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        chat: Option<String>,
+        parent: Option<String>,
     },
     /// Refuse the work `after` names that a queued launch in `repository`
     /// could not wait for, without queuing anything.

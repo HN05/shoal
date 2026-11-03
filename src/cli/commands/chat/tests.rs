@@ -29,7 +29,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         restore: None,
     };
     assert_eq!(
-        beside.relaunch(),
+        beside.relaunch(None),
         [
             "chat", "repo", "--here", "--name", "named", "--agent", "codex", "--effort", "high",
             "--", "--search",
@@ -37,14 +37,14 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         .map(OsString::from)
     );
     // A chat continuing a session takes it to the place it opens, as a
-    // restore takes the saved chat.
+    // restore takes the saved chat, and so does a scoped start its handoff.
     let resumed = Beside {
         session: Some("s1"),
         restore: Some("c1"),
         ..beside
     };
     assert_eq!(
-        resumed.relaunch(),
+        resumed.relaunch(Some(Path::new("/tmp/shoal-chat.1"))),
         [
             "chat",
             "repo",
@@ -59,6 +59,8 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
             "s1",
             "--restore",
             "c1",
+            "--handoff",
+            "/tmp/shoal-chat.1",
             "--",
             "--search",
         ]
@@ -89,7 +91,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         restore: None,
     };
     assert_eq!(
-        beside.relaunch(),
+        beside.relaunch(None),
         [
             "chat",
             "--workspace",

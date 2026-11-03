@@ -115,6 +115,16 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
             "approvals 1 --escalate",
             "cannot decide approval requests without their scope token",
         ),
+        ("add . child", "add workspaces only with their scope token"),
+        (
+            "chat --agent claude",
+            "start and ask chats only with their scope token",
+        ),
+        ("plan 1", "start and ask chats only with their scope token"),
+        (
+            "chat rename --request talk",
+            "start and ask chats only with their scope token",
+        ),
     ] {
         let output = run(args, None);
         assert!(!output.status.success());

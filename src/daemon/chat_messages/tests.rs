@@ -33,7 +33,7 @@ async fn chat_and_worker(temp: &tempfile::TempDir, manager: &Manager) -> (Chat, 
         .await
         .unwrap();
     manager
-        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .assign_parent(&worker.id, Some(chat.id.clone()))
         .await
         .unwrap();
     (chat, worker)
@@ -252,7 +252,7 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     manager
-        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .assign_parent(&worker.id, Some(chat.id.clone()))
         .await
         .unwrap();
     manager
@@ -320,7 +320,7 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
     manager
-        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .assign_parent(&worker.id, Some(chat.id.clone()))
         .await
         .unwrap();
     manager
@@ -352,7 +352,7 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     manager.stop_finished_chats().await.unwrap();
     // Opened outside the chat, the worker is the user's and stays when the
     // chat is removed.
-    manager.assign_chat(&worker.id, None).await.unwrap();
+    manager.assign_parent(&worker.id, None).await.unwrap();
     manager.remove_chat(&chat.id, None).await.unwrap();
     let handed = manager.notifications(true, 50).await.unwrap();
     assert_eq!(handed.len(), 1);
@@ -386,7 +386,7 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         .await
         .unwrap();
     manager
-        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .assign_parent(&worker.id, Some(chat.id.clone()))
         .await
         .unwrap();
     manager
@@ -441,7 +441,7 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     // Removed with nothing below it, the chat hands the files to the user.
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    manager.assign_chat(&worker.id, None).await.unwrap();
+    manager.assign_parent(&worker.id, None).await.unwrap();
     manager.remove_chat(&chat.id, None).await.unwrap();
     let notifications = manager.notifications(false, 100).await.unwrap();
     let [notification] = notifications.as_slice() else {

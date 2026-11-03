@@ -26,61 +26,65 @@ struct Start {
 
 impl Manager {
     /// Create a workspace at the commit `start` names in `repository`: a
-    /// child of `parent`, or without one a top-level workspace given to
-    /// `chat`, or else to the user. It runs setup like any workspace unless
-    /// the caller skips it.
+    /// child of the space `parent`, a chat's ID or a workspace, or without
+    /// one a top-level workspace of the user's. It runs setup like any
+    /// workspace unless the caller skips it.
     pub async fn create_commit_workspace(
         &self,
         repository: crate::repository::Selector,
         parent: Option<String>,
         start: CommitStart,
-        chat: Option<String>,
         options: CreationOptions,
     ) -> Result<Workspace> {
-        // A child belongs to its parent and the chat goes unused.
-        let owner = chat.as_deref().filter(|_| parent.is_none());
-        self.ensure_chat_repository(&repository, owner).await?;
         let parent = match parent {
-            Some(parent) => Some(self.workspace(&parent).await?),
+            Some(parent) => Some(self.parent_space(&parent).await?),
             None => None,
         };
-        let (repo, _guard) = self.lock_repository(repository).await?;
-        // Checked before resolving the start, which may fetch: a workspace
+        // Checked before resolving the start, which may fetch: a scoped
         // process reaches only its own repository.
-        if let Some(parent) = &parent {
-            anyhow::ensure!(
-                parent.repository_id == repo.id,
-                "parent workspace {} is not a workspace of this repository",
-                parent.name
-            );
-        }
-        let parent = parent.map(|parent| parent.id);
-        self.create_at_start(&repo, parent, start, chat, options)
-            .await
+        self.ensure_parent_repository(&repository, parent.as_deref())
+            .await?;
+        let (repo, _guard) = self.lock_repository(repository).await?;
+        self.create_at_start(&repo, parent, start, options).await
+    }
+
+    /// The ID of the space `parent` names: a chat's ID, or a workspace's
+    /// name or ID.
+    async fn parent_space(&self, parent: &str) -> Result<String> {
+        let id = parent.to_owned();
+        let kind = self
+            .store
+            .run(move |db| crate::daemon::spaces::space_kind(db, &id))
+            .await?;
+        Ok(match kind {
+            Some(SpaceKind::Chat) => parent.to_owned(),
+            _ => self.workspace(parent).await?.id,
+        })
     }
 
     /// Open PR `url`'s `head` in a workspace at a commit in `repository`:
     /// the one made for or linked to the PR, moved to `head` when the PR's
-    /// head moved, so there is at most one per PR, or else a new top-level
-    /// one given to `chat`, or to the user. A `confined` chat, whose own
-    /// agent asks, takes over no workspace outside its subtree.
+    /// head moved, so there is at most one per PR, or else a new one below
+    /// the space `parent`, or a top-level one of the user's. A `confined`
+    /// parent, whose own agent asks, takes over no workspace outside its
+    /// subtree.
     pub async fn open_pull_head(
         &self,
         repository: crate::repository::Selector,
         url: String,
         head: PullHead,
-        chat: Option<String>,
+        parent: Option<String>,
         options: CreationOptions,
         confined: bool,
     ) -> Result<OpenedWorkspace> {
-        self.ensure_chat_repository(&repository, chat.as_deref())
+        self.ensure_parent_repository(&repository, parent.as_deref())
             .await?;
         let (repo, _guard) = self.lock_repository(repository).await?;
         if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
-            if let Some(chat) = chat.as_deref().filter(|_| confined) {
+            if let Some(parent) = parent.as_deref().filter(|_| confined) {
                 anyhow::ensure!(
-                    self.within_subtree(chat, &workspace.id).await?,
-                    "{} is outside the chat; ask the user to open it",
+                    self.within_subtree(parent, &workspace.id).await?,
+                    "{} is outside the space opening it; ask the user to open it",
                     workspace.name
                 );
             }
@@ -94,7 +98,7 @@ impl Manager {
                 Some(parent) if parent.kind == SpaceKind::Workspace => {
                     self.workspace(&workspace.id).await?
                 }
-                _ => self.give_to_chat(&workspace.id, chat).await?,
+                _ => self.give_to_parent(&workspace.id, parent).await?,
             };
             return Ok(OpenedWorkspace {
                 workspace,
@@ -103,9 +107,7 @@ impl Manager {
         }
         let start = CommitStart::PullHead(head);
         Ok(OpenedWorkspace {
-            workspace: self
-                .create_at_start(&repo, None, start, chat, options)
-                .await?,
+            workspace: self.create_at_start(&repo, parent, start, options).await?,
             reused: false,
         })
     }
@@ -117,12 +119,10 @@ impl Manager {
         repo: &Repository,
         parent: Option<String>,
         start: CommitStart,
-        chat: Option<String>,
         options: CreationOptions,
     ) -> Result<Workspace> {
-        // A child belongs to its parent, whose agent or owner coordinates
-        // it; a top-level one goes below the chat, recorded with it.
-        let parent = parent.or(chat);
+        // Recorded below its parent, a workspace or a chat, with its
+        // record, so one whose creation fails is still there.
         let start = self.resolve_start(repo, start).await?;
         let head = start.at.commit.clone();
         let workspace = self

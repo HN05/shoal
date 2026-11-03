@@ -94,12 +94,10 @@ pub(super) async fn at_commit(
     options: CreationOptions,
 ) -> Result<i32> {
     let (repository, parent) = commit_owner(ctx, workspace).await?;
-    let chat = parent.is_none().then(|| ui::current_chat(&None)).flatten();
     let method = WorkspaceMethod::CreateCommitWorkspace {
         repository,
-        parent,
+        parent: parent.or_else(|| ui::current_chat(&None)),
         start: CommitStart::Revision(base),
-        chat,
         options,
     };
     let Some(child) = prepare(ctx, request(&ctx.paths, method).await?).await? else {

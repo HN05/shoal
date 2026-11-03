@@ -19,7 +19,6 @@ async fn create(
             repo.into(),
             parent.map(str::to_owned),
             start,
-            None,
             Default::default(),
         )
         .await
@@ -240,18 +239,24 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
     for (parent, allowed) in [
         (Some(own.name.clone()), true),
         (Some(other.name.clone()), false),
-        (None, false),
+        // Without one it goes below the caller's own workspace.
+        (None, true),
     ] {
         let mut request = WorkspaceMethod::CreateCommitWorkspace {
             repository: repo.id.as_str().into(),
             parent: parent.clone(),
             start: CommitStart::Revision(None),
-            chat: None,
             options: Default::default(),
         };
         let authorized =
             crate::daemon::scope::authorize(&manager, Some("scope"), &mut request).await;
         assert_eq!(authorized.is_ok(), allowed, "{parent:?}");
+        if parent.is_none() {
+            let WorkspaceMethod::CreateCommitWorkspace { parent, .. } = request else {
+                unreachable!()
+            };
+            assert_eq!(parent.as_deref(), Some(own.id.as_str()));
+        }
     }
 }
 
@@ -417,7 +422,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
 }
 
 #[tokio::test]
-async fn a_chat_owns_its_top_level_workspace_at_a_commit_but_not_a_child() {
+async fn a_workspace_at_a_commit_goes_below_the_chat_or_workspace_it_names() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -444,17 +449,21 @@ async fn a_chat_owns_its_top_level_workspace_at_a_commit_but_not_a_child() {
             repo.id.as_str().into(),
             parent,
             CommitStart::Revision(None),
-            Some(chat.id.clone()),
             Default::default(),
         )
     };
-    let top = create(None).await.unwrap();
-    assert_eq!(top.parent.map(|parent| parent.id), Some(chat.id.clone()));
+    let below_chat = create(Some(chat.id.clone())).await.unwrap();
+    assert_eq!(
+        below_chat.parent.map(|parent| parent.id),
+        Some(chat.id.clone())
+    );
     let child = create(Some(parent.name.clone())).await.unwrap();
     assert_eq!(
         child.parent.map(|parent| parent.id),
         Some(parent.id.clone())
     );
+    let top = create(None).await.unwrap();
+    assert_eq!(top.parent, None);
 }
 
 #[tokio::test]
@@ -667,7 +676,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
     // Another chat's own agent cannot take it from the first.
     let error = open(Some(second.id.clone()), true).await.unwrap_err();
     assert!(
-        format!("{error:#}").contains("is outside the chat"),
+        format!("{error:#}").contains("is outside the space opening it"),
         "{error:#}"
     );
     let kept = manager.workspace(&opened.id).await.unwrap();
@@ -749,7 +758,7 @@ async fn a_parent_of_another_repository_is_refused_before_any_fetch() {
         refused
             .unwrap_err()
             .to_string()
-            .contains("not a workspace of this repository")
+            .contains("parent is in another repository")
     );
     assert!(git(&other, &["tag", "--list", "remote-only"]).is_empty());
 }
@@ -782,9 +791,8 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
     let created = manager
         .create_commit_workspace(
             other.id.as_str().into(),
-            None,
-            CommitStart::Revision(None),
             Some(chat.id.clone()),
+            CommitStart::Revision(None),
             Default::default(),
         )
         .await

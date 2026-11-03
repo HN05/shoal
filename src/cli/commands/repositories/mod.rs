@@ -41,6 +41,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                 args,
                 session: None,
                 restore: None,
+                handoff: None,
             };
             super::repo_setup::start(ctx, repository, local, options).await
         }

@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    chats::NewChat,
     scope::{Caller, Scoped, denied},
     workspace::Manager,
 };
@@ -24,13 +25,19 @@ pub(super) async fn handle(
             pid,
             origin,
             hands_over,
-        } => Body::Chat(match workspace {
-            Some(workspace) => {
-                (manager.start_chat_in_workspace(&workspace, name, agent, pid, origin, hands_over))
-                    .await?
-            }
-            None => (manager.start_chat(repository, name, agent, pid, origin, hands_over)).await?,
-        }),
+            parent,
+        } => {
+            let new = NewChat {
+                name,
+                agent,
+                pid,
+                origin,
+                hands_over,
+                parent,
+            };
+            let workspace = workspace.as_deref();
+            Body::Chat(manager.start_new_chat(repository, workspace, new).await?)
+        }
         ChatMethod::RestoreChat {
             chat,
             pid,
@@ -70,14 +77,37 @@ impl Scoped for ChatMethod {
                     .own_workspace(caller, chat, "chat processes rename only their own chat")
                     .await?,
             ),
-            ChatMethod::StartChat { .. }
-            | ChatMethod::MoveChat { .. }
-            | ChatMethod::RestoreChat { .. }
-            | ChatMethod::SaveChat { .. }
-            | ChatMethod::RemoveChat { .. }
-            | ChatMethod::CheckChatName { .. }
-            | ChatMethod::FreeChatName { .. }
-            | ChatMethod::ChatScope { .. } => return Err(denied()),
+            // A scoped caller starts chats only below its own space, in a
+            // worktree of its tree, and hands each to the session it starts,
+            // with its scope.
+            ChatMethod::StartChat {
+                parent, workspace, ..
+            } => {
+                *parent = Some(caller.space_id.clone());
+                workspace.as_mut()
+            }
+            ChatMethod::MoveChat { chat, .. }
+            | ChatMethod::SaveChat { chat, .. }
+            | ChatMethod::ChatScope { chat } => Some(
+                manager
+                    .workspace_below(
+                        caller,
+                        chat,
+                        "scoped processes start only the chats below their own space",
+                    )
+                    .await?,
+            ),
+            ChatMethod::RemoveChat { chat, .. } => Some(
+                manager
+                    .unheld_workspace_below(
+                        caller,
+                        chat,
+                        "scoped processes remove only the chats below their own space",
+                    )
+                    .await?,
+            ),
+            ChatMethod::CheckChatName { .. } | ChatMethod::FreeChatName { .. } => None,
+            ChatMethod::RestoreChat { .. } => return Err(denied()),
         })
     }
 }

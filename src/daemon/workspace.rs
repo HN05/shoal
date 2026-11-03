@@ -67,8 +67,8 @@ pub(crate) use restore::removal_notice;
 pub(crate) use stack::record_base_changed;
 pub use stopped_work::Discarded;
 pub(crate) use tree::{
-    Source, TrackedAgents, children, deciders, delegated, ensure_parent, parent, parent_id,
-    parent_in_repository, receiving_paths, set_parent, spaces_above,
+    Source, TrackedAgents, children, deciders, delegated, ensure_parent, parent, receiving_paths,
+    set_parent, spaces_above,
 };
 
 use crate::daemon::refusal::{Reason, Refusal};

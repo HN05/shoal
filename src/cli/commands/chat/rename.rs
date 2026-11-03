@@ -38,7 +38,7 @@ pub(in crate::cli::commands) async fn request_name(
     ctx: &Context,
     chat: Option<String>,
 ) -> Result<i32> {
-    super::ensure_unscoped(ctx)?;
+    super::ensure_scope_token(ctx)?;
     let chat = select(ctx, chat).await?;
     let method = AgentMethod::SendAgentMessage {
         space: chat,

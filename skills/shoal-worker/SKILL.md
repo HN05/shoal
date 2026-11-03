@@ -403,6 +403,13 @@ one the user holds, or with such a workspace below it, is the user's to remove.
 You can split children from children; each workspace process reaches its own
 workspace and those below it.
 
+`shoal add <branch>` inside your workspace also opens a child, on a branch from
+the default branch rather than yours, and `shoal chat --agent <agent>` starts a
+child chat, a discussion agent with no worktree of its own, in a background
+place the user can attach to; it returns once the chat has started, and
+`--here` is refused. Both go below your workspace, in its repository;
+you cannot create anything outside it.
+
 To have work done in parallel, give it to a subagent where your instructions
 allow delegation. A subagent you run in its own worktree gets a child split from
 your workspace as that worktree; otherwise split the child first, then tell the

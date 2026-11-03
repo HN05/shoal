@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     daemon::events::{ChatEventKind, EventItem, EventKind},
-    model::SpaceRef,
+    model::{SpaceKind, SpaceRef},
     test_support::{manager, repository},
 };
 
@@ -70,7 +70,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     );
 
     manager
-        .assign_chat(&workspace.id, Some(ending.id.clone()))
+        .assign_parent(&workspace.id, Some(ending.id.clone()))
         .await
         .unwrap();
     assert_eq!(
@@ -84,7 +84,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     );
     // An unknown chat gives the workspace to the user rather than failing.
     manager
-        .assign_chat(&workspace.id, Some("gone".into()))
+        .assign_parent(&workspace.id, Some("gone".into()))
         .await
         .unwrap();
     assert_eq!(
@@ -97,7 +97,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         None
     );
     manager
-        .assign_chat(&workspace.id, Some(ending.id.clone()))
+        .assign_parent(&workspace.id, Some(ending.id.clone()))
         .await
         .unwrap();
 
@@ -707,7 +707,7 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
         .await
         .unwrap();
     let opened = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repo.id.clone().into(),
             "opened".into(),
             None,
@@ -776,7 +776,7 @@ async fn a_workspace_whose_creation_fails_stays_below_the_chat_that_opened_it() 
         .unwrap();
     // A base that does not resolve fails the worktree after the record.
     let error = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repo.id.clone().into(),
             "broken".into(),
             Some("does-not-exist".into()),
@@ -793,7 +793,7 @@ async fn a_workspace_whose_creation_fails_stays_below_the_chat_that_opened_it() 
 }
 
 #[tokio::test]
-async fn a_chat_being_removed_takes_no_new_workspace() {
+async fn a_chat_being_removed_takes_no_new_space() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -812,10 +812,10 @@ async fn a_chat_being_removed_takes_no_new_workspace() {
         .await
         .unwrap();
     // A creation that reaches its record after the removal began is refused,
-    // rather than leaving a workspace outside the chat.
+    // rather than leaving a space below the chat that the removal missed.
     let _removal = manager.chat_removals.reserve(&chat.id).unwrap();
     let branch = manager
-        .create_workspace_for_chat(
+        .create_workspace_below(
             repo.id.clone().into(),
             "late".into(),
             None,
@@ -827,17 +827,30 @@ async fn a_chat_being_removed_takes_no_new_workspace() {
     let commit = manager
         .create_commit_workspace(
             repo.id.clone().into(),
-            None,
-            crate::protocol::CommitStart::Revision(None),
             Some(chat.id.clone()),
+            crate::protocol::CommitStart::Revision(None),
             Default::default(),
         )
         .await
         .unwrap_err();
-    for error in [branch, commit] {
+    let start = super::NewChat {
+        name: "late-chat".into(),
+        agent: "claude".into(),
+        pid: std::process::id(),
+        origin: None,
+        hands_over: false,
+        parent: Some(chat.id.clone()),
+    };
+    let nested = manager
+        .start_new_chat(repo.id.clone().into(), None, start)
+        .await
+        .unwrap_err();
+    for error in [branch, commit, nested] {
         assert!(format!("{error:#}").contains("being removed"), "{error:#}");
     }
     assert!(manager.list_workspaces().await.unwrap().is_empty());
+    let chats = manager.chats().await.unwrap();
+    assert_eq!(chats.len(), 1, "{chats:?}");
 }
 
 /// A registered repository with the ready workspace `worker`.

@@ -31,9 +31,23 @@ pub(super) async fn start(
     issue: Option<String>,
     repository: Option<String>,
     pick: Pick,
-    mut options: chat::Options,
+    options: chat::Options,
 ) -> Result<i32> {
-    chat::ensure_unscoped(ctx)?;
+    let started = begin(ctx, issue, repository, pick, options).await;
+    chat::handoff::report(&started);
+    started
+}
+
+/// Start the planning chat as [`start`] does, which reports the outcome to a
+/// scoped starter that waits on it.
+async fn begin(
+    ctx: &Context,
+    issue: Option<String>,
+    repository: Option<String>,
+    pick: Pick,
+    options: chat::Options,
+) -> Result<i32> {
+    let mut options = options.for_caller(ctx)?;
     options.check_name(ctx).await?;
     let repo = issues::item_repository(
         ctx,

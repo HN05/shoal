@@ -189,7 +189,7 @@ async fn create_workspace(
         name,
         base,
         git_profile: None,
-        chat,
+        parent: chat,
         options: Default::default(),
     };
     request(&ctx.paths, method).await
