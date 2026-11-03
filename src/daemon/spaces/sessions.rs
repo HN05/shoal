@@ -9,6 +9,7 @@ use crate::{
     daemon::workspace::Manager,
     execution::recovery::{self, LastSession},
     model::{Chat, PresentSpace, Workspace},
+    paths::Paths,
     state::ExecutionState,
 };
 
@@ -56,40 +57,59 @@ impl Manager {
     /// The session each of the workspace's agent executions last reported,
     /// then those of its stopped agents and last sessions.
     async fn workspace_sessions(&self, workspace: &Workspace) -> Result<Vec<ReportedSession>> {
-        let paths = &self.paths;
-        let mut executions = self.workspace_executions(&workspace.id).await?;
-        // The running agents first, as the dedup keeps the first of each.
-        executions.sort_by_key(|execution| !runs_agent(execution));
-        let running = executions.into_iter().filter_map(|execution| {
-            Some(ReportedSession {
-                session: recovery::reported_session(paths, &workspace.id, &execution.id)?,
-                current: runs_agent(&execution),
-                agent: execution.agent?,
-                execution: Some(execution.id),
-            })
-        });
-        let stopped = recovery::stopped_agents(paths, &workspace.id)?
-            .into_iter()
-            .filter_map(|stopped| {
-                Some(ReportedSession {
-                    agent: stopped.record.agent,
-                    session: stopped.record.session?,
-                    execution: Some(stopped.execution),
-                    current: false,
-                })
-            });
-        let last = LastSession::all(paths, &workspace.id)?
-            .into_iter()
-            .filter_map(|last| {
-                Some(ReportedSession {
-                    agent: last.agent,
-                    session: last.session?,
-                    execution: Some(last.execution),
-                    current: false,
-                })
-            });
-        Ok(running.chain(stopped).chain(last).collect())
+        let mut sessions = self.execution_sessions(workspace).await?;
+        sessions.extend(stopped_sessions(&self.paths, &workspace.id)?);
+        sessions.extend(last_sessions(&self.paths, &workspace.id)?);
+        Ok(sessions)
     }
+
+    /// The session each of the workspace's agent executions last reported,
+    /// those that run their agent first.
+    async fn execution_sessions(&self, workspace: &Workspace) -> Result<Vec<ReportedSession>> {
+        let mut executions = self.workspace_executions(&workspace.id).await?;
+        executions.sort_by_key(|execution| !runs_agent(execution));
+        Ok(executions
+            .into_iter()
+            .filter_map(|execution| {
+                Some(ReportedSession {
+                    session: recovery::reported_session(&self.paths, &workspace.id, &execution.id)?,
+                    current: runs_agent(&execution),
+                    agent: execution.agent?,
+                    execution: Some(execution.id),
+                })
+            })
+            .collect())
+    }
+}
+
+/// The sessions of the workspace's stopped agents.
+fn stopped_sessions(paths: &Paths, workspace_id: &str) -> Result<Vec<ReportedSession>> {
+    Ok(recovery::stopped_agents(paths, workspace_id)?
+        .into_iter()
+        .filter_map(|stopped| {
+            Some(ReportedSession {
+                agent: stopped.record.agent,
+                session: stopped.record.session?,
+                execution: Some(stopped.execution),
+                current: false,
+            })
+        })
+        .collect())
+}
+
+/// The sessions of the agents that exited, the workspace's last sessions.
+fn last_sessions(paths: &Paths, workspace_id: &str) -> Result<Vec<ReportedSession>> {
+    Ok(LastSession::all(paths, workspace_id)?
+        .into_iter()
+        .filter_map(|last| {
+            Some(ReportedSession {
+                agent: last.agent,
+                session: last.session?,
+                execution: Some(last.execution),
+                current: false,
+            })
+        })
+        .collect())
 }
 
 /// Whether `execution`'s wrapper runs its agent now.
