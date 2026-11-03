@@ -110,8 +110,8 @@ asked for it goes. The worker acts with the caller's scope and, from the CLI, it
 environment without the secrets an agent launch exported, and runs the same tracked executions and hooks the CLI ran, under
 the same checks; what it and its processes write becomes the operation's output,
 and it reports typed steps and its end. The CLI starts an operation and follows
-it, showing its output where it showed it before, so the CLI and apps cannot
-drift. An interrupt or termination of the CLI cancels the operation, which
+it through `shoal::client`, as an app does, showing its output where it showed
+it before, so the CLI and apps cannot drift. An interrupt or termination of the CLI cancels the operation, which
 interrupts the worker as it interrupted the CLI; a CLI that ends otherwise leaves
 it running. The daemon keeps an operation in memory until ten minutes after it
 ends, so a client follows it again by its ID from any event; a restart forgets

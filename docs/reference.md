@@ -566,7 +566,11 @@ shoal = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<release tag>
 `connection` sends them to the daemon a `Connector` names, and `subscriptions`
 follows repositories, workspaces with their agents, linked issues, PRs and CI
 runs, open questions, pending approval requests, messages and notifications as
-they change, subscribing again after a daemon restart. It also holds the logic
+they change, subscribing again after a daemon restart. `operations` follows work
+the daemon runs for a request, such as the setup and post-setup hook of a
+workspace `StartWorkspace` creates: its steps and its processes' output lines as
+they come, then its result or a typed failure such as `setup_failed` or
+`hook_failed`. It also holds the logic
 the CLI applies on its side: which workspaces a command would act on, list
 status labels, the AI tools Shoal can launch, and reading and validating
 configuration, and in `output` the types every command prints with `--json`.
