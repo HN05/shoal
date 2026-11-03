@@ -777,6 +777,9 @@ pub struct WorktreeStatus {
     /// the committed HEAD; boxed to keep the response small.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub changed_on_both_sides: Option<Box<ChangedOnBothSides>>,
+    /// The chats running or stopped in its worktree, by name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chats: Vec<SpaceRef>,
 }
 
 /// How the background sync of a repository's default branch went.

@@ -47,6 +47,10 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
     }
     base::render(workspace);
     split::render(&workspace.parent, &workspace.children);
+    if !status.chats.is_empty() {
+        let chats: Vec<_> = status.chats.iter().map(|chat| chat.name.as_str()).collect();
+        outln!("Chats:         {}", chats.join(", "));
+    }
     outln!(
         "Setup:         {}",
         match (workspace.setup_skipped, status.setup_finished) {
@@ -114,6 +118,9 @@ fn render_chat(chat: &Chat, palette: Palette) {
         palette.paint(status.style(), status.label())
     );
     outln!("Agent:         {}", chat.agent);
+    if let Some(workspace) = &chat.workspace {
+        outln!("Workspace:     {}", workspace.name);
+    }
     split::render(&chat.parent, &chat.children);
 }
 

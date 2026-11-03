@@ -799,8 +799,11 @@ last check of HEAD against the default target found
 `changed_on_both_sides` (`target`, `target_commit`, `head` and `files`). Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
 open questions, a pending PR proposal or push request, a running chat in it, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
-when nothing does, in `cleanup_reason`. A chat's status leaves out what needs a worktree: its
-branch, changes, setup, executions, leases, sync and cleanup. `--json`
+when nothing does, in `cleanup_reason`. It lists the chats in the worktree, in
+`chats`. A chat's status leaves out what needs a worktree: its
+branch, changes, setup, executions, leases, sync and cleanup; it names the
+workspace it runs in, as `shoal work --chats`, the inbox and the menu do with
+`in <workspace>`. `--json`
 returns the same data, with `kind` (`workspace` or `chat`) and the space's
 record in `workspace` or `chat`, PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`. Workspace records from `work --json` and `status --json` include

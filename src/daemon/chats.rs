@@ -18,7 +18,7 @@ use crate::{
     },
     fsutil::off_runtime,
     model::{
-        Chat, OpenedWorkspace, RenamedChat, Repository, SpaceKind, SpaceLinks, Workspace,
+        Chat, OpenedWorkspace, RenamedChat, Repository, SpaceKind, SpaceLinks, SpaceRef, Workspace,
         WorkspaceRef,
     },
     process::identity::{self, Identity},
@@ -339,6 +339,27 @@ impl Manager {
                     "SELECT 1 FROM chats WHERE id=?1 AND restore IS NOT NULL AND saved",
                     [id],
                 )
+            })
+            .await
+    }
+
+    /// The chats running or stopped in the worktree of the workspace `id`,
+    /// by name.
+    pub(crate) async fn chats_in(&self, id: &str) -> Result<Vec<SpaceRef>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .prepare("SELECT id,name FROM chats WHERE workspace_id=?1 ORDER BY name")?
+                    .query_map([id], |row| {
+                        Ok(SpaceRef {
+                            id: row.get(0)?,
+                            name: row.get(1)?,
+                            kind: SpaceKind::Chat,
+                            branch: None,
+                        })
+                    })?
+                    .collect::<rusqlite::Result<_>>()?)
             })
             .await
     }

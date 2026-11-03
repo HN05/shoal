@@ -26965,6 +26965,25 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     ]);
     assert!(!both.status.success(), "{both:?}");
 
+    // Each status names the other.
+    assert_eq!(
+        fixture.ok(&["status", "worker"])["chats"][0]["name"],
+        "worker-chat"
+    );
+    let text = |space: &str| String::from_utf8(fixture.run(&["status", space]).stdout).unwrap();
+    assert!(
+        text("worker").contains("\nChats:         worker-chat\n"),
+        "{}",
+        text("worker")
+    );
+    assert!(
+        text("worker-chat").contains("\nWorkspace:     worker\n"),
+        "{}",
+        text("worker-chat")
+    );
+    let listed = String::from_utf8(fixture.run(&["work", "--chats"]).stdout).unwrap();
+    assert!(listed.contains("worker-chat  in worker"), "{listed}");
+
     // Its agent exited; `shoal resume` restores it in the worktree.
     assert_eq!(chats[0]["restore"], "resume", "{chats}");
     fs::remove_file(home.join("chat-cwd")).unwrap();

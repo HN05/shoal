@@ -59,6 +59,7 @@ impl Manager {
             .ok()
             .flatten()
             .map(Box::new);
+        let chats = self.chats_in(&workspace.id).await?;
         let status = WorktreeStatus {
             workspace,
             executions,
@@ -78,6 +79,7 @@ impl Manager {
             leftovers,
             sync,
             changed_on_both_sides,
+            chats,
         };
         let records = Records {
             issue,
