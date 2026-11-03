@@ -23,6 +23,7 @@ use crate::{
         run::NewRun,
         run_action::{Run, RunOperation},
         run_view::{RunFilter, RunJob},
+        runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, WaitingJob},
     },
     conventions::Lookup,
     items::{
@@ -681,6 +682,52 @@ pub(crate) trait Backend {
     /// The requests that apply `action` to `run`; `failed` reruns only its
     /// failed jobs.
     fn run_operation(&self, run: &Run, action: CiAction, failed: bool) -> Result<RunOperation>;
+
+    /// The program that runs one job on this machine.
+    fn runner_program(&self) -> Result<&'static str> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
+
+    /// The path under the repository that lists the jobs waiting for a
+    /// runner with `labels`.
+    fn waiting_jobs_path(&self, _labels: &[String]) -> Result<String> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
+
+    /// A job the job search listed as `value`, unless it no longer waits.
+    fn waiting_job(&self, _value: &Value) -> Result<Option<WaitingJob>> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
+
+    /// The path under the repository that reads the run with API ID `id`.
+    fn job_run_path(&self, _id: u64) -> Result<String> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
+
+    /// The run a read of its path returned as `value`.
+    fn job_run(&self, _repo: &ForgeRepo, _value: &Value) -> Result<JobRun> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
+
+    /// The request that registers a runner named `name` for the repository.
+    fn register_runner(&self, _repo: &ForgeRepo, _name: &str) -> Result<Request> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
+
+    /// The runner a registration request's response `value` reports.
+    fn registered_runner(&self, _value: &Value) -> Result<RegisteredRunner> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
+
+    /// The request that deletes the repository's runner `id`.
+    fn delete_runner(&self, _repo: &ForgeRepo, _id: u64) -> Result<Request> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
+
+    /// The command that claims and runs the job `launch` names.
+    fn job_command(&self, _repo: &ForgeRepo, _launch: &JobLaunch<'_>) -> Result<JobCommand> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
 
     /// The endpoint under the repository that approves `run`, where the
     /// forge approves runs.
@@ -1423,6 +1470,42 @@ impl Backend for ForgeKind {
 
     fn approve_endpoint(&self, run: &Run) -> Result<String> {
         dispatch!(self, backend => backend.approve_endpoint(run))
+    }
+
+    fn runner_program(&self) -> Result<&'static str> {
+        dispatch!(self, backend => backend.runner_program())
+    }
+
+    fn waiting_jobs_path(&self, labels: &[String]) -> Result<String> {
+        dispatch!(self, backend => backend.waiting_jobs_path(labels))
+    }
+
+    fn waiting_job(&self, value: &Value) -> Result<Option<WaitingJob>> {
+        dispatch!(self, backend => backend.waiting_job(value))
+    }
+
+    fn job_run_path(&self, id: u64) -> Result<String> {
+        dispatch!(self, backend => backend.job_run_path(id))
+    }
+
+    fn job_run(&self, repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
+        dispatch!(self, backend => backend.job_run(repo, value))
+    }
+
+    fn register_runner(&self, repo: &ForgeRepo, name: &str) -> Result<Request> {
+        dispatch!(self, backend => backend.register_runner(repo, name))
+    }
+
+    fn registered_runner(&self, value: &Value) -> Result<RegisteredRunner> {
+        dispatch!(self, backend => backend.registered_runner(value))
+    }
+
+    fn delete_runner(&self, repo: &ForgeRepo, id: u64) -> Result<Request> {
+        dispatch!(self, backend => backend.delete_runner(repo, id))
+    }
+
+    fn job_command(&self, repo: &ForgeRepo, launch: &JobLaunch<'_>) -> Result<JobCommand> {
+        dispatch!(self, backend => backend.job_command(repo, launch))
     }
 
     fn plain_log(&self, log: &str) -> String {

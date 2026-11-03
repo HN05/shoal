@@ -46,6 +46,7 @@ states!(Capability: Variants {
     RequestChanges => "request_changes",
     Reactions => "reactions",
     RevertPrs => "revert_prs",
+    RunJobs => "run_jobs",
 });
 
 impl Capability {
@@ -81,6 +82,7 @@ impl Capability {
             Self::RequestChanges => "request changes on PRs",
             Self::Reactions => "react to issues, PRs and comments",
             Self::RevertPrs => "have the forge revert merged PRs",
+            Self::RunJobs => "run CI jobs on this machine",
         }
     }
 

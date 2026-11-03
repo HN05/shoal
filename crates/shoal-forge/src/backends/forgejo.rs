@@ -8,6 +8,7 @@ mod actions;
 mod organization;
 mod review;
 mod reviewers;
+mod runner;
 mod sniff;
 pub(crate) mod threads;
 mod uploads;
@@ -31,6 +32,7 @@ use crate::{
         run::NewRun,
         run_action::{Run, RunOperation},
         run_view::{RunFilter, RunJob},
+        runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, WaitingJob},
     },
     conventions::{Lookup, shared_lookups},
     items::{
@@ -58,6 +60,9 @@ use crate::{
     },
     updates::{DISCUSSION, Entry, Snapshot},
 };
+
+/// Why an older Forgejo, or Gitea, runs no jobs on Shoal's runner.
+const RUNNER_RELEASE: &str = "that needs Forgejo 15 or later";
 
 /// Forgejo treats a PR whose title starts with one of these as a draft.
 pub(crate) const DRAFT_PREFIXES: [&str; 2] = ["WIP:", "[WIP]"];
@@ -91,6 +96,7 @@ impl Backend for Forgejo {
             )),
             // Forgejo approves runs only through a web UI route.
             Capability::ApproveRuns => Support::Unsupported(Some("approve them in the web UI")),
+            Capability::RunJobs => Support::Unsupported(Some(RUNNER_RELEASE)),
             Capability::CancelJobs
             | Capability::StartRuns
             | Capability::ReadRuns
@@ -119,15 +125,20 @@ impl Backend for Forgejo {
         }
     }
 
-    /// Forgejo reruns runs and jobs through its API from release 17; Gitea
-    /// does not.
+    /// Forgejo reruns runs and jobs through its API from release 17 and
+    /// hands a runner a named job from release 15; Gitea does neither.
     async fn server_support(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         capability: Capability,
     ) -> Result<Support> {
-        if capability == Capability::RerunJobs && version::reruns(repo, account).await? {
+        let supported = match capability {
+            Capability::RerunJobs => version::reruns(repo, account).await?,
+            Capability::RunJobs => version::runs_jobs(repo, account).await?,
+            _ => false,
+        };
+        if supported {
             return Ok(Support::Supported);
         }
         Ok(self.support(capability))
@@ -797,6 +808,43 @@ impl Backend for Forgejo {
 
     /// Forgejo reruns failed jobs one by one; one run accepts several job
     /// reruns in a row, also while it runs again.
+    fn runner_program(&self) -> Result<&'static str> {
+        Ok(runner::PROGRAM)
+    }
+
+    fn waiting_jobs_path(&self, labels: &[String]) -> Result<String> {
+        Ok(runner::waiting_jobs_path(labels))
+    }
+
+    fn waiting_job(&self, value: &Value) -> Result<Option<WaitingJob>> {
+        runner::waiting_job(value)
+    }
+
+    /// Forgejo reads a run by its API ID here, not its number.
+    fn job_run_path(&self, id: u64) -> Result<String> {
+        Ok(format!("actions/runs/{id}"))
+    }
+
+    fn job_run(&self, repo: &ForgeRepo, value: &Value) -> Result<JobRun> {
+        runner::job_run(repo, value)
+    }
+
+    fn register_runner(&self, repo: &ForgeRepo, name: &str) -> Result<Request> {
+        Ok(runner::register(repo, name))
+    }
+
+    fn registered_runner(&self, value: &Value) -> Result<RegisteredRunner> {
+        runner::registered(value)
+    }
+
+    fn delete_runner(&self, repo: &ForgeRepo, id: u64) -> Result<Request> {
+        Ok(runner::delete(repo, id))
+    }
+
+    fn job_command(&self, repo: &ForgeRepo, launch: &JobLaunch<'_>) -> Result<JobCommand> {
+        runner::job_command(repo, launch)
+    }
+
     fn run_operation(&self, run: &Run, action: CiAction, failed: bool) -> Result<RunOperation> {
         let id = run.id;
         Ok(match (action, failed) {

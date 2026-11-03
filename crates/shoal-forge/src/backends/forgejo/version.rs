@@ -6,16 +6,28 @@ use crate::{ForgeRepo, account::Account, transport::api::Request};
 
 /// The first release whose API reruns runs and jobs.
 const RERUNS_SINCE: u64 = 17;
+/// The first release that hands a runner the job it names by handle.
+const RUNS_JOBS_SINCE: u64 = 15;
 
 /// Whether the server reruns runs and jobs through its API.
 pub(super) async fn reruns(repo: &ForgeRepo, account: &Account) -> Result<bool> {
+    since(repo, account, RERUNS_SINCE).await
+}
+
+/// Whether the server lists waiting jobs and hands a runner the one it names.
+pub(super) async fn runs_jobs(repo: &ForgeRepo, account: &Account) -> Result<bool> {
+    since(repo, account, RUNS_JOBS_SINCE).await
+}
+
+/// Whether the server runs Forgejo `release` or later.
+async fn since(repo: &ForgeRepo, account: &Account, release: u64) -> Result<bool> {
     let version = repo
         .send(account, &Request::get("version".into()))
         .await
         .context("read the forge's version")?;
     Ok(
         forgejo_release(version["version"].as_str().unwrap_or_default())
-            .is_some_and(|release| release >= RERUNS_SINCE),
+            .is_some_and(|running| running >= release),
     )
 }
 

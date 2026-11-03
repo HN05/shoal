@@ -77,6 +77,7 @@ impl Backend for Bitbucket {
     /// Shoal starts Pipelines but reads none of their jobs.
     fn support(&self, capability: Capability) -> Support {
         match capability {
+            Capability::RunJobs => Support::Unsupported(None),
             Capability::ReopenPrs => Support::Unsupported(Some(
                 "Bitbucket cannot reopen a declined pull request; open a new one",
             )),
