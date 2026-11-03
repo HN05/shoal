@@ -1092,10 +1092,12 @@ pub struct MergeOptions {
     pub confirmed: Option<MergeConfirmation>,
 }
 
-/// The commit and push destination a user confirmed for a merge.
+/// The commits and push destination a user confirmed for a merge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MergeConfirmation {
     pub head: String,
+    /// The local default branch's commit the merge goes onto.
+    pub default_commit: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push: Option<MergePush>,
 }
@@ -1109,6 +1111,8 @@ pub struct MergePreview {
     /// The branch's commit that merges.
     pub head: String,
     pub default_branch: String,
+    /// The local default branch's commit the merge goes onto.
+    pub default_commit: String,
     /// Commits of the branch that the default branch lacks.
     pub commits: u64,
     /// Where the default branch is pushed afterwards, if it is.
@@ -1129,6 +1133,7 @@ impl MergePreview {
     pub fn confirmation(&self) -> MergeConfirmation {
         MergeConfirmation {
             head: self.head.clone(),
+            default_commit: self.default_commit.clone(),
             push: self.push_to.clone(),
         }
     }

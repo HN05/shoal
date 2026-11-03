@@ -472,7 +472,7 @@ async fn open_execution(
         },
         origin: place.map(Box::new),
         merge: match mode {
-            Mode::Merge { options, .. } => Some(options.clone()),
+            Mode::Merge { options, .. } => Some(Box::new(options.clone())),
             _ => None,
         },
     };

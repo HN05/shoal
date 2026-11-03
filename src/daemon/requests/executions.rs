@@ -41,7 +41,7 @@ pub(super) async fn handle(
                 queue_entry,
                 demo: demo.map(|demo| *demo),
                 origin: origin.map(|origin| *origin),
-                merge,
+                merge: merge.map(|merge| *merge),
                 caller: caller.cloned(),
             };
             return Ok(Answer::connection(move |stream, request_id, guard| {

@@ -55,7 +55,7 @@ impl Manager {
     pub async fn prepare_merge(&self, selector: &str, options: &MergeOptions) -> Result<MergePlan> {
         let merge = self.validate_merge(selector, options.push).await?;
         if let Some(confirmed) = &options.confirmed {
-            ensure_confirmed(&merge, confirmed)?;
+            ensure_confirmed(&merge, confirmed).await?;
         }
         let MergeSource {
             workspace,
@@ -199,6 +199,7 @@ impl Manager {
             branch: branch.to_owned(),
             head: head.to_owned(),
             default_branch: default.to_owned(),
+            default_commit: default_commit.to_owned(),
             commits: git::status::commits_since(&workspace.path, default_commit).await?,
             push_to: push.cloned(),
             warning,
@@ -219,19 +220,48 @@ impl Manager {
 }
 
 /// Refuse a merge that is no longer the one the user confirmed: the branch
-/// moved, or the default branch's upstream changed.
-fn ensure_confirmed(merge: &MergeSource, confirmed: &MergeConfirmation) -> Result<()> {
-    let branch = &merge.branch;
+/// moved, the default branch took commits its upstream lacks, so the push
+/// would publish them too, or the default branch's upstream changed.
+async fn ensure_confirmed(merge: &MergeSource, confirmed: &MergeConfirmation) -> Result<()> {
+    let (branch, default) = (&merge.branch, &merge.default);
     ensure!(
         merge.source == confirmed.head,
         "{branch} moved since you confirmed the merge; run shoal merge again"
     );
     ensure!(
         merge.push == confirmed.push,
-        "where the merge pushes {} changed since you confirmed it; run shoal merge again",
-        merge.default
+        "where the merge pushes {default} changed since you confirmed it; run shoal merge again"
+    );
+    let current = local_commit(&merge.repo, default).await?;
+    ensure!(
+        current == confirmed.default_commit || synced_to(merge, confirmed, &current).await?,
+        "{default} moved since you confirmed the merge; run shoal merge again"
     );
     Ok(())
+}
+
+/// Whether the default branch moved from the confirmed commit to `current`
+/// only along its upstream, as a sync does, so the push publishes nothing
+/// the user did not confirm.
+async fn synced_to(
+    merge: &MergeSource,
+    confirmed: &MergeConfirmation,
+    current: &str,
+) -> Result<bool> {
+    let Some(push) = &merge.push else {
+        return Ok(false);
+    };
+    let path = &merge.repo.path;
+    let tracking = format!("refs/remotes/{}", push.remote_branch());
+    Ok(git::is_ancestor(
+        path,
+        &confirmed.default_commit,
+        current,
+        git::isolated_command,
+    )
+    .await?
+        && git::ref_exists(path, &tracking, git::isolated_command).await?
+        && git::is_ancestor(path, current, &tracking, git::isolated_command).await?)
 }
 
 /// The commit of `repo`'s local `branch`.

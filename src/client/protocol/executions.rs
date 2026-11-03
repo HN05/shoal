@@ -35,7 +35,7 @@ pub enum ExecutionMethod {
         origin: Option<Box<crate::client::sessions::Origin>>,
         /// How a merge runs.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        merge: Option<crate::model::MergeOptions>,
+        merge: Option<Box<crate::model::MergeOptions>>,
     },
     /// Verify that this worker belongs to an unscoped caller's merge execution.
     CheckMerge,

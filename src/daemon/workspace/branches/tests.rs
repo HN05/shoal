@@ -1836,6 +1836,21 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
         error.contains("worker moved since you confirmed"),
         "{error}"
     );
+    // Another workspace merges locally into main, which the push would publish.
+    let options = confirmed().await;
+    fs::write(f.repo.join("other"), "other\n").unwrap();
+    commit(&f.repo, "other");
+    let error = refusal(&options).await;
+    assert!(error.contains("main moved since you confirmed"), "{error}");
+    git(&f.repo, &["reset", "--hard", "HEAD~1"]);
+    // A sync that brings main up to its upstream publishes nothing new.
+    let options = confirmed().await;
+    let author = f.root.path().join("author");
+    fs::write(author.join("upstream"), "upstream\n").unwrap();
+    commit(&author, "upstream");
+    git(&author, &["push", "origin", "HEAD:main"]);
+    git(&f.repo, &["pull", "--ff-only"]);
+    assert!(f.manager.prepare_merge("worker", &options).await.is_ok());
     // The default branch's upstream moves to another branch.
     let options = confirmed().await;
     git(&f.repo, &["push", "origin", "main:release"]);

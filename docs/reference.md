@@ -2571,8 +2571,9 @@ PR https://forge.example/team/app/pulls/12 is open; shoal pr merge merges it on 
 Are you sure? [y/N]
 ```
 
-The default answer is no, and a merge whose branch or push destination changed
-while the question was open is refused. `--yes`, or `[merge] confirm = false`, skips the question;
+The default answer is no. A merge is refused when, while the question was open,
+its branch moved, the default branch took commits other than its upstream's, or
+the push destination changed. `--yes`, or `[merge] confirm = false`, skips the question;
 without a terminal, as in scripts or with `--json`, a merge that would push is
 refused unless one of them is given. A merge that stays local never asks. An
 agent's merge asks through its approval request instead.

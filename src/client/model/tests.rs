@@ -167,6 +167,7 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
         branch: "fix-login".into(),
         head: "abc".into(),
         default_branch: "main".into(),
+        default_commit: "def".into(),
         commits: 1,
         push_to: None,
         warning: None,
