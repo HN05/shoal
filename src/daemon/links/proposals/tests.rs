@@ -122,7 +122,7 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
             .create_workspace(&repo.id, name.into(), None, None, None)
             .await
             .unwrap();
-        requests.push(store_issue_proposal(&manager, &workspace).await);
+        requests.push(store_issue_proposal(&manager, &workspace.clone().into()).await);
     }
     let [original, duplicate, replacement] = &requests[..] else {
         unreachable!()
@@ -145,7 +145,7 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
         .await
         .unwrap();
     let workspace = manager.workspace(&replacement.space_id).await.unwrap();
-    let reused = store_issue_proposal(&manager, &workspace).await;
+    let reused = store_issue_proposal(&manager, &workspace.clone().into()).await;
     assert_eq!(reused.id, original.id);
     let error = manager
         .add_to_proposal(duplicate, original.id, locked.as_ref())
@@ -160,25 +160,22 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
 }
 
 /// A pending issue proposal from `workspace`.
-pub(crate) async fn store_issue_proposal(
-    manager: &Manager,
-    workspace: &Workspace,
-) -> ApprovalRequest {
+pub(crate) async fn store_issue_proposal(manager: &Manager, space: &LinkSpace) -> ApprovalRequest {
     let specification = Specification::Issue(IssueSpecification {
         issue: NewIssue {
-            title: format!("Flaky in {}", workspace.name),
+            title: format!("Flaky in {}", space.name()),
             ..NewIssue::default()
         },
         repository: None,
         link: false,
-        branch: workspace.branch.clone(),
-        commit: Some("head".into()),
+        branch: space.branch().map(str::to_owned),
+        commit: space.workspace().map(|_| "head".into()),
         agent: None,
         duplicates: Vec::new(),
         follow_up: None,
     });
     let request = proposal(
-        &workspace.id,
+        space.id(),
         Target::IssueOpen,
         proposals::ISSUE,
         specification,

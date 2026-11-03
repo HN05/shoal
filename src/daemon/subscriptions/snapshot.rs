@@ -19,7 +19,7 @@ use crate::{
         workspace::Manager,
     },
     forge::{items::link::LinkKind, updates::Snapshot},
-    model::{Chat, Relation, Workspace},
+    model::{Relation, Workspace},
 };
 
 /// Records by key, each with its JSON, which tells a changed one apart.
@@ -63,12 +63,15 @@ pub(super) async fn take(
     if topics.has(Topic::Links) {
         found.extend(links(manager, &visible.workspaces).await?);
     }
-    if topics.has(Topic::Questions) {
+    if topics.has(Topic::Questions) || topics.has(Topic::Approvals) {
         let chats = manager.visible_chats(caller).await?;
-        found.extend(questions(manager, &visible, &chats).await?);
-    }
-    if topics.has(Topic::Approvals) {
-        found.extend(approvals(manager, caller, &visible).await?);
+        let chats: HashSet<&str> = chats.iter().map(|chat| chat.id.as_str()).collect();
+        if topics.has(Topic::Questions) {
+            found.extend(questions(manager, &visible, &chats).await?);
+        }
+        if topics.has(Topic::Approvals) {
+            found.extend(approvals(manager, caller, &visible, &chats).await?);
+        }
     }
     if topics.has(Topic::Messages) {
         found.extend(messages(manager, caller, &visible).await?);
@@ -229,9 +232,12 @@ fn lookup_errors(observed: &Snapshot) -> Vec<LookupError> {
         .collect()
 }
 
-/// The open questions of the visible workspaces and chats.
-async fn questions(manager: &Manager, visible: &Visible, chats: &[Chat]) -> Result<Vec<Record>> {
-    let chats: HashSet<&str> = chats.iter().map(|chat| chat.id.as_str()).collect();
+/// The open questions of the visible workspaces and `chats`.
+async fn questions(
+    manager: &Manager,
+    visible: &Visible,
+    chats: &HashSet<&str>,
+) -> Result<Vec<Record>> {
     Ok(manager
         .open_questions()
         .await?
@@ -244,12 +250,13 @@ async fn questions(manager: &Manager, visible: &Visible, chats: &[Chat]) -> Resu
 }
 
 /// Pending approval requests: all of them for the user, including issue
-/// proposals that outlive their workspace, and those of its workspace tree
-/// for a scoped caller.
+/// proposals that outlive their space, and for a scoped caller those its
+/// visible workspaces and `chats` made.
 async fn approvals(
     manager: &Manager,
     caller: Option<&Caller>,
     visible: &Visible,
+    chats: &HashSet<&str>,
 ) -> Result<Vec<Record>> {
     Ok(manager
         .approval_requests(None)
@@ -257,7 +264,9 @@ async fn approvals(
         .into_iter()
         .filter(|request| {
             request.status == DecisionStatus::Pending
-                && (caller.is_none() || visible.contains(&request.space_id))
+                && (caller.is_none()
+                    || visible.contains(&request.space_id)
+                    || chats.contains(request.space_id.as_str()))
         })
         .map(|request| Record::Approval(Box::new(request)))
         .collect())
