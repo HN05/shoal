@@ -99,6 +99,7 @@ impl Manager {
             .filter(|w| w.repository_id == repo.id)
             .collect();
         self.check_repository_boundaries(&repo, &workspaces).await?;
+        self.delete_runner_of_removed(&repo).await?;
         let progress = match self.removal_progress(&repo.id).await? {
             Some(progress) => progress,
             None => Progress {

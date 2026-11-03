@@ -108,10 +108,7 @@ impl Manager {
     }
 
     /// The forge of the registered checkout's `origin`.
-    pub(in crate::daemon::links) async fn checkout_forge(
-        &self,
-        repository: &Repository,
-    ) -> Result<ForgeRepo> {
+    pub(crate) async fn checkout_forge(&self, repository: &Repository) -> Result<ForgeRepo> {
         let remote = crate::repository::remote_url_from_path(&repository.path)
             .await?
             .context("forge actions need an origin remote")?;

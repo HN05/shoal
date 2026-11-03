@@ -43,6 +43,7 @@ mod requests;
 pub mod resources;
 mod restart_recovery;
 pub(crate) mod reviews;
+pub(crate) mod runner;
 pub mod scope;
 pub mod secrets;
 pub(crate) mod seed;
@@ -180,6 +181,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         expire_simulators,
     );
     spawn_supervised(&mut background, &manager, "seed builds", seed::run);
+    spawn_supervised(&mut background, &manager, "runner", runner::run);
     spawn_supervised(
         &mut background,
         &manager,

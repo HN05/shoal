@@ -73,6 +73,8 @@ states!(NotificationKind {
     SyncFailed => "sync_failed",
     /// File access in a directory stalled, as while a macOS privacy prompt waits.
     AccessStalled => "access_stalled",
+    /// A repository's runner could not register, be deleted or run a job.
+    RunnerFailed => "runner_failed",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
