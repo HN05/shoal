@@ -102,7 +102,9 @@ enum Removal<'a> {
     /// An ancestor finished its assignment with cleanup, which takes the
     /// workspace whatever its own work: it goes with its unsaved files once
     /// a checkpoint keeps them, while the ancestor's completion stands.
-    UnderCompleted { ancestor: &'a Workspace },
+    UnderCompleted {
+        ancestor: &'a super::done::CompletedAncestor,
+    },
     /// The workspace's parent is being removed, which nothing about the
     /// workspace keeps: it goes with its unsaved files once a checkpoint
     /// keeps them. `cause`, `refuse_holds` and the `confirmed` IDs of the
@@ -887,7 +889,7 @@ impl Manager {
         let workspace = self.workspace(id).await?;
         if let Some(ancestor) = self.completed_ancestor(&workspace).await? {
             return Ok(Some(CleanupReason::AncestorCompleted {
-                workspace: ancestor.name,
+                workspace: ancestor.name().to_owned(),
             }));
         }
         if self.pr_registration(id).await?.is_some() {
@@ -989,7 +991,7 @@ impl Manager {
     pub(super) async fn remove_under_completed(
         &self,
         selector: &str,
-        ancestor: &Workspace,
+        ancestor: &super::done::CompletedAncestor,
     ) -> Result<bool> {
         self.remove_after_grace(selector, Removal::UnderCompleted { ancestor })
             .await
@@ -1382,10 +1384,13 @@ impl Manager {
                     check.workspace.child_workspaces.is_empty(),
                     "workspaces split from it remain; retaining it until they go"
                 );
+                // A chat's worker may have been opened elsewhere since; the
+                // reservation keeps it where it is from here on.
+                let nearest = self.completed_ancestor(&check.workspace).await?;
                 ensure!(
-                    self.completion_stands(ancestor).await?,
-                    "{} withdrew its completion or changed since; retaining workspace",
-                    ancestor.name
+                    nearest.is_some_and(|nearest| nearest.id() == ancestor.id()),
+                    "{} withdrew its completion, changed or no longer has the workspace below it; retaining workspace",
+                    ancestor.name()
                 );
             }
             (Removal::Manual { .. } | Removal::Deleted | Removal::Parent { .. }, _) => {}

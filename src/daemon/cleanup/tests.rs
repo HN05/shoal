@@ -1399,6 +1399,34 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
 }
 
 #[tokio::test]
+async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    manager
+        .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+    // A question asked after the completion keeps the chat.
+    let ask = crate::daemon::questions::Ask {
+        question: "Which database?".into(),
+        recommendation: "SQLite".into(),
+        reason: None,
+        choices: Vec::new(),
+    };
+    manager
+        .ask_question(&chat.name, ask, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+
+    manager.sweep_completed().await.unwrap();
+    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
+    assert!(manager.workspace(&opened.id).await.is_err());
+    assert!(!opened.path.exists());
+}
+
+#[tokio::test]
 async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
     let (temp, manager) = crate::test_support::manager().await;
     let process =

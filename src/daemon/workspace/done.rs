@@ -243,7 +243,7 @@ impl Manager {
         // An ancestor's completion that takes the workspace changes under
         // the ancestor's gate, so that one is held too.
         let gated = self.completed_ancestor(listed).await?;
-        let gates = std::iter::once(&listed.id).chain(gated.as_ref().map(|a| &a.id));
+        let gates = std::iter::once(listed.id.as_str()).chain(gated.as_ref().map(|a| a.id()));
         let _guard = self.gates.lock_prs(gates).await;
         let Some(workspace) = self.find_workspace(&listed.id).await? else {
             return Ok(());
@@ -254,7 +254,7 @@ impl Manager {
         if let Some(ancestor) = self.completed_ancestor(&workspace).await? {
             // Another ancestor's completion waits for the next sweep, which
             // holds its gate.
-            if gated.is_some_and(|gated| gated.id == ancestor.id) {
+            if gated.is_some_and(|gated| gated.id() == ancestor.id()) {
                 self.sweep_under_completed(&workspace, &ancestor).await?;
             }
             return Ok(());
@@ -423,6 +423,8 @@ fn results_preview(results: &[HandedBack]) -> String {
 }
 
 mod children;
+
+pub(crate) use children::CompletedAncestor;
 
 #[cfg(test)]
 mod tests;

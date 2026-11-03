@@ -635,6 +635,15 @@ fn assign(
     removing: &Removing,
 ) -> Result<()> {
     let tx = db.transaction()?;
+    // A removal decided by the chat the workspace has keeps it there.
+    ensure!(
+        !store::exists(
+            &tx,
+            "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
+            params![workspace, crate::state::WorkspaceState::Removing]
+        )?,
+        "the workspace is being removed"
+    );
     let current: Option<String> = tx
         .query_row(
             "SELECT chat_id FROM workspaces WHERE id=?1",

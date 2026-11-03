@@ -961,3 +961,60 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
         .unwrap();
     assert_eq!(record, "not json");
 }
+
+#[tokio::test]
+async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let worker = manager
+        .create_workspace_for_chat(
+            repo.id.into(),
+            "worker".into(),
+            None,
+            None,
+            None,
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
+    manager
+        .mark_chat_done(
+            &chat.id,
+            true,
+            Vec::new(),
+            &crate::daemon::workspace_files::Attacher::User,
+        )
+        .await
+        .unwrap();
+    let ancestor = manager.completed_ancestor(&worker).await.unwrap().unwrap();
+    assert_eq!(ancestor.id(), chat.id);
+
+    // The user opens it outside the chat before the removal reserves it.
+    manager.assign_chat(&worker.id, None).await.unwrap();
+    let error = manager
+        .remove_under_completed(&worker.id, &ancestor)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("no longer has the workspace below it"),
+        "{error:#}"
+    );
+    assert!(manager.workspace(&worker.id).await.is_ok());
+}
