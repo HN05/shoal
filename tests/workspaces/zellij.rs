@@ -70,7 +70,9 @@ impl ZellijServer {
             if server.client.try_wait().unwrap().is_some() {
                 server.client = server.attach("caller");
             }
-            server.clients("caller").len() == 1
+            server
+                .clients("caller")
+                .is_some_and(|clients| clients.len() == 1)
         });
         Some(server)
     }
@@ -138,26 +140,30 @@ impl ZellijServer {
     fn detach(&mut self) {
         let _ = self.client.kill();
         let _ = self.client.wait();
-        wait_until("the client to leave", || self.clients("caller").is_empty());
+        wait_until("the client to leave", || {
+            self.clients("caller")
+                .is_some_and(|clients| clients.is_empty())
+        });
     }
 
-    /// The pane each client of `session` shows; none while Zellij reports
-    /// the session missing, as it can a busy one or one starting.
-    fn clients(&self, session: &str) -> Vec<String> {
+    /// The pane each client of `session` shows, and `None` while Zellij
+    /// reports the session missing, as it can a busy one or one starting.
+    fn clients(&self, session: &str) -> Option<Vec<String>> {
         let output = self
             .zellij()
             .args(["--session", session, "action", "list-clients"])
             .output()
             .unwrap();
         if reported_missing(&output) {
-            return Vec::new();
+            return None;
         }
         assert!(output.status.success(), "zellij list-clients: {output:?}");
-        String::from_utf8_lossy(&output.stdout)
+        let clients = String::from_utf8_lossy(&output.stdout)
             .lines()
             .skip(1)
             .filter_map(|line| line.split_whitespace().nth(1).map(str::to_owned))
-            .collect()
+            .collect();
+        Some(clients)
     }
 
     /// Every terminal pane of `session`, which lasts the test, with its
