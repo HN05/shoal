@@ -30,12 +30,14 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 # Whether a round's cargo status is more than its failed tests explain: no
-# binary reported results, or a binary failed without a FAILED summary because
-# it crashed or was killed before printing one.
+# binary reported results, cargo itself was stopped (it exits 101 for every
+# failure it reports), or a binary failed without a FAILED summary because it
+# crashed or was killed before printing one.
 #   round_broken <log> <cargo status>
 round_broken() {
   grep -q '^test result: ' "$1" || return 0
   [ "$2" -ne 0 ] || return 1
+  [ "$2" -eq 101 ] || return 0
   failed_targets=$(grep -c '^error: .*failed, to rerun pass ' "$1" || true)
   failed_summaries=$(grep -c '^test result: FAILED\.' "$1" || true)
   [ "$failed_summaries" -eq 0 ] || [ "$failed_summaries" -lt "$failed_targets" ]

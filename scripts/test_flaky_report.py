@@ -108,6 +108,13 @@ class FlakyReportTests(unittest.TestCase):
         self.assertIn("round 1 of 1 broke: cargo exited with status 137", result.stderr)
         self.assertIn("running 3 tests", result.stderr)
 
+    def test_cargo_killed_after_a_failed_test_breaks_the_round(self):
+        result = self.report(FAILED + "     Running tests/d.rs (target/debug/deps/d)\n\nrunning 3 tests\n", 137)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("| `bad` | 1 of 1 |", result.stdout)
+        self.assertIn("round 1 of 1 broke: cargo exited with status 137", result.stderr)
+        self.assertIn("running 3 tests", result.stderr)
+
     def test_a_build_error_breaks_the_round_and_prints_the_error(self):
         result = self.report(BUILD_ERROR, 101)
         self.assertEqual(result.returncode, 2, result.stderr)
