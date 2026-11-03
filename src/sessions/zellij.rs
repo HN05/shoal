@@ -727,14 +727,16 @@ async fn listing(command: Command) -> Result<Reply<String>> {
 
 /// What a listing command that ended with `output` printed; see [`listing`].
 /// A failure names Zellij's message, which some commands print to stdout.
+/// Zellij can report the session missing and still succeed, printing the
+/// sessions it found in place of the listing.
 fn listed(output: &Output) -> Result<Reply<String>> {
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let error = crate::subprocess::diagnostic(&output.stderr);
+    if nothing_to_list(&error) || (!output.status.success() && nothing_to_list(&stdout)) {
+        return Ok(Reply::Unanswered);
+    }
     if output.status.success() {
         return Ok(Reply::Answered(stdout.into_owned()));
-    }
-    let error = crate::subprocess::diagnostic(&output.stderr);
-    if nothing_to_list(&error) || nothing_to_list(&stdout) {
-        return Ok(Reply::Unanswered);
     }
     let reason = if error.trim().is_empty() {
         crate::subprocess::diagnostic(&output.stdout)
@@ -824,7 +826,10 @@ fn parse_panes(listed: &str) -> Result<Vec<Pane>> {
     if listed.trim().is_empty() {
         return Ok(Vec::new());
     }
-    let listed: Vec<Listed> = serde_json::from_str(listed).context("invalid Zellij panes")?;
+    let listed: Vec<Listed> = serde_json::from_str(listed).with_context(|| {
+        let printed = crate::subprocess::diagnostic(listed.as_bytes());
+        format!("invalid Zellij panes: {}", printed.trim())
+    })?;
     Ok(listed
         .into_iter()
         .filter(|pane| !pane.is_plugin || !(pane.is_suppressed || in_layout(pane)))

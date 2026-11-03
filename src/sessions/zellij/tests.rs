@@ -76,6 +76,11 @@ fn panes_list_terminals_without_plugins() {
         }]
     );
     assert!(parse_panes("").unwrap().is_empty());
+    let printed = parse_panes("caller [Created 0s ago]\n").map_err(|error| error.to_string());
+    assert_eq!(
+        printed,
+        Err("invalid Zellij panes: caller [Created 0s ago]".to_owned())
+    );
 }
 
 #[test]
@@ -203,6 +208,12 @@ fn a_missing_session_lists_nothing() {
     assert_eq!(
         listed(&exited(0, "[]", "")).ok(),
         Some(Reply::Answered("[]".to_owned()))
+    );
+    // Among several other sessions, Zellij lists them and succeeds.
+    let others = "caller [Created 0s ago]\ndemo [Created 0s ago]\n";
+    assert_eq!(
+        listed(&exited(0, others, missing)).ok(),
+        Some(Reply::Unanswered)
     );
 }
 
