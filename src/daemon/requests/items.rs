@@ -10,7 +10,7 @@ use super::super::{
 };
 use crate::{
     forge::items::action::Action,
-    protocol::{self, Body, ItemContext, ItemMethod},
+    protocol::{self, Body, ItemContext, ItemMethod, ViewPiece},
 };
 
 #[cfg(test)]
@@ -73,6 +73,17 @@ pub(super) async fn handle(
         ItemMethod::Reviewers { context, item } => {
             let reviewers = manager.reviewers(&context, item, caller.is_some()).await;
             return Ok(Answer::pages(reviewers, Body::Reviewers));
+        }
+        ItemMethod::ViewItems {
+            context,
+            selection,
+            comments,
+        } => {
+            let viewed = manager
+                .view_items(&context, &selection, comments, caller.is_some())
+                .await
+                .and_then(|viewed| view_pieces(&viewed));
+            return Ok(Answer::pages(viewed, Body::ViewPieces));
         }
         ItemMethod::ForgeApi {
             context,
@@ -227,6 +238,7 @@ impl Scoped for ItemMethod {
             | ItemMethod::ListItems { context, .. }
             | ItemMethod::Labels { context, .. }
             | ItemMethod::Reviewers { context, .. }
+            | ItemMethod::ViewItems { context, .. }
             | ItemMethod::ForgeApi { context, .. }
             | ItemMethod::ForgeDownload { context, .. }
             | ItemMethod::ItemAction {
@@ -279,6 +291,16 @@ pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut String
             bail!("scoped processes act on items from their space, not from a registered checkout")
         }
     }
+}
+
+/// The views as pieces of their JSON, each fitting a frame: one PR's
+/// discussion may outgrow a frame of its own.
+fn view_pieces(viewed: &crate::client::views::Viewed) -> Result<Vec<ViewPiece>> {
+    let json = serde_json::to_string(viewed)?;
+    Ok(protocol::text_pieces(&json)
+        .into_iter()
+        .map(ViewPiece)
+        .collect())
 }
 
 /// The workspace's next PR updates.

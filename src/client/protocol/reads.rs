@@ -33,6 +33,7 @@ impl Operation {
                     ItemMethod::ListItems { .. }
                         | ItemMethod::Labels { .. }
                         | ItemMethod::Reviewers { .. }
+                        | ItemMethod::ViewItems { .. }
                         | ItemMethod::ForgeDownload { .. }
                 )
                 | Self::Notification(NotificationMethod::ListNotifications { .. })

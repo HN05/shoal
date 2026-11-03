@@ -113,6 +113,16 @@ pub enum ItemMethod {
         context: ItemContext,
         item: Option<String>,
     },
+    /// The selected issues and PRs as the forge reports them, with the logs
+    /// of failed checks, answered as pieces of the JSON of
+    /// [`crate::client::views::Viewed`] in one or more `view_pieces` frames
+    /// and then `ok`.
+    ViewItems {
+        #[serde(flatten)]
+        context: ItemContext,
+        selection: crate::forge::items::link::Selection,
+        comments: bool,
+    },
     /// A request to the forge API of the context's repository, or the one
     /// `repository` names, answered with the response's JSON text in one or
     /// more `api_response` frames and then `ok`.
@@ -185,6 +195,11 @@ impl DownloadPiece {
         Ok(download)
     }
 }
+
+/// A piece of the JSON of an item view response, which the client joins.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ViewPiece(pub String);
 
 /// Where an item request runs: in a workspace, in a running chat, by its ID,
 /// which acts in its repository's registered checkout, or in the registered

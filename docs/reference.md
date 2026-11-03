@@ -572,8 +572,9 @@ workspace `StartWorkspace` creates: its steps and its processes' output lines as
 they come, then its result or a typed failure such as `setup_failed` or
 `hook_failed`. It also holds the logic
 the CLI applies on its side: which workspaces a command would act on, list
-status labels, the AI tools Shoal can launch, and reading and validating
-configuration, and in `output` the types every command prints with `--json`.
+status labels, the AI tools Shoal can launch, reading and validating
+configuration, and in `views` what `shoal view` reads; `output` holds the types
+every command prints with `--json`.
 Without a scope token the caller is the user; with one, it is
 that workspace's agent, under the rules of its `shoal` commands. The library
 speaks only its own release's protocol: a daemon of another release refuses
@@ -3977,7 +3978,9 @@ review whose inline comments could not be read keeps its body; the command exits
 of items with failed logs in `check_logs`, and runs with `kind` `ci`, or a check
 log object with `--check`;
 `reactions` on an item or comment lists each reaction's `content`, `count`, and
-whether your login `reacted`. Reactions use GitHub's names (`+1`, `-1`,
+whether the login that read it `reacted`: the daemon reads issues and PRs as the
+[agent account](#agent-accounts) for processes inside a workspace and a chat's
+agent, which read only from their space, and with your own logins otherwise. Reactions use GitHub's names (`+1`, `-1`,
 `laugh`, `hooray`, `confused`, `heart`, `rocket`, `eyes`); a GitLab emoji
 without one keeps its GitLab name.
 `--web` opens the selected items in the browser instead, with `open` on macOS

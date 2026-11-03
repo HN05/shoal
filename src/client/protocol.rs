@@ -59,7 +59,7 @@ pub use demos::DemoMethod;
 pub use executions::ExecutionMethod;
 pub use files::FileMethod;
 pub use holds::HoldMethod;
-pub use items::{DownloadPiece, ItemContext, ItemMethod};
+pub use items::{DownloadPiece, ItemContext, ItemMethod, ViewPiece};
 pub use notifications::NotificationMethod;
 pub use operations::OperationMethod;
 pub use ports::PortMethod;
@@ -590,6 +590,7 @@ response_bodies! {
     Downloaded(Vec<DownloadPiece>),
     Labels(Vec<crate::forge::conventions::labels::Label>),
     Reviewers(Vec<crate::forge::review::reviewers::Reviewer>),
+    ViewPieces(Vec<ViewPiece>),
     Opened(crate::client::links::OpenOutcome),
     Push(crate::client::links::PushOutcome),
     BranchPush(crate::client::links::BranchPush),
@@ -724,6 +725,7 @@ paged_bodies!(
     Downloaded,
     Labels,
     Reviewers,
+    ViewPieces,
     ReviewMarks,
     ReadyOutcomes,
     CiRunJobs,

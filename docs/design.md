@@ -1744,10 +1744,12 @@ reacting reads first and changes only a reaction not already as asked, since
 forges differ in whether adding one twice fails. A comment edit changes only
 a comment the acting login wrote, checked against the item's discussion before
 anything is sent, since an account with admin rights could otherwise rewrite
-someone else's words. Listing issues and PRs also
-runs in the daemon, so a scoped caller's search goes out as the agent account
-and anyone else's as the user's own logins, in another repository too, since
-checking for a duplicate before filing there is only a read; it uses each forge's own search and
+someone else's words. Listing issues and PRs, and
+reading items' views, a PR's possible reviewers and a repository's labels, also
+run in the daemon, so apps read them without choosing a login or a host's forge
+themselves: a scoped caller reads as the agent account and anyone else as the
+user's own logins, in another repository too, since checking for a duplicate
+before filing there is only a read. A search uses each forge's own search and
 reads pages only until the limit is met. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
 command models. The daemon
