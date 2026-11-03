@@ -164,6 +164,19 @@ impl Fixture {
         support::daemon_client::protocol(self.root.path())
     }
 
+    /// The daemon as an app reaches it through `shoal::client`, as the user.
+    fn connector(&self) -> shoal::client::connection::Connector {
+        let state = self.root.path().join("state");
+        shoal::client::connection::Connector {
+            paths: shoal::client::paths::Paths {
+                home: self.root.path().into(),
+                socket: state.join("daemon.sock"),
+                state,
+            },
+            scope: None,
+        }
+    }
+
     fn raw_request(&self, protocol: u64, id: u64, method: Value) -> Value {
         support::daemon_client::exchange(
             self.root.path(),
@@ -24607,8 +24620,7 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 #[test]
 fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
     use shoal::client::{
-        connection::{self, Connector},
-        paths::Paths,
+        connection,
         protocol::{OperationMethod, operations::StartedWorkspace},
     };
     let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -24616,15 +24628,7 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
         let fixture = issue_fixture(host);
         write_issue_state(&fixture, "Closed");
         let before = fixture.ok(&["work"]);
-        let state = fixture.root.path().join("state");
-        let app = Connector {
-            paths: Paths {
-                home: fixture.root.path().into(),
-                socket: state.join("daemon.sock"),
-                state,
-            },
-            scope: None,
-        };
+        let app = fixture.connector();
         let create = OperationMethod::StartWorkspace {
             repository: fixture.repo.to_str().unwrap().into(),
             name: "closed-work".into(),
@@ -24642,6 +24646,119 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
             "{host}: {error:#}"
         );
         assert_eq!(fixture.ok(&["work"]), before);
+    }
+}
+
+/// An app creates workspaces through `shoal::client` and follows their
+/// preparation in the daemon's worker: setup's output as setup writes it,
+/// the post-setup hook, then the ready workspace, or the typed failure of
+/// setup or the hook.
+#[test]
+fn an_app_follows_the_setup_of_a_workspace_it_creates() {
+    use shoal::client::{
+        operations::{Followed, Following},
+        protocol::{
+            ErrorCode, OperationMethod,
+            operations::{Ended, Outcome, Progress, StartedWorkspace, Step},
+        },
+        state::WorkspaceState,
+    };
+    let fixture = Fixture::new();
+    // Setup waits for `go`, which the app writes only once it has read the
+    // first line, so that line arrived while setup ran.
+    install_test_script(
+        fixture.repo.join("setup.sh"),
+        "#!/bin/sh\necho setting up\ncase \"$PWD\" in *setup-fails) exit 3 ;; esac\ni=0\nwhile [ ! -e go ]; do i=$((i+1)); [ $i -lt 600 ] || exit 4; sleep 0.1; done\necho set up\n",
+    );
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        "#!/bin/sh\necho post-setup ran\ncase \"$PWD\" in *hook-fails) exit 5 ;; esac\n",
+    );
+    commit_resource_config(
+        &fixture.repo,
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n",
+    );
+    let app = fixture.connector();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let start = |name: &str| {
+        let create = OperationMethod::StartWorkspace {
+            repository: fixture.repo.to_str().unwrap().into(),
+            name: name.into(),
+            base: Some("HEAD".into()),
+            issue: None,
+            pr: None,
+            agent: None,
+        };
+        runtime
+            .block_on(shoal::client::connection::request::<StartedWorkspace>(
+                &app, create,
+            ))
+            .unwrap()
+    };
+    let follow = |started: &StartedWorkspace| {
+        let go = started.workspace.path.join("go");
+        runtime.block_on(async {
+            let mut following = Following::open(&app, started.operation.clone(), 0)
+                .await
+                .unwrap();
+            let mut events = Vec::new();
+            loop {
+                match following.next().await.unwrap() {
+                    Followed::Event(event) => {
+                        if matches!(&event.progress, Progress::Output { line, .. } if line == "setting up")
+                        {
+                            fs::write(&go, "").unwrap();
+                        }
+                        events.push(event.progress);
+                    }
+                    Followed::Ended(ended) => return (events, ended),
+                }
+            }
+        })
+    };
+    let lines = |events: &[Progress]| -> Vec<String> {
+        events
+            .iter()
+            .filter_map(|progress| match progress {
+                Progress::Output { line, .. } => Some(line.clone()),
+                Progress::Step { .. } => None,
+            })
+            .collect()
+    };
+
+    let (events, ended) = follow(&start("api"));
+    let Ended::Succeeded(outcome) = ended else {
+        panic!("expected the prepared workspace: {ended:?} after {events:?}");
+    };
+    let Outcome::Prepared(prepared) = *outcome else {
+        panic!("expected the prepared workspace: {outcome:?}");
+    };
+    assert_eq!(prepared.workspace.state, WorkspaceState::Ready);
+    let steps: Vec<Step> = events
+        .iter()
+        .filter_map(|progress| match progress {
+            Progress::Step { step } => Some(*step),
+            Progress::Output { .. } => None,
+        })
+        .collect();
+    assert_eq!(
+        steps,
+        [Step::SetupStarted, Step::Ready, Step::PostSetupStarted]
+    );
+    let lines = lines(&events);
+    for line in ["setting up", "set up", "post-setup ran"] {
+        assert!(lines.iter().any(|shown| shown == line), "{line}: {lines:?}");
+    }
+
+    for (name, code) in [
+        ("setup-fails", ErrorCode::SetupFailed),
+        ("hook-fails", ErrorCode::HookFailed),
+    ] {
+        let (events, ended) = follow(&start(name));
+        let Ended::Failed(failure) = ended else {
+            panic!("{name}: expected a failure: {ended:?} after {events:?}");
+        };
+        assert_eq!(failure.code(), code, "{name}: {failure:?}");
     }
 }
 
