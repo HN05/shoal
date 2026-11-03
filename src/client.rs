@@ -39,5 +39,6 @@ pub mod subscriptions;
 pub mod time;
 pub mod transfer;
 pub mod validate;
+pub mod views;
 
 pub use shoal_forge as forge;

@@ -12,6 +12,7 @@ use crate::{
         forge_hosts::ForgeHosts,
         output::{self, Palette, Style},
     },
+    client::views,
     env,
     forge::{
         ForgeRepo,
@@ -141,7 +142,7 @@ async fn read_runs(ctx: &Context, context: &ItemContext, selected: &Selected) ->
         if item.kind != LinkKind::Ci {
             continue;
         }
-        let read = ci::read_view(ctx, Some(context), &item.url).await;
+        let read = views::read_run(&ctx.paths, Some(context), &item.url).await;
         let read = read
             .map(RunRead::Read)
             .unwrap_or_else(|error| RunRead::Failed {
