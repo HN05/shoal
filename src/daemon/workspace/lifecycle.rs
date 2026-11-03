@@ -993,6 +993,12 @@ impl Manager {
         selector: &str,
         ancestor: &super::done::CompletedAncestor,
     ) -> Result<bool> {
+        // A chat's workspaces could leave it, and the workspace with them,
+        // after the rechecks found it below the chat.
+        let _held = match ancestor {
+            super::done::CompletedAncestor::Chat(chat) => Some(self.chat_owners.reserve(&chat.id)?),
+            super::done::CompletedAncestor::Workspace(_) => None,
+        };
         self.remove_after_grace(selector, Removal::UnderCompleted { ancestor })
             .await
     }

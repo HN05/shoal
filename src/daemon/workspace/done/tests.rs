@@ -1018,3 +1018,71 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
     );
     assert!(manager.workspace(&worker.id).await.is_ok());
 }
+
+#[tokio::test]
+async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let root = manager
+        .create_workspace_for_chat(
+            repo.id.into(),
+            "root".into(),
+            None,
+            None,
+            None,
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap();
+    let split = manager
+        .split_workspace(&root.id, "split".into(), None)
+        .await
+        .unwrap();
+    manager
+        .mark_chat_done(
+            &chat.id,
+            true,
+            Vec::new(),
+            &crate::daemon::workspace_files::Attacher::User,
+        )
+        .await
+        .unwrap();
+    let split = manager.workspace(&split.id).await.unwrap();
+    let ancestor = manager.completed_ancestor(&split).await.unwrap().unwrap();
+    assert_eq!(ancestor.id(), chat.id);
+
+    // While a removal under the chat holds its workspaces, the root that
+    // puts the split child below the chat stays there...
+    let held = manager.chat_owners.reserve(&chat.id).unwrap();
+    let error = manager.assign_chat(&root.id, None).await.unwrap_err();
+    assert!(error.to_string().contains("holds it"), "{error:#}");
+    // ...and the removal takes that hold itself, so another one waits.
+    let error = manager
+        .remove_under_completed(&split.id, &ancestor)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("another removal holds the chat"),
+        "{error:#}"
+    );
+    assert!(manager.workspace(&split.id).await.is_ok());
+    drop(held);
+    manager.assign_chat(&root.id, None).await.unwrap();
+}

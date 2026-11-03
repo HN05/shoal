@@ -144,6 +144,9 @@ pub struct Manager {
     pub(crate) chat_stops: crate::daemon::chats::Stopping,
     /// The chats a removal holds, which no restore runs again.
     pub(crate) chat_removals: crate::daemon::chats::Removing,
+    /// The chats whose workspaces a removal under their completion takes,
+    /// which keep the workspaces below them meanwhile.
+    pub(crate) chat_owners: crate::daemon::chats::Removing,
     pub(crate) seeds: super::seed::Seeds,
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     pub(crate) reviews: crate::daemon::reviews::Reviews,
@@ -187,6 +190,7 @@ impl Manager {
             chat_saves: Default::default(),
             chat_stops: Default::default(),
             chat_removals: Default::default(),
+            chat_owners: Default::default(),
             seeds: Default::default(),
             forge_memories: Default::default(),
             reviews: Default::default(),

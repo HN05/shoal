@@ -319,9 +319,9 @@ impl Manager {
     /// was opened outside one or the chat is gone.
     pub async fn assign_chat(&self, workspace: &str, chat: Option<String>) -> Result<()> {
         let workspace = workspace.to_owned();
-        let removing = self.chat_removals.clone();
+        let held = [self.chat_removals.clone(), self.chat_owners.clone()];
         self.store
-            .run(move |db| assign(db, &workspace, chat.as_deref(), &removing))
+            .run(move |db| assign(db, &workspace, chat.as_deref(), &held))
             .await
     }
 
@@ -632,7 +632,7 @@ fn assign(
     db: &mut Connection,
     workspace: &str,
     chat: Option<&str>,
-    removing: &Removing,
+    [removing, owners]: &[Removing; 2],
 ) -> Result<()> {
     let tx = db.transaction()?;
     // A removal decided by the chat the workspace has keeps it there.
@@ -654,8 +654,8 @@ fn assign(
         .flatten();
     if let Some(current) = current.as_deref().filter(|current| Some(*current) != chat) {
         ensure!(
-            !removing.reserved(current),
-            "the chat that opened the workspace is being removed with it"
+            !removing.reserved(current) && !owners.reserved(current),
+            "a removal of the chat that opened the workspace, or of its workspaces, holds it"
         );
     }
     // A chat being removed takes no new workspace; one already below it

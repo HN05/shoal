@@ -900,7 +900,7 @@ async fn a_chat_a_removal_holds_neither_gives_up_nor_takes_workspaces() {
     // The workspace the removal takes stays below the chat, opened outside
     // it or from it again...
     let error = manager.assign_chat(&below.id, None).await.unwrap_err();
-    assert!(error.to_string().contains("is being removed"), "{error:#}");
+    assert!(error.to_string().contains("holds it"), "{error:#}");
     manager
         .assign_chat(&below.id, Some(chat.id.clone()))
         .await
