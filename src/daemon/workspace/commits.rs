@@ -61,8 +61,14 @@ impl Manager {
             if let Some(base) = head.base {
                 self.record_diff_ref(&workspace.id, base).await?;
             }
+            // Its last opener owns it, as a reopened branch's does; a child
+            // stays its parent's.
+            let workspace = match workspace.parent_workspace {
+                None => self.give_to_chat(&workspace.id, chat).await?,
+                Some(_) => self.workspace(&workspace.id).await?,
+            };
             return Ok(OpenedWorkspace {
-                workspace: self.workspace(&workspace.id).await?,
+                workspace,
                 reused: true,
             });
         }

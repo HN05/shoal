@@ -581,3 +581,59 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
     assert_eq!(restored.base_ref, None);
     assert_eq!(manager.diff_base(&restored.id).await.unwrap().commit, head);
 }
+
+#[tokio::test]
+async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
+    let (temp, manager) = manager().await;
+    let origin = repository(temp.path(), "origin");
+    git(
+        temp.path(),
+        &["clone", "-q", origin.to_str().unwrap(), "clone"],
+    );
+    std::fs::write(origin.join("fork"), "fork\n").unwrap();
+    commit(&origin, "fork");
+    let head = git(&origin, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(&origin, &["update-ref", "refs/pull/4/head", &head]);
+    let repo = manager
+        .register_repository(
+            temp.path().join("clone").to_str().unwrap().into(),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let start = |name: &str| {
+        manager.start_chat(
+            repo.id.clone().into(),
+            name.into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+    };
+    let (first, second) = (
+        start("first").await.unwrap(),
+        start("second").await.unwrap(),
+    );
+    let open = |chat: Option<String>| {
+        manager.open_pull_head(
+            repo.id.as_str().into(),
+            "https://forge.example/team/repo/pulls/4".into(),
+            crate::protocol::PullHead {
+                number: 4,
+                reference: "refs/pull/4/head".into(),
+                commit: head.clone(),
+                base: None,
+            },
+            chat,
+            Default::default(),
+        )
+    };
+    let opened = open(Some(first.id.clone())).await.unwrap().workspace;
+    assert_eq!(opened.chat.as_deref(), Some(first.id.as_str()));
+    let reopened = open(Some(second.id.clone())).await.unwrap().workspace;
+    assert_eq!(reopened.chat.as_deref(), Some(second.id.as_str()));
+    let by_user = open(None).await.unwrap().workspace;
+    assert_eq!(by_user.chat, None);
+}
