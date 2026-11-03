@@ -29901,6 +29901,16 @@ fn branch_only_commands_refuse_a_workspace_at_a_commit() {
 
 #[test]
 fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
+    // The number of the review `review run` queued, as its output names it.
+    let review_number = |output: &Output| {
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        stdout
+            .split_whitespace()
+            .skip_while(|word| *word != "Review")
+            .nth(1)
+            .unwrap_or_else(|| panic!("{stdout}"))
+            .to_owned()
+    };
     let fixture = Fixture::with_config(Some(
         "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n[commands]\nreview = ['printf', '%s\\n', '{diff_base}']\n",
     ));
@@ -29995,6 +30005,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     script(&second);
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
     assert!(output.status.success(), "{output:?}");
+    fixture.ok(&["watch", "review", &review_number(&output)]);
     let moved = &fixture.ok(&["status", "pr-8"])["workspace"];
     assert_eq!(moved["id"], workspace["id"]);
     assert_eq!(moved["at"]["commit"], second);
@@ -30023,13 +30034,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     );
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
     assert!(output.status.success(), "{output:?}");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let review = stdout
-        .split_whitespace()
-        .skip_while(|word| *word != "Review")
-        .nth(1)
-        .unwrap_or_else(|| panic!("{stdout}"));
-    let ended = fixture.ok(&["watch", "review", review]);
+    let ended = fixture.ok(&["watch", "review", &review_number(&output)]);
     assert_eq!(ended["head"], second, "{ended}");
     // A manual review reads the checkout, so it refuses one past the PR's head.
     let output = run(&["review", "run", url, "--manual"]);
@@ -30038,4 +30043,19 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         String::from_utf8_lossy(&output.stderr).contains("commits of its own"),
         "{output:?}"
     );
+
+    // Adding the PR runs its setup hooks once; reviewing it reopens the
+    // workspace without running them again.
+    fixture.ok(&["rm", "pr-8", "--yes"]);
+    let local = fixture.root.path().join("local.toml");
+    let hook = fixture.root.path().join("post-setup.sh");
+    install_test_script(&hook, "#!/bin/sh\necho ran >> \"$HOME/post-setup-ran\"\n");
+    fs::write(&local, format!("hooks.post_setup = '{}'\n", hook.display())).unwrap();
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &local);
+    let output = run(&["add", url]);
+    assert!(output.status.success(), "{output:?}");
+    let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
+    assert!(output.status.success(), "{output:?}");
+    let ran = fs::read_to_string(fixture.root.path().join("post-setup-ran")).unwrap();
+    assert_eq!(ran, "ran\n");
 }

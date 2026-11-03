@@ -313,8 +313,13 @@ async fn fork_pull_workspace(
         },
     };
     let opened: OpenedWorkspace = client::request(&ctx.paths, method).await?;
-    let Some(workspace) = super::super::split::prepare(ctx, opened.workspace).await? else {
-        bail!("PR #{}'s workspace could not be set up", pull.number);
+    // Reopening runs no hooks; only a new workspace is prepared.
+    let workspace = match opened.reused {
+        true => opened.workspace,
+        false => match super::super::split::prepare(ctx, opened.workspace).await? {
+            Some(workspace) => workspace,
+            None => bail!("PR #{}'s workspace could not be set up", pull.number),
+        },
     };
     let workspace = super::super::workspaces::link_pull(ctx, workspace, pull.url.clone()).await?;
     eprintln!(
