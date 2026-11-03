@@ -379,28 +379,34 @@ impl Zellij {
     /// Open `shell` in a new tab of `session`, which a client shows: Zellij
     /// drops tabs opened in a session no client shows.
     pub async fn open_tab(&self, session: &str, shell: &Shell<'_>) -> Result<Opened> {
-        let tab = run(self.new_tab(session, shell))
+        let before = self.panes(session).await?;
+        let printed = run(self.new_tab(session, shell))
             .await
             .context("open a Zellij tab")?;
-        let tab: u64 = tab.trim().parse().context("invalid Zellij tab")?;
+        let tab = printed_tab(&printed)?;
         let pane = self
-            .new_pane(session, |pane| pane.is_terminal() && pane.tab == tab)
+            .new_pane(session, |pane| opened_tab(pane, tab, shell.label, &before))
             .await
-            .with_context(|| format!("the Zellij tab {tab} shows no pane"))?;
+            .context("the new Zellij tab shows no pane")?;
         self.opened(session, pane.id).await
     }
 
     /// Open `shell` in a pane splitting `beside`, in its tab, which Zellij
-    /// can list only after it answers.
+    /// can list only after it answers. Under load Zellij can open the pane
+    /// and print nothing.
     pub async fn open_split(&self, beside: PaneRef<'_>, shell: &Shell<'_>) -> Result<Opened> {
-        let pane = run(self.new_split(beside, shell)?)
+        let before = self.panes(beside.session).await?;
+        let printed = run(self.new_split(beside, shell)?)
             .await
             .context("open a Zellij pane")?;
-        let pane = pane.trim();
-        self.new_pane(beside.session, |listed| listed.id == pane)
+        let printed = printed.trim();
+        let pane = self
+            .new_pane(beside.session, |pane| {
+                opened_split(pane, printed, beside.pane, &before)
+            })
             .await
-            .with_context(|| format!("the Zellij pane {pane} does not show"))?;
-        self.opened(beside.session, pane.to_owned()).await
+            .context("the new Zellij pane does not show")?;
+        self.opened(beside.session, pane.id).await
     }
 
     /// Open `shell` as the first pane of a new background session, named
@@ -826,6 +832,45 @@ fn lists_panes(listed: &str) -> bool {
     !listed.trim().is_empty()
         && serde_json::from_str::<Vec<serde::de::IgnoredAny>>(listed)
             .map_or(true, |panes| !panes.is_empty())
+}
+
+/// The tab `zellij action new-tab` printed; none when it printed nothing,
+/// as Zellij can under load once the tab is open.
+fn printed_tab(printed: &str) -> Result<Option<u64>> {
+    match printed.trim() {
+        "" => Ok(None),
+        tab => Ok(Some(tab.parse().context("invalid Zellij tab")?)),
+    }
+}
+
+/// Whether `pane` is the terminal a new tab opened: in `tab`, which Zellij
+/// printed, or else one `before` did not list in a tab named `label`.
+fn opened_tab(pane: &Pane, tab: Option<u64>, label: &str, before: &[Pane]) -> bool {
+    pane.is_terminal()
+        && tab.map_or_else(
+            || pane.tab_name == label && !listed_before(pane, before),
+            |tab| pane.tab == tab,
+        )
+}
+
+/// Whether `pane` is the terminal a split of `beside` opened: `printed`,
+/// the pane Zellij printed, or else one `before` did not list in the tab of
+/// `beside`.
+fn opened_split(pane: &Pane, printed: &str, beside: &str, before: &[Pane]) -> bool {
+    if !printed.is_empty() {
+        return pane.id == printed;
+    }
+    let tab = before
+        .iter()
+        .find(|old| old.id == beside)
+        .map(|old| old.tab);
+    pane.is_terminal() && Some(pane.tab) == tab && !listed_before(pane, before)
+}
+
+/// Whether `before`, an earlier listing of its session, has `pane`: a
+/// server never reuses a pane's number.
+fn listed_before(pane: &Pane, before: &[Pane]) -> bool {
+    before.iter().any(|old| old.id == pane.id)
 }
 
 /// Whether `pane` is the only one of `panes` in its tab.

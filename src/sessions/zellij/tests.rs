@@ -83,6 +83,39 @@ fn the_users_plugins_are_panes_but_layout_bars_are_not() {
 }
 
 #[test]
+fn a_pane_opened_without_an_answer_is_the_new_one_in_its_tab() {
+    let pane = |id: &str, tab: u64, tab_name: &str| Pane {
+        id: id.into(),
+        tab,
+        tab_name: tab_name.into(),
+        command: None,
+        exited: false,
+    };
+    let users = pane("terminal_0", 0, "Tab #1");
+    let other = pane("terminal_1", 1, "placed");
+    let before = [users.clone(), other.clone()];
+    let tab = pane("terminal_2", 2, "placed");
+    assert_eq!(printed_tab("2\n").unwrap(), Some(2));
+    assert_eq!(printed_tab("").unwrap(), None);
+    assert!(printed_tab("x").is_err());
+    assert!(opened_tab(&tab, Some(2), "placed", &before));
+    assert!(!opened_tab(&other, Some(2), "placed", &before));
+    // Without the tab Zellij printed, the new pane in a tab of that name.
+    assert!(opened_tab(&tab, None, "placed", &before));
+    assert!(!opened_tab(&other, None, "placed", &before));
+    assert!(!opened_tab(&tab, None, "elsewhere", &before));
+
+    let split = pane("terminal_3", 0, "Tab #1");
+    assert!(opened_split(&split, "terminal_3", "terminal_0", &before));
+    assert!(!opened_split(&tab, "terminal_3", "terminal_0", &before));
+    // Without the pane Zellij printed, the new pane in the split's tab.
+    assert!(opened_split(&split, "", "terminal_0", &before));
+    assert!(!opened_split(&users, "", "terminal_0", &before));
+    assert!(!opened_split(&tab, "", "terminal_0", &before));
+    assert!(!opened_split(&split, "", "terminal_9", &before));
+}
+
+#[test]
 fn clients_and_sessions_read_their_listings() {
     let clients = "CLIENT_ID ZELLIJ_PANE_ID RUNNING_COMMAND\n1         terminal_1     sleep 60\n2 terminal_0 N/A\n";
     assert_eq!(parse_clients(clients), ["terminal_1", "terminal_0"]);
