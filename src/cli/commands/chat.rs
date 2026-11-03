@@ -687,6 +687,9 @@ fn run_here(
         .split_first()
         .context("the agent command is empty")?;
     let mut process = std::process::Command::new(program);
+    for name in crate::env::not_chat_identity() {
+        process.env_remove(name);
+    }
     process
         .args(args)
         .current_dir(path)

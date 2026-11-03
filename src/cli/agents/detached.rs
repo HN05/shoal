@@ -554,6 +554,9 @@ fn spawn_session(
     let output = std::fs::File::create(log).with_context(|| format!("create {}", log.display()))?;
     let command = prepared.command();
     let mut session = std::process::Command::new(&command[0]);
+    for name in crate::env::not_chat_identity() {
+        session.env_remove(name);
+    }
     session
         .args(&command[1..])
         .current_dir(directory)

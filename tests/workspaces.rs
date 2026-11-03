@@ -26350,7 +26350,7 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
 fn install_recording_agent(fixture: &Fixture, agent: &str) {
     install_test_script(
         fixture.root.path().join("bin").join(agent),
-        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\necho \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\necho \"$SHOAL_OUTPUT\" > \"$HOME/chat-output\"\n",
+        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\necho \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\necho \"$SHOAL_OUTPUT\" > \"$HOME/chat-output\"\necho \"$SHOAL_WORKSPACE_ID$SHOAL_WORKSPACE\" > \"$HOME/chat-workspace\"\n",
     );
 }
 
@@ -26909,12 +26909,15 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
             .unwrap(),
     )
     .unwrap();
-    // Without a value, the flag takes the current workspace.
+    // Without a value, the flag takes the current workspace. The chat takes
+    // none of the identity a shell Shoal opened there carries.
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
             .current_dir(&worktree)
             .env("ZMX_SESSION", "outer")
+            .env("SHOAL_WORKSPACE_ID", "worker-id")
+            .env("SHOAL_WORKSPACE", "worker")
             .args(["chat", "--workspace", "--agent", "claude"]),
         "\n",
         true,
@@ -26927,6 +26930,10 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     assert_eq!(
         fs::read_to_string(home.join("chat-cwd")).unwrap().trim(),
         worktree.to_str().unwrap()
+    );
+    assert_eq!(
+        fs::read_to_string(home.join("chat-workspace")).unwrap(),
+        "\n"
     );
     let args = chat_args(&fixture);
     assert_eq!(args[0], "--append-system-prompt");
