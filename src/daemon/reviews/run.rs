@@ -141,6 +141,9 @@ impl Manager {
         let Some(slot) = self.await_slot(id, &workspace, cancel, cancelled).await? else {
             return Ok(Pass::Ended);
         };
+        // The workspace may have moved while the review waited, as a fork
+        // PR's moves to the PR's new head.
+        let workspace = self.workspace(&review.workspace_id).await?;
         // Its configuration and commits are read only from the worktree
         // that is this workspace's.
         self.verify_worktree(&workspace).await?;

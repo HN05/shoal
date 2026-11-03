@@ -1165,3 +1165,79 @@ fn sleep_as_a_survivor() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
+
+#[tokio::test]
+async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
+    let (root, manager) = manager().await;
+    let result = root.path().join("review.json");
+    std::fs::write(&result, REVIEW).unwrap();
+    let script = root.path().join("reviewer.sh");
+    install_test_script(&script, &format!("#!/bin/sh\ncat '{}'\n", result.display()));
+    configure(
+        &manager,
+        &format!(
+            "[review]\nagent = 'reviewer'\n[agents.reviewer]\ncommand = ['{}']\nreview = ['{{prompt}}', '{{schema}}']\n\
+             [machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false\n",
+            script.display()
+        ),
+    )
+    .await;
+    let path = repository(root.path(), "repo");
+    crate::test_support::git(&path, &["update-ref", "refs/remotes/origin/main", "main"]);
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_commit_workspace(
+            repo.id.as_str().into(),
+            None,
+            crate::protocol::CommitStart::Revision(None),
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    tokio::spawn(run(manager.clone()));
+    tokio::spawn(crate::daemon::agent_queue::run(manager.clone()));
+    // The only slot is taken, so the review waits for it.
+    let mut held = manager.agent_queue.request_oneshot(&repo.id, false, || {});
+    held.admitted().await;
+    let mut ended = manager.reviews.ended.subscribe();
+    let target = ReviewTarget::Pr {
+        url: "https://forge.example/team/repo/pulls/8".into(),
+        head: "topic".into(),
+        base: "main".into(),
+        post: false,
+    };
+    let queued = manager
+        .queue_review(&workspace.id, target, None, Default::default())
+        .await
+        .unwrap();
+    // The review read the workspace and waits for the slot.
+    while manager.agent_queue.waiting_oneshots().is_empty() {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    // Meanwhile the PR's head moves, and its workspace with it.
+    std::fs::write(workspace.path.join("moved"), "moved\n").unwrap();
+    crate::test_support::commit(&workspace.path, "moved");
+    let moved = crate::test_support::git(&workspace.path, &["rev-parse", "HEAD"])
+        .trim()
+        .to_owned();
+    let (id, commit) = (workspace.id.clone(), moved.clone());
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET start_commit=?2 WHERE id=?1",
+                rusqlite::params![id, commit],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    drop(held);
+    ended.changed().await.unwrap();
+    let review = manager.await_review(queued.id).await.unwrap();
+    assert_eq!(review.head.as_deref(), Some(moved.as_str()), "{review:?}");
+}
