@@ -1889,6 +1889,40 @@ async fn a_pushing_merge_approval_covers_no_other_local_commits_of_main() {
 }
 
 #[tokio::test]
+async fn unpushed_commits_count_against_a_remapped_upstream() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    let author = f.remote();
+    fs::write(workspace.path.join("feature"), "work\n").unwrap();
+    commit(&workspace.path, "feature");
+    // main tracks origin's main as origin/cache-main, and origin/main is gone.
+    git(
+        &f.repo,
+        &[
+            "config",
+            "remote.origin.fetch",
+            "+refs/heads/*:refs/remotes/origin/cache-*",
+        ],
+    );
+    git(&f.repo, &["update-ref", "-d", "refs/remotes/origin/main"]);
+    git(&f.repo, &["fetch", "origin"]);
+    git(
+        &f.repo,
+        &["branch", "--set-upstream-to=origin/cache-main", "main"],
+    );
+    git(&f.repo, &["merge", "--ff-only", "origin/cache-main"]);
+    // main takes a commit that only another of origin's branches has.
+    fs::write(author.join("other"), "other\n").unwrap();
+    commit(&author, "other");
+    git(&author, &["push", "origin", "HEAD:other"]);
+    git(&f.repo, &["fetch", "origin"]);
+    git(&f.repo, &["merge", "--ff-only", "origin/cache-other"]);
+    let preview = f.manager.preview_merge("worker", true).await.unwrap();
+    assert_eq!(preview.unpushed, 1);
+    assert!(preview.unpushed_default().is_some());
+}
+
+#[tokio::test]
 async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;

@@ -2,6 +2,8 @@
 //! and refresh the default branch before the merge worker merges it.
 mod approval;
 
+use std::path::Path;
+
 use anyhow::{Context, Result, bail, ensure};
 
 use super::{Manager, branches::UpstreamPolicy};
@@ -205,7 +207,7 @@ impl Manager {
             commits: git::status::commits_since(&workspace.path, default_commit).await?,
             push_to: push.cloned(),
             unpushed: match push {
-                Some(push) => unpushed(&workspace.path, default_commit, push).await?,
+                Some(_) => unpushed(&workspace.path, default, default_commit).await?,
                 None => 0,
             },
             warning,
@@ -264,11 +266,13 @@ async fn synced_to(
     confirmed: &MergeConfirmation,
     current: &str,
 ) -> Result<bool> {
-    let Some(push) = &merge.push else {
+    let path = &merge.repo.path;
+    if merge.push.is_none() {
+        return Ok(false);
+    }
+    let Some(tracking) = tracking_ref(path, &merge.default).await? else {
         return Ok(false);
     };
-    let path = &merge.repo.path;
-    let tracking = format!("refs/remotes/{}", push.remote_branch());
     Ok(git::is_ancestor(
         path,
         &confirmed.default_commit,
@@ -276,19 +280,36 @@ async fn synced_to(
         git::isolated_command,
     )
     .await?
-        && git::ref_exists(path, &tracking, git::isolated_command).await?
         && git::is_ancestor(path, current, &tracking, git::isolated_command).await?)
 }
 
-/// The commits of `default_commit` that the push destination `push` lacks,
-/// as the last fetch saw it, or that no remote has when nothing was fetched
-/// from it yet.
-async fn unpushed(path: &std::path::Path, default_commit: &str, push: &MergePush) -> Result<u64> {
-    let tracking = format!("refs/remotes/{}", push.remote_branch());
-    match git::ref_exists(path, &tracking, git::isolated_command).await? {
-        true => git::status::commits_between(path, &tracking, default_commit).await,
-        false => git::status::unretained_commits(path, default_commit, &[]).await,
+/// The commits of `default_commit` that the upstream of `default`, which a
+/// merge pushes to, lacks as the last fetch saw it; all of them when nothing
+/// was fetched from it yet.
+async fn unpushed(path: &Path, default: &str, default_commit: &str) -> Result<u64> {
+    match tracking_ref(path, default).await? {
+        Some(tracking) => git::status::commits_between(path, &tracking, default_commit).await,
+        None => Ok(git_run(path, &["rev-list", "--count", default_commit])
+            .await?
+            .trim()
+            .parse()?),
     }
+}
+
+/// The remote-tracking ref of `default`'s upstream as its remote's fetch
+/// refspec maps it, when a fetch has stored it.
+async fn tracking_ref(path: &Path, default: &str) -> Result<Option<String>> {
+    let tracking = git::existing_branch::upstream_ref(path, default).await?;
+    let tracking = tracking.trim();
+    if tracking.is_empty() {
+        return Ok(None);
+    }
+    Ok(
+        match git::ref_exists(path, tracking, git::isolated_command).await? {
+            true => Some(tracking.to_owned()),
+            false => None,
+        },
+    )
 }
 
 /// The commit of `repo`'s local `branch`.
