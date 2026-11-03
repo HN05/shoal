@@ -421,12 +421,13 @@ impl Manager {
         }
     }
 
-    /// The commit a PR review reads: the fetched head branch `head`, or the
-    /// detached HEAD of a workspace at a commit, which is at the head of a
-    /// PR whose branch origin does not have, as a fork's.
+    /// The commit a PR review reads: the fetched head branch `head`, or for
+    /// a workspace at a commit, opened at the head of a PR whose branch
+    /// origin does not have, as a fork's, the head it was last moved to,
+    /// whatever was committed on top of it there since.
     async fn pull_review_head(&self, workspace: &Workspace, head: &str) -> Result<String> {
-        if workspace.branch.is_none() {
-            return crate::daemon::links::pr::current_head(workspace).await;
+        if let Some(at) = &workspace.at {
+            return Ok(at.commit.clone());
         }
         let head_ref = crate::git::remote_ref("origin", head);
         crate::git::resolve_commit(&workspace.path, &head_ref, crate::git::run)

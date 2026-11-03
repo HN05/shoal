@@ -29975,4 +29975,31 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert_eq!(moved["id"], workspace["id"]);
     assert_eq!(moved["at"]["commit"], second);
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+
+    // A review reads the PR's head, not what was committed on top of it.
+    let moved_path = PathBuf::from(moved["path"].as_str().unwrap());
+    fs::write(moved_path.join("local"), "local\n").unwrap();
+    git(&moved_path, &["add", "local"]);
+    git(
+        &moved_path,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "local",
+        ],
+    );
+    let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let review = stdout
+        .split_whitespace()
+        .skip_while(|word| *word != "Review")
+        .nth(1)
+        .unwrap_or_else(|| panic!("{stdout}"));
+    let ended = fixture.ok(&["watch", "review", review]);
+    assert_eq!(ended["head"], second, "{ended}");
 }
