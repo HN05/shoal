@@ -186,6 +186,12 @@ class FlakyReportTests(unittest.TestCase):
         self.assertIn("round 1 of 1 broke: cargo exited with status 137", result.stderr)
         self.assertIn("running 3 tests", result.stderr)
 
+    def test_cargo_killed_after_a_crashed_binary_prints_both(self):
+        result = self.report(CRASHED + "     Running tests/d.rs (target/debug/deps/d)\n\nrunning 3 tests\n", 137)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("(signal: 6, SIGABRT: process abort signal)", result.stderr)
+        self.assertIn("running 3 tests", result.stderr)
+
     def test_a_build_error_breaks_the_round_and_prints_the_error(self):
         result = self.report(BUILD_ERROR, 101)
         self.assertEqual(result.returncode, 2, result.stderr)

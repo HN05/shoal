@@ -46,10 +46,13 @@ round_broken() {
 
 # The end of each part of a broken round's log that broke it: a test binary
 # that ended abnormally, with its last tests and signal, or an error without
-# test results, such as the build's. Without one, the end of the log, where
-# cargo stopped.
+# test results, such as the build's. The end of the log too, where cargo
+# stopped, when cargo itself was stopped or nothing else explains the round.
+#   print_round_errors <log> <cargo status>
 print_round_errors() {
-  awk -v keep=100 '
+  stopped=0
+  [ "$2" -eq 0 ] || [ "$2" -eq 101 ] || stopped=1
+  awk -v keep=100 -v stopped="$stopped" '
     function flush(  i) {
       if (abnormal || (failed && !summary)) {
         if (n > keep) print "[" n - keep " earlier lines omitted]"
@@ -64,7 +67,7 @@ print_round_errors() {
     /^error/ { failed = 1 }
     /^test result: / { summary = 1 }
     END {
-      if (!shown) { failed = 1; summary = 0 }
+      if (stopped || !shown) { failed = 1; summary = 0 }
       flush()
     }' "$1"
 }
@@ -83,7 +86,7 @@ while [ "$round" -le "$ROUNDS" ]; do
     broken=$((broken + 1))
     echo "round $round of $ROUNDS broke: cargo exited with status $status" >&2
     echo "::group::round $round errors" >&2
-    print_round_errors "$log" >&2
+    print_round_errors "$log" "$status" >&2
     echo "::endgroup::" >&2
   fi
   # Every failed test once per round; helper processes print their own lines.
