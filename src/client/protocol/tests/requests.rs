@@ -52,6 +52,7 @@ const REQUESTS: &[&str] = &[
     r#"{"workspace_env":{"workspace":"fix"}}"#,
     r#"{"revoke_workspace_env":{"workspace":"fix","token":"t1"}}"#,
     r#"{"space_status":{"space":"fix"}}"#,
+    r#"{"space_sessions":{"space":"fix"}}"#,
     r#"{"diff_base":{"workspace":"fix"}}"#,
     r#"{"conflicts":{"workspace":"fix","target":null}}"#,
     r#"{"preview_merge":{"workspace":"fix","push":true}}"#,

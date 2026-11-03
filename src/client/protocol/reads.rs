@@ -73,6 +73,7 @@ impl Operation {
                         | WorkspaceMethod::FindSpaces { .. }
                         | WorkspaceMethod::InspectWorkspace { .. }
                         | WorkspaceMethod::SpaceStatus { .. }
+                        | WorkspaceMethod::SpaceSessions { .. }
                         | WorkspaceMethod::DiffBase { .. }
                         | WorkspaceMethod::Conflicts { .. }
                         | WorkspaceMethod::PreviewMerge { .. }

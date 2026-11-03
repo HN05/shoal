@@ -11,8 +11,34 @@ use std::{
 };
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::client::ai::IntegrationKind;
+
+/// A session an agent of a space reported. Sessions its hooks never
+/// reported, such as those before a `/clear`, stay unknown.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportedSession {
+    pub agent: String,
+    pub session: String,
+    /// The execution the agent ran as, in a workspace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<String>,
+    /// Whether the agent runs in this session now.
+    pub current: bool,
+}
+
+/// The sessions a space's agents reported, with what says where their
+/// files are.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpaceSessions {
+    pub sessions: Vec<ReportedSession>,
+    /// The tool of each agent with a session, by agent name, as the space's
+    /// settings describe it.
+    pub integrations: BTreeMap<String, IntegrationKind>,
+    /// The `[env]` values the repository's tracked agents ran with.
+    pub environments: Vec<BTreeMap<String, String>>,
+}
 
 /// What an agent runs with, which says where its tool keeps its files: this
 /// process's environment with `configured`, the workspace's `[env]` for a

@@ -602,6 +602,7 @@ response_bodies! {
     WokenTurn(WokenTurn),
     AgentSession(crate::model::AgentSession),
     SpaceStatus(Box<SpaceStatus>),
+    SpaceSessions(crate::client::transcripts::SpaceSessions),
     Spaces(Vec<crate::model::PresentSpace>),
     SelectedItems(crate::model::Selected),
     MergedPull(crate::forge::items::revert::MergedPull),
