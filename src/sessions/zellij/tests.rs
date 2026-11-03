@@ -503,6 +503,43 @@ async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
 }
 
 #[tokio::test]
+async fn panes_stay_listed_while_tabs_close() {
+    let Some(mut server) = Isolated::start() else {
+        return;
+    };
+    server.shown().await;
+    let zellij = &server.zellij;
+    let command = ["sleep".to_owned(), "600".into()];
+    let mut tabs = Vec::new();
+    for _ in 0..8 {
+        let shell = server.shell(&command);
+        tabs.push(zellij.open_tab(&server.session, &shell).await.unwrap());
+    }
+    let closed = std::sync::atomic::AtomicBool::new(false);
+    let closing = async {
+        for tab in &tabs {
+            let place = PaneRef {
+                session: &tab.session,
+                pane: &tab.pane,
+            };
+            zellij.close(place, Some(&tab.instance)).await.unwrap();
+        }
+        closed.store(true, std::sync::atomic::Ordering::Relaxed);
+    };
+    let listing = async {
+        while !closed.load(std::sync::atomic::Ordering::Relaxed) {
+            let panes = zellij.panes(&server.session).await.unwrap();
+            assert!(
+                panes.iter().any(|pane| pane.id == "terminal_0"),
+                "the user's pane is missing from {panes:?}"
+            );
+        }
+    };
+    tokio::join!(closing, listing);
+    assert_eq!(zellij.panes(&server.session).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn typed_text_reaches_the_shell_as_it_is() {
     let Some(mut server) = Isolated::start() else {
         return;
