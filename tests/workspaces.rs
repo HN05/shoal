@@ -29801,6 +29801,17 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
     );
     fixture.ok(&["rm", "later", "--yes"]);
     assert_eq!(ran("pre-remove"), "later\n");
+    // With only a post-setup hook, setup run later still clears the mark and
+    // runs the hook.
+    commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
+    fixture.ok(&["add", repo, "hooked", "--skip-setup"]);
+    let set_up = fixture.ok(&["work", "setup", "hooked"]);
+    assert_eq!(set_up["setup_skipped"], false);
+    assert!(
+        ran("post-setup").ends_with("hooked\n"),
+        "{}",
+        ran("post-setup")
+    );
 }
 
 #[test]
