@@ -191,7 +191,8 @@ instead of the PR delivery guidance below.
   `pr open` records a proposal instead of opening, routed like other approval
   requests, though only the user approves it; approval opens it as the agent
   account through the normal open path, a PR only at its recorded commit, and an
-  issue proposal belongs to the repository and outlives its workspace.
+  issue proposal belongs to the repository and outlives the space that made it.
+  A chat's agent proposes issues, without a branch or commit, but never PRs.
   Under `[permissions] push = "propose"`, a scoped push, through `pr open` or
   plain `git push`, records a request bound to the ref and commit instead;
   approval pushes exactly that, with no agent present, and a branch that moved

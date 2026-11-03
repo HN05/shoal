@@ -128,8 +128,9 @@ you hold no grants; `shoal approvals --space <chat>` lists them. Proposed issues
 and PRs come too: deny one with `--reason` or hand it to the user, who alone
 approves them. You cannot merge, approve or request changes on PRs, approve CI
 runs or read the user's notifications; ask the user with `shoal alerts send`.
-Open issues with `shoal issue open` where the repository lets agents open them
-directly. Answer what you can decide with
+Open issues with `shoal issue open`; where the repository asks for approval,
+it records a proposal for the user, as a workspace's does. Answer what you can
+decide with
 `shoal questions`, write to an agent with `shoal messages send --space <name>`
 (`--attach FILE` hands it a file), and ask the user about the rest. Link the
 issues, PRs and CI runs you follow yourself with `shoal link <item> <relation>`:

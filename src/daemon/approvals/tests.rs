@@ -393,7 +393,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
 }
 
 #[tokio::test]
-async fn a_chat_has_no_request_to_withdraw() {
+async fn a_chat_withdraws_only_its_own_requests() {
     let (root, manager) = crate::test_support::manager().await;
     let path = crate::test_support::repository(root.path(), "repo");
     let repo = manager
@@ -426,10 +426,7 @@ async fn a_chat_has_no_request_to_withdraw() {
         .unwrap_err();
     assert_eq!(
         error.to_string(),
-        format!(
-            "chat planning has no approval request {}; chats request no approvals",
-            request.id
-        )
+        format!("chat planning has no approval request {}", request.id)
     );
     let pending = manager.show_approval(request.id).await.unwrap();
     assert_eq!(pending.status, DecisionStatus::Pending);

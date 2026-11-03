@@ -4861,6 +4861,90 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     assert_eq!(direct["created"], true);
 }
 
+/// A chat's agent proposes an issue as a workspace's does, from no branch
+/// or commit; approval opens it from the chat's checkout and assigns it to
+/// the chat.
+#[test]
+fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
+    let fixture = Fixture::new(Forge::GitHub, "[permissions]\nissue_open = 'propose'\n");
+    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .current_dir(fixture.root.path())
+        .spawn()
+        .unwrap();
+    let chat = fixture.request(json!({"start_chat": {"repository": repository,
+        "name": "planning", "agent": "claude", "pid": agent.id()}}));
+    let chat = chat["data"]["id"].as_str().unwrap().to_owned();
+    let scope = fixture.request(json!({"chat_scope": {"chat": chat}}));
+    let token = scope["data"]["token"].as_str().unwrap().to_owned();
+    let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
+    fixture.respond(json!({
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": created},
+    }));
+    let in_chat = |args: &[&str]| {
+        let output = fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("SHOAL_CHAT", &chat)
+            .env("SHOAL_SCOPE_TOKEN", &token)
+            .arg("--json")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let proposed = in_chat(&["issue", "open", "--title", "Flaky", "--link"])["proposed"].clone();
+    assert_eq!(proposed["space"], "planning", "{proposed}");
+    assert_eq!(proposed["specification"]["branch"], Value::Null);
+    assert_eq!(proposed["specification"].get("commit"), None);
+    let other = in_chat(&["issue", "open", "--title", "Noise"])["proposed"]["id"].to_string();
+    assert!(writes(&fixture).is_empty());
+    // The chat's agent lists its own proposals and withdraws one.
+    assert_eq!(in_chat(&["approvals"]).as_array().unwrap().len(), 2);
+    in_chat(&["approvals", "withdraw", &other]);
+    let id = proposed["id"].to_string();
+    let listed: Vec<_> = (in_chat(&["approvals"]).as_array().unwrap().iter())
+        .map(|request| request["id"].to_string())
+        .collect();
+    assert_eq!(listed, std::slice::from_ref(&id));
+
+    let approved = fixture.ok(&["approvals", "--approve", &id]);
+    let url = format!("{}/issues/40", fixture.web);
+    assert_eq!(approved["url"], url, "{approved}");
+    let posted: Vec<_> = writes(&fixture)
+        .iter()
+        .map(|write| write[0].clone())
+        .collect();
+    assert_eq!(posted, [json!("POST repos/team/project/issues")]);
+    let chats = fixture.request(json!("list_chats"));
+    let links = &chats["data"][0]["links"];
+    assert_eq!(links["issue"], json!(url), "{chats}");
+    assert_eq!(
+        links["opened"],
+        json!([{"kind": "issue", "url": url, "title": "Flaky"}]),
+        "{chats}"
+    );
+    let told: Vec<_> = (fixture
+        .ok(&["messages", "planning"])
+        .as_array()
+        .unwrap()
+        .iter())
+    .map(|message| message["message"].as_str().unwrap().to_owned())
+    .collect();
+    assert_eq!(
+        told,
+        [format!(
+            "Approval {id} to open issue \"Flaky\" was approved: {url} was opened and linked."
+        )]
+    );
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
 #[test]
 fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspace() {
     let fixture = Fixture::new(Forge::GitHub, "[permissions]\nissue_open = 'propose'\n");

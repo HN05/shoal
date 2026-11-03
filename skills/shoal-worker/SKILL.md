@@ -96,7 +96,7 @@ requests, and only the user approves it. Continue your work and do not
 open the item another way. The decider may edit the title and
 description, and the decision arrives as a message: approval names the opened
 item, which a PR's watch then follows; denial may give a reason or name the
-issue it duplicates. A proposed issue stays when your workspace is removed, so
+issue it duplicates. A proposed issue stays when your space is removed, so
 proposing follow-ups before `shoal done` is fine. A pending PR proposal keeps
 your workspace; new commits outdate it, so run `pr open` again after pushing
 more work, and when the message says so.

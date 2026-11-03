@@ -1870,9 +1870,10 @@ processes are: its agent carries a scope token, kept with the chat across
 stops and restores, that covers the chat and the spaces below it, so only the
 user's own terminal acts unscoped. The agent follows the workspace-agent rules
 without what needs a worktree: it opens workspaces only below its chat and in
-its repository, never takes over one outside it, renames only its own chat,
-and opens issues only where `[permissions]` lets agents open them directly,
-since the proposals a workspace's agent makes record its branch. It starts at once from the default branch the
+its repository, never takes over one outside it, and renames only its own
+chat. It proposes issues where `[permissions]` says so, as a workspace's agent
+does, recording no branch or commit, since it has none; approval opens the
+issue from the chat's checkout and records it as the chat's. It starts at once from the default branch the
 background sync keeps current, so an offline or diverged checkout still gets its
 chat. Its
 instructions describe the discussion only, from a chat template that
@@ -2118,9 +2119,9 @@ either. Approval carries data: the decider may replace the title and body, and t
 and an issue proposal may be denied as a duplicate of an existing issue, which gets
 its text as a comment, or of another pending proposal, which posts it once opened.
 A decided proposal is deleted, since the message carries the outcome. An issue
-proposal belongs to the repository rather than the workspace, because agents file
-follow-ups just before `done`; it opens through the repository's checkout and agent
-account once the workspace is gone. A PR proposal is bound to the branch and its
+proposal belongs to the repository rather than the space that made it, because
+agents file follow-ups just before `done`; it opens through the repository's
+checkout and agent account once the space is gone. A PR proposal is bound to the branch and its
 commit like a merge request: the push still happens unless `[permissions] push`
 holds it back, and a renamed branch or another
 commit, locally or where the push went, outdates it at approval or when the agent

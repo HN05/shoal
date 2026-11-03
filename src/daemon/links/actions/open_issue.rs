@@ -11,7 +11,10 @@ use crate::{
         resolve::Effective,
     },
     daemon::{
-        links::{LinkSpace, proposals::OpenOutcome},
+        links::{
+            LinkSpace,
+            proposals::{OpenOutcome, Proposer},
+        },
         scope::Caller,
         workspace::Manager,
     },
@@ -63,8 +66,8 @@ impl Manager {
 
     /// Open the issue from the chat's checkout as a checkout opens one, and
     /// record it as opened by the chat, or assign it to the chat with `link`.
-    /// The chat's own agent, a scoped `caller`, follows the repository's
-    /// `[permissions]` as a workspace's does, but cannot propose.
+    /// The chat's own agent, a scoped `caller`, records it for the user's
+    /// approval instead where `[permissions]` says so, as a workspace's does.
     async fn open_chat_issue(
         &self,
         selector: &str,
@@ -73,30 +76,37 @@ impl Manager {
         link: bool,
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
+        let proposer = self.proposer(caller).await;
         let space = self.link_space(selector).await?;
         let checkout = self.context_checkout(&space.item_context()).await?;
-        if caller.is_some() {
-            let settings = self.repository_settings(space.repository_id()).await?;
-            let own = self.checkout_forge(&checkout).await?;
-            let destination = self.issue_destination(own, repository.as_deref()).await?;
-            anyhow::ensure!(
-                destination.opening(&settings)? == Opening::Direct,
-                "[permissions] makes agents propose this issue, which a chat cannot do; ask the user to open it"
-            );
-        }
         // The chat's gate keeps a link meanwhile from taking its issue's place.
         let _gate = self.gates.lock_prs([space.id()]).await;
+        let own = self.checkout_forge(&checkout).await?;
+        let destination = self.issue_destination(own, repository.as_deref()).await?;
         if link {
             anyhow::ensure!(
                 self.issue_registration(space.id()).await?.is_none(),
                 "the chat already has a linked issue; open the issue without --link"
             );
-            let own = self.checkout_forge(&checkout).await?;
-            let destination = self.issue_destination(own, repository.as_deref()).await?;
             anyhow::ensure!(
                 !destination.elsewhere,
                 "an issue in another repository cannot be linked; open it without --link"
             );
+        }
+        if let Some(proposer) = proposer {
+            let settings = self.space_settings(&space).await?;
+            if destination.opening(&settings)? == Opening::Propose {
+                let required = destination.required(&settings);
+                return (self.propose_issue_at(
+                    &space,
+                    &destination,
+                    required,
+                    issue,
+                    link,
+                    proposer,
+                ))
+                .await;
+            }
         }
         let OpenOutcome::Opened(mut opened) =
             (self.open_checkout_issue(&checkout.id, issue, repository)).await?
@@ -150,21 +160,12 @@ impl Manager {
             None => Opening::Direct,
         };
         let (forge, required) = (&destination.forge, destination.required(&settings));
-        conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;
         if let Some(proposer) = proposer.filter(|_| opening == Opening::Propose) {
-            forge.check_uploads(&account, &issue.attachments).await?;
-            let repository = destination.repository();
-            let proposed = self
-                .propose_issue(
-                    &LinkSpace::from(workspace.clone()),
-                    issue,
-                    repository,
-                    link,
-                    proposer,
-                )
-                .await?;
-            return Ok(OpenOutcome::Proposed(proposed));
+            let space = LinkSpace::from(workspace.clone());
+            return (self.propose_issue_at(&space, &destination, required, issue, link, proposer))
+                .await;
         }
+        conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;
         let Created { item, unfinished } = forge.create_issue(&account, &issue).await?;
         let (linked, warning) = self
             .keep_created(&workspace.id, ItemKind::Issue, &item, link)
@@ -182,6 +183,29 @@ impl Manager {
                 .chain(checked)
                 .collect(),
         }))
+    }
+
+    /// Record the issue for the user's approval instead of opening it in
+    /// `destination`, refusing it first for what opening it would refuse:
+    /// a label in `required` it leaves out, or a file the forge does not
+    /// take.
+    async fn propose_issue_at(
+        &self,
+        space: &LinkSpace,
+        destination: &IssueDestination,
+        required: &[String],
+        issue: NewIssue,
+        link: bool,
+        proposer: Proposer,
+    ) -> Result<OpenOutcome> {
+        let (forge, account) = (&destination.forge, self.agent_account());
+        conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;
+        forge.check_uploads(&account, &issue.attachments).await?;
+        let repository = destination.repository();
+        let proposed = self
+            .propose_issue(space, issue, repository, link, proposer)
+            .await?;
+        Ok(OpenOutcome::Proposed(proposed))
     }
 
     /// Open the issue from the repository's registered checkout, under the

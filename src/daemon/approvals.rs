@@ -12,7 +12,7 @@ use crate::{
         store,
         workspace::Manager,
     },
-    model::{PresentSpace, Workspace},
+    model::PresentSpace,
 };
 
 pub mod proposals;
@@ -86,11 +86,25 @@ fn list_decided(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
     .collect()
 }
 
+/// The issues the chat `id` proposed and the requests routed to it to
+/// decide, in the order they were made. A chat proposes nothing else, and
+/// its issue proposals belong to its repository.
+fn list_of_chat(db: &Connection, id: &str) -> Result<Vec<ApprovalRequest>> {
+    db.prepare(&format!(
+        "{COLUMNS} WHERE (workspace_id IS NULL AND json_extract(record, '$.space_id')=?1)
+            OR CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1
+            ORDER BY rowid"
+    ))?
+    .query_map([id], record_row)?
+    .map(|row| decode_record(row?))
+    .collect()
+}
+
 /// How many requests of the space `id` wait for a decision: those a
-/// workspace made, or those a `chat` decides, since a chat requests none.
+/// workspace made, or those a `chat` made or decides.
 pub(crate) fn pending_count(db: &Connection, id: &str, chat: bool) -> Result<usize> {
     let requests = match chat {
-        true => list_decided(db, id)?,
+        true => list_of_chat(db, id)?,
         false => list(db, Some(id))?,
     };
     let pending = |request: &&ApprovalRequest| request.status == DecisionStatus::Pending;
@@ -386,11 +400,17 @@ fn close(
     Ok(request)
 }
 
-/// The workspace's request `id`, as the agent names it to withdraw.
-fn own_request(db: &Connection, workspace: &Workspace, id: i64) -> Result<ApprovalRequest> {
+/// The space's request `id`, as the agent names it to withdraw.
+fn own_request(db: &Connection, space: &PresentSpace, id: i64) -> Result<ApprovalRequest> {
     by_number(db, id)?
-        .filter(|request| request.space_id == workspace.id)
-        .with_context(|| format!("workspace {} has no approval request {id}", workspace.name))
+        .filter(|request| request.space_id == space.id())
+        .with_context(|| {
+            format!(
+                "{} {} has no approval request {id}",
+                space.kind(),
+                space.name()
+            )
+        })
 }
 
 /// Close the pending request `selected`, which its agent no longer needs. A
@@ -632,16 +652,16 @@ impl Manager {
     /// which its agent no longer needs, and take back its notification while
     /// unread; once shown, its decider is told instead.
     pub async fn withdraw_approval(&self, selector: &str, id: i64) -> Result<ApprovalRequest> {
-        let workspace = self.requesting_workspace(selector, id).await?;
-        let workspace_id = workspace.id.clone();
+        let space = self.present_space(selector).await?;
+        let space_id = space.id().to_owned();
         let selected = self
             .store
-            .run(move |db| own_request(db, &workspace, id))
+            .run(move |db| own_request(db, &space, id))
             .await?;
-        // Deciding a proposal opens its item under the workspace's gate
-        // before forgetting the request, which withdrawal must not split.
+        // Deciding a proposal opens its item under the space's gate before
+        // forgetting the request, which withdrawal must not split.
         let _decision = match selected.target.is_proposal() {
-            true => Some(self.gates.lock_prs([workspace_id]).await),
+            true => Some(self.gates.lock_prs([space_id]).await),
             false => None,
         };
         if let Some(current) = self.approval_by_key(&selected.key).await? {
@@ -656,18 +676,6 @@ impl Manager {
             self.announce_withdrawal(&request).await;
         }
         Ok(request)
-    }
-
-    /// The workspace `selector` names, whose request `id` is; a chat it
-    /// names has none, since a chat requests no approvals.
-    async fn requesting_workspace(&self, selector: &str, id: i64) -> Result<Workspace> {
-        match self.present_space(selector).await? {
-            PresentSpace::Workspace(workspace) => Ok(workspace),
-            PresentSpace::Chat(chat) => bail!(
-                "chat {} has no approval request {id}; chats request no approvals",
-                chat.name
-            ),
-        }
     }
 
     /// Atomically withdraw the selected request and retract its unread notification.
@@ -722,12 +730,12 @@ impl Manager {
     }
 
     /// Every request, or those of the workspace `selector` names, or those
-    /// the chat it names decides, since a chat requests none.
+    /// the chat it names made or decides.
     pub async fn approval_requests(&self, selector: Option<&str>) -> Result<Vec<ApprovalRequest>> {
         if let Some(selector) = selector
             && let PresentSpace::Chat(chat) = self.present_space(selector).await?
         {
-            return self.store.run(move |db| list_decided(db, &chat.id)).await;
+            return self.store.run(move |db| list_of_chat(db, &chat.id)).await;
         }
         let owner = self.workspace_filter(selector).await?;
         self.store.run(move |db| list(db, owner.as_deref())).await
