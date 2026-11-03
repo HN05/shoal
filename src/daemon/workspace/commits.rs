@@ -35,10 +35,20 @@ impl Manager {
         options: CreationOptions,
     ) -> Result<Workspace> {
         let parent = match parent {
-            Some(parent) => Some(self.workspace(&parent).await?.id),
+            Some(parent) => Some(self.workspace(&parent).await?),
             None => None,
         };
         let (repo, _guard) = self.lock_repository(repository).await?;
+        // Checked before resolving the start, which may fetch: a workspace
+        // process reaches only its own repository.
+        if let Some(parent) = &parent {
+            anyhow::ensure!(
+                parent.repository_id == repo.id,
+                "parent workspace {} is not a workspace of this repository",
+                parent.name
+            );
+        }
+        let parent = parent.map(|parent| parent.id);
         self.create_at_start(&repo, parent, start, chat, options)
             .await
     }

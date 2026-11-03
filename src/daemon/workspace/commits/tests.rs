@@ -689,3 +689,43 @@ async fn a_workspace_at_a_commit_takes_no_part_in_a_stack() {
         .await;
     assert!(stacked.unwrap_err().to_string().contains("is at a commit"));
 }
+
+#[tokio::test]
+async fn a_parent_of_another_repository_is_refused_before_any_fetch() {
+    let (temp, manager) = manager().await;
+    let own = repository(temp.path(), "own");
+    let origin = repository(temp.path(), "origin");
+    git(
+        temp.path(),
+        &["clone", "-q", origin.to_str().unwrap(), "other"],
+    );
+    let other = temp.path().join("other");
+    // A tag only origin has would make resolving it fetch the other clone.
+    git(&origin, &["tag", "remote-only"]);
+    let own = manager
+        .register_repository(own.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let other_repo = manager
+        .register_repository(other.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&own.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let refused = create(
+        &manager,
+        &other_repo.id,
+        Some(&parent.name),
+        CommitStart::Revision(Some("remote-only".into())),
+    )
+    .await;
+    assert!(
+        refused
+            .unwrap_err()
+            .to_string()
+            .contains("not a workspace of this repository")
+    );
+    assert!(git(&other, &["tag", "--list", "remote-only"]).is_empty());
+}
