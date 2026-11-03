@@ -849,3 +849,98 @@ async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
     );
     assert!(manager.chats().await.unwrap().is_empty());
 }
+
+/// Processes a test left running in the background, killed when it ends.
+struct Orphans(Vec<u32>);
+
+impl Drop for Orphans {
+    fn drop(&mut self) {
+        for pid in &self.0 {
+            // SAFETY: kill only sends a signal.
+            unsafe { libc::kill(*pid as libc::pid_t, libc::SIGKILL) };
+        }
+    }
+}
+
+/// Run `script` in `directory` as a process whose starter exited, as a
+/// detached session's is, and return the process IDs it writes to the
+/// files it names `$1`, `$2`, ... in `files`.
+fn orphan(directory: &std::path::Path, script: &str, files: &[&std::path::Path]) -> Vec<u32> {
+    let status = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("cd \"$0\" && {{ sh -c '{script}' sh \"$@\" & }}"))
+        .arg(directory)
+        .args(files)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    files
+        .iter()
+        .map(|file| {
+            for _ in 0..400 {
+                if let Some(pid) = std::fs::read_to_string(file)
+                    .ok()
+                    .and_then(|pid| pid.trim().parse().ok())
+                {
+                    return pid;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            panic!("{} names no process", file.display());
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_chats_processes_in_a_workspace_are_not_its_leftovers() {
+    let (temp, manager) = manager().await;
+    let (_, workspace) = workspace(temp.path(), &manager).await;
+    let file = |name: &str| temp.path().join(name);
+    let (agent, child, stray) = (file("agent"), file("child"), file("stray"));
+    // The chat's agent runs detached in the worktree with a child there,
+    // beside a stray process its starter left there.
+    let chat_pids = orphan(
+        &workspace.path,
+        "echo $$ > \"$1\"; sleep 600 & echo $! > \"$2\"; wait",
+        &[&agent, &child],
+    );
+    let stray_pid = orphan(
+        &workspace.path,
+        "echo $$ > \"$1\"; exec sleep 600",
+        &[&stray],
+    );
+    let _orphans = Orphans([chat_pids.clone(), stray_pid.clone()].concat());
+    manager
+        .start_chat_in_workspace(
+            &workspace.id,
+            "worker-chat".into(),
+            "claude".into(),
+            chat_pids[0],
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+
+    let space = manager
+        .workspace_space(
+            &workspace,
+            crate::daemon::space_processes::WorktreeTies::All,
+        )
+        .await
+        .unwrap();
+    let found = manager
+        .untracked_processes(vec![space], None)
+        .await
+        .unwrap()
+        .remove(&workspace.id)
+        .unwrap_or_default();
+    let leftovers: Vec<u32> = (found.iter())
+        .filter(|process| process.leftover)
+        .map(|process| process.identity.pid)
+        .collect();
+    assert!(leftovers.contains(&stray_pid[0]), "{found:?}");
+    for pid in &chat_pids {
+        assert!(!leftovers.contains(pid), "{pid} in {found:?}");
+    }
+}
