@@ -347,6 +347,12 @@ async fn check_workspace_export(
         },
     )
     .await?;
+    // Its removal keeps no record, which the package is built from.
+    ensure!(
+        !check.workspace.disposable,
+        "workspace {} is disposable, so its removal keeps nothing to export",
+        check.workspace.name
+    );
     ensure!(
         !check.dirty || check.unsaved_files_archived,
         "a checkpoint cannot keep the uncommitted files (they are too large, or include a repository or a changed submodule); commit or remove them before exporting"

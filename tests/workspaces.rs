@@ -29842,6 +29842,28 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     assert!(!path.exists() && !child_path.exists());
     assert!(git(&fixture.repo, &["branch", "--list", "scratch"]).is_empty());
     assert_eq!(fixture.ok(&["work", "restore"]), serde_json::json!([]));
+
+    // Its removal keeps nothing to export, which refuses a batch before
+    // removing any of it.
+    fixture.add("kept");
+    fixture.ok(&["add", repo, "scratch-2", "--disposable"]);
+    let directory = fixture.root.path().join("exports");
+    let refused = fixture.run(&[
+        "move",
+        "export",
+        "--repo",
+        repo,
+        "--all",
+        "-o",
+        directory.to_str().unwrap(),
+        "--yes",
+    ]);
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("disposable"),
+        "{refused:?}"
+    );
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
 }
 
 #[test]
