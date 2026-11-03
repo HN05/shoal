@@ -141,7 +141,7 @@ fn by_number(db: &Connection, number: i64) -> Result<Option<ApprovalRequest>> {
 pub fn list(db: &Connection, owner: Option<&str>) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!(
         "{COLUMNS} WHERE ?1 IS NULL OR workspace_id=?1
-            OR (workspace_id IS NULL AND json_extract(record, '$.workspace_id')=?1)
+            OR (workspace_id IS NULL AND json_extract(record, '$.space_id')=?1)
         ORDER BY rowid"
     ))?
     .query_map([owner], record_row)?
@@ -176,8 +176,8 @@ pub fn check(
     tx: &Transaction<'_>,
     mut request: ApprovalRequest,
 ) -> Result<Option<ApprovalRequest>> {
-    store::require_ready(tx, &request.workspace_id)?;
-    if let Some(existing) = current(tx, &request.workspace_id, &request.target, &request.name)? {
+    store::require_ready(tx, &request.space_id)?;
+    if let Some(existing) = current(tx, &request.space_id, &request.target, &request.name)? {
         ensure!(
             existing.specification == request.specification
                 && existing.lifetime == request.lifetime,
@@ -194,15 +194,15 @@ pub fn check(
     }
     ensure!(!request.reason.trim().is_empty(), ReasonRequired);
     crate::validate::reason("approval", Some(&request.reason))?;
-    request.workspace = tx.query_row(
+    request.space = tx.query_row(
         "SELECT name FROM workspaces WHERE id=?1",
-        [&request.workspace_id],
+        [&request.space_id],
         |r| r.get(0),
     )?;
     request.key = uuid::Uuid::new_v4().to_string();
     request.id = store::free_number(tx, "access_requests")?;
     tx.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,number) VALUES (?1,?2,?3,?4,?5,?6)",
-        params![request.key,request.workspace_id,request.target,request.name,serde_json::to_string(&request)?,request.id])?;
+        params![request.key,request.space_id,request.target,request.name,serde_json::to_string(&request)?,request.id])?;
     Ok(Some(request))
 }
 
@@ -211,7 +211,7 @@ fn reusable_grant(db: &Connection, request: &ApprovalRequest) -> Result<bool> {
     // fail the check. Released workspace grants remain candidates.
     let candidates = db
         .prepare(CANDIDATES)?
-        .query_map(params![request.workspace_id, request.target], record_row)?
+        .query_map(params![request.space_id, request.target], record_row)?
         .map(|row| decode_record(row?))
         .collect::<Result<Vec<_>>>()?;
     Ok(candidates.iter().any(|r| {
@@ -235,8 +235,8 @@ impl ApprovalRequest {
         Self {
             id: 0,
             key: String::new(),
-            workspace_id: owner.into(),
-            workspace: String::new(),
+            space_id: owner.into(),
+            space: String::new(),
             repository_id: None,
             target,
             name: name.into(),
@@ -260,7 +260,7 @@ impl ApprovalRequest {
     fn is_same(&self, other: &ApprovalRequest) -> bool {
         self.id == other.id
             && self.key == other.key
-            && self.workspace_id == other.workspace_id
+            && self.space_id == other.space_id
             && self.target == other.target
             && self.name == other.name
             && self.specification == other.specification
@@ -389,7 +389,7 @@ fn close(
 /// The workspace's request `id`, as the agent names it to withdraw.
 fn own_request(db: &Connection, workspace: &Workspace, id: i64) -> Result<ApprovalRequest> {
     by_number(db, id)?
-        .filter(|request| request.workspace_id == workspace.id)
+        .filter(|request| request.space_id == workspace.id)
         .with_context(|| format!("workspace {} has no approval request {id}", workspace.name))
 }
 
@@ -446,7 +446,7 @@ pub fn request_merge(
     tx: &Transaction<'_>,
     mut request: ApprovalRequest,
 ) -> Result<Option<ApprovalRequest>> {
-    let owner = request.workspace_id.clone();
+    let owner = request.space_id.clone();
     if let Some(existing) = current(tx, &owner, &Target::Merge, MERGE)? {
         if existing.specification == request.specification {
             request.reason = existing.reason;
@@ -485,7 +485,7 @@ pub struct Decision {
 /// same decision is a no-op.
 pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision> {
     let mut request = by_key(tx, key)?.context("the approval request no longer exists")?;
-    store::require_ready(tx, &request.workspace_id)?;
+    store::require_ready(tx, &request.space_id)?;
     ensure!(
         !matches!(
             request.status,
@@ -696,13 +696,13 @@ impl Manager {
         let message = request.withdrawal_notification();
         if let Some(decider) = &request.decider
             && self
-                .tell_agent(decider, format!("{}: {message}", request.workspace))
+                .tell_agent(decider, format!("{}: {message}", request.space))
                 .await
         {
             return;
         }
         self.notify(
-            Some(&request.workspace),
+            Some(&request.space),
             NotificationKind::ApprovalWithdrawn,
             message,
         )
@@ -904,7 +904,7 @@ impl Manager {
 
     /// Failure only logs; the decision stands.
     async fn tell_requester(&self, request: &ApprovalRequest) {
-        self.tell_workspace(&request.workspace_id, request.decision_message())
+        self.tell_workspace(&request.space_id, request.decision_message())
             .await;
     }
 
@@ -987,7 +987,7 @@ impl Manager {
         );
         let _gate = self.gates.lock_announcements().await;
         let routed = self.route_approval(&request, Some(space.id())).await?;
-        self.announce_approval(&request.workspace, &routed).await;
+        self.announce_approval(&request.space, &routed).await;
         // A decider that could not be told gave the request to the user. Its
         // key, unlike its number, never names another request.
         Ok(self.approval_by_key(&routed.key).await?.unwrap_or(routed))
@@ -1001,7 +1001,7 @@ impl Manager {
         above: Option<&str>,
     ) -> Result<ApprovalRequest> {
         let agents = self.tracked_agents().await;
-        let (key, workspace) = (request.key.clone(), request.workspace_id.clone());
+        let (key, workspace) = (request.key.clone(), request.space_id.clone());
         let above = above.map(str::to_owned);
         self.store
             .run(move |db| {
@@ -1068,7 +1068,7 @@ impl Manager {
             if let Some(stored) = stored.filter(|stored| {
                 stored.status == DecisionStatus::Pending && stored.decider.is_none()
             }) {
-                self.ask_user(&stored.workspace, &stored).await;
+                self.ask_user(&stored.space, &stored).await;
             }
         }
     }
@@ -1105,7 +1105,7 @@ impl Manager {
     }
 
     async fn ask_user(&self, workspace: &str, request: &ApprovalRequest) {
-        let about = About::workspace(workspace, &request.workspace_id).asking(&request.key);
+        let about = About::workspace(workspace, &request.space_id).asking(&request.key);
         self.notify_about(
             about,
             NotificationKind::ApprovalRequested,

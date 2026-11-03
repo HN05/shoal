@@ -2049,7 +2049,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             manager.store.run(move |db| {
                 if approval_request {
                     db.execute(
-                        "UPDATE access_requests SET workspace_id=?1, record=json_set(record,'$.workspace_id',?1) WHERE number=?2",
+                        "UPDATE access_requests SET workspace_id=?1, record=json_set(record,'$.space_id',?1) WHERE number=?2",
                         rusqlite::params![replacement_owner, id],
                     )?;
                 } else {

@@ -50,7 +50,7 @@ fn save(db: &Connection, request: &ApprovalRequest) -> Result<()> {
             VALUES (?1,?2,?3,?4,?5,?6,?7)",
             params![
                 request.key,
-                request.workspace_id,
+                request.space_id,
                 request.target,
                 request.name,
                 serde_json::to_string(request)?,
@@ -619,7 +619,7 @@ async fn reuse_validates_all_candidates_but_not_unrelated_history() -> Result<()
             ] {
                 let mut unrelated = grant.clone();
                 unrelated.key = format!("unrelated-{owner}");
-                unrelated.workspace_id = owner.into();
+                unrelated.space_id = owner.into();
                 unrelated.target = target;
                 save(&tx, &unrelated)?;
             }

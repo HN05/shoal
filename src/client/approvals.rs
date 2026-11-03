@@ -226,11 +226,12 @@ pub struct ApprovalRequest {
     /// Stable identity behind the user-facing number, carried through displayed snapshots.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub key: String,
-    pub workspace_id: String,
+    /// The space that made the request, a workspace or a chat.
+    pub space_id: String,
     #[serde(default)]
-    pub workspace: String,
+    pub space: String,
     /// The repository that owns a proposed issue, which outlives the
-    /// workspace that proposed it.
+    /// space that proposed it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository_id: Option<String>,
     pub target: Target,

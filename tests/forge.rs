@@ -4818,7 +4818,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     assert!(writes(&fixture).is_empty());
     let listed = fixture.ok(&["approvals"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
-    assert_eq!(listed[0]["workspace"], "topic");
+    assert_eq!(listed[0]["space"], "topic");
 
     // A worktree replaced while the proposal waits is refused before
     // anything is sent, and the proposal stays.

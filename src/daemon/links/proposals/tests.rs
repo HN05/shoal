@@ -144,7 +144,7 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
         .forget_proposal(replacement.key.clone())
         .await
         .unwrap();
-    let workspace = manager.workspace(&replacement.workspace_id).await.unwrap();
+    let workspace = manager.workspace(&replacement.space_id).await.unwrap();
     let reused = store_issue_proposal(&manager, &workspace).await;
     assert_eq!(reused.id, original.id);
     let error = manager

@@ -257,7 +257,7 @@ async fn approvals(
         .into_iter()
         .filter(|request| {
             request.status == DecisionStatus::Pending
-                && (caller.is_none() || visible.contains(&request.workspace_id))
+                && (caller.is_none() || visible.contains(&request.space_id))
         })
         .map(|request| Record::Approval(Box::new(request)))
         .collect())

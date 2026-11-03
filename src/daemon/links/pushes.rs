@@ -201,7 +201,7 @@ impl Manager {
             request.id,
             request.subject()
         );
-        self.tell_workspace(&request.workspace_id, message).await;
+        self.tell_workspace(&request.space_id, message).await;
         anyhow!(
             "approval request {} is outdated: the branch moved since it was requested; the agent was told to push again",
             request.id
@@ -220,7 +220,7 @@ impl Manager {
             .approval_by_key(key)
             .await?
             .context("the approval request no longer exists")?
-            .workspace_id;
+            .space_id;
         let _gate = self.gates.lock_prs([owner]).await;
         let request = self
             .approval_by_key(key)
@@ -238,12 +238,8 @@ impl Manager {
                 request.id,
                 request.subject()
             );
-            self.notify(
-                Some(&request.workspace),
-                NotificationKind::PushFailed,
-                message,
-            )
-            .await;
+            self.notify(Some(&request.space), NotificationKind::PushFailed, message)
+                .await;
         }
         finished
     }
@@ -267,7 +263,7 @@ impl Manager {
     async fn decide_pushed(&self, mut request: ApprovalRequest) -> Result<ApprovalRequest> {
         request.operation = None;
         let workspace = self
-            .find_workspace(&request.workspace_id)
+            .find_workspace(&request.space_id)
             .await?
             .context("the workspace that asked for the push is gone")?;
         if let Some(push) = request.pending_push() {

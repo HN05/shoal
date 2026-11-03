@@ -88,7 +88,7 @@ impl Inbox {
         )
         .await?;
         let detached = |request: &ApprovalRequest| {
-            !existing.contains(&request.workspace_id)
+            !existing.contains(&request.space_id)
                 && request
                     .repository_id
                     .as_deref()
@@ -209,7 +209,7 @@ fn decision_items(
         .filter(|request| {
             request.status == DecisionStatus::Pending
                 && request.decider.is_none()
-                && (kept(&request.workspace_id) || detached(request))
+                && (kept(&request.space_id) || detached(request))
         })
         .map(|request| Item::Approval { request });
     questions.chain(requests).collect()
@@ -265,7 +265,7 @@ impl Item {
     pub(in crate::cli) fn space_id(&self) -> &str {
         match self {
             Self::Question { question } => &question.space_id,
-            Self::Approval { request } => &request.workspace_id,
+            Self::Approval { request } => &request.space_id,
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.id,
@@ -292,7 +292,7 @@ impl Item {
     fn name<'a>(&'a self, repositories: &'a [(String, String)]) -> &'a str {
         match self {
             Self::Question { question } => &question.space,
-            Self::Approval { request } => &request.workspace,
+            Self::Approval { request } => &request.space,
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,

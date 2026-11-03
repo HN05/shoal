@@ -229,10 +229,10 @@ impl Manager {
         // A proposal this one duplicates takes its finding, so its gate is
         // held too.
         let duplicated = self.duplicated_proposal(&decision).await?;
-        let changed = duplicated.iter().map(|original| &original.workspace_id);
+        let changed = duplicated.iter().map(|original| &original.space_id);
         let _gate = self
             .gates
-            .lock_prs(changed.chain([&request.workspace_id]))
+            .lock_prs(changed.chain([&request.space_id]))
             .await;
         let request = self.pending_proposal(request).await?;
         if let Some(workspace) = routed_to {
@@ -243,7 +243,7 @@ impl Manager {
             );
         }
         self.ensure_not_pushing(&request)?;
-        let workspace = self.find_workspace(&request.workspace_id).await?;
+        let workspace = self.find_workspace(&request.space_id).await?;
         // A PR an earlier approval posted was pushed already.
         if approve && request.pending_push().is_some() && request.url.is_none() {
             return self
@@ -624,7 +624,7 @@ impl Manager {
             request.id,
             request.subject()
         );
-        self.tell_workspace(&request.workspace_id, message).await;
+        self.tell_workspace(&request.space_id, message).await;
         Ok(Moved(Box::new(request.clone())))
     }
 
@@ -912,7 +912,7 @@ fn finding(request: &ApprovalRequest) -> Result<Finding> {
         .context("only an issue proposal can be a duplicate")?;
     let mut text = format!(
         "Workspace {} proposed this as a separate issue, which was marked as a duplicate.\n\n### {}\n",
-        request.workspace, proposed.issue.title
+        request.space, proposed.issue.title
     );
     if !proposed.issue.body.trim().is_empty() {
         text.push('\n');
