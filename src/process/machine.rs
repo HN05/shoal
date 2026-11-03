@@ -1,9 +1,21 @@
 //! This machine's identity, which tells an import whether it runs where the
-//! export was made.
+//! export was made, and its name.
 
 /// The machine's hardware or installation ID; `None` when it has none.
 pub fn id() -> Option<String> {
     platform_id().filter(|id| !id.is_empty())
+}
+
+/// The machine's host name, or `unknown` when it cannot be read.
+pub fn hostname() -> String {
+    let mut buffer = [0u8; 256];
+    // SAFETY: gethostname writes at most `len` bytes into the provided buffer.
+    let result = unsafe { libc::gethostname(buffer.as_mut_ptr().cast(), buffer.len()) };
+    if result != 0 {
+        return "unknown".into();
+    }
+    let end = buffer.iter().position(|b| *b == 0).unwrap_or(buffer.len());
+    String::from_utf8_lossy(&buffer[..end]).into_owned()
 }
 
 #[cfg(target_os = "macos")]

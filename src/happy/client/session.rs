@@ -136,7 +136,7 @@ pub(super) fn creation_metadata(
         .unwrap_or_default();
     json!({
         "path": directory,
-        "host": hostname(),
+        "host": crate::process::machine::hostname(),
         "version": "unknown",
         "os": platform(),
         "machineId": machine_id,
@@ -149,17 +149,6 @@ pub(super) fn creation_metadata(
         "flavor": agent.as_str(),
         "gitBranch": branch,
     })
-}
-
-fn hostname() -> String {
-    let mut buffer = [0u8; 256];
-    // SAFETY: gethostname writes at most `len` bytes into the provided buffer.
-    let result = unsafe { libc::gethostname(buffer.as_mut_ptr().cast(), buffer.len()) };
-    if result != 0 {
-        return "unknown".into();
-    }
-    let end = buffer.iter().position(|b| *b == 0).unwrap_or(buffer.len());
-    String::from_utf8_lossy(&buffer[..end]).into_owned()
 }
 
 /// Node's `os.platform()` spelling, which Happy's app expects.
