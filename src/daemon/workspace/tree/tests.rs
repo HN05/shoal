@@ -199,19 +199,18 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         .split_workspace(&child.id, "grandchild".into(), None)
         .await
         .unwrap();
-    let mut done = AssignmentMethod::WorkspaceDone {
-        workspace: grandchild.name.clone(),
+    let mut done = AssignmentMethod::MarkDone {
+        space: grandchild.name.clone(),
         cleanup: false,
         integrated: false,
         results: vec![],
+        sender_chat: None,
     };
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut done)
         .await
         .unwrap();
     // Targets resolve to the named workspace, not the caller's own.
-    assert!(
-        matches!(&done, AssignmentMethod::WorkspaceDone { workspace, .. } if *workspace == grandchild.id)
-    );
+    assert!(matches!(&done, AssignmentMethod::MarkDone { space, .. } if *space == grandchild.id));
 }
 
 #[tokio::test]
@@ -606,6 +605,7 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
         .await
         .unwrap();
     let issue = "https://github.com/owner/repo/issues/7";
+    let run = "https://github.com/owner/repo/actions/runs/2765";
     for workspace in [&child, &sibling] {
         let id = workspace.id.clone();
         manager
@@ -613,8 +613,8 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
             .run(move |db| {
                 db.execute(
                     "INSERT INTO space_items(space_id,relation,kind,url)
-                     VALUES (?1,'related','issue',?2)",
-                    [&id, issue],
+                     VALUES (?1,'related','issue',?2),(?1,'related','ci',?3)",
+                    [&id, issue, run],
                 )?;
                 Ok(())
             })
@@ -639,8 +639,16 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
     }
     let targets = [
         crate::model::WorkspaceTarget::Item {
-            kind: crate::forge::items::link::ItemKind::Issue,
+            kind: crate::forge::items::link::LinkKind::Issue,
             input: "7".into(),
+        },
+        crate::model::WorkspaceTarget::Item {
+            kind: crate::forge::items::link::LinkKind::Ci,
+            input: "2765".into(),
+        },
+        crate::model::WorkspaceTarget::Item {
+            kind: crate::forge::items::link::LinkKind::Ci,
+            input: run.into(),
         },
         crate::model::WorkspaceTarget::Resource {
             name: "lock".into(),
@@ -704,7 +712,7 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .unwrap();
     // Without an agent above, the user hears the child's agent.
     manager
-        .send_message(&child.id, "first".into())
+        .send_message(&child.id, "first".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     assert_eq!(user().await, ["first"]);
@@ -714,12 +722,17 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .await
         .unwrap();
     manager
-        .send_message(&child.id, "second".into())
+        .send_message(&child.id, "second".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     // A child without an agent of its own is the coordinator's own work.
     manager
-        .send_message(&helper.id, "from the parent".into())
+        .send_message(
+            &helper.id,
+            "from the parent".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // The daemon's events about a child's agent reach the coordinator.
@@ -763,15 +776,15 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         choices: vec![],
     };
     let below = manager
-        .ask_question(&child.id, ask("Use SQLite?"))
+        .ask_question(&child.id, ask("Use SQLite?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let own = manager
-        .ask_question(&parent.id, ask("Merge now?"))
+        .ask_question(&parent.id, ask("Merge now?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let beside = manager
-        .ask_question(&sibling.id, ask("Rename it?"))
+        .ask_question(&sibling.id, ask("Rename it?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let messages = manager.agent_messages(&parent.id).await.unwrap();
@@ -867,7 +880,12 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         connections.push(started.stop);
     }
     manager
-        .send_message(&child.id, "done with the API".into())
+        .send_message(
+            &child.id,
+            "done with the API".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let received = manager.agent_messages(&parent.id).await.unwrap();
@@ -954,7 +972,7 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         choices: vec![],
     };
     let asked = manager
-        .ask_question(&child.id, ask("Use SQLite?"))
+        .ask_question(&child.id, ask("Use SQLite?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     manager
@@ -990,7 +1008,7 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         .await
         .unwrap();
     let reused = manager
-        .ask_question(&sibling.id, ask("Rename it?"))
+        .ask_question(&sibling.id, ask("Rename it?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     assert_eq!(reused.id, asked.id);
@@ -1964,6 +1982,8 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                     reason: None,
                     choices: vec![],
                 },
+                Vec::new(),
+                &Attacher::User,
             )
             .await
             .unwrap();

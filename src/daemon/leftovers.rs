@@ -140,12 +140,12 @@ impl Manager {
         Ok(spaces)
     }
 
-    /// Remember that the agent of the workspace `selector` names was told
-    /// about the leftovers `pids` name.
+    /// Remember that the agent of the workspace or running chat `selector`
+    /// names was told about the leftovers `pids` name.
     pub(crate) async fn acknowledge_leftovers(&self, selector: &str, pids: &[u32]) -> Result<()> {
         if !pids.is_empty() {
-            let workspace = self.workspace(selector).await?;
-            self.leftovers.delivered(&workspace.id, pids);
+            let space = self.present_space(selector).await?;
+            self.leftovers.delivered(space.id(), pids);
         }
         Ok(())
     }

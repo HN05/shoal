@@ -18,6 +18,7 @@ use crate::{
         agent_messages, chat_messages,
         notifications::{self, About, NotificationKind},
         workspace::Manager,
+        workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files},
     },
     model::PresentSpace,
 };
@@ -199,14 +200,16 @@ impl Ask {
 /// A question's space, workspace or chat, by ID, as a filter names it.
 const SPACE: &str = "COALESCE(q.workspace_id,q.chat_id)";
 
-const SELECT: &str =
+const SELECT: &str = concat!(
     "SELECT q.number,COALESCE(q.workspace_id,q.chat_id),COALESCE(w.name,c.name),q.created_at,
     q.question,q.recommendation,q.reason,q.choices,q.answer,q.answered_at,
     CASE WHEN q.chat_id IS NULL THEN (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id)
         ELSE (SELECT m.id FROM chat_messages m WHERE m.id=q.message_id) END,
-    q.closed_at,q.withdrawn,q.in_chat
-    FROM questions q LEFT JOIN workspaces w ON w.id=q.workspace_id
-        LEFT JOIN chats c ON c.id=q.chat_id";
+    q.closed_at,q.withdrawn,q.in_chat,",
+    sent_files!("q.files"),
+    " FROM questions q LEFT JOIN workspaces w ON w.id=q.workspace_id
+        LEFT JOIN chats c ON c.id=q.chat_id"
+);
 
 fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
     Ok((
@@ -227,6 +230,7 @@ fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
             closed_at: row.get(11)?,
             withdrawn: row.get(12)?,
             in_chat: row.get(13)?,
+            files: crate::daemon::store::json_column(row, "files")?.unwrap_or_default(),
         },
         row.get(7)?,
     ))
@@ -248,9 +252,15 @@ fn by_id(db: &Connection, id: i64) -> Result<Option<Question>> {
     Ok(query(db, "WHERE q.number=?1", [id])?.pop())
 }
 
-/// An identical question the agents have not received the answer to, so
-/// asking again, as after an interrupted wait, returns it.
-fn repeated(tx: &Transaction<'_>, space_id: &str, ask: &Ask) -> Result<Option<Question>> {
+/// An identical question with the same `files` that the agents have not
+/// received the answer to, so asking again, as after an interrupted wait,
+/// returns it.
+fn repeated(
+    tx: &Transaction<'_>,
+    space_id: &str,
+    ask: &Ask,
+    files: &[SentFile],
+) -> Result<Option<Question>> {
     let candidates = query(
         tx,
         &format!("WHERE {SPACE}=?1 AND q.question=?2"),
@@ -263,17 +273,25 @@ fn repeated(tx: &Transaction<'_>, space_id: &str, ask: &Ask) -> Result<Option<Qu
     else {
         return Ok(None);
     };
+    let ids = |files: &[SentFile]| files.iter().map(|file| file.id).collect::<Vec<_>>();
     ensure!(
-        question.ask == *ask,
+        question.ask == *ask && ids(&question.files) == ids(files),
         "question {} asks the same with different details; ask a different question",
         question.id
     );
     Ok(Some(question))
 }
 
-/// Record `ask` from the agents of `space`, asked in the conversation when
-/// `in_chat`, under the smallest free number and return that number.
-fn insert(tx: &Transaction<'_>, space: &PresentSpace, ask: &Ask, in_chat: bool) -> Result<i64> {
+/// Record `ask` from the agents of `space` with the files `files`, asked in
+/// the conversation when `in_chat`, under the smallest free number and
+/// return that number.
+fn insert(
+    tx: &Transaction<'_>,
+    space: &PresentSpace,
+    ask: &Ask,
+    files: &[SentFile],
+    in_chat: bool,
+) -> Result<i64> {
     let number = crate::daemon::store::free_number(tx, "questions")?;
     let (workspace_id, chat_id) = match space {
         PresentSpace::Workspace(workspace) => (Some(&workspace.id), None),
@@ -281,8 +299,8 @@ fn insert(tx: &Transaction<'_>, space: &PresentSpace, ask: &Ask, in_chat: bool) 
     };
     tx.execute(
         "INSERT INTO questions(number,workspace_id,chat_id,created_at,question,recommendation,
-                reason,choices,in_chat)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                reason,choices,in_chat,files)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
         params![
             number,
             workspace_id,
@@ -292,7 +310,8 @@ fn insert(tx: &Transaction<'_>, space: &PresentSpace, ask: &Ask, in_chat: bool) 
             ask.recommendation,
             ask.reason,
             serde_json::to_string(&ask.choices)?,
-            in_chat
+            in_chat,
+            workspace_files::sent_ids(files)?
         ],
     )?;
     Ok(number)
@@ -440,10 +459,22 @@ enum Recorded {
     New(Question),
 }
 
-/// Record `ask` from `asker` in `space` unless the same question was asked
-/// before. A chat asker's turn must be marked, and recording consumes the
-/// mark, also for a repeated question.
-fn record(db: &mut Connection, space: &PresentSpace, ask: &Ask, asker: &Asker) -> Result<Recorded> {
+/// What a question asks, with the files sent with it.
+struct Asking {
+    ask: Ask,
+    files: Vec<SentFile>,
+}
+
+/// Record `asking` from `asker` in `space` unless the same question was
+/// asked before. A chat asker's turn must be marked, and recording consumes
+/// the mark, also for a repeated question.
+fn record(
+    db: &mut Connection,
+    space: &PresentSpace,
+    asking: &Asking,
+    asker: &Asker,
+) -> Result<Recorded> {
+    let Asking { ask, files } = asking;
     let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     // A workspace reserved for removal takes no question its cleanup checks
     // have not seen.
@@ -455,12 +486,12 @@ fn record(db: &mut Connection, space: &PresentSpace, ask: &Ask, asker: &Asker) -
     {
         return Ok(Recorded::Unmarked);
     }
-    if let Some(question) = repeated(&tx, space.id(), ask)? {
+    if let Some(question) = repeated(&tx, space.id(), ask, files)? {
         tx.commit()?;
         return Ok(Recorded::Repeated(question));
     }
     let in_chat = matches!(asker, Asker::Chat(_));
-    let id = insert(&tx, space, ask, in_chat)?;
+    let id = insert(&tx, space, ask, files, in_chat)?;
     let question = by_id(&tx, id)?.context("recorded question is missing")?;
     tx.commit()?;
     Ok(Recorded::New(question))
@@ -548,13 +579,31 @@ fn newest_that_fit(mut questions: Vec<Question>) -> Result<Listing> {
 }
 
 impl Manager {
-    /// Record the question, or return the same one asked again, and tell the
-    /// user about a new one.
-    pub async fn ask_question(&self, selector: &str, ask: Ask) -> Result<Question> {
+    /// Record the question with copies of the files `attachments`, which
+    /// the space's attached files keep as attached by `attacher` for as long
+    /// as its results, or return the same one asked again, and tell the user
+    /// about a new one.
+    pub async fn ask_question(
+        &self,
+        selector: &str,
+        ask: Ask,
+        attachments: Vec<NewFile>,
+        attacher: &Attacher,
+    ) -> Result<Question> {
         ask.validate()?;
-        self.record_question(selector, ask, Asker::Command)
-            .await?
-            .context("a question asked on the command line is always recorded")
+        workspace_files::check_sent(&attachments)?;
+        let space = self.present_space(selector).await?;
+        let question = ask.question.clone();
+        let asked = (self.send_with_files(
+            &space.clone().into(),
+            FileSource::Question,
+            &question,
+            attachments,
+            attacher,
+            |files| self.record_question(space, Asking { ask, files }, Asker::Command),
+        ))
+        .await?;
+        asked.context("a question asked on the command line is always recorded")
     }
 
     /// Record the question in its turn's final `message` when the agent
@@ -566,23 +615,26 @@ impl Manager {
         turn: Turn,
         message: Option<&str>,
     ) -> Result<Option<Question>> {
-        self.record_question(selector, Ask::in_chat(message), Asker::Chat(turn))
-            .await
+        let space = self.present_space(selector).await?;
+        let asking = Asking {
+            ask: Ask::in_chat(message),
+            files: Vec::new(),
+        };
+        self.record_question(space, asking, Asker::Chat(turn)).await
     }
 
-    /// Record `ask` from `asker`, or return the same question asked again,
-    /// and tell the user about a new one; `None` for a chat asker whose
-    /// turn has no mark.
+    /// Record `asking` in `space` from `asker`, or return the same question
+    /// asked again, and tell the user about a new one; `None` for a chat
+    /// asker whose turn has no mark.
     async fn record_question(
         &self,
-        selector: &str,
-        ask: Ask,
+        space: PresentSpace,
+        asking: Asking,
         asker: Asker,
     ) -> Result<Option<Question>> {
-        let space = self.present_space(selector).await?;
         let recorded = self
             .store
-            .run(move |db| record(db, &space, &ask, &asker))
+            .run(move |db| record(db, &space, &asking, &asker))
             .await?;
         match recorded {
             Recorded::Unmarked => Ok(None),
@@ -606,12 +658,8 @@ impl Manager {
             Err(error) => crate::daemon::log!("question {id} not rechecked: {error:#}"),
         }
         let about = About::workspace(&question.space, &question.space_id);
-        self.notify_about(
-            about,
-            NotificationKind::QuestionAsked,
-            question.notification(),
-        )
-        .await;
+        let kind = NotificationKind::QuestionAsked;
+        (self.notify_with_files(about, kind, question.notification(), &question.files)).await;
     }
 
     /// The newest open questions that fit one response, oldest first, of

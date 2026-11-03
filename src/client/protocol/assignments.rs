@@ -1,24 +1,28 @@
 use serde::{Deserialize, Serialize};
 
-/// Requests about a workspace's assignment: completion, ready marks and stopped work.
+/// Requests about a space's assignment: completion, ready marks and a
+/// workspace's stopped work.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssignmentMethod {
-    /// `cleanup` requests cleanup even when `[cleanup.done] enabled` is false;
-    /// `integrated` records that another branch has HEAD's work under other
-    /// commits; `results` are files to hand back by absolute path, which the
-    /// daemon copies.
-    WorkspaceDone {
-        workspace: String,
+    /// Record the work of a workspace or running chat as done. For a
+    /// workspace, `cleanup` requests cleanup even when `[cleanup.done]
+    /// enabled` is false and `integrated` records that another branch has
+    /// HEAD's work under other commits; a chat has neither. `results` are
+    /// files to hand back by absolute path, which the daemon copies.
+    MarkDone {
+        space: String,
         cleanup: bool,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         integrated: bool,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         results: Vec<crate::client::files::NewFile>,
+        /// The chat whose agent sends the request, which attaches them.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sender_chat: Option<String>,
     },
-    WorkspaceUndone {
-        workspace: String,
-    },
+    /// Withdraw the completion of a workspace or running chat.
+    UndoDone { space: String },
     MarkReady {
         space: String,
         selection: crate::forge::items::link::Selection,

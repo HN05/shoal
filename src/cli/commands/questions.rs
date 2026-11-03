@@ -43,10 +43,23 @@ async fn show(ctx: &Context, question: Question) -> Result<i32> {
     Ok(0)
 }
 
-pub(super) async fn ask(ctx: &Context, space: Option<String>, ask: Ask, wait: bool) -> Result<i32> {
+pub(super) async fn ask(
+    ctx: &Context,
+    space: Option<String>,
+    ask: Ask,
+    attach: Vec<String>,
+    wait: bool,
+) -> Result<i32> {
+    let attachments = super::messages::attachments(&attach)?;
+    crate::client::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let question: Question =
-        request(&ctx.paths, QuestionMethod::AskQuestion { space, ask }).await?;
+    let method = QuestionMethod::AskQuestion {
+        space,
+        ask,
+        attachments,
+        sender_chat: crate::env::chat(),
+    };
+    let question: Question = request(&ctx.paths, method).await?;
     if !wait && question.is_open() {
         ctx.emit(
             &format!(
@@ -359,6 +372,10 @@ fn details(question: &Question, palette: Palette) -> String {
         let label = if number == 1 { "Choices" } else { "" };
         row(label, &format!("{number}. {choice}"));
     }
+    for (index, file) in question.files.iter().enumerate() {
+        let label = if index == 0 { "Files" } else { "" };
+        row(label, &file.path.display().to_string());
+    }
     if let Some(answer) = &question.answer {
         row("Answer", answer);
     }
@@ -405,6 +422,9 @@ fn render(question: &Question, palette: Palette) -> String {
     }
     for (number, choice) in question.ask.choices.iter().enumerate() {
         lines.push(format!("  {}. {choice}", number + 1));
+    }
+    for file in &question.files {
+        lines.push(format!("  Attached file: {}", file.path.display()));
     }
     if let Some(answer) = &question.answer {
         lines.push(format!("  Answer: {answer}"));

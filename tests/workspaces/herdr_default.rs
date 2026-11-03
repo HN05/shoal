@@ -276,7 +276,9 @@ fn a_default_host_config_turns_off_leaves_zmx_alone() {
         "{stderr}"
     );
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
-    assert_eq!(zmx_calls(&fixture), Vec::<Vec<String>>::new());
+    // The daemon's cleanup sweep may list sessions of every installed host.
+    let calls = zmx_calls(&fixture);
+    assert!(calls.iter().all(|call| call[..] == ["list"]), "{calls:?}");
 }
 
 /// Commands the fake `herdr` runs in its panes, as Herdr would, until the

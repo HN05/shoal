@@ -27,15 +27,26 @@ impl RemovalCheck {
         Ok(())
     }
 
-    pub async fn load_directory_processes(&mut self) -> Result<()> {
-        let wrappers: Vec<u32> = self
-            .idle_restores
-            .iter()
-            .filter_map(|restore| restore.wrapper)
-            .collect();
-        self.processes = process::in_directory_except(&self.workspace.path, &wrappers).await?;
+    /// The processes `users` finds in the worktree, besides the wrappers
+    /// waiting to restore idle agents.
+    pub async fn load_directory_processes(
+        &mut self,
+        users: &process::DirectoryUsers,
+    ) -> Result<()> {
+        self.processes = users
+            .in_directory_except(&self.workspace.path, &wrappers(&self.idle_restores))
+            .await?;
         Ok(())
     }
+}
+
+/// The wrappers waiting to restore the idle agents, which may use the
+/// workspace directory without using the workspace.
+pub(crate) fn wrappers(restores: &[IdleRestore]) -> Vec<u32> {
+    restores
+        .iter()
+        .filter_map(|restore| restore.wrapper)
+        .collect()
 }
 
 fn changed_files_preview(status: &str) -> (Vec<String>, usize) {
@@ -118,7 +129,9 @@ pub(crate) async fn inspect(
             && start_branch_retains_head(&check.workspace, default_branch, &tree).await?;
     }
     if policy == InspectionPolicy::IncludeDirectoryProcesses {
-        check.load_directory_processes().await?;
+        check
+            .load_directory_processes(&process::DirectoryUsers::default())
+            .await?;
     }
     Ok(check)
 }

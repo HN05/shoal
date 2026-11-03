@@ -12,10 +12,7 @@ use crate::{
         terminal::{self, Recorded},
         ui::{self, Fallback},
     },
-    forge::{
-        IssueInput,
-        items::link::{LinkKind, Selection},
-    },
+    forge::{IssueInput, items::link::Selection},
     model::{Chat, Workspace, WorkspaceStatus, WorkspaceTarget},
     protocol::{ConfigTarget, WorkspaceMethod},
 };
@@ -95,22 +92,20 @@ fn chat_name(chats: &[Chat], workspace: &Workspace) -> Option<String> {
     })
 }
 
-/// Items and resources find the workspaces that link or hold them; anything
-/// else selects a workspace.
+/// Linked items and resources find the workspaces that link or hold them;
+/// anything else selects a workspace.
 fn status_target(first: Option<&str>, item: Option<String>) -> Result<Option<WorkspaceTarget>> {
     match first {
         Some("resource") => Ok(Some(WorkspaceTarget::Resource {
             name: item.context("resource needs a pool or member name")?,
         })),
         Some(first)
-            if matches!(first, "pr" | "issue") || IssueInput::parse(first) == IssueInput::Url =>
+            if matches!(first, "pr" | "issue" | "ci")
+                || IssueInput::parse(first) == IssueInput::Url =>
         {
             let selection = Selection::parse(Some(first.to_owned()), item)?;
             Ok(Some(WorkspaceTarget::Item {
-                kind: selection
-                    .kind
-                    .and_then(LinkKind::item)
-                    .context("expected an issue or PR")?,
+                kind: selection.kind.context("expected an issue, PR or CI run")?,
                 input: selection
                     .input
                     .with_context(|| format!("{first} needs a number or URL"))?,
@@ -119,7 +114,7 @@ fn status_target(first: Option<&str>, item: Option<String>) -> Result<Option<Wor
         _ => {
             ensure!(
                 item.is_none(),
-                "put pr, issue or resource before a number, URL or name"
+                "put pr, issue, ci or resource before a number, URL or name"
             );
             Ok(None)
         }

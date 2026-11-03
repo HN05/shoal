@@ -468,6 +468,9 @@ pub struct Execution {
     /// The model and effort its agent runs with.
     #[serde(default, flatten)]
     pub model: crate::agent::ModelChoice,
+    /// Why Shoal stopped its agent, while its wrapper waits to restore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped: Option<crate::client::protocol::Protection>,
 }
 
 /// A file a completion handed back: the record of Shoal's copy, which tells a
@@ -680,9 +683,9 @@ pub struct IssueStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceTarget {
-    /// An issue or PR number or URL.
+    /// An issue, PR or CI run number or URL.
     Item {
-        kind: crate::forge::items::link::ItemKind,
+        kind: crate::forge::items::link::LinkKind,
         input: String,
     },
     /// A resource pool or member with a lease.
@@ -866,6 +869,13 @@ pub struct Chat {
     pub completion: Option<Completion>,
 }
 
+/// A running chat after a rename, with the name it had before.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RenamedChat {
+    pub chat: Chat,
+    pub previous_name: String,
+}
+
 /// A space as it exists: a workspace or a chat, running or saved, which
 /// share one namespace of IDs and names.
 #[derive(Debug, Clone)]
@@ -890,6 +900,36 @@ impl PresentSpace {
         match self {
             Self::Workspace(workspace) => &workspace.name,
             Self::Chat(chat) => &chat.name,
+        }
+    }
+
+    pub fn repository_id(&self) -> &str {
+        match self {
+            Self::Workspace(workspace) => &workspace.repository_id,
+            Self::Chat(chat) => &chat.repository_id,
+        }
+    }
+
+    /// The issues, PRs and CI runs it links.
+    pub fn links(&self) -> &SpaceLinks {
+        match self {
+            Self::Workspace(workspace) => &workspace.links,
+            Self::Chat(chat) => &chat.links,
+        }
+    }
+
+    pub fn into_links(self) -> SpaceLinks {
+        match self {
+            Self::Workspace(workspace) => workspace.links,
+            Self::Chat(chat) => chat.links,
+        }
+    }
+
+    /// What user-facing text calls it: `workspace` or `chat`.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Workspace(_) => "workspace",
+            Self::Chat(_) => "chat",
         }
     }
 
@@ -959,6 +999,9 @@ pub struct RunningAgent {
     /// The `shoal restart` of it in progress.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restart: Option<PendingRestart>,
+    /// Why Shoal stopped it, while its wrapper waits to restore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped: Option<crate::client::protocol::Protection>,
 }
 
 /// A `shoal restart` that has not started its agent again yet.

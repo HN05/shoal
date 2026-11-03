@@ -2237,3 +2237,56 @@ async fn a_merge_a_background_poll_sees_asks_for_a_sync() {
     assert!(!record("open").await.unwrap());
     assert!(record("merged").await.unwrap());
 }
+
+#[tokio::test]
+async fn the_background_poll_reads_spaces_together() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    // Each workspace's issue is answered only once both are being read.
+    let arrived = crate::forge::test_support::together(2);
+    let server = crate::forge::test_support::Server::start(move |request| {
+        let Some(number) = request
+            .line
+            .strip_prefix("GET /api/v1/repos/team/repo/issues/")
+        else {
+            return (404, Vec::new(), Vec::new());
+        };
+        if number.contains("/comments") {
+            return (200, Vec::new(), "[]".into());
+        }
+        if !arrived() {
+            return (500, Vec::new(), Vec::new());
+        }
+        let issue = json!({"number": number.parse::<u64>().unwrap(), "title": "Fix",
+            "state": "open"});
+        (200, Vec::new(), issue.to_string().into())
+    });
+    let host = &server.host;
+    // Pins are this process's, which parallel tests replace; an answer stays.
+    crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
+    crate::test_support::configure(
+        &manager,
+        &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n"),
+    )
+    .await;
+    let mut workspaces = Vec::new();
+    for number in [1, 2] {
+        let name = format!("issue-{number}");
+        let created = manager.create_workspace(&repo.id, name, None, None, None);
+        workspaces.push((number, created.await.unwrap()));
+    }
+    let origin = format!("http://{host}/team/repo");
+    crate::test_support::git(&path, &["remote", "add", "origin", &origin]);
+    for (number, workspace) in workspaces {
+        let issue = format!("http://{host}/team/repo/issues/{number}");
+        manager
+            .set_issue(&workspace.id, &issue, Some("Fix".into()))
+            .await
+            .unwrap();
+    }
+    manager.poll_linked_item_activity().await.unwrap();
+}

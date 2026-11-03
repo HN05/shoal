@@ -25,7 +25,11 @@ fn attached_files_follow_the_message_text() {
         superseded: false,
     };
     assert_eq!(
-        Inbox::Workspace("worker".into()).hook_context(&updates),
+        Inbox {
+            space: "worker".into(),
+            kind: "workspace"
+        }
+        .hook_context(&updates),
         "New Shoal messages for this workspace:\n\
          - See the crash\n  Attached file: /repo/.attachments/w/k/0/shot.png\n\
          - Attached file: /repo/.attachments/w/k/0/shot.png"
@@ -94,7 +98,11 @@ fn hook_output_names_the_event_it_answers() {
         timed_out: false,
         superseded: false,
     };
-    let context = Inbox::Workspace("worker".into()).hook_context(&updates);
+    let context = Inbox {
+        space: "worker".into(),
+        kind: "workspace",
+    }
+    .hook_context(&updates);
     assert_eq!(
         context,
         "New Shoal messages for this workspace:\n- Stop the dev server\n\
@@ -123,13 +131,19 @@ fn a_resumed_wake_continues_in_the_inbox_it_found() {
         wait.resume_arguments(hook.to_vec())
     };
     assert_eq!(
-        resumed(Some(Inbox::Workspace("worker".into()))),
+        resumed(Some(Inbox {
+            space: "worker".into(),
+            kind: "workspace"
+        })),
         [
             "internal", "wake", "--agent", "7", "--space", "worker", "--resume"
         ]
     );
     assert_eq!(
-        resumed(Some(Inbox::Chat("chat".into()))),
+        resumed(Some(Inbox {
+            space: "chat".into(),
+            kind: "chat"
+        })),
         [
             "internal", "wake", "--agent", "7", "--space", "chat", "--resume"
         ]
@@ -150,7 +164,13 @@ fn a_resumed_wake_continues_in_the_inbox_it_found() {
         "w1",
         "--resume",
     ];
-    for inbox in [Some(Inbox::Workspace("w1".into())), None] {
+    for inbox in [
+        Some(Inbox {
+            space: "w1".into(),
+            kind: "workspace",
+        }),
+        None,
+    ] {
         let wait = WakeWait {
             space: Some("w1".into()),
             inbox,

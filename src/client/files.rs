@@ -14,7 +14,17 @@ states!(FileSource {
     /// Handed back with `shoal done`; kept after the workspace's removal for
     /// as long as its removal record.
     Result => "result",
+    /// Sent to the user with `shoal alerts send`; kept as results are.
+    Alert => "alert",
+    /// Sent to the user with `shoal questions ask`; kept as results are.
+    Question => "question",
 });
+
+impl FileSource {
+    /// The sources whose files a workspace hands the user, which stay after
+    /// its removal for as long as its removal record.
+    pub const KEPT: [Self; 3] = [Self::Result, Self::Alert, Self::Question];
+}
 
 /// Who attached a file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,6 +65,20 @@ pub fn check_results(results: &[NewFile]) -> Result<()> {
     Ok(())
 }
 
+/// The most files one alert or question sends, which keeps one with the
+/// paths of Shoal's copies to a small part of a protocol frame, so listings
+/// of several still fit one response.
+pub const MAX_SENT: usize = 20;
+
+/// Refuse more files than one alert or question sends.
+pub fn check_sent(files: &[NewFile]) -> Result<()> {
+    ensure!(
+        files.len() <= MAX_SENT,
+        "send at most {MAX_SENT} files with one alert or question"
+    );
+    Ok(())
+}
+
 /// The `names` and record `ids` that none of `files` has, as an error
 /// names them.
 pub fn missing_selection(files: &[AttachedFile], names: &[String], ids: &[i64]) -> Vec<String> {
@@ -90,6 +114,31 @@ impl NewFile {
         self.title
             .as_deref()
             .map_or(Ok(()), crate::validate::file_title)
+    }
+}
+
+/// A file an agent sent the user with an alert or a question: the record of
+/// Shoal's copy, which `shoal files` lists, and where the copy is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SentFile {
+    pub id: i64,
+    /// The attached file's name.
+    pub name: String,
+    /// What the file is, when the agent said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Shoal's copy.
+    pub path: PathBuf,
+}
+
+impl From<&AttachedFile> for SentFile {
+    fn from(file: &AttachedFile) -> Self {
+        Self {
+            id: file.id,
+            name: file.name.clone(),
+            title: file.title.clone(),
+            path: file.path.clone(),
+        }
     }
 }
 

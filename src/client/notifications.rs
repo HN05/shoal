@@ -85,6 +85,9 @@ pub struct Notification {
     pub kind: NotificationKind,
     pub message: String,
     pub read: bool,
+    /// The files the space's agent sent with the message.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<crate::client::files::SentFile>,
 }
 
 /// Where a workspace process's message went: the user's notification, which

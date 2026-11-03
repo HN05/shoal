@@ -182,7 +182,9 @@ saves an agent records and a last session keeps, and that its subagents and
 background commands ended; configured restore commands receive that prompt through
 `{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked; they reattach
 like running commands, so a daemon restart or crash hands the wait to the next
-daemon instead of cancelling the restore. A daemon update waits for a stop
+daemon instead of cancelling the restore. A waiting wrapper's session shows
+only the stop, so `attach` and its picker leave it out, under every place
+recorded for it. A daemon update waits for a stop
 and a restore waiting for load, but not through a wait for an update, which
 may last indefinitely; that wrapper reattaches to the updated daemon. Restores wait in the agent queue,
 and manual recovery persists across restarts. Saved recovery represents
@@ -266,6 +268,8 @@ wakes an idle agent only while something besides the agents runs in its
 workspace, checked when the agent would be woken rather than when the warning
 is queued, since a turn that has just ended leaves nothing to stop and each
 woken turn costs tokens; otherwise it waits for the agent's next update or turn.
+Checks made at the same time share one process scan that starts after each asks;
+operations that stop or remove processes verify ownership with their own.
 A disk warning still wakes it, since deleting files frees space.
 Their thresholds are not
 validated against stop thresholds, so lowering a stop threshold never invalidates
@@ -687,9 +691,10 @@ but no scope token, because their purpose is to start or stop things that
 outlive the hook (a tmux session, say) without becoming execution survivors.
 Nothing outlives the workspace: removal stops every verified process that still
 carries its identity, including those hooks and exported environments started,
-and its leftovers. A leftover is a detached process, one launchd or init adopted
-or a descendant of one, that the space's worktree, temporary directory, program
-or identity ties to it, with everything it started: no live process outside the
+and its leftovers. A leftover is a detached process, one whose parent exited and
+left it to launchd, init or the subreaper that takes the daemon's orphans (such
+as `systemd --user`), or a descendant of one, that the space's worktree,
+temporary directory, program or identity ties to it, with everything it started: no live process outside the
 space keeps it, and the ties cover platform binaries whose hidden environment
 cannot show the identity and programs built in the worktree that run elsewhere.
 Exclusion follows live ancestry, not environment variables: the processes of
@@ -716,11 +721,15 @@ and automatic removal, after checks pass and commands stop, bounded in time;
 failure retains the workspace. Ownership and removal policy are rechecked after
 all removal hooks, with branch deletion derived from the final inspection.
 Idle cleanup requires unchanged
-HEAD, activity and file metadata; sweeps compare HEAD and activity, and walk the
-tree only when the timer starts, when it expires and after removal hooks, since
-change times only move forward and cannot be set. Status reports the first reason
-cleanup keeps a workspace from the checks the sweep runs, so it cannot disagree
-with the sweep and lsof still scans only clean worktrees. A HEAD changed by removal
+HEAD, activity and file metadata; while the timer runs, sweeps compare HEAD and
+activity and check recorded state and directory users, and inspect Git state and
+walk the tree only when the timer starts, when it expires and after removal hooks,
+since change times only move forward and cannot be set. For the same reason,
+merged cleanup walks a worktree again only once the newest change its last walk
+saw is older than the idle period. A sweep lists directory
+users with one lsof scan shared by every workspace it checks; removal scans again.
+Status reports the first reason cleanup keeps a workspace from the checks the sweep
+runs, so it cannot disagree with the sweep. A HEAD changed by removal
 hooks keeps its branch when only that branch has the new commits.
 Post-remove runs after ownership is released,
 from the repository checkout with its copy of the executable, retaining the old
@@ -907,8 +916,9 @@ tab's watcher as it was. Top-level `terminal.close_when_done` applies to every h
 `terminal.herdr.close_when_done` overrides it for tabs, as `terminal.focus` is shared.
 Preparation failures and shell or untracked desktop handoffs retain them until
 that lifecycle change. A watcher ends once its host reports the place missing,
-whatever the daemon reports. It asks the daemon whose its place is until the
-daemon answers; a place the daemon records, for its workspace or another
+whatever the daemon reports, and leaves the place open once no daemon has owned
+its state directory for two minutes, longer than a restart takes. It asks the
+daemon whose its place is until the daemon answers; a place the daemon records, for its workspace or another
 owner, or whose host labels it, is the daemon's, and the watcher closes it at
 removal only when the daemon knows nothing of it, such as a tab opened before
 Shoal recorded its places, never before an answer, which could close what
@@ -1042,7 +1052,12 @@ server per session and numbers panes per server, so a place's ID names its
 session and pane, it records the socket directory, and its instance is the
 server's process and birth; Zellij takes no condition with a command, so the
 host checks the instance just before each command on a recorded pane. Zellij
-closes a tab or session with its last pane only while a client shows the
+counts a session only when its server answers a probe in time, so it can
+report a busy session as missing, and a running session can list no pane
+before it lays out its first tab or while it is busy: the host asks again while
+the session's server process still runs, the recorded instance for a recorded
+pane, and takes a session as ended only once it does not.
+Zellij closes a tab or session with its last pane only while a client shows the
 session, so a close ends either along with the last pane there, as an attached
 client would see it, leaving no empty tab or session. A session's last pane
 closes by ending the session, never its tab, since a `zellij action` whose
@@ -1196,11 +1211,13 @@ Scope remains daemon-enforced. Bare `cd` always picks; all-workspace operations 
 A `-` target selects from a per-command history of workspace IDs that the CLI keeps
 in the state directory, shared across terminals so `attach -` works from a new pane;
 it only saves typing a name, so it never fails a command or authorizes anything, and
-scoped callers neither read nor write it. `attach` records a workspace once it has
-shown the session and the session still runs: when the terminal detaches, or right
-away for a host that shows it without attaching the terminal. So `attach -` returns
-to the session last detached from, not one another terminal still shows or one that
-ended.
+scoped callers neither read nor write it. `attach` and every launch that shows a
+workspace's agent session here, such as `add` or `claude`, record the workspace in
+`attach`'s history once the session is shown and still runs: when the terminal
+detaches, or right away for a host that shows it without attaching the terminal. A
+focused `add` that opens a place records the workspace once the place hosts it, since
+the host may show the place before the workspace exists. So `attach -` returns to the
+session last detached from, not one another terminal still shows or one that ended.
 `resume` uses the current workspace only when it has something to resume; its picker
 and completion list every workspace with the agents and commands it would
 restore, or that nothing would, and with nothing to resume anywhere it reports
@@ -1476,7 +1493,9 @@ daemon keeps a separate activity snapshot for each item and appends an
 conflict, closure, merge, reopen, or lookup failure. The first observation
 establishes the baseline, and watch acknowledgements do not affect this stream.
 The same poll queues each change on the workspace's watch cursor, holding
-passing checks as the watch below describes, and wakes a running watch, so an agent receives activity without watching for it. Polls
+passing checks as the watch below describes, and wakes a running watch, so an agent receives activity without watching for it. A
+poll reads spaces, their items, an item's independent parts and the agent queue's issue
+dependencies with bounded concurrency, so one slow forge does not hold back the rest. Polls
 read through the forge crate's shared request layer, which remembers each
 account's last response per URL in daemon memory and repeats the read as a
 conditional request, so an unchanged item costs a `304 Not Modified`, which
@@ -2154,7 +2173,15 @@ rather than something to merge hands back files with its completion. They are
 the workspace's results among its attached files, which stay when cleanup
 removes it, for as long as its removal record, so the user or the parent's
 agent can read them after the worktree is gone; the workspace's other attached
-files go with it. A chat's `done` records its completion on the chat
+files go with it. Files an agent sends the user with an alert or a question
+stay the same way, since the user may read the alert after the workspace is
+gone, and outlive the alert or question as a message's files outlive the
+message: clearing or withdrawing an alert and answering a question leave them
+among the space's files, which the user already sees and Quay may show, until
+`shoal files rm` or the retention removes them. The alert or question names them by their records rather than by path,
+so a file `shoal files rm` deleted drops out and a moved repository directory
+moves them, and a coordinating agent that receives the alert or question
+instead receives their paths as the message's attached files. A chat's `done` records its completion on the chat
 and nothing more: it has no cleanup to request, no branch another could
 integrate and no parent to tell, so it notifies the user and its agent keeps
 running, with the done state shown until `--undo` withdraws it. A workspace or a chat is a space: the user returns to both by name, from
@@ -2455,6 +2482,8 @@ Activity lookups run outside completion serialization; persisting results
 rechecks the watch set so cancelled watches cannot recreate their cursors.
 Unacknowledged deliveries persist with the cursor so timeout or disconnection
 cannot discard unseen updates; the CLI acknowledges after successful output.
+They are stored apart from what the cursor saw of each item, so hook deliveries
+and wake checks read only queued updates, never an item's discussion history.
 Waits share the cursor, so a newer wait in a workspace supersedes the running one
 before it takes updates, and an acknowledgement arriving while a newer wait runs
 leaves the updates pending for it; competing waits would consume updates the agent

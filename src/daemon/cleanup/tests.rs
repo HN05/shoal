@@ -39,7 +39,7 @@ fn fingerprint_sees_rewrites_that_restore_the_modification_time() {
     let modified = metadata.modified().unwrap();
     let change_time = |metadata: fs::Metadata| (metadata.ctime(), metadata.ctime_nsec());
     let changed = change_time(metadata);
-    let before = fingerprint(root.path()).unwrap();
+    let before = walk(root.path()).unwrap().fingerprint;
     // Filesystem timestamps are coarse; rewrite until the change time moves.
     while change_time(fs::metadata(&file).unwrap()) == changed {
         fs::write(&file, "after!").unwrap();
@@ -51,7 +51,7 @@ fn fingerprint_sees_rewrites_that_restore_the_modification_time() {
             .unwrap();
     }
     assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), modified);
-    assert_ne!(fingerprint(root.path()).unwrap(), before);
+    assert_ne!(walk(root.path()).unwrap().fingerprint, before);
 }
 
 #[tokio::test]
@@ -319,7 +319,10 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
-    let question = manager.ask_question(&workspace.name, ask).await.unwrap();
+    let question = manager
+        .ask_question(&workspace.name, ask, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
     assert_eq!(reason().await, CleanupReason::Held);
     manager
         .release_hold(
@@ -742,6 +745,66 @@ async fn ignored_changes_during_idle_delay_restart_timer_at_expiry() {
     expire(&mut timers);
     sweep(&manager, &mut timers).await.unwrap();
     assert!(!workspace.path.exists());
+}
+
+#[tokio::test]
+async fn git_state_is_inspected_when_the_idle_timer_starts_and_expires() {
+    use crate::test_support::{commit, git, manager, repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    fs::write(checkout.join("second"), "second\n").unwrap();
+    commit(&checkout, "second");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "idle".into(), None, None, None)
+        .await
+        .unwrap();
+    let mut timers = Timers::default();
+    sweep(&manager, &mut timers).await.unwrap();
+    let started = timers.idle[&workspace.id].snapshot;
+    // The workspace's last commit is no longer anywhere else, which changes
+    // neither its HEAD nor its files.
+    git(&checkout, &["reset", "--hard", "HEAD~1"]);
+    sweep(&manager, &mut timers).await.unwrap();
+    assert_eq!(timers.idle[&workspace.id].snapshot, started);
+    timers.idle.get_mut(&workspace.id).unwrap().since -= Duration::from_secs(600);
+    sweep(&manager, &mut timers).await.unwrap();
+    assert!(workspace.path.exists());
+    assert!(!timers.idle.contains_key(&workspace.id));
+    assert_eq!(
+        manager.cleanup_reason(&workspace).await,
+        CleanupReason::Unpushed { commits: 1 }
+    );
+}
+
+#[tokio::test]
+async fn a_process_in_the_worktree_stops_a_running_idle_timer() {
+    use crate::test_support::{manager, repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "idle".into(), None, None, None)
+        .await
+        .unwrap();
+    let mut timers = Timers::default();
+    sweep(&manager, &mut timers).await.unwrap();
+    assert!(timers.idle.contains_key(&workspace.id));
+    let mut child = tokio::process::Command::new("sleep")
+        .arg("60")
+        .current_dir(&workspace.path)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    sweep(&manager, &mut timers).await.unwrap();
+    assert!(!timers.idle.contains_key(&workspace.id));
+    child.kill().await.unwrap();
 }
 
 #[tokio::test]

@@ -5,7 +5,6 @@
 use std::{
     collections::HashMap,
     fs,
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -13,10 +12,11 @@ use std::{
 use anyhow::Result;
 use tokio::time::Instant;
 
-use super::Snapshot;
+use super::{Rule, Snapshot, Tree, change_time};
 use crate::{
     daemon::{events::EventCause, log, notifications::NotificationKind, workspace::Manager},
     model::Workspace,
+    process::DirectoryUsers,
     state::WorkspaceState,
     time::unix_seconds,
 };
@@ -27,37 +27,67 @@ const RETRY_AFTER: Duration = Duration::from_secs(60 * 60);
 /// What merged cleanup remembers between passes.
 #[derive(Default)]
 pub struct State {
-    /// Workspaces whose removal failed, and when: retried once they change
-    /// or after [`RETRY_AFTER`], so a passing failure does not keep them.
-    retained: HashMap<String, (Snapshot, Instant)>,
+    /// The signals of workspaces whose removal failed, and when: retried once
+    /// HEAD or recorded activity changes or after [`RETRY_AFTER`], so a
+    /// passing failure does not keep them. A file change makes the workspace
+    /// wait for its idle period again.
+    retained: HashMap<String, (u64, Instant)>,
+    /// The newest file change each workspace's last walk saw, in Unix seconds
+    /// and no later than that walk. Change times only move forward, so until
+    /// the idle period passes that change, another walk could only find the
+    /// workspace in use; a modification time set into the future does not
+    /// defer walks past it.
+    changed: HashMap<String, u64>,
 }
 
 impl State {
     /// Whether a failed removal of this unchanged workspace is too recent to retry.
-    fn waits(&self, id: &str, snapshot: Snapshot) -> bool {
+    fn waits(&self, id: &str, signals: u64) -> bool {
         self.retained
             .get(id)
-            .is_some_and(|(retained, at)| *retained == snapshot && at.elapsed() < RETRY_AFTER)
+            .is_some_and(|(retained, at)| *retained == signals && at.elapsed() < RETRY_AFTER)
+    }
+
+    /// Whether the last walk saw a file change after `deadline`.
+    fn changed_after(&self, id: &str, deadline: u64) -> bool {
+        self.changed
+            .get(id)
+            .is_some_and(|changed| *changed > deadline)
+    }
+
+    /// Remember the newest change a walk at `now` saw, no later than the walk.
+    fn remember_change(&mut self, id: &str, changed: u64, now: u64) {
+        self.changed.insert(id.to_owned(), changed.min(now));
+    }
+
+    fn forget_removed(&mut self, workspaces: &[Workspace]) {
+        let present = |id: &String| workspaces.iter().any(|workspace| &workspace.id == id);
+        self.retained.retain(|id, _| present(id));
+        self.changed.retain(|id, _| present(id));
     }
 }
 
-/// One pass over every ready workspace; a failure in one does not skip the others.
-pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
-    sweep_at(manager, state, unix_seconds()).await
+/// One pass over every ready workspace, reading the processes in each from
+/// `users`; a failure in one does not skip the others.
+pub async fn sweep(manager: &Manager, state: &mut State, users: &DirectoryUsers) -> Result<()> {
+    sweep_at(manager, state, unix_seconds(), users).await
 }
 
 /// A pass as of `now`, in Unix seconds.
-async fn sweep_at(manager: &Manager, state: &mut State, now: u64) -> Result<()> {
+async fn sweep_at(
+    manager: &Manager,
+    state: &mut State,
+    now: u64,
+    users: &DirectoryUsers,
+) -> Result<()> {
     let workspaces = manager.list_workspaces().await?;
-    state
-        .retained
-        .retain(|id, _| workspaces.iter().any(|workspace| &workspace.id == id));
+    state.forget_removed(&workspaces);
     let mut failed = super::WorkspaceFailures::default();
     for workspace in workspaces {
         if workspace.state != WorkspaceState::Ready || manager.sweep_skips(&workspace.path).await {
             continue;
         }
-        if let Err(error) = sweep_workspace(manager, state, &workspace, now).await {
+        if let Err(error) = sweep_workspace(manager, state, &workspace, now, users).await {
             failed.push(&workspace.id, &workspace.name, &error);
         }
     }
@@ -69,13 +99,11 @@ async fn sweep_workspace(
     state: &mut State,
     workspace: &Workspace,
     now: u64,
+    users: &DirectoryUsers,
 ) -> Result<()> {
-    let Some(snapshot) = idle_candidate(manager, workspace, now).await else {
+    let Some(snapshot) = idle_candidate(manager, state, workspace, now, users).await else {
         return Ok(());
     };
-    if state.waits(&workspace.id, snapshot) {
-        return Ok(());
-    }
     let (kind, message, recorded) = match manager.remove_merged_idle(&workspace.id, snapshot).await
     {
         Ok(false) => return Ok(()),
@@ -95,7 +123,7 @@ async fn sweep_workspace(
             log!("merged cleanup retained {}: {error:#}", workspace.name);
             state
                 .retained
-                .insert(workspace.id.clone(), (snapshot, Instant::now()));
+                .insert(workspace.id.clone(), (snapshot.signals, Instant::now()));
             let recorded = manager
                 .record_retained(&workspace.id, EventCause::Merged, &error)
                 .await;
@@ -111,27 +139,33 @@ async fn sweep_workspace(
 }
 
 /// The snapshot of a merged workspace idle for its configured period, or
-/// `None`. Cheap checks come first: recorded activity, then Git and process
-/// state, and only then a walk of the worktree's files.
-async fn idle_candidate(manager: &Manager, workspace: &Workspace, now: u64) -> Option<Snapshot> {
+/// `None`. Cheap checks come first: recorded activity and the change time the
+/// last walk saw, then Git and process state and the failed-removal backoff,
+/// and only then one walk of the worktree's files.
+async fn idle_candidate(
+    manager: &Manager,
+    state: &mut State,
+    workspace: &Workspace,
+    now: u64,
+    users: &DirectoryUsers,
+) -> Option<Snapshot> {
     let observed = async {
-        let settings = manager.workspace_settings(workspace).await?;
-        let Some(delay) = settings.cleanup.merged.delay() else {
+        let Some(deadline) = idle_deadline(manager, workspace, now).await? else {
             return Ok(None);
         };
-        let deadline = now.saturating_sub(delay.as_secs());
-        if manager.active_at(&workspace.id).await? > deadline {
+        if state.changed_after(&workspace.id, deadline)
+            || !manager.default_branch_fresh(&workspace.repository_id).await
+        {
             return Ok(None);
         }
-        if !manager.default_branch_fresh(&workspace.repository_id).await {
-            return Ok(None);
-        }
-        let Some(snapshot) = manager.merged_snapshot(&workspace.id).await? else {
+        let Some((path, signals)) = manager.merged_signals(&workspace.id, users).await? else {
             return Ok(None);
         };
-        let (path, git_dir) = (workspace.path.clone(), workspace.git_dir.clone());
-        let changed =
-            tokio::task::spawn_blocking(move || last_change(&path, git_dir.as_deref())).await??;
+        if state.waits(&workspace.id, signals) {
+            return Ok(None);
+        }
+        let (snapshot, changed) = walked_snapshot(path, workspace.git_dir.clone(), signals).await?;
+        state.remember_change(&workspace.id, changed, now);
         Ok((changed <= deadline).then_some(snapshot))
     }
     .await;
@@ -141,37 +175,49 @@ async fn idle_candidate(manager: &Manager, workspace: &Workspace, now: u64) -> O
     })
 }
 
-/// The newest change time, in Unix seconds, of any file in the worktree,
-/// including ignored files, and of the per-worktree Git state that commits,
-/// checkouts and staging update. Symlinks are not followed out of the tree.
-pub fn last_change(root: &Path, git_dir: Option<&Path>) -> Result<u64> {
-    fn changed(path: &Path) -> Result<u64> {
-        let metadata = fs::symlink_metadata(path)?;
-        Ok(metadata.ctime().max(metadata.mtime()).max(0) as u64)
-    }
-    let mut newest = 0;
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(path) = pending.pop() {
-        newest = newest.max(changed(&path)?);
-        if fs::symlink_metadata(&path)?.is_dir() {
-            for entry in fs::read_dir(&path)? {
-                let child = entry?.path();
-                if child.file_name().is_none_or(|name| name != ".git") {
-                    pending.push(child);
-                }
-            }
-        }
-    }
+/// The time, in Unix seconds, after which any use keeps the workspace as of
+/// `now`, or `None` when merged cleanup is disabled for it or recorded
+/// activity already keeps it.
+async fn idle_deadline(manager: &Manager, workspace: &Workspace, now: u64) -> Result<Option<u64>> {
+    let settings = manager.workspace_settings(workspace).await?;
+    let Some(delay) = settings.cleanup.merged.delay() else {
+        return Ok(None);
+    };
+    let deadline = now.saturating_sub(delay.as_secs());
+    Ok((manager.active_at(&workspace.id).await? <= deadline).then_some(deadline))
+}
+
+/// The snapshot of a merged candidate at `path` with `signals`, and the
+/// newest change its walk saw, in Unix seconds.
+async fn walked_snapshot(
+    path: PathBuf,
+    git_dir: Option<PathBuf>,
+    signals: u64,
+) -> Result<(Snapshot, u64)> {
+    let tree = tokio::task::spawn_blocking(move || walk_with_git_state(&path, git_dir.as_deref()))
+        .await??;
+    let snapshot = Snapshot {
+        rule: Rule::Merged,
+        signals,
+        tree: tree.fingerprint,
+    };
+    Ok((snapshot, tree.changed))
+}
+
+/// One walk of the worktree, whose newest change also covers the
+/// per-worktree Git state that commits, checkouts and staging update.
+fn walk_with_git_state(root: &Path, git_dir: Option<&Path>) -> Result<Tree> {
+    let mut tree = super::walk(root)?;
     let state: Vec<PathBuf> = git_dir
         .into_iter()
         .flat_map(|dir| ["HEAD", "index", "logs/HEAD"].map(|file| dir.join(file)))
         .collect();
     for path in state {
         if path.try_exists()? {
-            newest = newest.max(changed(&path)?);
+            tree.changed = tree.changed.max(change_time(&fs::symlink_metadata(&path)?));
         }
     }
-    Ok(newest)
+    Ok(tree)
 }
 
 #[cfg(test)]

@@ -81,11 +81,11 @@ pub(crate) async fn issue_activity(
     number: u64,
 ) -> Result<Snapshot> {
     async {
-        let issue = repo.read(account, ItemKind::Issue, number).await?;
-        let mut snapshot = Snapshot::item(&issue);
-        let discussion = reads
-            .discussion(repo, account, ItemKind::Issue, number)
-            .await;
+        let (issue, discussion) = tokio::join!(
+            repo.read(account, ItemKind::Issue, number),
+            reads.discussion(repo, account, ItemKind::Issue, number),
+        );
+        let mut snapshot = Snapshot::item(&issue?);
         snapshot.record_comments(DISCUSSION, discussion);
         Ok::<_, anyhow::Error>(snapshot)
     }
@@ -103,13 +103,16 @@ pub(crate) async fn pr_activity(
     branch: Option<&str>,
 ) -> Result<Snapshot> {
     let pull = branch_pull(repo, account, number, branch).await?;
+    let (discussion, reviews, checks) = tokio::join!(
+        reads.discussion(repo, account, ItemKind::Pr, number),
+        reads.review_activity(repo, account, number),
+        open_checks(reads, repo, account, &pull),
+    );
     let mut snapshot = Snapshot::item(&pull);
-    let discussion = reads.discussion(repo, account, ItemKind::Pr, number).await;
     snapshot.record_comments(DISCUSSION, discussion);
-    let reviews = reads.review_activity(repo, account, number).await;
     snapshot.record_comments("reviews", reviews);
-    if pull.item.state == ItemState::Open {
-        snapshot.record_checks(&pull, reads.checks(repo, account, &pull).await);
+    if let Some(checks) = checks {
+        snapshot.record_checks(&pull, checks);
     }
     Ok(snapshot)
 }
@@ -124,18 +127,34 @@ pub(crate) async fn pr_status(
 ) -> Result<PrStatus> {
     async {
         let pull = repo.read(account, ItemKind::Pr, number).await?;
-        let state = PrState::from(pull.item.state);
-        let mut status = PrStatus::new(url.into(), Some(state));
-        if state == PrState::Open {
+        let (checks, verdicts) = tokio::join!(
+            open_checks(reads, repo, account, &pull),
+            reads.verdicts(repo, account, number),
+        );
+        let mut status = PrStatus::new(url.into(), Some(PrState::from(pull.item.state)));
+        if let Some(checks) = checks {
             let mut snapshot = Snapshot::default();
-            snapshot.record_checks(&pull, reads.checks(repo, account, &pull).await);
+            snapshot.record_checks(&pull, checks);
             status.record_snapshot(snapshot);
         }
-        status.record_reviews(reads.verdicts(repo, account, number).await);
+        status.record_reviews(verdicts);
         Ok::<_, anyhow::Error>(status)
     }
     .await
     .hint_login(reads)
+}
+
+/// The checks on `pull`'s head while it is open; a closed PR has none to read.
+async fn open_checks(
+    reads: &impl RestReads,
+    repo: &ForgeRepo,
+    account: &Account,
+    pull: &Current,
+) -> Option<Result<Vec<RestCheck>>> {
+    if pull.item.state != ItemState::Open {
+        return None;
+    }
+    Some(reads.checks(repo, account, pull).await)
 }
 
 /// The commits of the PR once it has merged, or `None` before. The PR must

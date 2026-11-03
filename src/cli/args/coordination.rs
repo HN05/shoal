@@ -162,7 +162,7 @@ pub struct QuestionAskArgs {
     pub recommend: Option<String>,
     /// Ask in your conversation instead: your turn's final message becomes
     /// the question, and a reply in the conversation closes it.
-    #[arg(long, conflicts_with_all = ["question", "recommend", "reason", "choices", "wait", "resume"])]
+    #[arg(long, conflicts_with_all = ["question", "recommend", "reason", "choices", "attach", "wait", "resume"])]
     pub in_chat: bool,
     /// Why you recommend it.
     #[arg(long)]
@@ -170,6 +170,10 @@ pub struct QuestionAskArgs {
     /// A possible answer; repeat for each. The user may answer with its number.
     #[arg(long = "choice", value_name = "CHOICE")]
     pub choices: Vec<String>,
+    /// Send a file with it, such as a screenshot of a choice, as PATH or
+    /// PATH#TITLE; repeat for more. shoal files lists it, after cleanup too.
+    #[arg(long = "attach", value_name = "FILE")]
+    pub attach: Vec<String>,
     /// Wait for the answer and print it. Asking again waits for the same question.
     #[arg(long)]
     pub wait: bool,

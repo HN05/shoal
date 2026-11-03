@@ -146,17 +146,71 @@ fn a_missing_session_lists_nothing() {
         "Session 'gone' not found. The following sessions are active:"
     ));
     assert!(!nothing_to_list("Permission denied"));
+    let missing = "Session 'busy' not found. The following sessions are active:\n";
+    assert_eq!(
+        listed(&exited(1, "", missing)).ok(),
+        Some(Reply::Unanswered)
+    );
+    assert_eq!(
+        listed(&exited(0, "[]", "")).ok(),
+        Some(Reply::Answered("[]".to_owned()))
+    );
 }
 
 #[test]
 fn a_session_without_an_answer_is_reported_missing() {
     let missing = "No session named \"busy\" found.\n  help: Did you mean `busy`?\n";
-    assert_eq!(killed(&exited(1, missing, "")).ok(), Some(Kill::Missing));
-    assert_eq!(killed(&exited(0, "", "")).ok(), Some(Kill::Sent));
+    assert_eq!(
+        killed(&exited(1, missing, "")).ok(),
+        Some(Reply::Unanswered)
+    );
+    assert_eq!(killed(&exited(0, "", "")).ok(), Some(Reply::Answered(())));
     let none = "No active zellij sessions found.";
-    assert_eq!(killed(&exited(1, "", none)).ok(), Some(Kill::Sent));
+    assert_eq!(killed(&exited(1, "", none)).ok(), Some(Reply::Answered(())));
     let failed = killed(&exited(1, "Permission denied\n", "")).map_err(|error| error.to_string());
     assert_eq!(failed, Err("zellij failed: Permission denied".to_owned()));
+}
+
+#[test]
+fn a_pane_listing_without_panes_is_no_answer() {
+    assert!(!lists_panes(""));
+    assert!(!lists_panes("[]\n"));
+    assert!(!lists_panes("[\n]"));
+    assert!(lists_panes(
+        r#"[{"id": 0, "is_plugin": false, "tab_id": 0}]"#
+    ));
+    assert!(lists_panes("not a listing"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_session_reported_missing_is_asked_again_while_its_server_runs() {
+    let mut replies = vec![Reply::Unanswered, Reply::Unanswered, Reply::Answered("[]")].into_iter();
+    let mut asked = 0;
+    let answer = asked_while_running(
+        || {
+            asked += 1;
+            std::future::ready(Ok(replies.next().unwrap_or(Reply::Unanswered)))
+        },
+        || async { Ok(true) },
+    )
+    .await;
+    assert_eq!(answer.ok(), Some(Some("[]")));
+    assert_eq!(asked, 3);
+
+    let ended = asked_while_running(
+        || async { Ok(Reply::<&str>::Unanswered) },
+        || async { Ok(false) },
+    )
+    .await;
+    assert_eq!(ended.ok(), Some(None));
+
+    let busy = asked_while_running(
+        || async { Ok(Reply::<&str>::Unanswered) },
+        || async { Ok(true) },
+    )
+    .await;
+    let busy = busy.map_err(|error| error.to_string());
+    assert_eq!(busy, Err("the running session does not answer".to_owned()));
 }
 
 /// What a command that exited with `code`, printing `stdout` and `stderr`,
@@ -340,21 +394,19 @@ async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
         .open_split(place, &server.shell(&command))
         .await
         .unwrap();
-    let pane = zellij
-        .pane(place, Some(&opened.instance))
-        .await
-        .unwrap()
-        .unwrap();
+    let pane = open_pane(zellij, place, Some(&opened.instance)).await;
     assert_eq!(pane.tab_name, "placed");
+    let panes = zellij.panes(&server.session).await.unwrap();
     assert_eq!(
-        zellij.panes(&server.session).await.unwrap().len(),
+        panes.len(),
         3,
-        "the user's pane, the tab's and its split"
+        "the user's pane, the tab's and its split: {panes:?}; {}",
+        what_zellij_lists(zellij, &server.session).await
     );
 
     zellij.close(place, Some("1:1")).await.unwrap();
     zellij.close(place, None).await.unwrap();
-    assert!(zellij.pane(place, None).await.unwrap().is_some());
+    open_pane(zellij, place, None).await;
 
     zellij.close(place, Some(&opened.instance)).await.unwrap();
     wait_until_gone(zellij, place).await;
@@ -362,8 +414,14 @@ async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
         session: &split.session,
         pane: &split.pane,
     };
-    assert!(zellij.pane(split, None).await.unwrap().is_some());
-    assert_eq!(zellij.panes(&server.session).await.unwrap().len(), 2);
+    open_pane(zellij, split, None).await;
+    let panes = zellij.panes(&server.session).await.unwrap();
+    assert_eq!(
+        panes.len(),
+        2,
+        "{panes:?}; {}",
+        what_zellij_lists(zellij, &server.session).await
+    );
     zellij.close(place, Some(&opened.instance)).await.unwrap();
 }
 
@@ -415,7 +473,23 @@ async fn a_place_recorded_without_its_directory_reaches_its_server() {
         session: &server.session,
         pane: "terminal_0",
     };
-    assert!(reached.pane(users, None).await.unwrap().is_some());
+    open_pane(&reached, users, None).await;
+}
+
+/// A listing Zellij reports missing is asked again only while the server
+/// runs, the recorded instance where there is one: a session restarted
+/// meanwhile numbers its panes afresh.
+#[tokio::test]
+async fn a_listing_is_asked_again_only_on_the_recorded_instance() {
+    let Some(server) = Isolated::start() else {
+        return;
+    };
+    let session = server.session.as_str();
+    let (instance, _) = server.zellij.instance(session).await.unwrap().unwrap();
+    assert!(server.zellij.runs(session, Some(&instance)).await.unwrap());
+    assert!(server.zellij.runs(session, None).await.unwrap());
+    assert!(!server.zellij.runs(session, Some("1:0")).await.unwrap());
+    assert!(!server.zellij.runs("ended", None).await.unwrap());
 }
 
 #[tokio::test]
@@ -438,6 +512,29 @@ async fn a_session_left_with_no_pane_ends() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     panic!("{} never ended", server.session);
+}
+
+/// The pane `place`, which is open on `instance`, or any instance without
+/// one; failing, what Zellij lists then tells why it was not found.
+async fn open_pane(zellij: &Zellij, place: PaneRef<'_>, instance: Option<&str>) -> Pane {
+    if let Some(pane) = zellij.pane(place, instance).await.unwrap() {
+        return pane;
+    }
+    panic!(
+        "{} is not open on {instance:?}; {}",
+        place.pane,
+        what_zellij_lists(zellij, place.session).await
+    );
+}
+
+/// The server of `session` and what Zellij prints listing its panes, as
+/// the reason for a failed assertion.
+async fn what_zellij_lists(zellij: &Zellij, session: &str) -> String {
+    let instance = zellij.instance(session).await;
+    let mut list = zellij.action(session);
+    list.args(["list-panes", "--all", "--json"]);
+    let output = Run::new(list).timeout(TIMEOUT).capture().await;
+    format!("the server is {instance:?} and Zellij lists {output:?}")
 }
 
 /// Wait until `place` is gone; the limit is only a hang guard.

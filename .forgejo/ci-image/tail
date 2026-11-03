@@ -1,0 +1,8 @@
+#!/bin/sh
+# The runner starts each job container with `tail -f /dev/null` as its first
+# process, which never reaps the orphans that come to it. As that first
+# process, run tail under tini, which does; anywhere else, this is plain tail.
+if [ "$$" -eq 1 ]; then
+  exec /usr/bin/tini -- /usr/bin/tail "$@"
+fi
+exec /usr/bin/tail "$@"

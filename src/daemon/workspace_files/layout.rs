@@ -59,11 +59,16 @@ impl Layout {
     }
 
     /// Copies of the files `files` that the workspace `workspace_id` hands
-    /// back with its completion, apart from its other files since they
-    /// outlive its removal.
-    pub(crate) fn keep_results(&self, workspace_id: &str, files: &[NewFile]) -> Result<Kept> {
+    /// the user with `message`, such as its completion or an alert, apart
+    /// from its other files since they outlive its removal.
+    pub(crate) fn keep_results(
+        &self,
+        workspace_id: &str,
+        message: &str,
+        files: &[NewFile],
+    ) -> Result<Kept> {
         let directory = self.root.join(RESULTS).join(workspace_id);
-        self.keep_in(&directory, workspace_id, "shoal done", files)
+        self.keep_in(&directory, workspace_id, message, files)
     }
 
     /// Copies of `files` in `directory`, for the workspace `workspace_id`.
@@ -260,7 +265,7 @@ pub(crate) struct Copy {
 }
 
 /// The copies [`Layout::keep`] made or reused for one message.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Kept {
     pub(crate) copies: Vec<Copy>,
     /// The directory of copies made for this message, rather than reused.
@@ -270,6 +275,11 @@ pub(crate) struct Kept {
 }
 
 impl Kept {
+    /// Whether the copies were made for an identical message before.
+    pub(crate) fn reused(&self) -> bool {
+        self.created.is_none()
+    }
+
     /// Delete the copies made for a message that was not queued, and the
     /// workspace's directory when nothing else is left in it, as when the
     /// workspace was removed while they were copied.

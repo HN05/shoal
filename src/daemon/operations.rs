@@ -9,7 +9,7 @@ mod worker;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     sync::{Arc, Mutex, PoisonError},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use anyhow::{Result, ensure};
@@ -57,7 +57,7 @@ struct State {
     interrupt: Option<worker::Interrupt>,
     /// The end the worker reported, which takes effect once it exits.
     reported: Option<Ended>,
-    ended: Option<(Ended, Instant)>,
+    ended: Option<Ended>,
 }
 
 impl Operations {
@@ -70,7 +70,6 @@ impl Operations {
             changed: watch::Sender::new(()),
         });
         let mut entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
-        entries.retain(|_, entry| !entry.expired());
         entries.insert(id.clone(), entry.clone());
         (id, entry)
     }
@@ -78,7 +77,19 @@ impl Operations {
     /// The operation `id`, while it runs or can still be followed.
     fn get(&self, id: &str) -> Option<Arc<Entry>> {
         let entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
-        entries.get(id).filter(|entry| !entry.expired()).cloned()
+        entries.get(id).cloned()
+    }
+
+    /// Forget operation `id`; followers that hold it keep reading it.
+    fn forget(&self, id: &str) {
+        let mut entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
+        entries.remove(id);
+    }
+
+    /// Forget operation `id`, which just ended, once [`RETAIN`] has passed.
+    async fn expire(&self, id: &str) {
+        tokio::time::sleep(RETAIN).await;
+        self.forget(id);
     }
 
     /// A new token that acts as `caller` until [`Self::revoke`] revokes it.
@@ -146,7 +157,7 @@ impl Entry {
                     message: format!("the operation's worker exited with status {code}"),
                 })
             });
-            state.ended = Some((ended, Instant::now()));
+            state.ended = Some(ended);
             state.interrupt = None;
         });
     }
@@ -155,14 +166,6 @@ impl Entry {
     pub(crate) fn running(&self) -> bool {
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         state.ended.is_none()
-    }
-
-    fn expired(&self) -> bool {
-        let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        state
-            .ended
-            .as_ref()
-            .is_some_and(|(_, at)| at.elapsed() >= RETAIN)
     }
 
     /// The kept events from the `after`th on, and the end once it came.
@@ -174,7 +177,7 @@ impl Entry {
             .filter(|event| event.index >= after)
             .cloned()
             .collect();
-        (events, state.ended.as_ref().map(|(ended, _)| ended.clone()))
+        (events, state.ended.clone())
     }
 
     /// Notified on each change.
@@ -207,7 +210,7 @@ impl Manager {
                 if let Some(token) = &token {
                     self.operations.revoke(token);
                 }
-                entry.end(1);
+                self.operations.forget(&id);
                 return Err(error);
             }
         };
@@ -222,7 +225,12 @@ impl Manager {
                 operations.revoke(&token);
             }
         };
-        tokio::spawn(worker::supervise(entry, worker, operation, released));
+        let operations = self.operations.clone();
+        let ended = id.clone();
+        tokio::spawn(async move {
+            worker::supervise(entry, worker, operation, released).await;
+            operations.expire(&ended).await;
+        });
         Ok(id)
     }
 

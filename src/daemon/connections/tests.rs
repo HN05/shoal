@@ -5,7 +5,7 @@ use tokio::io::{AsyncReadExt, BufReader};
 use super::*;
 use crate::protocol::RepositoryMethod::ListRepositories;
 use crate::{
-    daemon::{Server, questions::Ask, serve},
+    daemon::{Server, questions::Ask, serve, workspace_files::Attacher},
     protocol::{
         self, Body, DaemonMethod, ExecutionMethod, NotificationMethod, QuestionMethod, Request,
         Response,
@@ -56,7 +56,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         choices: Vec::new(),
     };
     let question = manager
-        .ask_question(&workspace.name, ask.clone())
+        .ask_question(&workspace.name, ask.clone(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let socket = &manager.paths.socket.clone();

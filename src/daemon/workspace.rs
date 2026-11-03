@@ -38,6 +38,7 @@ mod repo_removal;
 mod restore;
 pub(crate) mod review;
 mod sessions;
+mod shared_scans;
 mod shutdown_stop;
 mod signals;
 pub(crate) mod spotlight;
@@ -126,6 +127,8 @@ pub struct Manager {
     /// a system shutdown is cancelled, so later ones leave the work alone.
     pub(crate) shutdown_stopped: tokio::sync::Mutex<bool>,
     pub(crate) signals: signals::Signals,
+    /// Process scans shared by the checks for agents' running work.
+    pub(crate) work_scans: shared_scans::SharedScans,
     pub(crate) usage: usage::Usage,
     pub(crate) leftovers: crate::daemon::leftovers::Leftovers,
     /// Held shared from reading the tracked processes until those found
@@ -173,6 +176,7 @@ impl Manager {
             operations: Default::default(),
             shutdown_stopped: Default::default(),
             signals: Default::default(),
+            work_scans: Default::default(),
             usage: Default::default(),
             leftovers: Default::default(),
             chat_handoffs: Default::default(),
@@ -226,14 +230,18 @@ impl Manager {
     }
 
     pub async fn list_workspaces(&self) -> Result<Vec<Workspace>> {
+        self.list_workspaces_within(None).await
+    }
+
+    /// `root` and every workspace below it, or every workspace without
+    /// `root`, by name. Only the selected workspaces load their details.
+    pub async fn list_workspaces_within(&self, root: Option<&str>) -> Result<Vec<Workspace>> {
+        let root = root.map(str::to_owned);
         self.store
-            .run(|db| {
+            .run(move |db| {
                 let mut workspaces = db
-                    .prepare(&format!(
-                        "SELECT {} FROM workspaces ORDER BY name",
-                        store::WORKSPACE_COLUMNS
-                    ))?
-                    .query_map([], store::workspace)?
+                    .prepare(&tree::subtree_query(store::WORKSPACE_COLUMNS))?
+                    .query_map([root], store::workspace)?
                     .collect::<rusqlite::Result<Vec<_>>>()?;
                 for workspace in &mut workspaces {
                     load_details(db, workspace)?;
@@ -264,10 +272,8 @@ impl Manager {
     /// HEAD. A workspace process sees its own subtree with its own workspace
     /// first, since scoped commands without a target act on the first one.
     pub async fn visible_workspaces(&self, owner: Option<&str>) -> Result<Vec<Workspace>> {
-        let mut workspaces = self.list_workspaces().await?;
+        let mut workspaces = self.list_workspaces_within(owner).await?;
         if let Some(owner) = owner {
-            let subtree = self.subtree(owner).await?;
-            workspaces.retain(|w| subtree.contains(&w.id));
             workspaces.sort_by_key(|w| w.id != owner);
         }
         let deadline = review::check_deadline();
@@ -366,7 +372,8 @@ impl Manager {
         let issue = self.issue_registration(&workspace.id).await?;
         let pr_cleanup = self.pr_registration(&workspace.id).await?;
         let completion = self.completion(&workspace.id).await?;
-        self.store
+        let mut inspection = self
+            .store
             .run(move |db| {
                 Ok(Inspection {
                     issue,
@@ -383,7 +390,9 @@ impl Manager {
                     workspace,
                 })
             })
-            .await
+            .await?;
+        self.annotate_stops(&mut inspection.executions).await;
+        Ok(inspection)
     }
 
     pub async fn create_workspace(
@@ -1029,9 +1038,7 @@ struct RemovalRules {
 fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.holds = holds::list(db, &workspace.id)?;
     workspace.review = review::list(db, &workspace.id)?;
-    workspace.latest_review = crate::daemon::reviews::store::latest(db, &workspace.id)?
-        .as_ref()
-        .map(Into::into);
+    workspace.latest_review = crate::daemon::reviews::store::latest_status(db, &workspace.id)?;
     workspace.agent_state = agent_state::current(db, &workspace.id)?;
     stack::load(db, workspace)?;
     tree::load(db, workspace)?;

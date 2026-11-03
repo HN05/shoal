@@ -6,8 +6,9 @@ use std::collections::{HashMap, HashSet};
 pub(crate) use crate::client::availability::*;
 use crate::{
     cli::{client, terminal},
-    model::Workspace,
+    model::{RunningAgent, Workspace},
     paths::Paths,
+    sessions::Origin,
 };
 
 impl Need {
@@ -104,9 +105,10 @@ pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Availa
 
 /// The IDs of workspaces with agent sessions, counting the places their
 /// running agents were recorded in and those Shoal created for them, such as
-/// a session left at its shell after a failed launch.
+/// a session left at its shell after a failed launch, but not the session
+/// of an agent Shoal stopped to restore later.
 async fn session_workspaces(paths: &Paths) -> HashSet<String> {
-    let agents: Vec<crate::model::RunningAgent> =
+    let agents: Vec<RunningAgent> =
         client::request(paths, crate::protocol::ExecutionMethod::ListAgents)
             .await
             .unwrap_or_default();
@@ -114,21 +116,12 @@ async fn session_workspaces(paths: &Paths) -> HashSet<String> {
         client::request(paths, crate::protocol::WorkspaceMethod::OwnedPlaces)
             .await
             .unwrap_or_default();
-    // A connected agent runs in its place. The record of an execution whose
-    // wrapper is gone, or of a place Shoal created, outlives its session.
-    let (connected, unknown): (Vec<_>, Vec<_>) = agents
-        .iter()
-        .filter_map(|agent| Some((agent, agent.origin.as_ref()?)))
-        .partition(|(agent, _)| agent.agent.is_some());
-    let connected: Vec<_> = connected
-        .into_iter()
-        .map(|(agent, place)| (agent.workspace_id.as_str(), place))
-        .collect();
-    let mut owners = terminal::session_owners(&connected);
+    let places = agent_places(&agents);
+    let mut owners = terminal::session_owners(&places.connected);
     // Each host lists its sessions once for the owners still in question.
-    let recorded: Vec<_> = unknown
+    let recorded: Vec<_> = places
+        .unknown
         .into_iter()
-        .map(|(agent, place)| (agent.workspace_id.as_str(), place))
         .chain(
             owned
                 .iter()
@@ -137,8 +130,37 @@ async fn session_workspaces(paths: &Paths) -> HashSet<String> {
         .filter(|(owner, _)| !owners.contains(*owner))
         .collect();
     let settings = workspace_settings(paths, recorded.iter().map(|(owner, _)| *owner)).await;
-    owners.extend(terminal::open_session_owners(&recorded, &settings).await);
+    owners.extend(terminal::open_session_owners(&recorded, &places.stopped, &settings).await);
     owners
+}
+
+/// Where agents were recorded running, as (workspace ID, place) pairs.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct AgentPlaces<'a> {
+    /// Connected agents, which run in their places.
+    connected: Vec<(&'a str, &'a Origin)>,
+    /// Connected agents Shoal stopped there to restore later.
+    stopped: Vec<(&'a str, &'a Origin)>,
+    /// Executions whose wrapper is gone, whose record outlives the session.
+    unknown: Vec<(&'a str, &'a Origin)>,
+}
+
+/// Sort the places of `agents` by what runs in them; an agent without a
+/// recorded place has none.
+fn agent_places(agents: &[RunningAgent]) -> AgentPlaces<'_> {
+    let mut places = AgentPlaces::default();
+    for agent in agents {
+        let Some(place) = agent.origin.as_ref() else {
+            continue;
+        };
+        let kind = match (&agent.agent, &agent.stopped) {
+            (None, _) => &mut places.unknown,
+            (Some(_), Some(_)) => &mut places.stopped,
+            (Some(_), None) => &mut places.connected,
+        };
+        kind.push((agent.workspace_id.as_str(), place));
+    }
+    places
 }
 
 /// The settings of each of `workspaces`, which say which hosts to ask about

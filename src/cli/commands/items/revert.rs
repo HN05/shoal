@@ -233,11 +233,12 @@ async fn remove(ctx: &Context, workspace: &Workspace) -> Result<()> {
 /// Record the revert workspace's assignment as done, so cleanup removes it
 /// once its PR merges.
 async fn finish(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    let method = AssignmentMethod::WorkspaceDone {
-        workspace: workspace.id.clone(),
+    let method = AssignmentMethod::MarkDone {
+        space: workspace.id.clone(),
         cleanup: true,
         integrated: false,
         results: Vec::new(),
+        sender_chat: None,
     };
     request::<crate::model::Completion>(&ctx.paths, method)
         .await

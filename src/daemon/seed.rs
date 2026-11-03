@@ -514,39 +514,29 @@ const GROUP_EXIT_WARNING: Duration = Duration::from_secs(30);
 async fn group_gone(group: i32) {
     let started = tokio::time::Instant::now();
     let mut warned = false;
-    while group_alive(group) {
-        if !warned && started.elapsed() >= GROUP_EXIT_WARNING {
-            log!("seed build group {group} survives SIGKILL; waiting for it to exit");
-            warned = true;
+    let mut check_failed = false;
+    loop {
+        match crate::process::identity::group_alive(group as u32).await {
+            Ok(false) => return,
+            Ok(true) => {
+                if !warned && started.elapsed() >= GROUP_EXIT_WARNING {
+                    log!("seed build group {group} survives SIGKILL; waiting for it to exit");
+                    warned = true;
+                }
+            }
+            // A failed check counts as alive, so nothing writes once this
+            // returns.
+            Err(error) => {
+                if !check_failed {
+                    log!(
+                        "cannot check seed build group {group}; waiting for it to exit: {error:#}"
+                    );
+                    check_failed = true;
+                }
+            }
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-}
-
-fn group_alive(group: i32) -> bool {
-    // SAFETY: signal 0 only checks whether the group has members.
-    if unsafe { libc::killpg(group, 0) } != 0 {
-        return false;
-    }
-    match fs::read_dir("/proc") {
-        // Linux lists each member's state and group after its command name.
-        Ok(entries) => entries.flatten().any(|entry| {
-            fs::read_to_string(entry.path().join("stat"))
-                .is_ok_and(|stat| live_member(&stat, group))
-        }),
-        // Elsewhere launchd reaps orphans, so members disappear.
-        Err(_) => true,
-    }
-}
-
-/// Whether a `/proc/<pid>/stat` line is a live member of `group`: after the
-/// command name come the state, the parent PID and the process group.
-fn live_member(stat: &str, group: i32) -> bool {
-    let rest = stat.rsplit_once(") ").map_or("", |(_, rest)| rest);
-    let mut fields = rest.split(' ');
-    let state = fields.next();
-    let group_id = fields.nth(1);
-    state != Some("Z") && group_id == Some(group.to_string().as_str())
 }
 
 /// Wait for the process `pid` to exit without reaping it.

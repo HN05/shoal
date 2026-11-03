@@ -24,8 +24,15 @@ pub(super) async fn handle(
                 Ok(Body::Question(question))
             }));
         }
-        QuestionMethod::AskQuestion { space, ask } => {
-            Body::Question(manager.ask_question(&space, ask).await?)
+        QuestionMethod::AskQuestion {
+            space,
+            ask,
+            attachments,
+            sender_chat,
+        } => {
+            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
+            let asked = manager.ask_question(&space, ask, attachments, &attacher);
+            Body::Question(asked.await?)
         }
         QuestionMethod::AskInChat { space } => {
             manager

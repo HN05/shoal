@@ -20,6 +20,7 @@ async fn a_long_notification_listing_goes_in_pages() {
             unread_only: true,
             limit: 200,
         },
+        None,
     )
     .await
     .unwrap();

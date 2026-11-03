@@ -108,7 +108,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     for invalid in ["", "  ", "two\nlines", "bell\x07", &"x".repeat(513)] {
         assert!(
             manager
-                .send_message(&workspace.id, invalid.into())
+                .send_message(&workspace.id, invalid.into(), Vec::new(), &Attacher::User)
                 .await
                 .is_err(),
             "{invalid:?}"
@@ -116,7 +116,12 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     }
     for _ in 0..2 {
         manager
-            .send_message(&workspace.id, "PR #12 is ready to merge".into())
+            .send_message(
+                &workspace.id,
+                "PR #12 is ready to merge".into(),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }
@@ -140,6 +145,8 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
             NotificationMethod::SendMessage {
                 space: target.clone(),
                 message: "hello".into(),
+                attachments: Vec::new(),
+                sender_chat: None,
             },
             NotificationMethod::WithdrawMessage {
                 space: target.clone(),
@@ -188,7 +195,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
         .unwrap();
     let send = async |message: &str| {
         manager
-            .send_message(&sender.id, message.into())
+            .send_message(&sender.id, message.into(), Vec::new(), &Attacher::User)
             .await
             .unwrap()
             .notification
@@ -238,7 +245,12 @@ async fn senders_withdraw_their_own_messages_until_shown() {
         .unwrap();
     // The same message from it is its own, not collapsed into the earlier one.
     let own = manager
-        .send_message(&successor.id, "PR #14 is ready to merge".into())
+        .send_message(
+            &successor.id,
+            "PR #14 is ready to merge".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap()
         .notification
@@ -349,4 +361,130 @@ async fn a_failed_state_report_alerts_one_line_that_fits() {
         "{}",
         unread[0].message
     );
+}
+
+#[tokio::test]
+async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
+    use crate::{state::AgentState, test_support::repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let shot = temp.path().join("layout.png");
+    std::fs::write(&shot, "png").unwrap();
+    let attach = || {
+        vec![NewFile {
+            path: shot.clone(),
+            title: Some("Layout".into()),
+        }]
+    };
+    for _ in 0..2 {
+        manager
+            .send_message(&child.id, "Which layout?".into(), attach(), &Attacher::User)
+            .await
+            .unwrap();
+    }
+    // Sending the same files again collapses with the unread message.
+    let unread = manager.notifications(true, 50).await.unwrap();
+    let [sent] = unread.as_slice() else {
+        panic!("{unread:?}");
+    };
+    let [file] = sent.files.as_slice() else {
+        panic!("{sent:?}");
+    };
+    assert_eq!(
+        (file.name.as_str(), file.title.as_deref()),
+        ("layout.png", Some("Layout"))
+    );
+    assert_eq!(std::fs::read_to_string(&file.path).unwrap(), "png");
+    let attached = manager.attached_files(&child.name).await.unwrap();
+    assert_eq!(
+        attached
+            .iter()
+            .map(|f| (f.id, f.source))
+            .collect::<Vec<_>>(),
+        [(file.id, FileSource::Alert)]
+    );
+
+    // A coordinating agent receives the files with the message.
+    manager
+        .set_agent_state(&child.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    manager
+        .set_agent_state(&parent.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    let sent = manager
+        .send_message(&child.id, "Done".into(), attach(), &Attacher::User)
+        .await
+        .unwrap();
+    assert_eq!(sent.notification, None);
+    let received = manager.agent_messages(&parent.id).await.unwrap();
+    let [message] = received.as_slice() else {
+        panic!("{received:?}");
+    };
+    assert_eq!(message.message, "child: Done");
+    let [copy] = message.attachments.as_slice() else {
+        panic!("{message:?}");
+    };
+    assert_eq!(std::fs::read_to_string(copy).unwrap(), "png");
+
+    manager
+        .remove_workspace(
+            &child.id,
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    let listed = manager.notifications(false, 50).await.unwrap();
+    let kept = listed
+        .iter()
+        .find(|n| n.message == "Which layout?")
+        .unwrap();
+    assert_eq!(kept.files.len(), 1, "{kept:?}");
+    assert!(kept.files[0].path.exists());
+    assert!(copy.exists());
+}
+
+#[tokio::test]
+async fn a_message_to_the_user_sends_a_limited_number_of_files() {
+    use crate::test_support::repository;
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "sender".into(), None, None, None)
+        .await
+        .unwrap();
+    let shot = temp.path().join("shot.png");
+    std::fs::write(&shot, "png").unwrap();
+    let files = vec![NewFile::from(shot); crate::client::files::MAX_SENT + 1];
+    let error = manager
+        .send_message(&workspace.id, "Look".into(), files, &Attacher::User)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("at most"), "{error:#}");
+    assert!(
+        manager
+            .attached_files(&workspace.name)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(manager.notifications(false, 50).await.unwrap().is_empty());
 }

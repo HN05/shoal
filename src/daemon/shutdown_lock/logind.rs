@@ -1,7 +1,7 @@
 //! systemd-logind as the login manager, over the system bus.
 use anyhow::{Context, Result};
 use futures_util::StreamExt;
-use zbus::zvariant::OwnedFd;
+use zbus::OwnedFd;
 
 use super::LoginManager;
 use crate::daemon::log;

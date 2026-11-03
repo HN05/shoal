@@ -37,14 +37,14 @@ pub enum WorkspaceCommand {
     },
     /// Show workspace activity, changes, resources, and issue and PR state.
     ///
-    /// Name a workspace, or find the workspaces that link an issue or PR or
-    /// hold a resource: `status pr 12`, `status <issue-or-PR-URL>`, `status
-    /// resource <pool-or-member>`.
+    /// Name a workspace, or find the workspaces that link an issue, PR or CI
+    /// run or hold a resource: `status pr 12`, `status ci 2765`, `status
+    /// <issue-PR-or-run-URL>`, `status resource <pool-or-member>`.
     Status {
-        /// Workspace, issue or PR URL, or pr, issue or resource.
+        /// Workspace, issue, PR or CI run URL, or pr, issue, ci or resource.
         #[arg(value_name = "TARGET")]
         workspace: Option<String>,
-        /// Number, URL, or resource name after pr, issue or resource.
+        /// Number, URL, or resource name after pr, issue, ci or resource.
         #[arg(value_parser = item_reference)]
         item: Option<String>,
     },

@@ -151,7 +151,7 @@ shoal work --chats            # Running chats
 shoal work --repo my-project  # Only one repository's workspaces, chats and queued agents
 shoal work --status needs-input,failed  # Only rows with these statuses
 shoal status fix-login        # Workspace activity, changes, resources, issue and PR state
-shoal status pr 12            # Workspaces that link PR 12; also issue or resource
+shoal status pr 12            # Workspaces that link PR 12; also issue, ci or resource
 shoal config show fix-login   # Effective settings and the source of each value
 shoal config reference        # This release's command and configuration reference
 shoal config set agent.default codex
@@ -178,6 +178,7 @@ shoal diff fix-login           # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
 shoal alerts                  # Conflicts, finished agents, and removals you missed
 shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
+shoal alerts send "New layout" --attach shot.png  # Send the user a file with it
 shoal messages send "Stop the dev server" --space fix-login  # Message the agents of a workspace or chat
 shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
 shoal messages send --all "Rebase onto main"  # Message every running agent of the repository
@@ -262,7 +263,7 @@ outside one, choose from the interactive picker or pass a target for `--json`
 and noninteractive calls. Bare `shoal cd` always opens a picker. `shoal cd -`,
 `shoal attach -` and other commands that open, show or run something in a
 workspace take `-` for the workspace they last acted on; for `attach`, the one
-whose session you last detached from.
+whose session you last detached from, whichever command attached it.
 Use `shoal <command> --help` for options.
 
 To move changes between your workspace and the default branch:

@@ -21,6 +21,7 @@ async fn kept_completion_waits_for_running_and_unresolved_executions() {
             group_id: None,
             origin: None,
             agent: None,
+            stopped: None,
         };
         assert_eq!(
             inspect_lifecycle(Some(false), vec![execution]).await,
@@ -292,6 +293,25 @@ async fn the_watcher_closes_at_removal_only_what_the_daemon_does_not() {
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
     assert_eq!(watch_from(&host, None, None, &lifecycles, 5).await, 2);
     assert!(host.closed().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_daemon_absent_for_the_limit_ends_the_watch() {
+    let owned = Cell::new(true);
+    let mut daemon = DaemonPresence::new(|| owned.get());
+    tokio::time::advance(DAEMON_ABSENCE_LIMIT * 2).await;
+    assert!(daemon.seen_recently());
+    owned.set(false);
+    tokio::time::advance(DAEMON_ABSENCE_LIMIT - Duration::from_secs(1)).await;
+    assert!(daemon.seen_recently());
+    // A restarted daemon starts the limit over.
+    owned.set(true);
+    assert!(daemon.seen_recently());
+    owned.set(false);
+    tokio::time::advance(DAEMON_ABSENCE_LIMIT - Duration::from_secs(1)).await;
+    assert!(daemon.seen_recently());
+    tokio::time::advance(Duration::from_secs(1)).await;
+    assert!(!daemon.seen_recently());
 }
 
 /// `completion` is the recorded cleanup choice.

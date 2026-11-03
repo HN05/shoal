@@ -23,6 +23,7 @@ pub(in crate::cli::commands) async fn run(
                 in_chat,
                 reason,
                 choices,
+                attach,
                 wait,
                 space,
                 handed_over,
@@ -41,7 +42,7 @@ pub(in crate::cli::commands) async fn run(
             // Clap requires a space with --resume.
             match (space.or(handed_over), resume) {
                 (Some(space), Some(id)) => questions::resume(&ctx, space, id, ask).await,
-                (space, _) => questions::ask(&ctx, space, ask, wait).await,
+                (space, _) => questions::ask(&ctx, space, ask, attach, wait).await,
             }
         }
         CoordinationCommand::Questions {

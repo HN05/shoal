@@ -67,7 +67,9 @@ pub(super) async fn handle(
         Operation::File(method) => files::handle(&server.manager, method, caller).await,
         Operation::Item(method) => items::handle(&server.manager, method, caller).await,
         Operation::Ci(method) => ci::handle(&server.manager, method, caller).await,
-        Operation::Notification(method) => notifications::handle(&server.manager, method).await,
+        Operation::Notification(method) => {
+            notifications::handle(&server.manager, method, caller).await
+        }
         Operation::Operations(method) => {
             operations::handle(&server.manager, method, caller, scope).await
         }

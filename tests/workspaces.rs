@@ -23,7 +23,7 @@ mod pty;
 
 #[path = "support/daemon.rs"]
 mod daemon_fixture;
-use daemon_fixture::{CommandGroup, DaemonGuard};
+use daemon_fixture::{CommandGroup, DaemonGuard, Detached};
 
 #[path = "support/git.rs"]
 mod git_fixture;
@@ -54,9 +54,11 @@ use tempfile::TempDir;
 
 struct Fixture {
     // Fields drop in declaration order: the commands stop while the daemon
-    // still answers them.
+    // still answers them, and what left their group stops before the
+    // directory goes.
     commands: CommandGroup,
     daemon: DaemonGuard,
+    _detached: Detached,
     root: TempDir,
     repo: PathBuf,
 }
@@ -134,6 +136,7 @@ impl Fixture {
         let daemon = DaemonGuard::start(root.path(), &mut daemon_launch(root.path()));
         let fixture = Self {
             commands: CommandGroup::new(),
+            _detached: Detached::new(root.path().join("state")),
             root,
             repo,
             daemon,
@@ -2759,7 +2762,8 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
             "no workspace holds resource missing",
         ),
         (vec!["pr"], "pr needs a number or URL"),
-        (vec!["summary", "7"], "put pr, issue or resource before"),
+        (vec!["ci", "2765"], "no workspace links CI run 2765"),
+        (vec!["summary", "7"], "put pr, issue, ci or resource before"),
     ] {
         let output = fixture.run(&[&["status"], target.as_slice()].concat());
         assert!(!output.status.success(), "{target:?}");
@@ -20909,8 +20913,8 @@ fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    let sent = fixture.request(serde_json::json!({"send_chat_message":{
-        "chat": "planning", "message": "Plan the next step"
+    let sent = fixture.request(serde_json::json!({"send_agent_message":{
+        "space": "planning", "message": "Plan the next step"
     }}));
     assert_eq!(sent["type"], "ok", "{sent}");
     // A hang guard only: the message ends the wait.
@@ -24402,7 +24406,9 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
 /// its shell would, logging the output to `$HOME/zmx-<name>.log`, and stays
 /// listed, with the labels set on it, once `$HOME/zmx-keep-sessions` exists.
 /// `$HOME/zmx-<name>.running` exists while the sent text runs.
-/// An attached session ends once `$HOME/zmx-attach-ends-session` exists.
+/// An attached session ends once `$HOME/zmx-attach-ends-session` exists, and
+/// one an attach creates stays listed after its command, as after a detach,
+/// once `$HOME/zmx-attach-detaches` exists.
 /// Calls from a place watcher go to `$HOME/zmx-watch-calls`, out of the
 /// recorded actions.
 const PASSTHROUGH_ZMX: &str = r#"#!/usr/bin/env python3
@@ -24499,6 +24505,9 @@ elif args[:1] == ['attach']:
     if (root / 'zmx-attach-ends-session').exists():
         rewrite_sessions(line for line in (root / 'zmx-sessions').read_text().splitlines()
             if not any(field == f'name={args[0]}' for field in line.strip().split('\t')))
+    if len(args) > 1 and (root / 'zmx-attach-detaches').exists():
+        with (root / 'zmx-sessions').open('a') as sessions:
+            sessions.write(f'  name={args[0]}\tpid=1\n')
     if len(args) > 1:
         os.environ['ZMX_SESSION'] = args[0]
         if os.environ.get('ZMX_TEST_LEAK_INPUT_MODE'):
@@ -25234,6 +25243,41 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
     );
     assert!(caller.status.success(), "{caller:?} {transcript}");
     assert!(herdr_calls(&fixture)[0].iter().any(|arg| arg == "--focus"));
+}
+
+#[test]
+fn attach_previous_returns_to_the_herdr_tab_a_focused_add_opened() {
+    let fixture = Fixture::with_config(Some(
+        "terminal.focus = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
+    ));
+    install_fake_herdr(&fixture);
+    let add = |name: &str, focus: bool| {
+        let mut args = vec!["add", fixture.repo.to_str().unwrap(), name, "--agent", "pi"];
+        if focus {
+            args.push("--focus");
+        }
+        let (caller, transcript) = herdr_call(&fixture, &args, "");
+        assert!(caller.status.success(), "{caller:?} {transcript}");
+        let (worker, transcript) =
+            fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
+        assert!(worker.status.success(), "{worker:?} {transcript}");
+    };
+    // A tab opened in the background shows nothing to return to.
+    add("hidden", false);
+    let (output, transcript) = herdr_call(&fixture, &["attach", "-"], "");
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains("no previous workspace for `shoal attach`"),
+        "{transcript}"
+    );
+    add("shown", true);
+    let before = herdr_calls(&fixture).len();
+    let (output, transcript) = herdr_call(&fixture, &["attach", "-"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(
+        herdr_calls(&fixture)[before..],
+        [vec!["tab", "focus", "w1:t9"]]
+    );
 }
 
 #[test]
@@ -28163,6 +28207,82 @@ fn attach_previous_returns_to_the_session_last_detached_from() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "other"]);
     drop((persist, other));
+}
+
+#[test]
+fn attach_previous_returns_to_a_session_an_agent_launch_left_running() {
+    let fixture = Fixture::new();
+    fixture.add("launched");
+    fixture.add("other");
+    let home = fixture.root.path();
+    let session = |name: &str| format!("  name={name}\tpid=1\tclients=0\tshoal.workspace=w0\n");
+    let listed = session("launched") + &session("other");
+    fs::write(home.join("zmx-sessions"), &listed).unwrap();
+    let launched = agent_in_session(&fixture, "launched", "launched");
+    let other = agent_in_session(&fixture, "other", "other");
+    let (output, transcript) = fixture.interactive(&["attach", "other"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    // An agent launched here runs in a new session this terminal attaches
+    // to, which outlives the detach.
+    install_test_script(home.join("bin/claude"), "#!/bin/sh\nexit 0\n");
+    fs::write(home.join("zmx-attach-detaches"), "").unwrap();
+    let mut launch = fixture.command();
+    launch.args(["claude", "launched"]);
+    let (output, transcript) = fixture.terminal_command(&mut launch, "", true);
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        transcript.contains("run `shoal attach launched` to return"),
+        "{transcript}"
+    );
+    fs::remove_file(home.join("zmx-attach-detaches")).unwrap();
+    fs::write(home.join("zmx-sessions"), &listed).unwrap();
+    let (output, transcript) = fixture.interactive(&["attach", "-"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let attached = zmx_calls(&fixture)
+        .into_iter()
+        .rfind(|call| call[0] == "attach")
+        .unwrap();
+    assert_eq!(attached, ["attach", "launched"]);
+    drop((launched, other));
+}
+
+#[test]
+fn attach_previous_returns_to_a_herdr_tab_an_agent_launch_left_open() {
+    let fixture = Fixture::with_config(Some("[terminal]\ndefault_host = 'herdr'\n"));
+    install_fake_herdr(&fixture);
+    install_fake_agents(&fixture, &["claude"]);
+    fixture.add("shown");
+    fixture.add("other");
+    let record = |workspace: &str, place: &str| {
+        let recorded = fixture.request(serde_json::json!({"record_owned_place": {
+            "workspace": workspace,
+            "origin": {"host": "herdr", "group": "w1", "place": place,
+                       "data": {"HERDR_SESSION": "work"}},
+        }}));
+        assert!(recorded.get("error").is_none(), "{recorded}");
+    };
+    record("other", "w1:p4");
+    let (output, transcript) = fixture.interactive(&["attach", "other"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let previous = || {
+        let before = herdr_calls(&fixture).len();
+        let (output, transcript) = fixture.interactive(&["attach", "-"], "");
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+        herdr_calls(&fixture)[before..]
+            .iter()
+            .find(|call| call[..2] == ["tab", "focus"])
+            .unwrap()[2]
+            .clone()
+    };
+    assert_eq!(previous(), "w1:t4");
+    // Outside Herdr, an agent launch opens a tab and attaches its session.
+    let mut launch = fixture.command();
+    launch.args(["claude", "shown"]);
+    let (output, transcript) = fixture.terminal_command(&mut launch, "", true);
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    // The fake Herdr runs no worker to record the tab it opened.
+    record("shown", "w1:p9");
+    assert_eq!(previous(), "w1:t9");
 }
 
 #[test]

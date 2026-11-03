@@ -89,7 +89,8 @@ pub enum SessionsCommand {
     /// Terminal agents and chats run in zmx sessions that keep running after
     /// their terminal closes or detaches. Without a target, attaches the
     /// current workspace's session, else the current checkout's only running
-    /// chat, else offers a picker.
+    /// chat, else offers a picker. The session of an agent Shoal stopped
+    /// until its automatic restore is not offered.
     Attach {
         /// Workspace or running chat, by name.
         #[arg(id = "workspace", value_name = "TARGET")]

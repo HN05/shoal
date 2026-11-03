@@ -20,7 +20,7 @@ use crate::{
     agent::ModelChoice,
     daemon::notifications::NotificationKind,
     execution::TrackedAgent,
-    process::{execution::Processes, identity as process},
+    process::execution::Processes,
     protocol::timing,
     state::{AgentState, ExecutionState, WorkspaceState},
 };
@@ -634,6 +634,14 @@ impl Manager {
             .flatten()
     }
 
+    /// Mark each of `executions` whose agent protection stopped while its
+    /// wrapper waits to restore it.
+    pub(crate) async fn annotate_stops(&self, executions: &mut [crate::model::Execution]) {
+        for execution in executions {
+            execution.stopped = self.agent_overload(&execution.id).await;
+        }
+    }
+
     pub(crate) async fn agent_was_overloaded(&self, id: &str) -> bool {
         self.agent_overload(id).await.is_some()
     }
@@ -841,7 +849,11 @@ impl Manager {
         if agents.is_empty() {
             return Ok(false);
         }
-        let scan = process::scan(agents.iter().map(|agent| agent.id.clone()).collect()).await?;
+        // Only wake checks read this, so checks made at the same time share a scan.
+        let scan = self
+            .work_scans
+            .scan(agents.iter().map(|agent| agent.id.clone()).collect())
+            .await?;
         Ok(agents
             .iter()
             .any(|agent| Processes::runs_outside_group(agent, &scan)))

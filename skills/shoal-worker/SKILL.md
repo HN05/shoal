@@ -35,13 +35,10 @@ Open your PR with `shoal pr open`: it pushes your branch, then links the
 branch's open PR or opens one (`--title`, `--body-file`, `--label`, `--draft`).
 A linked issue supplies the default title and, when no body is supplied,
 `Closes #<number>`. A supplied body is used verbatim; include a closing reference
-yourself when the PR completes the issue. A PR can close several issues, one
-`Closes #<number>` line each, so work it does beyond its issue can close the
-open issue that tracks it, which `shoal issue list <words>` finds. Before
-opening an issue or PR, read the repository's contribution rules and forge
-template for what the description needs, and choose labels from
-`shoal repo labels` (`--repo` for another repository), which lists each with
-its meaning.
+yourself when the PR completes the issue. Before opening an issue or PR, read
+the repository's contribution rules and forge template for what the description
+needs, and choose labels from `shoal repo labels` (`--repo` for another
+repository), which lists each with its meaning.
 Opening refuses an item without a label `required_labels` asks for; `pr open`,
 `issue open` and `ready` report `warnings` for missing labels or template
 headings, which you fix with `edit`. Change your PR or issue through Shoal,
@@ -204,7 +201,8 @@ HEAD for the user's integrations and takes a linked draft PR out of draft
 unless `[pr] undraft_on_ready = false`. When something new needs fixing, run
 `shoal ready --undo` before fixing it (`--draft` also returns the PR to draft), and
 `shoal ready` again once it is fixed. To tell the user about status without
-finishing, run `shoal alerts send "<one-line message>"`; if it stops applying before
+finishing, run `shoal alerts send "<one-line message>"`, adding `--attach FILE`
+for a screenshot or other file to show with it; if it stops applying before
 the user reads it, withdraw it with
 `shoal alerts withdraw <number>`, using the number it printed. Neither
 affects completion or cleanup. Ask for decisions with `shoal questions ask` instead (see
@@ -297,7 +295,9 @@ shoal questions ask "Which database should the cache use?" --recommend SQLite \
 ```
 
 State the decision in one line and always recommend an answer, so the user can
-reply with a word or a choice number; `--choice` is optional. The answer arrives
+reply with a word or a choice number; `--choice` is optional. `--attach FILE`,
+repeated for more, sends files with the question, such as a screenshot of each
+choice; `--in-chat` takes none. The answer arrives
 as a message naming the question. Continue with other
 work meanwhile, or end your turn to wait. When you cannot continue without the
 answer, add `--wait`: it blocks without a time limit and prints the answer, so run
@@ -524,27 +524,6 @@ workspace's simulator and passes its UDID as `SHOAL_SIM_UDID`. While the user
 tries it, read the screen and type into it to look at the same state they do.
 `shoal done` stops your demos; pass `--keep-demos` when the user is still trying
 one.
-
-## Recordings
-
-To show how a terminal interface looks, record it with a
-[VHS](https://github.com/charmbracelet/vhs) tape that types the keys a user
-would and shows what each command prints. Leave that output whole, without
-piping it through `grep`, `head` or the like, unless the rest buries what the
-recording shows; then keep enough of it to read in context. `Screenshot`
-captures a screen, `Output <file>.mp4` records a video, never a GIF, and
-`Output <file>.txt` writes each frame as text. Pace a video so
-the viewer can read each screen before the next key, about two to three seconds
-on a screen and longer on a dense one, without idle stretches. VHS renders
-headlessly, so look at the screenshots yourself before sharing them. Keep the
-tape, its output and any temporary state under the workspace's ignored build
-directory, such as `target/`, never in `/tmp` or elsewhere outside the
-workspace, so they go with it. Use the repository's recording helper when it
-has one. Otherwise start what the recording needs from the tape or from a setup
-step that finishes before it, never in the background with `&` or `nohup`, and
-stop anything still running from it once the recording ends: a process left
-behind outlives your workspace. Attach screenshots
-and videos with `shoal pr comment --attach`, and put text frames in code blocks.
 
 ## Secrets
 

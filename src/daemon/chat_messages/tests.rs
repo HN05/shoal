@@ -63,7 +63,7 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
     // Without an agent of its own, the worker is the chat's or the user's
     // own work, which the user hears about.
     manager
-        .send_message(&worker.id, "first".into())
+        .send_message(&worker.id, "first".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     manager
@@ -75,12 +75,17 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .await
         .unwrap();
     manager
-        .send_message(&worker.id, "second".into())
+        .send_message(&worker.id, "second".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     // The worker's agent coordinates the helper below it, not the chat.
     manager
-        .send_message(&helper.id, "to the worker".into())
+        .send_message(
+            &helper.id,
+            "to the worker".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(received(&manager, &chat).await, ["worker: second"]);
@@ -110,7 +115,12 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .await
         .unwrap();
     manager
-        .send_message(&helper.id, "to the chat".into())
+        .send_message(
+            &helper.id,
+            "to the chat".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -134,7 +144,12 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
         async move { manager.wait_chat_messages(&chat).await }
     });
     manager
-        .send_message(&worker.id, "done with the tests".into())
+        .send_message(
+            &worker.id,
+            "done with the tests".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let woken = waiting.await.unwrap().unwrap();
@@ -167,7 +182,7 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
     );
     assert!(waiting.await.unwrap().unwrap().superseded);
     manager
-        .send_message(&worker.id, "next".into())
+        .send_message(&worker.id, "next".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let delivered = manager.chat_updates(&chat.id).await.unwrap();
@@ -245,7 +260,7 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     manager
-        .send_message(&worker.id, "unread".into())
+        .send_message(&worker.id, "unread".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     // Ready marks reach only a coordinator, never the user.
@@ -256,6 +271,7 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
                 Some(&worker.id),
                 None,
                 "marked ready".into(),
+                Vec::new(),
                 Source::Agent,
             )
             .await
@@ -277,7 +293,7 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
     assert_eq!(user(&manager).await, std::slice::from_ref(&unread));
     // The worker is the user's again.
     manager
-        .send_message(&worker.id, "later".into())
+        .send_message(&worker.id, "later".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     assert_eq!(
@@ -319,7 +335,7 @@ async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
     manager
-        .send_message(&worker.id, "unread".into())
+        .send_message(&worker.id, "unread".into(), Vec::new(), &Attacher::User)
         .await
         .unwrap();
     // The worker is renamed and a new workspace takes its name before the
@@ -353,4 +369,88 @@ async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
         "{error:#}"
     );
     manager.withdraw_message(&worker.id, id).await.unwrap();
+}
+
+#[tokio::test]
+async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_moved() {
+    let (temp, manager) = manager().await;
+    let (_, worker) = chat_and_worker(&temp, &manager).await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            worker.repository_id.clone().into(),
+            "chat-4".into(),
+            "codex".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    manager
+        .assign_chat(&worker.id, Some(chat.id.clone()))
+        .await
+        .unwrap();
+    manager
+        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .await
+        .unwrap();
+    let shot = temp.path().join("layout.png");
+    std::fs::write(&shot, "png").unwrap();
+    manager
+        .send_message(
+            &worker.id,
+            "Which layout?".into(),
+            vec![shot.into()],
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let [copy] = messages[0].attachments.as_slice() else {
+        panic!("{messages:?}");
+    };
+    assert_eq!(std::fs::read_to_string(copy).unwrap(), "png");
+
+    // The worker's repository directory moves, as a chat of another
+    // repository may coordinate it.
+    let repo = manager.repository(&worker.repository_id).await.unwrap();
+    let source = repo.workspaces_dir.unwrap();
+    let destination = temp.path().join("moved");
+    std::fs::rename(&source, &destination).unwrap();
+    let (from, to) = (source.clone(), destination.clone());
+    let id = worker.repository_id.clone();
+    manager
+        .store
+        .run(move |db| {
+            let tx = db.transaction()?;
+            crate::daemon::workspace_files::rebase(&tx, &id, &from, &to)?;
+            super::rebase_attachments(&tx, &from, &to)?;
+            tx.commit()?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let [moved] = messages[0].attachments.as_slice() else {
+        panic!("{messages:?}");
+    };
+    assert_eq!(
+        *moved,
+        destination.join(copy.strip_prefix(&source).unwrap())
+    );
+
+    process.kill();
+    manager.end_finished_chats().await.unwrap();
+    let notifications = manager.notifications(false, 100).await.unwrap();
+    let [notification] = notifications.as_slice() else {
+        panic!("{notifications:?}");
+    };
+    assert_eq!(notification.message, "Which layout?");
+    let [file] = notification.files.as_slice() else {
+        panic!("{notification:?}");
+    };
+    assert_eq!(file.path, *moved);
+    assert_eq!(std::fs::read_to_string(&file.path).unwrap(), "png");
 }

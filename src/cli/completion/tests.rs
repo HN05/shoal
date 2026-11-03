@@ -144,6 +144,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                     origin: Some(Origin::created(HostName::Zmx, session.into())),
                     restarted_by: Vec::new(),
                     restart: None,
+                    stopped: None,
                 })
                 .into(),
             )

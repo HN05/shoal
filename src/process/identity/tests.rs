@@ -908,3 +908,54 @@ async fn discovers_marked_processes_and_rejects_changed_identity() {
     child.wait().await.unwrap();
     assert!(!alive(&identity).unwrap());
 }
+
+#[tokio::test]
+async fn a_group_stays_alive_while_a_member_outlives_its_leader() -> Result<()> {
+    use std::os::unix::process::CommandExt as _;
+    // The leader starts a member in its group, reports its PID and exits.
+    let leader = std::process::Command::new("sh")
+        .args(["-c", "sleep 30 >/dev/null & echo $!"])
+        .env_clear()
+        .process_group(0)
+        .stdout(std::process::Stdio::piped())
+        .spawn()?;
+    let group = leader.id();
+    let output = leader.wait_with_output()?;
+    let member: i32 = String::from_utf8(output.stdout)?.trim().parse()?;
+    let alive = group_alive(group).await;
+    // SAFETY: the member is the test's own background sleep.
+    unsafe { libc::kill(member, libc::SIGKILL) };
+    assert!(alive?, "the member keeps the group alive");
+    // A hang guard well past the member's exit; launchd or init reaps it.
+    tokio::time::timeout(Duration::from_secs(60), group_exited(group)).await??;
+    assert!(!group_alive(group).await?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_unreaped_leader_does_not_keep_its_group_alive() -> Result<()> {
+    use std::os::unix::process::CommandExt as _;
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "read line"])
+        .env_clear()
+        .process_group(0)
+        .stdin(std::process::Stdio::piped())
+        .spawn()?;
+    let group = child.id();
+    let alive = group_alive(group).await;
+    let observed = observe_unreaped_child(&mut child);
+    let exited = group_alive(group).await;
+    child.wait()?;
+    assert!(alive?, "the live leader keeps its group alive");
+    observed?;
+    assert!(!exited?, "the zombie leader does not");
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_group_is_read_after_the_state_and_parent() -> Result<()> {
+    // pid 40, command "a) b", state S, parent 7, group 30.
+    assert_eq!(stat_group("40 (a) b) S 7 30 30 0 -1")?, 30);
+    Ok(())
+}

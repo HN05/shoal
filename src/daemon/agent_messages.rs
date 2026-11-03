@@ -135,6 +135,18 @@ pub(crate) fn rebase_attachments(
         )?
         .query_map([repository_id], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<rusqlite::Result<_>>()?;
+    rewrite_attachments(tx, "agent_messages", attached, source, destination)
+}
+
+/// Point the attached paths of the messages `attached` of `table`, by ID
+/// with their JSON array of paths, from `source` to `destination`.
+pub(crate) fn rewrite_attachments(
+    tx: &Transaction<'_>,
+    table: &str,
+    attached: Vec<(i64, String)>,
+    source: &Path,
+    destination: &Path,
+) -> Result<()> {
     for (id, attachments) in attached {
         let paths: Vec<PathBuf> = serde_json::from_str::<Vec<PathBuf>>(&attachments)?
             .into_iter()
@@ -144,7 +156,7 @@ pub(crate) fn rebase_attachments(
             })
             .collect();
         tx.execute(
-            "UPDATE agent_messages SET attachments=?2 WHERE id=?1",
+            &format!("UPDATE {table} SET attachments=?2 WHERE id=?1"),
             params![id, serde_json::to_string(&paths)?],
         )?;
     }
@@ -296,6 +308,31 @@ impl Manager {
             .await
     }
 
+    /// Queue `message` with Shoal's copies `attachments` of files another
+    /// space's files already keep, such as those a workspace sent its
+    /// coordinator.
+    pub(crate) async fn queue_agent_message_attached(
+        &self,
+        workspace_id: &str,
+        message: String,
+        attachments: Vec<PathBuf>,
+    ) -> Result<()> {
+        let workspace_id = workspace_id.to_owned();
+        let queued = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                let queued = insert(&tx, &workspace_id, &message, &attachments)?;
+                tx.commit()?;
+                Ok(queued.is_some())
+            })
+            .await?;
+        if queued {
+            self.signals.agent_message_queued();
+        }
+        Ok(())
+    }
+
     pub(crate) async fn queue_agent_message_delivered(
         &self,
         workspace_id: &str,
@@ -339,6 +376,15 @@ impl Manager {
             self.signals.agent_message_queued();
         }
         Ok(())
+    }
+
+    /// [`Self::agent_messages`] of the workspace, or [`Self::chat_messages`]
+    /// of the running chat, `selector` names.
+    pub async fn space_messages(&self, selector: &str) -> Result<Vec<AgentMessage>> {
+        match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => self.agent_messages(&workspace.id).await,
+            PresentSpace::Chat(chat) => self.chat_messages(&chat.id).await,
+        }
     }
 
     /// Unread messages, oldest first. They stay unread until delivered.
@@ -397,17 +443,21 @@ impl Manager {
             .await
     }
 
-    /// Acknowledge the item updates and messages an agent received.
-    pub async fn acknowledge_agent_delivery(
+    /// Acknowledge the item updates, messages and leftovers the agent of the
+    /// workspace or running chat `selector` names received.
+    pub async fn acknowledge_space_delivery(
         &self,
         selector: &str,
         deliveries: Vec<String>,
         messages: Vec<i64>,
+        leftovers: &[u32],
     ) -> Result<()> {
         // Item updates first: a failure then leaves both to be delivered
         // again, while deleted messages could not be.
         self.acknowledge_pr_updates(selector, deliveries).await?;
-        self.mark_space_messages_delivered(selector, messages).await
+        self.mark_space_messages_delivered(selector, messages)
+            .await?;
+        self.acknowledge_leftovers(selector, leftovers).await
     }
 
     /// [`Self::mark_agent_messages_delivered`] for the workspace, or

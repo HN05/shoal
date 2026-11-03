@@ -613,11 +613,11 @@ impl Manager {
             .await
     }
 
-    /// Withdraw the workspace's pending request `id`, which its agent no
-    /// longer needs, and take back its notification while unread; once
-    /// shown, its decider is told instead.
+    /// Withdraw the pending request `id` of the space `selector` names,
+    /// which its agent no longer needs, and take back its notification while
+    /// unread; once shown, its decider is told instead.
     pub async fn withdraw_approval(&self, selector: &str, id: i64) -> Result<ApprovalRequest> {
-        let workspace = self.workspace(selector).await?;
+        let workspace = self.requesting_workspace(selector, id).await?;
         let workspace_id = workspace.id.clone();
         let selected = self
             .store
@@ -641,6 +641,18 @@ impl Manager {
             self.announce_withdrawal(&request).await;
         }
         Ok(request)
+    }
+
+    /// The workspace `selector` names, whose request `id` is; a chat it
+    /// names has none, since a chat requests no approvals.
+    async fn requesting_workspace(&self, selector: &str, id: i64) -> Result<Workspace> {
+        match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => Ok(workspace),
+            PresentSpace::Chat(chat) => bail!(
+                "chat {} has no approval request {id}; chats request no approvals",
+                chat.name
+            ),
+        }
     }
 
     /// Atomically withdraw the selected request and retract its unread notification.
@@ -1069,7 +1081,9 @@ impl Manager {
     /// looked up without ending one that exited, which would take the gate.
     async fn tell_agent(&self, space: &str, message: String) -> bool {
         let queued = match self.recorded_running_chat(space).await {
-            Ok(Some(chat)) => (self.queue_chat_message(&chat.id, None, None, None, message)).await,
+            Ok(Some(chat)) => {
+                (self.queue_chat_message(&chat.id, None, None, None, message, Vec::new())).await
+            }
             _ => self.queue_agent_message(space, message).await,
         };
         match queued {

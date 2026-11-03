@@ -170,7 +170,10 @@ mod streams {
             .unwrap();
         until(&mut subscription, changed(RecordKind::Link)).await;
 
-        let question = manager.ask_question(&workspace.id, ask()).await.unwrap();
+        let question = manager
+            .ask_question(&workspace.id, ask(), Vec::new(), &Attacher::User)
+            .await
+            .unwrap();
         until_each(
             &mut subscription,
             &[RecordKind::Question, RecordKind::Notification],
@@ -191,7 +194,12 @@ mod streams {
         })
         .await;
         manager
-            .send_message(&workspace.id, "Ready for review".into())
+            .send_message(
+                &workspace.id,
+                "Ready for review".into(),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
         until(&mut subscription, |update| {
@@ -289,7 +297,11 @@ mod streams {
             )
             .await
             .unwrap();
-        let question = daemon.manager.ask_question(&chat.id, ask()).await.unwrap();
+        let question = daemon
+            .manager
+            .ask_question(&chat.id, ask(), Vec::new(), &Attacher::User)
+            .await
+            .unwrap();
         let mut subscription = subscribe(daemon.connector(), &[Topic::Questions]).await;
         let records = snapshot(&mut subscription).await;
         let [Record::Question(shown)] = records.as_slice() else {
@@ -303,7 +315,11 @@ mod streams {
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
         let other = daemon.workspace("other").await;
-        daemon.manager.ask_question(&other.id, ask()).await.unwrap();
+        daemon
+            .manager
+            .ask_question(&other.id, ask(), Vec::new(), &Attacher::User)
+            .await
+            .unwrap();
         let elsewhere = crate::test_support::repository(&daemon.manager.paths.home, "elsewhere");
         daemon
             .manager
@@ -329,6 +345,44 @@ mod streams {
                 .all(|key| !matches!(key.kind, RecordKind::Notification | RecordKind::Question)),
             "{keys:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn a_scoped_subscription_without_workspace_records_names_its_tree() {
+        let daemon = TestDaemon::start().await;
+        let own = daemon.workspace("own").await;
+        let other = daemon.workspace("other").await;
+        for workspace in [&own, &other] {
+            daemon
+                .manager
+                .ask_question(&workspace.id, ask(), Vec::new(), &Attacher::User)
+                .await
+                .unwrap();
+            daemon
+                .manager
+                .send_agent_message(
+                    &workspace.id,
+                    "Rebase on main".into(),
+                    Vec::new(),
+                    &Attacher::User,
+                )
+                .await
+                .unwrap();
+        }
+        let topics = [Topic::Questions, Topic::Messages];
+        let mut subscription = subscribe(daemon.scoped(&own).await, &topics).await;
+        let records = snapshot(&mut subscription).await;
+        assert_eq!(records.len(), 2, "{records:?}");
+        for record in &records {
+            match record {
+                Record::Question(question) => assert_eq!(question.space_id, own.id),
+                Record::Message(message) => {
+                    assert_eq!(message.workspace_id.as_ref(), Some(&own.id));
+                    assert_eq!(message.workspace.as_ref(), Some(&own.name));
+                }
+                other => panic!("unexpected record: {other:?}"),
+            }
+        }
     }
 
     #[tokio::test]

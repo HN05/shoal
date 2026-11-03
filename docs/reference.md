@@ -491,8 +491,9 @@ workspace's count and the PID and command of the first ten, and with `--json`
 `directory` and `started_at` in Unix seconds. Its agent's hook names each new
 one once, up to ten per delivery, and they create no notification. A space's untracked processes carry its identity
 (`SHOAL_WORKSPACE_ID`, or `SHOAL_CHAT` for a chat) or are its leftovers:
-processes whose parent exited, so that launchd or init adopted them, or that
-descend from such a process, working in the worktree or the space's temporary
+processes whose parent exited, so that launchd or init adopted them, or on
+Linux the subreaper that adopts the daemon's orphans, such as `systemd --user`,
+or that descend from such a process, working in the worktree or the space's temporary
 directory, running a program inside the worktree, or carrying its identity,
 with every process they started wherever it runs. Never among them are the
 processes of tracked executions and chat agents, the processes that started
@@ -654,6 +655,7 @@ shoal happy codex fix-login              # Detached Happy session for the Happy 
 shoal t3 fix-login                       # Running T3 Code desktop app
 shoal status fix-login                   # Activity, changes, held resources, issue and PR state
 shoal status pr 12                       # Workspaces that link PR 12
+shoal status ci 2765                     # Workspaces that link CI run 2765
 shoal status resource devices            # Workspaces that hold a devices lease
 shoal stop fix-login                     # Stop agents and commands until shoal resume
 shoal rm fix-login                       # Remove; choose what to keep if work differs
@@ -738,7 +740,9 @@ when none is left. Workspaces the command would refuse for their state, or for
 `cd`, `attach` and the commands that open, show or run something in one workspace
 remember, across terminals, the workspaces each acted on, and take `-` as the
 target for the latest one other than the current workspace; `cd` also remembers
-the workspace it leaves. Scoped callers keep no such history.
+the workspace it leaves, and `attach` the workspace of each agent session it or
+a launch such as `add` or `claude` showed here and left running, and of each
+place a focused `add` opened. Scoped callers keep no such history.
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers
@@ -780,9 +784,9 @@ in `sessions`, or a failed `zmx list` in `sessions_error`. Workspace records fro
 the assigned issue in `links.issue`, assigned PR URLs in `links.prs`, and items
 recorded as opened or related in `links.opened` and `links.related`, each with
 `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
-`links.prs` empty. `status` lists opened and related items too. An issue or PR URL, `pr` or `issue` with a number or URL, or
-`resource` with a pool or member name shows every workspace that links or holds
-it instead, as a JSON array; a number must be linked in only one repository.
+`links.prs` empty. `status` lists opened and related items too. An issue, PR or
+CI run URL, `pr`, `issue` or `ci` with a number or URL, or `resource` with a pool
+or member name shows every workspace that links or holds it instead, as a JSON array; a number must be linked in only one repository.
 Scoped callers find only their own workspace and its child workspaces.
 
 ### Configured commands
@@ -1083,8 +1087,11 @@ Herdr session, and inside another Herdr session it is refused. A chat running
 in the Happy app or a terminal outside zmx has no session, and attaching says
 where it runs instead. Attach finds a session where the daemon recorded the
 workspace's agent or the chat running, or one Shoal opened for the workspace,
-such as a detached session left at its shell after a failed setup. Sessions
-are named after the workspace or chat, suffixed `-2`, `-3`, ... when the name
+such as a detached session left at its shell after a failed setup. The
+session of an agent Shoal stopped, such as for memory pressure, while it waits
+for its automatic restore is not offered: attaching to it says why the agent
+stopped, what restores it, and that `shoal queue start <workspace>` restores it
+now. Sessions are named after the workspace or chat, suffixed `-2`, `-3`, ... when the name
 is in use, so `zmx ls` and `zmx attach` work as well, and labelled with their
 owner, `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`.
 Sessions Shoal creates are also labelled `shoal.created=1`. Removing a
@@ -1136,7 +1143,8 @@ Failures before agent execution leave the tab open. Agent exits leave the tab
 open so work can continue, and with shell integration its shell enters the
 workspace at its next prompt; completion closes it once tracked executions resolve
 or the agent finishes its turn, as its hooks report it or, for an agent without
-them, as Herdr does, unless stopped work waits for `shoal resume`. Workspace
+them, as Herdr does, unless stopped work waits for `shoal resume` or the daemon
+stayed stopped for more than two minutes while the tab was open. Workspace
 removal closes it immediately, regardless of `terminal.close_when_done`, and daemon
 startup and `shoal cleanup` close those whose workspace is gone. Shoal closes
 only the pane it opened the tab with, so a pane you split off keeps the tab
@@ -4016,7 +4024,8 @@ sooner when [disk space](#overload-protection) runs low.
 Deleted directories are forgotten even when disabled, releasing resources and
 retaining branches; moved worktrees or recorded commands need manual recovery.
 HEAD and commands reset the timer; file changes, including ignored files, restart
-it when it expires.
+it when it expires, and Git state such as unpushed commits is checked when it
+starts and when it expires.
 Running/unknown commands, saved stopped work, directory users (including shells),
 dirty/unpushed work,
 simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, and failed checks block cleanup. Pushed means reachable
@@ -4169,6 +4178,7 @@ shoal alerts --follow   # Keep printing, and raise terminal notifications
 shoal alerts --keep-unread  # Show without marking read, also with --follow
 shoal alerts clear      # Delete all of them, including unread ones
 shoal alerts send "PR #12 is ready to merge" [--space S]  # Add one for a workspace or chat
+shoal alerts send "New layout" --attach shot.png  # Send a file with it
 shoal alerts withdraw <number> [--space S]   # Take back an unread one send added
 ```
 
@@ -4182,13 +4192,18 @@ stalled, and, when the daemon starts or
 reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
 a checkout with `core.bare` set, or a global worker template repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a space, a workspace or chat, which the entry names;
-agents use it to ask for attention without marking the assignment done. It
+agents use it to ask for attention without marking the assignment done.
+`--attach FILE`, repeated for up to 20, sends files with it, such as a
+screenshot, kept as [attached files](#attached-files); a coordinating agent
+receives them with the message. It
 prints the notification's number, or that a
 [coordinating agent](#child-workspaces) received the message instead; the
 space may withdraw its message by that number until it is shown. Each line shows when it came in, the workspace, and the message: the local
 time for today's, otherwise whole days, weeks, months or years ago, such as
-`1 day ago` or `2 weeks ago`;
-`--json` returns records with `kind`, `created_at`, and `read`. On a terminal,
+`1 day ago` or `2 weeks ago`, followed by an `Attached file:` line with the
+path of each file sent with it;
+`--json` returns records with `kind`, `created_at`, `read`, and `files`, each
+with its record's `id`, `name`, `title` and `path`, when there are any. On a terminal,
 `--follow` also sends each entry as an OSC 9 terminal notification, which iTerm2,
 Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 `allow-passthrough`); other terminals ignore it. Repeated
@@ -4310,8 +4325,10 @@ add row, asks for a file to add. Workspace processes cannot open files.
 terminal, lists them: each one's name, title, size,
 how it came (`message` for a file sent with `shoal messages send --attach`,
 `added` for one from `shoal files add`, `result` for one handed back with
-`shoal done --attach`), when, and the path of Shoal's copy in the repository
-directory's `.attachments`. Results outlive the workspace: they stay for as
+`shoal done --attach`, `alert` and `question` for one sent with
+`shoal alerts send --attach` and `shoal questions ask --attach`), when, and the path of Shoal's copy in the repository
+directory's `.attachments`. Results, and the files sent with alerts and
+questions, outlive the workspace: they stay for as
 long as its removal record, `cleanup.restore.retention_days` like its
 [checkpoints](#checkpoints-and-restore), and `shoal files <name>` still lists
 them, with when they go, and deletes them with `rm`. A chat's files outlive
@@ -4346,7 +4363,7 @@ reach a chat's files.
 ### Questions
 
 ```sh
-shoal questions ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--wait]
+shoal questions ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--attach FILE]... [--wait]
 shoal questions ask --in-chat        # The turn's final message in the chat is the question
 shoal questions [--space S]          # Pick an open question on a terminal
 shoal questions withdraw <number>    # Close a question the agent no longer needs answered
@@ -4357,8 +4374,10 @@ shoal questions <number> --answer <answer> # Answer text or a choice number
 `shoal questions ask` records a question for the user from the agents of a space, a
 workspace or chat: the
 decision, the recommended answer, an optional reason and optional choices, each
-one line with the same limits as `alerts send`. It raises a `question_asked`
-notification and prints the question number. `shoal questions <number> --answer <answer>` records the answer,
+one line with the same limits as `alerts send`, and files sent with `--attach`
+as `alerts send` sends them, such as screenshots of the choices. It raises a `question_asked`
+notification and prints the question number. Listings and the inbox name its
+files, and `--json` lists them as `files` as alerts do. `shoal questions <number> --answer <answer>` records the answer,
 resolving a choice number to that choice, and queues it for the space's agents
 as a message naming the question, so the [agent messages](#agent-messages) hooks
 deliver it and wake an idle agent; it confirms with the question text, since a
@@ -4386,7 +4405,7 @@ also delivers its message; it survives daemon restarts, waiting up to two minute
 for a daemon that went away to return and know the caller's scope again, or 10
 seconds for one that was not running. Asking an identical
 question again returns it while it is open or its answer is undelivered, so an
-interrupted `--wait` can be rerun; the same question with other details is refused.
+interrupted `--wait` can be rerun; the same question with other details or files is refused.
 A listing returns the newest open questions that fit one response and counts the older
 ones it leaves out. Only unscoped callers answer, except that a workspace process
 answers, by number, the questions asked in the [workspaces below its own](#child-workspaces).
@@ -4795,7 +4814,7 @@ the decision. Pending requests produce a daemon notification, collapsed until re
 a decision queues an [agent message](#agent-messages) for the requesting workspace
 naming the request, its target and the decision.
 
-`shoal approvals withdraw <number> [--workspace W]` lets the requesting workspace
+`shoal approvals withdraw <number> [--space S]` lets the requesting workspace
 take back a pending request it no longer needs, as releasing a lease does for a
 lease request. The request stays listed as `withdrawn` on the same terms as
 `outdated`, except a proposed issue, which is deleted as a decided proposal is.

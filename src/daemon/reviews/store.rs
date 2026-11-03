@@ -7,7 +7,7 @@ use crate::{
     agent::ModelChoice,
     reviews::{
         Check, FailureReason, Finding, FindingId, Outcome, Posted, Reply, Review, ReviewState,
-        ReviewTarget,
+        ReviewStatus, ReviewTarget,
         output::{Checked, ReviewerOutput},
     },
 };
@@ -323,7 +323,14 @@ const COLUMNS: &str = "reviews.id,workspace_id,workspaces.name,target,agent,revi
 
 /// Review `id` with its findings.
 pub(crate) fn load(db: &Connection, id: i64) -> Result<Option<Review>> {
-    let review = db
+    load_record(db, id)?
+        .map(|review| with_findings(db, review))
+        .transpose()
+}
+
+/// Review `id` without its findings.
+fn load_record(db: &Connection, id: i64) -> Result<Option<Review>> {
+    Ok(db
         .query_row(
             &format!(
                 "SELECT {COLUMNS} FROM reviews JOIN workspaces ON workspaces.id=workspace_id
@@ -332,8 +339,7 @@ pub(crate) fn load(db: &Connection, id: i64) -> Result<Option<Review>> {
             [id],
             review,
         )
-        .optional()?;
-    review.map(|review| with_findings(db, review)).transpose()
+        .optional()?)
 }
 
 /// The reviews of the workspaces `ids`, newest first.
@@ -378,15 +384,30 @@ pub(crate) fn finished_at(
 
 /// The workspace's newest review.
 pub(crate) fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Review>> {
-    let id: Option<i64> = db.query_row(
-        "SELECT MAX(id) FROM reviews WHERE workspace_id=?1",
-        [workspace_id],
-        |row| row.get(0),
-    )?;
-    match id {
+    match latest_id(db, workspace_id)? {
         Some(id) => load(db, id),
         None => Ok(None),
     }
+}
+
+/// The workspace's newest review as lists show it, which reads no replies.
+pub(crate) fn latest_status(db: &Connection, workspace_id: &str) -> Result<Option<ReviewStatus>> {
+    let Some(id) = latest_id(db, workspace_id)? else {
+        return Ok(None);
+    };
+    let Some(mut review) = load_record(db, id)? else {
+        return Ok(None);
+    };
+    review.findings = findings(db, id)?;
+    Ok(Some((&review).into()))
+}
+
+fn latest_id(db: &Connection, workspace_id: &str) -> Result<Option<i64>> {
+    Ok(db.query_row(
+        "SELECT MAX(id) FROM reviews WHERE workspace_id=?1",
+        [workspace_id],
+        |row| row.get(0),
+    )?)
 }
 
 /// The workspace's reviews before `id` that returned findings, oldest
@@ -439,38 +460,50 @@ fn review(row: &Row) -> rusqlite::Result<Review> {
 }
 
 fn with_findings(db: &Connection, mut review: Review) -> Result<Review> {
-    let id = review.id;
-    let mut findings = db
-        .prepare(
-            "SELECT number,severity,path,line,title,body,outcome,check_result,checked_by
-                FROM review_findings WHERE review_id=?1 ORDER BY number",
-        )?
-        .query_map([id], |row| {
-            let outcome: Option<String> = row.get(6)?;
-            let check = match (row.get(7)?, row.get(8)?) {
-                (Some(result), Some(review)) => Some(Check { result, review }),
-                _ => None,
-            };
-            Ok(Finding {
-                id: FindingId {
-                    review: id,
-                    number: row.get(0)?,
-                },
-                severity: row.get(1)?,
-                path: row.get(2)?,
-                line: row.get(3)?,
-                title: row.get(4)?,
-                body: row.get(5)?,
-                replies: Vec::new(),
-                outcome: outcome.as_deref().map(|text| json(6, text)).transpose()?,
-                check,
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .context("read review findings")?;
-    let mut replies = db.prepare(
-        "SELECT number,created_at,body FROM review_replies WHERE review_id=?1 ORDER BY id",
-    )?;
+    let mut findings = findings(db, review.id)?;
+    add_replies(db, review.id, &mut findings)?;
+    review.findings = findings;
+    Ok(review)
+}
+
+/// Review `id`'s findings without their replies.
+fn findings(db: &Connection, id: i64) -> Result<Vec<Finding>> {
+    db.prepare(
+        "SELECT number,severity,path,line,title,body,outcome,check_result,checked_by
+            FROM review_findings WHERE review_id=?1 ORDER BY number",
+    )?
+    .query_map([id], |row| {
+        let outcome: Option<String> = row.get(6)?;
+        let check = match (row.get(7)?, row.get(8)?) {
+            (Some(result), Some(review)) => Some(Check { result, review }),
+            _ => None,
+        };
+        Ok(Finding {
+            id: FindingId {
+                review: id,
+                number: row.get(0)?,
+            },
+            severity: row.get(1)?,
+            path: row.get(2)?,
+            line: row.get(3)?,
+            title: row.get(4)?,
+            body: row.get(5)?,
+            replies: Vec::new(),
+            outcome: outcome.as_deref().map(|text| json(6, text)).transpose()?,
+            check,
+        })
+    })?
+    .collect::<rusqlite::Result<Vec<_>>>()
+    .context("read review findings")
+}
+
+/// The replies to review `?1`'s findings, oldest first.
+const REPLIES: &str =
+    "SELECT number,created_at,body FROM review_replies WHERE review_id=?1 ORDER BY id";
+
+/// Add the replies of review `id` to its `findings`.
+fn add_replies(db: &Connection, id: i64, findings: &mut [Finding]) -> Result<()> {
+    let mut replies = db.prepare(REPLIES)?;
     for reply in replies.query_map([id], |row| {
         Ok((
             row.get::<_, i64>(0)?,
@@ -489,8 +522,7 @@ fn with_findings(db: &Connection, mut review: Review) -> Result<Review> {
             None => bail!("a reply names finding {id}.{number}, which is missing"),
         }
     }
-    review.findings = findings;
-    Ok(review)
+    Ok(())
 }
 
 /// The JSON in column `index`, refusing what does not parse.

@@ -12,6 +12,7 @@ use crate::{
         approvals::{Lifetime, PortSpecification, Specification, Target},
         operations::fake,
         questions::Ask,
+        workspace_files::Attacher,
     },
     forge::items::link::LinkKind,
     model::{
@@ -127,11 +128,12 @@ async fn done_renames_and_links_go_through_the_protocol() {
     let workspace = daemon.workspace("first").await;
     daemon.workspace("second").await;
     let app = daemon.connector();
-    let done = AssignmentMethod::WorkspaceDone {
-        workspace: workspace.id.clone(),
+    let done = AssignmentMethod::MarkDone {
+        space: workspace.id.clone(),
         cleanup: false,
         integrated: false,
         results: Vec::new(),
+        sender_chat: None,
     };
     let completion: Completion = connection::request(&app, done).await.unwrap();
     assert!(!completion.head.is_empty());
@@ -177,7 +179,7 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
     };
     let question = daemon
         .manager
-        .ask_question(&workspace.name, ask)
+        .ask_question(&workspace.name, ask, Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let app = daemon.connector();

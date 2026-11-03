@@ -39,17 +39,20 @@ pub(super) async fn handle(
             workspace,
             execution,
         } => Body::AgentStatus(manager.interrupt_turn(&workspace, execution).await?),
+        AgentMethod::WaitAgentUpdates { space } => {
+            let manager = manager.clone();
+            return Ok(Answer::wait(async move {
+                Ok(Body::PrUpdates(manager.wait_space_updates(&space).await?))
+            }));
+        }
         AgentMethod::AcknowledgePrUpdates {
-            space: workspace,
+            space,
             deliveries,
             messages,
             leftovers,
         } => {
             manager
-                .acknowledge_agent_delivery(&workspace, deliveries, messages)
-                .await?;
-            manager
-                .acknowledge_leftovers(&workspace, &leftovers)
+                .acknowledge_space_delivery(&space, deliveries, messages, &leftovers)
                 .await?;
             Body::Ok
         }
@@ -165,11 +168,11 @@ pub(super) async fn handle(
                     .await?,
             )
         }
-        AgentMethod::AgentMessages { workspace } => {
-            Body::AgentMessages(manager.agent_messages(&workspace).await?)
+        AgentMethod::AgentMessages { space } => {
+            Body::AgentMessages(manager.space_messages(&space).await?)
         }
-        AgentMethod::AgentUpdates { workspace } => {
-            Body::PrUpdates(manager.agent_updates(&workspace).await?)
+        AgentMethod::AgentUpdates { space } => {
+            Body::PrUpdates(manager.space_updates(&space).await?)
         }
         AgentMethod::MarkAgentMessagesDelivered { space, ids } => {
             manager.mark_space_messages_delivered(&space, ids).await?;
@@ -182,13 +185,12 @@ impl Scoped for AgentMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             AgentMethod::AwaitAgentWake { workspace, .. }
-            | AgentMethod::AgentMessages { workspace }
-            | AgentMethod::AgentSession { workspace }
-            | AgentMethod::MarkAgentMessagesDelivered {
-                space: workspace, ..
-            }
-            | AgentMethod::AgentUpdates { workspace }
-            | AgentMethod::AcknowledgePrUpdates { space: workspace, .. } => Some(workspace),
+            | AgentMethod::AgentSession { workspace } => Some(workspace),
+            AgentMethod::AgentMessages { space }
+            | AgentMethod::MarkAgentMessagesDelivered { space, .. }
+            | AgentMethod::AgentUpdates { space }
+            | AgentMethod::WaitAgentUpdates { space }
+            | AgentMethod::AcknowledgePrUpdates { space, .. } => Some(space),
             AgentMethod::ReportTurnFailure {
                 execution: Some(_), ..
             } => bail!("workspace processes report a failed turn only for their own execution"),

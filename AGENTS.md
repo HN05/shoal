@@ -20,6 +20,9 @@ when behavior changes, distinguishing decisions from proposals.
   cover several, or a match dispatches every command of a group, split it by
   responsibility into a directory of modules before adding to it; judge the
   responsibility, not the line count.
+- When you see a problem with the code's structure or code that should be
+  refactored, refactor it in your change when it lies within your work, and
+  otherwise file an issue for it instead of only mentioning it.
 - Tests live in a sibling `tests.rs` (`#[cfg(test)] mod tests;`), not inline in
   the implementation file.
 - Integrations such as agent tools, terminal hosts and apps implement callbacks
@@ -222,7 +225,9 @@ when behavior changes, distinguishing decisions from proposals.
 
 Keep documentation short and current. Say each thing once, where a reader looks for
 it: usage in README.md, behavior in docs/reference.md, decisions in docs/design.md,
-contributor rules here; a new document needs a subject none of those covers. Edit
+contributor rules here; a new document needs a subject none of those covers. The
+skills under `skills/` say only how to work with Shoal; a rule about anything
+else, such as how to write or structure code, goes here. Edit
 the sentence that describes the changed behavior instead of appending a paragraph,
 and cut text that restates code, tests, history, or another section. State a rule
 as its condition, never as the list of things that satisfy it: the condition
@@ -283,7 +288,9 @@ Jobs use the image built from
 version>`), so a run installs nothing: new CI tooling goes into the
 Containerfile, and only the owner rebuilds it with `.forgejo/ci-image/build.sh`
 on the runner host, then updates `workspace.package.rust-version` in `Cargo.toml`, the
-Containerfile's `ARG RUST`, and the `image:` tag in every workflow. Cargo builds
+Containerfile's `ARG RUST`, and the `image:` tag in every workflow. The image's
+`tail` runs the job container's PID 1 under tini, which reaps the orphans
+tests leave. Cargo builds
 share the runner-mounted `/ci-target`; every step that runs cargo there sources
 `.forgejo/scripts/lock-target-dir.sh` first, which takes a free slot directory
 instead of waiting, and runs `cargo clean --workspace`.
@@ -396,12 +403,25 @@ command uses it internally.
 ## Terminal recordings
 
 A PR that changes what Shoal prints or draws in the terminal, such as a picker,
-menu, listing or message, shows examples of the new interface, recorded as the
-shoal-worker skill describes. Record it with `python3 scripts/record.py <tape>`,
-which runs the tape against a development build in a sandbox beside it, under
-`target/`, and stops every process the recording started; `--help` shows how a
-setup script prepares the sandbox. Commit the tape and its output only when a
-document uses them.
+menu, listing or message, shows examples of the new interface, recorded with a
+[VHS](https://github.com/charmbracelet/vhs) tape. Record it with
+`python3 scripts/record.py <tape>`, which runs the tape against a development
+build in a sandbox beside it, under `target/`, and stops every process the
+recording started; `--help` shows how a setup script prepares the sandbox. Keep
+the tape and its output under `target/`, and commit them only when a document
+uses them.
+
+The tape types the keys a user would and shows what each command prints. Leave
+that output whole, without piping it through `grep`, `head` or the like, unless
+the rest buries what the recording shows; then keep enough of it to read in
+context. `Screenshot` captures a screen, `Output <file>.mp4` records a video,
+never a GIF, and `Output <file>.txt` writes each frame as text. Pace a video so
+the viewer can read each screen before the next key, about two to three seconds
+on a screen and longer on a dense one, without idle stretches. VHS renders
+headlessly, so look at the screenshots yourself before sharing them. Attach the
+video and screenshots to the PR with `shoal pr comment --attach`, and put text
+frames in code blocks.
+
 For a change to try rather than watch, offer `python3 scripts/demo.py` as a
 demo (`shoal demo start shoal -- python3 scripts/demo.py`): it runs a
 development build against sample workspaces, questions and approvals in a

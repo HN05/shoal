@@ -1,5 +1,7 @@
 //! Child workspaces: workspaces split from a parent, whose agent works on them
 //! or coordinates their agents. Children form a tree within one repository.
+use std::path::PathBuf;
+
 use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -51,19 +53,35 @@ impl Manager {
         self.store.run(move |db| subtree(db, &id)).await
     }
 
-    /// Queue `message` about the workspace named `name` for its coordinator:
-    /// the agent of its nearest ancestor that has one, or the running chat
-    /// that owns it or a nearer ancestor. `kind` is the notification the
-    /// event would be for the user. Returns false when there is no
-    /// coordinator, its messages are full, or the event comes from an agent
-    /// and the workspace has none of its own, since the coordinator itself
-    /// or the user acted there; the user then receives the event instead.
+    /// The ID, name and branch of `root` and every workspace below it, or
+    /// of every workspace without `root`, by name.
+    pub async fn workspace_refs_within(&self, root: Option<&str>) -> Result<Vec<WorkspaceRef>> {
+        let root = root.map(str::to_owned);
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .prepare(&subtree_query("id,name,branch"))?
+                    .query_map([root], row)?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+    }
+
+    /// Queue `message` about the workspace named `name` for its coordinator,
+    /// with Shoal's copies `attachments` of the files it sent: the agent of
+    /// its nearest ancestor that has one, or the running chat that owns it
+    /// or a nearer ancestor. `kind` is the notification the event would be
+    /// for the user. Returns false when there is no coordinator, its
+    /// messages are full, or the event comes from an agent and the workspace
+    /// has none of its own, since the coordinator itself or the user acted
+    /// there; the user then receives the event instead.
     pub(crate) async fn tell_coordinator(
         &self,
         name: &str,
         workspace_id: Option<&str>,
         kind: Option<NotificationKind>,
         message: String,
+        attachments: Vec<PathBuf>,
         source: Source,
     ) -> bool {
         let lookup = name.to_owned();
@@ -74,11 +92,12 @@ impl Manager {
             .await;
         let queued = match found {
             Ok(Some(Coordinator::Agent(workspace))) => {
-                self.queue_agent_message(&workspace, format!("{name}: {message}"))
-                    .await
+                let message = format!("{name}: {message}");
+                (self.queue_agent_message_attached(&workspace, message, attachments)).await
             }
             Ok(Some(Coordinator::Chat(chat))) => {
-                self.queue_chat_message(&chat, Some(name), workspace_id, kind, message)
+                let about = Some(name);
+                (self.queue_chat_message(&chat, about, workspace_id, kind, message, attachments))
                     .await
             }
             Ok(None) => return false,
@@ -158,6 +177,19 @@ pub(super) fn ensure_parent(db: &Connection, repository_id: &str, parent: &str) 
         "parent workspace is {state}; split from a ready workspace"
     );
     Ok(())
+}
+
+/// A query of `columns` from the workspace whose ID is parameter 1 and those
+/// below it, or from every workspace when the parameter is NULL, by name.
+pub(super) fn subtree_query(columns: &str) -> String {
+    format!(
+        "WITH RECURSIVE tree(id) AS (
+            SELECT ?1
+            UNION SELECT workspaces.id FROM workspaces
+                JOIN tree ON workspaces.parent_workspace_id=tree.id
+        ) SELECT {columns} FROM workspaces
+            WHERE ?1 IS NULL OR id IN (SELECT id FROM tree) ORDER BY name"
+    )
 }
 
 fn subtree(db: &Connection, id: &str) -> Result<Vec<String>> {

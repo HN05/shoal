@@ -176,6 +176,11 @@ fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
+    // Pending updates sit in their activity records again.
+    db.execute_batch(
+        "DROP TRIGGER workspace_pending_updates_removed;
+         DROP TRIGGER chat_pending_updates_removed; DROP TABLE pending_updates;",
+    )?;
     // Links name their workspace again, as before chats linked items.
     db.execute_batch(
         "DROP TRIGGER workspace_links_removed; DROP TRIGGER chat_links_removed;
@@ -225,6 +230,9 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN placed_by;")?;
     db.execute_batch("ALTER TABLE notifications DROP COLUMN workspace_id;")?;
     db.execute_batch("ALTER TABLE notifications DROP COLUMN subject;")?;
+    db.execute_batch(
+        "ALTER TABLE notifications DROP COLUMN files; ALTER TABLE questions DROP COLUMN files;",
+    )?;
     db.execute_batch("ALTER TABLE chat_messages DROP COLUMN workspace_id;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN scope_token;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN agent_execution;")?;

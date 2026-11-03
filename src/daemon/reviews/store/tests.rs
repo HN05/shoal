@@ -183,10 +183,34 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 [second, first]
             );
             assert_eq!(latest(db, "work")?.unwrap().id, second);
+            let status = latest_status(db, "work")?.unwrap();
+            assert_eq!((status.id, status.unresolved), (second, 0));
             assert_eq!(earlier(db, "work", second)?.len(), 1);
 
             resolve(db, finding, None)?;
             assert_eq!(load(db, first)?.unwrap().unresolved().count(), 1);
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_review_reads_its_replies_without_scanning_others() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = store(&directory).await;
+    store
+        .run(|db| {
+            let plan = db
+                .prepare(&format!("EXPLAIN QUERY PLAN {REPLIES}"))?
+                .query_map([1], |row| row.get::<_, String>(3))?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+                .join("; ");
+            assert!(
+                plan.contains("SEARCH review_replies USING INDEX review_replies_review"),
+                "{plan}"
+            );
+            assert!(!plan.contains("TEMP B-TREE"), "{plan}");
             Ok(())
         })
         .await

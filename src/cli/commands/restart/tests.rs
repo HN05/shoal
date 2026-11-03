@@ -26,6 +26,7 @@ fn a_joined_restart_stays_joined_once_it_ends() {
             run: Some("earlier".into()),
             joined: Vec::new(),
         }),
+        stopped: None,
     };
     let mut restarts = vec![Restart {
         workspace,
@@ -61,6 +62,7 @@ fn an_agent_another_command_of_the_run_restarted_is_skipped() {
         origin: None,
         restarted_by: Vec::new(),
         restart: None,
+        stopped: None,
     };
     let mut restarts = vec![Restart {
         workspace,

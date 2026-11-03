@@ -1,8 +1,8 @@
-use std::{fs, path::Path, sync::Arc};
+use std::{fs, os::unix::fs::MetadataExt, path::Path, sync::Arc};
 
 use super::*;
 use crate::test_support::{commit, git, manager, repository};
-use crate::{execution::recovery, model::CleanupReason};
+use crate::{daemon::workspace_files::Attacher, execution::recovery, model::CleanupReason};
 
 const HOUR: u64 = 3600;
 
@@ -69,12 +69,30 @@ impl Fixture {
             .unwrap();
     }
 
+    /// Let recorded activity no longer keep the workspace, so only its files do.
+    async fn age_out_activity(&self) {
+        let id = self.workspace.id.clone();
+        self.manager
+            .store
+            .run(move |db| {
+                db.execute("UPDATE workspaces SET active_at=0 WHERE id=?1", [id])?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+    }
+
     /// Run a pass `hours` from now and report whether the workspace remains.
     async fn kept_after(&self, hours: u64) -> bool {
         let mut state = State::default();
-        sweep_at(&self.manager, &mut state, unix_seconds() + hours * HOUR)
-            .await
-            .unwrap();
+        sweep_at(
+            &self.manager,
+            &mut state,
+            unix_seconds() + hours * HOUR,
+            &Default::default(),
+        )
+        .await
+        .unwrap();
         self.manager
             .list_workspaces()
             .await
@@ -334,7 +352,10 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
         reason: None,
         choices: vec![],
     };
-    let question = manager.ask_question(id, ask).await.unwrap();
+    let question = manager
+        .ask_question(id, ask, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
     assert!(f.kept_after(5).await, "an open question");
     manager
         .answer_question(question.id, "No".into(), None)
@@ -396,7 +417,7 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
 }
 
 #[test]
-fn last_change_covers_nested_files_and_worktree_git_state() {
+fn a_walk_sees_changes_of_nested_files_and_worktree_git_state() {
     let root = tempfile::tempdir().unwrap();
     let tree = root.path().join("tree");
     let git_dir = root.path().join("git");
@@ -407,10 +428,13 @@ fn last_change_covers_nested_files_and_worktree_git_state() {
         let metadata = fs::symlink_metadata(path).unwrap();
         metadata.ctime().max(metadata.mtime()) as u64
     };
-    let before = last_change(&tree, Some(&git_dir)).unwrap();
+    let before = walk_with_git_state(&tree, Some(&git_dir)).unwrap().changed;
     assert!(before >= newest(&tree.join("a/b/file")));
     fs::write(git_dir.join("HEAD"), "").unwrap();
-    assert!(last_change(&tree, Some(&git_dir)).unwrap() >= newest(&git_dir.join("HEAD")));
+    assert!(
+        walk_with_git_state(&tree, Some(&git_dir)).unwrap().changed
+            >= newest(&git_dir.join("HEAD"))
+    );
 }
 
 #[tokio::test]
@@ -437,24 +461,57 @@ async fn a_failed_fetch_keeps_merged_workspaces() {
 
 #[tokio::test(start_paused = true)]
 async fn a_failed_removal_is_retried_after_a_while_or_once_changed() {
-    let snapshot = Snapshot {
-        rule: super::super::Rule::Merged,
-        signals: 1,
-        tree: 2,
-    };
     let mut state = State::default();
-    assert!(!state.waits("w", snapshot));
-    state
-        .retained
-        .insert("w".into(), (snapshot, Instant::now()));
-    assert!(state.waits("w", snapshot));
-    assert!(!state.waits(
-        "w",
-        Snapshot {
-            tree: 3,
-            ..snapshot
-        }
-    ));
+    assert!(!state.waits("w", 1));
+    state.retained.insert("w".into(), (1, Instant::now()));
+    assert!(state.waits("w", 1));
+    assert!(!state.waits("w", 2), "HEAD or activity changed");
     tokio::time::advance(RETRY_AFTER).await;
-    assert!(!state.waits("w", snapshot));
+    assert!(!state.waits("w", 1));
+}
+
+#[tokio::test]
+async fn a_recent_file_change_defers_walks_until_its_idle_period_passes() {
+    let f = Fixture::new().await;
+    f.squash_merge();
+    f.age_out_activity().await;
+    let mut state = State::default();
+    let now = unix_seconds();
+    sweep_at(&f.manager, &mut state, now, &Default::default())
+        .await
+        .unwrap();
+    let changed = state.changed[&f.workspace.id];
+    assert!(changed + 4 * HOUR > now, "files changed just now");
+    assert!(state.changed_after(&f.workspace.id, changed - 1));
+    assert!(!state.changed_after(&f.workspace.id, changed));
+    sweep_at(&f.manager, &mut state, now + 5 * HOUR, &Default::default())
+        .await
+        .unwrap();
+    assert!(!f.workspace.path.exists());
+    sweep_at(&f.manager, &mut state, now + 5 * HOUR, &Default::default())
+        .await
+        .unwrap();
+    assert!(state.changed.is_empty(), "a removed workspace is forgotten");
+}
+
+#[tokio::test]
+async fn a_future_modification_time_defers_walks_no_later_than_the_walk() {
+    let f = Fixture::new().await;
+    f.squash_merge();
+    f.age_out_activity().await;
+    let file = f.workspace.path.join("future");
+    fs::write(&file, "").unwrap();
+    let now = unix_seconds();
+    let future = std::time::SystemTime::now() + std::time::Duration::from_secs(1000 * HOUR);
+    fs::File::options()
+        .write(true)
+        .open(&file)
+        .unwrap()
+        .set_modified(future)
+        .unwrap();
+    let mut state = State::default();
+    sweep_at(&f.manager, &mut state, now, &Default::default())
+        .await
+        .unwrap();
+    assert_eq!(state.changed[&f.workspace.id], now);
 }

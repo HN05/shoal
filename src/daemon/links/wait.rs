@@ -6,10 +6,13 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
+use futures_util::{StreamExt, TryStreamExt, stream};
 use rusqlite::{OptionalExtension, params};
 use tokio::sync::Notify;
 
-use self::cursor::{ActivityRecord, cursor_record, save_cursor_record};
+use self::cursor::{
+    ActivityRecord, all_pending, cursor_record, pending_updates, save_cursor_record, save_pending,
+};
 use super::{
     pr::RegistrationKind,
     space::{LinkSpace, require_ready_space},
@@ -17,6 +20,7 @@ use super::{
 use crate::{
     daemon::{agent_messages::AgentMessage, notifications::NotificationKind, workspace::Manager},
     forge::{
+        account::Account,
         items::{
             item::ItemState,
             link::{ItemKind, LinkKind, Selection},
@@ -24,7 +28,7 @@ use crate::{
         transport::limits::rate_limited,
         updates::{Edited, MergeCheck, Snapshot, Update, UpdateKind},
     },
-    model::{ConflictCheck, Workspace, WorkspaceRef},
+    model::{ConflictCheck, PresentSpace, Workspace, WorkspaceRef},
     repository,
 };
 
@@ -34,6 +38,12 @@ mod cursor;
 mod held;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
+
+/// How many spaces the background poll reads at once, and how many of one
+/// space's items: each read runs curl processes, and a slow forge must not
+/// hold back every other space's poll.
+const POLLED_SPACES_AT_ONCE: usize = 4;
+const ITEMS_READ_AT_ONCE: usize = 4;
 
 /// The bytes a response's updates and messages may take, leaving room for
 /// its other fields.
@@ -195,6 +205,29 @@ impl Manager {
             return Ok(Updates::superseded());
         }
         Ok(Updates::messages(messages))
+    }
+
+    /// [`Self::agent_updates`] of the workspace, or [`Self::chat_updates`] of
+    /// the running chat, `selector` names.
+    pub async fn space_updates(&self, selector: &str) -> Result<Updates> {
+        match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => self.agent_updates(&workspace.id).await,
+            PresentSpace::Chat(chat) => self.chat_updates(&chat.id).await,
+        }
+    }
+
+    /// The next messages or item activity of the agent of the workspace or
+    /// running chat `selector` names, unless a newer wait or delivery takes
+    /// them first: a workspace's as an unfiltered [`Self::wait_items`]
+    /// without a deadline finds them, a chat's as
+    /// [`Self::wait_chat_messages`] does.
+    pub async fn wait_space_updates(&self, selector: &str) -> Result<Updates> {
+        match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                (self.wait_items(&workspace.id, &Selection::default(), None)).await
+            }
+            PresentSpace::Chat(chat) => self.wait_chat_messages(&chat.id).await,
+        }
     }
 
     /// What the workspace's agent has not received: its settled messages and
@@ -609,60 +642,70 @@ impl Manager {
         items: Vec<(String, LinkKind)>,
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
-        let account = self.user_account();
-        let mut observations = Vec::new();
-        for (url, kind) in items {
-            let snapshot = match kind {
-                LinkKind::Issue => {
-                    let forge = self.issue_url_forge(&url).await?;
-                    let (number, _) = forge.issue(&url)?;
-                    forge.issue_activity(&account, number).await?
-                }
-                LinkKind::Pr => {
-                    let forge = self.pull_forge(&url).await?;
-                    let (number, _) = forge.pull(&url)?;
-                    let branch = selection.input.is_none().then(|| space.branch());
-                    let branch = branch.flatten();
-                    forge.activity(&account, number, branch).await?
-                }
-                LinkKind::Ci => {
-                    let forge = self.run_url_forge(&url).await?;
-                    forge.run_activity(&account, &url).await?
-                }
-            };
-            observations.push((url, snapshot));
+        let account = &self.user_account();
+        let branch = selection.input.is_none().then(|| space.branch());
+        let branch = branch.flatten();
+        stream::iter(items)
+            .map(|(url, kind)| async move {
+                let snapshot = self.read_item_activity(account, &url, kind, branch).await?;
+                Ok((url, snapshot))
+            })
+            .buffered(ITEMS_READ_AT_ONCE)
+            .try_collect()
+            .await
+    }
+
+    /// The activity of the item at `url`, a PR only while its head is
+    /// `branch` when one is given.
+    async fn read_item_activity(
+        &self,
+        account: &Account,
+        url: &str,
+        kind: LinkKind,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
+        match kind {
+            LinkKind::Issue => {
+                let forge = self.issue_url_forge(url).await?;
+                let (number, _) = forge.issue(url)?;
+                forge.issue_activity(account, number).await
+            }
+            LinkKind::Pr => {
+                let forge = self.pull_forge(url).await?;
+                let (number, _) = forge.pull(url)?;
+                forge.activity(account, number, branch).await
+            }
+            LinkKind::Ci => {
+                let forge = self.run_url_forge(url).await?;
+                forge.run_activity(account, url).await
+            }
         }
-        Ok(observations)
     }
 
     /// Poll linked items for integrations, with their own baseline, and queue
     /// the changes on each ready workspace's cursor, or hand them to each
     /// running chat's inbox.
     pub(crate) async fn poll_linked_item_activity(&self) -> Result<()> {
+        let mut polls = stream::iter(self.polled_spaces().await?)
+            .map(|space| async move {
+                let result = self.poll_space_item_activity(&space).await;
+                (space, result)
+            })
+            .buffer_unordered(POLLED_SPACES_AT_ONCE);
         let mut failure = None;
-        for space in self.polled_spaces().await? {
-            let id = space.id().to_owned();
-            let items = self.store.run(move |db| polled_items(db, &id)).await?;
-            if items.is_empty() {
-                continue;
-            }
-            let Err(error) = self.poll_space_item_activity(&space, items).await else {
+        while let Some((space, result)) = polls.next().await {
+            let Err(error) = result else {
                 continue;
             };
             // The limit is the forge's, not the space's; a later poll retries.
             if self.notify_rate_limit(&error).await {
                 continue;
             }
-            if failure.is_none() {
-                failure =
-                    Some(error.context(format!("background item activity for {}", space.name())));
-            }
+            failure.get_or_insert_with(|| {
+                error.context(format!("background item activity for {}", space.name()))
+            });
         }
-        if let Some(error) = failure {
-            Err(error)
-        } else {
-            Ok(())
-        }
+        failure.map_or(Ok(()), Err)
     }
 
     /// Tell the user when `error` is a forge's rate limit, and whether it is.
@@ -695,11 +738,14 @@ impl Manager {
         Ok(spaces)
     }
 
-    async fn poll_space_item_activity(
-        &self,
-        space: &LinkSpace,
-        items: Vec<(String, LinkKind)>,
-    ) -> Result<()> {
+    /// Read the activity of the space's polled items, and record and queue
+    /// what changed.
+    async fn poll_space_item_activity(&self, space: &LinkSpace) -> Result<()> {
+        let id = space.id().to_owned();
+        let items = self.store.run(move |db| polled_items(db, &id)).await?;
+        if items.is_empty() {
+            return Ok(());
+        }
         let observed_at = crate::time::unix_seconds();
         let items = self.items_to_look_up(space, items).await?;
         let observations = self
@@ -1113,10 +1159,10 @@ pub(super) fn queue_update(
     workspace_id: &str,
     update: Update,
 ) -> Result<()> {
-    let mut record = cursor_record(db, workspace_id, &update.url)?.unwrap_or_default();
+    let mut pending = pending_updates(db, workspace_id, &update.url)?;
     let url = update.url.clone();
-    record.pending.push(update);
-    save_cursor_record(db, workspace_id, &url, &record)
+    pending.push(update);
+    save_pending(db, workspace_id, &url, &pending)
 }
 
 /// Remove `deliveries` from the pending updates of the workspaces `ids`;
@@ -1126,17 +1172,11 @@ fn acknowledge_deliveries(
     ids: &[String],
     deliveries: &[String],
 ) -> Result<()> {
-    for (id, url, record) in activity_records(db, ids)? {
-        let mut record: ActivityRecord = serde_json::from_str(&record)?;
-        let pending = record.pending.len();
-        record
-            .pending
-            .retain(|update| !deliveries.contains(&update.delivery));
-        if record.pending.len() != pending {
-            db.execute(
-                "UPDATE pr_activity SET record=?1 WHERE space_id=?2 AND url=?3",
-                params![serde_json::to_string(&record)?, id, url],
-            )?;
+    for (id, url, mut pending) in all_pending(db, ids)? {
+        let count = pending.len();
+        pending.retain(|update| !deliveries.contains(&update.delivery));
+        if pending.len() != count {
+            save_pending(db, &id, &url, &pending)?;
         }
     }
     Ok(())
@@ -1145,20 +1185,11 @@ fn acknowledge_deliveries(
 /// The updates pending on the cursor of the space `id` for the items at
 /// `urls`.
 fn pending_on_cursor(db: &rusqlite::Connection, id: &str, urls: &[String]) -> Result<Vec<Update>> {
-    let mut statement = db.prepare("SELECT url,record FROM pr_activity WHERE space_id=?1")?;
-    let records = statement.query_map([id], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
-    let mut updates = Vec::new();
-    for record in records {
-        let (url, record) = record?;
-        if !urls.contains(&url) {
-            continue;
-        }
-        let record: ActivityRecord = serde_json::from_str(&record)?;
-        updates.extend(record.pending);
-    }
-    Ok(updates)
+    Ok(all_pending(db, &[id.to_owned()])?
+        .into_iter()
+        .filter(|(_, url, _)| urls.contains(url))
+        .flat_map(|(_, _, pending)| pending)
+        .collect())
 }
 
 /// Pending updates for one response, each with the workspace whose cursor
@@ -1234,10 +1265,9 @@ fn redeliver_after(
 ) -> Result<()> {
     let next = uuid::Uuid::new_v4().to_string();
     let mut seen = 0;
-    for (id, url, record) in activity_records(db, &[workspace.to_owned()])? {
-        let mut record: ActivityRecord = serde_json::from_str(&record)?;
+    for (id, url, mut pending) in all_pending(db, &[workspace.to_owned()])? {
         let mut moved = false;
-        for update in &mut record.pending {
+        for update in &mut pending {
             if update.delivery == delivery {
                 seen += 1;
                 if seen > kept {
@@ -1247,10 +1277,7 @@ fn redeliver_after(
             }
         }
         if moved {
-            db.execute(
-                "UPDATE pr_activity SET record=?1 WHERE space_id=?2 AND url=?3",
-                params![serde_json::to_string(&record)?, id, url],
-            )?;
+            save_pending(db, &id, &url, &pending)?;
         }
     }
     Ok(())
@@ -1294,24 +1321,6 @@ fn links_kind(
         }
     }
     Ok(false)
-}
-
-/// The activity record of every item of the workspaces `ids`, with its
-/// workspace and URL.
-fn activity_records(
-    db: &rusqlite::Connection,
-    ids: &[String],
-) -> Result<Vec<(String, String, String)>> {
-    let mut statement = db.prepare("SELECT ?1, url, record FROM pr_activity WHERE space_id=?1")?;
-    let mut records = Vec::new();
-    for id in ids {
-        records.extend(
-            statement
-                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-                .collect::<rusqlite::Result<Vec<_>>>()?,
-        );
-    }
-    Ok(records)
 }
 
 /// The workspace's items of a kind, or of every kind, that one use of its

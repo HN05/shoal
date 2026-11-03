@@ -26,9 +26,12 @@ pub(crate) async fn issue_activity(
     account: &Account,
     number: u64,
 ) -> Result<Snapshot> {
-    let issue = repo.read(account, ItemKind::Issue, number).await?;
-    let mut snapshot = Snapshot::item(&issue);
-    snapshot.record_comments(DISCUSSION, discussion(repo, account, number).await);
+    let (issue, discussion) = tokio::join!(
+        repo.read(account, ItemKind::Issue, number),
+        discussion(repo, account, number),
+    );
+    let mut snapshot = Snapshot::item(&issue?);
+    snapshot.record_comments(DISCUSSION, discussion);
     Ok(snapshot)
 }
 
@@ -40,16 +43,17 @@ pub(crate) async fn pr_activity(
 ) -> Result<Snapshot> {
     let pull = branch_pull(repo, account, number, branch).await?;
     let mut snapshot = Snapshot::item(&pull);
-    let (discussion, reviews, inline) = tokio::join!(
+    let (discussion, reviews, inline, checks) = tokio::join!(
         discussion(repo, account, number),
         reviews(repo, account, number),
         inline_comments(repo, account, number),
+        open_checks(repo, account, &pull),
     );
     snapshot.record_comments(DISCUSSION, discussion);
     snapshot.record_comments("reviews", reviews.and_then(|r| entries(&r, "node_id")));
     snapshot.record_comments("inline", inline);
-    if pull.item.state == ItemState::Open {
-        snapshot.record_keyed_checks(&pull, checks(repo, account, &pull).await);
+    if let Some(checks) = checks {
+        snapshot.record_keyed_checks(&pull, checks);
     }
     Ok(snapshot)
 }
@@ -61,16 +65,30 @@ pub(crate) async fn pr_status(
     url: &str,
 ) -> Result<PrStatus> {
     let pull = repo.read(account, ItemKind::Pr, number).await?;
-    let state = PrState::from(pull.item.state);
-    let mut status = PrStatus::new(url.into(), Some(state));
-    if state == PrState::Open {
+    let (checks, reviews) = tokio::join!(
+        open_checks(repo, account, &pull),
+        reviews(repo, account, number),
+    );
+    let mut status = PrStatus::new(url.into(), Some(PrState::from(pull.item.state)));
+    if let Some(checks) = checks {
         let mut snapshot = Snapshot::default();
-        snapshot.record_keyed_checks(&pull, checks(repo, account, &pull).await);
+        snapshot.record_keyed_checks(&pull, checks);
         status.record_snapshot(snapshot);
     }
-    let reviews = reviews(repo, account, number).await;
     status.record_reviews(reviews.and_then(|reviews| github_reviews(&reviews)));
     Ok(status)
+}
+
+/// The checks on `pull`'s head while it is open; a closed PR has none to read.
+async fn open_checks(
+    repo: &ForgeRepo,
+    account: &Account,
+    pull: &Current,
+) -> Option<Result<Vec<(String, Check)>>> {
+    if pull.item.state != ItemState::Open {
+        return None;
+    }
+    Some(checks(repo, account, pull).await)
 }
 
 /// The item's discussion comments, by the GraphQL node IDs `gh` reported.

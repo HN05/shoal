@@ -12,9 +12,14 @@ pub(in crate::cli::commands) async fn run(
 ) -> Result<i32> {
     match command {
         DiagnosticsCommand::Alerts {
-            command: Some(AlertsCommand::Send { message, space }),
+            command:
+                Some(AlertsCommand::Send {
+                    message,
+                    attach,
+                    space,
+                }),
             ..
-        } => notifications::send(&ctx, space, message).await,
+        } => notifications::send(&ctx, space, message, attach).await,
         DiagnosticsCommand::Alerts {
             command: Some(AlertsCommand::Clear),
             ..

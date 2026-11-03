@@ -339,7 +339,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     manager.executions.issue_scope("scope".into(), caller).await;
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         let mut method = crate::protocol::ApprovalMethod::WithdrawApproval {
-            workspace: target.clone(),
+            space: target.clone(),
             id: shown.id,
         };
         let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
@@ -347,6 +347,49 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
             .is_ok();
         assert_eq!(authorized, allowed);
     }
+}
+
+#[tokio::test]
+async fn a_chat_has_no_request_to_withdraw() {
+    let (root, manager) = crate::test_support::manager().await;
+    let path = crate::test_support::repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "asker".into(), None, None, None)
+        .await
+        .unwrap();
+    let request = manager
+        .request_approval(sample(&workspace.id, Target::Port("web".into())))
+        .await
+        .unwrap()
+        .unwrap();
+    let error = manager
+        .withdraw_approval(&chat.name, request.id)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "chat planning has no approval request {}; chats request no approvals",
+            request.id
+        )
+    );
+    let pending = manager.show_approval(request.id).await.unwrap();
+    assert_eq!(pending.status, DecisionStatus::Pending);
 }
 
 #[tokio::test]

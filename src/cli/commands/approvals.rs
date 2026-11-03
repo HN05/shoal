@@ -312,19 +312,17 @@ pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
 }
 
 /// Withdraw the workspace's pending request `id`, which its agent no longer needs.
-pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
-    let workspace = match workspace {
-        Some(workspace) => workspace,
+pub(super) async fn withdraw(ctx: &Context, space: Option<String>, id: i64) -> Result<i32> {
+    let space = match space {
+        Some(space) => space,
         None => request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ShowApproval { id })
             .await?
             .workspace_id
             .clone(),
     };
-    let request = request::<Box<ApprovalRequest>>(
-        &ctx.paths,
-        ApprovalMethod::WithdrawApproval { workspace, id },
-    )
-    .await?;
+    let request =
+        request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::WithdrawApproval { space, id })
+            .await?;
     ctx.emit(&outcome(&request), &request)?;
     Ok(0)
 }

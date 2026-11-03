@@ -4045,6 +4045,13 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
         (&json!("ci"), &json!(url), &json!("running")),
         "{viewed}"
     );
+    for target in [vec!["ci", "2765"], vec![url.as_str()]] {
+        let found = fixture.ok(&[&["status"], target.as_slice()].concat());
+        assert_eq!(
+            found[0]["workspace"]["name"], "topic",
+            "{target:?}: {found}"
+        );
+    }
 
     // A running run has nothing to report, so this wait can only time out.
     let running = fixture.ok(&["watch", "ci", "--space", "topic", "--timeout", "1"]);

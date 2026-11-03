@@ -20,8 +20,8 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        ApprovalMethod::WithdrawApproval { workspace, id } => {
-            Body::ApprovalRequest(Box::new(manager.withdraw_approval(&workspace, id).await?))
+        ApprovalMethod::WithdrawApproval { space, id } => {
+            Body::ApprovalRequest(Box::new(manager.withdraw_approval(&space, id).await?))
         }
         ApprovalMethod::ListApprovals { space } => {
             Body::ApprovalRequests(manager.approval_requests(space.as_deref()).await?)
@@ -78,8 +78,8 @@ impl Scoped for ApprovalMethod {
                     )
                     .await?,
             ),
-            ApprovalMethod::WithdrawApproval { workspace, .. }
-            | ApprovalMethod::BranchPush { workspace }
+            ApprovalMethod::WithdrawApproval { space, .. } => Some(space),
+            ApprovalMethod::BranchPush { workspace }
             | ApprovalMethod::RequestPush { workspace, .. } => Some(workspace),
             // Only the push the user approved, which runs unscoped, ends it.
             ApprovalMethod::FinishPush { .. } => return Err(denied()),

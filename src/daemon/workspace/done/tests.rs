@@ -144,6 +144,8 @@ async fn repeating_an_unchanged_completion_is_refused() {
                 reason: None,
                 choices: vec![],
             },
+            Vec::new(),
+            &Attacher::User,
         )
         .await
         .unwrap();
@@ -591,7 +593,12 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     };
     // Done closes the questions asked before it.
     manager
-        .ask_question(&workspace.name, ask("Anything else?"))
+        .ask_question(
+            &workspace.name,
+            ask("Anything else?"),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
@@ -599,7 +606,12 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
         .await
         .unwrap();
     let question = manager
-        .ask_question(&workspace.name, ask("Anything more?"))
+        .ask_question(
+            &workspace.name,
+            ask("Anything more?"),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();

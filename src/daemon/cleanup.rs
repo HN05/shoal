@@ -23,6 +23,7 @@ use crate::{
     },
     fsutil::off_runtime,
     model::{CleanupReason, Workspace},
+    process::DirectoryUsers,
     state::WorkspaceState,
 };
 
@@ -129,17 +130,32 @@ pub fn signals(head: &str, activity: u64) -> u64 {
     hash.finish()
 }
 
+/// What one walk of a worktree's files sees.
+#[derive(Clone, Copy, Debug)]
+pub struct Tree {
+    /// The metadata of every file. Change times only move forward and cannot
+    /// be set, unlike modification times, so two equal fingerprints mean no
+    /// file changed between them.
+    pub fingerprint: u64,
+    /// The newest change or modification time of any file, in Unix seconds.
+    pub changed: u64,
+}
+
+/// The later of a file's change and modification times, in Unix seconds.
+pub fn change_time(metadata: &fs::Metadata) -> u64 {
+    metadata.ctime().max(metadata.mtime()).max(0) as u64
+}
+
 /// Metadata only, including ignored files; never follow symlinks out of the tree.
 /// Git administrative storage is shared and inspected separately through HEAD.
-/// Change times only move forward and cannot be set, unlike modification
-/// times, so two equal fingerprints mean no file changed between them.
-pub fn fingerprint(root: &Path) -> Result<u64> {
-    fn visit(path: &Path, hash: &mut DefaultHasher) -> Result<()> {
+pub fn walk(root: &Path) -> Result<Tree> {
+    fn visit(path: &Path, hash: &mut DefaultHasher, changed: &mut u64) -> Result<()> {
         let metadata = fs::symlink_metadata(path)?;
         path.hash(hash);
         metadata.len().hash(hash);
         metadata.modified()?.hash(hash);
         (metadata.ctime(), metadata.ctime_nsec()).hash(hash);
+        *changed = (*changed).max(change_time(&metadata));
         if metadata.is_dir() {
             let mut children = fs::read_dir(path)?
                 .map(|entry| entry.map(|e| e.path()))
@@ -149,14 +165,18 @@ pub fn fingerprint(root: &Path) -> Result<u64> {
                 if child.file_name().is_some_and(|name| name == ".git") {
                     continue;
                 }
-                visit(&child, hash)?;
+                visit(&child, hash, changed)?;
             }
         }
         Ok(())
     }
     let mut hash = DefaultHasher::new();
-    visit(root, &mut hash)?;
-    Ok(hash.finish())
+    let mut changed = 0;
+    visit(root, &mut hash, &mut changed)?;
+    Ok(Tree {
+        fingerprint: hash.finish(),
+        changed,
+    })
 }
 
 /// One pass of every automatic cleanup. A failed step does not skip the
@@ -174,11 +194,13 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
     step("branch observation", observe_branches(manager).await);
     step("completion cleanup", manager.sweep_completed().await);
     step("PR cleanup", manager.sweep_prs().await);
-    step("idle cleanup", sweep_idle(manager, timers).await);
+    // Every step that asks which processes use a worktree reads one listing.
+    let users = DirectoryUsers::default();
+    step("idle cleanup", sweep_idle(manager, timers, &users).await);
     step("idle agents", manager.stop_idle_agents().await);
     step(
         "merged cleanup",
-        merged::sweep(manager, &mut timers.merged).await,
+        merged::sweep(manager, &mut timers.merged, &users).await,
     );
     step(
         "kept branches",
@@ -225,14 +247,14 @@ async fn is_dir(path: &std::path::Path) -> bool {
 /// Each workspace's idle delay comes from its own layered config; a disabled
 /// one gets only deleted-directory cleanup. A failure in one workspace does
 /// not skip the others.
-async fn sweep_idle(manager: &Manager, timers: &mut Timers) -> Result<()> {
+async fn sweep_idle(manager: &Manager, timers: &mut Timers, users: &DirectoryUsers) -> Result<()> {
     let workspaces = manager.list_workspaces().await?;
     timers
         .idle
         .retain(|id, _| workspaces.iter().any(|workspace| &workspace.id == id));
     let mut failed = WorkspaceFailures::default();
     for workspace in workspaces {
-        if let Err(error) = sweep_workspace(manager, timers, &workspace).await {
+        if let Err(error) = sweep_workspace(manager, timers, &workspace, users).await {
             failed.push(&workspace.id, &workspace.name, &error);
         }
     }
@@ -243,6 +265,7 @@ async fn sweep_workspace(
     manager: &Manager,
     timers: &mut Timers,
     workspace: &Workspace,
+    users: &DirectoryUsers,
 ) -> Result<()> {
     // Its idle timer stays for the pass after a check there finishes.
     if manager.sweep_skips(&workspace.path).await {
@@ -260,19 +283,19 @@ async fn sweep_workspace(
         remove_deleted(manager, workspace).await;
         return Ok(());
     }
-    let Some((delay, signals)) = observe(manager, workspace).await else {
+    let Some((delay, signals)) = observe(manager, workspace, users).await else {
         timers.idle.remove(&workspace.id);
         return Ok(());
     };
-    // Each pass compares only the signals; the tree is walked when the timer
-    // starts and again when it expires.
+    // Each pass compares only the signals; Git state is inspected and the
+    // tree walked when the timer starts and again when it expires.
     let now = Instant::now();
     let started = match timers.expired(&workspace.id, signals, now, delay) {
         Expiry::Running => return Ok(()),
         Expiry::Restart => None,
         Expiry::Expired(snapshot) => Some(snapshot),
     };
-    let Some(snapshot) = candidate(manager, workspace).await else {
+    let Some(snapshot) = candidate(manager, workspace, users).await else {
         timers.idle.remove(&workspace.id);
         return Ok(());
     };
@@ -323,28 +346,37 @@ async fn idle_delay(manager: &Manager, workspace: &Workspace) -> Result<Option<D
     Ok(settings.cleanup.auto.delay())
 }
 
-/// The idle delay and cleanup signals of a ready, removable workspace;
-/// `None` when it is not, its idle cleanup is disabled, or its config cannot
-/// be read.
-async fn observe(manager: &Manager, workspace: &Workspace) -> Option<(Duration, u64)> {
+/// The idle delay and timer signals of a ready workspace nothing recorded
+/// and no process keeps; `None` when something does, its idle cleanup is
+/// disabled, or its config cannot be read.
+async fn observe(
+    manager: &Manager,
+    workspace: &Workspace,
+    users: &DirectoryUsers,
+) -> Option<(Duration, u64)> {
     let observed = async {
         let Some(delay) = idle_delay(manager, workspace).await? else {
             return Ok(None);
         };
-        let signals = manager.cleanup_signals(&workspace.id).await?;
+        let signals = manager.idle_timer_signals(&workspace.id, users).await?;
         Ok(signals.map(|signals| (delay, signals)))
     }
     .await;
     skip_failed(workspace, observed)
 }
 
-/// The full snapshot of a workspace [`observe`] accepts.
-pub(super) async fn candidate(manager: &Manager, workspace: &Workspace) -> Option<Snapshot> {
+/// The full snapshot of an idle cleanup candidate, with the processes in
+/// its worktree read from `users`.
+pub(super) async fn candidate(
+    manager: &Manager,
+    workspace: &Workspace,
+    users: &DirectoryUsers,
+) -> Option<Snapshot> {
     let observed = async {
         if idle_delay(manager, workspace).await?.is_none() {
             return Ok(None);
         }
-        manager.cleanup_snapshot(&workspace.id).await
+        manager.swept_snapshot(&workspace.id, users).await
     }
     .await;
     skip_failed(workspace, observed)

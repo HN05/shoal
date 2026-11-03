@@ -194,6 +194,56 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
 }
 
 #[tokio::test]
+async fn inspection_and_agent_list_report_an_agent_awaiting_its_restore() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "agent".into(), None, None, None)
+        .await
+        .unwrap();
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = &execution.plan.id;
+    manager
+        .track_agent(
+            id,
+            &crate::execution::TrackedAgent::named("codex"),
+            &workspace.id,
+            &workspace.name,
+            true,
+            Duration::ZERO,
+        )
+        .await;
+    let stopped = || async {
+        let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+        let listed = manager.running_agents().await.unwrap();
+        (
+            inspection.executions[0].stopped.clone(),
+            listed[0].stopped.clone(),
+        )
+    };
+    assert_eq!(stopped().await, (None, None));
+
+    assert!(
+        manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    let protection = Some(Protection::load("critical memory pressure"));
+    assert_eq!(stopped().await, (protection.clone(), protection));
+    manager
+        .finish_execution(id.clone(), ExecutionKind::Command, Some(143))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
     let (_root, manager) = manager().await;
     let repo = repository(_root.path(), "repo");

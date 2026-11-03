@@ -106,6 +106,7 @@ impl Manager {
                             restart: agent
                                 .and_then(|agent| agent.restart.as_ref())
                                 .map(Restart::pending),
+                            stopped: agent.and_then(|agent| agent.overload.clone()),
                             execution: execution.id,
                             workspace_id: execution.workspace_id,
                             origin: execution.origin,

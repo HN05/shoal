@@ -19,12 +19,15 @@ pub(crate) mod layout;
 mod records;
 mod retention;
 
-pub(crate) use records::{forget_removed, keep_ended_chat, rebase, record};
+pub(crate) use records::{
+    forget_removed, ids_at, keep_ended_chat, rebase, record, sent_files, sent_ids,
+};
 
 use layout::{Kept, Layout};
 
 pub(crate) use crate::client::files::{
-    AttachedFile, Attacher, FileSource, NewFile, check_results, missing_selection,
+    AttachedFile, Attacher, FileSource, NewFile, SentFile, check_results, check_sent,
+    missing_selection,
 };
 #[cfg(test)]
 mod tests;
@@ -87,6 +90,20 @@ pub(crate) async fn keep(
 ) -> Result<Kept> {
     let (id, message) = (space_id.to_owned(), message.to_owned());
     tokio::task::spawn_blocking(move || layout.keep(&id, &message, &files)).await?
+}
+
+/// Copies of `files` that the workspace or chat `space_id` hands the user
+/// with `message`, apart from its other files since they outlive its
+/// removal, made off the async runtime. Callers hold the gate of the
+/// repository's attached files.
+async fn copy_for_user(
+    layout: Layout,
+    space_id: &str,
+    message: &str,
+    files: Vec<NewFile>,
+) -> Result<Kept> {
+    let (id, message) = (space_id.to_owned(), message.to_owned());
+    tokio::task::spawn_blocking(move || layout.keep_results(&id, &message, &files)).await?
 }
 
 /// Delete the copies of files that were refused, such as ones for a
@@ -206,16 +223,16 @@ impl Manager {
         results: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Vec<HandedBack>> {
-        if results.is_empty() {
-            return Ok(Vec::new());
-        }
-        let (layout, _files) = self.lock_files(space).await?;
-        let id = space.id.clone();
-        let kept =
-            tokio::task::spawn_blocking(move || layout.keep_results(&id, &results)).await??;
-        let records = self
-            .record_or_discard(&space.id, FileSource::Result, attacher, kept)
-            .await?;
+        let kept = |files: Vec<SentFile>| std::future::ready(Ok(files));
+        let records = (self.send_with_files(
+            space,
+            FileSource::Result,
+            "shoal done",
+            results,
+            attacher,
+            kept,
+        ))
+        .await?;
         Ok(records
             .into_iter()
             .map(|file| HandedBack {
@@ -223,6 +240,54 @@ impl Manager {
                 name: file.name,
             })
             .collect())
+    }
+
+    /// Hand the user `message`, such as an alert, a question or a
+    /// completion, from `space` with `send`, passing it copies of the files
+    /// `files` recorded as coming from `source` and attached by `attacher`,
+    /// which outlive its removal. When `send` refuses the message, the copies
+    /// and records made for it go; those an identical earlier message made
+    /// stay with it.
+    pub(crate) async fn send_with_files<T, Send, Sent>(
+        &self,
+        space: &Space,
+        source: FileSource,
+        message: &str,
+        files: Vec<NewFile>,
+        attacher: &Attacher,
+        send: Send,
+    ) -> Result<T>
+    where
+        Send: FnOnce(Vec<SentFile>) -> Sent,
+        Sent: Future<Output = Result<T>>,
+    {
+        if files.is_empty() {
+            return send(Vec::new()).await;
+        }
+        let (layout, _files) = self.lock_files(space).await?;
+        let kept = copy_for_user(layout, &space.id, message, files).await?;
+        let records = self
+            .record_or_discard(&space.id, source, attacher, kept.clone())
+            .await?;
+        let sent = send(records.iter().map(SentFile::from).collect()).await;
+        if sent.is_err() {
+            self.forget_unsent(kept, records).await;
+        }
+        sent
+    }
+
+    /// Delete the copies `kept` and their records `records` once the message
+    /// they were made for was refused, unless the copies were reused.
+    /// Failure only logs, as the message's refusal is what its sender hears.
+    async fn forget_unsent(&self, kept: Kept, records: Vec<AttachedFile>) {
+        if kept.reused() {
+            return;
+        }
+        let ids: Vec<i64> = records.iter().map(|file| file.id).collect();
+        if let Err(error) = self.store.run(move |db| records::forget(db, &ids)).await {
+            crate::daemon::log!("records of refused files not deleted: {error:#}");
+        }
+        discard(kept).await;
     }
 
     /// Delete the files attached to the workspace or chat `selector` names,

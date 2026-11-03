@@ -157,6 +157,8 @@ async fn start(
             NotificationMethod::SendMessage {
                 space: workspace.id.clone(),
                 message,
+                attachments: Vec::new(),
+                sender_chat: None,
             },
         )
         .await?;

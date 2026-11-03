@@ -38,11 +38,21 @@ fn ask(question: &str, choices: &[&str]) -> Ask {
 async fn asking_notifies_once_and_repeats_return_the_same_question() {
     let (_root, manager, workspace) = fixture().await;
     let first = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let again = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(again, first);
@@ -64,13 +74,23 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
     );
 
     let error = manager
-        .ask_question(&workspace.name, ask("Which database?", &["SQLite"]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &["SQLite"]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap_err();
     assert!(error.to_string().contains("different details"));
     assert!(
         manager
-            .ask_question(&workspace.name, ask("two\nlines", &[]))
+            .ask_question(
+                &workspace.name,
+                ask("two\nlines", &[]),
+                Vec::new(),
+                &Attacher::User
+            )
             .await
             .is_err()
     );
@@ -83,6 +103,8 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
         .ask_question(
             &workspace.name,
             ask("Which database?", &["SQLite", "Postgres"]),
+            Vec::new(),
+            &Attacher::User,
         )
         .await
         .unwrap();
@@ -126,7 +148,10 @@ async fn recommended_numeric_answers_are_literal_and_bound_to_the_shown_question
     let (_root, manager, workspace) = fixture().await;
     let mut request = ask("Which number?", &["2", "4"]);
     request.recommendation = "2".into();
-    let question = manager.ask_question(&workspace.id, request).await.unwrap();
+    let question = manager
+        .ask_question(&workspace.id, request, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
     let mut stale = question.clone();
     stale.ask.recommendation = "4".into();
     let error = manager
@@ -149,7 +174,12 @@ async fn recommended_numeric_answers_are_literal_and_bound_to_the_shown_question
 async fn free_text_answers_may_span_lines() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let answered = manager
@@ -166,7 +196,12 @@ async fn free_text_answers_may_span_lines() {
 async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let answered = manager
@@ -174,7 +209,12 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
         .await
         .unwrap();
     let again = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(again, answered);
@@ -187,7 +227,12 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
     // Delivery deletes the question and frees its number.
     assert!(manager.question(question.id).await.is_err());
     let new = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(new.id, question.id);
@@ -208,7 +253,7 @@ async fn questions_take_the_smallest_free_number_across_workspaces() {
         (&workspace, "Which queue?"),
     ] {
         let question = manager
-            .ask_question(&asker.name, ask(text, &[]))
+            .ask_question(&asker.name, ask(text, &[]), Vec::new(), &Attacher::User)
             .await
             .unwrap();
         numbers.push(question.id);
@@ -221,7 +266,12 @@ async fn questions_take_the_smallest_free_number_across_workspaces() {
         .await
         .unwrap();
     let next = manager
-        .ask_question(&workspace.name, ask("Which logger?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which logger?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(next.id, 4);
@@ -230,7 +280,12 @@ async fn questions_take_the_smallest_free_number_across_workspaces() {
         .await
         .unwrap();
     let reused = manager
-        .ask_question(&workspace.name, ask("Which scheduler?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which scheduler?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(reused.id, 2);
@@ -257,7 +312,12 @@ async fn questions_take_the_smallest_free_number_across_workspaces() {
 async fn a_wait_returns_the_answer() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let waiter = tokio::spawn({
@@ -291,7 +351,12 @@ async fn a_wait_returns_the_answer() {
         .await
         .unwrap();
     let reused = manager
-        .ask_question(&workspace.name, ask("Which database?", &["SQLite"]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &["SQLite"]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(reused.id, question.id);
@@ -306,7 +371,12 @@ async fn a_wait_returns_the_answer() {
 async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -323,7 +393,12 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
     );
 
     manager
-        .ask_question(&workspace.name, ask("Which cache?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which cache?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
@@ -355,6 +430,8 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             QuestionMethod::AskQuestion {
                 space: target.clone(),
                 ask: ask("Which database?", &[]),
+                attachments: Vec::new(),
+                sender_chat: None,
             },
             QuestionMethod::AwaitAnswer {
                 space: target.clone(),
@@ -422,7 +499,12 @@ async fn listings_and_unread_answers_fit_one_response() {
     let mut unread = 0;
     let full = loop {
         let question = manager
-            .ask_question(&workspace.name, maximal(unread))
+            .ask_question(
+                &workspace.name,
+                maximal(unread),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
         match manager
@@ -444,7 +526,12 @@ async fn listings_and_unread_answers_fit_one_response() {
     let mut open = 1;
     let listing = loop {
         manager
-            .ask_question(&workspace.name, maximal(unread + open))
+            .ask_question(
+                &workspace.name,
+                maximal(unread + open),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
         open += 1;
@@ -465,7 +552,7 @@ async fn notifications_of_maximal_questions_fit_one_response() {
     let mut first = None;
     for n in 0..50 {
         let question = manager
-            .ask_question(&workspace.name, maximal(n))
+            .ask_question(&workspace.name, maximal(n), Vec::new(), &Attacher::User)
             .await
             .unwrap();
         first.get_or_insert(question);
@@ -503,7 +590,12 @@ async fn a_workspace_reserved_for_removal_takes_no_question() {
         .await
         .unwrap();
     let error = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap_err();
     assert!(error.to_string().contains("not ready"), "{error:#}");
@@ -514,7 +606,12 @@ async fn a_workspace_reserved_for_removal_takes_no_question() {
 async fn done_closes_open_questions_for_good() {
     let (_root, manager, workspace) = fixture().await;
     let answered = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
@@ -522,7 +619,12 @@ async fn done_closes_open_questions_for_good() {
         .await
         .unwrap();
     let open = manager
-        .ask_question(&workspace.name, ask("Which cache?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which cache?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
@@ -568,7 +670,12 @@ async fn done_closes_open_questions_for_good() {
     manager.undo_done(&workspace.name).await.unwrap();
     assert!(!manager.has_open_questions(&workspace.id).await.unwrap());
     let asked_again = manager
-        .ask_question(&workspace.name, ask("Which cache?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which cache?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert!(asked_again.is_open());
@@ -579,7 +686,12 @@ async fn done_closes_open_questions_for_good() {
 async fn withdrawing_a_displayed_question_refuses_a_reused_number() {
     let (_root, manager, workspace) = fixture().await;
     let shown = manager
-        .ask_question(&workspace.id, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.id,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let answered = manager
@@ -591,7 +703,12 @@ async fn withdrawing_a_displayed_question_refuses_a_reused_number() {
         .await
         .unwrap();
     let replacement = manager
-        .ask_question(&workspace.id, ask("Which cache?", &[]))
+        .ask_question(
+            &workspace.id,
+            ask("Which cache?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(shown.id, replacement.id);
@@ -616,7 +733,12 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
         .await
         .unwrap();
     let question = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let waiter = tokio::spawn({
@@ -658,7 +780,12 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
     }
     // Its number stays taken, and asking again asks anew.
     let again = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert!(again.is_open());
@@ -669,7 +796,12 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
 async fn withdrawing_after_a_rename_still_takes_back_the_notification() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
@@ -687,7 +819,12 @@ async fn withdrawing_after_a_rename_still_takes_back_the_notification() {
 async fn withdrawing_a_shown_question_tells_the_user() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let shown = manager.notifications(true, 50).await.unwrap();
@@ -715,7 +852,12 @@ async fn withdrawing_a_shown_question_tells_the_user() {
 async fn a_withdrawn_question_is_never_announced_afterwards() {
     let (_root, manager, workspace) = fixture().await;
     let question = manager
-        .ask_question(&workspace.name, ask("Which database?", &[]))
+        .ask_question(
+            &workspace.name,
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
@@ -725,4 +867,96 @@ async fn a_withdrawn_question_is_never_announced_afterwards() {
     // An announcement that lost the race to the withdrawal comes too late.
     manager.announce_question(&question).await;
     assert!(manager.notifications(true, 50).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn files_sent_with_a_question_are_listed_with_it_and_its_notification() {
+    let (root, manager, workspace) = fixture().await;
+    let layouts: Vec<NewFile> = ["a.png", "b.png"]
+        .into_iter()
+        .map(|name| {
+            let path = root.path().join(name);
+            std::fs::write(&path, name).unwrap();
+            path.into()
+        })
+        .collect();
+    let asked = manager
+        .ask_question(
+            &workspace.name,
+            ask("Which layout?", &["A", "B"]),
+            layouts.clone(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    let names: Vec<_> = asked.files.iter().map(|file| file.name.as_str()).collect();
+    assert_eq!(names, ["a.png", "b.png"]);
+    for file in &asked.files {
+        assert_eq!(std::fs::read_to_string(&file.path).unwrap(), file.name);
+    }
+    let listed = manager.questions(None).await.unwrap().questions;
+    assert_eq!(listed, std::slice::from_ref(&asked));
+    let attached = manager.attached_files(&workspace.name).await.unwrap();
+    assert!(
+        attached
+            .iter()
+            .all(|file| file.source == FileSource::Question),
+        "{attached:?}"
+    );
+    let notifications = manager.notifications(true, 50).await.unwrap();
+    let [notification] = notifications.as_slice() else {
+        panic!("{notifications:?}");
+    };
+    assert_eq!(notification.files, asked.files);
+
+    // The same question with the same files is the same question; with
+    // other files it is a different one.
+    let again = manager
+        .ask_question(
+            &workspace.name,
+            ask("Which layout?", &["A", "B"]),
+            layouts.clone(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    assert_eq!(again, asked);
+    let error = manager
+        .ask_question(
+            &workspace.name,
+            ask("Which layout?", &["A", "B"]),
+            layouts[..1].to_vec(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("different details"), "{error:#}");
+    // The refused question's copies go, and the asked one's stay.
+    let after = manager.attached_files(&workspace.name).await.unwrap();
+    assert_eq!(after, attached);
+    let workspace_results = asked.files[0].path.ancestors().nth(3).unwrap();
+    let messages = std::fs::read_dir(workspace_results).unwrap().count();
+    assert_eq!(messages, 1, "{workspace_results:?}");
+    assert!(asked.files.iter().all(|file| file.path.exists()));
+}
+
+#[tokio::test]
+async fn a_question_sends_a_limited_number_of_files() {
+    let (root, manager, workspace) = fixture().await;
+    let shot = root.path().join("shot.png");
+    std::fs::write(&shot, "png").unwrap();
+    let files = vec![NewFile::from(shot); crate::client::files::MAX_SENT + 1];
+    let error = manager
+        .ask_question(&workspace.name, ask("Which?", &[]), files, &Attacher::User)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("at most"), "{error:#}");
+    assert!(
+        manager
+            .attached_files(&workspace.name)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(manager.questions(None).await.unwrap().questions.is_empty());
 }
