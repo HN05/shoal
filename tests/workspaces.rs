@@ -29934,6 +29934,8 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert_eq!(workspace["branch"], Value::Null);
     assert_eq!(workspace["at"]["made_for"], serde_json::json!({"pr": 8}));
     assert_eq!(workspace["setup_skipped"], true);
+    // Its diff, and a manual review's {diff_base}, compare with the PR's base.
+    assert_eq!(workspace["base_ref"], "refs/remotes/origin/main");
     assert_eq!(workspace["links"]["prs"], serde_json::json!([url]));
 
     // Adding the PR reuses its workspace; it holds no agent.

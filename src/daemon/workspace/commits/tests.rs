@@ -157,6 +157,7 @@ async fn a_pr_head_is_fetched_from_the_ref_its_forge_serves() {
             number: 812,
             reference: "refs/pull/812/head".into(),
             commit: commit.into(),
+            base: None,
         })
     };
     let moved = create(&manager, &repo.id, None, pull(&"0".repeat(40))).await;
@@ -352,6 +353,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
                 number: 9,
                 reference: "refs/pull/9/head".into(),
                 commit,
+                base: Some("refs/remotes/origin/main".into()),
             },
             None,
             Default::default(),
@@ -360,6 +362,18 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
     let first = push_head("first");
     let opened = open(first.clone()).await.unwrap();
     assert!(!opened.reused);
+    // Its diff shows the PR's changes against the PR's base.
+    let base = git(&repo.path, &["rev-parse", "origin/main"])
+        .trim()
+        .to_owned();
+    assert_eq!(
+        manager
+            .diff_base(&opened.workspace.id)
+            .await
+            .unwrap()
+            .commit,
+        base
+    );
     let again = open(first).await.unwrap();
     assert!(again.reused);
     assert_eq!(again.workspace.id, opened.workspace.id);

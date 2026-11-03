@@ -235,6 +235,10 @@ pub struct PullHead {
     pub number: u64,
     pub reference: String,
     pub commit: String,
+    /// The fetched ref of the PR's base branch, which the workspace's diff
+    /// compares with, so it shows the PR's changes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
 }
 
 impl WorkspaceMethod {

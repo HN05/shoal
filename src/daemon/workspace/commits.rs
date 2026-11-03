@@ -17,6 +17,8 @@ use crate::{
 struct Start {
     at: StartingCommit,
     name: String,
+    /// The ref its diff compares with; none compares with `at`.
+    diff_ref: Option<String>,
 }
 
 impl Manager {
@@ -85,7 +87,7 @@ impl Manager {
         let start = self.resolve_start(repo, start).await?;
         let head = start.at.commit.clone();
         let workspace = self
-            .record_commit_workspace(repo, &start.name, start.at, parent, options)
+            .record_commit_workspace(repo, &start.name, start.at, start.diff_ref, parent, options)
             .await?;
         let result = self
             .materialize_commit_worktree(repo, &workspace, &head, None)
@@ -195,7 +197,14 @@ impl Manager {
     ) -> Result<Workspace> {
         let (repo, _guard) = self.lock_repository(removed.repository_id.as_str()).await?;
         let workspace = self
-            .record_commit_workspace(&repo, &removed.name, at, None, CreationOptions::default())
+            .record_commit_workspace(
+                &repo,
+                &removed.name,
+                at,
+                removed.base_ref.clone(),
+                None,
+                CreationOptions::default(),
+            )
             .await?;
         let head = &removed.checkpoint.head;
         let result = self
@@ -205,12 +214,14 @@ impl Manager {
     }
 
     /// Record a new workspace at a commit named after `name`, which started
-    /// `at`, below `parent`. The caller holds the repository's Git gate.
+    /// `at`, below `parent`, whose diff compares with `diff_ref`, else with
+    /// `at`. The caller holds the repository's Git gate.
     async fn record_commit_workspace(
         &self,
         repo: &Repository,
         name: &str,
         at: StartingCommit,
+        diff_ref: Option<String>,
         parent: Option<String>,
         options: CreationOptions,
     ) -> Result<Workspace> {
@@ -218,6 +229,7 @@ impl Manager {
         let path = self.new_workspace_path(repo, &name, None).await?;
         let workspace = Workspace {
             base_commit: Some(at.commit.clone()),
+            base_ref: diff_ref,
             at: Some(at),
             setup_skipped: options.skip_setup,
             disposable: options.disposable,
@@ -294,6 +306,7 @@ async fn pull_head(repo: &Repository, head: &PullHead) -> Result<Start> {
             made_for: Some(MadeFor::Pr(head.number)),
         },
         name: format!("pr-{}", head.number),
+        diff_ref: head.base.clone(),
     })
 }
 
@@ -323,6 +336,7 @@ fn named_start(commit: String, base: Option<&str>, reference: &str) -> Start {
             made_for: made_for.map(MadeFor::Ref),
         },
         name,
+        diff_ref: None,
     }
 }
 

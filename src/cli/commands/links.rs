@@ -561,7 +561,7 @@ pub(super) async fn pull_creation(
             "PR #{} comes from a fork and opens at its head in a workspace Shoal places; --path, --git-profile and --base apply to a branch",
             pull.number
         );
-        creation.pull_head = Some(fork_head(&pull)?);
+        creation.pull_head = Some(fork_head(repo, &pull).await?);
         creation.pr = Some(pull.url);
         return Ok(());
     }
@@ -584,9 +584,10 @@ pub(super) async fn pull_creation(
     Ok(())
 }
 
-/// The head of `pull`, a PR from a fork, which only the ref the forge serves
-/// it under reaches.
-pub(super) fn fork_head(pull: &PullRequest) -> Result<PullHead> {
+/// The head of `pull`, a PR from a fork in `repo`, which only the ref the
+/// forge serves it under reaches, with its base branch fetched for its
+/// workspace's diff to compare with.
+pub(super) async fn fork_head(repo: &Repository, pull: &PullRequest) -> Result<PullHead> {
     let reference = pull.head_ref.clone().with_context(|| {
         format!(
             "PR #{} comes from a fork, and its forge serves no ref for a fork's head, so Shoal cannot open it",
@@ -597,10 +598,12 @@ pub(super) fn fork_head(pull: &PullRequest) -> Result<PullHead> {
         .head_commit
         .clone()
         .with_context(|| format!("PR #{} reports no head commit", pull.number))?;
+    let base = super::review::fetch_pull_branch(&repo.path, "base", &pull.base).await?;
     Ok(PullHead {
         number: pull.number,
         reference,
         commit,
+        base: Some(base),
     })
 }
 

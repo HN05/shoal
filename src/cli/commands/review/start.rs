@@ -302,11 +302,10 @@ async fn fork_pull_workspace(
     repo: &Repository,
     pull: &PullRequest,
 ) -> Result<String> {
-    fetch_pull_branch(&repo.path, "base", &pull.base).await?;
     let method = WorkspaceMethod::OpenPullHead {
         repository: repo.id.as_str().into(),
         url: pull.url.clone(),
-        head: super::super::links::fork_head(pull)?,
+        head: super::super::links::fork_head(repo, pull).await?,
         chat: crate::cli::ui::current_chat(&None),
         options: CreationOptions {
             skip_setup: true,
