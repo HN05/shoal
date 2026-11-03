@@ -140,6 +140,8 @@ pub struct Manager {
     /// a system shutdown is cancelled, so later ones leave the work alone.
     pub(crate) shutdown_stopped: tokio::sync::Mutex<bool>,
     pub(crate) signals: signals::Signals,
+    /// The time runs of agent messages settle by.
+    pub(crate) settle_clock: crate::daemon::agent_messages::SettleClock,
     /// Process scans shared by the checks for agents' running work.
     pub(crate) work_scans: shared_scans::SharedScans,
     pub(crate) usage: usage::Usage,
@@ -194,6 +196,7 @@ impl Manager {
             operations: Default::default(),
             shutdown_stopped: Default::default(),
             signals: Default::default(),
+            settle_clock: Default::default(),
             work_scans: Default::default(),
             usage: Default::default(),
             leftovers: Default::default(),
