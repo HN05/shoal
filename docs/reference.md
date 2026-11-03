@@ -565,8 +565,9 @@ shoal = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<release tag>
 `shoal::client` holds every request the CLI makes, with its reply's types;
 `connection` sends them to the daemon a `Connector` names, and `subscriptions`
 follows repositories, workspaces with their agents, linked issues, PRs and CI
-runs, open questions, pending approval requests, messages and notifications as
-they change, subscribing again after a daemon restart. `operations` follows work
+runs, the sessions each space's agents reported, open questions, pending
+approval requests, messages and notifications as they change, subscribing again
+after a daemon restart. `operations` follows work
 the daemon runs for a request, such as the setup and post-setup hook of a
 workspace `StartWorkspace` creates: its steps and its processes' output lines as
 they come, then its result or a typed failure such as `setup_failed` or

@@ -254,7 +254,10 @@ impl Manager {
         }
         if let (Some(execution), Some(session)) = (&execution, &session) {
             ensure!(recovery::valid_session(session), "invalid agent session ID");
-            recovery::save_session(&self.paths, &id, execution, session)?;
+            // A subscription follows the session, which the store leaves out.
+            if recovery::save_session(&self.paths, &id, execution, session)? {
+                self.signals.agent_changed();
+            }
         }
         let now = i64::try_from(crate::time::unix_seconds())?;
         let report = Report {
