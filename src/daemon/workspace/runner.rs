@@ -2,6 +2,8 @@
 //! repository registers on its forge, the forge's waiting jobs as entries of
 //! the agent queue, and the jobs the daemon claims, each in a workspace at its
 //! commit that goes when the job ends.
+mod claims;
+mod ends;
 mod registration;
 mod waiting;
 
@@ -26,3 +28,6 @@ pub(crate) fn runner_labels(configured: &[String]) -> Vec<String> {
     }
     labels
 }
+
+#[cfg(test)]
+mod tests;

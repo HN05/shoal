@@ -14,6 +14,7 @@ fn limits(global: Option<u32>, repositories: &[(&str, Option<u32>)]) -> Limits {
             .map(|(id, limit)| (id.to_string(), *limit))
             .collect(),
         disk: None,
+        jobs: JobLimits::default(),
     }
 }
 
@@ -60,6 +61,48 @@ fn admission_fills_free_slots_in_order_and_passes_over_full_repositories() {
         admit(&vec!["b".to_owned(); 9], &queue, &dynamic, false),
         ["a1"]
     );
+}
+
+#[test]
+fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
+    let job = |id: &str, cores| Waiting {
+        id: id.into(),
+        repository: "a".into(),
+        work: Work::Job { cores },
+    };
+    let mut queue = waiting(&[("a1", "a")]);
+    queue.insert(0, job("j1", 2.0));
+    queue.push(job("j2", 2.0));
+    // A full agent limit holds back agents, not jobs; max_jobs holds jobs.
+    let fixed = Limits {
+        jobs: JobLimits {
+            running: 1,
+            fixed: Some(2),
+            room: None,
+        },
+        ..limits(Some(1), &[])
+    };
+    assert_eq!(admit(&["a".into()], &queue, &fixed, false), ["j1"]);
+    // Measured load starts one entry a pass, a job or an agent, where it fits.
+    let dynamic = |percent| Limits {
+        starts: Some(1),
+        jobs: JobLimits {
+            room: Some(capacity::Room::Free {
+                percent,
+                parallelism: 16,
+            }),
+            ..JobLimits::default()
+        },
+        ..Limits::default()
+    };
+    assert_eq!(admit(&[], &queue, &dynamic(50.0), false), ["j1"]);
+    // A job too big for the room keeps its place and the agent behind it starts.
+    assert_eq!(admit(&[], &queue, &dynamic(10.0), false), ["a1"]);
+    let no_starts = Limits {
+        starts: Some(0),
+        ..dynamic(50.0)
+    };
+    assert!(admit(&[], &queue, &no_starts, false).is_empty());
 }
 
 #[test]

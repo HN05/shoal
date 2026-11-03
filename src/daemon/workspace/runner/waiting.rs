@@ -82,7 +82,7 @@ impl Manager {
 
     /// The workspace of `repository_id` that links the PR `run` ran for, or
     /// owns the branch it ran on.
-    async fn run_workspace(
+    pub(super) async fn run_workspace(
         &self,
         forge: &ForgeRepo,
         repository_id: &str,

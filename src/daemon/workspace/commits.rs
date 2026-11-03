@@ -125,6 +125,36 @@ impl Manager {
         self.give_to_chat(&created.id, chat).await
     }
 
+    /// Create the workspace CI job `name` runs in: at `commit`, fetched
+    /// from the ref `reference` `origin` serves it under, or else by
+    /// itself, made for nothing, so no PR reuses it, and disposable, without
+    /// setup; the seed clone still happens.
+    pub(crate) async fn create_job_workspace(
+        &self,
+        repository_id: &str,
+        name: &str,
+        commit: &str,
+        reference: Option<&str>,
+    ) -> Result<Workspace> {
+        let (repo, _guard) = self.lock_repository(repository_id).await?;
+        fetch_job_commit(&repo, commit, reference).await?;
+        let at = StartingCommit {
+            commit: commit.to_owned(),
+            made_for: None,
+        };
+        let options = CreationOptions {
+            skip_setup: true,
+            disposable: true,
+        };
+        let workspace = self
+            .record_commit_workspace(&repo, name, at, None, None, options)
+            .await?;
+        let result = self
+            .materialize_commit_worktree(&repo, &workspace, commit, None)
+            .await;
+        self.settle_creation(&workspace, result).await
+    }
+
     /// The workspace at a commit of `repository_id` made for PR `number` or
     /// linked to it at `url`.
     async fn pull_workspace(
@@ -348,6 +378,34 @@ async fn surviving_ref(repo: &Repository, reference: Option<&str>) -> Result<Opt
             .await?
             .then(|| reference.to_owned()),
     )
+}
+
+/// Fetch `commit` into `repo` unless it has it: with the ref `reference`
+/// `origin` serves it under, which may have moved past it since, and else
+/// by itself.
+async fn fetch_job_commit(repo: &Repository, commit: &str, reference: Option<&str>) -> Result<()> {
+    let present = async || {
+        git::resolve_commit(
+            &repo.path,
+            &format!("{commit}^{{commit}}"),
+            git::run_isolated,
+        )
+        .await
+        .is_ok()
+    };
+    if present().await {
+        return Ok(());
+    }
+    if let Some(reference) = reference {
+        git::fetch::reference(&repo.path, "origin", reference).await?;
+        if present().await {
+            return Ok(());
+        }
+    }
+    git::fetch::reference(&repo.path, "origin", commit)
+        .await
+        .with_context(|| format!("the job's commit {commit} is not on origin"))?;
+    Ok(())
 }
 
 /// A PR's `head`, fetched from `origin` and checked to be the commit the

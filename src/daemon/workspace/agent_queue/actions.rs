@@ -82,11 +82,6 @@ impl Manager {
     pub async fn queue_start(&self, selector: &str) -> Result<QueueEntry> {
         let _gate = self.agent_queue.lock_admission().await;
         let mut entry = self.waiting_entry(selector, None, "").await?;
-        ensure!(
-            entry.kind != QueueKind::Job,
-            "{} is a CI job; the runner starts it once it is admitted",
-            entry.name
-        );
         let base = self.start_base(&entry).await?;
         match self.waiting_wrapper(&entry).await? {
             Some(execution) => self.grant_now(&entry, &execution).await?,
@@ -96,6 +91,9 @@ impl Manager {
                     .mark_starting(vec![entry.id.clone()], bases.into_iter().collect())
                     .await?;
                 self.start_launches(starts, None).await?;
+                if entry.kind == QueueKind::Job {
+                    self.runners.wake();
+                }
             }
         }
         entry.state = QueueState::Starting;
