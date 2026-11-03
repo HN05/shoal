@@ -24,6 +24,9 @@ impl Manager {
         base: Option<String>,
     ) -> Result<Workspace> {
         let workspace = self.workspace(selector).await?;
+        if base.is_some() {
+            workspace.require_branch("stacking on a base workspace")?;
+        }
         let repository_id = workspace.repository_id.clone();
         let base = match base {
             Some(base) => Some(
@@ -115,6 +118,15 @@ fn base_workspace(db: &Connection, repository_id: &str, selector: &str) -> Resul
         ensure!(
             repository == repository_id,
             "base workspace {selector} belongs to another repository"
+        );
+        // A stack builds on its base's branch.
+        ensure!(
+            store::exists(
+                db,
+                "SELECT 1 FROM workspaces WHERE id=?1 AND branch IS NOT NULL",
+                [&id]
+            )?,
+            "base workspace {selector} is at a commit and has no branch to build on"
         );
         return Ok(id);
     }

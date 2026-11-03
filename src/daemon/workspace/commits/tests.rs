@@ -659,3 +659,33 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
     let by_user = open(None).await.unwrap().workspace;
     assert_eq!(by_user.chat, None);
 }
+
+#[tokio::test]
+async fn a_workspace_at_a_commit_takes_no_part_in_a_stack() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let branch = manager
+        .create_workspace(&repo.id, "feature".into(), None, None, None)
+        .await
+        .unwrap();
+    let detached = create(&manager, &repo.id, None, CommitStart::Revision(None))
+        .await
+        .unwrap();
+    let as_base = manager
+        .set_base_workspace(&branch.id, Some(detached.name.clone()))
+        .await;
+    assert!(
+        as_base
+            .unwrap_err()
+            .to_string()
+            .contains("no branch to build on")
+    );
+    let stacked = manager
+        .set_base_workspace(&detached.id, Some(branch.name.clone()))
+        .await;
+    assert!(stacked.unwrap_err().to_string().contains("is at a commit"));
+}
