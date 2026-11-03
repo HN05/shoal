@@ -29880,7 +29880,7 @@ fn branch_only_commands_refuse_a_workspace_at_a_commit() {
 #[test]
 fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n[commands]\nreview = ['printf', '%s\\n', '{diff_base}']\n",
     ));
     let author = forge_origin(&fixture);
     let remote = fixture.root.path().join("origin.git");
@@ -29977,6 +29977,11 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert_eq!(moved["id"], workspace["id"]);
     assert_eq!(moved["at"]["commit"], second);
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    // A manual review compares the PR's head with its base.
+    let output = run(&["review", "run", url, "--manual"]);
+    assert!(output.status.success(), "{output:?}");
+    let main = git(&remote, &["rev-parse", "main"]);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), main);
 
     // A review reads the PR's head, not what was committed on top of it.
     let moved_path = PathBuf::from(moved["path"].as_str().unwrap());
@@ -30004,4 +30009,11 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         .unwrap_or_else(|| panic!("{stdout}"));
     let ended = fixture.ok(&["watch", "review", review]);
     assert_eq!(ended["head"], second, "{ended}");
+    // A manual review reads the checkout, so it refuses one past the PR's head.
+    let output = run(&["review", "run", url, "--manual"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("commits of its own"),
+        "{output:?}"
+    );
 }

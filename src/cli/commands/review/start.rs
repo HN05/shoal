@@ -400,8 +400,32 @@ async fn run(
             let target = subject.target(post.unwrap_or(settings.review.post));
             queue(ctx, workspace, &settings, agent, model, target).await
         }
-        _ => super::super::configured::run(ctx, MANUAL, Some(workspace), args).await,
+        _ => {
+            if matches!(subject, Subject::Pull { .. }) {
+                ensure_at_pull_head(ctx, &workspace).await?;
+            }
+            super::super::configured::run(ctx, MANUAL, Some(workspace), args).await
+        }
     }
+}
+
+/// Refuse a manual PR review in a workspace at a commit whose HEAD moved past
+/// the PR head it was opened at: the review command reads the checkout, so
+/// it would review commits the PR does not have.
+async fn ensure_at_pull_head(ctx: &Context, workspace: &str) -> Result<()> {
+    let workspace = client::inspect(&ctx.paths, workspace.to_owned())
+        .await?
+        .workspace;
+    let Some(at) = &workspace.at else {
+        return Ok(());
+    };
+    let head = git::revision(&workspace.path, "HEAD", git::run).await?;
+    ensure!(
+        head.trim() == at.commit,
+        "workspace {} has commits of its own on top of the PR's head, which a manual review would include; review with an agent, or remove the workspace to open the PR again",
+        workspace.name
+    );
+    Ok(())
 }
 
 /// The agent that reviews without --agent: `[review] agent`, else

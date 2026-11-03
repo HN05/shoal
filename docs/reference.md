@@ -1014,7 +1014,9 @@ branch, or in one opened from origin whose base is the PR's `origin/<base>`. Eit
 workspace links the PR as `shoal add` does, and the review is stored on it. A
 fork's PR is reviewed in its workspace at a commit, opened or moved as `shoal add`
 does but with `--skip-setup`, since the reviewer only reads the checkout; its
-review covers the PR's head against its base, whatever was committed on top there. `--repo` selects the PR's repository, which otherwise follows
+review covers the PR's head against its base, whatever was committed on top there,
+and a manual review, which reads the checkout, refuses a workspace with commits on
+top of the PR's head. `--repo` selects the PR's repository, which otherwise follows
 `shoal add`. An issue URL is refused: `shoal plan` settles an issue before
 implementation. Unless `[review] post` is false, a finished PR review is posted on
 the PR as a comment review by the workspace's agent account, as
