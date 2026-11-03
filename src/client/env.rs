@@ -14,6 +14,9 @@ pub const ADD_PLAN: &str = "SHOAL_ADD_PLAN";
 /// The agent queue entry whose slot a launched agent takes over when it
 /// registers; passed to launch workers and removed at startup.
 pub const QUEUE_ENTRY: &str = "SHOAL_QUEUE_ENTRY";
+/// Set on a chat that a focused place beside the caller runs, which records
+/// it in `attach`'s history once it registers; removed at startup.
+pub const SHOWN_CHAT: &str = "SHOAL_SHOWN_CHAT";
 /// Set on the command a detached zmx session's shell runs, which ends the
 /// session once its agent or workspace shell has run; removed at startup.
 pub const ENDS_SESSION: &str = "SHOAL_ENDS_SESSION";

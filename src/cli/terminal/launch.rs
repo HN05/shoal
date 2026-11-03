@@ -595,6 +595,13 @@ pub(in crate::cli) async fn start_chat(
     let repo = groups::Repo::Known(repository);
     let origin = groups::beside(ctx, &host, &repo, &repository.path).await?;
     let beside = host.beside(origin.as_ref());
+    let attaches = host.host.attaches();
+    let mut env = place_env(ctx)?;
+    // A chat registers only once the place runs it, so the chat itself
+    // records the place it is shown in for `attach -`.
+    if attaches.is_none() {
+        env.push((env::SHOWN_CHAT, "1".to_owned()));
+    }
     let start = Start {
         state: &ctx.paths.state,
         origin: beside.origin,
@@ -603,22 +610,17 @@ pub(in crate::cli) async fn start_chat(
         focus: true,
         split: beside.split,
         argv: &shoal_command(ctx, args)?,
-        env: &place_env(ctx)?,
+        env: &env,
     };
-    let left_running = match host.host.attaches() {
-        Some(attaches) => {
-            let session = attaches.run_chat(&start).await?;
-            report_detach(attaches, name, &session).await?
+    if let Some(attaches) = attaches {
+        let session = attaches.run_chat(&start).await?;
+        if report_detach(attaches, name, &session).await? {
+            recent::record_chat_attach(ctx, name).await;
         }
-        None => {
-            let place = places.open(&start).await?;
-            show_opened(&host, places, &place, name).await?;
-            left_open(&place).await
-        }
-    };
-    if left_running {
-        recent::record_chat_attach(ctx, name).await;
+        return Ok(true);
     }
+    let place = places.open(&start).await?;
+    show_opened(&host, places, &place, name).await?;
     Ok(true)
 }
 

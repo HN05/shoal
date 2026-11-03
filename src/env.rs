@@ -413,6 +413,28 @@ pub(crate) unsafe fn take_session_end() {
     unsafe { std::env::remove_var(ENDS_SESSION) };
 }
 
+static SHOWN_LAUNCH_CHAT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Keep whether this process runs a chat in a place shown to the caller, and
+/// drop the marker from the environment so the agent's own children do not
+/// inherit it.
+///
+/// # Safety
+/// Call before any other thread exists.
+pub(crate) unsafe fn take_shown_chat() {
+    if std::env::var_os(SHOWN_CHAT).is_some_and(|value| !value.is_empty()) {
+        SHOWN_LAUNCH_CHAT.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    // SAFETY: the caller guarantees no other thread reads the environment.
+    unsafe { std::env::remove_var(SHOWN_CHAT) };
+}
+
+/// Whether the chat this process starts runs in a place shown to the caller,
+/// as [`take_shown_chat`] read it.
+pub(crate) fn shown_chat() -> bool {
+    SHOWN_LAUNCH_CHAT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Whether this process ends the session it runs in, as
 /// [`take_session_end`] read it.
 pub(crate) fn ends_launch_session() -> bool {

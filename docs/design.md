@@ -1261,8 +1261,9 @@ scoped callers neither read nor write it. `attach` and every launch that shows a
 workspace's or a chat's agent session here, such as `add`, `claude` or `chat`, record
 the space in `attach`'s history once the session is shown and still runs: when the terminal
 detaches, or right away for a host that shows it without attaching the terminal. A
-focused `add` that opens a place records the workspace once the place hosts it, since
-the host may show the place before the workspace exists. So `attach -` returns to the
+focused `add` that opens a place records the workspace once the place hosts it, and a
+focused `chat` that opens one records the chat once it registers there, since the host
+may show the place before the workspace or chat exists. So `attach -` returns to the
 session last detached from, not one another terminal still shows or one that ended;
 it passes over removed workspaces and chats that no longer run, while other
 commands' `-` selects only workspaces.

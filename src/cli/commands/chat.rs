@@ -18,7 +18,7 @@ use crate::{
         agents, client,
         context::Context,
         output::{self, Palette},
-        terminal, ui,
+        recent, terminal, ui,
     },
     config::{Effective, templates},
     model::{Chat, LinkedItem, Relation, Repository},
@@ -273,6 +273,9 @@ pub(super) async fn launch(
         restore.as_deref(),
     )
     .await?;
+    if crate::env::shown_chat() {
+        recent::record_chat_attach(ctx, &chat.id).await;
+    }
     agents::link_chat(ctx, &chat, &topic.links).await;
     let command = command(
         &settings,

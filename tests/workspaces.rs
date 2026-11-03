@@ -26996,6 +26996,14 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
             "chat", id, "--here", "--name", CHAT_NAME, "--agent", "codex", "--", "--search"
         ]
     );
+    // The chat registers only once the tab runs it, so nothing is recorded
+    // for `attach -` yet; the tab's call records it.
+    let history = fixture.root.path().join("state/recent-workspaces.json");
+    assert!(!history.exists());
+    assert!(
+        create.iter().any(|arg| arg == "SHOAL_SHOWN_CHAT=1"),
+        "{create:?}"
+    );
 
     // The tab's own call runs the agent in its pane.
     let (output, transcript) = fixture.interactive_command(
@@ -27006,6 +27014,13 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
         "",
     );
     assert!(output.status.success(), "{output:?} {transcript}");
+    let chats = fixture.ok(&["work", "--chats"]);
+    let recorded: Value = serde_json::from_slice(&fs::read(&history).unwrap()).unwrap();
+    assert_eq!(
+        recorded["attach"],
+        serde_json::json!([chats[0]["id"]]),
+        "{chats}"
+    );
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("chat-cwd"))
             .unwrap()
