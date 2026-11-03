@@ -334,7 +334,7 @@ instead of the PR delivery guidance below.
   Every unattended removal except for disk space waits `[cleanup] grace_minutes`,
   started only once removal's initial checks pass and ended by any sweep pass that
   no longer removes the workspace; user requests never wait.
-  Every removal of an existing worktree saves a checkpoint and removal record
+  Every removal of an existing worktree, except a disposable workspace's, saves a checkpoint and removal record
   before deleting files and keeps both when removal fails; merged cleanup may
   discard unsaved files only once the checkpoint keeps them, and restoring a
   checkpoint first keeps the state it replaces in another.

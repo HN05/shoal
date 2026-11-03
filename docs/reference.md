@@ -2934,7 +2934,7 @@ ignored ones, under `refs/shoal/checkpoints/<commit>` in the
 repository; taking one leaves the worktree and its index untouched.
 `shoal work checkpoint [workspace]` takes one, and Shoal takes one when an agent
 exits or is stopped, before a restore to a checkpoint, and on every removal of an existing
-worktree. An automatic checkpoint that would keep what the newest one keeps
+worktree except a disposable workspace's. An automatic checkpoint that would keep what the newest one keeps
 extends that one instead. When the unsaved files exceed `archive_max_mb`, include
 an untracked nested repository or a changed submodule, whose files it cannot hold,
 the checkpoint keeps HEAD only. Checkpoints expire after `retention_days`; their
