@@ -3,6 +3,7 @@
 //! the agent queue, and the jobs the daemon claims, each in a workspace at its
 //! commit that goes when the job ends.
 mod claims;
+mod costs;
 mod ends;
 mod registration;
 mod waiting;

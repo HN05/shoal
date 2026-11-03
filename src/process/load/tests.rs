@@ -15,4 +15,17 @@ fn memory_uses_available_including_reclaimable_cache() {
     ] {
         assert!(linux_memory(reading, 95).is_err(), "{reading}");
     }
+    assert_eq!(
+        linux_memory_reading(reading).unwrap(),
+        Memory {
+            total: 10000 * 1024,
+            available: 500 * 1024,
+        }
+    );
+}
+
+#[test]
+fn this_machine_reports_its_memory() {
+    let memory = memory().unwrap();
+    assert!(memory.available <= memory.total, "{memory:?}");
 }

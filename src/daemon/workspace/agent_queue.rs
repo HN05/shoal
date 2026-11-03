@@ -67,9 +67,9 @@ impl Limits {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Work {
     Launch,
-    /// A CI job expected to use `cores`.
+    /// A CI job expected to use `cost`.
     Job {
-        cores: f64,
+        cost: capacity::JobCost,
     },
     /// A one-shot run, which the daemon starts without a session; one
     /// protection stopped waits for healthy readings `after_stop`.
@@ -143,13 +143,13 @@ pub(crate) fn admit(
     let mut jobs = limits.jobs.running;
     let mut admitted = Vec::new();
     for entry in waiting {
-        if let Work::Job { cores } = entry.work {
+        if let Work::Job { cost } = entry.work {
             if limits.jobs.fixed.is_some_and(|limit| jobs >= limit) {
                 continue;
             }
             if let Some(room) = limits.jobs.room {
                 // Measured load admits one start a pass, of an agent or a job.
-                if starts == Some(0) || job_started || !room.fits(cores) {
+                if starts == Some(0) || job_started || !room.fits(cost) {
                     continue;
                 }
                 job_started = true;
@@ -212,6 +212,8 @@ struct QueuedRow {
     started_here: bool,
     /// Whether Shoal queued the restore on its own.
     automatic: bool,
+    /// A job's entry's job, as JSON.
+    job: Option<String>,
 }
 
 /// The waiting entries as admission sees them.
@@ -252,7 +254,7 @@ fn dormant_restores(
 fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,kind,execution_id,workspace_id,env IS NOT NULL,automatic
+            "SELECT id,repository_id,kind,execution_id,workspace_id,env IS NOT NULL,automatic,job
              FROM agent_queue WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
@@ -264,6 +266,7 @@ fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
                 workspace: row.get(4)?,
                 started_here: row.get(5)?,
                 automatic: row.get(6)?,
+                job: row.get(7)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
@@ -604,14 +607,18 @@ impl Manager {
             workspace,
             started_here,
             automatic,
+            job,
         } in queued
         {
             let work = match (kind, execution, workspace) {
                 // A job waits while its repository's permits are all held.
                 (QueueKind::Job, ..) if self.runners.permits_busy(&repository) => continue,
-                (QueueKind::Job, ..) => Work::Job {
-                    cores: capacity::ASSUMED_AGENT_CORES,
-                },
+                (QueueKind::Job, ..) => {
+                    let job = serde_json::from_str(&job.context("a job's entry names no job")?)?;
+                    Work::Job {
+                        cost: self.job_cost(&repository, &job).await?,
+                    }
+                }
                 (QueueKind::Restore, Some(execution), Some(workspace)) if started_here => {
                     let work = self
                         .stopped_restore_work(&workspace, &execution, automatic)
@@ -831,7 +838,7 @@ impl Manager {
             id: String::new(),
             repository: String::new(),
             work: Work::Job {
-                cores: capacity::ASSUMED_AGENT_CORES,
+                cost: capacity::JobCost::UNKNOWN,
             },
         }];
         Ok(!admit(&occupied, &probe, &limits, false).is_empty())

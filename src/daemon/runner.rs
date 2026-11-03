@@ -130,9 +130,11 @@ pub(super) async fn run(manager: Arc<Manager>) {
     }
 }
 
-/// Remove the workspaces of the jobs that ended, claim the jobs admission
-/// admitted, and read the forge's waiting jobs while one could start.
+/// Record the running jobs' usage, remove the workspaces of the jobs that
+/// ended, claim the jobs admission admitted, and read the forge's waiting
+/// jobs while one could start.
 async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
+    manager.sample_job_usage().await?;
     manager.finish_ended_jobs().await?;
     for entry in manager.admitted_jobs().await? {
         if manager.runners.begin_claim(&entry.id) {

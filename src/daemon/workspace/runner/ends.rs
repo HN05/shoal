@@ -9,10 +9,7 @@ use rusqlite::params;
 use crate::{
     daemon::{
         notifications::NotificationKind,
-        workspace::{
-            Manager,
-            capacity::{self, Activity},
-        },
+        workspace::{Manager, capacity::Activity},
     },
     model::QueuedJob,
     state::{QueueKind, QueueState},
@@ -23,6 +20,7 @@ use crate::{
 pub(crate) struct ClaimedJob {
     /// The ID its queue entry had.
     pub id: String,
+    pub repository_id: String,
     pub workspace_id: String,
     /// The execution running the forge's runner, once it started.
     pub execution_id: Option<String>,
@@ -36,17 +34,19 @@ impl Manager {
             .run(|db| {
                 Ok(db
                     .prepare(
-                        "SELECT id,workspace_id,execution_id,job FROM ci_jobs ORDER BY started_at",
+                        "SELECT id,repository_id,workspace_id,execution_id,job FROM ci_jobs
+                         ORDER BY started_at",
                     )?
                     .query_map([], |row| {
                         Ok(ClaimedJob {
                             id: row.get(0)?,
-                            workspace_id: row.get(1)?,
-                            execution_id: row.get(2)?,
-                            job: serde_json::from_str(&row.get::<_, String>(3)?).map_err(
+                            repository_id: row.get(1)?,
+                            workspace_id: row.get(2)?,
+                            execution_id: row.get(3)?,
+                            job: serde_json::from_str(&row.get::<_, String>(4)?).map_err(
                                 |error| {
                                     rusqlite::Error::FromSqlConversionFailure(
-                                        3,
+                                        4,
                                         rusqlite::types::Type::Text,
                                         Box::new(error),
                                     )
@@ -71,6 +71,7 @@ impl Manager {
             if running {
                 continue;
             }
+            self.record_job_usage(&job).await?;
             if let Err(error) = self.remove_job_workspace(&job.workspace_id).await {
                 self.notify(
                     None,
@@ -104,30 +105,32 @@ impl Manager {
             .await
     }
 
-    /// The load of each admitted or claimed job, by how long ago it was
-    /// admitted.
+    /// The load of each admitted or claimed job: what it is expected to
+    /// use, and how long ago it was admitted.
     pub(crate) async fn job_activities(&self) -> Result<Vec<Activity>> {
-        let since: Vec<Option<i64>> = self
+        let jobs: Vec<(String, Option<i64>, String)> = self
             .store
             .run(|db| {
                 Ok(db
                     .prepare(
-                        "SELECT seen_at FROM agent_queue WHERE kind=?1 AND state=?2
-                         UNION ALL SELECT started_at FROM ci_jobs",
+                        "SELECT repository_id,seen_at,job FROM agent_queue WHERE kind=?1 AND state=?2
+                         UNION ALL SELECT repository_id,started_at,job FROM ci_jobs",
                     )?
                     .query_map(params![QueueKind::Job, QueueState::Starting], |row| {
-                        row.get(0)
+                        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
                     })?
                     .collect::<rusqlite::Result<_>>()?)
             })
             .await?;
         let now = crate::time::unix_seconds() as i64;
-        Ok(since
-            .into_iter()
-            .map(|since| Activity::Job {
+        let mut activities = Vec::new();
+        for (repository, since, job) in jobs {
+            let job: QueuedJob = serde_json::from_str(&job)?;
+            activities.push(Activity::Job {
                 age: Duration::from_secs(now.saturating_sub(since.unwrap_or(now)).max(0) as u64),
-                cores: capacity::ASSUMED_AGENT_CORES,
-            })
-            .collect())
+                cost: self.job_cost(&repository, &job).await?,
+            });
+        }
+        Ok(activities)
     }
 }

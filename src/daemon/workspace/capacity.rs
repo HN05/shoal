@@ -28,7 +28,26 @@ pub(crate) struct HostSample {
     pub parallelism: u32,
     pub cpu: Option<CpuSample>,
     pub memory: MemoryState,
+    /// The bytes new work may use before memory reaches its warning
+    /// threshold; `None` without a reading.
+    pub memory_room: Option<u64>,
     pub disk_free: Option<u64>,
+}
+
+/// What a CI job is expected to use: cores, and resident memory once its
+/// earlier runs showed it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct JobCost {
+    pub cores: f64,
+    pub memory: Option<u64>,
+}
+
+impl JobCost {
+    /// The cost of a job without earlier runs: an agent's assumed load.
+    pub(crate) const UNKNOWN: Self = Self {
+        cores: ASSUMED_AGENT_CORES,
+        memory: None,
+    };
 }
 
 /// Busy percentage across all cores over [`RECENT`] and [`SETTLED`].
@@ -59,8 +78,9 @@ pub(crate) struct Agents {
     /// Jobs starting or running.
     pub jobs: u32,
     /// The cores the jobs running for less than [`WARM_UP`] are expected to
-    /// use.
+    /// use, and the memory they are known to use.
     pub warming_job_cores: f64,
+    pub warming_job_memory: u64,
     /// Time since the newest agent, job or start began.
     pub newest: Option<Duration>,
 }
@@ -74,8 +94,8 @@ pub(crate) enum Activity {
     Running(Duration),
     /// An agent awaiting reattachment or resume, which runs no load here.
     Stopped,
-    /// A CI job admitted this long ago, expected to use `cores`.
-    Job { age: Duration, cores: f64 },
+    /// A CI job admitted this long ago, expected to use `cost`.
+    Job { age: Duration, cost: JobCost },
 }
 
 /// What measured load leaves for one more start.
@@ -86,20 +106,31 @@ pub(crate) enum Room {
     None,
     /// Nothing runs or starts, so one starts whatever the load.
     Idle,
-    /// The busy percentage of all cores left below the warning threshold.
-    Free { percent: f64, parallelism: u32 },
+    /// The busy percentage of all cores left below the warning threshold,
+    /// and the bytes of memory, without a reading `None`.
+    Free {
+        percent: f64,
+        parallelism: u32,
+        memory: Option<u64>,
+    },
 }
 
 impl Room {
-    /// Whether a start expected to use `cores` fits.
-    pub(crate) fn fits(self, cores: f64) -> bool {
+    /// Whether a job expected to use `cost` fits.
+    pub(crate) fn fits(self, cost: JobCost) -> bool {
         match self {
             Self::None => false,
             Self::Idle => true,
             Self::Free {
                 percent,
                 parallelism,
-            } => share(cores, parallelism) < percent,
+                memory,
+            } => {
+                share(cost.cores, parallelism) < percent
+                    && cost
+                        .memory
+                        .is_none_or(|needed| memory.is_some_and(|free| needed < free))
+            }
         }
     }
 }
@@ -122,10 +153,11 @@ impl Agents {
                     agents.settled += 1;
                     age
                 }
-                Activity::Job { age, cores } => {
+                Activity::Job { age, cost } => {
                     agents.jobs += 1;
                     if age < WARM_UP {
-                        agents.warming_job_cores += cores;
+                        agents.warming_job_cores += cost.cores;
+                        agents.warming_job_memory += cost.memory.unwrap_or_default();
                     }
                     age
                 }
@@ -148,8 +180,21 @@ pub(crate) fn sample(paths: &[&Path], settings: &Overload, cpu: Option<CpuSample
             .max(1),
         cpu,
         memory: sample_memory(settings),
+        memory_room: memory_room(settings),
         disk_free: disk_free(paths, settings),
     }
+}
+
+/// The bytes new work may use before memory reaches the warning threshold;
+/// unlimited with memory protection off.
+fn memory_room(settings: &Overload) -> Option<u64> {
+    if !settings.memory.enabled {
+        return Some(u64::MAX);
+    }
+    let memory = load::memory().ok()?;
+    let warning = u128::from(memory.total) * u128::from(settings.warning.memory_used_percent) / 100;
+    let used = u128::from(memory.total - memory.available);
+    Some(warning.saturating_sub(used).try_into().unwrap_or(u64::MAX))
 }
 
 /// The least free space across `paths`, as [`sample`] probes it.
@@ -240,6 +285,9 @@ pub(crate) fn room(sample: HostSample, agents: Agents, settings: &Overload) -> R
     Room::Free {
         percent: f64::from(settings.warning.cpu_used_percent) - projected,
         parallelism: sample.parallelism,
+        memory: sample
+            .memory_room
+            .map(|free| free.saturating_sub(agents.warming_job_memory)),
     }
 }
 

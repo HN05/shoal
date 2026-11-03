@@ -8,6 +8,7 @@ fn sample(cpu: f64) -> HostSample {
             settled: cpu,
         }),
         memory: MemoryState::Healthy,
+        memory_room: Some(1 << 30),
         disk_free: Some(u64::MAX),
     }
 }
@@ -172,7 +173,13 @@ fn low_disk_holds_fixed_limits_and_critical_disk_starts_none() {
 fn jobs_count_at_their_own_load_against_agents_and_each_other() {
     let settings = Overload::default();
     let minute = Duration::from_secs(60);
-    let warming_job = |cores| Activity::Job { age: minute, cores };
+    let warming_job = |cores| Activity::Job {
+        age: minute,
+        cost: JobCost {
+            cores,
+            memory: None,
+        },
+    };
     // Sixteen cores: a warming four-core job counts 25% beside the last
     // minute's 5%, which leaves 50% below the 80% target.
     let free = room(sample(5.0), Agents::count([warming_job(4.0)]), &settings);
@@ -180,11 +187,34 @@ fn jobs_count_at_their_own_load_against_agents_and_each_other() {
         free,
         Room::Free {
             percent: 50.0,
-            parallelism: 16
+            parallelism: 16,
+            memory: Some(1 << 30),
         }
     );
-    assert!(free.fits(7.0));
-    assert!(!free.fits(8.0));
+    let cost = |cores, memory| JobCost { cores, memory };
+    assert!(free.fits(cost(7.0, None)));
+    assert!(!free.fits(cost(8.0, None)));
+    // A job whose runs used more memory than is left waits.
+    assert!(free.fits(cost(1.0, Some(1 << 29))));
+    assert!(!free.fits(cost(1.0, Some(1 << 30))));
+    // Warming jobs' memory counts against the room left.
+    let heavy = Activity::Job {
+        age: minute,
+        cost: cost(1.0, Some(3 << 28)),
+    };
+    let left = room(sample(5.0), Agents::count([heavy]), &settings);
+    assert!(!left.fits(cost(1.0, Some(1 << 29))));
+    // Without a memory reading, only a job whose memory is unknown fits.
+    let unread = room(
+        HostSample {
+            memory_room: None,
+            ..sample(5.0)
+        },
+        Agents::count([warming_job(1.0)]),
+        &settings,
+    );
+    assert!(unread.fits(cost(1.0, None)));
+    assert!(!unread.fits(cost(1.0, Some(1))));
     // A running job is not an idle machine, and an agent fits beside it only
     // with room for its own load.
     let busy = Agents::count([warming_job(10.0)]);
@@ -192,13 +222,16 @@ fn jobs_count_at_their_own_load_against_agents_and_each_other() {
     // A settled job's load shows in measurements instead.
     let settled = Agents::count([Activity::Job {
         age: WARM_UP,
-        cores: 10.0,
+        cost: JobCost {
+            cores: 10.0,
+            memory: None,
+        },
     }]);
     assert_eq!(limit(sample(5.0), settled, &settings), 2);
     // Starts stay staggered across agents and jobs.
     let recent = Agents::count([Activity::Job {
         age: Duration::from_secs(1),
-        cores: 1.0,
+        cost: JobCost::UNKNOWN,
     }]);
     assert_eq!(room(sample(5.0), recent, &settings), Room::None);
     assert_eq!(room(sample(5.0), Agents::default(), &settings), Room::Idle);

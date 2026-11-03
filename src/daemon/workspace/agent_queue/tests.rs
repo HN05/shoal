@@ -68,7 +68,12 @@ fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
     let job = |id: &str, cores| Waiting {
         id: id.into(),
         repository: "a".into(),
-        work: Work::Job { cores },
+        work: Work::Job {
+            cost: capacity::JobCost {
+                cores,
+                memory: None,
+            },
+        },
     };
     let mut queue = waiting(&[("a1", "a")]);
     queue.insert(0, job("j1", 2.0));
@@ -90,6 +95,7 @@ fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
             room: Some(capacity::Room::Free {
                 percent,
                 parallelism: 16,
+                memory: None,
             }),
             ..JobLimits::default()
         },
