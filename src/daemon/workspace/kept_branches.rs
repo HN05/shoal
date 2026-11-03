@@ -56,9 +56,12 @@ impl Manager {
         workspace: &Workspace,
         outcome: &RemovalResult,
     ) -> Result<()> {
+        // Only the workspace's own branch is its to delete later; a worktree
+        // switched onto another leaves that one alone.
         let Some(branch) = outcome
             .branch
             .clone()
+            .filter(|branch| workspace.branch.as_ref() == Some(branch))
             .filter(|_| !outcome.branch_outcome.is_deleted())
         else {
             return Ok(());

@@ -1356,4 +1356,6 @@ async fn a_disposable_workspace_deletes_only_its_own_new_branch() {
         .unwrap();
     assert!(!removed.branch_outcome.is_deleted(), "{removed:?}");
     assert!(!git(&path, &["branch", "--list", "kept"]).is_empty());
+    // Nor does cleanup delete it later as a branch the workspace kept.
+    assert!(manager.list_kept_branches(None).await.unwrap().is_empty());
 }

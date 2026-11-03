@@ -481,6 +481,8 @@ async fn removing_one_switched_onto_a_branch_leaves_that_branch() {
         .unwrap();
     assert!(!removed.branch_outcome.is_deleted(), "{removed:?}");
     assert!(!git(&checkout, &["branch", "--list", "topic"]).is_empty());
+    // Nor does cleanup delete it later as a branch the workspace kept.
+    assert!(manager.list_kept_branches(None).await.unwrap().is_empty());
 }
 
 #[tokio::test]
