@@ -163,6 +163,65 @@ pub fn install_test_script(path: &Path, script: &str) {
     fs::rename(&staged, path).unwrap();
 }
 
+/// Whether the filesystem holding `dir` clones files without copying them.
+/// The probe calls the system directly instead of Shoal's clone code, so a
+/// broken clone never passes for a filesystem without cloning, and any failure
+/// other than missing support fails the test.
+pub fn native_cloning(dir: &Path) -> bool {
+    let probe = tempfile::tempdir_in(dir).unwrap();
+    let source = probe.path().join("source");
+    fs::write(&source, "probe").unwrap();
+    match clone_file(&source, &probe.path().join("clone")) {
+        Ok(()) => true,
+        Err(error) if cloning_unsupported(&error) => false,
+        Err(error) => panic!("probe cloning in {}: {error}", dir.display()),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn clone_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::{ffi::CString, os::unix::ffi::OsStrExt as _};
+    let source = CString::new(source.as_os_str().as_bytes())?;
+    let destination = CString::new(destination.as_os_str().as_bytes())?;
+    // SAFETY: both arguments are NUL-terminated paths that outlive the call.
+    match unsafe { libc::clonefile(source.as_ptr(), destination.as_ptr(), 0) } {
+        0 => Ok(()),
+        _ => Err(std::io::Error::last_os_error()),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn cloning_unsupported(error: &std::io::Error) -> bool {
+    error.raw_os_error() == Some(libc::ENOTSUP)
+}
+
+#[cfg(target_os = "linux")]
+fn clone_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::fd::AsRawFd as _;
+    let source = fs::File::open(source)?;
+    let destination = fs::File::create(destination)?;
+    // SAFETY: both descriptors stay open for the call.
+    match unsafe { libc::ioctl(destination.as_raw_fd(), libc::FICLONE, source.as_raw_fd()) } {
+        0 => Ok(()),
+        _ => Err(std::io::Error::last_os_error()),
+    }
+}
+
+/// The errors filesystems without reflinks give, as coreutils' `cp` reads them.
+#[cfg(target_os = "linux")]
+fn cloning_unsupported(error: &std::io::Error) -> bool {
+    error.raw_os_error().is_some_and(|code| {
+        [
+            libc::EOPNOTSUPP,
+            libc::ENOTTY,
+            libc::ENOSYS,
+            libc::EINVAL,
+            libc::EXDEV,
+        ]
+        .contains(&code)
+    })
+}
+
 /// A shell command that runs until this test binary exits, for at most ten
 /// minutes, standing in for a long-running tool: a test killed before it
 /// stops the command leaves nothing running.

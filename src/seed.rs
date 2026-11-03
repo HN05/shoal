@@ -170,6 +170,18 @@ impl Snapshot {
         paths: &[String],
         files: Vec<String>,
     ) -> Result<()> {
+        Self::freeze_with(&clone_tree, layout, commit, settings, paths, files).await
+    }
+
+    /// [`Self::freeze`], copying each output tree with `copy`.
+    async fn freeze_with(
+        copy: &impl AsyncFn(&Path, &Path) -> Result<()>,
+        layout: &Layout,
+        commit: String,
+        settings: String,
+        paths: &[String],
+        files: Vec<String>,
+    ) -> Result<()> {
         layout.ensure_owned()?;
         let staging = layout.staging();
         remove_dir(&staging)?;
@@ -185,7 +197,7 @@ impl Snapshot {
             if let Some(parent) = destination.parent() {
                 fs::create_dir_all(parent)?;
             }
-            clone_tree(&source, &destination).await?;
+            copy(&source, &destination).await?;
             frozen.push(path.clone());
         }
         let snapshot = Self {
@@ -213,6 +225,18 @@ impl Snapshot {
         worktree: &Path,
         paths: &[String],
     ) -> Result<Vec<String>> {
+        self.clone_outputs_with(&clone_tree, layout, worktree, paths)
+            .await
+    }
+
+    /// [`Self::clone_outputs`], copying each output tree with `copy`.
+    async fn clone_outputs_with(
+        &self,
+        copy: &impl AsyncFn(&Path, &Path) -> Result<()>,
+        layout: &Layout,
+        worktree: &Path,
+        paths: &[String],
+    ) -> Result<Vec<String>> {
         let outputs = layout.snapshot().join(OUTPUTS);
         let mut cloned = Vec::new();
         for path in self.paths.iter().filter(|path| paths.contains(path)) {
@@ -231,7 +255,7 @@ impl Snapshot {
                 None => Ok(()),
             };
             let result = match result {
-                Ok(()) => clone_tree(&outputs.join(path), &destination).await,
+                Ok(()) => copy(&outputs.join(path), &destination).await,
                 Err(error) => Err(error),
             };
             if let Err(error) = result {
