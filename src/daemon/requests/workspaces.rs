@@ -1,7 +1,7 @@
 //! The daemon's answers to [`WorkspaceMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use tokio::net::UnixStream;
 
 use super::super::{
@@ -36,10 +36,11 @@ pub(super) async fn handle(
                 git_profile: git_profile.as_deref(),
                 path,
                 options,
+                ..Default::default()
             };
             Body::OpenedWorkspace(
                 manager
-                    .open_branch_for_chat(repository, &branch, base, new, chat)
+                    .open_branch_for_chat(repository, &branch, base, new, chat, caller.is_some())
                     .await?,
             )
         }
@@ -56,6 +57,7 @@ pub(super) async fn handle(
                 git_profile: git_profile.as_deref(),
                 path,
                 options,
+                ..Default::default()
             };
             Body::Workspace(
                 manager
@@ -82,7 +84,7 @@ pub(super) async fn handle(
             options,
         } => Body::OpenedWorkspace(
             manager
-                .open_pull_head(repository, url, head, chat, options)
+                .open_pull_head(repository, url, head, chat, options, caller.is_some())
                 .await?,
         ),
         WorkspaceMethod::ReopenWorkspace { workspace } => {
@@ -140,7 +142,7 @@ pub(super) async fn handle(
         ),
         WorkspaceMethod::ListWorkspaces => Body::Workspaces(
             manager
-                .visible_workspaces(caller.map(|c| c.workspace_id.as_str()))
+                .visible_workspaces(caller.map(|c| c.space_id.as_str()))
                 .await?,
         ),
         WorkspaceMethod::UntrackedWorktrees => {
@@ -236,8 +238,38 @@ async fn owned_places(manager: &Manager, workspace: Option<String>) -> Result<Bo
 }
 
 impl Scoped for WorkspaceMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
+            // The settings of its own repository choose what it opens there.
+            WorkspaceMethod::LayeredConfig {
+                target: ConfigTarget::Repository(repository),
+            } => {
+                *repository = manager
+                    .own_repository(
+                        caller,
+                        repository,
+                        "scoped processes read only their own repository's config",
+                    )
+                    .await?;
+                None
+            }
+            // A chat's agent opens workspaces below its chat, which must be
+            // in its repository; a workspace's splits them from its own.
+            WorkspaceMethod::OpenBranch { chat, .. }
+            | WorkspaceMethod::CreateWorkspace { chat, .. }
+            | WorkspaceMethod::CreateCommitWorkspace {
+                parent: None, chat, ..
+            }
+            | WorkspaceMethod::OpenPullHead { chat, .. }
+            | WorkspaceMethod::CheckCreation { chat, .. } => {
+                ensure!(manager.caller_is_chat(caller).await?, denied());
+                *chat = Some(caller.space_id.clone());
+                None
+            }
+            WorkspaceMethod::CheckDependencies { .. } => {
+                ensure!(manager.caller_is_chat(caller).await?, denied());
+                None
+            }
             WorkspaceMethod::ListWorkspaces | WorkspaceMethod::FindSpaces { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
             | WorkspaceMethod::SetWorkspaceTitle { workspace, .. }
@@ -263,19 +295,10 @@ impl Scoped for WorkspaceMethod {
                 target: ConfigTarget::Workspace(workspace),
             } => Some(workspace),
             WorkspaceMethod::SpaceStatus { space } => Some(space),
-            WorkspaceMethod::OpenBranch { .. }
-            | WorkspaceMethod::CreateWorkspace { .. }
-            | WorkspaceMethod::CreateCommitWorkspace { parent: None, .. }
-            | WorkspaceMethod::OpenPullHead { .. }
-            | WorkspaceMethod::ReopenWorkspace { .. }
-            | WorkspaceMethod::CheckCreation { .. }
-            | WorkspaceMethod::CheckDependencies { .. }
+            WorkspaceMethod::ReopenWorkspace { .. }
             | WorkspaceMethod::AdoptWorkspace { .. }
             | WorkspaceMethod::WorkspaceEnv { .. }
             | WorkspaceMethod::RevokeWorkspaceEnv { .. }
-            | WorkspaceMethod::LayeredConfig {
-                target: ConfigTarget::Repository(_),
-            }
             | WorkspaceMethod::UntrackedWorktrees
             | WorkspaceMethod::OwnedPlaces
             | WorkspaceMethod::WatchWorkspaceEvents { .. } => return Err(denied()),

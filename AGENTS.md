@@ -98,10 +98,15 @@ when behavior changes, distinguishing decisions from proposals.
   local config, worktree file, global config, then default; the CLI reads the global file at launch and asks the
   daemon for the repository layer. Named ports are lazy, with CLI overrides and
   explicit conflicts.
-- Workspace commands inherit a scope token; CLI refusals also follow process
-  ancestry for the same state directory, so a cleared token does not unscope. A scope covers its
-  workspace and the spaces below it, recursively; targets name one of them, and
-  the agent's hooks report for its own. Enforce own-worktree resource access
+- Workspace commands and every chat's agent inherit a scope token, a chat's
+  lasting as long as the chat; only the user's own terminal is unscoped. CLI
+  refusals also follow process ancestry for the same state directory, so a
+  cleared token does not unscope. A scope covers its space and the spaces below
+  it, recursively; targets name one of them, and the agent's hooks report for
+  its own. A chat's agent follows the workspace-agent rules below, without what
+  needs a worktree; it opens workspaces only below its chat, in its repository,
+  renames its own chat, and opens issues only where `[permissions]` lets agents
+  open them directly. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery other than splitting a child and removing one the user holds nothing below, and shared
   repository/service administration. For the workspaces below their own, scoped callers may hold them, queue
   agents and the restores of agents they or the workspaces below them stopped, which the daemon starts detached, cancel their queue
@@ -187,10 +192,10 @@ when behavior changes, distinguishing decisions from proposals.
   with an agent goes to the nearest space above it with an agent, of either
   kind. That space decides it or passes it up, the next such space above and
   the user at the top; a parent
-  workspace without an approved grant for the same target and settings may only
-  deny or pass it up, while a chat, being unscoped, may approve anything.
-  Proposals route the same way, but only the user or a chat approves one; a
-  parent workspace may deny it with a reason or pass it up. A chat whose agent
+  space without an approved grant for the same target and settings may only
+  deny or pass it up, a chat as a workspace. Proposals route the same way, but
+  only the user approves one; a parent space may deny it with a reason or pass
+  it up. A chat whose agent
   stops, or a deciding space that is removed, passes its undecided requests to
   the user. Resource grants bind effective
   allocation settings, consume no capacity, and last until release or workspace

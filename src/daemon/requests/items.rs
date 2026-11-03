@@ -259,10 +259,10 @@ impl Scoped for ItemMethod {
 /// workspace, never from a registered checkout.
 pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut String> {
     match context {
-        ItemContext::Workspace(workspace) => Ok(workspace),
-        ItemContext::Checkout(_) | ItemContext::Chat(_) => bail!(
-            "workspace processes act on items from their workspace, not from a registered checkout"
-        ),
+        ItemContext::Workspace(space) | ItemContext::Chat(space) => Ok(space),
+        ItemContext::Checkout(_) => {
+            bail!("scoped processes act on items from their space, not from a registered checkout")
+        }
     }
 }
 

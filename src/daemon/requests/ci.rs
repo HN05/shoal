@@ -78,7 +78,7 @@ pub(super) async fn handle(
 }
 
 impl Scoped for CiMethod {
-    async fn scope(&mut self, _: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             CiMethod::ApproveCiRuns { .. } => {
                 bail!("approving CI runs is the user's decision; ask them with shoal alerts send")
@@ -95,14 +95,18 @@ impl Scoped for CiMethod {
             | CiMethod::CiRunJobs { context, .. }
             | CiMethod::CiRunJobLog { context, .. }
             | CiMethod::StartCiRun { context, .. } => {
-                let context = context.get_or_insert_with(|| own_context(caller));
-                Some(super::items::context_workspace(context)?)
+                let own = own_context(manager, caller).await?;
+                Some(super::items::context_workspace(context.get_or_insert(own))?)
             }
         })
     }
 }
 
-/// The caller's own workspace as the context of a request that names none.
-fn own_context(caller: &Caller) -> ItemContext {
-    ItemContext::Workspace(caller.workspace_id.clone())
+/// The caller's own space as the context of a request that names none.
+async fn own_context(manager: &Manager, caller: &Caller) -> Result<ItemContext> {
+    let space = caller.space_id.clone();
+    Ok(match manager.caller_is_chat(caller).await? {
+        true => ItemContext::Chat(space),
+        false => ItemContext::Workspace(space),
+    })
 }

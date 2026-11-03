@@ -28,3 +28,10 @@ fn a_started_run_is_linked_only_where_shoal_reads_runs() -> Result<()> {
     assert_eq!(started_link(&bitbucket, &pipeline), None);
     Ok(())
 }
+
+#[test]
+fn a_chat_starts_runs_only_through_a_workspace_below_it() {
+    // A chat has no branch, so it names a workspace below it instead.
+    let error = on_own_branch_name(None, "topic").unwrap_err();
+    assert!(format!("{error:#}").contains(FROM_A_CHAT), "{error:#}");
+}

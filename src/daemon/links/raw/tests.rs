@@ -99,6 +99,111 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
 }
 
 #[tokio::test]
+async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let server = Server::start(|_| (200, Vec::new(), r#"{"ok":true}"#.into()));
+    let host = &server.host;
+    // Pins are this process's, which parallel tests replace; an answer stays.
+    crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::GitHub);
+    git(
+        &path,
+        &[
+            "remote",
+            "add",
+            "origin",
+            &format!("http://{host}/team/repo"),
+        ],
+    );
+    configure(
+        &manager,
+        &format!(
+            "[machine.forges.\"{host}\"]\ntype = \"github\"\ntoken = \"user\"\nagent_token = \"agent\"\n"
+        ),
+    )
+    .await;
+    let context = ItemContext::Chat(chat.id.clone());
+    let request = |method| RawRequest {
+        method,
+        path: "repos/{owner}/{repo}".into(),
+        body: None,
+    };
+
+    // Its agent reads as the agent account, as a workspace's does.
+    manager
+        .forge_api(&context, &request(HttpMethod::Get), None, true)
+        .await
+        .unwrap();
+    let error = manager
+        .forge_api(&context, &request(HttpMethod::Patch), None, true)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("api_writes"), "{error:#}");
+    manager
+        .write_local_config(
+            &repo.id,
+            Some("[permissions]\napi_writes = 'direct'\n".into()),
+        )
+        .await
+        .unwrap();
+    manager
+        .forge_api(&context, &request(HttpMethod::Patch), None, true)
+        .await
+        .unwrap();
+    let error = manager
+        .forge_api(
+            &context,
+            &request(HttpMethod::Patch),
+            Some("team/tool"),
+            true,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("GET requests to another repository"),
+        "{error:#}"
+    );
+    // The user's own command in the chat sends with the user's login.
+    manager
+        .forge_api(&context, &request(HttpMethod::Get), None, false)
+        .await
+        .unwrap();
+    let sent: Vec<_> = (server.received().into_iter())
+        .map(|request| {
+            let account = request.header("Authorization").map(str::to_owned);
+            (request.line, account)
+        })
+        .collect();
+    let agent = Some("Bearer agent".to_owned());
+    assert_eq!(
+        sent,
+        [
+            ("GET /api/v3/repos/team/repo".to_owned(), agent.clone()),
+            ("PATCH /api/v3/repos/team/repo".to_owned(), agent),
+            (
+                "GET /api/v3/repos/team/repo".to_owned(),
+                Some("Bearer user".to_owned())
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn agents_download_from_their_forge_as_their_account() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");

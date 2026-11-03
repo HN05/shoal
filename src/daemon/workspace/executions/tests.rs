@@ -131,7 +131,7 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
         let (token, caller) = scopes.iter().next().unwrap();
         (token.clone(), caller.clone())
     };
-    assert_eq!(caller.workspace_id, workspace.id);
+    assert_eq!(caller.space_id, workspace.id);
     assert_eq!(caller.kind(), Some(ExecutionKind::Setup));
     let mut stop = manager
         .executions

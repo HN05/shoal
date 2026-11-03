@@ -1,4 +1,4 @@
-//! Issues and PRs the daemon lists for a workspace or a registered
+//! Issues and PRs the daemon lists for a workspace, a chat or a registered
 //! checkout, in its repository or another one, so a scoped caller's search
 //! goes out as its agent account.
 use anyhow::Result;
@@ -15,8 +15,8 @@ use crate::{
 
 impl Manager {
     /// Issues or PRs that `search` matches in the repository of `context`,
-    /// or the one `repository` names, read as the workspace's agent account
-    /// for a `scoped` caller and as the user's own logins otherwise. Only
+    /// or the one `repository` names, read as the agent account for a
+    /// `scoped` caller and as the user's own logins otherwise. Only
     /// unscoped callers list from a registered checkout.
     pub async fn list_items(
         &self,
@@ -31,25 +31,30 @@ impl Manager {
         forge.list(&account, kind, search).await
     }
 
-    /// The repository of `context` and the account a listing reads it as.
+    /// The repository of `context` and the account a listing reads it as:
+    /// the agent account for a `scoped` caller in a workspace or a chat.
     async fn listing_forge_account(
         &self,
         context: &ItemContext,
         scoped: bool,
     ) -> Result<(ForgeRepo, Account)> {
         match context {
-            ItemContext::Workspace(selector) => {
-                let workspace = self.workspace(selector).await?;
-                self.verify_worktree(&workspace).await?;
-                if scoped {
-                    return self.workspace_forge_account(&workspace).await;
-                }
-                Ok((self.workspace_forge(&workspace).await?, self.user_account()))
+            ItemContext::Workspace(selector) | ItemContext::Chat(selector) => {
+                let space = self.link_space(selector).await?;
+                self.verify_space(&space).await?;
+                let account = match scoped {
+                    true => self.agent_account(),
+                    false => self.user_account(),
+                };
+                Ok((self.space_forge(&space).await?, account))
             }
-            ItemContext::Checkout(_) | ItemContext::Chat(_) => {
+            ItemContext::Checkout(_) => {
                 let checkout = self.context_checkout(context).await?;
                 Ok((self.checkout_forge(&checkout).await?, self.user_account()))
             }
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

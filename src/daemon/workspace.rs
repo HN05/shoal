@@ -99,6 +99,9 @@ pub(crate) struct NewWorkspace<'a> {
     pub git_profile: Option<&'a str>,
     pub path: Option<std::path::PathBuf>,
     pub options: CreationOptions,
+    /// The space it goes below, a chat or a workspace, recorded with it so
+    /// that one whose creation fails is still there.
+    pub parent: Option<String>,
 }
 
 enum WorkspaceSource {
@@ -430,7 +433,7 @@ impl Manager {
         let new = NewWorkspace {
             git_profile,
             path,
-            options: CreationOptions::default(),
+            ..Default::default()
         };
         self.create_workspace_with(repository, name, base, new)
             .await
@@ -520,6 +523,7 @@ impl Manager {
             git_profile,
             path,
             options,
+            parent: below,
         } = new;
         let existing = match &source {
             WorkspaceSource::Existing { .. } => Some(branch.as_str()),
@@ -540,7 +544,8 @@ impl Manager {
         let parent = match &source {
             WorkspaceSource::New { parent, .. } => parent.clone(),
             WorkspaceSource::Existing { .. } => None,
-        };
+        }
+        .or(below);
         let name = derive_workspace_name(&name);
         let path = self.new_workspace_path(repo, &name, path).await?;
         let workspace = Workspace {
@@ -591,7 +596,8 @@ impl Manager {
     }
 
     /// Record a new workspace, stacked on the workspace that owns `base_branch`
-    /// and split from `parent`.
+    /// and below `parent`, refusing a parent chat being removed, which takes
+    /// no new workspace.
     async fn insert_workspace(
         &self,
         record: Workspace,
@@ -602,6 +608,7 @@ impl Manager {
             Some(git_dir) => off_runtime::run(move || identity::marked_owner(&git_dir)).await?,
             None => None,
         };
+        let removing = self.chat_removals.clone();
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -636,6 +643,10 @@ impl Manager {
                 };
                 // Recorded first, so the workspace's creation names it.
                 if let Some(parent) = &parent {
+                    ensure!(
+                        !removing.reserved(parent),
+                        "the chat the workspace would go below is being removed"
+                    );
                     tree::ensure_parent(&tx, &record.repository_id, &record.id, parent)?;
                     tree::set_parent(&tx, &record.id, Some(parent))?;
                 }

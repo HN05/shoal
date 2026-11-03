@@ -1,4 +1,6 @@
 //! Opening a planned workspace, setting it up and launching its agent.
+use std::ffi::OsString;
+
 use anyhow::{Context as _, Result};
 
 use super::{
@@ -20,10 +22,10 @@ use crate::{
         output::{Palette, Style},
         terminal,
     },
-    model::{OpenedWorkspace, Workspace},
+    model::{OpenedWorkspace, QueueEntry, Workspace},
     protocol::{ConfigTarget, ItemMethod, WorkspaceMethod},
     shell,
-    state::WorkspaceState,
+    state::{QueueState, WorkspaceState},
 };
 
 pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
@@ -44,18 +46,21 @@ pub(super) async fn execute_add_with_target(
     issue: Option<issues::Issue>,
 ) -> Result<i32> {
     let Some(entry) = plan.queue_entry.clone() else {
-        return add_planned(ctx, plan, target, issue).await;
+        return add_planned(ctx, plan, target, issue, false).await;
     };
     let _hold = agent_queue::Hold::start(&ctx.paths, &entry).await;
-    let result = add_planned(ctx, plan, target, issue).await;
+    let result = add_planned(ctx, plan, target, issue, false).await;
     failing_entry(ctx, Some(&entry), result).await
 }
 
-async fn add_planned(
+/// Open the planned workspace and launch its agent here, or with `queued`
+/// queue the agent there.
+pub(super) async fn add_planned(
     ctx: &Context,
     plan: AddPlan,
     target: AddTarget,
     issue: Option<issues::Issue>,
+    queued: bool,
 ) -> Result<i32> {
     let AddPlan {
         repository: _,
@@ -89,7 +94,12 @@ async fn add_planned(
         (None, None, None) => branch.to_owned(),
     };
     let agent_name = agent.agent.clone().map(String::from);
-    terminal::host_workspace(ctx, &opened.workspace, agent_name.is_some(), &label).await?;
+    // A queued agent starts detached, so the caller's terminal, such as a
+    // chat's session, stays its own.
+    let queued = queued && agent_name.is_some();
+    if !queued {
+        terminal::host_workspace(ctx, &opened.workspace, agent_name.is_some(), &label).await?;
+    }
     if let Some(issue) = &issue {
         request::<()>(
             &ctx.paths,
@@ -102,6 +112,7 @@ async fn add_planned(
         .await?;
     }
     let name = opened.workspace.name.clone();
+    let own_prompt = prompt.clone();
     let prompt = issue.as_ref().map(issues::Issue::prompt).or(prompt);
     let Some(workspace) = finish_add_workspace(ctx, opened, pr, &agent, prompt.is_some()).await?
     else {
@@ -116,7 +127,46 @@ async fn add_planned(
     if let Some(entry) = &queue_entry {
         crate::env::launch_queue_entry(entry);
     }
+    if queued {
+        let input = (own_prompt, args, fork);
+        return queue_added_agent(ctx, &workspace, agent, issue, input).await;
+    }
     agent.launch(ctx, workspace, prompt, args, fork).await
+}
+
+/// Queue `agent` in the added `workspace`, prompted with `issue` or else the plan's own prompt, with its arguments
+/// and fork. The daemon starts it outside this process, so it gets the
+/// workspace's own scope, as `shoal split --agent` does.
+async fn queue_added_agent(
+    ctx: &Context,
+    workspace: &Workspace,
+    agent: ResolvedAddAgent,
+    issue: Option<issues::Issue>,
+    (prompt, args, fork): (Option<String>, Vec<OsString>, Option<String>),
+) -> Result<i32> {
+    let chosen = agent.agent.context("the queued launch has no agent")?;
+    let name = String::from(chosen.clone());
+    let mut plan = AddPlan::agent_in(workspace, chosen, agent.model, issue.as_ref(), args, fork);
+    plan.prompt = prompt.filter(|_| plan.issue.is_none());
+    let title = issue.map(|issue| issue.title);
+    let entry = agent_queue::queue_in(ctx, &plan, workspace, name, title).await?;
+    report_queued_in(ctx, workspace, &entry)
+}
+
+/// Report the agent queued in the added `workspace`.
+fn report_queued_in(ctx: &Context, workspace: &Workspace, entry: &QueueEntry) -> Result<i32> {
+    let text = match entry.state {
+        QueueState::Queued => format!(
+            "Queued {} in {} (position {}); it starts {}",
+            entry.agent,
+            workspace.name,
+            entry.position.unwrap_or(1),
+            agent_queue::starts_when(entry)
+        ),
+        _ => format!("Starting {} in {}", entry.agent, workspace.name),
+    };
+    ctx.emit(&text, entry)?;
+    Ok(0)
 }
 
 /// Whether the caller's shell enters the added `workspace`, where `agent`

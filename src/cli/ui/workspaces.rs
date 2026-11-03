@@ -313,7 +313,7 @@ async fn resolve_workspace(
     // A scoped caller lists its own workspace first, then the workspaces
     // split from it, which the current directory selects.
     let workspaces = client::workspaces(&ctx.paths).await?;
-    let scoped = crate::env::is_scoped();
+    let scoped = crate::env::workspace_scoped();
     let order = match fallback {
         Fallback::OwnWorkspace => ScopeOrder::BeforeDirectory,
         Fallback::CurrentDirectory | Fallback::CurrentDirectoryOnly => ScopeOrder::AfterDirectory,
@@ -339,7 +339,7 @@ async fn resolve_workspace(
 
 /// The workspace containing the current directory, for an unscoped caller.
 pub fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>> {
-    if crate::env::is_scoped() {
+    if crate::env::workspace_scoped() {
         return Ok(None);
     }
     let cwd = current_directory()?;
@@ -401,13 +401,13 @@ pub async fn select_other_space(
     Ok(space)
 }
 
-/// The chat this process runs in, outside any workspace scope, when no
-/// space is `explicit`.
+/// The chat this process runs in, outside any workspace, when no space is
+/// `explicit`.
 pub fn current_chat(explicit: &Option<String>) -> Option<String> {
-    if explicit.is_some() || crate::env::is_scoped() {
+    if explicit.is_some() {
         return None;
     }
-    crate::env::chat()
+    crate::env::in_chat()
 }
 
 /// [`select_space`] for a command that also acts on every space: `None`

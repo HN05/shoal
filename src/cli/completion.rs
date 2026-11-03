@@ -354,7 +354,7 @@ impl Typed {
                 let workspace = context
                     .resolve(
                         self.workspace.as_deref(),
-                        env::is_scoped(),
+                        env::workspace_scoped(),
                         ScopeOrder::AfterDirectory,
                     )
                     // Command names remain available from cwd while a typed
@@ -571,7 +571,7 @@ impl Typed {
         let cwd = std::env::current_dir().ok();
         WorkspaceContext::from_directory(workspaces, cwd.as_deref()).resolve(
             self.workspace.as_deref(),
-            env::is_scoped(),
+            env::workspace_scoped(),
             ScopeOrder::AfterDirectory,
         )
     }

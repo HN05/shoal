@@ -51,21 +51,30 @@ pub(super) async fn handle(
             Body::Ok
         }
         ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),
+        ChatMethod::ChatScope { chat } => Body::ScopeToken(crate::protocol::ScopeToken {
+            token: manager.chat_scope(&chat).await?,
+        }),
     }))
 }
 
 impl Scoped for ChatMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             ChatMethod::ListChats => None,
+            // A chat's agent chooses its chat's name.
+            ChatMethod::RenameChat { chat, .. } => Some(
+                manager
+                    .own_workspace(caller, chat, "chat processes rename only their own chat")
+                    .await?,
+            ),
             ChatMethod::StartChat { .. }
             | ChatMethod::MoveChat { .. }
             | ChatMethod::RestoreChat { .. }
             | ChatMethod::SaveChat { .. }
             | ChatMethod::RemoveChat { .. }
-            | ChatMethod::RenameChat { .. }
             | ChatMethod::CheckChatName { .. }
-            | ChatMethod::FreeChatName { .. } => return Err(denied()),
+            | ChatMethod::FreeChatName { .. }
+            | ChatMethod::ChatScope { .. } => return Err(denied()),
         })
     }
 }

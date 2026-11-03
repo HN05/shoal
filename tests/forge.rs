@@ -3762,7 +3762,7 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
         refused["data"]["message"]
             .as_str()
             .unwrap()
-            .contains("only on their workspace's branch"),
+            .contains("only on the branch of the workspace they act from"),
         "{refused}"
     );
     assert!(fixture.requests().is_empty());
@@ -3894,7 +3894,10 @@ fn forgejo_workflow_links_of_another_repository_link_the_run_for_the_user_only()
     );
     for (workflow, error) in [
         (page.as_str(), "of their own repository"),
-        (own_file.as_str(), "only on their workspace's branch"),
+        (
+            own_file.as_str(),
+            "only on the branch of the workspace they act from",
+        ),
     ] {
         let refused = fixture.request_as(
             json!({"start_ci_run": {"workflow": workflow, "branch": null, "inputs": {}}}),
@@ -4415,7 +4418,7 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
         refused["data"]["message"]
             .as_str()
             .unwrap()
-            .contains("only on CI runs of their workspace's branch"),
+            .contains("only on CI runs of the branch of the workspace they act from"),
         "{refused}"
     );
     assert!(writes(&fixture).is_empty());

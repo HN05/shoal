@@ -111,8 +111,11 @@ instead of the PR delivery guidance below.
 - Every problem names the command that resolves it; repairing a workspace
   remains an explicit choice except readying one the startup audit failed once
   its ownership verifies.
-- Scope: tracked executions and externally launched processes with exported
-  environments carry a scope token and get access to their own worktree and the
+- Scope: tracked executions, externally launched processes with exported
+  environments and every chat's agent carry a scope token; only the user's own
+  terminal is unscoped. Flag a chat process granted what a workspace process is
+  refused, other than opening workspaces below its chat in its repository and
+  renaming its own chat. Scoped callers get access to their own worktree and the
   spaces below it, recursively, only (CLI refusals also follow ancestry
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
@@ -186,7 +189,7 @@ instead of the PR delivery guidance below.
   and `[permissions] push` are both `"direct"`; approval never skips a merge check and merges only the approved commit.
   Under `[permissions] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
   `pr open` records a proposal instead of opening, routed like other approval
-  requests, though only the user or a chat approves it; approval opens it as the agent
+  requests, though only the user approves it; approval opens it as the agent
   account through the normal open path, a PR only at its recorded commit, and an
   issue proposal belongs to the repository and outlives its workspace.
   Under `[permissions] push = "propose"`, a scoped push, through `pr open` or
@@ -223,8 +226,8 @@ instead of the PR delivery guidance below.
 - Resource approvals bind effective allocation settings and require an unscoped
   decision, or one by the nearest space above with an agent, of either kind, that
   the request was routed to: a workspace approves only with an approved grant
-  for the same target and settings and otherwise denies or passes it up, and a
-  chat may approve anything. That decision, which queues an agent message for the requester; failing to queue it
+  for the same target and settings and otherwise denies or passes it up, as a
+  chat does. That decision, which queues an agent message for the requester; failing to queue it
   never fails the decision. Pending requests reserve nothing; grant lifetime follows configuration
   and approval never bypasses capacity or simulator cleanup rules. Approval lookups
   validate their selected ID or active workspace/target/name record; grant reuse

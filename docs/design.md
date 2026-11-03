@@ -669,10 +669,10 @@ confirming that an execution Shoal cannot prove ended did, stay the user's.
 Stopping a workspace stops the workspaces below it unless `--skip-children`
 says otherwise, since their agents work for it. Approval
 requests go up the same tree: to the nearest space above with an agent, of
-either kind, since each knows best what its children need. A parent workspace approves only what it
-holds an approved grant for, or a hold on its child, and otherwise denies or
-passes the request up; a chat runs with the user's authority and approves
-anything; the user decides at the top, and a chat whose agent stops or a
+either kind, since each knows best what its children need. A parent space,
+workspace or chat, approves only what it holds an approved grant for, or a
+hold on its child, and otherwise denies or passes the request up; the user
+decides at the top, and a chat whose agent stops or a
 deciding space that is removed hands the user what it had not decided, since
 neither can decide any more.
 The worker skill steers agents to a subagent working in the child's directory
@@ -1387,7 +1387,7 @@ shares. For a repository that won't take that file, or settings for one user,
 `--local` or the interactive “Save locally” choice has the agent write the local
 config and its scripts in the repository directory's `.shoal/` instead. Nothing
 then needs a branch, so the agent runs as a chat in the registered checkout,
-with the user's authority, given that directory as another working directory;
+given that directory as another working directory;
 the result applies as soon as it is saved, and the agent tries the setup script
 in a temporary workspace it removes again. Explicit arguments are checked
 before the interactive choice. A `review` command such as tuicr owns its own
@@ -1864,9 +1864,15 @@ would stop the agent as soon as its turn ends; 30 minutes is the least OpenAI
 keeps a GPT-5.6 or later cache, and a guess for other tools.
 
 A chat is a conversation with an agent about a repository, not an assignment,
-so it runs in the registered checkout with the user's authority instead of in a
-workspace: coordinating work is one thing a chat may do, and scoped sessions
-cannot create workspaces. It starts at once from the default branch the
+so it runs in the registered checkout instead of in a workspace: coordinating
+work is one thing a chat may do. Every chat is scoped, as a workspace's
+processes are: its agent carries a scope token, kept with the chat across
+stops and restores, that covers the chat and the spaces below it, so only the
+user's own terminal acts unscoped. The agent follows the workspace-agent rules
+without what needs a worktree: it opens workspaces only below its chat and in
+its repository, never takes over one outside it, renames only its own chat,
+and opens issues only where `[permissions]` lets agents open them directly,
+since the proposals a workspace's agent makes record its branch. It starts at once from the default branch the
 background sync keeps current, so an offline or diverged checkout still gets its
 chat. Its
 instructions describe the discussion only, from a chat template that
@@ -1910,7 +1916,8 @@ hooks deliver, including the user's request to rename it; a removed chat gives t
 messages stand for.
 A chat passes a question up by asking the user, who attends it. The approval
 requests of the spaces below it come to it when it is the nearest space above
-them with an agent, and with the user's authority it may approve them; those it
+them with an agent, and it approves only what it holds a grant for, as a
+parent workspace does, and otherwise denies or passes them up; those it
 has not decided go to the user when its agent stops or it is removed, as with
 any deciding space. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
@@ -2104,9 +2111,8 @@ attachments in the state directory until no pending proposal uses them; the comm
 reports it and exits 0, because the agent goes on with its work and hears the
 decision as a message. A proposal is routed like any request, to the nearest
 space above with an agent and up to the user, but publishing to a forge other people see is the review
-the setting asks for, so only the user or a chat, which runs with the user's
-authority, approves one. A parent workspace may deny it with a reason or pass it
-up; marking it a duplicate comments on the forge too, so that is not a workspace's
+the setting asks for, so only the user approves one. A parent space may deny it
+with a reason or pass it up; marking it a duplicate comments on the forge too, so that is not a workspace's
 either. Approval carries data: the decider may replace the title and body, and the daemon then opens the item as the agent account through the same path
 `issue open` and `pr open` use, recording and linking it. Denial may carry a reason,
 and an issue proposal may be denied as a duplicate of an existing issue, which gets
@@ -2156,7 +2162,7 @@ Item commands that need only a repository also run from a registered checkout
 outside any space: they act as the repository's agent account under its
 settings, open without a proposal, and link or record nothing, since a checkout
 holds no links; workspace processes act from their workspace. A chat acts the
-same way from its repository's checkout, with the user's authority, but records
+same way from its repository's checkout, under its own scope, but records
 what it opens as a workspace does: a new issue is linked as opened, or assigned
 with `--link`, and its item actions default to its linked items.
 A chat holds links as a workspace does: the link tables name the space, a
@@ -2185,7 +2191,7 @@ persists a request with a caller-supplied reason and the effective allocation se
 only an unscoped caller decides it, or the nearest space above the requesting
 workspace with an agent: a workspace approves only what it holds an approved
 grant for with the same target and settings and otherwise denies or passes the
-request up, and a chat may approve anything; the user decides at the top. The decision is sent to the requesting
+request up, as a chat does; the user decides at the top. The decision is sent to the requesting
 workspace's agents as a message so they need not poll. Pending requests consume no capacity. Approval
 lasts until release by default, or for the workspace when configured, limited to the
 same resource and access settings. Changed settings require a new request; approval

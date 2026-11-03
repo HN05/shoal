@@ -66,7 +66,7 @@ async fn setup() -> (tempfile::TempDir, std::sync::Arc<Manager>, Caller) {
         .await
         .unwrap();
     let caller = Caller {
-        workspace_id: workspace.id,
+        space_id: workspace.id,
         execution: None,
     };
     (temp, manager, caller)

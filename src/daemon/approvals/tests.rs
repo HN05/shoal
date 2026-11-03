@@ -376,7 +376,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
 
     // Workspace processes withdraw only their own requests.
     let caller = crate::daemon::scope::Caller {
-        workspace_id: workspace.id.clone(),
+        space_id: workspace.id.clone(),
         execution: None,
     };
     manager.executions.issue_scope("scope".into(), caller).await;

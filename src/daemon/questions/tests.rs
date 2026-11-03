@@ -420,7 +420,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
         .issue_scope(
             "scope".into(),
             Caller {
-                workspace_id: workspace.id.clone(),
+                space_id: workspace.id.clone(),
                 execution: None,
             },
         )

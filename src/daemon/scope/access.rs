@@ -12,7 +12,7 @@ use crate::{
 };
 
 impl Manager {
-    /// The repositories `caller` may see: its own workspace's, or all of them
+    /// The repositories `caller` may see: its own space's, or all of them
     /// for an unscoped caller.
     pub(in crate::daemon) async fn visible_repositories(
         &self,
@@ -20,56 +20,73 @@ impl Manager {
     ) -> Result<Vec<Repository>> {
         let mut repositories = self.repositories().await?;
         if let Some(caller) = caller {
-            let own = self.workspace(&caller.workspace_id).await?.repository_id;
+            let own = self.caller_repository(caller).await?;
             repositories.retain(|repository| repository.id == own);
         }
         Ok(repositories)
     }
 
-    /// The spaces `target` finds among those `caller` may see: the
-    /// workspaces in its workspace tree, or every space for an unscoped
-    /// caller.
+    /// Whether the caller's own space is a chat.
+    pub(in crate::daemon) async fn caller_is_chat(&self, caller: &Caller) -> Result<bool> {
+        let id = caller.space_id.clone();
+        let kind = (self.store)
+            .run(move |db| crate::daemon::spaces::space_kind(db, &id))
+            .await?;
+        Ok(kind == Some(crate::model::SpaceKind::Chat))
+    }
+
+    /// The repository of the caller's own space.
+    pub(in crate::daemon) async fn caller_repository(&self, caller: &Caller) -> Result<String> {
+        Ok(self
+            .present_space(&caller.space_id)
+            .await?
+            .repository_id()
+            .to_owned())
+    }
+
+    /// The spaces `target` finds among those `caller` may see: the ones
+    /// below its space, or every space for an unscoped caller.
     pub(in crate::daemon) async fn find_visible_spaces(
         &self,
         target: &SpaceTarget,
         caller: Option<&Caller>,
     ) -> Result<Vec<PresentSpace>> {
         let within = match caller {
-            Some(caller) => Some(self.subtree(&caller.workspace_id).await?),
+            Some(caller) => Some(self.subtree(&caller.space_id).await?),
             None => None,
         };
         self.find_spaces(target, within).await
     }
 
-    /// `workspace`, which must be the caller's own; `refusal` says why
+    /// `space`, which must be the caller's own; `refusal` says why
     /// another is refused.
     pub(in crate::daemon) async fn own_workspace<'a>(
         &self,
         caller: &Caller,
-        workspace: &'a mut String,
+        space: &'a mut String,
         refusal: &str,
     ) -> Result<&'a mut String> {
         ensure!(
-            self.workspace(workspace).await?.id == caller.workspace_id,
+            self.present_space(space).await?.id() == caller.space_id,
             "{refusal}"
         );
-        Ok(workspace)
+        Ok(space)
     }
 
-    /// `workspace`, which must not be the caller's own; [`super::authorize`] confines
-    /// it to the workspaces below. `refusal` says why the caller's own is
-    /// refused.
+    /// `space`, which must not be the caller's own; [`super::authorize`]
+    /// confines it to the spaces below. `refusal` says why the caller's own
+    /// is refused.
     pub(in crate::daemon) async fn workspace_below<'a>(
         &self,
         caller: &Caller,
-        workspace: &'a mut String,
+        space: &'a mut String,
         refusal: &str,
     ) -> Result<&'a mut String> {
         ensure!(
-            self.workspace(workspace).await?.id != caller.workspace_id,
+            self.present_space(space).await?.id() != caller.space_id,
             "{refusal}"
         );
-        Ok(workspace)
+        Ok(space)
     }
 
     /// `workspace`, which must be one below the caller's whose agent stopped
@@ -92,7 +109,7 @@ impl Manager {
         let id = self.workspace(workspace).await?.id;
         let stopper = recovery::stopped_by(&self.paths, &id, execution)?;
         let ours = match stopper {
-            Some(stopper) => self.within_subtree(&caller.workspace_id, &stopper).await?,
+            Some(stopper) => self.within_subtree(&caller.space_id, &stopper).await?,
             None => false,
         };
         ensure!(
@@ -114,7 +131,10 @@ impl Manager {
         let workspace = self.workspace_below(caller, workspace, refusal).await?;
         let id = self.workspace(workspace).await?.id;
         for id in self.subtree(&id).await? {
-            let held = self.workspace(&id).await?;
+            // A chat below has no holds.
+            let Some(held) = self.find_workspace(&id).await? else {
+                continue;
+            };
             ensure!(
                 held.holds
                     .iter()
@@ -137,21 +157,24 @@ impl Manager {
             Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
         })?;
         ensure!(
-            request.decider.as_deref() == Some(caller.workspace_id.as_str()),
+            request.decider.as_deref() == Some(caller.space_id.as_str()),
             "workspace processes decide only the approval requests routed to them; ask the user to run this command"
         );
         Ok(request)
     }
 
-    /// The chats `caller` may see: none for a workspace process.
+    /// The chats `caller` may see: those of its own space's subtree, or all
+    /// of them for an unscoped caller.
     pub(in crate::daemon) async fn visible_chats(
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<Chat>> {
-        match caller {
-            Some(_) => Ok(Vec::new()),
-            None => self.chats().await,
+        let mut chats = self.chats().await?;
+        if let Some(caller) = caller {
+            let subtree = self.subtree(&caller.space_id).await?;
+            chats.retain(|chat| subtree.contains(&chat.id));
         }
+        Ok(chats)
     }
 
     /// The agent queue `caller` may see: the entries for the workspaces
@@ -162,10 +185,10 @@ impl Manager {
     ) -> Result<Vec<QueueEntry>> {
         let mut entries = self.queue_entries().await?;
         if let Some(caller) = caller {
-            let subtree = self.subtree(&caller.workspace_id).await?;
+            let subtree = self.subtree(&caller.space_id).await?;
             entries.retain(|entry| {
                 entry.workspace().is_some_and(|workspace| {
-                    workspace != caller.workspace_id && subtree.iter().any(|id| id == workspace)
+                    workspace != caller.space_id && subtree.iter().any(|id| id == workspace)
                 })
             });
         }
@@ -195,7 +218,7 @@ impl Manager {
         id: i64,
         shown: Option<Question>,
     ) -> Result<Question> {
-        let owner = &caller.workspace_id;
+        let owner = &caller.space_id;
         let question = match shown {
             Some(shown) => shown,
             None => self.question(id).await?,
@@ -217,7 +240,7 @@ impl Manager {
         repository: &Selector,
         refusal: &str,
     ) -> Result<Selector> {
-        let own = self.workspace(&caller.workspace_id).await?.repository_id;
+        let own = self.caller_repository(caller).await?;
         ensure!(self.repository(repository).await?.id == own, "{refusal}");
         Ok(own.into())
     }

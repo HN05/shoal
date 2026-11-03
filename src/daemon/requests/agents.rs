@@ -154,7 +154,7 @@ pub(super) async fn handle(
             sender_chat,
         } => {
             let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
-            let below = caller.map(|caller| caller.workspace_id.as_str());
+            let below = caller.map(|caller| caller.space_id.as_str());
             Body::Reached(
                 manager
                     .send_repository_message(

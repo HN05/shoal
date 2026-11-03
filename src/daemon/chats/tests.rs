@@ -651,7 +651,7 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     let mode = std::fs::metadata(&tmp_dir).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o700);
     assert_eq!(
-        crate::env::chat_environment(&chat, &manager.paths)[crate::env::TMPDIR],
+        crate::env::chat_environment(&chat, "token", &manager.paths)[crate::env::TMPDIR],
         tmp_dir.as_os_str()
     );
     std::fs::write(tmp_dir.join("scratch"), "garbage").unwrap();
@@ -753,4 +753,89 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
 /// How `process` exited.
 fn process_wait(mut process: crate::test_support::ProcessGroup) -> std::process::ExitStatus {
     process.wait().unwrap()
+}
+
+#[tokio::test]
+async fn a_workspace_whose_creation_fails_stays_below_the_chat_that_opened_it() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    // A base that does not resolve fails the worktree after the record.
+    let error = manager
+        .create_workspace_for_chat(
+            repo.id.clone().into(),
+            "broken".into(),
+            Some("does-not-exist".into()),
+            Default::default(),
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("failed"), "{error:#}");
+    // It is the chat's to inspect and remove, and goes with the chat.
+    let broken = manager.workspace("broken").await.unwrap();
+    assert_eq!(broken.state, crate::state::WorkspaceState::Failed);
+    assert_eq!(broken.parent.map(|parent| parent.id), Some(chat.id));
+}
+
+#[tokio::test]
+async fn a_chat_being_removed_takes_no_new_workspace() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    // A creation that reaches its record after the removal began is refused,
+    // rather than leaving a workspace outside the chat.
+    let _removal = manager.chat_removals.reserve(&chat.id).unwrap();
+    let branch = manager
+        .create_workspace_for_chat(
+            repo.id.clone().into(),
+            "late".into(),
+            None,
+            Default::default(),
+            Some(chat.id.clone()),
+        )
+        .await
+        .unwrap_err();
+    let commit = manager
+        .create_commit_workspace(
+            repo.id.clone().into(),
+            None,
+            crate::protocol::CommitStart::Revision(None),
+            Some(chat.id.clone()),
+            Default::default(),
+        )
+        .await
+        .unwrap_err();
+    for error in [branch, commit] {
+        assert!(format!("{error:#}").contains("being removed"), "{error:#}");
+    }
+    assert!(manager.list_workspaces().await.unwrap().is_empty());
 }

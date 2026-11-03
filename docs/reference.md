@@ -1758,8 +1758,16 @@ prompts are delivered. Its output and any saved first message replace those of
 an earlier chat with its name, at `<state>/chats/<name>.log` and `.prompt.md`;
 `--json` reports
 the `chat`, `log`, `prompt_file`, `prompt_delivered`, `happy_session_id` and
-`happy_daemon_recorded`. Chats run with your
-authority, not a workspace scope, and workspace processes cannot start one.
+`happy_daemon_recorded`. A chat's agent carries a scope of its own, which
+lasts as long as the chat, across stops and restores, so only your own terminal
+is unscoped. It acts on the chat and the spaces below it as a workspace's agent
+acts on its own, under the [scoped workspace commands](#scoped-workspace-commands)
+rules, without those that need a worktree. It opens workspaces only below the
+chat and in its repository, renames only its own chat, decides the requests
+routed to it only with a grant, and opens issues only where `[permissions]`
+lets agents open them directly. Merging, branch deletion, PR verdicts, CI
+approval, your notifications and administration stay with you. Workspace
+processes cannot start a chat.
 Chats are not tracked executions, so they are never queued or stopped under
 pressure. The daemon records each chat under its
 name, with the session the agent's session-start
@@ -1797,7 +1805,11 @@ restores and removal. A workspace the chat's agent opens with `shoal add` is
 below the chat, unless it was split from a workspace, below which it stays: its `parent` field and `shoal status` name the chat until the
 workspace is opened outside a chat, which returns it to you. The chat opens
 workspaces only in its own repository; one in another repository is refused.
-While it runs, or waits to come back on its own, the chat
+With `--agent`, the agent is queued once the workspace is set up, and the
+daemon starts it with the workspace's own scope when a slot is free, as for
+`shoal split --agent`. Since the workspace is created at once, an agent that
+would wait for `--after` or the issue's open blockers is refused there, as are
+`--now` and `--focus`. While it runs, or waits to come back on its own, the chat
 [coordinates](#child-workspaces) the spaces below it and receives the activity
 of those without an agent of their own; while it is otherwise stopped, their
 events go on up, to you at the top, and one removed before receiving their
@@ -3203,7 +3215,7 @@ in `placed_by` whether the user or an app hosting an external session placed it
 workspaces below their own directly. Holding their own workspace is an approval
 request with the target `hold/<name>`, which needs `--reason` and goes to the
 nearest space above with an agent, as other [approval requests](#resource-approvals)
-do: a workspace, which needs no grant to decide it, or a chat, else the user;
+do: a workspace or a chat, which needs no grant to decide it, else the user;
 approval places the hold,
 and acquiring again returns it.
 Workspace processes release only the holds agents placed, on their own workspace
@@ -3564,8 +3576,8 @@ agent's copies may be gone when you decide, and deleted once no pending proposal
 uses them, by the next decision or proposal or by the cleanup sweep. Both commands exit 0 with JSON `proposed`, the request, and the agent
 continues its work. A proposal is routed like other
 [approval requests](#resource-approvals): the nearest space above with an agent,
-a workspace or a chat, decides it before you do. Only you or a chat approve
-one; a parent workspace may deny it with `--reason` or pass it up.
+a workspace or a chat, decides it before you do. Only you approve one; a
+parent space may deny it with `--reason` or pass it up.
 
 ```sh
 shoal approvals                     # proposals show their labels and description
@@ -3761,7 +3773,8 @@ taking no workflow and passing inputs to its `spec:inputs`; Bitbucket runs the n
 custom pipeline, or the branch's own without one, with the inputs as its
 variables. The daemon starts it as the [agent account](#agent-accounts), or in
 another repository with the user's own logins, and processes inside a workspace
-may start runs only on that workspace's branch.
+may start runs only on that workspace's branch. A chat's agent, which has no
+branch, starts them on the branch of a workspace below it that `--space` names.
 `--json` returns `workflow`, `branch` and the run's `url` where the forge
 reports it, which GitHub and Gitea do not. Inside a workspace, a run with a URL
 is [linked](#linked-items-and-cleanup) as opened where Shoal reads runs, which
@@ -3774,8 +3787,10 @@ job of a finished run, or with `--failed` only its failed jobs; GitLab retries
 only failed and cancelled jobs either way, Forgejo with `--failed` reruns each
 failed job and the jobs that need it, also while the run is running, and
 Forgejo before 17, Gitea and Bitbucket cannot rerun. `cancel` cancels a running run on every forge but Bitbucket.
-Processes inside a workspace act only on runs of that workspace's branch, so a
-PR's checks, whose runs may name the PR instead, are acted on through the PR.
+Processes inside a workspace act only on runs of that workspace's branch, and a
+chat's agent only on runs of the branch of a workspace below it that `--space`
+names, so a PR's checks, whose runs may name the PR instead, are acted on
+through the PR.
 `--json` returns the run's `url` and the `action`.
 
 A run's URL may name another repository than that of the workspace or
@@ -3847,9 +3862,9 @@ or `-` for standard input, unless `-X` names another method. It uses the logins,
 rate limits and 64 MiB response bound of other forge requests. On Forgejo, a
 GET whose query sets `limit` without `page` reads the first page, since
 Forgejo's Actions lists otherwise ignore `limit` and return every run.
-Processes inside a workspace send it as the [agent account](#agent-accounts),
-and only GET unless `[permissions] api_writes` lets agents send other methods to
-the workspace's repository, which could merge, approve or skip required labels
+Processes inside a workspace and a chat's agent send it as the
+[agent account](#agent-accounts), and only GET unless `[permissions]
+api_writes` lets agents send other methods to their space's repository, which could merge, approve or skip required labels
 around Shoal's checks; to another repository they send only GET. Anyone
 else sends any request with your own logins.
 
@@ -4745,7 +4760,8 @@ PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
 `internal turn-failed` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `diff`, `work setup`, and resources. They may read
-effective configuration for their own workspace, but cannot change configuration.
+effective configuration for their own workspace and their space's repository,
+but cannot change configuration.
 They `merge` only with [approval](#merge-into-the-default-branch) and cannot
 reach spaces other than the ones below theirs, create workspaces other than by
 `split`, remove spaces other than those below theirs without holds, read
@@ -4978,12 +4994,11 @@ space above it with an agent: a parent [workspace](#child-workspaces) or a
 agent is told and decides it instead of the user, by number with
 `shoal approvals --approve <number>` or `shoal approvals --deny <number>`, or
 passes it up with `shoal approvals --escalate <number>`, to the next such
-space above and at the top to the user. A parent workspace approves only what it holds an
-approved grant for, with the same target and settings, or a request to hold the
-workspace, which needs none; otherwise `--approve` is refused and it denies or
-passes the request up. It never approves a proposal or denies one as a
-duplicate, which write to the forge. A chat runs with your authority and may
-approve anything.
+space above and at the top to the user. A parent space, workspace or chat,
+approves only what it holds an approved grant for, with the same target and
+settings, or a request to hold the workspace, which needs none; otherwise
+`--approve` is refused and it denies or passes the request up. It never
+approves a proposal or denies one as a duplicate, which write to the forge.
 A merge request names its own branch and commit, which no other workspace holds
 a grant for, so its parent workspace passes it up. When a chat's agent stops,
 or a space deciding a request is removed, such as below an issue

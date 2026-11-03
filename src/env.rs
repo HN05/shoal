@@ -272,12 +272,18 @@ pub fn apply_chat_identity(command: &mut Command, chat: &crate::model::Chat, pat
         .env_remove(SHELL_DIRECTIVE);
 }
 
-/// A chat agent's identity: its chat, and the state directory whose daemon
+/// A chat agent's identity: its chat, the scope `token` that confines it
+/// to the chat and the spaces below it, and the state directory whose daemon
 /// recorded it, which the agent's own Shoal commands must reach; its
 /// temporary directory; and the agents' output default.
-pub fn chat_environment(chat: &crate::model::Chat, paths: &Paths) -> BTreeMap<String, OsString> {
+pub fn chat_environment(
+    chat: &crate::model::Chat,
+    token: &str,
+    paths: &Paths,
+) -> BTreeMap<String, OsString> {
     let mut values = BTreeMap::from([
         (CHAT.into(), chat.id.clone().into()),
+        (SCOPE_TOKEN.into(), token.into()),
         (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
     ]);
     if let Some(directory) = &chat.tmp_dir {
@@ -358,6 +364,24 @@ pub fn output_setting() -> (String, String) {
 /// The chat this process runs under, if any.
 pub fn chat() -> Option<String> {
     std::env::var(CHAT).ok().filter(|chat| !chat.is_empty())
+}
+
+/// Whether this process carries a workspace's scope, which names its own
+/// workspace, rather than a chat's or none.
+pub fn workspace_scoped() -> bool {
+    is_scoped() && in_chat().is_none()
+}
+
+/// The chat whose own agent this process belongs to: a workspace's process
+/// that a chat started, which keeps the chat's marker, belongs to the
+/// workspace instead.
+pub fn in_chat() -> Option<String> {
+    own_chat(std::env::var_os(WORKSPACE_ID), chat())
+}
+
+/// `chat`, unless `workspace` names the workspace the process belongs to.
+fn own_chat(workspace: Option<OsString>, chat: Option<String>) -> Option<String> {
+    chat.filter(|_| workspace.is_none_or(|workspace| workspace.is_empty()))
 }
 
 /// True when this process or an ancestor carries scope for the `state`

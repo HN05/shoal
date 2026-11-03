@@ -49,7 +49,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
         .issue_scope(
             "scope".into(),
             Caller {
-                workspace_id: workspace.id.clone(),
+                space_id: workspace.id.clone(),
                 execution: Some(crate::daemon::scope::ScopedExecution {
                     id: "execution".into(),
                     kind: super::super::ExecutionKind::Command,
@@ -234,7 +234,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
             .issue_scope(
                 token.into(),
                 Caller {
-                    workspace_id: workspace.id.clone(),
+                    space_id: workspace.id.clone(),
                     execution: None,
                 },
             )

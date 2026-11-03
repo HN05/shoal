@@ -29,7 +29,8 @@ impl Manager {
     /// Start `workflow`, named by its file or ID or by its web URL, on
     /// `branch`, by default the one the URL names, and link the run as
     /// opened in the workspace where the forge reports it, so watches follow
-    /// it. Workspace processes start runs only on their workspace's branch.
+    /// it. Scoped processes start runs only on the branch of the workspace
+    /// they act from.
     pub async fn start_ci_run(
         &self,
         context: Option<&ItemContext>,
@@ -231,22 +232,26 @@ fn started_link(forge: &ForgeRepo, started: &StartedRun) -> Option<LinkedItem> {
     })
 }
 
+/// How a chat, which has no branch, acts on the runs of a workspace below it.
+const FROM_A_CHAT: &str = "a chat names a workspace below it with --space";
+
 /// Refuse a run started on any branch but the workspace's, or in another
-/// repository.
+/// repository; a chat has no branch.
 fn on_own_branch_name(workspace: Option<&Workspace>, branch: &str) -> Result<()> {
     ensure!(
         workspace.is_some_and(|workspace| workspace.branch.as_deref() == Some(branch)),
-        "workspace processes start CI runs only on their workspace's branch"
+        "scoped processes start CI runs only on the branch of the workspace they act from; {FROM_A_CHAT}"
     );
     Ok(())
 }
 
-/// Refuse a run on any branch but the workspace's, or of another repository.
+/// Refuse a run on any branch but the workspace's, or of another
+/// repository; a chat has no branch.
 fn on_own_branch(workspace: Option<&Workspace>, run: &Run) -> Result<()> {
     ensure!(
         workspace.is_some_and(|workspace| run.branch.is_some() && run.branch == workspace.branch),
-        "workspace processes act only on CI runs of their workspace's branch; \
-         use --pr for a PR's checks"
+        "scoped processes act only on CI runs of the branch of the workspace they act from; \
+         {FROM_A_CHAT}, and use --pr for a PR's checks"
     );
     Ok(())
 }

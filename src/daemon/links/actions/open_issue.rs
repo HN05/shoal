@@ -47,7 +47,7 @@ impl Manager {
                     .await
             }
             ItemContext::Chat(selector) => {
-                self.open_chat_issue(selector, issue, repository, link)
+                self.open_chat_issue(selector, issue, repository, link, caller)
                     .await
             }
             ItemContext::Checkout(selector) => {
@@ -59,15 +59,27 @@ impl Manager {
 
     /// Open the issue from the chat's checkout as a checkout opens one, and
     /// record it as opened by the chat, or assign it to the chat with `link`.
+    /// The chat's own agent, a scoped `caller`, follows the repository's
+    /// `[permissions]` as a workspace's does, but cannot propose.
     async fn open_chat_issue(
         &self,
         selector: &str,
         issue: NewIssue,
         repository: Option<String>,
         link: bool,
+        caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
         let space = self.link_space(selector).await?;
         let checkout = self.context_checkout(&space.item_context()).await?;
+        if caller.is_some() {
+            let settings = self.repository_settings(space.repository_id()).await?;
+            let own = self.checkout_forge(&checkout).await?;
+            let destination = self.issue_destination(own, repository.as_deref()).await?;
+            anyhow::ensure!(
+                destination.opening(&settings)? == Opening::Direct,
+                "[permissions] makes agents propose this issue, which a chat cannot do; ask the user to open it"
+            );
+        }
         // The chat's gate keeps a link meanwhile from taking its issue's place.
         let _gate = self.gates.lock_prs([space.id()]).await;
         if link {

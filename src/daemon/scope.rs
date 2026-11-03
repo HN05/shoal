@@ -9,10 +9,10 @@ use anyhow::{Result, ensure};
 
 mod access;
 
-/// The workspace and optional tracked execution a scope token belongs to.
+/// The space and optional tracked execution a scope token belongs to.
 #[derive(Debug, Clone)]
 pub struct Caller {
-    pub workspace_id: String,
+    pub space_id: String,
     pub execution: Option<ScopedExecution>,
 }
 
@@ -25,9 +25,9 @@ pub struct ScopedExecution {
     pub agent: Option<String>,
 }
 
-/// Resolve `token` and confine `method` to the caller's own workspace and the
-/// workspaces split from it. Optional workspace filters default to the
-/// caller's own; other targets must name one of them.
+/// Resolve `token` and confine `method` to the caller's own space, a
+/// workspace or a chat, and the spaces below it. Optional space filters
+/// default to the caller's own; other targets must name one of them.
 pub(crate) async fn authorize(
     manager: &Manager,
     token: Option<&str>,
@@ -41,10 +41,10 @@ pub(crate) async fn authorize(
         .await?
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
     if let Some(target) = method.scope(manager, &caller).await? {
-        let id = manager.workspace(target).await?.id;
+        let id = manager.present_space(target).await?.id().to_owned();
         ensure!(
-            manager.within_subtree(&caller.workspace_id, &id).await?,
-            "workspace processes can only access their own workspace and those split from it"
+            manager.within_subtree(&caller.space_id, &id).await?,
+            "workspace processes can only access their own space and those below it"
         );
         *target = id;
     }
@@ -54,8 +54,8 @@ pub(crate) async fn authorize(
 /// A request whose access a scoped caller's scope decides.
 pub(crate) trait Scoped {
     /// Refuse what `caller`'s scope does not allow and narrow the rest to
-    /// it, returning the workspace the request targets, which must be the
-    /// caller's own or one split from it.
+    /// it, returning the space the request targets, which must be the
+    /// caller's own or one below it.
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>>;
 }
 
@@ -102,10 +102,10 @@ impl Caller {
         self.execution.as_ref().map(|execution| execution.kind)
     }
 
-    /// The workspace an optional filter names, which defaults to the caller's
+    /// The space an optional filter names, which defaults to the caller's
     /// own.
     pub(super) fn own_by_default<'a>(&self, workspace: &'a mut Option<String>) -> &'a mut String {
-        workspace.get_or_insert_with(|| self.workspace_id.clone())
+        workspace.get_or_insert_with(|| self.space_id.clone())
     }
 }
 
@@ -125,9 +125,7 @@ pub(super) async fn inspect_owner(
 ) -> Result<()> {
     if let Some(caller) = caller {
         ensure!(
-            manager
-                .within_subtree(&caller.workspace_id, workspace)
-                .await?,
+            manager.within_subtree(&caller.space_id, workspace).await?,
             "workspace processes inspect only {kind} in their workspace tree"
         );
     }

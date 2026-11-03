@@ -1,5 +1,5 @@
 //! Admitting an addition's agent to the agent queue, with the work it waits for.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use super::{
     AddOptions,
@@ -86,6 +86,35 @@ pub(super) async fn admit(
             agent_queue::report_queued(ctx, &entry, waiting).map(Some)
         }
     }
+}
+
+/// Refuse a scoped caller's agent that is not queued as soon as its new
+/// workspace exists: one that starts at once in this terminal, as `--now`
+/// and `--focus` ask, or one that waits for `after` or its issue's blockers,
+/// whose branch a workspace created later would build on.
+pub(super) async fn ensure_queues_at_once(
+    ctx: &Context,
+    target: &AddTarget,
+    issue: Option<&issues::Issue>,
+    options: &AddOptions,
+    after: Vec<Dependency>,
+) -> Result<()> {
+    ensure!(
+        !options.now && !options.focus,
+        "scoped processes start agents when a slot is free; leave out --now and --focus"
+    );
+    let after = launch_dependencies(ctx, target, issue, false, after).await?;
+    let waits_for: Vec<_> = (after.iter())
+        .map(|dependency| match dependency {
+            Dependency::Work(name) | Dependency::Issue(name) => name.as_str(),
+        })
+        .collect();
+    ensure!(
+        waits_for.is_empty(),
+        "scoped processes add a workspace at once, so its agent cannot wait for other work; add it once {} is complete",
+        waits_for.join(", ")
+    );
+    Ok(())
 }
 
 /// `result`, after failing the queue `entry`, if any, with its error.

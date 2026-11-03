@@ -108,7 +108,8 @@ pub struct RunArgs {
     pub space: Option<String>,
     /// Branch to run on; defaults to the branch a workflow file's URL names,
     /// then the workspace's, the only one workspace processes may run on, or
-    /// else, as in a chat, the repository's default branch.
+    /// else, as in a chat, the repository's default branch; a chat's agent
+    /// runs only on the branch of a workspace below it that --space names.
     #[arg(long)]
     pub branch: Option<String>,
     #[command(flatten)]

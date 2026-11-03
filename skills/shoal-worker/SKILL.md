@@ -92,7 +92,7 @@ A repository can require the user's approval for issues and PRs you open
 (`[permissions]`). Then `issue open` and `pr open` exit 0 with `proposed`, an
 approval request, instead of the item; `pr open` still pushes unless pushes need
 approval too. A proposal goes to the space above you like other approval
-requests, and only the user or a chat approves it. Continue your work and do not
+requests, and only the user approves it. Continue your work and do not
 open the item another way. The decider may edit the title and
 description, and the decision arrives as a message: approval names the opened
 item, which a PR's watch then follows; denial may give a reason or name the
