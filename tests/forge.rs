@@ -2152,10 +2152,13 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
         "labels": [], "pull_request": null});
     let pr_issue = json!({"number": 9, "title": "Fix", "state": "open", "body": "",
         "labels": [], "pull_request": {"merged": false}});
+    // Marked ready below, the PR's head is the workspace's HEAD.
+    let mut pr = pull(9, "open", "Fix", &[]);
+    pr["head"]["sha"] = json!(git(&fixture.topic(), &["rev-parse", "HEAD"]).trim());
     fixture.respond(json!({
         "GET repos/team/project/issues/8": {"body": issue},
         "GET repos/team/project/issues/9": {"body": pr_issue},
-        "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
+        "GET repos/team/project/pulls/9": {"body": pr.clone()},
     }));
     fixture.ok(&["link", "8", "assigned", "--space", "topic"]);
     fixture.ok(&["link", "#9", "assigned", "--space", "topic"]);
@@ -2165,6 +2168,21 @@ fn bare_numbers_select_the_issue_or_pr_they_name() {
 
     let marks = fixture.ok(&["ready", "#9", "--space", "topic"]);
     assert_eq!(marks[0]["kind"], "pr", "{marks}");
+    // Once the PR merges, `ready` marks only the issue and says why.
+    let mut merged = pull(9, "merged", "Fix", &[]);
+    merged["head"] = pr["head"].clone();
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": {"body": issue},
+        "GET repos/team/project/pulls/9": {"body": merged},
+    }));
+    let output = fixture.run(&["ready", "--space", "topic", "--json"]);
+    assert!(output.status.success(), "{output:?}");
+    let marks: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(marks.as_array().unwrap().len(), 1, "{marks}");
+    assert_eq!(marks[0]["kind"], "issue", "{marks}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let skipped = format!("Skipped PR {}/pulls/9: the PR is merged", fixture.web);
+    assert!(stderr.contains(&skipped), "{stderr}");
     fixture.ok(&["unlink", "8", "assigned", "--space", "topic"]);
     let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert!(links["issue"].is_null(), "{links}");

@@ -1812,7 +1812,10 @@ Ready-for-review marks are the agent's status signal for integrations, separate
 from messages and completion: they never notify, complete, or change cleanup. A
 mark covers a linked issue or PR, or the workspace when nothing is linked, and
 binds to HEAD; new commits make it outdated rather than removing it, so marking
-again is an explicit statement about the new revision. Marking linked items
+again is an explicit statement about the new revision. Only an open PR whose
+head on the forge is HEAD takes a mark, since a branch that opens several PRs in
+turn leaves merged ones linked, and a PR cannot be reviewed at a commit it lacks;
+marking skips the others with their reasons rather than failing the rest. Marking linked items
 replaces a workspace mark. Unlinking an item
 withdraws its mark and removal deletes all marks. Marks and withdrawals are
 journal events, and `hooks.post_ready` runs after each explicit mark under the
@@ -1824,7 +1827,7 @@ an agent usually withdraws to push more work that still needs CI and review.
 A failed forge change fails the command with the marks kept, so the agent can
 retry it.
 A chat marks the same way, except that its checkout is not on a PR's branch:
-it marks each linked PR at the head the forge reports, and its issue or itself
+it marks each linked open PR at the head the forge reports, and its issue or itself
 at its checkout's HEAD. Its marks are not journal events, since the journal
 records workspaces, and they show it `ready` in lists and the inbox.
 

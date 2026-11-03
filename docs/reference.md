@@ -4054,7 +4054,10 @@ shoal ready --undo --draft    # Also return the PRs whose marks are withdrawn to
 A mark says the agent considers the work for a linked issue or PR, or for the
 workspace itself when nothing is linked, ready for review at the current HEAD.
 Items are selected like `link`, and a selected item must be linked; a kind with
-no linked items is an error. Marking again moves the mark to the current HEAD, and
+no linked items is an error. A linked PR is marked only while it is open and
+its head on the forge is HEAD; `shoal ready` skips any other, prints each
+with its reason on stderr, and fails when that PR was selected or nothing
+else is left to mark. Marking again moves the mark to the current HEAD, and
 marking linked items replaces a mark made while nothing was linked.
 Marks never notify, record completion, or affect cleanup; use `shoal alerts send` to
 ask for attention. New commits make a mark outdated: `work` shows
@@ -4068,7 +4071,7 @@ all marks. Each mark and withdrawal
 is a [workspace event](#workspace-events). Scoped callers mark only their own
 workspace; `--space` selects another workspace or a chat for unscoped callers.
 
-A [chat](#chats) marks each linked PR at the PR's head on the forge, since its
+A [chat](#chats) marks each linked open PR at the PR's head on the forge, since its
 checkout is not on the PR's branch, and its linked issue, or the chat itself
 when nothing is linked, at its checkout's HEAD. `work --chats` shows a marked
 chat as `ready`, `inbox` lists its marks, and `work --json` lists them as the

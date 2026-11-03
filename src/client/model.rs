@@ -425,6 +425,21 @@ pub struct ReviewMark {
     pub warnings: Vec<String>,
 }
 
+/// What `shoal ready` marked, and the linked PRs it left unmarked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReadyMarks {
+    pub marks: Vec<ReviewMark>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<SkippedPr>,
+}
+
+/// A linked PR that `shoal ready` left unmarked, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkippedPr {
+    pub url: String,
+    pub reason: String,
+}
+
 /// The turn state a workspace's agent last reported, and since when.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentStatus {

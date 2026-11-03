@@ -9,7 +9,7 @@ use crate::{
     test_support::{commit, configure, git, install_test_script, manager, repository},
 };
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 
@@ -34,6 +34,30 @@ async fn review_events(manager: &Manager) -> Vec<(String, Option<String>, String
             EventItem::Chat(_) | EventItem::File(_) | EventItem::Gap { .. } => None,
         })
         .collect()
+}
+
+/// Link the `pr`, and the `issue` if given, to the space `id`.
+async fn link(manager: &Manager, id: &str, pr: &str, issue: Option<&str>) {
+    let id = id.to_owned();
+    let registration = serde_json::json!({ "url": pr });
+    let issue = issue.map(str::to_owned);
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
+                params![id, registration.to_string()],
+            )?;
+            if let Some(issue) = issue {
+                db.execute(
+                    "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
+                    params![id, issue],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -64,12 +88,14 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     let (_, pr) = forge.pull("12").unwrap();
     let (_, issue) = forge.issue("7").unwrap();
     let head = current_head(&workspace).await.unwrap();
+    github.push(&head);
 
     // Nothing linked: the workspace itself is marked, but a kind needs links.
     let marks = manager
         .mark_ready(&workspace.id, Selection::default(), false)
         .await
-        .unwrap();
+        .unwrap()
+        .marks;
     assert_eq!((marks[0].kind, marks[0].url.as_deref()), (None, None));
     assert!(
         manager
@@ -78,24 +104,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
             .is_err()
     );
 
-    let id = workspace.id.clone();
-    let registration = serde_json::json!({ "url": pr });
-    let linked_issue = issue.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
-                params![id, registration.to_string()],
-            )?;
-            db.execute(
-                "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
-                params![id, linked_issue],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    link(&manager, &workspace.id, &pr, Some(&issue)).await;
     let listed = manager.list_workspaces().await.unwrap();
     assert_eq!(
         listed[0].links,
@@ -111,7 +120,8 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     let marks = manager
         .mark_ready(&workspace.id, Selection::default(), false)
         .await
-        .unwrap();
+        .unwrap()
+        .marks;
     let mut marked: Vec<_> = marks.iter().map(|mark| mark.url.clone().unwrap()).collect();
     marked.sort();
     let mut expected = vec![issue.clone(), pr.clone()];
@@ -143,8 +153,16 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
             .all(|mark| mark.stale == Some(true))
     );
     let later = current_head(&workspace).await.unwrap();
+    let pr_only = || select(Some(LinkKind::Pr), Some("12"));
+    // The PR is marked only once its head on the forge is HEAD.
+    let error = manager
+        .mark_ready(&workspace.id, pr_only(), false)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("not HEAD"), "{error:#}");
+    github.push(&later);
     manager
-        .mark_ready(&workspace.id, select(Some(LinkKind::Pr), Some("12")), false)
+        .mark_ready(&workspace.id, pr_only(), false)
         .await
         .unwrap();
     let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
@@ -234,6 +252,85 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
 }
 
 #[tokio::test]
+async fn ready_skips_linked_prs_that_are_closed_or_at_another_head() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "ready".into(), None, None, None)
+        .await
+        .unwrap();
+    let github = FakeGitHub::start(&manager).await;
+    git(
+        &workspace.path,
+        &["remote", "add", "origin", &github.remote()],
+    );
+    let forge = ForgeRepo::parse(&github.remote()).unwrap();
+    let (_, pr) = forge.pull("12").unwrap();
+    let (_, issue) = forge.issue("7").unwrap();
+    link(&manager, &workspace.id, &pr, Some(&issue)).await;
+    github.push(&current_head(&workspace).await.unwrap());
+    let marked_urls = |ready: &ReadyMarks| -> Vec<String> {
+        (ready.marks.iter())
+            .filter_map(|mark| mark.url.clone())
+            .collect()
+    };
+
+    // An unpushed commit leaves the PR unmarked and says why.
+    std::fs::write(workspace.path.join("later"), "later\n").unwrap();
+    commit(&workspace.path, "later");
+    let ready = manager
+        .mark_ready(&workspace.id, Selection::default(), false)
+        .await
+        .unwrap();
+    assert_eq!(marked_urls(&ready), std::slice::from_ref(&issue));
+    assert_eq!(ready.skipped.len(), 1);
+    assert_eq!(ready.skipped[0].url, pr);
+    assert!(
+        ready.skipped[0].reason.contains("not HEAD"),
+        "{:?}",
+        ready.skipped
+    );
+
+    // A merged PR stays unmarked whatever its head, and selecting it fails.
+    github.push(&current_head(&workspace).await.unwrap());
+    github.merge();
+    let ready = manager
+        .mark_ready(&workspace.id, Selection::default(), false)
+        .await
+        .unwrap();
+    assert_eq!(marked_urls(&ready), [issue]);
+    assert_eq!(
+        ready.skipped,
+        [SkippedPr {
+            url: pr.clone(),
+            reason: "the PR is merged".into()
+        }]
+    );
+    for (selection, expected) in [
+        (
+            select(Some(LinkKind::Pr), Some("12")),
+            "pr cannot be marked ready",
+        ),
+        (
+            select(Some(LinkKind::Pr), None),
+            "no linked item can be marked ready",
+        ),
+    ] {
+        let error = manager
+            .mark_ready(&workspace.id, selection, false)
+            .await
+            .unwrap_err();
+        assert!(format!("{error:#}").contains(expected), "{error:#}");
+    }
+    let stored = manager.workspace(&workspace.id).await.unwrap().review;
+    assert!(stored.iter().all(|mark| mark.url.as_ref() != Some(&pr)));
+}
+
+#[tokio::test]
 async fn scoped_callers_mark_only_their_own_workspace() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -318,7 +415,7 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
     assert_eq!(name, "post_ready");
     assert_eq!(
         serde_json::from_str::<Vec<ReviewMark>>(json).unwrap(),
-        marks
+        marks.marks
     );
     assert_eq!(
         manager.workspace(&workspace.id).await.unwrap().review.len(),
@@ -383,10 +480,12 @@ async fn a_chats_post_ready_hook_gets_the_configured_environment() {
 }
 
 /// A GitHub on a loopback port that serves PR 12 of acme/widgets with its
-/// draft state and no labels, and the repository's one label; it changes
-/// draft state through GraphQL, and refuses every request while it fails.
+/// head, merge and draft state and no labels, and the repository's one label;
+/// it changes draft state through GraphQL, which it refuses while it fails.
 struct FakeGitHub {
     server: Server,
+    head: Arc<Mutex<String>>,
+    merged: Arc<AtomicBool>,
     draft: Arc<AtomicBool>,
     fail: Arc<AtomicBool>,
 }
@@ -394,14 +493,17 @@ struct FakeGitHub {
 impl FakeGitHub {
     /// Serve a draft PR, and give the agent a token for the host.
     async fn start(manager: &Manager) -> Self {
+        let head = Arc::new(Mutex::new(String::new()));
+        let merged = Arc::new(AtomicBool::new(false));
         let draft = Arc::new(AtomicBool::new(true));
         let fail = Arc::new(AtomicBool::new(false));
+        let (sha, merge) = (head.clone(), merged.clone());
         let (state, failing) = (draft.clone(), fail.clone());
         let server = Server::start(move |request| {
-            if failing.load(Ordering::SeqCst) {
-                return (403, Vec::new(), r#"{"message":"forbidden"}"#.into());
-            }
             let body = if request.line.ends_with("/graphql") {
+                if failing.load(Ordering::SeqCst) {
+                    return (403, Vec::new(), r#"{"message":"forbidden"}"#.into());
+                }
                 if request.body.contains("markPullRequestReadyForReview") {
                     state.store(false, Ordering::SeqCst);
                 } else if request.body.contains("convertPullRequestToDraft") {
@@ -411,9 +513,12 @@ impl FakeGitHub {
             } else if request.line.contains("/labels") {
                 r#"[{"name":"type/bug","description":"Broken"}]"#.to_owned()
             } else if request.line.contains("pulls/12") {
+                let merged = merge.load(Ordering::SeqCst);
                 format!(
-                    r#"{{"number":12,"title":"Fix","state":"open","draft":{},"node_id":"PR_1","head":{{"ref":"ready"}},"base":{{"ref":"main"}},"labels":[]}}"#,
-                    state.load(Ordering::SeqCst)
+                    r#"{{"number":12,"title":"Fix","state":"{}","merged":{merged},"draft":{},"node_id":"PR_1","head":{{"ref":"ready","sha":"{}"}},"base":{{"ref":"main"}},"labels":[]}}"#,
+                    if merged { "closed" } else { "open" },
+                    state.load(Ordering::SeqCst),
+                    sha.lock().unwrap(),
                 )
             } else {
                 return (404, Vec::new(), r#"{"message":"not found"}"#.into());
@@ -422,6 +527,8 @@ impl FakeGitHub {
         });
         let github = Self {
             server,
+            head,
+            merged,
             draft,
             fail,
         };
@@ -441,6 +548,15 @@ impl FakeGitHub {
 
     fn remote(&self) -> String {
         format!("http://{}/acme/widgets.git", self.server.host)
+    }
+
+    /// Report `head` as the PR's head commit.
+    fn push(&self, head: &str) {
+        *self.head.lock().unwrap() = head.to_owned();
+    }
+
+    fn merge(&self) {
+        self.merged.store(true, Ordering::SeqCst);
     }
 
     fn draft(&self) -> bool {
@@ -482,19 +598,8 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap()
         .pull("12")
         .unwrap();
-    let id = workspace.id.clone();
-    let registration = serde_json::json!({ "url": pr });
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
-                params![id, registration.to_string()],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    link(&manager, &workspace.id, &pr, None).await;
+    github.push(&current_head(&workspace).await.unwrap());
     let draft = || github.draft();
     let mutations = || github.mutations();
 
@@ -503,7 +608,8 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     let marks = manager
         .mark_ready(&workspace.id, Selection::default(), false)
         .await
-        .unwrap();
+        .unwrap()
+        .marks;
     assert!(!draft());
     assert!(
         marks[0].warnings[0].starts_with("PR #12 has no labels"),

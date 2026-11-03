@@ -593,6 +593,7 @@ response_bodies! {
     Completion(crate::model::Completion),
     Discarded(crate::client::executions::Discarded),
     ReviewMarks(Vec<crate::model::ReviewMark>),
+    ReadyMarks(crate::model::ReadyMarks),
     AgentStatus(crate::model::AgentStatus),
     WokenTurn(WokenTurn),
     AgentSession(crate::model::AgentSession),

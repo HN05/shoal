@@ -198,7 +198,9 @@ When a linked PR is ready to merge (checks pass, review findings handled, no
 conflicts), or the issue is solved without one, run `shoal ready`. It marks
 your linked items, or the workspace when nothing is linked, ready for review at
 HEAD for the user's integrations and takes a linked draft PR out of draft
-unless `[pr] undraft_on_ready = false`. When something new needs fixing, run
+unless `[pr] undraft_on_ready = false`. It skips a linked PR that is not open
+or whose head on the forge is not HEAD, so push first, and names each skipped
+PR with its reason on stderr. When something new needs fixing, run
 `shoal ready --undo` before fixing it (`--draft` also returns the PR to draft), and
 `shoal ready` again once it is fixed. To tell the user about status without
 finishing, run `shoal alerts send "<one-line message>"`, adding `--attach FILE`

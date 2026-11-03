@@ -895,7 +895,8 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     let marks = manager
         .mark_ready(&workspace.id, Default::default(), true)
         .await
-        .unwrap();
+        .unwrap()
+        .marks;
     assert_eq!(marks[0].head, head);
 }
 

@@ -1,12 +1,7 @@
 //! Ready-for-review marks: an agent's statement that linked work is ready at a
 //! commit. Integrations read them from the event journal; they neither notify
 //! the user nor affect completion or cleanup.
-use std::{
-    collections::{BTreeMap, HashMap},
-    ffi::OsString,
-    path::Path,
-    time::Duration,
-};
+use std::{collections::BTreeMap, ffi::OsString, path::Path, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
@@ -25,8 +20,11 @@ use crate::{
     },
     forge::items::link::{ItemKind, LinkKind, Selection},
     hooks::{self, Hook, HookKind, HookSpace},
-    model::{Chat, Repository, ReviewMark, Workspace},
+    model::{Chat, ReadyMarks, Repository, ReviewMark, SkippedPr, Workspace},
 };
+use pulls::Pulls;
+
+mod pulls;
 
 /// How long a listing waits for its review checks before it leaves their
 /// staleness unknown, so stalled file access cannot hold up the
@@ -70,7 +68,9 @@ pub(crate) fn forget(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
 
 impl Manager {
     /// Mark the selected linked items ready at HEAD, or the workspace itself
-    /// when nothing is linked and nothing was selected. Marking again moves
+    /// when nothing is linked and nothing was selected. A linked PR is marked
+    /// only while it is open with HEAD as its head on the forge; the others are
+    /// skipped, and an explicitly selected one fails. Marking again moves
     /// the mark to the current HEAD and reruns `hooks.post_ready`. With
     /// `[pr] undraft_on_ready`, marked draft PRs leave draft before the hook runs;
     /// a failure there keeps the marks and runs the hook. With `gated`, as for
@@ -81,7 +81,7 @@ impl Manager {
         selector: &str,
         selection: Selection,
         gated: bool,
-    ) -> Result<Vec<ReviewMark>> {
+    ) -> Result<ReadyMarks> {
         if let space @ LinkSpace::Chat { .. } = self.link_space(selector).await? {
             return self.mark_chat_ready(&space, selection).await;
         }
@@ -106,18 +106,18 @@ impl Manager {
         }
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(&workspace.path, &selection).await?);
-        let mut marks = self
-            .record_marks(&workspace.id, kind, explicit, head, HashMap::new())
-            .await?;
         let space = LinkSpace::from(workspace.clone());
+        let pulls = (self.markable_pulls(&space, kind, explicit.as_ref(), Some(&head))).await?;
+        let mut ready = (self.record_marks(&workspace.id, kind, explicit, head, pulls)).await?;
         let undrafted = match settings.pr.undraft_on_ready {
-            true => self.set_draft(&space, &pr_urls(&marks), false).await,
+            true => self.set_draft(&space, &pr_urls(&ready.marks), false).await,
             false => Ok(()),
         };
         if let Some(command) = command {
             match self.configured_workspace_environment(&workspace).await {
                 Ok(configured) => {
-                    (self.run_post_ready((&workspace).into(), &command, &configured, &marks)).await;
+                    let marks = &ready.marks;
+                    (self.run_post_ready((&workspace).into(), &command, &configured, marks)).await;
                 }
                 Err(error) => self.post_ready_failed(&workspace.name, &error).await,
             }
@@ -126,25 +126,21 @@ impl Manager {
             &workspace.name,
             Some(&workspace.id),
             None,
-            ready_notice(&marks),
+            ready_notice(&ready.marks),
             Vec::new(),
             super::Source::Agent,
         )
         .await;
         undrafted.context("marked ready for review, but a PR is still a draft")?;
-        self.check_conventions(&space, &settings, &mut marks).await;
-        Ok(marks)
+        (self.check_conventions(&space, &settings, &mut ready.marks)).await;
+        Ok(ready)
     }
 
     /// [`Self::mark_ready`] for a chat, which works on no branch of its own:
-    /// each linked PR is marked at its head on the forge, and an issue or the
-    /// chat itself at its checkout's HEAD. A chat is unscoped, so no review
+    /// each linked open PR is marked at its head on the forge, and an issue or
+    /// the chat itself at its checkout's HEAD. A chat is unscoped, so no review
     /// gate applies, and no coordinator hears of it.
-    async fn mark_chat_ready(
-        &self,
-        space: &LinkSpace,
-        selection: Selection,
-    ) -> Result<Vec<ReviewMark>> {
+    async fn mark_chat_ready(&self, space: &LinkSpace, selection: Selection) -> Result<ReadyMarks> {
         let LinkSpace::Chat { chat, checkout } = space else {
             bail!("only a chat is marked this way");
         };
@@ -152,13 +148,13 @@ impl Manager {
         let settings = self.space_settings(space).await?;
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(&checkout.path, &selection).await?);
-        let heads = self.marked_pr_heads(space, kind, explicit.as_ref()).await?;
+        let pulls = (self.markable_pulls(space, kind, explicit.as_ref(), None)).await?;
         let (head, _) = crate::git::head_and_branch(&checkout.path)
             .await
             .context("cannot read the checkout's HEAD")?;
-        let mut marks = (self.record_marks(space.id(), kind, explicit, head, heads)).await?;
+        let mut ready = (self.record_marks(space.id(), kind, explicit, head, pulls)).await?;
         let undrafted = match settings.pr.undraft_on_ready {
-            true => self.set_draft(space, &pr_urls(&marks), false).await,
+            true => self.set_draft(space, &pr_urls(&ready.marks), false).await,
             false => Ok(()),
         };
         if let Some(command) = HookKind::PostReady.command(&settings) {
@@ -170,52 +166,15 @@ impl Manager {
             match chat_hook_environment(chat, checkout, &settings) {
                 Ok(configured) => {
                     let command = checkout.path.join(command);
-                    self.run_post_ready(hook, &command, &configured, &marks)
+                    self.run_post_ready(hook, &command, &configured, &ready.marks)
                         .await;
                 }
                 Err(error) => self.post_ready_failed(&chat.name, &error).await,
             }
         }
         undrafted.context("marked ready for review, but a PR is still a draft")?;
-        self.check_conventions(space, &settings, &mut marks).await;
-        Ok(marks)
-    }
-
-    /// The forge's head of each linked PR the marks of `kind`, or the
-    /// `explicit` item, cover.
-    async fn marked_pr_heads(
-        &self,
-        space: &LinkSpace,
-        kind: Option<ItemKind>,
-        explicit: Option<&(String, ItemKind)>,
-    ) -> Result<HashMap<String, String>> {
-        let urls = match explicit {
-            Some((url, ItemKind::Pr)) => vec![url.clone()],
-            Some(_) => Vec::new(),
-            None if kind == Some(ItemKind::Issue) => Vec::new(),
-            None => {
-                let id = space.id().to_owned();
-                (self
-                    .store
-                    .run(move |db| linked_items(db, &id, Some(ItemKind::Pr))))
-                .await?
-                .into_iter()
-                .map(|(url, _)| url)
-                .collect()
-            }
-        };
-        if urls.is_empty() {
-            return Ok(HashMap::new());
-        }
-        let forge = self.space_forge(space).await?;
-        let account = self.agent_account();
-        let mut heads = HashMap::new();
-        for url in urls {
-            let head = (forge.pull_head(&account, &url).await)
-                .with_context(|| format!("could not read the head of {url}"))?;
-            heads.insert(url, head);
-        }
-        Ok(heads)
+        (self.check_conventions(space, &settings, &mut ready.marks)).await;
+        Ok(ready)
     }
 
     /// Run `hooks.post_ready` in `space` with the `configured`
@@ -249,15 +208,15 @@ impl Manager {
     }
 
     /// Record marks of `kind`, or of the `explicit` item, at `head`, or for
-    /// a PR at its own head `heads` names.
+    /// a PR at its own head among the `pulls`, which leave out those they skip.
     async fn record_marks(
         &self,
         id: &str,
         kind: Option<ItemKind>,
         explicit: Option<(String, ItemKind)>,
         head: String,
-        heads: HashMap<String, String>,
-    ) -> Result<Vec<ReviewMark>> {
+        pulls: Pulls,
+    ) -> Result<ReadyMarks> {
         let id = id.to_owned();
         let created_at = i64::try_from(crate::time::unix_seconds())?;
         self.store
@@ -265,26 +224,7 @@ impl Manager {
                 let tx = db.transaction()?;
                 require_ready_space(&tx, &id)?;
                 let linked = linked_items(&tx, &id, kind)?;
-                let items: Vec<(Option<String>, Option<ItemKind>)> = match explicit {
-                    Some((url, kind)) => {
-                        ensure!(
-                            linked.iter().any(|(linked, _)| linked == &url),
-                            "{kind} is not linked: {url}"
-                        );
-                        vec![(Some(url), Some(kind))]
-                    }
-                    None if !linked.is_empty() => linked
-                        .into_iter()
-                        .map(|(url, kind)| (Some(url), Some(kind)))
-                        .collect(),
-                    None => {
-                        ensure!(
-                            kind.is_none(),
-                            "no linked items of the selected kind; register one with shoal link"
-                        );
-                        vec![(None, None)]
-                    }
-                };
+                let items = marked_items(linked, explicit, kind, &pulls)?;
                 // Linked-item marks replace a mark made while nothing was linked.
                 if items.iter().any(|(url, _)| url.is_some()) {
                     tx.execute(
@@ -295,7 +235,7 @@ impl Manager {
                 let mut marks = Vec::new();
                 for (url, kind) in items {
                     let head = (url.as_ref())
-                        .and_then(|url| heads.get(url))
+                        .and_then(|url| pulls.heads.get(url))
                         .unwrap_or(&head)
                         .clone();
                     tx.execute(
@@ -315,7 +255,10 @@ impl Manager {
                     });
                 }
                 tx.commit()?;
-                Ok(marks)
+                Ok(ReadyMarks {
+                    marks,
+                    skipped: pulls.skipped,
+                })
             })
             .await
     }
@@ -445,6 +388,52 @@ fn chat_hook_environment(
         &caches,
         chat.tmp_dir.as_deref(),
     ))
+}
+
+/// The items a mark of `kind`, or of the `explicit` item, covers among the
+/// `linked` ones, leaving out the `pulls` it skips, or the space itself when
+/// nothing is linked.
+fn marked_items(
+    linked: Vec<(String, ItemKind)>,
+    explicit: Option<(String, ItemKind)>,
+    kind: Option<ItemKind>,
+    pulls: &Pulls,
+) -> Result<Vec<(Option<String>, Option<ItemKind>)>> {
+    if let Some((url, kind)) = explicit {
+        ensure!(
+            linked.iter().any(|(linked, _)| linked == &url),
+            "{kind} is not linked: {url}"
+        );
+        if let Some(reason) = pulls.skip_reason(&url) {
+            bail!("{kind} cannot be marked ready: {url}: {reason}");
+        }
+        return Ok(vec![(Some(url), Some(kind))]);
+    }
+    if linked.is_empty() {
+        ensure!(
+            kind.is_none(),
+            "no linked items of the selected kind; register one with shoal link"
+        );
+        return Ok(vec![(None, None)]);
+    }
+    let items: Vec<_> = (linked.into_iter())
+        .filter(|(url, _)| pulls.skip_reason(url).is_none())
+        .map(|(url, kind)| (Some(url), Some(kind)))
+        .collect();
+    ensure!(
+        !items.is_empty(),
+        "no linked item can be marked ready: {}",
+        skipped_list(&pulls.skipped)
+    );
+    Ok(items)
+}
+
+/// The `skipped` PRs with their reasons, on one line.
+fn skipped_list(skipped: &[SkippedPr]) -> String {
+    (skipped.iter())
+        .map(|skipped| format!("{}: {}", skipped.url, skipped.reason))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 /// The PRs among `marks`.
