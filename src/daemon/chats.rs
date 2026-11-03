@@ -86,10 +86,10 @@ impl Manager {
             review: Vec::new(),
             completion: None,
         };
-        let birth = process.birth.clone();
+        let recorded = process.clone();
         let chat = self
             .store
-            .run(move |db| insert(db, chat, &birth, hands_over))
+            .run(move |db| insert(db, chat, &recorded, hands_over))
             .await?;
         self.give_tmp_dir(chat, &repository, process).await
     }
@@ -368,30 +368,43 @@ impl Manager {
 
 /// Insert `chat` unless its name is taken or the repository is being removed,
 /// starting until it is moved when it `hands_over`.
-fn insert(db: &mut Connection, chat: Chat, birth: &str, hands_over: bool) -> Result<Chat> {
+fn insert(db: &mut Connection, chat: Chat, process: &Identity, hands_over: bool) -> Result<Chat> {
     let tx = db.transaction()?;
     ensure_checkout_free(&tx, &chat.repository_id)?;
     store::ensure_name_available(&tx, &chat.name, None)?;
     tx.execute(
-        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
+            unique_id)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
         params![
             chat.id,
             chat.repository_id,
             chat.name,
             chat.agent,
             chat.pid,
-            birth,
+            process.birth,
             chat.started_at,
             chat.origin
                 .as_ref()
                 .map(serde_json::to_string)
                 .transpose()?,
-            hands_over
+            hands_over,
+            unique_id(process)?
         ],
     )?;
     tx.commit()?;
     Ok(chat)
+}
+
+/// The never-reused ID of `process` as JSON, where the platform reports one,
+/// which finds what the chat's agent started once it ended, as after it
+/// exits.
+pub(super) fn unique_id(process: &Identity) -> Result<Option<String>> {
+    Ok(process
+        .unique
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()?)
 }
 
 /// Refuse a chat in the repository `repository_id` while it is being
@@ -482,8 +495,8 @@ fn move_chat_files(paths: &crate::paths::Paths, old: &Chat, renamed: &Chat) -> R
 /// its launcher then stops.
 fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> {
     let moved = db.execute(
-        "UPDATE chats SET pid=?2,birth=?3,starting=0 WHERE id=?1 AND restore IS NULL",
-        params![chat, process.pid, process.birth],
+        "UPDATE chats SET pid=?2,birth=?3,unique_id=?4,starting=0 WHERE id=?1 AND restore IS NULL",
+        params![chat, process.pid, process.birth, unique_id(process)?],
     )?;
     anyhow::ensure!(moved == 1, "no running chat {chat}");
     recorded(db)?

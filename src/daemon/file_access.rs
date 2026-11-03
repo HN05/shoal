@@ -245,6 +245,11 @@ impl FileAccess {
             stalled.rechecking = true;
         }
     }
+
+    /// Record that access in `path`'s directory answers again.
+    pub(crate) fn recover_at(&self, path: &Path) {
+        self.recover(&directory(path));
+    }
 }
 
 /// The directory holding `path`, such as a repository's directory of

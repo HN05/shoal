@@ -918,3 +918,60 @@ async fn a_chat_a_removal_holds_neither_gives_up_nor_takes_workspaces() {
     drop(reservation);
     manager.assign_chat(&below.id, None).await.unwrap();
 }
+
+/// [`a_survivor_that_left_the_chats_group_holds_it_saved`] for an agent that
+/// exited on its own, which no save saw.
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn a_survivor_that_left_the_group_of_an_exited_agent_holds_the_chat() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let started = root.path().join("child");
+    let mut leader = ProcessGroup::spawn(
+        unmarked("sh")
+            .arg("-c")
+            .arg("perl -MPOSIX -e 'POSIX::setsid(); sleep 600' & echo $! > \"$0\"; wait")
+            .arg(&started),
+    );
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            leader.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let child = wait_for_child(&started).await;
+    let escaped = KilledGroup(child);
+    while unsafe { libc::getpgid(child as i32) } != child as i32 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    // The agent exits on its own, which no save saw.
+    unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
+    leader.wait().unwrap();
+    manager.stop_finished_chats().await.unwrap();
+    assert!(
+        manager
+            .recorded_chat("talk")
+            .await
+            .unwrap()
+            .unwrap()
+            .restore
+            .is_some()
+    );
+
+    let error = manager.remove_chat("talk", None).await.unwrap_err();
+    assert!(
+        error.to_string().contains(&format!("kill {child}")),
+        "{error:#}"
+    );
+    assert!(chat.tmp_dir.unwrap().exists());
+    drop(escaped);
+}

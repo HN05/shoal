@@ -180,8 +180,6 @@ impl Manager {
             reservation
         };
         let below = self.chat_children(&chat.id).await?;
-        self.ensure_none_stalled_below(below.clone(), removal)
-            .await?;
         let children = self.remove_children(&chat.name, below, removal).await?;
         // A save or restore under way would run the agent the removal stops.
         let _saving = self.chat_saves.lock().await;
@@ -218,7 +216,8 @@ impl Manager {
     }
 
     /// Refuse `removal` of `chat` as it is now: an unattended one while
-    /// something keeps it; any while a stopped chat's processes run on; idle or merged cleanup once it changed from the
+    /// something keeps it, or a directory below it stalled; any while a
+    /// stopped chat's processes run on; idle or merged cleanup once it changed from the
     /// snapshot it took; completion cleanup once the completion changed.
     async fn check_chat_removal(&self, chat: &Chat, removal: Removal<'_>) -> Result<()> {
         if removal.unattended()
@@ -226,11 +225,14 @@ impl Manager {
         {
             bail!("{retention}; retaining the chat");
         }
-        // Processes a stopped chat left running refuse its removal, so they
-        // start no grace period and no space below it goes before they end.
+        // Processes a stopped chat left running, and a stalled directory
+        // below it that the sweep skips, refuse its removal, so neither
+        // starts a grace period nor lets a space below it go.
         if chat.restore.is_some() {
             self.ensure_ended(chat, std::process::id()).await?;
         }
+        let below = self.chat_children(&chat.id).await?;
+        self.ensure_none_stalled_below(below, removal).await?;
         match removal {
             Removal::Automatic { snapshot, .. } => ensure!(
                 self.chat_cleanup_snapshot(chat, snapshot.rule).await? == Some(snapshot),

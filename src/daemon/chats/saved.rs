@@ -248,8 +248,9 @@ fn save(db: &mut Connection, restore: ChatRestore) -> Result<Saved> {
     let mut released = Vec::new();
     for (id, process) in &running {
         tx.execute(
-            "UPDATE chats SET restore=?2,unique_id=?3,stopped_at=unixepoch(),saved=1 WHERE id=?1",
-            params![id, restore, unique_id(process)?],
+            "UPDATE chats SET restore=?2,unique_id=COALESCE(?3,unique_id),stopped_at=unixepoch(),
+                saved=1 WHERE id=?1",
+            params![id, restore, live_unique_id(process)?],
         )?;
         released.extend(release_decided_by(&tx, id)?);
     }
@@ -258,7 +259,7 @@ fn save(db: &mut Connection, restore: ChatRestore) -> Result<Saved> {
 }
 
 /// The never-reused ID of `process`, as JSON, while it runs.
-fn unique_id(process: &Identity) -> Result<Option<String>> {
+fn live_unique_id(process: &Identity) -> Result<Option<String>> {
     let unique = identity::capture(process.pid)?
         .filter(|live| live == process)
         .and_then(|live| live.unique);
@@ -332,7 +333,8 @@ fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
     let tx = db.transaction()?;
     ensure_checkout_free(&tx, &restored.repository)?;
     let updated = tx.execute(
-        "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0
+        "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0,
+            unique_id=?6
          WHERE id=?1 AND restore IS NOT NULL",
         params![
             restored.id,
@@ -343,7 +345,8 @@ fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
                 .as_ref()
                 .map(serde_json::to_string)
                 .transpose()?,
-            restored.hands_over
+            restored.hands_over,
+            super::unique_id(&restored.process)?
         ],
     )?;
     ensure!(updated == 1, "the chat is no longer stopped");

@@ -1339,3 +1339,40 @@ async fn a_stopped_chat_whose_processes_run_on_starts_no_grace_period() {
     assert_eq!(manager.cleanup_at(&chat.id).await.unwrap(), None);
     assert!(manager.workspace(&opened.id).await.is_ok());
 }
+
+#[tokio::test]
+async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    manager
+        .write_local_config(
+            &chat.repository_id,
+            Some("[cleanup]\ngrace_minutes = 600\n".into()),
+        )
+        .await
+        .unwrap();
+    let completion = manager
+        .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+    let chat = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    manager.file_access.stall_rechecking(&opened.path);
+    let error = manager
+        .remove_completed_chat(&chat, &completion)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("stalled"), "{error:#}");
+    assert_eq!(manager.cleanup_at(&chat.id).await.unwrap(), None);
+    // Once access recovers, the grace period starts, and only then runs.
+    manager.file_access.recover_at(&opened.path);
+    assert!(
+        !manager
+            .remove_completed_chat(&chat, &completion)
+            .await
+            .unwrap()
+    );
+    assert!(manager.cleanup_at(&chat.id).await.unwrap().is_some());
+    assert!(manager.workspace(&opened.id).await.is_ok());
+}
