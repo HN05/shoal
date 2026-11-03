@@ -170,6 +170,7 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
         default_commit: "def".into(),
         commits: 1,
         push_to: None,
+        unpushed: 0,
         warning: None,
         open_prs: Vec::new(),
     };
@@ -198,6 +199,13 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
     assert_eq!(preview.reason(), preview.description().replace('\n', " "));
     preview.warning = None;
     preview.open_prs.clear();
+    preview.unpushed = 2;
+    assert_eq!(
+        preview.description(),
+        "Merge fix-login (3 commits) into main, then push main to origin.\n\
+        main has 2 commits that origin/main lacks, which the push publishes too."
+    );
+    preview.unpushed = 0;
     preview.push_to.as_mut().unwrap().reference = "refs/heads/release".into();
     assert_eq!(
         preview.description(),

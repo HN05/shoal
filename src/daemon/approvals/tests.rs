@@ -231,6 +231,7 @@ async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Re
                         branch: "feature".into(),
                         head: head.into(),
                         push: None,
+                        unpushed: None,
                         changed_on_both_sides: Vec::new(),
                     }),
                     Lifetime::Lease,
@@ -270,6 +271,7 @@ async fn a_merge_retried_with_other_wording_keeps_its_request_and_approval() -> 
                         branch: "feature".into(),
                         head: "abc".into(),
                         push: None,
+                        unpushed: None,
                         changed_on_both_sides: Vec::new(),
                     }),
                     Lifetime::Lease,
@@ -506,6 +508,7 @@ fn decision_messages_name_the_request_target_and_next_step() {
         branch: "feature".into(),
         head: "abc".into(),
         push: None,
+        unpushed: None,
         changed_on_both_sides: Vec::new(),
     });
     assert_eq!(

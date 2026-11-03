@@ -173,8 +173,9 @@ pub struct SimulatorSpecification {
 }
 
 /// A merge decision covers the branch at one commit, whether it pushes the
-/// default branch afterwards, and the sensitive files it warned about; later
-/// commits or another warning need a new one.
+/// default branch afterwards and what else that push publishes, and the
+/// sensitive files it warned about; later commits or another warning need a
+/// new one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MergeSpecification {
@@ -184,6 +185,11 @@ pub struct MergeSpecification {
     /// the ref there, so another destination needs another decision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push: Option<crate::model::MergePush>,
+    /// The default branch's commit when the push publishes commits of it
+    /// besides the merge's, so other local commits need another decision;
+    /// none otherwise, so a sync of the default branch needs none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unpushed: Option<String>,
     /// The sensitive files the merge brings to a default branch that changed
     /// them too, so a warning recorded after the decision needs another.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

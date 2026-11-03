@@ -1113,6 +1113,10 @@ pub struct MergePreview {
     /// Where the default branch is pushed afterwards, if it is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push_to: Option<MergePush>,
+    /// Commits of the default branch that its push destination lacks, which
+    /// the push publishes too.
+    #[serde(default)]
+    pub unpushed: u64,
     /// The sensitive files the merge brings to a default branch that changed
     /// them too, as the last check of the branch's head found them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1132,6 +1136,12 @@ impl MergePreview {
             push: self.push_to.clone(),
             changed_on_both_sides: self.changed_on_both_sides(),
         }
+    }
+
+    /// The default branch's commit when the push publishes commits of it
+    /// besides the merge's.
+    pub fn unpushed_default(&self) -> Option<String> {
+        (self.push_to.is_some() && self.unpushed > 0).then(|| self.default_commit.clone())
     }
 
     /// The sensitive files the warning names, if there is one.
@@ -1155,14 +1165,18 @@ impl MergePreview {
 
     fn sentences(&self) -> Vec<String> {
         let (branch, default) = (&self.branch, &self.default_branch);
-        let commits = match self.commits {
-            1 => "1 commit".to_owned(),
-            count => format!("{count} commits"),
-        };
+        let commits = count_commits(self.commits);
         let mut merge = format!("Merge {branch} ({commits}) into {default}");
+        let mut unpushed = None;
         if let Some(push) = &self.push_to {
             let destination = push.destination(default);
             merge.push_str(&format!(", then push {default} to {destination}"));
+            if self.unpushed > 0 {
+                let (count, remote) = (count_commits(self.unpushed), push.remote_branch());
+                unpushed = Some(format!(
+                    "{default} has {count} that {remote} lacks, which the push publishes too."
+                ));
+            }
         }
         merge.push('.');
         let warning = self.warning.iter().map(|warning| format!("{warning}."));
@@ -1170,7 +1184,19 @@ impl MergePreview {
             .open_prs
             .iter()
             .map(|url| format!("PR {url} is open; shoal pr merge merges it on the forge instead."));
-        std::iter::once(merge).chain(warning).chain(prs).collect()
+        std::iter::once(merge)
+            .chain(unpushed)
+            .chain(warning)
+            .chain(prs)
+            .collect()
+    }
+}
+
+/// `1 commit` or `3 commits`.
+fn count_commits(count: u64) -> String {
+    match count {
+        1 => "1 commit".to_owned(),
+        count => format!("{count} commits"),
     }
 }
 

@@ -2548,11 +2548,13 @@ current commit, and for where it pushes, unless `[permissions] merge = "direct"`
 [`[permissions] push`](#approval-for-agent-pushes) is `"direct"` too. The first run records a
 `merge` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
 the request names the branch, the default branch it merges into, its commit count,
-the remote branch it pushes to, any files changed on both sides as below, and
-any open PR the workspace watches. After approval, running it again merges that commit with every check above. A new
-commit, a change to where it pushes or a new set of files changed on both sides
-replaces the request, approving a request
-after its branch moved is refused as stale, and a denied commit stays refused
+the remote branch it pushes to, any other local commits of the default branch
+that the push publishes too, any files changed on both sides as below, and any
+open PR the workspace watches. After approval, running it again merges that commit with every check above. A new
+commit, a change to where it pushes, other local commits of the default branch
+that its push would publish too, or a new set of files changed on both sides
+replaces the request; a sync of the default branch from its upstream does not.
+Approving a request after its branch moved is refused as stale, and a denied commit stays refused
 with `"approval_denied"`.
 
 With `[merge] push`, or `--push` for one run, Shoal pushes the default branch to
@@ -2562,7 +2564,8 @@ upstream is refused before merging, and a failed push keeps the merge.
 A merge that pushes asks first, after Shoal has checked it and before anything
 changes. As [`pr merge`](#issue-and-pr-actions) does, so does a merge whose last
 check found files [changed on both sides](#conflicts) with the default branch.
-The question names the direction, the commit count, where it pushes and those
+The question names the direction, the commit count, where it pushes, other
+local commits of the default branch that the push publishes too, and those
 files, and points to `shoal pr merge` for any open PR the workspace watches:
 
 ```text

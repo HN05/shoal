@@ -91,6 +91,7 @@ fn merge_request(plan: &MergePlan, preview: &MergePreview) -> ApprovalRequest {
             branch: plan.branch.clone(),
             head: plan.source.clone(),
             push: plan.push.clone(),
+            unpushed: preview.unpushed_default(),
             changed_on_both_sides: preview.changed_on_both_sides(),
         }),
         Lifetime::Lease,

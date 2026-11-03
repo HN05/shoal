@@ -55,12 +55,16 @@ pub async fn changed_files(repo: &Path) -> Result<String> {
 
 /// Commits on HEAD that `base` does not contain.
 pub async fn commits_since(repo: &Path, base: &str) -> Result<u64> {
-    Ok(
-        run(repo, &["rev-list", "--count", &format!("{base}..HEAD")])
-            .await?
-            .trim()
-            .parse()?,
-    )
+    commits_between(repo, base, "HEAD").await
+}
+
+/// Commits on `revision` that `base` does not contain.
+pub async fn commits_between(repo: &Path, base: &str, revision: &str) -> Result<u64> {
+    let range = format!("{base}..{revision}");
+    Ok(run(repo, &["rev-list", "--count", &range])
+        .await?
+        .trim()
+        .parse()?)
 }
 
 /// Commits on `revision` that are reachable from neither a remote nor the given ref.

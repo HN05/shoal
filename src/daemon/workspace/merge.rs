@@ -204,6 +204,10 @@ impl Manager {
             default_commit: default_commit.to_owned(),
             commits: git::status::commits_since(&workspace.path, default_commit).await?,
             push_to: push.cloned(),
+            unpushed: match push {
+                Some(push) => unpushed(&workspace.path, default_commit, push).await?,
+                None => 0,
+            },
             warning,
             open_prs,
         })
@@ -274,6 +278,17 @@ async fn synced_to(
     .await?
         && git::ref_exists(path, &tracking, git::isolated_command).await?
         && git::is_ancestor(path, current, &tracking, git::isolated_command).await?)
+}
+
+/// The commits of `default_commit` that the push destination `push` lacks,
+/// as the last fetch saw it, or that no remote has when nothing was fetched
+/// from it yet.
+async fn unpushed(path: &std::path::Path, default_commit: &str, push: &MergePush) -> Result<u64> {
+    let tracking = format!("refs/remotes/{}", push.remote_branch());
+    match git::ref_exists(path, &tracking, git::isolated_command).await? {
+        true => git::status::commits_between(path, &tracking, default_commit).await,
+        false => git::status::unretained_commits(path, default_commit, &[]).await,
+    }
 }
 
 /// The commit of `repo`'s local `branch`.

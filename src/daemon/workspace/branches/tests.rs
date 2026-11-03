@@ -1843,6 +1843,52 @@ async fn a_merge_warning_recorded_after_approval_needs_another_decision() {
 }
 
 #[tokio::test]
+async fn a_pushing_merge_approval_covers_no_other_local_commits_of_main() {
+    use crate::daemon::approvals::{DecisionStatus, Specification};
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    f.remote();
+    fs::write(workspace.path.join("feature"), "work\n").unwrap();
+    commit(&workspace.path, "feature");
+    let approved = undecided(begin_merge_as_agent(&f, &workspace, true).await);
+    let Specification::Merge(merge) = &approved.specification else {
+        panic!("merge specification expected");
+    };
+    assert_eq!(merge.unpushed, None);
+    f.manager
+        .decide_approval(approved.id, true, None, Default::default(), None)
+        .await
+        .unwrap();
+    // A sync brings main up to its upstream, which the push publishes anyway.
+    let author = f.root.path().join("author");
+    fs::write(author.join("upstream"), "upstream\n").unwrap();
+    commit(&author, "upstream");
+    git(&author, &["push", "origin", "HEAD:main"]);
+    git(&f.repo, &["pull", "--ff-only"]);
+    let started = begin_merge_as_agent(&f, &workspace, true).await;
+    assert!(started.is_ok(), "{:?}", started.err());
+    drop(started);
+    // Another merge into main locally, which the push would publish too.
+    fs::write(f.repo.join("other"), "other\n").unwrap();
+    commit(&f.repo, "other");
+    let local = git(&f.repo, &["rev-parse", "main"]).trim().to_owned();
+    let widened = undecided(begin_merge_as_agent(&f, &workspace, true).await);
+    assert_ne!(widened.id, approved.id);
+    assert_eq!(widened.status, DecisionStatus::Pending);
+    let Specification::Merge(merge) = &widened.specification else {
+        panic!("merge specification expected");
+    };
+    assert_eq!(merge.unpushed.as_deref(), Some(local.as_str()));
+    assert!(
+        widened
+            .reason
+            .contains("main has 1 commit that origin/main lacks, which the push publishes too."),
+        "{}",
+        widened.reason
+    );
+}
+
+#[tokio::test]
 async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
