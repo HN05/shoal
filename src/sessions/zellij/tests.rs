@@ -400,13 +400,21 @@ impl Isolated {
     }
 
     /// Wait until the client shows the session, which Zellij's tabs need.
+    /// Under load Zellij can tell a client attaching that the session is
+    /// missing, and the client exits: another one attaches instead.
     async fn shown(&mut self) {
         for _ in 0..600 {
             if !self.zellij.clients(&self.session).await.unwrap().is_empty() {
                 return;
             }
             if let Some(status) = self.client.try_wait().unwrap() {
-                panic!("the client of {} exited: {status}", self.session);
+                eprintln!(
+                    "the client of {} exited: {status}; it showed:\n{}",
+                    self.session,
+                    self.client_screen()
+                );
+                self.client =
+                    Self::client(self.dir.path(), &self.session, Arc::clone(&self.screen));
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }

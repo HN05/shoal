@@ -64,7 +64,12 @@ impl ZellijServer {
             .unwrap();
         assert!(output.status.success(), "{output:?}");
         server.client = server.attach("caller");
+        // Under load Zellij can tell a client attaching that the session is
+        // missing, and the client exits: another one attaches instead.
         wait_until("a client to show the user's session", || {
+            if server.client.try_wait().unwrap().is_some() {
+                server.client = server.attach("caller");
+            }
             server.clients("caller").len() == 1
         });
         Some(server)
