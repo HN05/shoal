@@ -207,7 +207,8 @@ fn clone_file(source: &Path, destination: &Path) -> std::io::Result<()> {
     }
 }
 
-/// The errors filesystems without reflinks give, as coreutils' `cp` reads them.
+/// The errors filesystems without reflinks give, as coreutils' `cp` reads
+/// them. Containers refuse the ioctl with EPERM.
 #[cfg(target_os = "linux")]
 fn cloning_unsupported(error: &std::io::Error) -> bool {
     error.raw_os_error().is_some_and(|code| {
@@ -217,6 +218,7 @@ fn cloning_unsupported(error: &std::io::Error) -> bool {
             libc::ENOSYS,
             libc::EINVAL,
             libc::EXDEV,
+            libc::EPERM,
         ]
         .contains(&code)
     })
