@@ -787,6 +787,7 @@ own stdin, stdout, stderr, and exit code.
 `shoal status [target]` summarizes one space, a workspace or a [chat](#chats),
 running or stopped, which the target names, else the current one: its state, a
 workspace's changes since its fork point and what it holds, its agent sessions,
+each session its agents reported with the path of its transcript on this machine,
 whether its linked issue is open or closed,
 and each watched PR as the forge reports it now: open, merged or closed, merge
 conflicts, each CI check's result, the CI runs on an open PR's head that
@@ -810,7 +811,15 @@ when nothing does, in `cleanup_reason`. A chat's status leaves out what needs a 
 branch, changes, setup, executions, leases, sync and cleanup. `--json`
 returns the same data, with `kind` (`workspace` or `chat`) and the space's
 record in `workspace` or `chat`, PRs in `prs`, the issue in `issue_status` and sessions
-in `sessions`, or a failed `zmx list` in `sessions_error`. Workspace records from `work --json` and `status --json` include
+in `sessions`, or a failed `zmx list` in `sessions_error`. `transcripts` lists every
+session the space's agents reported, with `agent`, `session`, the `execution` a
+workspace's agent ran as, whether the agent runs it now in `current`, its
+transcript in `path` and all its files, the transcript included, in `files`,
+which Shoal finds where the agent's tool keeps them and never reads. A session
+whose files are not on this machine, or of an agent whose tool Shoal does not
+know, has no `path` and no files, and one whose files could not be looked for
+says why in `error`; sessions the agents' hooks never reported, such as those
+before a `/clear`, are not listed. Workspace records from `work --json` and `status --json` include
 the assigned issue in `links.issue`, assigned PR URLs in `links.prs`, and items
 recorded as opened or related in `links.opened` and `links.related`, each with
 `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves

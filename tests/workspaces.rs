@@ -6764,6 +6764,66 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
 }
 
 #[test]
+fn status_shows_where_each_reported_session_keeps_its_transcript() {
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
+    let workspace = fixture.add("talked");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    // The agent reports its session as Claude Code's hooks do, then quits.
+    fs::write(
+        path.join("agent.sh"),
+        format!(
+            "printf '{{\"session_id\":\"talked-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .args(["claude", "talked"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+
+    // Its files are not on this machine yet.
+    let status = fixture.ok(&["status", "talked"]);
+    assert_eq!(
+        status["transcripts"],
+        serde_json::json!([{
+            "agent": "claude",
+            "session": "talked-session",
+            "execution": status["transcripts"][0]["execution"],
+            "current": false,
+            "files": [],
+        }]),
+        "{status}"
+    );
+    let text = String::from_utf8_lossy(&fixture.run(&["status", "talked"]).stdout).into_owned();
+    assert!(
+        text.contains("Transcripts:   1\n  claude  talked-session  not found\n"),
+        "{text}"
+    );
+
+    let project = fixture.root.path().join(".claude/projects/-talked");
+    let transcript = project.join("talked-session.jsonl");
+    let subagent = project.join("talked-session/subagents/one.jsonl");
+    fs::create_dir_all(subagent.parent().unwrap()).unwrap();
+    fs::write(&transcript, "{}\n").unwrap();
+    fs::write(&subagent, "{}\n").unwrap();
+    let status = fixture.ok(&["status", "talked"]);
+    let found = &status["transcripts"][0];
+    assert_eq!(found["path"], transcript.to_str().unwrap(), "{status}");
+    assert_eq!(
+        found["files"],
+        serde_json::json!([transcript.to_str().unwrap(), subagent.to_str().unwrap()]),
+        "{status}"
+    );
+    let text = String::from_utf8_lossy(&fixture.run(&["status", "talked"]).stdout).into_owned();
+    let line = format!("  claude  talked-session  {}\n", transcript.display());
+    assert!(text.contains(&line), "{text}");
+}
+
+#[test]
 fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_restore() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("quit");
@@ -7039,7 +7099,17 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         let chats = fixture.ok(&["work", "--chats"]);
         assert_eq!(chats[0]["session"], "chat-session", "{chats}");
         fs::create_dir_all(&project).unwrap();
-        fs::write(project.join("chat-session.jsonl"), "{\"turn\":1}\n").unwrap();
+        let transcript = project.join("chat-session.jsonl");
+        fs::write(&transcript, "{\"turn\":1}\n").unwrap();
+        let status = fixture.ok(&["status", "talk"]);
+        assert_eq!(
+            (
+                &status["transcripts"][0]["path"],
+                &status["transcripts"][0]["current"]
+            ),
+            (&serde_json::json!(transcript), &serde_json::json!(true)),
+            "{status}"
+        );
 
         // Run inside the chat without a target, the export never takes the
         // chat it would end under itself.
