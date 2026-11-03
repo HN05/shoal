@@ -10,7 +10,8 @@
 # Exit status:
 #   0  every round passed
 #   1  a test failed in some round; the body lists it
-#   2  a round produced no test results (the build broke); the body says so
+#   2  a round failed without a failing test to account for it (the build
+#      broke, or a test binary crashed or was killed); the body says so
 # Publish the body first in every case, then fail the job.
 #
 # Optional: RUN_URL and SOURCE are linked in the footer; CARGO_TEST_ARGS is
@@ -28,16 +29,58 @@ ROUNDS=$1
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
+# Whether a round's cargo status is more than its failed tests explain: no
+# binary reported results, or a binary failed without a FAILED summary because
+# it crashed or was killed before printing one.
+#   round_broken <log> <cargo status>
+round_broken() {
+  grep -q '^test result: ' "$1" || return 0
+  [ "$2" -ne 0 ] || return 1
+  failed_targets=$(grep -c '^error: .*failed, to rerun pass ' "$1" || true)
+  failed_summaries=$(grep -c '^test result: FAILED\.' "$1" || true)
+  [ "$failed_summaries" -eq 0 ] || [ "$failed_summaries" -lt "$failed_targets" ]
+}
+
+# The end of each part of a broken round's log that reported an error but no
+# test results: the build's compiler errors, or a crashed binary's last tests
+# and signal. Without one, the end of the log, where cargo stopped.
+print_round_errors() {
+  awk -v keep=100 '
+    function flush(  i) {
+      if (failed && !summary) {
+        if (n > keep) print "[" n - keep " earlier lines omitted]"
+        for (i = n > keep ? n - keep + 1 : 1; i <= n; i++) print lines[i % keep]
+        shown = 1
+      }
+      n = 0; failed = 0; summary = 0
+    }
+    /^ *(Running|Doc-tests) / { flush() }
+    { lines[++n % keep] = $0 }
+    /^error/ { failed = 1 }
+    /^test result: / { summary = 1 }
+    END {
+      if (!shown) { failed = 1; summary = 0 }
+      flush()
+    }' "$1"
+}
+
 broken=0
 : >"$WORK/panics"
 round=1
 while [ "$round" -le "$ROUNDS" ]; do
   log=$WORK/round-$round.log
-  # Failures are the findings, so the status is read from the log instead.
+  # Failures are the findings; the status only tells whether something else broke.
+  status=0
   # shellcheck disable=SC2086
   CARGO_TERM_COLOR=never cargo test --locked --no-fail-fast ${CARGO_TEST_ARGS:-} \
-    >"$log" 2>&1 || true
-  grep -q '^test result: ' "$log" || broken=$((broken + 1))
+    >"$log" 2>&1 || status=$?
+  if round_broken "$log" "$status"; then
+    broken=$((broken + 1))
+    echo "round $round of $ROUNDS broke: cargo exited with status $status" >&2
+    echo "::group::round $round errors" >&2
+    print_round_errors "$log" >&2
+    echo "::endgroup::" >&2
+  fi
   # Every failed test once per round; helper processes print their own lines.
   sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' "$log" | sort -u >"$WORK/failed-$round"
   # The first line of each failed test's panic message.
@@ -77,7 +120,7 @@ printf '%s\n' "$MARKER"
 printf 'Nightly stress run: `cargo test` %s times on `main` at %s.\n\n' \
   "$ROUNDS" "$(git rev-parse --short HEAD 2>/dev/null || echo 'an unknown commit')"
 if [ "$broken" -gt 0 ]; then
-  printf '> [!WARNING]\n> %s of %s rounds produced no test results; the build or the test harness broke. The run log says why.\n\n' \
+  printf '> [!WARNING]\n> %s of %s rounds failed without a failing test to account for it: the build broke, or a test binary crashed or was killed. The run log says why.\n\n' \
     "$broken" "$ROUNDS"
 fi
 if [ -s "$WORK/counts" ]; then
@@ -90,7 +133,7 @@ if [ -s "$WORK/counts" ]; then
   done <"$WORK/counts"
   printf '\n'
 else
-  printf 'No test failed%s.\n\n' "$([ "$broken" -eq 0 ] || echo ' in the rounds that produced results')"
+  printf 'No test failed.\n\n'
 fi
 footer="updated $(date -u '+%Y-%m-%d %H:%M UTC')"
 [ -z "${SOURCE:-}" ] || footer="[\`.forgejo/workflows/flaky.yml\`]($SOURCE) · $footer"
