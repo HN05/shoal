@@ -484,6 +484,42 @@ async fn a_list_too_large_for_a_frame_arrives_in_pages_that_join() {
     );
 }
 
+/// A ready reply too large for a frame keeps its marks and skipped PRs.
+#[tokio::test]
+async fn ready_outcomes_too_large_for_a_frame_arrive_in_pages() {
+    use crate::model::{ReadyMarks, ReadyOutcome, ReviewMark, SkippedPr};
+    let ready = ReadyMarks {
+        marks: (0..400)
+            .map(|n| ReviewMark {
+                kind: Some(crate::forge::items::link::ItemKind::Pr),
+                url: Some(format!("https://forge.invalid/team/project/pulls/{n}")),
+                head: format!("{n:040}"),
+                created_at: 1,
+                stale: Some(false),
+                warnings: Vec::new(),
+            })
+            .collect(),
+        skipped: (0..400)
+            .map(|n| SkippedPr {
+                url: format!("https://forge.invalid/team/project/pulls/{}", 400 + n),
+                reason: "the PR is merged".into(),
+            })
+            .collect(),
+    };
+    let frames = Response::new(7, Body::ReadyOutcomes(ready.clone().into()))
+        .frames()
+        .unwrap();
+    assert!(frames.len() > 1);
+    let mut wire = Vec::new();
+    for frame in &frames {
+        write(&mut wire, frame).await.unwrap();
+    }
+    let mut reader = tokio::io::BufReader::new(wire.as_slice());
+    let joined = read_response(&mut reader).await.unwrap();
+    let joined = Vec::<ReadyOutcome>::try_from(joined.body).unwrap();
+    assert_eq!(ReadyMarks::from(joined), ready);
+}
+
 /// The spaces a lookup finds arrive in pages when they outgrow a frame.
 #[tokio::test]
 async fn found_spaces_too_large_for_a_frame_arrive_in_pages() {

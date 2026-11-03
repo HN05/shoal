@@ -426,11 +426,41 @@ pub struct ReviewMark {
 }
 
 /// What `shoal ready` marked, and the linked PRs it left unmarked.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ReadyMarks {
     pub marks: Vec<ReviewMark>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skipped: Vec<SkippedPr>,
+}
+
+/// One entry of the reply to `shoal ready`, which the daemon sends as a
+/// list so that it pages like every other list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadyOutcome {
+    Marked(ReviewMark),
+    Skipped(SkippedPr),
+}
+
+impl From<ReadyMarks> for Vec<ReadyOutcome> {
+    fn from(ready: ReadyMarks) -> Self {
+        let marked = ready.marks.into_iter().map(ReadyOutcome::Marked);
+        marked
+            .chain(ready.skipped.into_iter().map(ReadyOutcome::Skipped))
+            .collect()
+    }
+}
+
+impl From<Vec<ReadyOutcome>> for ReadyMarks {
+    fn from(outcomes: Vec<ReadyOutcome>) -> Self {
+        let mut ready = Self::default();
+        for outcome in outcomes {
+            match outcome {
+                ReadyOutcome::Marked(mark) => ready.marks.push(mark),
+                ReadyOutcome::Skipped(skipped) => ready.skipped.push(skipped),
+            }
+        }
+        ready
+    }
 }
 
 /// A linked PR that `shoal ready` left unmarked, and why.

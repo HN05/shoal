@@ -19,7 +19,10 @@ use crate::{
         items::link::{ItemKind, Link, LinkKind, LinkTarget, Selection},
     },
     git,
-    model::{PresentSpace, ReadyMarks, Relation, Repository, ReviewMark, Selected, SelectedItem},
+    model::{
+        PresentSpace, ReadyMarks, ReadyOutcome, Relation, Repository, ReviewMark, Selected,
+        SelectedItem,
+    },
     protocol::{AssignmentMethod, ItemContext, ItemMethod, PullHead},
 };
 
@@ -341,8 +344,9 @@ pub(super) async fn watch(
 pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
     let (space, selection) = select(ctx, items).await?;
     let itself = space_kind(ctx, &space).await?;
-    let ReadyMarks { marks, skipped } =
+    let outcomes: Vec<ReadyOutcome> =
         client::request(&ctx.paths, AssignmentMethod::MarkReady { space, selection }).await?;
+    let ReadyMarks { marks, skipped } = outcomes.into();
     for skipped in &skipped {
         eprintln!("Skipped PR {}: {}", skipped.url, skipped.reason);
     }
