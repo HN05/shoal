@@ -33,7 +33,9 @@ when behavior changes, distinguishing decisions from proposals.
   this machine, such as leases, `shoal run` and demos, or needs its own
   worktree or branch. A change that adds or extends such a feature implements
   it for chats too, through the same code path, or its PR says why it cannot
-  apply to them.
+  apply to them. A workspace has one editing agent, its own: a chat in its
+  worktree reads it as a chat, never as the workspace's agent or child, and
+  goes with it.
 - A space is a workspace or a chat. Flags, arguments, user-facing text and
   code call what applies to both a space (`--space`), and say workspace only
   for what needs a worktree. A command's flag becomes `--space` in the change

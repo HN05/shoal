@@ -7,7 +7,7 @@ use super::AgentEnvironment;
 use crate::{
     cli::{client, commands::workspaces, context::Context},
     env,
-    model::{Repository, Workspace},
+    model::{ChatHome, Repository, Workspace},
 };
 
 /// A tool's config file that records the directories it trusts, so a
@@ -105,13 +105,14 @@ impl TrustFile {
         }
     }
 
-    /// Trust a repository's checkout for a chat, which runs with this
+    /// Trust the directory of a chat at `home`, which runs with this
     /// process's environment changed by `profile`, as workspace launches
     /// trust theirs; repository removal clears the entries.
-    pub(super) async fn trust_checkout(
+    pub(super) async fn trust_chat(
         &self,
         ctx: &Context,
         repository: &Repository,
+        home: ChatHome<'_>,
         profile: &crate::ai::Environment,
     ) {
         let mut configured = std::collections::BTreeMap::new();
@@ -124,7 +125,7 @@ impl TrustFile {
         };
         self.trust(
             &environment,
-            &repository_trust_paths(repository, &repository.path),
+            &repository_trust_paths(repository, home.path()),
         );
     }
 

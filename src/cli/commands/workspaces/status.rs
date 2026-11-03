@@ -10,7 +10,7 @@ use crate::{
         client::{self, request},
         context::Context,
         terminal::{self, Recorded},
-        ui::{self, Fallback},
+        ui,
     },
     forge::{IssueInput, items::link::Selection},
     model::{PresentSpace, SpaceDetail, SpaceStatus, SpaceTarget},
@@ -23,7 +23,7 @@ pub(in crate::cli::commands) async fn status(
     item: Option<String>,
 ) -> Result<i32> {
     let Some(target) = status_target(space.as_deref(), item)? else {
-        let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+        let space = ui::select_space_here(ctx, space).await?;
         let status = status_view(ctx, space).await?;
         ctx.show(&status, |status| render_status(status, ctx.json))?;
         return Ok(0);

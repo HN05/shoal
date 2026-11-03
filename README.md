@@ -171,6 +171,7 @@ shoal demo                     # Pick a running demo an agent started and open i
 shoal demo start web           # Start the configured demo `web` for the user to try
 shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
 shoal chat my-project          # Discuss the repository with an agent in its checkout
+shoal chat --workspace fix-login  # Review a workspace's live work in its worktree, beside its agent
 shoal chat rename my-project-chat login  # Rename a running chat
 shoal chat rename --request my-project-chat  # Ask its agent to choose the name
 shoal plan --oldest            # Settle the oldest unplanned issue's plan in a chat

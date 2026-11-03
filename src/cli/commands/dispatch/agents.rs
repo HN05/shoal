@@ -64,6 +64,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             command: None,
             here,
             repository,
+            workspace,
             agent,
             name,
             model,
@@ -80,7 +81,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
                 session,
                 restore,
             };
-            chat::start(&ctx, repository, options).await
+            match workspace {
+                Some(workspace) => chat::start_in_workspace(&ctx, workspace, options).await,
+                None => chat::start(&ctx, repository, options).await,
+            }
         }
         AgentsCommand::Plan {
             issue,

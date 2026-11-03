@@ -1905,6 +1905,24 @@ which workers. Removing the chat first removes the spaces below it through the
 removal path of any space's children, and a stopped chat passes their events
 on up, to the user at the top, unless it waits for its automatic restore. A
 chat opens workspaces only in its own repository.
+A chat may run in a ready workspace's worktree instead of the checkout, to
+debug, audit or review that workspace's live work, committed and uncommitted,
+with the commands that read a branch, rather than reading another worktree by
+path. A workspace has one editing agent, its own: a chat in it reads and does
+not edit, which its instructions say and nothing enforces until modes decide
+what an agent may do. It stays a chat, unscoped, with its own identity,
+temporary directory and messages, and is not the workspace's child, since a
+child's questions and approvals go to its parent's agent while the user attends
+a chat; so Shoal commands it runs never act as the workspace's agent. Its
+record names the workspace, so a restore runs it there again, commands that
+take the workspace from the directory act on it, and those that act on chats
+keep acting on the chat. A running chat in a workspace is use, so no unattended
+removal takes the workspace from under it, and one Shoal saved is the
+workspace's saved stopped work, which keeps it from idle cleanup but not merged
+cleanup. Removing the workspace removes its chats first through the chat
+removal path, so a workspace one of them opened that cannot go keeps the chat,
+which keeps the workspace. Nothing moves a session between directories: a chat
+about another workspace is a new chat.
 Having no workspace, a chat keeps its messages in its own queue, which the same
 hooks deliver, including the user's request to rename it; a removed chat gives the user the notifications its unread
 messages stand for.

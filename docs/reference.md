@@ -798,7 +798,7 @@ last check of HEAD against the default target found
 [changed on both sides](#conflicts), from a watch or `shoal conflicts`, in
 `changed_on_both_sides` (`target`, `target_commit`, `head` and `files`). Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
-open questions, a pending PR proposal or push request, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
+open questions, a pending PR proposal or push request, a running chat in it, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. A chat's status leaves out what needs a worktree: its
 branch, changes, setup, executions, leases, sync and cleanup. `--json`
 returns the same data, with `kind` (`workspace` or `chat`) and the space's
@@ -1721,7 +1721,7 @@ other commands do. Failed session closes notify and retry at startup or with
 
 ### Chats
 
-`shoal chat [repository] [--agent NAME] [--name NAME] [--here] [-- ARGS]` starts a new chat
+`shoal chat [repository | --workspace [WORKSPACE]] [--agent NAME] [--name NAME] [--here] [-- ARGS]` starts a new chat
 with an agent about a repository, to discuss it, its issues and plans, or to
 coordinate work, without changing code. The repository is the named one, else the
 current checkout's or workspace's, else a picker. The agent is `--agent`, else
@@ -1775,6 +1775,28 @@ Workspaces and chats share one set of names across
 repositories: a chat cannot take a workspace's name or a name an unfinished
 rename reserves, and a workspace cannot be created or renamed to a chat's name.
 The name frees once the chat is removed.
+
+`shoal chat --workspace [WORKSPACE]` starts the chat in a ready workspace's
+worktree instead of the checkout, to debug, audit or review its work, committed
+and uncommitted: the named workspace, else the current one, else a picker of the
+ready workspaces. The repository is the workspace's, the default name
+`<workspace>-chat`, and a workspace that is not ready or whose worktree is
+missing is refused. The chat is not the workspace's agent: it runs as any chat
+does, with its own identity, `TMPDIR` and messages, without the workspace's
+scope, `[env]` or leases, and is not below the workspace. Its instructions name
+the workspace, its branch or commit and its path, and tell the agent that the
+workspace's own agent may be editing there and not to change files, stage,
+commit, stash or switch branches; nothing else enforces it. Its record, and
+`--json`, name the `workspace`, and `shoal resume` restores it there. In the
+chat, commands that act only on workspaces, such as `shoal diff`,
+`shoal conflicts` and `shoal branch base`, act on the workspace, and so does
+`shoal status`, which takes the current directory's workspace before the chat;
+commands that act on chats, such as `shoal view`, `shoal ci`, `shoal link`,
+`shoal ready` and `shoal done`, act on the chat, and `--space <workspace>`
+reaches the workspace's. A running chat keeps the workspace from every
+unattended removal, and one Shoal saved keeps it from idle cleanup; removing the
+workspace removes its chats first, which `shoal rm` lists before asking. A chat
+never moves to another directory: one about another workspace is a new chat.
 
 `shoal chat rename [chat] NAME` gives a running chat, `shoal plan` chats
 included, a new name that is free as a new chat's would be, and frees the old
@@ -4158,8 +4180,8 @@ retaining branches; moved worktrees or recorded commands need manual recovery.
 HEAD and commands reset the timer; file changes, including ignored files, restart
 it when it expires, and Git state such as unpushed commits is checked when it
 starts and when it expires.
-Running/unknown commands, saved stopped work, directory users (including shells),
-dirty/unpushed work,
+Running/unknown commands, saved stopped work, a chat running in the worktree or
+saved there, directory users (including shells), dirty/unpushed work,
 simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, and failed checks block cleanup. Pushed means reachable
 from locally known remote branches, merged into the default branch as removal
 decides, or with its changes on the branch the workspace builds on: its base
@@ -4205,7 +4227,7 @@ minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitt
 [removal's checkpoint](#checkpoints-and-restore); they keep the workspace when the checkpoint cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
 Git operation under way, open [questions](#questions), running/unknown commands,
-directory users, leases, permits, holds and
+a running chat in it, directory users, leases, permits, holds and
 workspaces stacked on it keep it too; PR cleanup moves stacked workspaces once the base's PR merges. Shoal records the
 time of each command start and exit, lease and hold change, and takes the newest
 change time of the worktree's files, including ignored ones, and of its HEAD,

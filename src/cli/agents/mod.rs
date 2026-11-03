@@ -32,7 +32,7 @@ use crate::{
     config::{Config, Effective, named_commands::Commands},
     execution::recovery,
     fsutil,
-    model::{Chat, LinkedItem, Relation, RemovedWorkspace, Repository, Workspace},
+    model::{Chat, ChatHome, LinkedItem, Relation, RemovedWorkspace, Repository, Workspace},
     paths::Paths,
     protocol::{ConfigTarget, RepositoryMethod},
     tools::Tool,
@@ -330,9 +330,13 @@ impl<'a> AgentEnvironment<'a> {
     }
 }
 
-/// One chat about a repository in its registered checkout.
+/// One chat about a repository in its registered checkout, or in a
+/// workspace's worktree.
 pub(in crate::cli) struct ChatLaunch {
     pub repository: Repository,
+    /// The workspace whose worktree the chat runs in, instead of the
+    /// repository's checkout.
+    pub workspace: Option<Workspace>,
     /// The name the chat is recorded under.
     pub name: String,
     pub settings: Effective,
@@ -349,6 +353,16 @@ pub(in crate::cli) struct ChatLaunch {
     pub restores: Option<String>,
     /// What the chat is linked to once recorded, such as the issue it plans.
     pub links: Vec<(Relation, LinkedItem)>,
+}
+
+impl ChatLaunch {
+    /// Where the chat runs.
+    pub fn home(&self) -> ChatHome<'_> {
+        match &self.workspace {
+            Some(workspace) => ChatHome::Workspace(workspace),
+            None => ChatHome::Checkout(&self.repository),
+        }
+    }
 }
 
 /// Assign the recorded `chat` the issue its launch names, if any. A failure
@@ -1226,18 +1240,18 @@ async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<String>) {
     }
 }
 
-/// Trust a repository's checkout for a chat of agent `name` as workspace
-/// launches trust theirs. Failure only warns.
-pub(in crate::cli) async fn trust_checkout(
+/// Trust the directory of a chat of agent `name` in `repository` at `home`
+/// as workspace launches trust theirs. Failure only warns.
+pub(in crate::cli) async fn trust_chat(
     ctx: &Context,
     settings: &Effective,
     name: &str,
     repository: &Repository,
+    home: ChatHome<'_>,
 ) {
     if let Some(trust) = agent_integration(settings, name).trust_file() {
-        trust
-            .trust_checkout(ctx, repository, &settings.launch(name).environment)
-            .await;
+        let profile = &settings.launch(name).environment;
+        trust.trust_chat(ctx, repository, home, profile).await;
     }
 }
 

@@ -26894,6 +26894,106 @@ fn chat_instructions_append_the_checkout_template_to_the_global_one() {
     assert!(!chat().iter().any(|arg| arg == "--append-system-prompt"));
 }
 
+/// A chat in a workspace runs its agent in the worktree as a chat, told
+/// not to edit; workspace commands it runs act on the workspace, and
+/// removing the workspace lists and removes the chat first.
+#[test]
+fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    install_recording_agent(&fixture, "claude");
+    fixture.add("worker");
+    let worktree = fs::canonicalize(
+        fixture.ok(&["status", "worker"])["workspace"]["path"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    // Without a value, the flag takes the current workspace.
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .current_dir(&worktree)
+            .env("ZMX_SESSION", "outer")
+            .args(["chat", "--workspace", "--agent", "claude"]),
+        "\n",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        transcript.contains("Chat name [worker-chat]:"),
+        "{transcript}"
+    );
+    assert_eq!(
+        fs::read_to_string(home.join("chat-cwd")).unwrap().trim(),
+        worktree.to_str().unwrap()
+    );
+    let args = chat_args(&fixture);
+    assert_eq!(args[0], "--append-system-prompt");
+    for told in ["Shoal workspace worker", "Do not change files"] {
+        assert!(args[1].contains(told), "{told}: {}", args[1]);
+    }
+    let chats = fixture.ok(&["work", "--chats"]);
+    let chat = &chats[0];
+    assert_eq!(chat["name"], "worker-chat", "{chats}");
+    assert_eq!(chat["workspace"]["name"], "worker", "{chats}");
+    let id = chat["id"].as_str().unwrap();
+    assert_eq!(fs::read_to_string(home.join("chat-id")).unwrap().trim(), id);
+
+    // Workspace commands the chat runs act on the workspace.
+    let in_chat = |args: &[&str]| {
+        fixture
+            .command()
+            .current_dir(&worktree)
+            .env("SHOAL_CHAT", id)
+            .arg("--json")
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let status = in_chat(&["status"]);
+    assert!(status.status.success(), "{status:?}");
+    let status: Value = serde_json::from_slice(&status.stdout).unwrap();
+    assert_eq!(status["workspace"]["name"], "worker", "{status}");
+    assert!(in_chat(&["conflicts"]).status.success());
+    // A chat in a workspace takes its repository from it.
+    let both = fixture.run(&[
+        "chat",
+        fixture.repo.to_str().unwrap(),
+        "--workspace",
+        "worker",
+    ]);
+    assert!(!both.status.success(), "{both:?}");
+
+    // Its agent exited; `shoal resume` restores it in the worktree.
+    assert_eq!(chats[0]["restore"], "resume", "{chats}");
+    fs::remove_file(home.join("chat-cwd")).unwrap();
+    let (output, transcript) = fixture.interactive_command(
+        fixture.command().args(["resume", "worker-chat", "--focus"]),
+        "",
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(
+        fs::read_to_string(home.join("chat-cwd")).unwrap().trim(),
+        worktree.to_str().unwrap()
+    );
+    assert_eq!(fs::read_to_string(home.join("chat-id")).unwrap().trim(), id);
+
+    let (no, prompt) = fixture.interactive(&["rm", "worker"], "n\n");
+    assert!(!no.status.success());
+    assert!(
+        prompt.contains("Removes the chats in it first: worker-chat"),
+        "{prompt}"
+    );
+    let removed = fixture.run(&["rm", "worker", "--yes"]);
+    assert!(removed.status.success(), "{removed:?}");
+    assert!(
+        String::from_utf8_lossy(&removed.stdout).contains("also removed worker-chat"),
+        "{removed:?}"
+    );
+    assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
+}
+
 #[test]
 fn chat_starts_from_the_checkout_without_syncing() {
     let fixture = Fixture::new();

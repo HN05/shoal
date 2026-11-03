@@ -11,6 +11,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         opening: None,
         directories: Vec::new(),
         links: Vec::new(),
+        workspace: None,
     };
     let agent: Agent = "codex".parse().unwrap();
     let model = ModelChoice {
@@ -63,4 +64,76 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         ]
         .map(OsString::from)
     );
+}
+
+#[test]
+fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
+    let mut workspace = Workspace::new_record(
+        "repo".into(),
+        "worker".into(),
+        "/work/worker".into(),
+        Some("feature".into()),
+        crate::state::WorkspaceState::Ready,
+    );
+    workspace.id = "worker-id".into();
+    let topic = Topic::workspace(workspace.clone());
+    assert_eq!(topic.name, "worker-chat");
+    let agent: Agent = "claude".parse().unwrap();
+    let beside = Beside {
+        topic: &topic,
+        name: "worker-chat",
+        agent: &agent,
+        model: &ModelChoice::default(),
+        args: &[],
+        session: None,
+        restore: None,
+    };
+    assert_eq!(
+        beside.relaunch(),
+        [
+            "chat",
+            "--workspace",
+            "worker-id",
+            "--here",
+            "--name",
+            "worker-chat",
+            "--agent",
+            "claude",
+        ]
+        .map(OsString::from)
+    );
+
+    let repo = Repository {
+        id: "repo".into(),
+        path: "/repos/shoal".into(),
+        source: "/repos/shoal".into(),
+        last_used: 0,
+        name: Some("shoal".into()),
+        workspaces_dir: None,
+        contribution: false,
+    };
+    assert_eq!(topic.home(&repo).path(), Path::new("/work/worker"));
+    let settings = crate::config::Config::default()
+        .resolve(&Default::default())
+        .unwrap();
+    let told = instructions(&settings, &agent, &repo, topic.home(&repo), false);
+    for expected in [
+        "Shoal workspace worker of the shoal",
+        "repository, on branch feature, in its worktree at /work/worker",
+        "Do not change files,",
+        "`--space worker`",
+    ] {
+        assert!(told.contains(expected), "{expected:?} in {told}");
+    }
+    // The chat template describes the checkout, which the chat is not in.
+    assert!(!told.contains("registered\ncheckout"), "{told}");
+
+    workspace.branch = None;
+    workspace.at = Some(crate::model::StartingCommit {
+        commit: "0123456789abcdef".into(),
+        made_for: None,
+    });
+    let at_commit = Topic::workspace(workspace);
+    let told = instructions(&settings, &agent, &repo, at_commit.home(&repo), false);
+    assert!(told.contains("at commit 0123456"), "{told}");
 }

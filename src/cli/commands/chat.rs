@@ -1,11 +1,11 @@
 //! `shoal chat`: talk with an agent about a repository in its registered
-//! checkout. A chat belongs to no workspace, so it is not a tracked execution;
-//! the daemon records it while its agent runs. Every call starts a new chat
-//! and gives it focus.
+//! checkout, or about a workspace's work in its worktree. A chat is no
+//! workspace's agent, so it is not a tracked execution; the daemon records
+//! it while its agent runs. Every call starts a new chat and gives it focus.
 use std::{
     ffi::{OsStr, OsString},
     os::unix::process::CommandExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context as _, Result, ensure};
@@ -21,7 +21,7 @@ use crate::{
         recent, terminal, ui,
     },
     config::{Effective, templates},
-    model::{Chat, LinkedItem, Relation, Repository},
+    model::{Chat, ChatHome, LinkedItem, Relation, Repository, Workspace},
     protocol::ConfigTarget,
     repository,
 };
@@ -49,6 +49,55 @@ pub(super) async fn start(
     }
     .await;
     client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+}
+
+/// Start a chat in the worktree of the workspace `workspace` names, else
+/// the current one, else one picked among the ready workspaces.
+pub(super) async fn start_in_workspace(
+    ctx: &Context,
+    workspace: Option<String>,
+    options: Options,
+) -> Result<i32> {
+    ensure_unscoped(ctx)?;
+    let restores = options.restore.clone();
+    let started = async {
+        options.check_name(ctx).await?;
+        let workspace = chosen_workspace(ctx, workspace).await?;
+        let repo = workspace_repository(ctx, &workspace).await?;
+        let settings = settings(ctx, &repo).await?;
+        let topic = Topic::workspace(workspace);
+        begin(ctx, repo, settings, topic, options).await
+    }
+    .await;
+    client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+}
+
+/// The workspace `selector` names, else the current one, else one picked
+/// among the ready workspaces.
+async fn chosen_workspace(ctx: &Context, selector: Option<String>) -> Result<Workspace> {
+    let id = ui::select_ready_workspace(ctx, selector).await?;
+    find_workspace(ctx, &id).await
+}
+
+/// The workspace `selector` names, by ID or name.
+pub(super) async fn find_workspace(ctx: &Context, selector: &str) -> Result<Workspace> {
+    client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|workspace| workspace.id == selector || workspace.name == selector)
+        .with_context(|| format!("no workspace {selector}"))
+}
+
+/// The registered repository of `workspace`.
+pub(super) async fn workspace_repository(
+    ctx: &Context,
+    workspace: &Workspace,
+) -> Result<Repository> {
+    client::repositories(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|repo| repo.id == workspace.repository_id)
+        .with_context(|| format!("the repository of workspace {} is missing", workspace.name))
 }
 
 /// How the command line starts a chat.
@@ -119,6 +168,9 @@ pub(super) struct Topic {
     pub directories: Vec<PathBuf>,
     /// What the chat is linked to once recorded, such as the issue it plans.
     pub links: Vec<(Relation, LinkedItem)>,
+    /// The workspace whose worktree the chat runs in, instead of the
+    /// repository's checkout.
+    pub workspace: Option<Workspace>,
 }
 
 impl Topic {
@@ -130,6 +182,32 @@ impl Topic {
             opening: None,
             directories: Vec::new(),
             links: Vec::new(),
+            workspace: None,
+        }
+    }
+
+    /// A chat in the worktree of `workspace`.
+    pub(super) fn workspace(workspace: Workspace) -> Self {
+        Self {
+            relaunch: vec![
+                "chat".into(),
+                "--workspace".into(),
+                workspace.id.clone().into(),
+            ],
+            name: format!("{}-chat", workspace.name),
+            asks_name: true,
+            opening: None,
+            directories: Vec::new(),
+            links: Vec::new(),
+            workspace: Some(workspace),
+        }
+    }
+
+    /// Where the chat about this topic in `repo` runs.
+    fn home<'a>(&'a self, repo: &'a Repository) -> ChatHome<'a> {
+        match &self.workspace {
+            Some(workspace) => ChatHome::Workspace(workspace),
+            None => ChatHome::Checkout(repo),
         }
     }
 }
@@ -204,11 +282,18 @@ pub(super) async fn launch(
     let resumed = resumed_args(&settings, &agent, session.as_deref())?;
     let launch = agents::ChatLaunch {
         name,
-        instructions: instructions(&settings, &agent, &repo, session.is_some()),
+        instructions: instructions(
+            &settings,
+            &agent,
+            &repo,
+            topic.home(&repo),
+            session.is_some(),
+        ),
         opening: topic.opening.clone().filter(|_| session.is_none()),
         directories: topic.directories.clone(),
         model: agents::resolve_model(&settings, agent.name(), model.clone()),
         repository: repo,
+        workspace: topic.workspace.clone(),
         settings,
         args: [resumed.clone(), args.clone()].concat(),
         restores: restore.clone(),
@@ -236,11 +321,13 @@ pub(super) async fn launch(
         session: session.as_deref(),
         restore: restore.as_deref(),
     };
+    let home = topic.home(&repo);
     if place == ChatPlace::Background {
         let note = terminal::start_chat_in_background(
             ctx,
             &settings,
             &repo,
+            home.path(),
             &name,
             &beside(&name).relaunch(),
         )
@@ -248,7 +335,7 @@ pub(super) async fn launch(
         return Ok(Started::Background(BackgroundChat {
             chat: name,
             agent: agent.name().to_owned(),
-            repository: repo.id,
+            repository: repo.id.clone(),
             place: note,
         }));
     }
@@ -262,10 +349,10 @@ pub(super) async fn launch(
     if place == ChatPlace::Beside && start_beside(ctx, &settings, &repo, beside(&name)).await? {
         return Ok(Started::Exited(0));
     }
-    agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
+    agents::trust_chat(ctx, &settings, agent.name(), &repo, home).await;
     let chat = client::record_chat(
         &ctx.paths,
-        crate::model::ChatHome::Checkout(&repo),
+        home,
         &name,
         agent.name(),
         terminal::current_place().await,
@@ -290,7 +377,7 @@ pub(super) async fn launch(
             ),
         ]
         .concat(),
-        &repo,
+        home.path(),
         &agent,
         instructions,
         opening,
@@ -299,7 +386,7 @@ pub(super) async fn launch(
     terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
     run_here(
         ctx,
-        &repo,
+        home.path(),
         &chat,
         &command,
         &settings.launch(agent.name()).environment_with(&resolved),
@@ -482,9 +569,9 @@ impl Beside<'_> {
     }
 }
 
-/// Run the chat `beside` describes in a new focused tab or session at the
-/// checkout, where Shoal starts it in place, returning whether it ran there;
-/// otherwise it runs here.
+/// Run the chat `beside` describes in a new focused tab or session in its
+/// checkout or worktree, where Shoal starts it in place, returning whether
+/// it ran there; otherwise it runs here.
 async fn start_beside(
     ctx: &Context,
     settings: &Effective,
@@ -492,16 +579,17 @@ async fn start_beside(
     beside: Beside<'_>,
 ) -> Result<bool> {
     let chat = beside.relaunch();
-    terminal::start_chat(ctx, settings, repo, beside.name, &chat).await
+    let cwd = beside.topic.home(repo).path();
+    terminal::start_chat(ctx, settings, repo, cwd, beside.name, &chat).await
 }
 
 /// The agent's configured launcher with the chat instructions, its opening
 /// task, the hooks that deliver its messages and the arguments that give it
-/// `directories`, run at the checkout.
+/// `directories`, run in `path`, the chat's checkout or worktree.
 fn command(
     settings: &Effective,
     directories: Vec<OsString>,
-    repo: &Repository,
+    path: &Path,
     agent: &Agent,
     instructions: String,
     opening: Option<String>,
@@ -532,7 +620,7 @@ fn command(
         &settings.launchers,
         name,
         &[
-            ("{path}", repo.path.as_os_str()),
+            ("{path}", path.as_os_str()),
             ("{prompt}", OsStr::new(&prompt)),
         ],
         args,
@@ -542,7 +630,13 @@ fn command(
 /// The resolved chat template with the repository's name and checkout, or
 /// nothing for a chat that `resumes` a session with an agent that takes it
 /// only in its first message, which the session already has.
-fn instructions(settings: &Effective, agent: &Agent, repo: &Repository, resumes: bool) -> String {
+fn instructions(
+    settings: &Effective,
+    agent: &Agent,
+    repo: &Repository,
+    home: ChatHome<'_>,
+    resumes: bool,
+) -> String {
     let in_first_message = settings
         .launch(agent.name())
         .arguments
@@ -551,21 +645,40 @@ fn instructions(settings: &Effective, agent: &Agent, repo: &Repository, resumes:
     if resumes && in_first_message {
         return String::new();
     }
-    templates::render(
-        &settings.agent.templates.chat,
-        &[
-            ("{repo}", repository::name(repo)),
-            ("{path}", &repo.path.to_string_lossy()),
-        ],
-    )
+    let (repo, path) = (repository::name(repo), home.path().to_string_lossy());
+    match home.workspace() {
+        Some(workspace) => templates::render(
+            templates::WORKSPACE_CHAT,
+            &[
+                ("{workspace}", &workspace.name),
+                ("{repo}", repo),
+                ("{head}", &head_label(workspace)),
+                ("{path}", &path),
+            ],
+        ),
+        None => templates::render(
+            &settings.agent.templates.chat,
+            &[("{repo}", repo), ("{path}", &path)],
+        ),
+    }
 }
 
-/// Replace this process with the agent, so the terminal's signals reach it
-/// alone and the process the daemon recorded for `chat` runs it, changed by
-/// the agent's `profile`. Workspaces the agent opens belong to the chat.
+/// What `workspace` has checked out, as its chat's instructions name it.
+fn head_label(workspace: &Workspace) -> String {
+    match (&workspace.branch, &workspace.at) {
+        (Some(branch), _) => format!("on branch {branch}"),
+        (None, Some(at)) => format!("at commit {}", super::workspaces::commit_label(at)),
+        (None, None) => "on a detached HEAD".to_owned(),
+    }
+}
+
+/// Replace this process with the agent in `path`, so the terminal's signals
+/// reach it alone and the process the daemon recorded for `chat` runs it,
+/// changed by the agent's `profile`. Workspaces the agent opens belong to
+/// the chat.
 fn run_here(
     ctx: &Context,
-    repo: &Repository,
+    path: &Path,
     chat: &Chat,
     command: &[OsString],
     profile: &crate::ai::Environment,
@@ -576,7 +689,7 @@ fn run_here(
     let mut process = std::process::Command::new(program);
     process
         .args(args)
-        .current_dir(&repo.path)
+        .current_dir(path)
         .envs(crate::env::chat_environment(chat, &ctx.paths));
     profile.apply(&mut process, &ctx.paths.home);
     let error = process.exec();

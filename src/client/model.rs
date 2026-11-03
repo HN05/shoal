@@ -1318,23 +1318,23 @@ pub enum ChatHome<'a> {
     Workspace(&'a Workspace),
 }
 
-impl ChatHome<'_> {
+impl<'a> ChatHome<'a> {
     /// The directory the chat's agent runs in.
-    pub fn path(&self) -> &std::path::Path {
+    pub fn path(self) -> &'a std::path::Path {
         match self {
             Self::Checkout(repository) => &repository.path,
             Self::Workspace(workspace) => &workspace.path,
         }
     }
 
-    pub fn repository_id(&self) -> &str {
+    pub fn repository_id(self) -> &'a str {
         match self {
             Self::Checkout(repository) => &repository.id,
             Self::Workspace(workspace) => &workspace.repository_id,
         }
     }
 
-    pub fn workspace(&self) -> Option<&Workspace> {
+    pub fn workspace(self) -> Option<&'a Workspace> {
         match self {
             Self::Checkout(_) => None,
             Self::Workspace(workspace) => Some(workspace),
