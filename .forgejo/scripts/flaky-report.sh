@@ -30,34 +30,37 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 # Whether a round's cargo status is more than its failed tests explain: no
-# binary reported results, cargo itself was stopped (it exits 101 for every
-# failure it reports), or a binary failed without a FAILED summary because it
-# crashed or was killed before printing one.
+# binary reported results, cargo itself was stopped, no test failed, or a test
+# binary ended other than as libtest does for failed tests (exit status 101,
+# which cargo also exits with), as when it crashed or was killed. Test helper
+# processes print their own libtest lines into the log, so each binary's end
+# is read from cargo's diagnostic for it rather than from summaries.
 #   round_broken <log> <cargo status>
 round_broken() {
   grep -q '^test result: ' "$1" || return 0
   [ "$2" -ne 0 ] || return 1
   [ "$2" -eq 101 ] || return 0
-  failed_targets=$(grep -c '^error: .*failed, to rerun pass ' "$1" || true)
-  failed_summaries=$(grep -c '^test result: FAILED\.' "$1" || true)
-  [ "$failed_summaries" -eq 0 ] || [ "$failed_summaries" -lt "$failed_targets" ]
+  grep -q '^test .* \.\.\. FAILED$' "$1" || return 0
+  grep "^ *process didn't exit successfully: " "$1" | grep -qv '(exit status: 101)$'
 }
 
-# The end of each part of a broken round's log that reported an error but no
-# test results: the build's compiler errors, or a crashed binary's last tests
-# and signal. Without one, the end of the log, where cargo stopped.
+# The end of each part of a broken round's log that broke it: a test binary
+# that ended abnormally, with its last tests and signal, or an error without
+# test results, such as the build's. Without one, the end of the log, where
+# cargo stopped.
 print_round_errors() {
   awk -v keep=100 '
     function flush(  i) {
-      if (failed && !summary) {
+      if (abnormal || (failed && !summary)) {
         if (n > keep) print "[" n - keep " earlier lines omitted]"
         for (i = n > keep ? n - keep + 1 : 1; i <= n; i++) print lines[i % keep]
         shown = 1
       }
-      n = 0; failed = 0; summary = 0
+      n = 0; abnormal = 0; failed = 0; summary = 0
     }
     /^ *(Running|Doc-tests) / { flush() }
     { lines[++n % keep] = $0 }
+    /^ *process didn\047t exit successfully: / && !/\(exit status: 101\)$/ { abnormal = 1 }
     /^error/ { failed = 1 }
     /^test result: / { summary = 1 }
     END {

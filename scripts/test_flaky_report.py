@@ -52,6 +52,60 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; 
 error: test failed, to rerun pass `--test c`
 """
 
+# A test whose helper process, the same binary run for one ignored test, failed
+# and printed its own libtest lines into the log.
+HELPER_FAILED = """\
+     Running tests/e.rs (target/debug/deps/e-6c1f0f6f3e0a1b2c)
+
+running 1 test
+
+running 1 test
+test helper ... FAILED
+
+failures:
+
+failures:
+    helper
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+test parent ... FAILED
+
+failures:
+
+---- parent stdout ----
+
+thread 'parent' (165994153) panicked at tests/e.rs:9:5:
+the helper failed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    parent
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test e`
+"""
+
+# A binary that crashed after a helper it ran had passed.
+CRASHED_AFTER_HELPER = """\
+     Running tests/f.rs (target/debug/deps/f-0d9e8c7b6a5f4e3d)
+
+running 2 tests
+
+running 1 test
+test helper ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+test uses_helper ... ok
+error: test failed, to rerun pass `--test f`
+
+Caused by:
+  process didn't exit successfully: `target/debug/deps/f-0d9e8c7b6a5f4e3d` (signal: 11, SIGSEGV: invalid memory reference)
+"""
+
 BUILD_ERROR = """\
    Compiling crate v0.1.0
 error[E0425]: cannot find value `missing` in this scope
@@ -101,6 +155,23 @@ class FlakyReportTests(unittest.TestCase):
         # Only the crashed binary's part of the log, not the ones that reported results.
         self.assertNotIn("Running tests/a.rs", result.stderr)
         self.assertNotIn("Running tests/c.rs", result.stderr)
+
+    def test_a_failed_helper_accounts_for_its_own_lines(self):
+        result = self.report(PASSING + HELPER_FAILED, 101)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("| `helper` | 1 of 1 |", result.stdout)
+        self.assertIn("| `parent` | 1 of 1 |", result.stdout)
+        self.assertNotIn("[!WARNING]", result.stdout)
+
+    def test_a_crashed_binary_beside_a_failed_helper_breaks_the_round(self):
+        result = self.report(HELPER_FAILED + CRASHED_AFTER_HELPER, 101)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("1 of 1 rounds failed without a failing test to account for it", result.stdout)
+        self.assertIn("| `parent` | 1 of 1 |", result.stdout)
+        # The crashed binary's part of the log, though its helper printed a summary.
+        self.assertIn("test uses_helper ... ok", result.stderr)
+        self.assertIn("(signal: 11, SIGSEGV: invalid memory reference)", result.stderr)
+        self.assertNotIn("Running tests/e.rs", result.stderr)
 
     def test_cargo_killed_after_passing_binaries_breaks_the_round(self):
         result = self.report(PASSING + "     Running tests/d.rs (target/debug/deps/d)\n\nrunning 3 tests\n", 137)
