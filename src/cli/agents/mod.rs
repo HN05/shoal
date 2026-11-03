@@ -29,6 +29,7 @@ use crate::{
     agent::{Agent, AgentMode, ModelChoice},
     ai::IntegrationKind,
     cli::{client, commands::configured, context::Context, terminal, ui},
+    client::transcripts::Environments,
     config::{Config, Effective, named_commands::Commands},
     execution::recovery,
     fsutil,
@@ -38,11 +39,11 @@ use crate::{
     tools::Tool,
 };
 
+pub(in crate::cli) use crate::client::transcripts::AgentEnvironment;
 pub(in crate::cli) use claude::APP as CLAUDE_APP;
 pub(in crate::cli) use codex::APP as CODEX_APP;
 pub(in crate::cli) use desktop::{App, T3};
 pub(in crate::cli) use launch::input;
-pub(crate) use sessions::session_sources;
 pub(in crate::cli) use sessions::{SessionHome, install_session_files};
 #[cfg(feature = "happy")]
 pub(super) use shortcuts::happy;
@@ -162,19 +163,6 @@ pub(in crate::cli) trait Integration: Sync {
     /// workspace launches to.
     fn app(&self) -> Option<&'static desktop::App> {
         None
-    }
-
-    /// The directory the agent keeps its sessions' files in, running in
-    /// `environment`; `None` for an agent whose sessions cannot move to
-    /// another machine.
-    fn session_dir(&self, _environment: &AgentEnvironment) -> Result<Option<PathBuf>> {
-        Ok(None)
-    }
-
-    /// The files of session `id` in `directory`, which [`Self::session_dir`]
-    /// gave, relative to it.
-    fn session_files(&self, _directory: &Path, _id: &str) -> std::io::Result<Vec<PathBuf>> {
-        Ok(Vec::new())
     }
 }
 
@@ -308,26 +296,6 @@ pub(in crate::cli) struct Launch {
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
     pub replaces: Vec<PathBuf>,
-}
-
-/// What a workspace's agent runs with, which says where its tool keeps its
-/// files: this process's environment with `configured`, the workspace's
-/// `[env]` for a tracked agent.
-pub(in crate::cli) struct AgentEnvironment<'a> {
-    pub home: &'a Path,
-    pub configured: &'a BTreeMap<String, OsString>,
-}
-
-impl<'a> AgentEnvironment<'a> {
-    /// This process's environment alone, which agents Shoal does not track,
-    /// such as chats and desktop apps, run with.
-    pub fn inherited(home: &'a Path) -> Self {
-        static NONE: BTreeMap<String, OsString> = BTreeMap::new();
-        Self {
-            home,
-            configured: &NONE,
-        }
-    }
 }
 
 /// One chat about a repository in its registered checkout.
@@ -1334,14 +1302,8 @@ pub(crate) fn forget_repository_trust(
     agent_environments: &[BTreeMap<String, String>],
 ) -> Vec<String> {
     let paths = trust::repository_paths(repository, workspace_paths);
-    let configured = configured_environments(agent_environments);
-    let environments: Vec<_> = std::iter::once(AgentEnvironment::inherited(home))
-        .chain(
-            configured
-                .iter()
-                .map(|configured| AgentEnvironment { home, configured }),
-        )
-        .collect();
+    let environments = Environments::new(home, agent_environments);
+    let environments = environments.each();
     let mut cleaned: Vec<&trust::TrustFile> = Vec::new();
     let mut warnings = Vec::new();
     let integrations = IntegrationKind::ALL
@@ -1358,21 +1320,6 @@ pub(crate) fn forget_repository_trust(
         }
     }
     warnings
-}
-
-/// `agent_environments` as the `[env]` values agents run with.
-fn configured_environments(
-    agent_environments: &[BTreeMap<String, String>],
-) -> Vec<BTreeMap<String, OsString>> {
-    agent_environments
-        .iter()
-        .map(|environment| {
-            environment
-                .iter()
-                .map(|(name, value)| (name.clone(), value.into()))
-                .collect()
-        })
-        .collect()
 }
 
 #[cfg(test)]

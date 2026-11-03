@@ -4,6 +4,7 @@
 //! holds its removal record and a Git bundle of its checkpoint, and a chat's
 //! its name.
 use std::{
+    collections::BTreeSet,
     io::{BufRead, Read, Write},
     path::{Component, Path, PathBuf},
 };
@@ -14,6 +15,8 @@ pub(crate) use crate::client::transfer::{
     ExportedSpace, Manifest, PackagedChat, PackagedWorkspace, SessionFile, Sessions, Space,
 };
 use crate::{
+    client::transcripts::{self, Environments},
+    config::Effective,
     execution::recovery::{LastSession, StoppedAgent},
     git::{self, default_branch::DefaultBranchLookup},
     model::{Chat, RemovedWorkspace, Repository},
@@ -58,6 +61,48 @@ pub struct SessionSource {
     pub session: String,
     pub path: PathBuf,
     pub source: PathBuf,
+}
+
+/// The files of the sessions the agents of `sessions` reported, as
+/// `settings` describes the agents, wherever one of `environments` put
+/// them, with a warning for each session whose files cannot be read, which
+/// then starts over.
+pub fn session_sources(
+    settings: &Effective,
+    environments: &Environments,
+    sessions: &Sessions,
+) -> (Vec<SessionSource>, Vec<String>) {
+    let environments = environments.each();
+    let mut seen = BTreeSet::new();
+    let mut sources = Vec::new();
+    let mut warnings = Vec::new();
+    for (agent, session) in sessions.reported() {
+        if !seen.insert(session) {
+            continue;
+        }
+        let Some(store) = transcripts::store(settings.integration(agent)) else {
+            continue;
+        };
+        match transcripts::find(store, &environments, session) {
+            Ok(found) => sources.extend(found.into_iter().flat_map(|found| {
+                let directory = found.directory;
+                found
+                    .files
+                    .files
+                    .into_iter()
+                    .map(move |path| SessionSource {
+                        agent: agent.to_owned(),
+                        session: session.to_owned(),
+                        source: directory.join(&path),
+                        path,
+                    })
+            })),
+            Err(error) => warnings.push(format!(
+                "cannot export the files of {agent} session {session}: {error:#}"
+            )),
+        }
+    }
+    (sources, warnings)
 }
 
 /// Write the package `manifest` describes, a space of `repo`, with its

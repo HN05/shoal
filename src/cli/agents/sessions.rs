@@ -1,104 +1,23 @@
-//! Agents' session files, which `shoal move export` copies unread so the
-//! sessions continue on another machine, and `shoal move import` puts where
-//! the agents look for them.
+//! Agents' session files that `shoal move import` puts where the agents
+//! look for them.
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     ffi::OsString,
     io::Read,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Result, ensure};
 
-use super::{AgentEnvironment, Integration, agent_integration, configured_environments};
+use super::AgentEnvironment;
 use crate::{
     cli::{client, commands::workspaces, context::Context},
+    client::transcripts,
     config::Effective,
     model::Workspace,
     protocol::ConfigTarget,
-    transfer::{ImportedSessionFile, SessionSource, Sessions},
+    transfer::ImportedSessionFile,
 };
-
-/// The files of the sessions the agents of `sessions` reported, as
-/// `settings` describes the agents, wherever this process's environment
-/// under `home` or one of `agent_environments`, those its agents ran with,
-/// put them, with a warning for each session whose files cannot be read,
-/// which then starts over.
-pub(crate) fn session_sources(
-    settings: &Effective,
-    home: &Path,
-    agent_environments: &[BTreeMap<String, String>],
-    sessions: &Sessions,
-) -> (Vec<SessionSource>, Vec<String>) {
-    let configured = configured_environments(agent_environments);
-    let environments: Vec<_> = std::iter::once(AgentEnvironment::inherited(home))
-        .chain(
-            configured
-                .iter()
-                .map(|configured| AgentEnvironment { home, configured }),
-        )
-        .collect();
-    let mut seen = BTreeSet::new();
-    let mut sources = Vec::new();
-    let mut warnings = Vec::new();
-    for (agent, session) in sessions.reported() {
-        if !seen.insert(session) {
-            continue;
-        }
-        let integration = agent_integration(settings, agent);
-        match find_session(integration, &environments, session) {
-            Ok(files) => sources.extend(files.into_iter().map(|(path, source)| SessionSource {
-                agent: agent.to_owned(),
-                session: session.to_owned(),
-                path,
-                source,
-            })),
-            Err(error) => warnings.push(format!(
-                "cannot export the files of {agent} session {session}: {error:#}"
-            )),
-        }
-    }
-    (sources, warnings)
-}
-
-/// The files of session `id`, each relative to the session directory and
-/// where it is, in the first of `environments` whose session directory has
-/// any; none for an integration whose sessions cannot move.
-fn find_session(
-    integration: &dyn Integration,
-    environments: &[AgentEnvironment],
-    id: &str,
-) -> Result<Vec<(PathBuf, PathBuf)>> {
-    if !is_file_name(id) {
-        return Ok(Vec::new());
-    }
-    for environment in environments {
-        let Some(directory) = integration.session_dir(environment)? else {
-            return Ok(Vec::new());
-        };
-        let files = integration.session_files(&directory, id)?;
-        if !files.is_empty() {
-            return Ok(files
-                .into_iter()
-                .map(|path| {
-                    let source = directory.join(&path);
-                    (path, source)
-                })
-                .collect());
-        }
-    }
-    Ok(Vec::new())
-}
-
-/// Whether `id` names a single file, so a session ID cannot reach outside
-/// the directory it is looked up in.
-fn is_file_name(id: &str) -> bool {
-    let mut components = Path::new(id).components();
-    matches!(
-        (components.next(), components.next()),
-        (Some(Component::Normal(_)), None)
-    )
-}
 
 /// Whose agents an import's session files go to.
 pub(in crate::cli) enum SessionHome<'a> {
@@ -181,7 +100,9 @@ fn session_dir(
         home,
         configured: &configured,
     };
-    agent_integration(settings, name).session_dir(&environment)
+    transcripts::store(settings.integration(name))
+        .map(|store| store.session_dir(&environment))
+        .transpose()
 }
 
 /// Copy `imported` into the session directory `directory`. A file already
@@ -230,40 +151,6 @@ fn continues(existing: &Path, imported: &Path) -> std::io::Result<bool> {
             return Ok(false);
         }
     }
-}
-
-/// Every file under `directory`, or with `files` false every directory in
-/// it, relative to `base`, following no links; none when it is missing.
-pub(super) fn files_under(
-    base: &Path,
-    directory: &Path,
-    files: bool,
-) -> std::io::Result<Vec<PathBuf>> {
-    let mut found = Vec::new();
-    let mut pending = vec![directory.to_owned()];
-    while let Some(directory) = pending.pop() {
-        let entries = match std::fs::read_dir(&directory) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(error),
-        };
-        for entry in entries {
-            let entry = entry?;
-            let kind = entry.file_type()?;
-            let wanted = match files {
-                true => kind.is_file(),
-                false => kind.is_dir(),
-            };
-            if wanted && let Ok(relative) = entry.path().strip_prefix(base) {
-                found.push(relative.to_owned());
-            }
-            if files && kind.is_dir() {
-                pending.push(entry.path());
-            }
-        }
-    }
-    found.sort();
-    Ok(found)
 }
 
 #[cfg(test)]
