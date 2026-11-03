@@ -1,33 +1,26 @@
 use super::*;
 
-fn workspace(id: &str) -> Workspace {
-    serde_json::from_value(serde_json::json!({
-        "id": id,
-        "repository_id": "repo",
-        "name": id,
-        "path": format!("/{id}"),
-        "branch": id,
-        "state": "ready",
-    }))
-    .unwrap()
-}
-
 #[test]
-fn previous_skips_the_current_and_missing_workspaces() {
-    let workspaces = [workspace("a"), workspace("b")];
+fn previous_skips_the_current_and_missing_spaces() {
+    let spaces = ["a", "b", "chat"];
     let mut history = History::default();
-    for id in ["a", "removed", "b"] {
-        history.record("cd", id);
+    for id in ["a", "removed", "chat", "ended", "b"] {
+        history.record("attach", id);
     }
-    assert_eq!(history.0["cd"], ["b", "removed", "a"]);
-    let previous = |current| history.previous("cd", &workspaces, current).map(|w| &w.id);
-    assert_eq!(previous(None).unwrap(), "b");
-    assert_eq!(previous(workspaces.get(1)).unwrap(), "a");
-    assert!(history.previous("attach", &workspaces, None).is_none());
+    assert_eq!(history.0["attach"], ["b", "ended", "chat", "removed", "a"]);
+    let previous = |current: &[&str]| history.previous("attach", &spaces, current);
+    assert_eq!(previous(&[]).as_deref(), Some("b"));
+    assert_eq!(previous(&["b"]).as_deref(), Some("chat"));
+    assert_eq!(previous(&["b", "chat"]).as_deref(), Some("a"));
+    assert_eq!(
+        history.previous("attach", &["a", "b"], &["b"]).as_deref(),
+        Some("a")
+    );
+    assert!(history.previous("cd", &spaces, &[]).is_none());
 }
 
 #[test]
-fn recording_moves_a_workspace_to_the_front_and_keeps_the_limit() {
+fn recording_moves_a_space_to_the_front_and_keeps_the_limit() {
     let mut history = History::default();
     for id in 0..LIMIT + 2 {
         history.record("attach", &id.to_string());

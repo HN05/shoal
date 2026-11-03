@@ -751,9 +751,10 @@ when none is left. Workspaces the command would refuse for their state, or for
 `cd`, `attach` and the commands that open, show or run something in one workspace
 remember, across terminals, the workspaces each acted on, and take `-` as the
 target for the latest one other than the current workspace; `cd` also remembers
-the workspace it leaves, and `attach` the workspace of each agent session it or
-a launch such as `add` or `claude` showed here and left running, and of each
-place a focused `add` opened. Scoped callers keep no such history.
+the workspace it leaves, and `attach` the workspace or chat of each agent
+session it or a launch such as `add`, `claude` or `chat` showed here and left
+running, and of each place a focused `add` opened; its `-` passes over chats
+that no longer run as it passes over removed workspaces. Scoped callers keep no such history.
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers

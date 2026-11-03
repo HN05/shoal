@@ -63,11 +63,16 @@ enum Target {
 }
 
 impl Target {
-    /// The running chat or workspace `name` selects; without one, the
+    /// The running chat or workspace `name` selects, where `-` is the one
+    /// whose session this terminal last left running; without one, the
     /// current workspace, else the current checkout's only running chat,
     /// else a picker of the workspaces and chats with sessions.
     async fn resolve(ctx: &Context, name: Option<String>) -> Result<Self> {
         let chats = client::chats(&ctx.paths).await?;
+        if name.as_deref() == Some(recent::PREVIOUS) {
+            let id = recent::previous_space(ctx, &chats).await?;
+            return Self::space(ctx, chats, id).await;
+        }
         if let Some(name) = name {
             return match chats.into_iter().find(|chat| chat.name == name) {
                 Some(chat) => Ok(Self::Chat(Box::new(chat))),
@@ -103,18 +108,26 @@ impl Target {
             .collect();
         let workspaces = client::workspaces(&ctx.paths).await?;
         let id = ui::pick_space(ctx, workspaces, &chats, "workspace").await?;
+        Self::space(ctx, chats, id).await
+    }
+
+    /// The one of `chats` with the ID `id`, else the workspace with it.
+    async fn space(ctx: &Context, chats: Vec<Chat>, id: String) -> Result<Self> {
         if let Some(chat) = chats.into_iter().find(|chat| chat.id == id) {
             return Ok(Self::Chat(Box::new(chat)));
         }
         Self::inspected(ctx, id).await
     }
 
-    /// Remember a workspace once its session was shown and still runs, so
-    /// `attach -` returns to the session last detached from rather than the
-    /// one last attached, which another terminal may still show.
+    /// Remember a workspace or chat once its session was shown and still
+    /// runs, so `attach -` returns to the session last detached from rather
+    /// than the one last attached, which another terminal may still show.
     async fn record_detach(&self, ctx: &Context) {
-        if let Self::Workspace(inspection) = self {
-            recent::record_attach(ctx, &inspection.workspace.id).await;
+        match self {
+            Self::Workspace(inspection) => {
+                recent::record_attach(ctx, &inspection.workspace.id).await;
+            }
+            Self::Chat(chat) => recent::record_chat_attach(ctx, &chat.id).await,
         }
     }
 

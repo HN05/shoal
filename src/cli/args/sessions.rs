@@ -92,7 +92,8 @@ pub enum SessionsCommand {
     /// chat, else offers a picker. The session of an agent Shoal stopped
     /// until its automatic restore is not offered.
     Attach {
-        /// Workspace or running chat, by name.
+        /// Workspace or running chat, by name; `-` for the one whose session
+        /// this terminal last detached from.
         #[arg(id = "workspace", value_name = "TARGET")]
         target: Option<String>,
         /// Session to attach when the workspace has several.

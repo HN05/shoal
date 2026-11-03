@@ -1,4 +1,4 @@
-//! The workspaces each command last acted on, so `-` can name the previous one.
+//! The spaces each command last acted on, so `-` can name the previous one.
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, ensure};
@@ -12,7 +12,7 @@ use crate::{
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     fsutil::{Permissions, ReplaceOptions},
-    model::Workspace,
+    model::Chat,
     paths::Paths,
 };
 
@@ -20,14 +20,14 @@ use crate::{
 pub const PREVIOUS: &str = "-";
 
 /// The history `attach -` reads, which every command that shows a
-/// workspace's agent session here keeps.
+/// workspace's or a chat's agent session here keeps.
 pub const ATTACH: &str = "attach";
 
-/// Entries kept per command, enough to pass over the current workspace and
-/// removed ones.
+/// Entries kept per command, enough to pass over the current space and
+/// removed workspaces or ended chats.
 const LIMIT: usize = 8;
 
-/// Workspace IDs by command name, most recent first.
+/// Workspace and chat IDs by command name, most recent first.
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct History(BTreeMap<String, Vec<String>>);
 
@@ -67,44 +67,71 @@ impl History {
         Ok(())
     }
 
-    fn record(&mut self, command: &str, workspace_id: &str) {
+    fn record(&mut self, command: &str, space_id: &str) {
         let ids = self.0.entry(command.to_owned()).or_default();
-        ids.retain(|id| id != workspace_id);
-        ids.insert(0, workspace_id.to_owned());
+        ids.retain(|id| id != space_id);
+        ids.insert(0, space_id.to_owned());
         ids.truncate(LIMIT);
     }
 
-    /// The most recent of `workspaces` other than `current`.
-    fn previous<'a>(
-        &self,
-        command: &str,
-        workspaces: &'a [Workspace],
-        current: Option<&Workspace>,
-    ) -> Option<&'a Workspace> {
+    /// The most recent of the space IDs `spaces` not in `current`.
+    fn previous(&self, command: &str, spaces: &[&str], current: &[&str]) -> Option<String> {
         self.0
             .get(command)?
             .iter()
-            .filter(|id| current.is_none_or(|current| current.id != **id))
-            .find_map(|id| workspaces.iter().find(|workspace| workspace.id == *id))
+            .filter(|id| !current.contains(&id.as_str()))
+            .find(|id| spaces.contains(&id.as_str()))
+            .cloned()
     }
 }
 
 /// The workspace the command last acted on other than the current one.
 pub async fn previous(ctx: &Context) -> Result<String> {
+    let command = command(ctx)?;
+    previous_among(ctx, command, &[])
+        .await?
+        .with_context(|| format!("no previous workspace for `shoal {command}`"))
+}
+
+/// The workspace or one of the running `chats` the command last acted on,
+/// other than the current workspace and the chat this process runs in.
+pub async fn previous_space(ctx: &Context, chats: &[Chat]) -> Result<String> {
+    let command = command(ctx)?;
+    previous_among(ctx, command, chats)
+        .await?
+        .with_context(|| format!("no previous space for `shoal {command}`"))
+}
+
+/// The history the command keeps, outside workspace processes, which keep
+/// none.
+fn command(ctx: &Context) -> Result<&str> {
     let command = ctx
         .recent
         .as_deref()
         .context("this command does not accept - for a previous workspace")?;
     ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
+        keeps_history(ctx),
         "workspace processes have no previous workspace"
     );
+    Ok(command)
+}
+
+/// The most recent of the workspaces and `chats` in `command`'s history
+/// other than the current workspace and chat.
+async fn previous_among(ctx: &Context, command: &str, chats: &[Chat]) -> Result<Option<String>> {
     let workspaces = client::workspaces(&ctx.paths).await?;
-    let current = ui::current_workspace(&workspaces)?;
-    History::load(&ctx.paths)
-        .previous(command, &workspaces, current)
-        .map(|workspace| workspace.id.clone())
-        .with_context(|| format!("no previous workspace for `shoal {command}`"))
+    let current_chat = crate::env::chat();
+    let current: Vec<&str> = ui::current_workspace(&workspaces)?
+        .map(|workspace| workspace.id.as_str())
+        .into_iter()
+        .chain(current_chat.as_deref())
+        .collect();
+    let spaces: Vec<&str> = workspaces
+        .iter()
+        .map(|workspace| workspace.id.as_str())
+        .chain(chats.iter().map(|chat| chat.id.as_str()))
+        .collect();
+    Ok(History::load(&ctx.paths).previous(command, &spaces, &current))
 }
 
 /// Remember that the command acted on the workspace `selector` names.
@@ -129,10 +156,25 @@ pub async fn record_attach(ctx: &Context, selector: &str) {
     remember(ctx, ATTACH, selector, false).await;
 }
 
-/// Scoped callers keep no history, and failing to keep it never fails the
-/// command.
+/// Remember that this terminal showed the agent session of the running chat
+/// `selector` names or identifies and left it running, as [`record_attach`]
+/// does for a workspace. Failing to keep it never fails the command.
+pub async fn record_chat_attach(ctx: &Context, selector: &str) {
+    if !keeps_history(ctx) {
+        return;
+    }
+    let Ok(chats) = client::chats(&ctx.paths).await else {
+        return;
+    };
+    let named = |chat: &&Chat| chat.id == selector || chat.name == selector;
+    if let Some(chat) = chats.iter().find(named) {
+        let _ = History::update(&ctx.paths, |history| history.record(ATTACH, &chat.id));
+    }
+}
+
+/// Failing to keep the history never fails the command.
 async fn remember(ctx: &Context, command: &str, selector: &str, from_current: bool) {
-    if crate::env::inherits_scope(&ctx.paths.state) {
+    if !keeps_history(ctx) {
         return;
     }
     let Ok(workspaces) = client::workspaces(&ctx.paths).await else {
@@ -154,6 +196,11 @@ async fn remember(ctx: &Context, command: &str, selector: &str, from_current: bo
         }
         history.record(command, &target.id);
     });
+}
+
+/// Whether this caller keeps a history: scoped callers keep none.
+fn keeps_history(ctx: &Context) -> bool {
+    !crate::env::inherits_scope(&ctx.paths.state)
 }
 
 #[cfg(test)]

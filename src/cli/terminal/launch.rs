@@ -605,13 +605,20 @@ pub(in crate::cli) async fn start_chat(
         argv: &shoal_command(ctx, args)?,
         env: &place_env(ctx)?,
     };
-    if let Some(attaches) = host.host.attaches() {
-        let session = attaches.run_chat(&start).await?;
-        report_detach(attaches, name, &session).await?;
-        return Ok(true);
+    let left_running = match host.host.attaches() {
+        Some(attaches) => {
+            let session = attaches.run_chat(&start).await?;
+            report_detach(attaches, name, &session).await?
+        }
+        None => {
+            let place = places.open(&start).await?;
+            show_opened(&host, places, &place, name).await?;
+            left_open(&place).await
+        }
+    };
+    if left_running {
+        recent::record_chat_attach(ctx, name).await;
     }
-    let place = places.open(&start).await?;
-    show_opened(&host, places, &place, name).await?;
     Ok(true)
 }
 

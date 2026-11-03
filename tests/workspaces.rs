@@ -25512,7 +25512,7 @@ fn attach_previous_returns_to_the_herdr_tab_a_focused_add_opened() {
     let (output, transcript) = herdr_call(&fixture, &["attach", "-"], "");
     assert!(!output.status.success());
     assert!(
-        transcript.contains("no previous workspace for `shoal attach`"),
+        transcript.contains("no previous space for `shoal attach`"),
         "{transcript}"
     );
     add("shown", true);
@@ -28588,6 +28588,45 @@ fn attach_previous_returns_to_the_session_last_detached_from() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "other"]);
     drop((persist, other));
+}
+
+#[test]
+fn attach_previous_returns_to_a_running_chat() {
+    let fixture = Fixture::new();
+    fixture.add("persist");
+    let home = fixture.root.path();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    let persist = agent_in_session(&fixture, "persist", "persist");
+    // The sleep stands in for the chat's agent.
+    let mut chat_agent = Command::new("sleep").arg("600").spawn().unwrap();
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository["id"], "name": "talk", "agent": "claude",
+        "pid": chat_agent.id(), "origin": {"host": "zmx", "place": "chat"}
+    }}));
+    assert_eq!(response["type"], "chat", "{response}");
+    fs::write(
+        home.join("zmx-sessions"),
+        "  name=persist\tpid=1\tclients=0\tshoal.workspace=w0\n  name=chat\tpid=1\tclients=0\n",
+    )
+    .unwrap();
+    let previous = || {
+        let (output, transcript) = fixture.interactive(&["attach", "-"], "");
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+        zmx_calls(&fixture)
+            .into_iter()
+            .rfind(|call| call[0] == "attach")
+            .unwrap()
+    };
+    for target in ["persist", "talk"] {
+        let (output, transcript) = fixture.interactive(&["attach", target], "");
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+    }
+    assert_eq!(previous(), ["attach", "chat"]);
+    // A chat whose agent exited is passed over, as a removed workspace is.
+    chat_agent.kill().unwrap();
+    chat_agent.wait().unwrap();
+    assert_eq!(previous(), ["attach", "persist"]);
+    drop(persist);
 }
 
 #[test]

@@ -1254,16 +1254,18 @@ picker selects several: Tab selects each entry and Ctrl-A all of them. It checks
 every target before acting on any, asks one confirmation that names what each
 loses, and goes on after one fails, exiting 1.
 Scope remains daemon-enforced. Bare `cd` always picks; all-workspace operations retain their scope.
-A `-` target selects from a per-command history of workspace IDs that the CLI keeps
+A `-` target selects from a per-command history of space IDs that the CLI keeps
 in the state directory, shared across terminals so `attach -` works from a new pane;
 it only saves typing a name, so it never fails a command or authorizes anything, and
 scoped callers neither read nor write it. `attach` and every launch that shows a
-workspace's agent session here, such as `add` or `claude`, record the workspace in
-`attach`'s history once the session is shown and still runs: when the terminal
+workspace's or a chat's agent session here, such as `add`, `claude` or `chat`, record
+the space in `attach`'s history once the session is shown and still runs: when the terminal
 detaches, or right away for a host that shows it without attaching the terminal. A
 focused `add` that opens a place records the workspace once the place hosts it, since
 the host may show the place before the workspace exists. So `attach -` returns to the
-session last detached from, not one another terminal still shows or one that ended.
+session last detached from, not one another terminal still shows or one that ended;
+it passes over removed workspaces and chats that no longer run, while other
+commands' `-` selects only workspaces.
 `resume` uses the current workspace only when it has something to resume; its picker
 and completion list every workspace with the agents and commands it would
 restore, or that nothing would, and with nothing to resume anywhere it reports
