@@ -334,12 +334,30 @@ fn queue_status_cell(entry: &QueueEntry) -> Cell {
     (text, Some(status.style()))
 }
 
-/// What a queue entry starts: a launch's issue title, or a restore.
+/// What a queue entry starts: a launch's issue title, a restore, or a CI job.
 fn queue_subject(entry: &QueueEntry) -> String {
-    match entry.kind {
-        QueueKind::Launch => entry.issue_title.clone().unwrap_or_default(),
-        QueueKind::Restore => format!("Restore of {}", entry.agent),
+    match (entry.kind, &entry.job) {
+        (QueueKind::Launch, _) => entry.issue_title.clone().unwrap_or_default(),
+        (QueueKind::Restore, _) => format!("Restore of {}", entry.agent),
+        (QueueKind::Job, Some(job)) => job_subject(job),
+        (QueueKind::Job, None) => "CI job".into(),
     }
+}
+
+/// `CI job ci.yml / rust for PR #12`, naming the workflow where the forge
+/// reports it and the PR or branch the run is for.
+fn job_subject(queued: &crate::model::QueuedJob) -> String {
+    use crate::forge::ci::runner::Trigger;
+    let mut subject = match &queued.run.workflow {
+        Some(workflow) => format!("CI job {workflow} / {}", queued.job.name),
+        None => format!("CI job {}", queued.job.name),
+    };
+    match &queued.run.trigger {
+        Trigger::Pull { number } => subject += &format!(" for PR #{number}"),
+        Trigger::Branch(branch) => subject += &format!(" on {branch}"),
+        Trigger::Other => {}
+    }
+    subject
 }
 
 /// One aligned row per agent queue entry: its workspace name, its repository

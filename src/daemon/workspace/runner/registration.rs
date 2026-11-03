@@ -1,0 +1,186 @@
+//! The runner each repository registers on its forge: registered while
+//! `runner.enabled` is on for it, with the user's own login, and deleted on
+//! the forge once the setting is off or the repository is removed.
+use anyhow::{Context, Result};
+use rusqlite::{OptionalExtension, params};
+
+use crate::daemon::workspace::Manager;
+use crate::{
+    daemon::notifications::NotificationKind,
+    forge::{ForgeRepo, ci::runner::RegisteredRunner},
+    model::Repository,
+};
+
+/// A repository's runner as the daemon keeps it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Registration {
+    /// The web URL of the forge repository it serves.
+    pub forge_repository: String,
+    pub runner: RegisteredRunner,
+}
+
+impl Manager {
+    /// Register a runner for each repository that has `runner.enabled` on
+    /// and none, and delete the runner of each that turned it off. A failure
+    /// leaves that repository for the next pass and tells the user once.
+    pub(crate) async fn reconcile_runners(&self) -> Result<()> {
+        let config = self.config();
+        for repository in self.repositories().await? {
+            let enabled = match self.repository_settings_from(&config, &repository.id).await {
+                Ok(settings) => settings.runner.enabled,
+                // A config that does not resolve leaves the runner as it is.
+                Err(_) => continue,
+            };
+            let registered = self.runner_registration(&repository.id).await?;
+            let result = match (enabled, registered) {
+                (true, None) if self.runners.due(&repository.id) => {
+                    self.register_runner(&repository).await
+                }
+                (false, Some(registration)) => self.delete_runner(&repository, &registration).await,
+                _ => continue,
+            };
+            if let Err(error) = result {
+                self.runners.failed(&repository.id);
+                self.notify(
+                    None,
+                    NotificationKind::RunnerFailed,
+                    format!(
+                        "The runner of {} could not change: {error:#}",
+                        crate::repository::name(&repository)
+                    ),
+                )
+                .await;
+            }
+        }
+        Ok(())
+    }
+
+    /// Delete `repository`'s runner on the forge before the repository goes;
+    /// a forge that cannot be reached leaves the runner there, which the
+    /// user is told to delete.
+    pub(crate) async fn delete_runner_of_removed(&self, repository: &Repository) -> Result<()> {
+        let Some(registration) = self.runner_registration(&repository.id).await? else {
+            return Ok(());
+        };
+        if let Err(error) = self.delete_runner(repository, &registration).await {
+            self.notify(
+                None,
+                NotificationKind::RunnerFailed,
+                format!(
+                    "The runner of {} stays registered at {}; delete it in the repository's Actions settings: {error:#}",
+                    crate::repository::name(repository),
+                    registration.forge_repository
+                ),
+            )
+            .await;
+        }
+        Ok(())
+    }
+
+    /// The runner `repository_id` registered, if any.
+    pub(crate) async fn runner_registration(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<Registration>> {
+        let id = repository_id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .query_row(
+                        "SELECT forge_repository,forge_id,uuid,token FROM runners WHERE repository_id=?1",
+                        [id],
+                        |row| {
+                            Ok(Registration {
+                                forge_repository: row.get(0)?,
+                                runner: RegisteredRunner {
+                                    id: row.get::<_, i64>(1)? as u64,
+                                    uuid: row.get(2)?,
+                                    token: row.get(3)?,
+                                },
+                            })
+                        },
+                    )
+                    .optional()?)
+            })
+            .await
+    }
+
+    /// The forge of `repository`'s checkout, refused unless this machine
+    /// can run its jobs: the forge supports it and its runner program is on
+    /// the daemon's `PATH`.
+    pub(crate) async fn runner_forge(&self, repository: &Repository) -> Result<ForgeRepo> {
+        let forge = self.checkout_forge(repository).await?;
+        let program = forge.runner_program()?;
+        let path = self.runners.search_path();
+        crate::fsutil::find_executable(program.as_ref(), &path)
+            .with_context(|| format!("{program} is not on the daemon's PATH; install it"))?;
+        forge.require_runner(&self.user_account()).await?;
+        Ok(forge)
+    }
+
+    /// Register a runner for `repository` on its forge and keep it.
+    async fn register_runner(&self, repository: &Repository) -> Result<()> {
+        let forge = self.runner_forge(repository).await?;
+        let account = self.user_account();
+        let name = format!("shoal-{}", crate::process::machine::hostname());
+        let registration = Registration {
+            forge_repository: forge.repository_url(),
+            runner: forge.register_runner(&account, &name).await?,
+        };
+        let forge_id = registration.runner.id;
+        if let Err(error) = self.keep_registration(&repository.id, registration).await {
+            // Unkept, the runner would stay on the forge with nothing to delete it.
+            let _ = forge.delete_runner(&account, forge_id).await;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    async fn keep_registration(
+        &self,
+        repository_id: &str,
+        registration: Registration,
+    ) -> Result<()> {
+        let id = repository_id.to_owned();
+        self.store
+            .run(move |db| {
+                let runner = &registration.runner;
+                db.execute(
+                    "INSERT INTO runners(repository_id,forge_repository,forge_id,uuid,token)
+                     VALUES (?1,?2,?3,?4,?5)",
+                    params![
+                        id,
+                        registration.forge_repository,
+                        i64::try_from(runner.id)?,
+                        runner.uuid,
+                        runner.token
+                    ],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Delete `registration`, `repository`'s runner, on the forge it serves
+    /// and forget it.
+    async fn delete_runner(
+        &self,
+        repository: &Repository,
+        registration: &Registration,
+    ) -> Result<()> {
+        let forge = ForgeRepo::resolve(&registration.forge_repository, &self.forge_hosts()).await?;
+        forge
+            .delete_runner(&self.user_account(), registration.runner.id)
+            .await?;
+        let id = repository.id.clone();
+        self.store
+            .run(move |db| {
+                db.execute("DELETE FROM runners WHERE repository_id=?1", [id])?;
+                Ok(())
+            })
+            .await
+    }
+}
+
+#[cfg(test)]
+mod tests;

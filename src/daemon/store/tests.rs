@@ -396,6 +396,12 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 121 {
         db.execute_batch(include_str!("space_parents.sql"))?;
     }
+    if version >= 122 {
+        db.execute_batch(include_str!("runners.sql"))?;
+    }
+    if version >= 123 {
+        db.execute_batch(include_str!("agent_queue_jobs.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

@@ -402,7 +402,7 @@ pub(crate) struct Start {
     pub env: BTreeMap<String, String>,
 }
 
-const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch";
+const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch,job";
 
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch that no limit
@@ -559,6 +559,8 @@ impl Manager {
         } in queued
         {
             let work = match (kind, execution, workspace) {
+                // The runner admits no job yet.
+                (QueueKind::Job, ..) => continue,
                 (QueueKind::Restore, Some(execution), Some(workspace)) if started_here => {
                     let work = self
                         .stopped_restore_work(&workspace, &execution, automatic)
@@ -1259,6 +1261,15 @@ impl Manager {
     }
 }
 
+/// Place the waiting entry `id` at `place` within `tx`.
+pub(crate) fn place_entry(
+    tx: &rusqlite::Transaction<'_>,
+    id: &str,
+    place: &crate::model::QueuePlace,
+) -> Result<()> {
+    order::place(tx, id, place).map(|_| ())
+}
+
 /// A configured value as a slot count. Dynamic admission measures the whole
 /// machine, so it adds no repository limit of its own.
 fn fixed_limit(limit: RunLimit) -> Option<u32> {
@@ -1285,6 +1296,7 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         waiting_for: Vec::new(),
         waits_for_update: false,
         base: row.get("base_branch")?,
+        job: crate::daemon::store::json_column(row, "job")?,
     })
 }
 

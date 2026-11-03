@@ -16,7 +16,7 @@ use crate::{
         scope::Caller,
         workspace::{Manager, StopRequest},
     },
-    model::{MovedEntry, QueueEntry, QueuePlace},
+    model::{MovedEntry, QueueEntry, QueuePlace, QueuedJob},
     state::{QueueKind, QueueState},
 };
 
@@ -66,7 +66,7 @@ impl Manager {
     /// The execution of the stopped agent whose wrapper waits for `entry`,
     /// a restore the daemon does not start itself.
     async fn waiting_wrapper(&self, entry: &QueueEntry) -> Result<Option<String>> {
-        if entry.kind == QueueKind::Launch || self.restores_stopped_agent(&entry.id).await? {
+        if entry.kind != QueueKind::Restore || self.restores_stopped_agent(&entry.id).await? {
             return Ok(None);
         }
         entry
@@ -82,6 +82,11 @@ impl Manager {
     pub async fn queue_start(&self, selector: &str) -> Result<QueueEntry> {
         let _gate = self.agent_queue.lock_admission().await;
         let mut entry = self.waiting_entry(selector, None, "").await?;
+        ensure!(
+            entry.kind != QueueKind::Job,
+            "{} is a CI job; the runner starts it once it is admitted",
+            entry.name
+        );
         let base = self.start_base(&entry).await?;
         match self.waiting_wrapper(&entry).await? {
             Some(execution) => self.grant_now(&entry, &execution).await?,
@@ -144,7 +149,10 @@ impl Manager {
             self.stop_waiting_wrapper(&entry, execution).await?;
         }
         // A stopped wrapper removes its entry as it finishes, which may come first.
-        let deleted = self.delete_waiting_entry(entry.id.clone()).await?;
+        let deleted = match &entry.job {
+            Some(job) => self.pass_over_job(&entry, job).await?,
+            None => self.delete_waiting_entry(entry.id.clone()).await?,
+        };
         ensure!(
             deleted || wrapper.is_some(),
             "{} is no longer waiting",
@@ -203,6 +211,30 @@ impl Manager {
             entry.name
         );
         Ok(())
+    }
+
+    /// Delete the waiting job `entry`, leaving its `job` to other runners,
+    /// returning whether it still waited.
+    async fn pass_over_job(&self, entry: &QueueEntry, job: &QueuedJob) -> Result<bool> {
+        let (id, repository, handle) = (
+            entry.id.clone(),
+            entry.repository_id.clone(),
+            job.job.handle.clone(),
+        );
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                let deleted = delete_waiting(&tx, &id)?;
+                if deleted {
+                    tx.execute(
+                        "INSERT OR IGNORE INTO ci_passed_jobs(repository_id,handle) VALUES (?1,?2)",
+                        params![repository, handle],
+                    )?;
+                }
+                tx.commit()?;
+                Ok(deleted)
+            })
+            .await
     }
 
     /// Delete the entry `id` if it still waits, returning whether it did.

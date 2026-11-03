@@ -1474,7 +1474,8 @@ pub struct AgentSession {
     pub session: String,
 }
 
-/// An agent launch or restore waiting for, or starting in, a `max_agents` slot.
+/// An agent launch or restore waiting for, or starting in, a `max_agents`
+/// slot, or a CI job waiting for the runner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueEntry {
     pub id: String,
@@ -1508,6 +1509,20 @@ pub struct QueueEntry {
     /// The branch of the completed dependency a started launch builds on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,
+    /// The CI job a job's entry claims.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job: Option<Box<QueuedJob>>,
+}
+
+/// A CI job of a repository's runner, from the forge's queue, with the run
+/// it belongs to and the workspace that run's PR or branch links.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueuedJob {
+    pub job: crate::forge::ci::runner::WaitingJob,
+    pub run: crate::forge::ci::runner::JobRun,
+    /// The workspace that links the run's PR, or owns the branch it ran on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
 }
 
 impl QueueEntry {

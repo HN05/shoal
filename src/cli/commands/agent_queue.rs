@@ -214,6 +214,7 @@ pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
         match queued.kind {
             QueueKind::Launch => start_launch(ctx, &entry).await,
             QueueKind::Restore => super::resume::start_queued(ctx, &queued).await,
+            QueueKind::Job => anyhow::bail!("the daemon starts a CI job itself"),
         }
     }
     .await;

@@ -193,6 +193,8 @@ states!(QueueKind {
     Launch => "launch",
     /// A protection-stopped agent's automatic restore in its own workspace.
     Restore => "restore",
+    /// A CI job waiting in the forge's queue for this machine's runner.
+    Job => "job",
 });
 states!(
     /// How a stopped chat comes back.

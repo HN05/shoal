@@ -1,6 +1,7 @@
 //! The runner's background work: each repository's runner follows its
 //! `runner.enabled` setting, checked when the global config changes and
-//! every [`INTERVAL`] for the repositories' own files.
+//! every [`INTERVAL`] for the repositories' own files, and the forge's
+//! waiting jobs are read into the agent queue every [`POLL_INTERVAL`].
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, PoisonError},
@@ -13,6 +14,9 @@ use crate::daemon::{log, workspace::Manager};
 
 /// How often the runners are checked against the repositories' settings.
 const INTERVAL: Duration = Duration::from_secs(60);
+/// How often the forge's waiting jobs are read, as often as admission
+/// samples the machine's load.
+const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// How long a repository whose runner could not change waits to try again.
 const RETRY_AFTER: Duration = Duration::from_secs(5 * 60);
 
@@ -63,13 +67,23 @@ impl Runners {
 
 pub(super) async fn run(manager: Arc<Manager>) {
     let mut config = manager.config_state.watch();
+    let mut reconciled: Option<Instant> = None;
     loop {
-        if let Err(error) = manager.reconcile_runners().await {
+        if reconciled.is_none_or(|at| at.elapsed() >= INTERVAL) {
+            if let Err(error) = manager.reconcile_runners().await {
+                log!("runner: {error:#}");
+            }
+            reconciled = Some(Instant::now());
+        }
+        if let Err(error) = manager.refresh_waiting_jobs().await {
             log!("runner: {error:#}");
         }
         tokio::select! {
-            _ = config.changed() => manager.runners.forget_failures(),
-            _ = tokio::time::sleep(INTERVAL) => {}
+            _ = config.changed() => {
+                manager.runners.forget_failures();
+                reconciled = None;
+            }
+            _ = tokio::time::sleep(POLL_INTERVAL) => {}
         }
     }
 }

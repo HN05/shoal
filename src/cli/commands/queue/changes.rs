@@ -37,6 +37,10 @@ pub(super) async fn cancel(ctx: &Context, entry: Option<String>) -> Result<i32> 
             "Removed the restore of {0} from the agent queue; restore it with shoal resume {0}",
             entry.name
         ),
+        QueueKind::Job => format!(
+            "Passed over {}; the forge keeps it for other runners",
+            entry.name
+        ),
     };
     ctx.emit(&message, &entry)?;
     Ok(0)

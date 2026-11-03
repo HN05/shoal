@@ -38,7 +38,8 @@ pub(super) fn expire_starts(
         tx.execute("DELETE FROM agent_queue WHERE id=?1", [&id])?;
         let failure = match kind {
             QueueKind::Launch if unopened => FailedStart::UnopenedLaunch(name),
-            QueueKind::Launch => continue,
+            // Opened launches expire silently; jobs carry no start environment.
+            QueueKind::Launch | QueueKind::Job => continue,
             QueueKind::Restore => FailedStart::UnstartedRestore(name),
         };
         failures.push(failure);
