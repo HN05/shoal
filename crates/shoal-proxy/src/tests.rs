@@ -349,11 +349,9 @@ async fn failures_a_retry_cannot_fix_reach_the_agent_at_once() {
 
 #[tokio::test]
 async fn an_unreachable_upstream_is_retried_then_answers_bad_gateway() {
-    // A port nothing listens on any more.
-    let closed = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
-    let url = format!("http://{}", closed.local_addr().unwrap());
-    drop(closed);
-    let (addr, mut events, clock) = proxy_on(Upstream::parse(&url).unwrap()).await;
+    // Nothing can listen on port 0, so connecting to it fails at once.
+    let upstream = Upstream::parse("http://127.0.0.1:0").unwrap();
+    let (addr, mut events, clock) = proxy_on(upstream).await;
     let (status, _, body) = drive(&clock, send(addr, Request::post("/v1/messages"), "{}")).await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert!(body.contains("reach the upstream"), "{body}");
