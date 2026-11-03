@@ -13,6 +13,7 @@ pub mod pr;
 pub mod proposals;
 mod pushes;
 mod raw;
+mod reads;
 mod revert;
 mod run_approval;
 mod runs;
