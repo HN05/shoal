@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
-use super::{AgentLimit, forges, overload};
+use super::{RunLimit, forges, overload};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -17,7 +17,10 @@ pub struct Machine {
     pub keep_awake: bool,
     /// Agents running at once on this machine; defaults to measured load and
     /// `shoal add` queues past it. Use `none` for unlimited admission.
-    pub max_agents: AgentLimit,
+    pub max_agents: RunLimit,
+    /// CI jobs the runner runs at once on this machine; defaults to measured
+    /// load, which agents and jobs share. Use `none` for unlimited admission.
+    pub max_jobs: RunLimit,
     pub overload: overload::Overload,
     /// What each AI tool needs of this machine.
     pub agents: std::collections::BTreeMap<String, super::agents::MachineAgent>,

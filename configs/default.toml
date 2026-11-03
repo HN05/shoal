@@ -22,6 +22,11 @@ root_dir = "~/shoal"
 # fixed limit or `none` for unlimited admission.
 # max_agents = 3
 
+# CI jobs the runner runs at once; `dynamic` admits them with agents, one start
+# at a time, while measured load allows. Set a positive number for a fixed limit
+# or `none` for unlimited admission.
+# max_jobs = 2
+
 # How hard Shoal may load this machine: "light" for a computer you work on,
 # "balanced", or "full" for one that only runs agents. It sets the default
 # CPU and memory thresholds in [machine.overload] and dynamic agent admission.
@@ -358,3 +363,13 @@ push = "direct"
 # Requests through shoal forge api that are not reads, which you may always
 # send: "deny" or "direct".
 api_writes = "deny"
+
+# Run the repository's CI jobs on this machine: Shoal registers a runner for
+# it on its forge and runs each waiting job with these labels, plus
+# shoal-<os>-<arch>, in a workspace at the job's commit. Enable it per
+# repository with `shoal config set runner.enabled true --repo <name>`.
+# [runner]
+# enabled = false
+# labels = ["shoal"]
+# One permit from this resource pool for each running job.
+# permit = "builds"

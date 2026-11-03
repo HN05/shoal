@@ -17,7 +17,7 @@ use super::{
     capacity::{self, Activity, Agents},
 };
 use crate::{
-    config::{AgentLimit, overload::Overload},
+    config::{RunLimit, overload::Overload},
     daemon::notifications::NotificationKind,
     model::{QueueAdmission, QueueEntry, QueueRequest, QueuedPlan},
     protocol::ConfigTarget,
@@ -710,7 +710,7 @@ impl Manager {
         let mut limits = Limits {
             global: fixed_limit(global),
             starts: match global {
-                AgentLimit::Dynamic => {
+                RunLimit::Dynamic => {
                     Some(self.dynamic_starts(&config.machine.overload, slots).await?)
                 }
                 _ => None,
@@ -1261,10 +1261,10 @@ impl Manager {
 
 /// A configured value as a slot count. Dynamic admission measures the whole
 /// machine, so it adds no repository limit of its own.
-fn fixed_limit(limit: AgentLimit) -> Option<u32> {
+fn fixed_limit(limit: RunLimit) -> Option<u32> {
     match limit {
-        AgentLimit::Fixed(value) => Some(value.get()),
-        AgentLimit::Dynamic | AgentLimit::Unlimited => None,
+        RunLimit::Fixed(value) => Some(value.get()),
+        RunLimit::Dynamic | RunLimit::Unlimited => None,
     }
 }
 

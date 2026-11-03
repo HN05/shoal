@@ -118,6 +118,8 @@ pub struct RepoConfig {
     pub conflicts: ConflictsConfig,
     #[option(section)]
     pub permissions: PermissionsConfig,
+    #[option(section)]
+    pub runner: RunnerConfig,
 }
 
 /// What every agent of a repository starts with.
@@ -134,8 +136,8 @@ pub struct AgentConfig {
     pub effort: Option<String>,
     /// Agents of this repository running at once; by default only the
     /// machine limit applies. Use `none` for unlimited.
-    #[option(default = crate::config::AgentLimit::Dynamic)]
-    pub max_running: Option<crate::config::AgentLimit>,
+    #[option(default = crate::config::RunLimit::Dynamic)]
+    pub max_running: Option<crate::config::RunLimit>,
     /// Directories every agent and chat gets as other working directories.
     #[option(default = vec!["/tmp".into()])]
     pub dirs: Option<Vec<String>>,
@@ -444,6 +446,7 @@ impl RepoConfig {
         self.cleanup.validate()?;
         self.messages.validate()?;
         self.conflicts.validate()?;
+        self.runner.validate()?;
         crate::config::validate_port_range(self.ports.start, self.ports.end)?;
         for (name, definition) in &self.ports.definitions {
             crate::validate::lowercase_name("port", name)
@@ -736,6 +739,38 @@ states!(
         Direct => "direct",
     }
 );
+
+/// Running the repository's CI jobs on this machine.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = Runner)]
+pub struct RunnerConfig {
+    /// Register a runner for the repository on its forge and run its CI
+    /// jobs here.
+    #[option(default = false)]
+    pub enabled: Option<bool>,
+    /// The labels of the jobs the runner takes; `shoal-<os>-<arch>` is
+    /// always added.
+    #[option(default = vec!["shoal".into()])]
+    pub labels: Option<Vec<String>>,
+    /// A resource pool each job holds one permit from while it runs.
+    pub permit: Option<String>,
+}
+
+impl RunnerConfig {
+    fn validate(&self) -> Result<()> {
+        for label in self.labels.iter().flatten() {
+            ensure!(
+                !label.is_empty()
+                    && !label
+                        .chars()
+                        .any(|c| c.is_whitespace() || matches!(c, ',' | ':')),
+                "runner.labels entries must be non-empty, without spaces, commas or colons: {label:?}"
+            );
+        }
+        Ok(())
+    }
+}
 
 /// What a scoped agent may do at once, after the user's approval, or not at all.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]

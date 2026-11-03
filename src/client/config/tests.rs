@@ -279,19 +279,19 @@ fn default_agent_accepts_agent_spellings_only() {
 }
 
 #[test]
-fn agent_limits_accept_dynamic_fixed_and_unlimited_values() {
+fn agent_and_job_limits_accept_dynamic_fixed_and_unlimited_values() {
     for (value, expected) in [
-        ("'dynamic'", AgentLimit::Dynamic),
-        ("'none'", AgentLimit::Unlimited),
-        ("'unlimited'", AgentLimit::Unlimited),
-        (
-            "3",
-            AgentLimit::Fixed(std::num::NonZeroU32::new(3).unwrap()),
-        ),
+        ("'dynamic'", RunLimit::Dynamic),
+        ("'none'", RunLimit::Unlimited),
+        ("'unlimited'", RunLimit::Unlimited),
+        ("3", RunLimit::Fixed(std::num::NonZeroU32::new(3).unwrap())),
     ] {
-        let text = format!("agent.max_running = {value}\n[machine]\nmax_agents = {value}");
+        let text = format!(
+            "agent.max_running = {value}\n[machine]\nmax_agents = {value}\nmax_jobs = {value}"
+        );
         let config = Config::from_toml(&text).unwrap();
         assert_eq!(config.machine.max_agents, expected);
+        assert_eq!(config.machine.max_jobs, expected);
         assert_eq!(config.repository.agent.max_running, Some(expected));
     }
     for value in ["0", "'automatic'"] {
@@ -304,7 +304,7 @@ fn agent_limits_accept_dynamic_fixed_and_unlimited_values() {
             .unwrap()
             .agent
             .max_running,
-        AgentLimit::Dynamic
+        RunLimit::Dynamic
     );
 }
 
@@ -692,4 +692,24 @@ fn a_snapshot_resolves_with_the_template_files_beside_its_file() {
     );
     let plain = snapshot.resolve(&Default::default()).unwrap();
     assert_eq!(plain.agent.templates.review, templates::review_base());
+}
+
+#[test]
+fn the_runner_is_off_by_default_and_refuses_labels_it_cannot_register() {
+    let settings = Config::default().effective(&RepoConfig::default()).unwrap();
+    assert!(!settings.runner.enabled);
+    assert_eq!(settings.runner.labels, ["shoal"]);
+    assert_eq!(settings.runner.permit, None);
+    let config =
+        Config::from_toml("[runner]\nenabled = true\nlabels = ['rust']\npermit = 'builds'")
+            .unwrap();
+    let settings = Config::default().effective(&config.repository).unwrap();
+    assert!(settings.runner.enabled);
+    assert_eq!(settings.runner.labels, ["rust"]);
+    assert_eq!(settings.runner.permit.as_deref(), Some("builds"));
+    for label in ["''", "'two words'", "'a,b'", "'shoal:host'"] {
+        let config = Config::from_toml(&format!("runner.labels = [{label}]")).unwrap();
+        let error = config.repository.validate().unwrap_err().to_string();
+        assert!(error.contains("runner.labels"), "{error}");
+    }
 }
