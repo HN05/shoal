@@ -1475,7 +1475,9 @@ for `--agent`; numbers use `--repo`, the current checkout/workspace, then a pick
 PR links open their head against the refreshed remote base and link the PR once
 the workspace is ready, as issue links associate their issue; branch links open
 an origin branch. Both use existing-branch ownership checks and retain an owned
-workspace's diff base. Opening fork PR branches is refused. Interactive `add`
+workspace's diff base. A fork PR has no origin branch, so its head opens in the
+PR's workspace at a commit instead, with the PR's base as its diff base, and
+`--agent`, `--path`, `--git-profile` and `--base` are refused. Interactive `add`
 without a branch, base or issue also offers the repository's open issues and PRs,
 which open as their links do.
 Interactive `add` uses an agent picker when no agent is named; non-interactive
