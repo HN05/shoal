@@ -190,15 +190,20 @@ async fn merge_pr(
     // An invalid action fails before a picker asks for its context.
     action.validate(ItemKind::Pr)?;
     let context = item_context(ctx, &selector).await?;
+    let mut item = selector.item;
     if !confirmed && !matches!(action, Action::CancelAutoMerge) {
-        let item = selector.item.clone();
         let warning = ItemMethod::MergeWarning {
             context: context.clone(),
-            item,
+            item: item.clone(),
         };
-        super::merge_warning::confirm(ctx, client::request(&ctx.paths, warning).await?)?;
+        let warning = client::request(&ctx.paths, warning).await?;
+        // The merge is of the PR the user confirmed, even if the space's
+        // link changed meanwhile.
+        if let Some(confirmed) = super::merge_warning::confirm(ctx, warning)? {
+            item = Some(confirmed);
+        }
     }
-    act_in(ctx, context, selector.item, ItemKind::Pr, action, outcome).await
+    act_in(ctx, context, item, ItemKind::Pr, action, outcome).await
 }
 
 async fn act(

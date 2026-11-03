@@ -22,7 +22,7 @@ impl Manager {
         input: Option<String>,
     ) -> Result<Option<MergeWarning>> {
         let (forge, number, url) = self.pull_to_merge(context, input).await?;
-        let recorded = self.recorded_for_pull(url).await?;
+        let recorded = self.recorded_for_pull(url.clone()).await?;
         if recorded.is_empty() {
             return Ok(None);
         }
@@ -31,7 +31,11 @@ impl Manager {
         let head = current.head_sha.context("the forge names no PR head")?;
         let base = current.item.pr.context("the forge names no PR base")?.base;
         let merged = Merged { head, target: base };
-        Ok(warning(format!("PR #{number}"), recorded, &merged))
+        let warning = warning(format!("PR #{number}"), recorded, &merged);
+        Ok(warning.map(|warning| MergeWarning {
+            url: Some(url),
+            ..warning
+        }))
     }
 
     /// The warning for landing the workspace's HEAD in the default branch,
@@ -119,6 +123,7 @@ fn warning(
         subject,
         target: recorded.target,
         files: recorded.files,
+        url: None,
     })
 }
 

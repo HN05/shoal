@@ -787,6 +787,10 @@ pub struct MergeWarning {
     pub subject: String,
     pub target: String,
     pub files: Vec<String>,
+    /// The URL of the PR the warning is about, so the merge the user
+    /// confirms is of that PR; none for a branch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 impl MergeWarning {

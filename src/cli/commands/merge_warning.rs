@@ -7,17 +7,18 @@ use crate::{
     model::MergeWarning,
 };
 
-/// Ask whether to merge despite `warning`, unless there is none.
+/// Ask whether to merge despite `warning`, unless there is none, and return
+/// the URL of the PR the user confirmed merging.
 pub(in crate::cli::commands) fn confirm(
     ctx: &Context,
     warning: Option<MergeWarning>,
-) -> Result<()> {
+) -> Result<Option<String>> {
     let Some(warning) = warning else {
-        return Ok(());
+        return Ok(None);
     };
     ensure!(
         ui::confirm(ctx, &warning.to_string(), "--yes")?,
         "merge canceled"
     );
-    Ok(())
+    Ok(warning.url)
 }
