@@ -437,9 +437,9 @@ pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -
     Ok(true)
 }
 
-/// Replace a merge request for an earlier commit or another push with
-/// `request`. Returns the request still awaiting or refused a decision; an
-/// approval for the same commit and push lets the merge proceed. A request
+/// Replace a merge request for an earlier commit, another push or another
+/// warning with `request`. Returns the request still awaiting or refused a
+/// decision; an approval for the same merge lets it proceed. A request
 /// for the same merge keeps the reason it was decided on, though the commit
 /// count or open PRs it names changed since.
 pub fn request_merge(

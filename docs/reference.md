@@ -2550,7 +2550,8 @@ current commit, and for where it pushes, unless `[permissions] merge = "direct"`
 the request names the branch, the default branch it merges into, its commit count,
 the remote branch it pushes to, any files changed on both sides as below, and
 any open PR the workspace watches. After approval, running it again merges that commit with every check above. A new
-commit or a change to where it pushes replaces the request, approving a request
+commit, a change to where it pushes or a new set of files changed on both sides
+replaces the request, approving a request
 after its branch moved is refused as stale, and a denied commit stays refused
 with `"approval_denied"`.
 

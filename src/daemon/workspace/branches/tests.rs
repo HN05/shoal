@@ -1803,6 +1803,46 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
 }
 
 #[tokio::test]
+async fn a_merge_warning_recorded_after_approval_needs_another_decision() {
+    use crate::daemon::approvals::{DecisionStatus, Specification};
+    let f = Fixture::new().await;
+    fs::write(
+        f.repo.join(".shoal.toml"),
+        "[conflicts]\nsensitive = ['version']\n",
+    )
+    .unwrap();
+    commit(&f.repo, ".shoal.toml");
+    let workspace = f.add("worker").await;
+    fs::write(workspace.path.join("version"), "2\n").unwrap();
+    commit(&workspace.path, "version");
+    let approved = undecided_merge(&f, &workspace).await;
+    f.manager
+        .decide_approval(approved.id, true, None, Default::default(), None)
+        .await
+        .unwrap();
+    // The default branch changes the same file, and a check at the same
+    // HEAD records it after the decision.
+    fs::write(f.repo.join("version"), "3\n").unwrap();
+    commit(&f.repo, "version");
+    f.manager
+        .check_conflicts(&workspace.id, None)
+        .await
+        .unwrap();
+    let warned = undecided_merge(&f, &workspace).await;
+    assert_ne!(warned.id, approved.id);
+    assert_eq!(warned.status, DecisionStatus::Pending);
+    let Specification::Merge(merge) = &warned.specification else {
+        panic!("merge specification expected");
+    };
+    assert_eq!(merge.changed_on_both_sides, ["version"]);
+    assert_eq!(
+        warned.reason,
+        "Merge worker (1 commit) into main. \
+        Sensitive files changed on both sides by worker and main: version."
+    );
+}
+
+#[tokio::test]
 async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
