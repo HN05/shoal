@@ -1454,3 +1454,42 @@ async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
         );
     }
 }
+
+#[tokio::test]
+async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces() {
+    let (temp, manager) = crate::test_support::manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
+    process.kill();
+    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let snapshot = (manager.chat_cleanup_snapshot(&stopped, Rule::Idle))
+        .await
+        .unwrap()
+        .unwrap();
+    // A link under way holds the chat's PR gate when the removal starts...
+    let gate = manager.gates.lock_prs([&chat.id]).await;
+    let removal = tokio::spawn({
+        let (manager, stopped) = (manager.clone(), stopped.clone());
+        async move { (manager.remove_unused_chat(&stopped, snapshot, EventCause::Idle)).await }
+    });
+    // ...and records the issue before it lets the removal go on.
+    let id = chat.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO space_issue(space_id,url) VALUES (?1,'https://forge/o/r/issues/1')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    drop(gate);
+
+    let error = removal.await.unwrap().unwrap_err();
+    assert!(error.to_string().contains("changed"), "{error:#}");
+    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
+    assert!(manager.workspace(&opened.id).await.is_ok());
+}

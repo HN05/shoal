@@ -130,6 +130,9 @@ impl Manager {
         snapshot: Snapshot,
         cause: EventCause,
     ) -> Result<bool> {
+        // Under the PR gate link changes take, as a workspace's cleanup, so
+        // no link appears while the spaces below the chat go.
+        let _gate = self.gates.lock_prs([&chat.id]).await;
         (self.remove_chat_after_grace(chat, Removal::Automatic { snapshot, cause })).await
     }
 
