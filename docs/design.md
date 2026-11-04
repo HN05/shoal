@@ -888,19 +888,26 @@ Build acceleration and the CI runner belong in core: Shoal runs the CI jobs of
 the repositories registered with it, so a job starts from the seed and rebuilds
 only what its commit changed, and the machine's agents and jobs share one
 admission instead of competing for memory. The forge's own runner runs the
-steps, `forgejo-runner one-job --handle` on the host, which keeps the workflow
-semantics, actions and log streaming, while Shoal decides which job runs when:
-it lists the jobs waiting for its labels as agent queue entries, admits them
-with agents, and claims a job only once admitted, so until then any other
-runner may take it. Each job runs as a tracked execution in a disposable
-workspace at its commit, which goes once the forge's runner exits. A job ends
-only on the forge's word, so stopping it cancels its run there and protection
-leaves it running. The workspace a run's PR or branch links lists the job, but
+steps on the host, `forgejo-runner one-job --handle` or a GitHub just-in-time
+`actions/runner`, which keeps the workflow semantics, actions and log
+streaming, while Shoal decides which job runs when: it lists the jobs waiting
+for its labels as agent queue entries, admits them with agents, and claims a
+job only once admitted, so until then any other runner may take it. GitHub
+has no handle and no label that keeps a runner to one job, so its runner may
+take another job its labels match; a job-started hook holds a job of another
+run until its workspace is at that run's commit, so a check never reports on
+another commit. Polling stands in for webhooks, which a local daemon cannot
+receive; it runs only while a job could start, and conditional reads keep
+unchanged answers off the rate limit. Each job runs as a tracked execution in
+a disposable workspace at its commit, which goes once the forge's runner
+exits. A job ends only on the forge's word, so stopping it cancels its run
+there and protection leaves it running. The workspace a run's PR or branch links lists the job, but
 neither owns it, lends it a build nor reaches it with its scope. The runner is
 registered per repository with the user's own login, never for a user,
-organisation or instance, and what the forge does its own way is a `Backend`
-operation, so another forge adds an implementation, not daemon code. Container
-jobs and forges other than Forgejo remain proposals.
+organisation or instance, or on GitHub one runner per job, and what the forge
+does its own way is a `Backend` operation, so another forge adds an
+implementation, not daemon code. Container jobs and forges other than Forgejo
+and GitHub remain proposals.
 
 ## Scope and user interfaces
 

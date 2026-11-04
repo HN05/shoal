@@ -186,3 +186,60 @@ async fn a_missing_runner_program_registers_nothing_and_tells_the_user_once() {
     );
     assert!(changes.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_github_repository_keeps_no_runner_of_its_own() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let server = Server::start(|request| match request.line.as_str() {
+        "GET /api/v3/repos/team/repo/actions/runners?per_page=1" => {
+            let body = json!({"total_count": 0, "runners": []});
+            (200, Vec::new(), body.to_string().into())
+        }
+        _ => (404, Vec::new(), b"{}".to_vec()),
+    });
+    crate::forge::hosts::learn(&server.host, ForgeKind::GitHub);
+    let origin = format!("http://{}/team/repo", server.host);
+    git(&path, &["remote", "add", "origin", &origin]);
+    let bin = crate::daemon::workspace::runner::tests::runner_program(
+        &root.path().join("actions-runner"),
+        "Runner.Listener",
+    );
+    *manager.runners.path.lock().unwrap() = Some(bin);
+    let github = |enabled: bool| {
+        format!(
+            "[machine.forges.\"{}\"]\ntype = \"github\"\ntoken = \"user\"\n[runner]\nenabled = {enabled}\n",
+            server.host
+        )
+    };
+
+    configure(&manager, &github(true)).await;
+    manager.reconcile_runners().await.unwrap();
+    assert!(runner_notifications(&manager).await.is_empty());
+    let registration = manager.runner_registration(&repo.id).await.unwrap();
+    assert_eq!(
+        registration,
+        Some(Registration {
+            forge_repository: origin,
+            runner: None,
+        })
+    );
+
+    configure(&manager, &github(false)).await;
+    manager.reconcile_runners().await.unwrap();
+    assert_eq!(manager.runner_registration(&repo.id).await.unwrap(), None);
+    let lines: Vec<_> = server
+        .received()
+        .into_iter()
+        .map(|request| request.line)
+        .filter(|line| !line.starts_with("GET /api/v3/meta"))
+        .collect();
+    assert_eq!(
+        lines,
+        ["GET /api/v3/repos/team/repo/actions/runners?per_page=1"]
+    );
+}

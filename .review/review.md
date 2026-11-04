@@ -418,7 +418,9 @@ instead of the PR delivery guidance below.
   `runner.enabled` is on: `machine.max_jobs` counts only jobs, and under
   `dynamic` a job counts at its recent runs' peak CPU and memory and takes the
   one staggered start an agent would. A job is claimed only once admitted, runs
-  `forgejo-runner one-job --handle` as a tracked execution in a disposable
+  the forge's runner (`forgejo-runner one-job --handle`, or a GitHub
+  just-in-time runner whose workspace moves to the commit of the job it took
+  before that job's first step) as a tracked execution in a disposable
   workspace at its commit that starts from the seed, and ends only through the
   forge: stopping it cancels its run there, protection leaves it running, and
   its workspace goes once the execution ends. Forge-specific steps are

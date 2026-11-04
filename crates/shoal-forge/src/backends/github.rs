@@ -81,8 +81,8 @@ impl Backend for GitHub {
 
     fn support(&self, capability: Capability) -> Support {
         match capability {
-            Capability::RunJobs => Support::Unsupported(None),
-            Capability::ResolveThreads
+            Capability::RunJobs
+            | Capability::ResolveThreads
             | Capability::RerunJobs
             | Capability::CancelJobs
             | Capability::StartRuns

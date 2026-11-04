@@ -2970,21 +2970,25 @@ permit = "builds"     # Optional: a resource pool each job holds one permit from
 max_jobs = "dynamic"  # Default; or a positive number, or "none"
 ```
 
-While `runner.enabled` is on for a registered repository, the daemon registers
-a runner for that repository on its forge with your own login, the `token` of
-its [forge host](#forges), which must be allowed to administer the
-repository's Actions, and keeps the runner's UUID and token in its state.
-Turning the setting off, or removing the repository, deletes the runner on the
-forge; when the forge cannot be reached, removal goes ahead and a
-`runner_failed` notification names the runner to delete by hand. `[runner]`
-resolves like any repository option; a change to the local config applies at
-once, others within a minute. The runner takes jobs whose `runs-on` labels are
-among `labels` and `shoal-<os>-<arch>`, such as `shoal-linux-x86_64` or
-`shoal-macos-arm64`. It needs Forgejo 15 or later and `forgejo-runner` on the
-daemon's `PATH`; otherwise, or when the forge refuses the registration, a
-`runner_failed` notification says why and nothing is claimed, and the daemon
-tries again five minutes later or when the config changes. Other forges and
-Gitea report the `run_jobs` capability as unsupported.
+While `runner.enabled` is on for a registered repository, the daemon runs its
+CI jobs with your own login, the `token` of its [forge host](#forges), which
+must be allowed to administer the repository's Actions. On Forgejo it registers
+a runner for the repository and keeps the runner's UUID and token in its state;
+turning the setting off, or removing the repository, deletes the runner on the
+forge, and when the forge cannot be reached, removal goes ahead and a
+`runner_failed` notification names the runner to delete by hand. On GitHub it
+registers a single-use runner for each job instead, so turning the setting on
+only checks that your login may. `[runner]` resolves like any repository
+option; a change to the local config applies at once, others within a minute.
+The runner takes jobs whose `runs-on` labels are among `labels` and
+`shoal-<os>-<arch>`, such as `shoal-linux-x86_64` or `shoal-macos-arm64`. It
+needs Forgejo 15 or later with `forgejo-runner` on the daemon's `PATH`, or
+GitHub with the `bin` directory of an
+[`actions/runner`](https://github.com/actions/runner) installation on it;
+otherwise, or when the forge refuses the registration, a `runner_failed`
+notification says why and nothing is claimed, and the daemon tries again five
+minutes later or when the config changes. Other forges and Gitea report the
+`run_jobs` capability as unsupported.
 
 The jobs the forge holds for the runner's labels join the [agent
 queue](#agent-queue) as `job` entries named `ci-<job>-<ID>`, in the order the
@@ -3005,9 +3009,20 @@ start` admits a job regardless of the limits, `queue move` moves it, and
 `queue cancel` passes it over, leaving it to other runners. A PR's job whose PR
 has a newer head when it is admitted is passed over too.
 
-An admitted job runs `forgejo-runner one-job --handle <handle>` with each label
-on the host backend, as a tracked execution in a disposable workspace at the
-job's commit, fetched from its PR's or branch's ref. The workspace skips setup
+An admitted job runs the forge's runner as a tracked execution in a disposable
+workspace at the job's commit, fetched from its PR's or branch's ref, or by
+commit. On Forgejo that is `forgejo-runner one-job --handle <handle>` with
+each label on the host backend. On GitHub it is a just-in-time runner for the
+labels, run from a copy of the installation in the job's directory under the
+state directory, cloned where the filesystem clones files and copied
+otherwise, since the runner writes its credentials and work into its
+installation; keep the installation updated, or each copy updates itself
+before its job. GitHub gives that runner any job its labels match: one of
+another run than the admitted job's waits before its first step until the
+daemon moves the workspace to that run's commit, and the job is then listed,
+counted and cancelled as the one it took; a workspace that cannot move fails
+the job. A runner GitHub gives no job is deleted once it has waited a minute
+and no job waits for its labels, and its workspace goes. The workspace skips setup
 and starts from the [seed build](#seed-builds) like any workspace, so the job
 rebuilds only what its commit changed. The job gets its workspace's
 environment, scope token, `TMPDIR` and `[env]`, but no agent secrets and no
@@ -3034,8 +3049,10 @@ workspace's build, and the workspace's agent's scope does not reach it.
 not the job's workspace, so a job for this runner names the workspace as its
 working directory and has no checkout step, since the workspace has the commit
 already. `SHOAL_WORKSPACE_PATH` and `SHOAL_WORKSPACE_ID`, which Shoal gives
-every job's steps and its `env` context through the runner's `runner.envs`,
-serve both, also in a job that other runners take too:
+every job's steps and its `env` context, serve both, also in a job that other
+runners take too. On GitHub the variables reach the steps from a job-started
+hook, after job defaults are read, and the job's default working directory is
+the workspace, so the same job works there:
 
 ```yaml
 jobs:

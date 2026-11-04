@@ -41,6 +41,8 @@ async fn queued_jobs_of_active_runs_wait_when_the_runner_has_their_labels() {
     });
     let github = repo_on(&server, ForgeKind::GitHub, "team/repo");
     let account = agent_on(&server, "user");
+    github.require_runner(&account).await.unwrap();
+    assert_eq!(github.runner_program().unwrap(), "Runner.Listener");
     let labels = ["shoal".to_owned(), "shoal-macos-arm64".to_owned()];
     let jobs = github.waiting_jobs(&account, &labels).await.unwrap();
     assert_eq!(
