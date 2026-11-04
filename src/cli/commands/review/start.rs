@@ -17,8 +17,11 @@ use crate::{
         items::link::{ItemKind, Link, LinkTarget},
     },
     git,
-    model::{Chat, OpenedWorkspace, Repository, Workspace},
-    protocol::{ConfigTarget, CreationOptions, ReviewMethod, WorkspaceMethod},
+    model::{Chat, Repository, Workspace},
+    protocol::{
+        ConfigTarget, CreationOptions, OperationMethod, ReviewMethod, WorkspaceMethod,
+        operations::WorkspaceStart,
+    },
     reviews::{Review, ReviewTarget},
 };
 
@@ -302,26 +305,30 @@ async fn fork_pull_workspace(
     repo: &Repository,
     pull: &PullRequest,
 ) -> Result<String> {
-    let method = WorkspaceMethod::OpenPullHead {
+    let method = OperationMethod::StartWorkspace {
         repository: repo.id.as_str().into(),
-        url: pull.url.clone(),
-        head: super::super::links::fork_head(repo, pull).await?,
+        start: WorkspaceStart::PullHead {
+            url: pull.url.clone(),
+            head: super::super::links::fork_head(repo, pull).await?,
+        },
+        base: None,
+        path: None,
+        git_profile: None,
         parent: crate::cli::ui::current_chat(&None),
         options: CreationOptions {
             skip_setup: true,
             ..Default::default()
         },
+        issue: None,
+        pr: Some(pull.url.clone()),
+        agent: None,
+        env: Some(crate::env::without_secrets()),
     };
-    let opened: OpenedWorkspace = client::request(&ctx.paths, method).await?;
+    let started = client::request(&ctx.paths, method).await?;
     // Reopening runs no hooks; only a new workspace is prepared.
-    let workspace = match opened.reused {
-        true => opened.workspace,
-        false => match super::super::split::prepare(ctx, opened.workspace).await? {
-            Some(workspace) => workspace,
-            None => bail!("PR #{}'s workspace could not be set up", pull.number),
-        },
+    let Some(workspace) = super::super::split::follow_preparation(ctx, started).await? else {
+        bail!("PR #{}'s workspace could not be set up", pull.number);
     };
-    let workspace = super::super::workspaces::link_pull(ctx, workspace, pull.url.clone()).await?;
     eprintln!(
         "Reviewing PR #{} in workspace {}",
         pull.number, workspace.name
