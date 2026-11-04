@@ -26706,6 +26706,18 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     fixture.ok(&["split", "below", "--workspace", "opened"]);
+    // Another chat runs in the opened workspace's worktree.
+    let mut resident = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .current_dir(fixture.root.path())
+        .spawn()
+        .unwrap();
+    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository, "workspace": "opened", "name": "reading",
+        "agent": "claude", "pid": resident.id()
+    }}));
+    assert_eq!(response["type"], "chat", "{response}");
 
     // Removing the chat asks first, naming what it takes.
     let (output, prompt) = fixture.interactive(&["rm", "planning"], "n\n");
@@ -26713,17 +26725,22 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
     let prompt = prompt.replace("\r\n", "\n");
     assert!(prompt.contains("Remove chat: planning"), "{prompt}");
     assert!(
-        prompt.contains("Removes the spaces below it first") && prompt.contains("opened, below"),
+        prompt.contains("Removes the spaces below it first")
+            && prompt.contains("opened, reading, below"),
         "{prompt}"
     );
     assert!(prompt.contains("Stops its agent"), "{prompt}");
 
     let removed = fixture.ok(&["rm", "planning", "--yes"]);
     assert_eq!(removed["chat"]["id"], chat.as_str(), "{removed}");
-    assert_eq!(removed["children"], serde_json::json!(["below", "opened"]));
+    assert_eq!(
+        removed["children"],
+        serde_json::json!(["reading", "below", "opened"])
+    );
     assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
     assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
     assert!(!agent.wait().unwrap().success());
+    assert!(!resident.wait().unwrap().success());
 }
 
 #[test]

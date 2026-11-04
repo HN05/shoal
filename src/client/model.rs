@@ -1455,6 +1455,40 @@ impl Spaces {
         }
         below
     }
+
+    /// Every space a removal of the space `id` takes before it, nearest
+    /// first: the spaces below it, and the chats in the worktree of each
+    /// workspace among them and of `id` itself.
+    pub fn taken_with(&self, id: &str) -> Vec<SpaceRef> {
+        let first = |id: &str| -> Vec<SpaceRef> {
+            let mut resident: Vec<SpaceRef> = (self.chats.iter())
+                .filter(|chat| chat.workspace.as_ref().is_some_and(|w| w.id == id))
+                .map(|chat| SpaceRef {
+                    id: chat.id.clone(),
+                    name: chat.name.clone(),
+                    kind: SpaceKind::Chat,
+                    branch: None,
+                })
+                .collect();
+            resident.sort_by(|a, b| a.name.cmp(&b.name));
+            let workspace = self.workspaces.iter().find(|workspace| workspace.id == id);
+            let chat = self.chats.iter().find(|chat| chat.id == id);
+            resident.extend(
+                (workspace.map(|workspace| workspace.children.clone()))
+                    .or_else(|| chat.map(|chat| chat.children.clone()))
+                    .unwrap_or_default(),
+            );
+            resident
+        };
+        let mut taken = first(id);
+        let mut next = 0;
+        while let Some(space) = taken.get(next) {
+            let id = space.id.clone();
+            taken.extend(first(&id));
+            next += 1;
+        }
+        taken
+    }
 }
 
 /// A place Shoal created for a workspace, which closes with it.

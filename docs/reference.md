@@ -3047,7 +3047,8 @@ ending anything when the file exists, when the daemon cannot create a file in it
 directory within 30 seconds, or when `-` would stream from a place that closes
 with the space. A workspace is removed as `shoal rm` removes it, and its file
 holds its removal record and checkpoint. The export also refuses one whose file
-lies inside it, or whose uncommitted files a checkpoint cannot keep, and asks
+lies inside it, whose uncommitted files a checkpoint cannot keep, or with chats
+in its worktree or in one below it, and asks
 before releasing holds unless given `--yes`. A workspace already removed is
 exported from its removal record without another removal. The checkpoint
 travels as a Git bundle without the commits of the default remote's default
