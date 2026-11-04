@@ -28,6 +28,9 @@ const DEFAULT_GROUP: u64 = 1;
 /// The run states whose runs may have queued jobs.
 const ACTIVE_RUNS: [&str; 2] = ["queued", "in_progress"];
 
+/// The most items GitHub serves on one page of a listing.
+const PAGE: usize = 100;
+
 /// The queued jobs of the repository's active runs that a runner with
 /// `labels` may take: GitHub gives a job to a runner that has each of the
 /// labels it runs on, whatever their case.
@@ -38,16 +41,11 @@ pub(super) async fn waiting_jobs(
 ) -> Result<Vec<WaitingJob>> {
     let mut jobs = Vec::new();
     for status in ACTIVE_RUNS {
-        let endpoint = repo.repo_endpoint(&format!("actions/runs?status={status}&per_page=100"));
-        let listed = repo.send(account, &Request::get(endpoint)).await?;
-        for run in listed["workflow_runs"].as_array().into_iter().flatten() {
+        let path = format!("actions/runs?status={status}");
+        for run in every(repo, account, &path, "workflow_runs").await? {
             let run = run["id"].as_u64().context("Actions run has no ID")?;
-            let endpoint = repo.repo_endpoint(&format!(
-                "actions/runs/{run}/jobs?filter=latest&per_page=100"
-            ));
-            let listed = repo.send(account, &Request::get(endpoint)).await?;
-            for job in listed["jobs"].as_array().into_iter().flatten() {
-                if let Some(job) = queued_job(job)?
+            for job in run_jobs(repo, account, run).await? {
+                if let Some(job) = queued_job(&job)?
                     && matches(&job.labels, labels)
                 {
                     jobs.push(job);
@@ -56,6 +54,31 @@ pub(super) async fn waiting_jobs(
         }
     }
     Ok(jobs)
+}
+
+/// The latest attempt's jobs of the run with API ID `run`.
+async fn run_jobs(repo: &ForgeRepo, account: &Account, run: u64) -> Result<Vec<Value>> {
+    let path = format!("actions/runs/{run}/jobs?filter=latest");
+    every(repo, account, &path, "jobs").await
+}
+
+/// Every item a listing at `path` serves under `field`, page by page until
+/// one is not full.
+async fn every(repo: &ForgeRepo, account: &Account, path: &str, field: &str) -> Result<Vec<Value>> {
+    let mut items = Vec::new();
+    for page in 1.. {
+        let endpoint = repo.repo_endpoint(&format!("{path}&per_page={PAGE}&page={page}"));
+        let listed = repo.send(account, &Request::get(endpoint)).await?;
+        let batch = listed[field]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        items.extend_from_slice(batch);
+        if batch.len() < PAGE {
+            break;
+        }
+    }
+    Ok(items)
 }
 
 /// A listed job, unless it no longer waits for a runner.
@@ -147,14 +170,9 @@ pub(super) async fn runner_job(
     run: u64,
     runner: u64,
 ) -> Result<Option<WaitingJob>> {
-    let endpoint = repo.repo_endpoint(&format!(
-        "actions/runs/{run}/jobs?filter=latest&per_page=100"
-    ));
-    let listed = repo.send(account, &Request::get(endpoint)).await?;
-    let Some(job) = listed["jobs"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let jobs = run_jobs(repo, account, run).await?;
+    let Some(job) = jobs
+        .iter()
         .find(|job| job["runner_id"].as_u64() == Some(runner))
     else {
         return Ok(None);

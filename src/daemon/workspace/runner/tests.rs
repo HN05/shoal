@@ -213,14 +213,15 @@ pub(super) async fn github_fixture() -> GitHubFixture {
                 "html_url": format!("http://{host}/team/repo/actions/runs/{id}"),
             })
         };
-        let body = if line == "GET /api/v3/repos/team/repo/actions/runs?status=queued&per_page=100"
+        let body = if line
+            == "GET /api/v3/repos/team/repo/actions/runs?status=queued&per_page=100&page=1"
         {
             json!({"workflow_runs": [{"id": 1}]})
         } else if line.starts_with("GET /api/v3/repos/team/repo/actions/runs?status=") {
             json!({"workflow_runs": []})
         } else if let Some(listed) = line
             .strip_prefix("GET /api/v3/repos/team/repo/actions/runs/")
-            .and_then(|rest| rest.strip_suffix("/jobs?filter=latest&per_page=100"))
+            .and_then(|rest| rest.strip_suffix("/jobs?filter=latest&per_page=100&page=1"))
         {
             let id: u64 = listed.parse().unwrap();
             let mut jobs = if id == 1 {

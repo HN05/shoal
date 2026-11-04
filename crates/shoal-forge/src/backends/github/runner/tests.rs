@@ -17,19 +17,21 @@ fn job(id: u64, run: u64, status: &str, labels: &[&str]) -> Value {
 async fn queued_jobs_of_active_runs_wait_when_the_runner_has_their_labels() {
     let server = Server::start(|request| {
         let body = match request.line.as_str() {
-            "GET /api/v3/repos/team/repo/actions/runs?status=queued&per_page=100" => {
+            "GET /api/v3/repos/team/repo/actions/runs?status=queued&per_page=100&page=1" => {
                 json!({"workflow_runs": [{"id": 1}]})
             }
-            "GET /api/v3/repos/team/repo/actions/runs?status=in_progress&per_page=100" => {
+            "GET /api/v3/repos/team/repo/actions/runs?status=in_progress&per_page=100&page=1" => {
                 json!({"workflow_runs": [{"id": 2}]})
             }
-            "GET /api/v3/repos/team/repo/actions/runs/1/jobs?filter=latest&per_page=100" => {
-                json!({"jobs": [
-                    job(11, 1, "queued", &["Shoal"]),
-                    job(12, 1, "queued", &["shoal", "gpu"]),
-                ]})
+            "GET /api/v3/repos/team/repo/actions/runs/1/jobs?filter=latest&per_page=100&page=1" => {
+                // A full page, so the next is read too.
+                let gpu = (100..200).map(|id| job(id, 1, "queued", &["shoal", "gpu"]));
+                json!({"jobs": gpu.collect::<Vec<_>>()})
             }
-            "GET /api/v3/repos/team/repo/actions/runs/2/jobs?filter=latest&per_page=100" => {
+            "GET /api/v3/repos/team/repo/actions/runs/1/jobs?filter=latest&per_page=100&page=2" => {
+                json!({"jobs": [job(11, 1, "queued", &["Shoal"])]})
+            }
+            "GET /api/v3/repos/team/repo/actions/runs/2/jobs?filter=latest&per_page=100&page=1" => {
                 json!({"jobs": [
                     job(9, 2, "queued", &["shoal-macos-arm64"]),
                     job(10, 2, "in_progress", &["shoal"]),
@@ -234,7 +236,7 @@ async fn a_runner_is_busy_until_it_goes_and_names_the_job_it_took() {
     let server = Server::start(|request| {
         let body = match request.line.as_str() {
             "GET /api/v3/repos/team/repo/actions/runners/77" => json!({"id": 77, "busy": true}),
-            "GET /api/v3/repos/team/repo/actions/runs/2/jobs?filter=latest&per_page=100" => {
+            "GET /api/v3/repos/team/repo/actions/runs/2/jobs?filter=latest&per_page=100&page=1" => {
                 json!({"jobs": [
                     {"id": 9, "run_id": 2, "name": "docs", "runner_id": 76, "labels": ["shoal"]},
                     {"id": 10, "run_id": 2, "name": "rust", "runner_id": 77, "labels": ["shoal"]},
