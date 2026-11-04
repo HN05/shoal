@@ -80,21 +80,7 @@ impl Manager {
         let Ok(number) = input.parse::<u64>() else {
             return Ok(selection.clone());
         };
-        let linked = Selected {
-            path: space.origin_path().to_owned(),
-            items: (space.links().items().into_iter())
-                .map(|item| SelectedItem {
-                    url: item.url,
-                    kind: item.kind,
-                })
-                .collect(),
-        };
-        // A number names an item of the space's repository; issues opened
-        // in another one share its numbers.
-        let remote = crate::repository::remote_url_from_path(space.origin_path())
-            .await?
-            .context("item lookup needs an origin remote")?;
-        let kind = match linked.kind_of(&remote, number)? {
+        let kind = match linked_kind(space, number).await? {
             Some(kind) => kind,
             None => (self.space_forge(space).await?)
                 .item_kind(account, number)
@@ -208,4 +194,24 @@ impl Manager {
             }
         }
     }
+}
+
+/// The kind of the item numbered `number` linked to `space` under any
+/// relation.
+async fn linked_kind(space: &LinkSpace, number: u64) -> Result<Option<LinkKind>> {
+    let linked = Selected {
+        path: space.origin_path().to_owned(),
+        items: (space.links().items().into_iter())
+            .map(|item| SelectedItem {
+                url: item.url,
+                kind: item.kind,
+            })
+            .collect(),
+    };
+    // A number names an item of the space's repository; issues opened in
+    // another one share its numbers.
+    let remote = crate::repository::remote_url_from_path(space.origin_path())
+        .await?
+        .context("item lookup needs an origin remote")?;
+    linked.kind_of(&remote, number)
 }
