@@ -313,7 +313,7 @@ impl Zellij {
             || async {
                 let mut list = self.action(session);
                 list.args(args);
-                Ok(match listing(list).await? {
+                Ok(match reply(list).await? {
                     Reply::Answered(listed) if !answered(&listed) => Reply::Unanswered,
                     reply => reply,
                 })
@@ -323,6 +323,21 @@ impl Zellij {
         .await
         .with_context(|| format!("list Zellij session {session}"))?;
         Ok(listed.unwrap_or_default())
+    }
+
+    /// What the `zellij action` that `action` makes prints for `session`
+    /// while its server is the instance `instance`, or any instance without
+    /// one. Zellij reports a busy session missing without sending the
+    /// action, so Shoal sends it again while the server still runs.
+    async fn act(
+        &self,
+        session: &str,
+        instance: Option<&str>,
+        action: impl Fn() -> Command,
+    ) -> Result<String> {
+        asked_while_running(|| reply(action()), || self.runs(session, instance))
+            .await?
+            .with_context(|| format!("the Zellij session {session} ended"))
     }
 
     /// The pane `place`, while it is open on the server instance `instance`,
@@ -378,7 +393,7 @@ impl Zellij {
     async fn session_names(&self) -> Result<Vec<String>> {
         let mut list = self.command();
         list.args(["list-sessions", "--no-formatting"]);
-        let listed = listing(list).await?.answer().unwrap_or_default();
+        let listed = reply(list).await?.answer().unwrap_or_default();
         Ok(parse_sessions(&listed))
     }
 
@@ -386,7 +401,8 @@ impl Zellij {
     /// drops tabs opened in a session no client shows.
     pub async fn open_tab(&self, session: &str, shell: &Shell<'_>) -> Result<Opened> {
         let before = self.panes(session).await?;
-        let printed = run(self.new_tab(session, shell))
+        let printed = self
+            .act(session, None, || self.new_tab(session, shell))
             .await
             .context("open a Zellij tab")?;
         let tab = printed_tab(&printed)?;
@@ -401,8 +417,12 @@ impl Zellij {
     /// can list only after it answers. Under load Zellij can open the pane
     /// and print nothing.
     pub async fn open_split(&self, beside: PaneRef<'_>, shell: &Shell<'_>) -> Result<Opened> {
+        let number = pane_number(beside.pane)?;
         let before = self.panes(beside.session).await?;
-        let printed = run(self.new_split(beside, shell)?)
+        let printed = self
+            .act(beside.session, None, || {
+                self.new_split(beside.session, number, shell)
+            })
             .await
             .context("open a Zellij pane")?;
         let printed = printed.trim();
@@ -462,11 +482,12 @@ impl Zellij {
         open
     }
 
-    /// The command that opens `shell` in a pane splitting `beside`, which
-    /// Zellij takes as the pane the command runs in.
-    fn new_split(&self, beside: PaneRef<'_>, shell: &Shell<'_>) -> Result<Command> {
-        let mut open = self.action(beside.session);
-        open.env(PANE_VAR, pane_number(beside.pane)?)
+    /// The command that opens `shell` in a pane of `session` splitting the
+    /// pane numbered `beside`, which Zellij takes as the pane the command
+    /// runs in.
+    fn new_split(&self, session: &str, beside: &str, shell: &Shell<'_>) -> Command {
+        let mut open = self.action(session);
+        open.env(PANE_VAR, beside)
             .args(["new-pane", "--near-current-pane", "--direction", "right"])
             .arg("--name")
             .arg(shell.label)
@@ -476,7 +497,7 @@ impl Zellij {
             open.arg("--no-focus");
         }
         open.args(pane_command(shell));
-        Ok(open)
+        open
     }
 
     /// The command that creates `session` in the background with `shell` as
@@ -526,13 +547,15 @@ impl Zellij {
     /// included, while its server is the instance `instance`.
     pub async fn write(&self, place: PaneRef<'_>, instance: &str, text: &str) -> Result<()> {
         self.require(place, instance).await?;
-        let mut write = self.action(place.session);
-        write
-            .args(["write", "--pane-id", place.pane])
-            .args(text.bytes().map(|byte| byte.to_string()));
-        run(write)
-            .await
-            .with_context(|| format!("type into Zellij pane {}", place.pane))?;
+        self.act(place.session, Some(instance), || {
+            let mut write = self.action(place.session);
+            write
+                .args(["write", "--pane-id", place.pane])
+                .args(text.bytes().map(|byte| byte.to_string()));
+            write
+        })
+        .await
+        .with_context(|| format!("type into Zellij pane {}", place.pane))?;
         Ok(())
     }
 
@@ -545,9 +568,12 @@ impl Zellij {
         lines: usize,
     ) -> Result<String> {
         self.require(place, instance).await?;
-        let mut dump = self.action(place.session);
-        dump.args(["dump-screen", "--full", "--pane-id", place.pane]);
-        let screen = run(dump)
+        let screen = self
+            .act(place.session, Some(instance), || {
+                let mut dump = self.action(place.session);
+                dump.args(["dump-screen", "--full", "--pane-id", place.pane]);
+                dump
+            })
             .await
             .with_context(|| format!("read Zellij pane {}", place.pane))?;
         Ok(last_lines(&screen, lines))
@@ -556,21 +582,31 @@ impl Zellij {
     /// Make `pane` the focused pane of `session`, in its tab, which becomes
     /// the session's current one.
     pub async fn select(&self, session: &str, pane: &Pane) -> Result<()> {
-        let mut tab = self.action(session);
-        tab.args(["go-to-tab-by-id", &pane.tab.to_string()]);
-        run(tab).await?;
-        let mut focus = self.action(session);
-        focus.args(["focus-pane-id", &pane.id]);
-        run(focus).await?;
+        let tab = pane.tab.to_string();
+        self.act(session, None, || {
+            let mut go = self.action(session);
+            go.args(["go-to-tab-by-id", &tab]);
+            go
+        })
+        .await?;
+        self.act(session, None, || {
+            let mut focus = self.action(session);
+            focus.args(["focus-pane-id", &pane.id]);
+            focus
+        })
+        .await?;
         Ok(())
     }
 
     /// Show `session`, at `pane`, in the Zellij client this process runs
     /// under, in the session `from`.
     pub async fn switch_client(&self, from: &str, session: &str, pane: &str) -> Result<()> {
-        let mut switch = self.action(from);
-        switch.args(["switch-session", session, "--pane-id", pane]);
-        run(switch).await?;
+        self.act(from, None, || {
+            let mut switch = self.action(from);
+            switch.args(["switch-session", session, "--pane-id", pane]);
+            switch
+        })
+        .await?;
         Ok(())
     }
 
@@ -588,11 +624,14 @@ impl Zellij {
 
     /// Name the tab of `pane` `name`.
     pub async fn rename_tab(&self, session: &str, pane: &Pane, name: &str) -> Result<()> {
-        let mut rename = self.action(session);
-        rename.args(["rename-tab-by-id", &pane.tab.to_string(), name]);
-        run(rename)
-            .await
-            .with_context(|| format!("rename Zellij tab {}", pane.tab))?;
+        let tab = pane.tab.to_string();
+        self.act(session, None, || {
+            let mut rename = self.action(session);
+            rename.args(["rename-tab-by-id", &tab, name]);
+            rename
+        })
+        .await
+        .with_context(|| format!("rename Zellij tab {}", pane.tab))?;
         Ok(())
     }
 
@@ -617,24 +656,39 @@ impl Zellij {
             return self.end_session(place.session, instance).await;
         }
         if let Some(pane) = panes.iter().find(|pane| pane.id == place.pane) {
-            self.close_pane(place.session, pane, &panes).await?;
+            self.close_pane(place.session, instance, pane, &panes)
+                .await?;
         }
         Ok(())
     }
 
     /// Close `pane` of `session`, whose panes are `panes`, with its tab
     /// when no other pane is there: Zellij leaves a tab whose last pane
-    /// closed while no client showed the session.
-    async fn close_pane(&self, session: &str, pane: &Pane, panes: &[Pane]) -> Result<()> {
-        let mut close = self.action(session);
-        if alone_in_tab(pane, panes) {
-            close.args(["close-tab-by-id", &pane.tab.to_string()]);
+    /// closed while no client showed the session. A session no longer on
+    /// the server instance `instance` holds the pane no more.
+    async fn close_pane(
+        &self,
+        session: &str,
+        instance: &str,
+        pane: &Pane,
+        panes: &[Pane],
+    ) -> Result<()> {
+        let tab = pane.tab.to_string();
+        let args: &[&str] = if alone_in_tab(pane, panes) {
+            &["close-tab-by-id", &tab]
         } else {
-            close.args(["close-pane", "--pane-id", &pane.id]);
-        }
-        run(close)
-            .await
-            .with_context(|| format!("close Zellij pane {}", pane.id))?;
+            &["close-pane", "--pane-id", &pane.id]
+        };
+        asked_while_running(
+            || {
+                let mut close = self.action(session);
+                close.args(args);
+                reply(close)
+            },
+            || self.on_instance(session, instance),
+        )
+        .await
+        .with_context(|| format!("close Zellij pane {}", pane.id))?;
         Ok(())
     }
 
@@ -722,13 +776,13 @@ async fn run(command: Command) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// What the listing `command` prints, or that Zellij found the session, or
-/// any session, missing.
-async fn listing(command: Command) -> Result<Reply<String>> {
+/// What `command` prints, or that Zellij found the session, or any
+/// session, missing.
+async fn reply(command: Command) -> Result<Reply<String>> {
     listed(&Run::new(command).timeout(TIMEOUT).capture().await?)
 }
 
-/// What a listing command that ended with `output` printed; see [`listing`].
+/// What a command that ended with `output` printed; see [`reply`].
 /// A failure names Zellij's message, which some commands print to stdout.
 /// Zellij can report the session missing and still succeed, printing the
 /// sessions it found in place of the listing.
