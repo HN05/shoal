@@ -4,6 +4,7 @@ use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail, ensure};
 
+use crate::client::operations::NewWorkspace;
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
@@ -19,7 +20,7 @@ use crate::{
     git,
     model::{Chat, Repository, Workspace},
     protocol::{
-        ConfigTarget, CreationOptions, ItemContext, OperationMethod, ReviewMethod, WorkspaceMethod,
+        ConfigTarget, CreationOptions, ItemContext, ReviewMethod, WorkspaceMethod,
         operations::WorkspaceStart,
     },
     reviews::{Review, ReviewTarget},
@@ -308,26 +309,21 @@ async fn fork_pull_workspace(
     repo: &Repository,
     pull: &PullRequest,
 ) -> Result<String> {
-    let method = OperationMethod::StartWorkspace {
-        repository: repo.id.as_str().into(),
-        start: WorkspaceStart::PullHead {
-            url: pull.url.clone(),
-            head: super::super::links::fork_head(repo, pull).await?,
-        },
-        base: None,
-        path: None,
-        git_profile: None,
+    let start = WorkspaceStart::PullHead {
+        url: pull.url.clone(),
+        head: super::super::links::fork_head(repo, pull).await?,
+    };
+    let new = NewWorkspace {
         parent: crate::cli::ui::current_chat(&None),
         options: CreationOptions {
             skip_setup: true,
             ..Default::default()
         },
-        issue: None,
         pr: Some(pull.url.clone()),
-        agent: None,
-        env: Some(crate::env::without_secrets()),
+        ..NewWorkspace::new(repo.id.as_str().into(), start)
     };
-    let started = client::request(&ctx.paths, method).await?;
+    let env = crate::env::without_secrets();
+    let started = crate::client::operations::start_workspace(&ctx.paths, new, env).await?;
     // Reopening runs no hooks; only a new workspace is prepared.
     let Some(workspace) = super::super::split::follow_preparation(ctx, started).await? else {
         bail!("PR #{}'s workspace could not be set up", pull.number);

@@ -13,14 +13,10 @@ use tokio::{
 use super::failure;
 use crate::{
     cli::{
-        client,
         commands::{approvals, items, workspaces},
         context::Context,
     },
-    protocol::{
-        OperationMethod,
-        operations::{Ended, OperationSpec, Order, Outcome, Report, Step},
-    },
+    protocol::operations::{Ended, OperationSpec, Order, Outcome, Report, Step},
 };
 
 /// Reports the steps of one operation, and whether it was cancelled.
@@ -57,11 +53,7 @@ impl Reporter<'_> {
     }
 
     async fn report(&self, report: Report) -> Result<()> {
-        let method = OperationMethod::ReportProgress {
-            id: self.id.to_owned(),
-            report,
-        };
-        client::request(&self.ctx.paths, method).await
+        crate::client::operations::report(&self.ctx.paths, self.id.to_owned(), report).await
     }
 }
 

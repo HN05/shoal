@@ -10,10 +10,11 @@ use super::{
     source::load_add_issue,
     target::AddTarget,
 };
+use crate::client::operations::NewWorkspace;
 use crate::{
     cli::{
         agents,
-        client::{self, request},
+        client::{self},
         commands::{
             agent_queue, issues, operations,
             workspaces::{SetUp, follow_setup},
@@ -24,7 +25,7 @@ use crate::{
     },
     model::{QueueEntry, Workspace},
     protocol::{
-        ConfigTarget, OperationMethod,
+        ConfigTarget,
         operations::{OperationSpec, Preparation, Prepared, StartedWorkspace, WorkspaceStart},
     },
     shell,
@@ -225,7 +226,7 @@ async fn start_add_workspace(
         (None, None, Some(branch)) => WorkspaceStart::Branch(branch),
         (None, None, None) => WorkspaceStart::Name(branch.context("a branch name is required")?),
     };
-    let method = OperationMethod::StartWorkspace {
+    let new = NewWorkspace {
         repository: target.selector.clone(),
         start,
         base,
@@ -235,10 +236,8 @@ async fn start_add_workspace(
         options,
         issue: issue.map(|issue| issue.url.clone()),
         pr,
-        agent: None,
-        env: Some(crate::env::without_secrets()),
     };
-    request(&ctx.paths, method).await
+    crate::client::operations::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await
 }
 
 /// Follow the preparation of the started workspace, which sets it up and

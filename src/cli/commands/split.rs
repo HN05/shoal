@@ -20,7 +20,7 @@ use crate::{
     daemon::refusal::{Reason, Refusal},
     model::{AgentSession, QueueEntry, SpaceRef, Workspace},
     protocol::{
-        CommitStart, ConfigTarget, CreationOptions, ItemContext, OperationMethod, WorkspaceMethod,
+        CommitStart, ConfigTarget, CreationOptions, ItemContext, WorkspaceMethod,
         operations::StartedWorkspace,
     },
     shell,
@@ -187,16 +187,10 @@ pub(super) async fn start_child(
     issue: Option<&Issue>,
     options: CreationOptions,
 ) -> Result<StartedWorkspace> {
-    let method = OperationMethod::StartSplit {
-        workspace: parent,
-        name,
-        base,
-        options,
-        issue: issue.map(|issue| issue.url.clone()),
-        agent: None,
-        env: Some(crate::env::without_secrets()),
-    };
-    request(&ctx.paths, method).await
+    let issue = issue.map(|issue| issue.url.clone());
+    let env = crate::env::without_secrets();
+    crate::client::operations::start_split(&ctx.paths, parent, name, base, options, issue, env)
+        .await
 }
 
 /// Run the child's setup and post-setup hook; `None` when setup failed.

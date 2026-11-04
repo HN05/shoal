@@ -8,13 +8,13 @@ use anyhow::Result;
 use tokio::signal::unix::{SignalKind, signal};
 
 use crate::{
-    cli::{client, context::Context},
+    cli::context::Context,
     client::approvals::Undecided,
     client::operations::{Followed, Following},
     execution::SetupVerificationFailure,
     protocol::{
-        OperationMethod, RemoteError,
-        operations::{Ended, Failure, OperationSpec, Outcome, Progress, Started, Stream},
+        RemoteError,
+        operations::{Ended, Failure, OperationSpec, Outcome, Progress, Stream},
     },
 };
 pub(super) use worker::{Reporter, run as worker};
@@ -48,11 +48,8 @@ pub(super) async fn run<T>(ctx: &Context, spec: OperationSpec) -> Result<T>
 where
     T: TryFrom<Outcome, Error = anyhow::Error>,
 {
-    let method = OperationMethod::StartOperation {
-        spec,
-        env: Some(crate::env::without_secrets()),
-    };
-    let Started { id } = client::request(&ctx.paths, method).await?;
+    let id =
+        crate::client::operations::start(&ctx.paths, spec, crate::env::without_secrets()).await?;
     follow_started(ctx, id).await
 }
 
@@ -100,7 +97,7 @@ async fn cancel(ctx: &Context, id: &str, cancelled: bool) -> Result<bool> {
         "stopped following operation {id}, which continues"
     );
     let id = id.to_owned();
-    client::request::<()>(&ctx.paths, OperationMethod::CancelOperation { id }).await?;
+    crate::client::operations::cancel(&ctx.paths, id).await?;
     eprintln!("Cancelling; interrupt again to stop following and leave it running");
     Ok(true)
 }

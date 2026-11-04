@@ -1,15 +1,20 @@
 //! Following an operation, work the daemon runs in a worker of its own, such
 //! as preparing a workspace it created: its progress as it comes, then how it
 //! ended. The CLI follows its operations the same way.
+use std::{collections::BTreeMap, path::PathBuf};
+
 use anyhow::Result;
 use tokio::{io::BufReader, net::UnixStream};
 
 use crate::client::{
     connection::{self, Daemon},
     protocol::{
-        Body, OperationMethod, Responses,
-        operations::{Ended, OperationEvent},
+        Body, CreationOptions, OperationMethod, Responses,
+        operations::{
+            Ended, OperationEvent, OperationSpec, Report, Started, StartedWorkspace, WorkspaceStart,
+        },
     },
+    repository::Selector,
 };
 
 /// What following an operation reports.
@@ -54,4 +59,119 @@ impl Following {
             body => Err(body.unexpected("OperationEvent")),
         }
     }
+}
+
+/// Start `spec` with `env`, returning the started operation's ID to follow.
+pub async fn start(
+    daemon: &impl Daemon,
+    spec: OperationSpec,
+    env: BTreeMap<String, String>,
+) -> Result<String> {
+    let method = OperationMethod::StartOperation {
+        spec,
+        env: Some(env),
+    };
+    let Started { id } = connection::request(daemon, method).await?;
+    Ok(id)
+}
+
+/// Cancel operation `id`.
+pub async fn cancel(daemon: &impl Daemon, id: String) -> Result<()> {
+    connection::request(daemon, OperationMethod::CancelOperation { id }).await
+}
+
+/// Report a step of operation `id`, or its end, from its worker.
+pub async fn report(daemon: &impl Daemon, id: String, report: Report) -> Result<()> {
+    connection::request(daemon, OperationMethod::ReportProgress { id, report }).await
+}
+
+/// A workspace for the daemon to open and prepare in an operation.
+pub struct NewWorkspace {
+    pub repository: Selector,
+    pub start: WorkspaceStart,
+    /// The branch a new branch starts from.
+    pub base: Option<String>,
+    pub path: Option<PathBuf>,
+    pub git_profile: Option<String>,
+    /// The chat the workspace is created in.
+    pub parent: Option<String>,
+    pub options: CreationOptions,
+    /// The issue to link, by URL.
+    pub issue: Option<String>,
+    /// The PR to link, by URL.
+    pub pr: Option<String>,
+}
+
+impl NewWorkspace {
+    /// A workspace of `repository` that starts at `start`, with defaults
+    /// for everything else.
+    pub fn new(repository: Selector, start: WorkspaceStart) -> Self {
+        Self {
+            repository,
+            start,
+            base: None,
+            path: None,
+            git_profile: None,
+            parent: None,
+            options: CreationOptions::default(),
+            issue: None,
+            pr: None,
+        }
+    }
+}
+
+/// Open `workspace` and start preparing it with `env`.
+pub async fn start_workspace(
+    daemon: &impl Daemon,
+    workspace: NewWorkspace,
+    env: BTreeMap<String, String>,
+) -> Result<StartedWorkspace> {
+    let NewWorkspace {
+        repository,
+        start,
+        base,
+        path,
+        git_profile,
+        parent,
+        options,
+        issue,
+        pr,
+    } = workspace;
+    let method = OperationMethod::StartWorkspace {
+        repository,
+        start,
+        base,
+        path,
+        git_profile,
+        parent,
+        options,
+        issue,
+        pr,
+        agent: None,
+        env: Some(env),
+    };
+    connection::request(daemon, method).await
+}
+
+/// Split a child of `workspace` on a new branch `name` from `base`, linking
+/// the issue `issue` names by URL, and start preparing it with `env`.
+pub async fn start_split(
+    daemon: &impl Daemon,
+    workspace: String,
+    name: String,
+    base: Option<String>,
+    options: CreationOptions,
+    issue: Option<String>,
+    env: BTreeMap<String, String>,
+) -> Result<StartedWorkspace> {
+    let method = OperationMethod::StartSplit {
+        workspace,
+        name,
+        base,
+        options,
+        issue,
+        agent: None,
+        env: Some(env),
+    };
+    connection::request(daemon, method).await
 }

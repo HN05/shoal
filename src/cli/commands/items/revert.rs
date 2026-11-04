@@ -7,6 +7,7 @@ use super::{
     content::read_content,
     open::{print_warnings, publish, report_proposed},
 };
+use crate::client::operations::{self, NewWorkspace};
 use crate::client::output::items::Revert;
 use crate::{
     cli::{
@@ -28,7 +29,7 @@ use crate::{
     git::revert::{self as git_revert, Merge, Merged, Reverted},
     model::{Chat, PresentSpace, Workspace},
     protocol::{
-        AssignmentMethod, ItemContext, ItemMethod, OperationMethod, RemovalMethod, WorkspaceMethod,
+        ItemContext, ItemMethod, RemovalMethod, WorkspaceMethod,
         operations::{StartedWorkspace, WorkspaceStart},
     },
     removal::{RemovalResult, UnsavedWork},
@@ -185,20 +186,12 @@ async fn start_workspace(
     base: Option<String>,
     chat: Option<String>,
 ) -> Result<StartedWorkspace> {
-    let method = OperationMethod::StartWorkspace {
-        repository: Selector::Value(repository),
-        start: WorkspaceStart::Name(name),
+    let new = NewWorkspace {
         base,
-        path: None,
-        git_profile: None,
         parent: chat,
-        options: Default::default(),
-        issue: None,
-        pr: None,
-        agent: None,
-        env: Some(crate::env::without_secrets()),
+        ..NewWorkspace::new(Selector::Value(repository), WorkspaceStart::Name(name))
     };
-    request(&ctx.paths, method).await
+    operations::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await
 }
 
 /// Revert the merge on the workspace's branch as tracked commands of that
@@ -248,14 +241,8 @@ async fn remove(ctx: &Context, workspace: &Workspace) -> Result<()> {
 /// Record the revert workspace's assignment as done, so cleanup removes it
 /// once its PR merges.
 async fn finish(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    let method = AssignmentMethod::MarkDone {
-        space: workspace.id.clone(),
-        cleanup: true,
-        integrated: false,
-        results: Vec::new(),
-        sender_chat: None,
-    };
-    request::<crate::model::Completion>(&ctx.paths, method)
+    let space = workspace.id.clone();
+    crate::client::assignments::mark_done(&ctx.paths, space, true, false, Vec::new(), None)
         .await
         .map(drop)
 }
