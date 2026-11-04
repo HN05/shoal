@@ -539,7 +539,7 @@ fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
     ] {
         responses[key] = json!({"body": body});
     }
-    fixture.respond(responses);
+    fixture.respond(responses.clone());
     let state = fixture.root.path().join("state");
     let app = Connector {
         paths: Paths {
@@ -641,7 +641,40 @@ fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
         "{reads:?}"
     );
     let refused = runtime.block_on(connection::labels(&agent, checkout(), None));
-    assert!(format!("{:#}", refused.unwrap_err()).contains("not from a registered checkout"),);
+    assert!(format!("{:#}", refused.unwrap_err()).contains("not from a registered checkout"));
+
+    // A scoped view fetches the agent's token once, for the PR and the logs
+    // of each of its failed checks.
+    let script = fixture.root.path().join("agent-token");
+    support::install_test_script(
+        &script,
+        "#!/bin/sh\necho run >> \"$(dirname \"$0\")/token-runs\"\necho agenttoken\n",
+    );
+    let config = fs::read_to_string(fixture.root.path().join(".config/shoal/config.toml")).unwrap();
+    let command = format!("agent_token = {{ cmd = [{:?}] }}", script.to_str().unwrap());
+    fixture.write_config(&config.replace("agent_token = \"agenttoken\"", &command));
+    fixture.ok(&["daemon", "reload"]);
+    let target = "/team/project/actions/runs/2765/jobs/1";
+    responses["GET repos/team/project/commits/head/status?limit=50"]["body"] = json!({
+        "total_count": 2, "statuses": [
+            {"context": "rust", "status": "failure"},
+            {"context": "lint", "status": "failure"},
+        ]
+    });
+    responses["GET repos/team/project/commits/head/statuses?limit=50&page=1"]["body"] = json!([
+        {"context": "rust", "status": "failure", "target_url": target},
+        {"context": "lint", "status": "failure", "target_url": target},
+    ]);
+    fixture.respond(responses);
+    let shown = runtime
+        .block_on(views::read(&agent, workspace(), pr_8(), false))
+        .unwrap();
+    let [Shown::Item(view)] = shown.as_slice() else {
+        panic!("expected one item view");
+    };
+    assert_eq!(view.check_logs.len(), 2, "{:?}", view.errors);
+    let runs = fs::read_to_string(fixture.root.path().join("token-runs")).unwrap();
+    assert_eq!(runs.lines().count(), 1, "{runs}");
 }
 
 /// Add the label `ready` to PR 8 of the workspace's repository.

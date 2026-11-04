@@ -40,7 +40,15 @@ impl Manager {
         }
         let own = self.read_place_forge(&place).await?;
         let mut views = self.read_views(&own, &account, &items, comments).await;
-        self.read_failed_logs(context, &own, &mut views).await;
+        // Logs are read as the agent account, once for every log.
+        let agent;
+        let logs_account = if scoped {
+            &account
+        } else {
+            agent = self.agent_account();
+            &agent
+        };
+        read_failed_logs(&own, logs_account, &mut views).await;
         Ok(Viewed { items, views })
     }
 
@@ -156,44 +164,6 @@ impl Manager {
             _ => Ok(own.clone()),
         }
     }
-
-    /// Add the logs of the failed checks of the PRs among `views` in the
-    /// repository of `context`, recording those it cannot read.
-    async fn read_failed_logs(
-        &self,
-        context: &ItemContext,
-        own: &ForgeRepo,
-        views: &mut [ItemView],
-    ) {
-        if !own.supports(Capability::ReadJobLogs) {
-            return;
-        }
-        for view in views {
-            if own.pull(&view.url).is_err() {
-                continue;
-            }
-            let failed: Vec<String> = view
-                .details
-                .iter()
-                .filter_map(|details| details.pr.as_ref())
-                .flat_map(|pr| &pr.checks)
-                .filter(|check| check.failed())
-                .map(|check| check.name.clone())
-                .collect();
-            let selection = Selection {
-                kind: Some(LinkKind::Pr),
-                input: Some(view.url.clone()),
-            };
-            for name in failed {
-                match self.check_log(context, &selection, &name).await {
-                    Ok(log) => view.check_logs.push(log),
-                    Err(error) => view
-                        .errors
-                        .push(format!("{name}: log unavailable: {error:#}")),
-                }
-            }
-        }
-    }
 }
 
 /// The kind of the item numbered `number` linked to `space` under any
@@ -214,4 +184,33 @@ async fn linked_kind(space: &LinkSpace, number: u64) -> Result<Option<LinkKind>>
         .await?
         .context("item lookup needs an origin remote")?;
     linked.kind_of(&remote, number)
+}
+
+/// Add the logs of the failed checks of the PRs among `views` in `own`'s
+/// repository, read as `account`, recording those it cannot read.
+async fn read_failed_logs(own: &ForgeRepo, account: &Account, views: &mut [ItemView]) {
+    if !own.supports(Capability::ReadJobLogs) {
+        return;
+    }
+    for view in views {
+        if own.pull(&view.url).is_err() {
+            continue;
+        }
+        let failed: Vec<String> = view
+            .details
+            .iter()
+            .filter_map(|details| details.pr.as_ref())
+            .flat_map(|pr| &pr.checks)
+            .filter(|check| check.failed())
+            .map(|check| check.name.clone())
+            .collect();
+        for name in failed {
+            match own.failed_check_log(account, &view.url, &name).await {
+                Ok(log) => view.check_logs.push(log),
+                Err(error) => view
+                    .errors
+                    .push(format!("{name}: log unavailable: {error:#}")),
+            }
+        }
+    }
 }
