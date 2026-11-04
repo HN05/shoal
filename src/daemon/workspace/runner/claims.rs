@@ -439,14 +439,18 @@ async fn prepare_job_files(workspace: &Workspace, command: &JobCommand) -> Resul
         copy_installation(installation).await?;
     }
     for link in &command.workspace_links {
-        if let Some(parent) = link.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("create {}", parent.display()))?;
-        }
-        std::os::unix::fs::symlink(&workspace.path, link)
-            .with_context(|| format!("link {}", link.display()))?;
+        link_workspace(workspace, link)?;
     }
     Ok(())
+}
+
+/// Make `link` a symbolic link to `workspace`, with the directories above it.
+fn link_workspace(workspace: &Workspace, link: &Path) -> Result<()> {
+    if let Some(parent) = link.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    std::os::unix::fs::symlink(&workspace.path, link)
+        .with_context(|| format!("link {}", link.display()))
 }
 
 fn write_private(path: &Path, contents: &str) -> Result<()> {

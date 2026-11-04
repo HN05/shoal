@@ -201,22 +201,7 @@ pub(super) async fn job_command(
     let installation = installation(launch)?;
     let hook = launch.work_dir.join("job-started.sh");
     let script = took_run_hook(launch.work_dir, launch.job.run, &job_env_lines(launch.env))?;
-    let request = Request::new(
-        HttpMethod::Post,
-        repo.repo_endpoint("actions/runners/generate-jitconfig"),
-        Some(json!({
-            "name": launch.name,
-            "runner_group_id": DEFAULT_GROUP,
-            "labels": launch.labels,
-            "work_folder": "_work",
-        })),
-    );
-    let registered = repo.send(account, &request).await?;
-    let runner = registered["runner"]["id"]
-        .as_u64()
-        .context("the registered runner has no ID")?;
-    let config = text(&registered["encoded_jit_config"])
-        .context("the registered runner has no configuration")?;
+    let (runner, config) = register_for_job(repo, account, launch).await?;
     let name = repo
         .path
         .rsplit('/')
@@ -239,6 +224,32 @@ pub(super) async fn job_command(
         runner: Some(runner),
         installation: Some(installation),
     })
+}
+
+/// Register a just-in-time runner named and labelled as `launch` says,
+/// returning its ID and the configuration it runs with.
+async fn register_for_job(
+    repo: &ForgeRepo,
+    account: &Account,
+    launch: &JobLaunch<'_>,
+) -> Result<(u64, String)> {
+    let request = Request::new(
+        HttpMethod::Post,
+        repo.repo_endpoint("actions/runners/generate-jitconfig"),
+        Some(json!({
+            "name": launch.name,
+            "runner_group_id": DEFAULT_GROUP,
+            "labels": launch.labels,
+            "work_folder": "_work",
+        })),
+    );
+    let registered = repo.send(account, &request).await?;
+    let runner = registered["runner"]["id"]
+        .as_u64()
+        .context("the registered runner has no ID")?;
+    let config = text(&registered["encoded_jit_config"])
+        .context("the registered runner has no configuration")?;
+    Ok((runner, config))
 }
 
 /// The installation `launch.program` belongs to, without the files and
