@@ -249,6 +249,13 @@ fn a_pane_listing_without_panes_is_no_answer() {
     assert!(lists_panes("not a listing"));
 }
 
+#[test]
+fn a_dump_without_a_line_is_no_answer() {
+    assert!(!shows_screen(""));
+    assert!(shows_screen("\n"));
+    assert!(shows_screen("sh-5.3$\n"));
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_session_reported_missing_is_asked_again_while_its_server_runs() {
     let mut replies = vec![Reply::Unanswered, Reply::Unanswered, Reply::Answered("[]")].into_iter();

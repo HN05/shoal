@@ -309,20 +309,41 @@ impl Zellij {
         args: &[&str],
         answered: fn(&str) -> bool,
     ) -> Result<String> {
-        let listed = asked_while_running(
+        let list = || {
+            let mut list = self.action(session);
+            list.args(args);
+            list
+        };
+        let listed = self
+            .answer(session, instance, list, answered)
+            .await
+            .with_context(|| format!("list Zellij session {session}"))?;
+        Ok(listed.unwrap_or_default())
+    }
+
+    /// What the `zellij action` that `action` makes prints for `session`
+    /// once it is `answered`, while its server is the instance `instance`,
+    /// or any instance without one; none once the server is not. Zellij
+    /// reports a busy session missing without sending the action, and under
+    /// load a command can return before its answer, so Shoal asks again
+    /// while the server still runs.
+    async fn answer(
+        &self,
+        session: &str,
+        instance: Option<&str>,
+        action: impl Fn() -> Command,
+        answered: fn(&str) -> bool,
+    ) -> Result<Option<String>> {
+        asked_while_running(
             || async {
-                let mut list = self.action(session);
-                list.args(args);
-                Ok(match reply(list).await? {
-                    Reply::Answered(listed) if !answered(&listed) => Reply::Unanswered,
+                Ok(match reply(action()).await? {
+                    Reply::Answered(printed) if !answered(&printed) => Reply::Unanswered,
                     reply => reply,
                 })
             },
             || self.runs(session, instance),
         )
         .await
-        .with_context(|| format!("list Zellij session {session}"))?;
-        Ok(listed.unwrap_or_default())
     }
 
     /// What the `zellij action` that `action` makes prints for `session`
@@ -335,7 +356,7 @@ impl Zellij {
         instance: Option<&str>,
         action: impl Fn() -> Command,
     ) -> Result<String> {
-        asked_while_running(|| reply(action()), || self.runs(session, instance))
+        self.answer(session, instance, action, |_| true)
             .await?
             .with_context(|| format!("the Zellij session {session} ended"))
     }
@@ -568,14 +589,16 @@ impl Zellij {
         lines: usize,
     ) -> Result<String> {
         self.require(place, instance).await?;
+        let dump = || {
+            let mut dump = self.action(place.session);
+            dump.args(["dump-screen", "--full", "--pane-id", place.pane]);
+            dump
+        };
         let screen = self
-            .act(place.session, Some(instance), || {
-                let mut dump = self.action(place.session);
-                dump.args(["dump-screen", "--full", "--pane-id", place.pane]);
-                dump
-            })
+            .answer(place.session, Some(instance), dump, shows_screen)
             .await
-            .with_context(|| format!("read Zellij pane {}", place.pane))?;
+            .with_context(|| format!("read Zellij pane {}", place.pane))?
+            .with_context(|| format!("the Zellij session {} ended", place.session))?;
         Ok(last_lines(&screen, lines))
     }
 
@@ -922,6 +945,13 @@ fn lists_panes(listed: &str) -> bool {
         Ok(_) => true,
         Err(_) => !listed.trim().is_empty(),
     }
+}
+
+/// Whether `printed`, what `dump-screen` printed, shows a screen: every
+/// screen dumps at least its end of line, and under load Zellij can let the
+/// command return before its answer, printing nothing.
+fn shows_screen(printed: &str) -> bool {
+    !printed.is_empty()
 }
 
 /// The tab `zellij action new-tab` printed, unless `before`, the session's

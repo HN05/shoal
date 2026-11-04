@@ -1140,10 +1140,10 @@ report a busy session as missing, and a running session can list no pane
 before it lays out its first tab or while it is busy: the host asks again while
 the session's server process still runs, the recorded instance for a recorded
 pane, and takes a session as ended only once it does not. Under load Zellij
-can also hand a command the answer to one that returned before it, so the
-host takes a tab or pane a command printed only when the session listed no
-such one before, and asks a pane listing again when it holds another
-command's answer.
+can also let a command return before its answer and hand that answer to the
+next command, so the host takes a tab or pane a command printed only when the
+session listed no such one before, and asks a pane listing or screen dump
+again when it holds another command's answer or none.
 Zellij closes a tab or session with its last pane only while a client shows the
 session, so a close ends either along with the last pane there, as an attached
 client would see it, leaving no empty tab or session. A session's last pane
