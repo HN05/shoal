@@ -157,6 +157,18 @@ pub struct StartingCommit {
     pub made_for: Option<MadeFor>,
 }
 
+impl StartingCommit {
+    /// The commit as `3f2a9c1`, or `3f2a9c1 (v1.4.0)` with what it was made
+    /// for.
+    pub fn label(&self) -> String {
+        let short = &self.commit[..self.commit.len().min(7)];
+        match &self.made_for {
+            Some(made_for) => format!("{short} ({made_for})"),
+            None => short.to_owned(),
+        }
+    }
+}
+
 /// What a workspace at a commit was created for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

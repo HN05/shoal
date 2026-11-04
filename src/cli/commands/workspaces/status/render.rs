@@ -43,7 +43,7 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
     outln!("Path:          {}", workspace.path.display());
     match (&workspace.branch, &workspace.at) {
         (Some(branch), _) => outln!("Branch:        {branch}"),
-        (None, Some(at)) => outln!("At:            {}", super::super::commit_label(at)),
+        (None, Some(at)) => outln!("At:            {}", at.label()),
         (None, None) => {}
     }
     base::render(workspace);

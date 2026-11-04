@@ -52,17 +52,7 @@ pub(super) fn location_phrase(workspace: &crate::model::Workspace) -> String {
     let path = workspace.path.display();
     match (&workspace.branch, &workspace.at) {
         (Some(branch), _) => format!("on branch {branch} at {path}"),
-        (None, Some(at)) => format!("at {} in {path}", commit_label(at)),
+        (None, Some(at)) => format!("at {} in {path}", at.label()),
         (None, None) => format!("at a commit in {path}"),
-    }
-}
-
-/// A starting commit as `3f2a9c1`, or `3f2a9c1 (v1.4.0)` with what it was
-/// made for.
-pub(super) fn commit_label(at: &crate::model::StartingCommit) -> String {
-    let short = &at.commit[..at.commit.len().min(7)];
-    match &at.made_for {
-        Some(made_for) => format!("{short} ({made_for})"),
-        None => short.to_owned(),
     }
 }

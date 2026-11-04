@@ -741,7 +741,7 @@ fn instructions(
 fn head_label(workspace: &Workspace) -> String {
     match (&workspace.branch, &workspace.at) {
         (Some(branch), _) => format!("on branch {branch}"),
-        (None, Some(at)) => format!("at commit {}", super::workspaces::commit_label(at)),
+        (None, Some(at)) => format!("at commit {}", at.label()),
         (None, None) => "on a detached HEAD".to_owned(),
     }
 }
