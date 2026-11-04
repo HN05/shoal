@@ -27250,6 +27250,15 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     let status: Value = serde_json::from_slice(&status.stdout).unwrap();
     assert_eq!(status["workspace"]["name"], "worker", "{status}");
     assert!(in_chat(&["conflicts"]).status.success());
+    fs::write(
+        worktree.join("tracked"),
+        "changed by the workspace's agent\n",
+    )
+    .unwrap();
+    let diff = in_chat(&["diff"]);
+    assert!(diff.status.success(), "{diff:?}");
+    let diff = String::from_utf8_lossy(&diff.stdout);
+    assert!(diff.contains("+changed by the workspace's agent"), "{diff}");
     let view = in_chat(&["view", "--space", "worker", "--no-comments"]);
     assert!(view.status.success(), "{view:?}");
     let change = in_chat(&["branch", "base", "clear"]);
