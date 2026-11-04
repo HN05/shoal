@@ -1786,7 +1786,8 @@ ready workspaces. The repository is the workspace's, the default name
 `<workspace>-chat`, and a workspace that is not ready or whose worktree is
 missing is refused. The chat is not the workspace's agent: it runs as any chat
 does, with its own identity, `TMPDIR` and messages, without the workspace's
-scope, `[env]` or leases, and is not below the workspace. Its instructions name
+scope, `[env]` or leases, and is not below the workspace. Its instructions,
+Shoal's own in place of the chat template, which describes the checkout, name
 the workspace, its branch or commit and its path, and tell the agent that the
 workspace's own agent may be editing there and not to change files, stage,
 commit, stash or switch branches; nothing else enforces it. Its record, and
