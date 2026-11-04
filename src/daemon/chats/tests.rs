@@ -831,6 +831,11 @@ async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
     std::fs::rename(&workspace.path, &moved).unwrap();
     let missing = start("missing").await.unwrap_err();
     assert!(format!("{missing:#}").contains("is missing"), "{missing:#}");
+    // Another directory at its path is not its worktree.
+    std::fs::create_dir(&workspace.path).unwrap();
+    crate::test_support::git(&workspace.path, &["init", "-q"]);
+    assert!(start("replaced").await.is_err());
+    std::fs::remove_dir_all(&workspace.path).unwrap();
     std::fs::rename(&moved, &workspace.path).unwrap();
 
     let id = workspace.id.clone();

@@ -92,7 +92,7 @@ impl Manager {
     }
 
     /// The workspace `selector` names, once a chat may run in it: it is
-    /// ready and its worktree is there.
+    /// ready and its worktree is there and verified to be its own.
     pub(crate) async fn chat_workspace(&self, selector: &str) -> Result<Workspace> {
         let workspace = self.workspace(selector).await?;
         ensure!(
@@ -108,6 +108,8 @@ impl Manager {
             workspace.name,
             path.display()
         );
+        self.check_access(path, self.verify_worktree(&workspace))
+            .await?;
         Ok(workspace)
     }
 
