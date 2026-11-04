@@ -258,3 +258,8 @@ pub struct Discarded {
 pub async fn check_merge(daemon: &impl Daemon) -> anyhow::Result<()> {
     request(daemon, ExecutionMethod::CheckMerge).await
 }
+
+/// Refuse a caller other than an unmerge execution the user authorized.
+pub async fn check_unmerge(daemon: &impl Daemon) -> anyhow::Result<()> {
+    request(daemon, ExecutionMethod::CheckUnmerge).await
+}

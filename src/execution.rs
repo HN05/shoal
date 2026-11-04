@@ -188,6 +188,15 @@ pub async fn merge(
 /// What a merge worker writes: what it merged, or why it could not.
 pub type MergeResult = std::result::Result<crate::model::MergedBranch, String>;
 
+/// Undo the workspace's latest merge; its worker writes the result as an
+/// [`UnmergeResult`] to `result`.
+pub async fn unmerge(paths: &Paths, workspace: String, result: PathBuf) -> Result<i32> {
+    run_tracked(paths, workspace, vec![], Mode::Unmerge { result }, None).await
+}
+
+/// What an unmerge worker writes: what it undid, or why it could not.
+pub type UnmergeResult = std::result::Result<crate::model::Unmerged, String>;
+
 pub async fn setup(paths: &Paths, workspace: String) -> Result<i32> {
     run_tracked(paths, workspace, vec![], Mode::Setup, None).await
 }

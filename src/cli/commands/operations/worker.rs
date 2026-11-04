@@ -108,6 +108,11 @@ async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Re
                 .await
                 .map(Outcome::Merged)
         }
+        OperationSpec::Unmerge { workspace } => {
+            workspaces::unmerge_branch(ctx, workspace, reporter)
+                .await
+                .map(Outcome::Unmerged)
+        }
         OperationSpec::Push {
             workspace,
             approval,

@@ -115,6 +115,7 @@ outputs!(
     crate::model::Completion,
     crate::model::ConflictCheck,
     crate::model::MergedBranch,
+    crate::model::Unmerged,
     crate::model::LocalConfigEdit,
     crate::model::MovedEntry,
     crate::model::MovedRepository,

@@ -80,3 +80,34 @@ async fn a_merge_commit_with_an_edit_of_its_own_is_told_from_a_clean_one() {
     git(&repo, &["commit", "-q", "-a", "--no-edit"]);
     assert!(super::merge_has_own_changes(&repo, "edited").await.unwrap());
 }
+
+#[tokio::test]
+async fn a_replay_stopped_while_merging_is_aborted() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let start = rev(&repo, "main");
+    git(&repo, &["switch", "-q", "-c", "side"]);
+    fs::write(repo.join("shared"), "side\n").unwrap();
+    commit(&repo, "shared");
+    git(&repo, &["switch", "-q", "main"]);
+    fs::write(repo.join("merged"), "merged\n").unwrap();
+    commit(&repo, "merged");
+    git(&repo, &["merge", "-q", "--no-ff", "--no-edit", "side"]);
+    git(&repo, &["switch", "-q", "-c", "onto", &start]);
+    fs::write(repo.join("shared"), "onto\n").unwrap();
+    commit(&repo, "shared");
+    git(&repo, &["switch", "-q", "main"]);
+    let tip = rev(&repo, "main");
+    // Replaying the merge of side onto onto conflicts in the merge itself.
+    let replay = super::rebase_command(&repo, "onto", "main~1")
+        .output()
+        .await
+        .unwrap();
+    assert!(!replay.status.success());
+    git(&repo, &["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
+
+    super::abort_replay(&repo).await.unwrap();
+    assert_eq!(rev(&repo, "main"), tip);
+    assert!(!repo.join(".git/rebase-merge").exists());
+    assert_eq!(git(&repo, &["status", "--porcelain"]), "");
+}

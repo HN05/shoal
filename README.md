@@ -281,6 +281,7 @@ shoal repo sync                    # Fetch and fast-forward the default branch
 git rebase main               # Or git merge; use your repo's branch name
 shoal merge                   # Merge your branch into the default branch; no remote needed
 shoal merge --push            # Then push the default branch, after asking, instead of opening a PR
+shoal unmerge                 # Undo your branch's latest merge while it is unpushed
 ```
 
 To have an agent review a workspace's committed changes or a PR:

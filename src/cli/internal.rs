@@ -15,6 +15,7 @@ pub const GROUP: &str = "internal";
 pub const HERDR_WATCH: &str = "herdr-watch";
 pub const PLACE_WATCH: &str = "place-watch";
 pub const MERGE: &str = "merge";
+pub const UNMERGE: &str = "unmerge";
 pub const DETACHED: &str = "detached";
 pub const SESSION: &str = "session";
 pub const DEMO: &str = "demo";
@@ -44,6 +45,10 @@ pub enum Worker<'a> {
         kept_at: Option<&'a str>,
     },
     Merge {
+        plan: &'a str,
+        result: &'a Path,
+    },
+    Unmerge {
         plan: &'a str,
         result: &'a Path,
     },
@@ -207,6 +212,14 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
         Worker::Merge { plan, result } => {
             args.extend([
                 MERGE.into(),
+                "--result".into(),
+                result.as_os_str().to_owned(),
+            ]);
+            args.push(plan.into());
+        }
+        Worker::Unmerge { plan, result } => {
+            args.extend([
+                UNMERGE.into(),
                 "--result".into(),
                 result.as_os_str().to_owned(),
             ]);

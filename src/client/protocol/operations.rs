@@ -10,7 +10,7 @@ use crate::{
         links::OpenOutcome,
     },
     forge::items::create::PullOptions,
-    model::{MergedBranch, QueueEntry, Workspace},
+    model::{MergedBranch, QueueEntry, Unmerged, Workspace},
 };
 
 /// Requests about operations: work the daemon starts in a worker process of
@@ -156,6 +156,8 @@ pub enum OperationSpec {
         workspace: String,
         options: crate::model::MergeOptions,
     },
+    /// Undo the latest local merge of the workspace's branch.
+    Unmerge { workspace: String },
     /// Run the push the user approved in request `approval`, then let the
     /// daemon decide the request, opening the PR it proposed.
     Push {
@@ -218,6 +220,7 @@ impl OperationSpec {
             Self::Prepare { workspace, .. }
             | Self::OpenPull { workspace, .. }
             | Self::Merge { workspace, .. }
+            | Self::Unmerge { workspace }
             | Self::Push { workspace, .. } => workspace,
         }
     }
@@ -232,6 +235,7 @@ crate::state::states!(Step {
     PushStarted => "push_started",
     Pushed => "pushed",
     MergeStarted => "merge_started",
+    UnmergeStarted => "unmerge_started",
 });
 
 crate::state::states!(Stream {
@@ -284,6 +288,7 @@ pub enum Outcome {
     Prepared(Prepared),
     Opened(OpenOutcome),
     Merged(MergedBranch),
+    Unmerged(Unmerged),
     Decided(Box<crate::client::approvals::ApprovalRequest>),
 }
 
@@ -314,6 +319,7 @@ outcomes!(
     Prepared(Prepared),
     Opened(OpenOutcome),
     Merged(MergedBranch),
+    Unmerged(Unmerged),
     Decided(Box<crate::client::approvals::ApprovalRequest>)
 );
 
@@ -337,7 +343,8 @@ pub enum Failure {
     PushFailed {
         message: String,
     },
-    /// Merging waits for the user's decision on `request`, or was denied.
+    /// Merging or unmerging waits for the user's decision on `request`, or
+    /// was denied.
     Approval {
         request: Box<ApprovalRequest>,
     },

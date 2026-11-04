@@ -17587,6 +17587,63 @@ fn merge_into_main_without_a_remote_needs_approval_in_scoped_processes() {
 }
 
 #[test]
+fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let path = Path::new(worker["path"].as_str().unwrap());
+    commit_file(path, "merged", "from the workspace\n");
+    let head = git(path, &["rev-parse", "HEAD"]);
+    let before = git(&fixture.repo, &["rev-parse", "main"]);
+    fixture.ok(&["merge", "--no-push", "worker"]);
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), head);
+    let binary = env!("CARGO_BIN_EXE_shoal");
+    let as_agent = |args: &[&str]| {
+        let mut command = vec!["run", "--workspace", "worker", "--", binary];
+        command.extend_from_slice(args);
+        fixture.run(&command)
+    };
+    let pending = as_agent(&["--json", "unmerge"]);
+    assert_eq!(pending.status.code(), Some(2));
+    let pending: serde_json::Value = serde_json::from_slice(&pending.stdout).unwrap();
+    assert_eq!(pending["code"], "approval_pending");
+    assert_eq!(pending["request"]["target"], "unmerge");
+    assert_eq!(pending["request"]["specification"]["result"], head.trim());
+    let refusal = fixture.root.path().join("unmerge-result.json");
+    let forged = as_agent(&[
+        "internal",
+        "unmerge",
+        "--result",
+        refusal.to_str().unwrap(),
+        "{}",
+    ]);
+    assert!(!forged.status.success());
+    let refusal = fs::read_to_string(&refusal).unwrap();
+    assert!(refusal.contains("only an authorized unmerge"), "{refusal}");
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), head);
+
+    fixture.ok(&[
+        "approvals",
+        "--approve",
+        pending["request"]["number"].as_str().unwrap(),
+    ]);
+    let unmerged = as_agent(&["--json", "unmerge"]);
+    assert!(unmerged.status.success(), "{unmerged:?}");
+    let unmerged: serde_json::Value = serde_json::from_slice(&unmerged.stdout).unwrap();
+    assert_eq!(unmerged["commit"], before.trim());
+    assert_eq!(unmerged["replayed"], 0);
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
+    assert!(!fixture.repo.join("merged").exists());
+    assert_eq!(git(&fixture.repo, &["rev-parse", "worker"]), head);
+    // The record went with the merge, so nothing is left to undo.
+    let again = fixture.run(&["unmerge", "worker"]);
+    assert!(!again.status.success());
+    assert!(
+        String::from_utf8_lossy(&again.stderr).contains("no local merge of worker"),
+        "{again:?}"
+    );
+}
+
+#[test]
 fn invalid_item_actions_fail_before_a_picker_asks_for_their_space() {
     let fixture = Fixture::new();
     fixture.add("worker");

@@ -370,6 +370,8 @@ merges your committed branch into the default branch. Unless the repository sets
 `[permissions] merge = "direct"`, it first exits 2 with `approval_pending` for your
 current HEAD: wait for the decision message, then run it again without new
 commits. A new commit needs a new request; stop on `approval_denied`.
+`shoal unmerge` undoes your branch's latest merge while the default branch is
+unpushed, through the same approval.
 
 ## Child workspaces
 

@@ -6,12 +6,12 @@ use crate::{
         scope,
         workspace::{ExecutionKind, ExecutionRequest, Manager, RecordChange},
     },
-    model::{MergeOptions, Workspace},
+    model::{MergeOptions, Unmerged, Workspace},
     test_support::{commit, git, manager, repository},
 };
 
 struct Fixture {
-    _root: tempfile::TempDir,
+    root: tempfile::TempDir,
     repo: PathBuf,
     manager: Arc<Manager>,
     repo_id: String,
@@ -27,7 +27,7 @@ impl Fixture {
             .unwrap()
             .id;
         Self {
-            _root: root,
+            root,
             repo,
             manager,
             repo_id,
@@ -58,8 +58,28 @@ impl Fixture {
         self.manager.update_merge_records(&change).await;
     }
 
+    /// Undo the workspace `name`'s latest merge and update the records, as
+    /// an unmerge execution does, whether or not the worker succeeds.
+    async fn unmerge(&self, name: &str) -> anyhow::Result<Unmerged> {
+        let _guard = self.manager.gates.lock_git(&self.repo_id).await;
+        let plan = self.manager.prepare_unmerge(name).await?;
+        let unmerged = crate::git::unmerge::finish_unmerge(plan.clone()).await;
+        let change = RecordChange::Unmerge(Box::new(plan));
+        self.manager.update_merge_records(&change).await;
+        unmerged
+    }
+
     fn main(&self) -> String {
         rev(&self.repo, "main")
+    }
+
+    /// Whether `main` holds `commit`.
+    fn holds(&self, commit: &str) -> bool {
+        git(
+            &self.repo,
+            &["branch", "--contains", commit, "--list", "main"],
+        )
+        .contains("main")
     }
 }
 
@@ -70,6 +90,166 @@ fn rev(repo: &std::path::Path, revision: &str) -> String {
 fn write_commit(path: &std::path::Path, file: &str, text: &str) {
     fs::write(path.join(file), format!("{text}\n")).unwrap();
     commit(path, file);
+}
+
+#[tokio::test]
+async fn the_latest_merge_moves_main_back_whether_it_fast_forwarded_or_not() {
+    let f = Fixture::new().await;
+    let worker = f.add("worker", "feature").await;
+    let before = f.main();
+    f.merge("worker").await;
+    assert_eq!(f.main(), rev(&worker.path, "HEAD"));
+    let unmerged = f.unmerge("worker").await.unwrap();
+    assert_eq!(
+        (unmerged.commit.as_str(), unmerged.replayed),
+        (before.as_str(), 0)
+    );
+    assert_eq!(f.main(), before);
+    assert!(!f.repo.join("feature").exists());
+    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
+    assert_eq!(rev(&f.repo, "worker"), rev(&worker.path, "HEAD"));
+    assert!(!unmerged.branch_recreated);
+    let error = f.unmerge("worker").await.unwrap_err();
+    assert!(
+        error.to_string().contains("no local merge of worker"),
+        "{error:#}"
+    );
+
+    // Diverged histories merged with a merge commit.
+    write_commit(&f.repo, "tracked", "main side");
+    let before = f.main();
+    f.merge("worker").await;
+    assert_eq!(rev(&f.repo, "main^2"), rev(&worker.path, "HEAD"));
+    f.unmerge("worker").await.unwrap();
+    assert_eq!(f.main(), before);
+    assert!(!f.repo.join("feature").exists());
+}
+
+#[tokio::test]
+async fn an_older_merge_is_taken_out_by_replaying_later_merges() {
+    let f = Fixture::new().await;
+    let first = f.add("first", "first").await;
+    let second = f.add("second", "second").await;
+    write_commit(&f.repo, "tracked", "main side");
+    let before = f.main();
+    f.merge("first").await;
+    f.merge("second").await;
+    let unmerged = f.unmerge("first").await.unwrap();
+    assert_eq!(unmerged.replayed, 1);
+    assert!(!f.holds(&rev(&first.path, "HEAD")));
+    assert!(f.holds(&rev(&second.path, "HEAD")));
+    assert_eq!(rev(&f.repo, "main^1"), before);
+    assert_eq!(rev(&f.repo, "main^2"), rev(&second.path, "HEAD"));
+    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
+    // The replayed merge's record follows its new commit, so it can be
+    // undone in turn.
+    f.unmerge("second").await.unwrap();
+    assert_eq!(f.main(), before);
+}
+
+#[tokio::test]
+async fn unmerge_refuses_stacked_conflicting_and_pushed_merges_changing_nothing() {
+    let f = Fixture::new().await;
+    f.add("first", "first").await;
+    write_commit(&f.repo, "tracked", "main side");
+    f.merge("first").await;
+    // A workspace stacked on first's commits.
+    let stacked = f
+        .manager
+        .create_workspace(
+            &f.repo_id,
+            "stacked".into(),
+            Some("first".into()),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    write_commit(&stacked.path, "stacked", "stacked");
+    f.merge("stacked").await;
+    let main = f.main();
+    let error = f.unmerge("first").await.unwrap_err();
+    assert!(
+        error.to_string().contains("later merge of stacked")
+            && error.to_string().contains("shoal unmerge stacked"),
+        "{error:#}"
+    );
+    assert_eq!(f.main(), main);
+    f.unmerge("stacked").await.unwrap();
+
+    // A later commit that changes what the merge brought conflicts.
+    write_commit(&f.repo, "first", "changed on main");
+    let main = f.main();
+    let error = f.unmerge("first").await.unwrap_err();
+    assert!(error.to_string().contains("nothing changed"), "{error:#}");
+    assert_eq!(f.main(), main);
+    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
+    assert!(!f.repo.join(".git/rebase-merge").exists());
+
+    // Once main went to its upstream, only a revert undoes the merge.
+    let origin = f.root.path().join("origin.git");
+    git(
+        &f.repo,
+        &[
+            "init",
+            "-q",
+            "--bare",
+            "-b",
+            "main",
+            origin.to_str().unwrap(),
+        ],
+    );
+    git(
+        &f.repo,
+        &["remote", "add", "origin", origin.to_str().unwrap()],
+    );
+    git(&f.repo, &["push", "-q", "-u", "origin", "main"]);
+    let error = f.unmerge("first").await.unwrap_err();
+    assert!(error.to_string().contains("git revert"), "{error:#}");
+    assert_eq!(f.main(), main);
+}
+
+#[tokio::test]
+async fn unmerge_refuses_to_replay_a_merge_with_changes_of_its_own() {
+    let f = Fixture::new().await;
+    f.add("first", "first").await;
+    let before = f.main();
+    f.merge("first").await;
+    git(&f.repo, &["switch", "-q", "-c", "side", &before]);
+    write_commit(&f.repo, "side", "side");
+    git(&f.repo, &["switch", "-q", "main"]);
+    git(&f.repo, &["merge", "-q", "--no-ff", "--no-commit", "side"]);
+    write_commit(&f.repo, "side", "edited while merging");
+    let main = f.main();
+    let error = f.unmerge("first").await.unwrap_err();
+    assert!(
+        error.to_string().contains("changes of its own"),
+        "{error:#}"
+    );
+    assert_eq!(f.main(), main);
+}
+
+#[tokio::test]
+async fn unmerge_refuses_to_overwrite_an_ignored_file_the_merge_untracked() {
+    let f = Fixture::new().await;
+    write_commit(&f.repo, "notes", "tracked");
+    let first = f.add("first", "first").await;
+    git(&first.path, &["rm", "-q", "notes"]);
+    write_commit(&first.path, ".gitignore", "notes");
+    f.merge("first").await;
+    fs::write(f.repo.join("notes"), "kept locally\n").unwrap();
+    let main = f.main();
+    let error = f.unmerge("first").await.unwrap_err();
+    assert!(
+        error.to_string().contains("overwrite ignored files")
+            && error.to_string().contains("notes"),
+        "{error:#}"
+    );
+    assert_eq!(f.main(), main);
+    assert_eq!(
+        fs::read_to_string(f.repo.join("notes")).unwrap(),
+        "kept locally\n"
+    );
 }
 
 #[tokio::test]

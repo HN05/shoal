@@ -26,6 +26,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
             let push = (push || no_push).then_some(push);
             workspaces::merge(&ctx, workspace, push, confirmation.yes).await
         }
+        ChangesCommand::Unmerge { workspace } => workspaces::unmerge(&ctx, workspace).await,
     }
 }
 

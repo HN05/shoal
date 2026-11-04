@@ -106,6 +106,14 @@ pub enum InternalCommand {
         result: PathBuf,
         plan: String,
     },
+    /// Finish a planned unmerge inside its tracked execution.
+    #[command(name = internal::UNMERGE)]
+    Unmerge {
+        /// Where to write what it undid, or why it could not.
+        #[arg(long)]
+        result: PathBuf,
+        plan: String,
+    },
     /// Close a terminal host's place once its workspace completes or is removed.
     #[command(name = internal::PLACE_WATCH)]
     PlaceWatch {

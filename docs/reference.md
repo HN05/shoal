@@ -2698,6 +2698,38 @@ push = false             # Default: false
 merge = "propose"        # Default: "propose"; "direct" merges at once
 ```
 
+### Undo a merge
+
+`shoal unmerge [workspace]` undoes the workspace's latest `shoal merge` into the
+default branch while that merge is unpushed. It works for fast-forwards and merge
+commits alike, and the branch and its commits stay as they are; when cleanup deleted
+the branch, `unmerge` creates it again at the commit that merged. Afterwards the
+branch's commits no longer count as merged, so cleanup keeps the workspace.
+
+When the default branch is still at the merge's result, Shoal moves it back to the
+commit it was at before the merge. When commits came after the merge, Shoal
+replays them onto that commit (`git rebase --rebase-merges`), so each later merge
+keeps its merge commit and can be unmerged in turn. `unmerge` changes nothing and
+says why when:
+
+- the default branch's upstream has the merge's result, as the last fetch saw it.
+  Undo it with `git revert -m 1 <commit>` and push that; Git then counts the
+  branch's commits as merged, so merging the branch again brings in only newer
+  commits;
+- a later merge's branch contains the unmerged branch's commits, as a stacked
+  workspace's does, since replaying it would bring them back. The refusal names
+  that merge, to unmerge first;
+- a later merge commit records changes its parents do not merge into by
+  themselves, such as a conflict resolution, which the replay would drop;
+- the default checkout has ignored files where undoing the merge writes files,
+  as when the merge stopped tracking a path that was then recreated locally,
+  since Git would overwrite them;
+- the replay does not apply cleanly, or the default branch is not checked out for it.
+
+The default branch has the same requirements as for `merge`, and an agent's scoped
+`unmerge` needs approval under the same `[permissions] merge` and `push` settings: the
+request names the merge it undoes, and after approval the agent's retry undoes it.
+
 ### Diff
 
 ```sh

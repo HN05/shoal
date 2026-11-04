@@ -281,14 +281,17 @@ impl TrackedLaunch {
     }
 }
 
-/// Undo the merge of a command that failed; a failed rollback replaces the
-/// result.
+/// Undo the merge or unmerge of a command that failed; a failed rollback
+/// replaces the result.
 async fn roll_back_failed_merge(plan: &ExecutionPlan, result: Result<i32>) -> Result<i32> {
-    if !matches!(result, Ok(0))
-        && let Some(merge) = &plan.merge
-        && let Err(error) = crate::git::repo::rollback_merge(merge).await
-    {
-        return Err(error);
+    if matches!(result, Ok(0)) {
+        return result;
+    }
+    if let Some(merge) = &plan.merge {
+        crate::git::repo::rollback_merge(merge).await?;
+    }
+    if let Some(unmerge) = &plan.unmerge {
+        crate::git::unmerge::rollback_unmerge(unmerge).await?;
     }
     result
 }
@@ -606,6 +609,19 @@ fn execution_command(
             false,
             Worker::Merge {
                 plan: &serde_json::to_string(merge)?,
+                result,
+            },
+        );
+    }
+    if let Some(unmerge) = &plan.unmerge {
+        let Mode::Unmerge { result } = mode else {
+            anyhow::bail!("only an unmerge execution unmerges");
+        };
+        return internal_command(
+            paths,
+            false,
+            Worker::Unmerge {
+                plan: &serde_json::to_string(unmerge)?,
                 result,
             },
         );

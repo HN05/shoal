@@ -1147,6 +1147,26 @@ pub struct UnmergePlan {
     pub tip: String,
 }
 
+/// A merge undone: the default branch moved back from `previous_commit` to
+/// `commit`, which no longer contains the branch's commits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Unmerged {
+    pub workspace_id: String,
+    pub repository_id: String,
+    pub branch: String,
+    pub default_branch: String,
+    /// The branch's commit that had merged.
+    pub source: String,
+    pub previous_commit: String,
+    pub commit: String,
+    /// The commits after the merge replayed onto the commit before it; none
+    /// when it was the latest merge.
+    pub replayed: u64,
+    /// The branch was gone and was created again at `source`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub branch_recreated: bool,
+}
+
 /// The upstream a merge pushes the default branch to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

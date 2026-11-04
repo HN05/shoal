@@ -98,6 +98,8 @@ pub enum ChangesCommand {
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },
+    /// Undo this workspace's latest merge into the default branch while it is unpushed.
+    Unmerge { workspace: Option<String> },
 }
 
 #[derive(Debug, Subcommand)]

@@ -835,8 +835,22 @@ same details and is its confirmation; the agent still answers the question about
 sensitive files with `--yes`, so the approver decides on them.
 A repository that merges only through PRs turns it off with `[merge] enabled =
 false`, which refuses agents' requests to merge too.
+Because a local merge can be undone, `unmerge` is a command of its own rather than
+a flag that flips `merge`. The daemon records each merge when its execution ends,
+from what the default branch holds rather than what the worker reports, and drops
+records the default branch no longer holds or its upstream has. `unmerge` undoes
+the branch's latest recorded merge under the same gate, checks and tracked
+execution: it moves the default branch back when nothing came after the merge, and
+otherwise replays the later history onto the commit before it with
+`--rebase-merges`, rewriting the records of the merges it replays. It refuses a
+pushed merge, since only a revert undoes that, and a replay that would bring the
+merged commits back through a later merge, drop a later merge commit's own
+changes, or does not apply cleanly, and an undo that would overwrite ignored files
+in the default checkout; Shoal makes
+no revert commits. It recreates a branch cleanup deleted, so the commits stay on one.
 After cancellation, the wrapper rolls back incomplete merges after stopping the
-process group, preserving completed merges and reporting unsafe recovery failures.
+process group, preserving completed merges and reporting unsafe recovery failures;
+an interrupted replay is aborted.
 Refresh fetches use private temporary refs; merges run in the tracked wrapper.
 A fetch of a whole remote also deletes the tracking refs of branches the remote no
 longer has, since cleanup counts commits on a stale ref as pushed.
@@ -923,7 +937,8 @@ Creation other than of a child of the caller's space, removal other than of a de
 reconciliation, other workspaces, repository administration, and service control need an
 unscoped caller. A scoped `merge` is an
 approval request bound to the branch and its HEAD unless `[permissions] merge`
-and `push` are `"direct"`; approval lets the agent's retry merge that commit through the normal checks,
+and `push` are `"direct"`, and a scoped `unmerge` one bound to the merge it undoes;
+approval lets the agent's retry merge that commit, or undo that merge, through the normal checks,
 so it replaces only the user typing the command. PR registration,
 manual merge acknowledgement, assignment completion and its withdrawal, and syncing the
 caller's own repository are own-workspace exceptions.

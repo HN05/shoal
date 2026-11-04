@@ -17,6 +17,7 @@ mod run;
 mod setup;
 mod status;
 mod title;
+mod unmerge;
 mod watch;
 
 pub(super) use add::{AddOptions, AgentLaunch, add, launch_args};
@@ -41,6 +42,7 @@ pub(super) use setup::{
 };
 pub(super) use status::status;
 pub(super) use title::{request_title, title};
+pub(super) use unmerge::{unmerge, unmerge_branch, unmerge_worker};
 pub(super) use watch::watch_items;
 
 /// Where the workspace's worktree is, for messages: `on branch <branch> at
