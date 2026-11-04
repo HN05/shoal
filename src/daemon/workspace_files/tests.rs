@@ -1150,6 +1150,8 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_created;
     ALTER TABLE executions DROP COLUMN effort;
     DROP TRIGGER workspace_grace_removed;
     DROP TRIGGER chat_grace_removed;
+    DROP INDEX chats_workspace;
+    ALTER TABLE chats DROP COLUMN workspace_id;
     ALTER TABLE chats DROP COLUMN stopped_at;
     ALTER TABLE chats DROP COLUMN saved;
     ALTER TABLE chats DROP COLUMN completion;
