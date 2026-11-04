@@ -304,11 +304,10 @@ impl Manager {
     async fn job_command(&self, claim: &Claimed<'_>, job: &QueuedJob) -> Result<JobCommand> {
         let program = self.runner_program(claim.forge)?;
         let labels = runner_labels(&claim.runner.labels);
-        let name = format!(
-            "shoal-{}-{}",
-            crate::process::machine::hostname(),
-            job.job.id
-        );
+        // Named for the claim: a job claimed again, after an earlier runner
+        // took another job, may find that runner still registered.
+        let claim_id: String = claim.entry.id.chars().take(8).collect();
+        let name = format!("shoal-{}-{claim_id}", crate::process::machine::hostname());
         let launch = JobLaunch {
             runner: claim.registration.runner.as_ref(),
             program: &program,
