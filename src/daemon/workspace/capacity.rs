@@ -257,6 +257,13 @@ pub(crate) fn limit(sample: HostSample, agents: Agents, settings: &Overload) -> 
     agents.total + u32::from(start)
 }
 
+/// How many agents may start beside `agents` now: one when [`room`] leaves
+/// room for an agent's load, else none, also when a blocking reading leaves
+/// the limit below the slots in use.
+pub(crate) fn starts(sample: HostSample, agents: Agents, settings: &Overload) -> u32 {
+    limit(sample, agents, settings).saturating_sub(agents.total)
+}
+
 /// What measured load leaves for one more start beside `agents`, which a
 /// start fits when its expected load stays below the warning threshold once
 /// every warming agent shows a settled agent's load and every warming job

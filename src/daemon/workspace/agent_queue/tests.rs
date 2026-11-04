@@ -104,11 +104,15 @@ fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
     assert_eq!(admit(&[], &queue, &dynamic(50.0), false), ["j1"]);
     // A job too big for the room keeps its place and the agent behind it starts.
     assert_eq!(admit(&[], &queue, &dynamic(10.0), false), ["a1"]);
-    let no_starts = Limits {
+    // Room too small for an agent's load still starts a smaller job.
+    let no_agent = Limits {
         starts: Some(0),
         ..dynamic(50.0)
     };
-    assert!(admit(&[], &queue, &no_starts, false).is_empty());
+    assert_eq!(admit(&[], &queue, &no_agent, false), ["j1"]);
+    // An agent that started takes the pass's start from the job behind it.
+    let agent_first = [queue[1].clone(), queue[0].clone()];
+    assert_eq!(admit(&[], &agent_first, &dynamic(50.0), false), ["a1"]);
 }
 
 #[test]

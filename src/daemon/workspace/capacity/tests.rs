@@ -236,3 +236,14 @@ fn jobs_count_at_their_own_load_against_agents_and_each_other() {
     assert_eq!(room(sample(5.0), recent, &settings), Room::None);
     assert_eq!(room(sample(5.0), Agents::default(), &settings), Room::Idle);
 }
+
+#[test]
+fn critical_readings_start_none_beside_slots_in_use() {
+    let settings = Overload::default();
+    let critical = HostSample {
+        memory: MemoryState::Critical,
+        ..sample(0.0)
+    };
+    assert_eq!(starts(critical, agents(2, 3, 600), &settings), 0);
+    assert_eq!(starts(sample(5.0), agents(0, 1, 600), &settings), 1);
+}

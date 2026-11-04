@@ -111,6 +111,7 @@ impl Wake {
 }
 
 /// A queued entry and the repository it starts an agent in.
+#[derive(Clone)]
 pub(crate) struct Waiting {
     pub id: String,
     pub repository: String,
@@ -134,8 +135,8 @@ pub(crate) fn admit(
 ) -> Vec<String> {
     let mut total = occupied.len();
     let mut starts = limits.starts;
-    // Whether measured load admitted a job, which takes the pass's one start.
-    let mut job_started = false;
+    // Whether measured load admitted an agent or a job: one start a pass.
+    let mut started = false;
     let mut used: HashMap<&str, usize> = HashMap::new();
     for repository in occupied {
         *used.entry(repository).or_default() += 1;
@@ -148,11 +149,12 @@ pub(crate) fn admit(
                 continue;
             }
             if let Some(room) = limits.jobs.room {
-                // Measured load admits one start a pass, of an agent or a job.
-                if starts == Some(0) || job_started || !room.fits(cost) {
+                // `starts` counts what fits an agent's load, which says
+                // nothing of a job's; the room does.
+                if started || !room.fits(cost) {
                     continue;
                 }
-                job_started = true;
+                started = true;
                 starts = starts.map(|_| 0);
             }
             jobs += 1;
@@ -193,6 +195,7 @@ pub(crate) fn admit(
         }
         *used += 1 - own;
         total += 1 - own;
+        started |= starts.is_some();
         starts = starts.map(|starts| starts - 1);
         // Each healthy interval restarts one stopped agent or one-shot run.
         recovered &= own == 0 && entry.work != Work::OneShot { after_stop: true };
@@ -787,7 +790,7 @@ impl Manager {
             global: fixed_limit(global),
             starts: measured
                 .filter(|_| global == RunLimit::Dynamic)
-                .map(|(sample, agents)| capacity::limit(sample, agents, overload) - agents.total),
+                .map(|(sample, agents)| capacity::starts(sample, agents, overload)),
             repositories: HashMap::new(),
             disk: None,
             jobs: JobLimits {
