@@ -175,7 +175,11 @@ impl Manager {
             return Ok(Claim::Suspended);
         }
         self.take_over_entry(&claim.entry.id).await?;
-        let argv = self.write_job_files(&claim, job)?;
+        let argv = {
+            // The sweep of unclaimed directories waits while one is written.
+            let _files = self.runners.job_files().await;
+            self.write_job_files(&claim, job)?
+        };
         let log = self.job_directory(&claim.entry.id).join("job.log");
         let execution = self.launch_job_command(claim.workspace, log, argv).await?;
         self.record_job_execution(&claim.entry.id, execution)
@@ -261,8 +265,9 @@ impl Manager {
         self.store
             .run(move |db| {
                 db.execute(
-                    "UPDATE ci_jobs SET execution_id=?2 WHERE id=?1",
-                    params![id, execution],
+                    "UPDATE ci_jobs SET execution_id=?2,launched_at=coalesce(launched_at,?3)
+                     WHERE id=?1",
+                    params![id, execution, crate::time::unix_seconds() as i64],
                 )?;
                 Ok(())
             })

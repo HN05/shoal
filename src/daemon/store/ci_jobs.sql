@@ -1,6 +1,7 @@
 -- The CI jobs the runner claimed. Each runs in its own workspace at the
 -- job's commit, by the execution that runs the forge's runner once it
--- started, and leaves with that workspace once the execution ends. Its peaks
+-- started at `launched_at`, and leaves with that workspace once the
+-- execution ends. Its peaks
 -- are the most CPU, in percent of one core, and resident memory its
 -- workspace's usage samples showed, which join the job's usage once, when
 -- it ends.
@@ -11,6 +12,7 @@ CREATE TABLE IF NOT EXISTS ci_jobs (
     execution_id TEXT,
     job TEXT NOT NULL,
     started_at INTEGER NOT NULL,
+    launched_at INTEGER,
     peak_cpu REAL,
     peak_memory INTEGER,
     usage_recorded INTEGER NOT NULL DEFAULT 0 CHECK(usage_recorded IN (0,1))

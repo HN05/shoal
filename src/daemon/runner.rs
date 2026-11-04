@@ -35,6 +35,9 @@ pub(crate) struct Runners {
     claiming: Mutex<HashSet<String>>,
     /// Admission admitted a job, or one ended.
     wake: Notify,
+    /// Held while a claim writes a job's files and while the sweep of
+    /// unclaimed directories decides on one.
+    job_files: tokio::sync::Mutex<()>,
     /// A repository's settings changed since the runners were checked.
     changed: std::sync::atomic::AtomicBool,
     /// The `PATH` tests find the runner's program on instead of the process's.
@@ -91,6 +94,11 @@ impl Runners {
 
     pub(crate) fn claiming(&self, entry: &str) -> bool {
         lock(&self.claiming).contains(entry)
+    }
+
+    /// The lock over the runner's job directories.
+    pub(crate) async fn job_files(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.job_files.lock().await
     }
 
     /// Run the runner's pass now.

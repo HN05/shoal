@@ -115,16 +115,13 @@ impl Manager {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
             Err(error) => return Err(error.into()),
         };
-        let claimed: Vec<String> = self
-            .claimed_jobs()
-            .await?
-            .into_iter()
-            .map(|job| job.id)
-            .collect();
         for entry in entries {
             let entry = entry?;
             let id = entry.file_name().to_string_lossy().into_owned();
-            if claimed.contains(&id) || self.runners.claiming(&id) {
+            // Checked for each directory, under the lock a claim writes its
+            // files with, so a claim recorded or begun meanwhile keeps them.
+            let _files = self.runners.job_files().await;
+            if self.runners.claiming(&id) || self.job_claimed(&id).await? {
                 continue;
             }
             if let Err(error) = std::fs::remove_dir_all(entry.path()) {
@@ -132,6 +129,16 @@ impl Manager {
             }
         }
         Ok(())
+    }
+
+    /// Whether the runner records a claim of the job `id`.
+    async fn job_claimed(&self, id: &str) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                crate::daemon::store::exists(db, "SELECT 1 FROM ci_jobs WHERE id=?1", [id])
+            })
+            .await
     }
 
     /// Cancel on the forge the run of the job running in the workspace
@@ -210,16 +217,18 @@ impl Manager {
     }
 
     /// The load of each admitted or claimed job: what it is expected to
-    /// use, and how long ago it was admitted.
+    /// use, and how long ago its runner started; one whose runner has not
+    /// started yet has just started, so it keeps warming and holds back the
+    /// next start until it runs.
     pub(crate) async fn job_activities(&self) -> Result<Vec<Activity>> {
         let jobs: Vec<(String, Option<i64>, String)> = self
             .store
             .run(|db| {
                 Ok(db
                     .prepare(
-                        "SELECT repository_id,seen_at,job FROM agent_queue WHERE kind=?1 AND state=?2
+                        "SELECT repository_id,NULL,job FROM agent_queue WHERE kind=?1 AND state=?2
                              AND id NOT IN (SELECT id FROM ci_jobs)
-                         UNION ALL SELECT repository_id,started_at,job FROM ci_jobs",
+                         UNION ALL SELECT repository_id,launched_at,job FROM ci_jobs",
                     )?
                     .query_map(params![QueueKind::Job, QueueState::Starting], |row| {
                         Ok((row.get(0)?, row.get(1)?, row.get(2)?))

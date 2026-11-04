@@ -633,3 +633,59 @@ async fn removing_a_job_whose_execution_is_not_recorded_yet_cancels_its_run() {
             .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
     );
 }
+
+#[tokio::test]
+async fn a_job_keeps_warming_until_its_runner_starts() {
+    use crate::daemon::workspace::capacity::{Activity, WARM_UP};
+    let fixture = fixture(vec![job("h1", 4, 1)], "unused", "").await;
+    let manager = &fixture.manager;
+    let ages = || async {
+        manager
+            .job_activities()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|activity| match activity {
+                Activity::Job { age, .. } => age,
+                other => panic!("{other:?}"),
+            })
+            .collect::<Vec<_>>()
+    };
+    manager.refresh_waiting_jobs().await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(ages().await, [std::time::Duration::ZERO]);
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
+    let id = claimed[0].id.clone();
+    let set = |sql: &'static str| {
+        let id = id.clone();
+        manager.store.run(move |db| {
+            db.execute(sql, [id])?;
+            Ok(())
+        })
+    };
+    // Its age counts from its runner's start, however long ago it was admitted.
+    set("UPDATE ci_jobs SET started_at=0,launched_at=strftime('%s','now')-600 WHERE id=?1")
+        .await
+        .unwrap();
+    assert!(ages().await[0] >= WARM_UP);
+    set("UPDATE ci_jobs SET launched_at=NULL WHERE id=?1")
+        .await
+        .unwrap();
+    assert_eq!(ages().await, [std::time::Duration::ZERO]);
+}
+
+#[tokio::test]
+async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "unused", "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
+    let stray = manager.job_directory("stray");
+    std::fs::create_dir_all(&stray).unwrap();
+    manager.finish_ended_jobs().await.unwrap();
+    assert!(manager.job_directory(&claimed[0].id).join("token").exists());
+    assert!(!stray.exists());
+}
