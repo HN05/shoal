@@ -4,7 +4,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::state::states;
+use crate::{
+    client::connection::{Daemon, pages},
+    protocol::FileMethod,
+    state::states,
+};
 
 states!(FileSource {
     /// Sent with a message to the workspace's agents.
@@ -191,4 +195,36 @@ pub struct AttachedFile {
     /// Unix seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<i64>,
+}
+
+/// The files attached to `space`.
+pub async fn list(daemon: &impl Daemon, space: String) -> Result<Vec<AttachedFile>> {
+    pages(daemon, FileMethod::ListFiles { space }).await
+}
+
+/// Attach copies of `files` to `space`; the chat `sender_chat` names, when
+/// its agent attaches them, attaches its own files.
+pub async fn add(
+    daemon: &impl Daemon,
+    space: String,
+    files: Vec<NewFile>,
+    sender_chat: Option<String>,
+) -> Result<Vec<AttachedFile>> {
+    let method = FileMethod::AddFiles {
+        space,
+        files,
+        sender_chat,
+    };
+    pages(daemon, method).await
+}
+
+/// Delete the files of `space`, or of every space the caller reaches, that
+/// `names` and `ids` select.
+pub async fn remove(
+    daemon: &impl Daemon,
+    space: Option<String>,
+    names: Vec<String>,
+    ids: Vec<i64>,
+) -> Result<Vec<AttachedFile>> {
+    pages(daemon, FileMethod::RemoveFiles { space, names, ids }).await
 }

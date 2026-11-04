@@ -5,27 +5,22 @@
 //! `clear` deletes them all.
 use std::io::{IsTerminal, Write};
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         installed::{Executable, arguments_with},
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    client::notifications::{Cleared, Notification, Sent},
-    protocol::{self, NotificationMethod, Response},
+    client::notifications::{self, Notification, Watch},
 };
 
 pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
-    let method = NotificationMethod::ListNotifications {
-        unread_only: !all,
-        limit,
-    };
-    let notifications = client::pages::<Notification>(&ctx.paths, method).await?;
+    let notifications = notifications::list(&ctx.paths, !all, limit).await?;
     ctx.show(&notifications, |notifications| {
         let now = crate::time::unix_seconds() as i64;
         let rows = notifications.iter().map(|n| cells(n, now)).collect();
@@ -40,11 +35,7 @@ pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32
     // Shown once: exactly what this listing printed does not come back as new.
     if !keep_unread && !notifications.is_empty() {
         let ids = notifications.iter().map(|n| n.id).collect();
-        request::<()>(
-            &ctx.paths,
-            NotificationMethod::MarkNotificationsRead { ids },
-        )
-        .await?;
+        notifications::mark_read(&ctx.paths, ids).await?;
     }
     if !all && let Some(status) = client::status(&ctx.paths).await? {
         // A listing kept unread still counts what it printed.
@@ -62,7 +53,7 @@ pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32
 
 pub(super) async fn clear(ctx: &Context) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
-    let cleared = request::<Cleared>(&ctx.paths, NotificationMethod::ClearNotifications).await?;
+    let cleared = notifications::clear(&ctx.paths).await?;
     ctx.show(&cleared, |cleared| match cleared.cleared {
         0 => outln!("No notifications"),
         n => outln!("Cleared {n} notification{}", if n == 1 { "" } else { "s" }),
@@ -82,11 +73,7 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
 
 pub(super) async fn withdraw(ctx: &Context, space: Option<String>, id: i64) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let withdrawn = request::<Notification>(
-        &ctx.paths,
-        NotificationMethod::WithdrawMessage { space, id },
-    )
-    .await?;
+    let withdrawn = notifications::withdraw(&ctx.paths, space, id).await?;
     ctx.emit(
         &format!("Withdrew notification {id}: {}", withdrawn.message),
         &withdrawn,
@@ -103,16 +90,8 @@ pub(super) async fn send(
     let attachments = super::messages::attachments(&attach)?;
     crate::client::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let sent = request::<Sent>(
-        &ctx.paths,
-        NotificationMethod::SendMessage {
-            space,
-            message,
-            attachments,
-            sender_chat: crate::env::chat(),
-        },
-    )
-    .await?;
+    let sender_chat = crate::env::chat();
+    let sent = notifications::send(&ctx.paths, space, message, attachments, sender_chat).await?;
     let text = match sent.notification {
         Some(id) => format!("Notification {id} sent."),
         None => "Sent to the coordinating agent.".to_owned(),
@@ -128,29 +107,14 @@ pub(super) async fn send(
 pub(super) async fn follow(ctx: &Context, keep_unread: bool, after: i64) -> Result<i32> {
     refuse_workspace_processes(ctx)?;
     let executable = Executable::current();
-    let mut delivered = after;
-    let watch = |after| NotificationMethod::WatchNotifications { keep_unread, after };
-    let (mut stream, body) = client::open_buffered(&ctx.paths, watch(delivered)).await?;
-    <()>::try_from(body)?;
+    let mut watch = Watch::start(&ctx.paths, keep_unread, after).await?;
     let palette = Palette::stdout(ctx.json);
     let raise = !ctx.json && std::io::stdout().is_terminal();
     loop {
-        let response: Response = match protocol::read_buffered(&mut stream).await {
-            Ok(response) => response,
-            Err(error) if client::stream_closed(&error) => {
-                let (next, body) = client::reconnect(&ctx.paths, || watch(delivered))
-                    .await
-                    .map_err(|error| {
-                        executable.resume_or(error, || arguments_with("--resume", Some(delivered)))
-                    })?;
-                <()>::try_from(body)?;
-                stream = next;
-                continue;
-            }
-            Err(error) => return Err(error).context("daemon closed the notification stream"),
-        };
-        let notification = Notification::try_from(response.body)?;
-        delivered = notification.id;
+        let notification = watch.next(&ctx.paths).await.map_err(|error| {
+            let delivered = watch.delivered();
+            executable.resume_or(error, || arguments_with("--resume", Some(delivered)))
+        })?;
         ctx.show(&notification, |notification| {
             outln!(
                 "{}",

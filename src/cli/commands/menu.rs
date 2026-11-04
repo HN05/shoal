@@ -29,18 +29,17 @@ use crate::{
             workspace::{WorkCommand, WorkspaceCommand},
         },
         client,
-        client::request,
         context::Context,
         internal::{self, Worker},
         output::{Palette, Style},
         ui::{self, Entries, KeyBindings, PickerView, ViewPicker, WidthLimit},
     },
-    client::notifications::Notification,
+    client::notifications::{self, Notification},
     daemon::refusal::{Reason, Refusal},
     env,
     forge::items::link,
     model::{LinkedItem, PresentSpace},
-    protocol::{ConfigTarget, NotificationMethod},
+    protocol::ConfigTarget,
 };
 
 const ADD_ENTRY: &str = "add-workspace";
@@ -494,11 +493,7 @@ async fn rows(ctx: &Context, view: View, scoped: bool) -> Result<Entries> {
 /// Recent notifications, newest first; showing the unread ones marks them
 /// read, as `shoal alerts` does.
 async fn notification_rows(ctx: &Context) -> Result<Entries> {
-    let method = NotificationMethod::ListNotifications {
-        unread_only: false,
-        limit: NOTIFICATIONS_SHOWN,
-    };
-    let notifications = client::pages::<Notification>(&ctx.paths, method).await?;
+    let notifications = notifications::list(&ctx.paths, false, NOTIFICATIONS_SHOWN).await?;
     let labels = notification_labels(&notifications);
     mark_read(ctx, &notifications).await?;
     Ok(notifications
@@ -547,11 +542,7 @@ async fn mark_read(ctx: &Context, notifications: &[Notification]) -> Result<()> 
     if unread.is_empty() {
         return Ok(());
     }
-    request::<()>(
-        &ctx.paths,
-        NotificationMethod::MarkNotificationsRead { ids: unread },
-    )
-    .await
+    notifications::mark_read(&ctx.paths, unread).await
 }
 
 /// One row per item that needs the user.

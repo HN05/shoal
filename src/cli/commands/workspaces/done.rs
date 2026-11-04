@@ -9,7 +9,7 @@ use crate::{
         ui::{self, Fallback},
     },
     model::{Completion, PresentSpace},
-    protocol::{AssignmentMethod, DemoMethod},
+    protocol::AssignmentMethod,
 };
 
 /// The space `space` names, else the current chat or workspace, else a
@@ -95,11 +95,7 @@ pub(in crate::cli::commands) async fn done(
 }
 
 async fn stop_demos(ctx: &Context, workspace: &str) -> Result<()> {
-    let method = DemoMethod::StopDemos {
-        workspace: workspace.to_owned(),
-        name: None,
-    };
-    request::<()>(&ctx.paths, method).await
+    crate::client::demos::stop(&ctx.paths, workspace.to_owned(), None).await
 }
 
 fn done_message(completion: &Completion) -> String {

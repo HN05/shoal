@@ -17,7 +17,10 @@ use tokio::{
 use crate::{
     client::{paths::Paths, processes::Identity},
     config::repo::ConfigLayers,
-    model::{Chat, ChatHome, Inspection, LinkedItem, PresentSpace, Repository, Spaces, Workspace},
+    model::{
+        Chat, ChatHome, Inspection, LinkedItem, PresentSpace, RenamedChat, Repository, Spaces,
+        Workspace,
+    },
     protocol::{
         self, Body, ChatMethod, DaemonMethod, DaemonStatus, ErrorCode, Exit, ItemMethod, Method,
         RepositoryMethod, Request, Response, WorkspaceMethod, timing,
@@ -423,6 +426,11 @@ pub async fn move_chat(daemon: &impl Daemon, chat: &Chat, pid: u32) -> Result<Ch
         },
     )
     .await
+}
+
+/// Rename `chat` to `name`.
+pub async fn rename_chat(daemon: &impl Daemon, chat: String, name: String) -> Result<RenamedChat> {
+    request(daemon, ChatMethod::RenameChat { chat, name }).await
 }
 
 /// Running chats; listing them ends those whose agent exited.

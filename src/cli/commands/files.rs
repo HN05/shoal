@@ -12,7 +12,6 @@ use crate::{
         ui::{self, Fallback},
     },
     client::files::{AttachedFile, FileSource},
-    protocol::FileMethod,
 };
 
 mod menu;
@@ -31,13 +30,7 @@ pub(super) enum Listing {
 /// Show the files of the workspace or chat as `listing` asks.
 pub(super) async fn list(ctx: &Context, space: Option<String>, listing: Listing) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let files = client::pages::<AttachedFile>(
-        &ctx.paths,
-        FileMethod::ListFiles {
-            space: space.clone(),
-        },
-    )
-    .await?;
+    let files = crate::client::files::list(&ctx.paths, space.clone()).await?;
     if listing == Listing::Menu && ctx.interactive_output() {
         return menu::choose(ctx, space, &files).await;
     }
@@ -66,12 +59,7 @@ pub(super) async fn list(ctx: &Context, space: Option<String>, listing: Listing)
 pub(super) async fn add(ctx: &Context, space: Option<String>, files: Vec<String>) -> Result<i32> {
     let files = super::messages::attachments(&files)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let method = FileMethod::AddFiles {
-        space,
-        files,
-        sender_chat: crate::env::chat(),
-    };
-    let added = client::pages::<AttachedFile>(&ctx.paths, method).await?;
+    let added = crate::client::files::add(&ctx.paths, space, files, crate::env::chat()).await?;
     ctx.show(&added, |added| {
         let now = crate::time::unix_seconds() as i64;
         let rows = added.iter().map(|file| cells(file, now)).collect();
@@ -106,9 +94,7 @@ pub(super) async fn remove(
     if !yes && let Some(action) = confirmation(ctx, space.as_deref()).await? {
         ensure!(ui::confirm(ctx, &action, "--yes")?, "deletion canceled");
     }
-    let deleted =
-        client::pages::<AttachedFile>(&ctx.paths, FileMethod::RemoveFiles { space, names, ids })
-            .await?;
+    let deleted = crate::client::files::remove(&ctx.paths, space, names, ids).await?;
     let text = match deleted.len() {
         0 => "No files deleted".to_owned(),
         1 => "Deleted 1 file".to_owned(),
@@ -124,10 +110,7 @@ async fn check_selected(ctx: &Context, space: &str, names: &[String], ids: &[i64
     if names.is_empty() && ids.is_empty() {
         return Ok(());
     }
-    let method = FileMethod::ListFiles {
-        space: space.to_owned(),
-    };
-    let files = client::pages::<AttachedFile>(&ctx.paths, method).await?;
+    let files = crate::client::files::list(&ctx.paths, space.to_owned()).await?;
     let missing = crate::client::files::missing_selection(&files, names, ids);
     ensure!(
         missing.is_empty(),

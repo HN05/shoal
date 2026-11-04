@@ -12,7 +12,7 @@ use super::listing::ListFilter;
 use crate::client::output::inbox::Item;
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         list_status::ListStatus,
         output::{self, Palette, Style},
@@ -22,9 +22,8 @@ use crate::{
         approvals::{ApprovalRequest, DecisionStatus},
         questions::{self, Question},
     },
-    demos::Running,
     model::{Chat, CheckoutSync, ReviewMark, SpaceLinks, UntrackedWorktree, Workspace},
-    protocol::{DemoMethod, RepositoryMethod, WorkspaceMethod},
+    protocol::{RepositoryMethod, WorkspaceMethod},
     state::WorkspaceState,
 };
 
@@ -87,8 +86,7 @@ impl Inbox {
                     .as_deref()
                     .is_some_and(|repository| filter.keeps_detached(repository))
         };
-        let demos =
-            request::<Vec<Running>>(&ctx.paths, DemoMethod::ListDemos { workspace: None }).await?;
+        let demos = crate::client::demos::running(&ctx.paths, None).await?;
         let mut items = decision_items(questions, requests, &workspaces, &chats, detached);
         items.extend(workspace_items(&workspaces, &stopped));
         items.extend(chat_items(&chats));

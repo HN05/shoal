@@ -7,7 +7,11 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::state::states;
+use crate::{
+    client::connection::{Daemon, request},
+    protocol::DemoMethod,
+    state::states,
+};
 
 /// The variable a serving demo's port reaches its command as.
 pub const PORT: &str = "PORT";
@@ -182,6 +186,21 @@ fn argv(key: &str, argv: &[String]) -> Result<()> {
         "{key} needs a nonempty executable and arguments without NUL bytes"
     );
     Ok(())
+}
+
+/// The demos running in `workspace`, or in every workspace.
+pub async fn running(daemon: &impl Daemon, workspace: Option<String>) -> Result<Vec<Running>> {
+    request(daemon, DemoMethod::ListDemos { workspace }).await
+}
+
+/// How far `workspace`'s demo launch `launch` came.
+pub async fn progress(daemon: &impl Daemon, workspace: String, launch: String) -> Result<Progress> {
+    request(daemon, DemoMethod::DemoProgress { workspace, launch }).await
+}
+
+/// Stop `workspace`'s demo `name`, or all of them.
+pub async fn stop(daemon: &impl Daemon, workspace: String, name: Option<String>) -> Result<()> {
+    request(daemon, DemoMethod::StopDemos { workspace, name }).await
 }
 
 #[cfg(test)]

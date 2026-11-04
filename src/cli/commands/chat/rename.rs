@@ -9,7 +9,7 @@ use crate::{
         terminal, ui,
     },
     model::RenamedChat,
-    protocol::{AgentMethod, ChatMethod},
+    protocol::AgentMethod,
 };
 
 /// What `shoal chat rename --request` asks the chat's agent.
@@ -24,7 +24,7 @@ pub(in crate::cli::commands) async fn rename(
     // lets a chat's agent rename only its own chat.
     crate::validate::name("chat", &name)?;
     let chat = select(ctx, chat).await?;
-    let renamed = request::<RenamedChat>(&ctx.paths, ChatMethod::RenameChat { chat, name }).await?;
+    let renamed = client::rename_chat(&ctx.paths, chat, name).await?;
     relabel(ctx, &renamed).await;
     ctx.show(&renamed.chat, |chat| {
         outln!("Renamed chat to {}", chat.name)

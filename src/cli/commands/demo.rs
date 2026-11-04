@@ -15,9 +15,9 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
-    demos::{Demo, Launch, Preset, Progress, Running},
+    demos::{self, Demo, Launch, Preset, Progress, Running},
     model::Workspace,
-    protocol::{ConfigTarget, DemoMethod, NotificationMethod, WorkspaceMethod},
+    protocol::{ConfigTarget, WorkspaceMethod},
     sessions::Origin,
 };
 
@@ -152,16 +152,8 @@ async fn start(
     let opening = format!("shoal demo {} --workspace {}", chosen.name, workspace.name);
     if crate::env::is_scoped() {
         let message = format!("Demo {} is running; open it with {opening}", chosen.name);
-        client::call(
-            &ctx.paths,
-            NotificationMethod::SendMessage {
-                space: workspace.id.clone(),
-                message,
-                attachments: Vec::new(),
-                sender_chat: None,
-            },
-        )
-        .await?;
+        let space = workspace.id.clone();
+        crate::client::notifications::send(&ctx.paths, space, message, Vec::new(), None).await?;
     }
     ctx.emit_styled(
         Style::Success,
@@ -284,14 +276,7 @@ async fn place(
 async fn await_record(ctx: &Context, workspace: &Workspace, launch: &Launch) -> Result<Running> {
     let deadline = tokio::time::Instant::now() + START_LIMIT;
     loop {
-        let progress = client::request::<Progress>(
-            &ctx.paths,
-            DemoMethod::DemoProgress {
-                workspace: workspace.id.clone(),
-                launch: launch.id.clone(),
-            },
-        )
-        .await?;
+        let progress = demos::progress(&ctx.paths, workspace.id.clone(), launch.id.clone()).await?;
         match progress {
             Progress::Running { demo } => return Ok(*demo),
             Progress::Ended => return Err(not_started(launch).await),
@@ -354,14 +339,7 @@ async fn replace(ctx: &Context, workspace: &Workspace, name: &str) -> Result<()>
 }
 
 async fn stop_named(ctx: &Context, workspace: &Workspace, name: Option<String>) -> Result<()> {
-    client::request::<()>(
-        &ctx.paths,
-        DemoMethod::StopDemos {
-            workspace: workspace.id.clone(),
-            name,
-        },
-    )
-    .await
+    demos::stop(&ctx.paths, workspace.id.clone(), name).await
 }
 
 async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
@@ -562,13 +540,7 @@ async fn scope(ctx: &Context, workspace: Option<String>) -> Result<Option<Worksp
 }
 
 async fn running(ctx: &Context, workspace: Option<&Workspace>) -> Result<Vec<Running>> {
-    client::request(
-        &ctx.paths,
-        DemoMethod::ListDemos {
-            workspace: workspace.map(|workspace| workspace.id.clone()),
-        },
-    )
-    .await
+    demos::running(&ctx.paths, workspace.map(|workspace| workspace.id.clone())).await
 }
 
 /// The last `count` lines of `screen` with trailing blank lines dropped.
