@@ -1543,7 +1543,8 @@ fn listed_pids(kind: u32, argument: u32) -> Result<Vec<u32>> {
 }
 
 /// The PIDs in process group `group`, including zombies. Linux lists
-/// process groups only in each process's stat.
+/// process groups only per process; `getpgid` reads each one without
+/// parsing another process's `/proc` record, which may not parse.
 #[cfg(target_os = "linux")]
 fn group_members(group: u32) -> Result<Vec<u32>> {
     let mut members = Vec::new();
@@ -1551,28 +1552,18 @@ fn group_members(group: u32) -> Result<Vec<u32>> {
         let Some(pid) = entry?
             .file_name()
             .to_str()
-            .and_then(|name| name.parse::<u32>().ok())
+            .and_then(|name| name.parse::<i32>().ok())
         else {
             continue;
         };
-        let Some(stat) = read_process_stat(&format!("/proc/{pid}/stat"))? else {
-            continue;
-        };
-        if pid > 1 && stat_group(&stat)? == group {
-            members.push(pid);
+        // Reading a process group sends no signal. A process that exited
+        // since the listing has none.
+        let member = unsafe { libc::getpgid(pid) };
+        if pid > 1 && u32::try_from(member) == Ok(group) {
+            members.push(pid as u32);
         }
     }
     Ok(members)
-}
-
-/// The process group a `/proc/<pid>/stat` line names after the state and
-/// the parent PID.
-#[cfg(target_os = "linux")]
-fn stat_group(stat: &str) -> Result<u32> {
-    Ok(stat_fields(stat)?
-        .get(2)
-        .context("incomplete process stat")?
-        .parse()?)
 }
 
 /// The live processes those of `identities` started, directly or through

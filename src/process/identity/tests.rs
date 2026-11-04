@@ -981,11 +981,3 @@ async fn an_unreaped_leader_does_not_keep_its_group_alive() -> Result<()> {
     assert!(!exited?, "the zombie leader does not");
     Ok(())
 }
-
-#[cfg(target_os = "linux")]
-#[test]
-fn the_group_is_read_after_the_state_and_parent() -> Result<()> {
-    // pid 40, command "a) b", state S, parent 7, group 30.
-    assert_eq!(stat_group("40 (a) b) S 7 30 30 0 -1")?, 30);
-    Ok(())
-}
