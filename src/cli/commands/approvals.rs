@@ -137,7 +137,7 @@ fn print_details(ctx: &Context, request: &ApprovalRequest) {
     }
 }
 
-/// Status once decided, workspace, reason, and the settings an approval
+/// Status once decided, space, reason, and the settings an approval
 /// grants or the labels a proposal adds.
 fn detail_rows(request: &ApprovalRequest) -> Vec<[Cell; 2]> {
     let mut rows = Vec::new();
@@ -149,7 +149,7 @@ fn detail_rows(request: &ApprovalRequest) -> Vec<[Cell; 2]> {
     if request.status != DecisionStatus::Pending {
         row("Status", request.status.to_string());
     }
-    row("Workspace", request.workspace.clone());
+    row("Space", request.space.clone());
     row("Reason", request.reason.clone());
     match proposed_labels(request) {
         Some(labels) => row("Labels", labels.join(", ")),
@@ -322,7 +322,7 @@ pub(super) async fn withdraw(ctx: &Context, space: Option<String>, id: i64) -> R
         Some(space) => space,
         None => request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ShowApproval { id })
             .await?
-            .workspace_id
+            .space_id
             .clone(),
     };
     let request =
@@ -392,11 +392,11 @@ fn describe(request: &ApprovalRequest) -> String {
         reason => format!(": {reason}"),
     };
     format!(
-        "{} [{}] {} in workspace {}{reason}",
+        "{} [{}] {} in space {}{reason}",
         request.id,
         request.status,
         request.subject(),
-        request.workspace,
+        request.space,
     )
 }
 

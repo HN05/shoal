@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 123;
+pub(super) const SCHEMA_VERSION: i64 = 124;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -385,7 +385,8 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (120, MERGE_REQUESTS, None),
     (121, include_str!("space_parents.sql"), None),
     (122, include_str!("chat_scopes.sql"), None),
-    (123, CHAT_WORKSPACES, None),
+    (123, REQUEST_SPACES, None),
+    (124, CHAT_WORKSPACES, None),
 ];
 
 /// The workspace whose worktree a chat runs in instead of its repository's
@@ -444,6 +445,13 @@ const MERGE_REQUESTS: &str = "UPDATE access_requests SET target_key='merge',
         record=CASE WHEN json_valid(record)
             THEN json_set(record, '$.target', 'merge') ELSE record END
     WHERE target_key='land';";
+
+/// An approval request names the space that made it, a workspace or a chat.
+const REQUEST_SPACES: &str = "UPDATE access_requests SET record=json_set(
+        json_remove(record, '$.workspace_id', '$.workspace'),
+        '$.space_id', json_extract(record, '$.workspace_id'),
+        '$.space', COALESCE(json_extract(record, '$.workspace'), ''))
+    WHERE json_valid(record) AND json_type(record, '$.workspace_id') IS NOT NULL;";
 
 /// The replies to a review's findings, which every read of the review loads.
 pub(super) const REVIEW_REPLY_LOOKUPS: &str =

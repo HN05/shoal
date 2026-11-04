@@ -3583,8 +3583,8 @@ issue_other_repositories = "deny" # Default: "propose"
 
 A repository whose issues and PRs other people see can require your approval
 before an agent opens one. `"direct"`, the default, opens at once; `"propose"`
-makes `issue open` or `pr open` in a workspace process record an
-[approval request](#resource-approvals) instead. Unscoped callers always open
+makes `issue open` or `pr open` in a workspace process, and `issue open` in a
+chat's agent, record an [approval request](#resource-approvals) instead. Unscoped callers always open
 directly.
 
 ```toml
@@ -3593,9 +3593,10 @@ issue_open = "propose" # Default: "direct"
 pr_open = "propose" # Default: "direct"
 ```
 
-A proposed `issue open` records every option it was given, with the workspace,
-branch, commit and agent; running it again unchanged returns the same request.
-The request belongs to the repository, so it stays when the workspace is removed.
+A proposed `issue open` records every option it was given, with the space, a
+workspace's branch and commit, and the agent; running it again unchanged returns
+the same request. The request belongs to the repository, so it stays when the
+space is removed.
 A proposed `pr open` pushes the branch as usual, unless
 [`[permissions] push`](#approval-for-agent-pushes) holds the push back, links the branch's open PR if
 there is one, and otherwise records the PR it would open, with its defaults
@@ -3618,11 +3619,11 @@ shoal approvals --deny 6 --duplicate-of 120     # an existing issue's number or 
 shoal approvals --deny 7 --duplicate-of-approval 4
 ```
 
-`approve` opens the item as the workspace's agent account, with `--title`,
+`approve` opens the item as the space's agent account, with `--title`,
 `--body` or `--body-file` replacing what was proposed. An issue is recorded as
-opened by its workspace and assigned when it was proposed with `--link` and no
-issue is assigned yet; after the workspace is removed, it opens through the
-repository's checkout with the repository's agent account. A PR is linked
+opened by its space and assigned when it was proposed with `--link` and no
+issue is assigned yet; a chat's opens through the repository's checkout, as
+does any after its space is removed. A PR is linked
 like one `pr open` opened. Approving a PR request whose branch was renamed, or has
 another commit locally or where `pr open` pushed it, is refused, the request
 becomes `outdated`, and the agent is told to run `pr open` again. When labeling
@@ -3639,7 +3640,7 @@ when attaching its files or reading the issue afterwards fails, the decision
 finishes and reports the failure in `warnings`. Approving also returns the
 [convention](#repository-conventions) warnings that opening prints; required
 labels were checked when the item was proposed. A decided proposal is no longer listed, and the decision
-reaches the workspace's agent as an [agent message](#agent-messages) naming
+reaches the space's agent as an [agent message](#agent-messages) naming
 the opened item.
 
 #### Approval for agent pushes
@@ -4992,7 +4993,8 @@ still need a reason and the usual audit before mutations.
 Agents use the normal acquire command with `--reason`. `shoal approvals` shows
 these requests, merge requests from a scoped `shoal merge`,
 [proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --space <workspace>` filters
-by workspace, and `--space <chat>` lists the requests a chat decides. Scoped callers can inspect requests in their workspace tree. On a terminal,
+by workspace, and `--space <chat>` lists the issues a chat proposed and the
+requests it decides. Scoped callers can inspect requests in their workspace tree. On a terminal,
 `shoal approvals` opens a picker; selecting a pending request or naming its number
 shows its recorded settings and prompts for `y` to approve or `n` to deny,
 case-insensitively; any other input cancels. In the list, Ctrl-A approves
@@ -5001,16 +5003,16 @@ error shows above the key hints and the list updates. JSON and nonterminal outpu
 print records without prompting. An unscoped user
 reviews the recorded settings and uses `shoal approvals --approve [number]` or
 `shoal approvals --deny [number]`; without a number, they pick among pending requests, shown
-with their workspace, reason and settings, and a request that took the chosen
+with their space, reason and settings, and a request that took the chosen
 number meanwhile is refused. A request takes the smallest number no
 stored request holds. A keep or merge request that no longer applies, because a request
 for a newer commit replaced it, its completion was withdrawn or it was found stale,
 stays listed as `outdated` until the workspace is removed, so its number is not reused and deciding it is refused. Approval reserves no capacity: retry acquisition after
 the decision. Pending requests produce a daemon notification, collapsed until read;
-a decision queues an [agent message](#agent-messages) for the requesting workspace
+a decision queues an [agent message](#agent-messages) for the requesting space
 naming the request, its target and the decision.
 
-`shoal approvals withdraw <number> [--space S]` lets the requesting workspace
+`shoal approvals withdraw <number> [--space S]` lets the requesting space
 take back a pending request it no longer needs, as releasing a lease does for a
 lease request. The request stays listed as `withdrawn` on the same terms as
 `outdated`, except a proposed issue, which is deleted as a decided proposal is.
@@ -5019,7 +5021,7 @@ unread; otherwise its deciding coordinator is told, or the user gets
 `approval_withdrawn`. A command that retries the request, such as a queued
 `acquire`, requests it again.
 
-A request from a workspace with an agent of its own goes first to the nearest
+A request from a space with an agent of its own goes first to the nearest
 space above it with an agent: a parent [workspace](#child-workspaces) or a
 [chat](#chats), whichever comes first. That space's
 agent is told and decides it instead of the user, by number with

@@ -21,6 +21,7 @@ use crate::{
             },
         },
         file_copies::keep_copies,
+        links::LinkSpace,
         workspace::Manager,
     },
     forge::{
@@ -69,36 +70,36 @@ impl std::error::Error for Moved {}
 
 impl Manager {
     /// Record `issue` for the user's approval instead of opening it, in the
-    /// repository at the URL `repository` when it is not the workspace's.
+    /// repository at the URL `repository` when it is not the space's.
     pub(super) async fn propose_issue(
         &self,
-        workspace: &Workspace,
+        space: &LinkSpace,
         mut issue: NewIssue,
         repository: Option<String>,
         link: bool,
         proposer: Proposer,
     ) -> Result<Proposed> {
         let files = self.gates.lock_proposal_files().await;
-        self.keep_attachments(&workspace.id, &mut issue.body, &mut issue.attachments)
+        self.keep_attachments(space.id(), &mut issue.body, &mut issue.attachments)
             .await?;
-        let commit = crate::git::revision(&workspace.path, "HEAD", crate::git::run).await?;
+        let (branch, commit) = proposed_from(space).await?;
         let specification = Specification::Issue(IssueSpecification {
             issue,
             repository,
             link,
-            branch: workspace.branch.clone(),
-            commit: commit.trim().to_owned(),
+            branch,
+            commit,
             agent: proposer.agent,
             duplicates: Vec::new(),
             follow_up: None,
         });
         let request = proposal(
-            workspace,
+            space.id(),
             Target::IssueOpen,
             proposals::ISSUE,
             specification,
         );
-        self.record_proposal(workspace, request, proposals::propose_issue, files)
+        self.record_proposal(space.name(), request, proposals::propose_issue, files)
             .await
     }
 
@@ -123,8 +124,8 @@ impl Manager {
             follow_up: None,
             push,
         });
-        let request = proposal(workspace, Target::PrOpen, proposals::PR, specification);
-        self.record_proposal(workspace, request, proposals::propose_pull, files)
+        let request = proposal(&workspace.id, Target::PrOpen, proposals::PR, specification);
+        self.record_proposal(&workspace.name, request, proposals::propose_pull, files)
             .await
     }
 
@@ -188,12 +189,12 @@ impl Manager {
         tokio::task::spawn_blocking(move || remove_unattached(&root, &kept)).await?
     }
 
-    /// Store the proposal with `record` and tell the user about a new one.
-    /// `files`, held since its files were copied, is released once it is
-    /// stored.
+    /// Store the proposal of the space named `space` with `record` and tell
+    /// whoever decides it about a new one. `files`, held since its files
+    /// were copied, is released once it is stored.
     pub(super) async fn record_proposal(
         &self,
-        workspace: &Workspace,
+        space: &str,
         request: ApprovalRequest,
         record: fn(&rusqlite::Transaction<'_>, ApprovalRequest) -> Result<Recorded>,
         files: tokio::sync::MutexGuard<'_, ()>,
@@ -202,7 +203,7 @@ impl Manager {
         drop(files);
         self.prune_proposal_files().await;
         if new {
-            self.notify_approval(&workspace.name, &request).await;
+            self.notify_approval(space, &request).await;
         }
         Ok(Proposed {
             proposed: Box::new(request),
@@ -210,7 +211,7 @@ impl Manager {
     }
 
     /// Open, deny or merge as a duplicate the proposal the user or a chat
-    /// chose, then forget it and tell the proposing workspace's agents.
+    /// chose, then forget it and tell the proposing space's agent.
     /// Approving a push starts it in `env` instead, and its end decides the
     /// request. With `routed_to`, the workspace deciding it, the proposal
     /// must still be routed there once its gate is held.
@@ -223,16 +224,16 @@ impl Manager {
         routed_to: Option<&str>,
     ) -> Result<ApprovalRequest> {
         decision.validate(&request.target, approve)?;
-        // Cleanup holds the workspace's gate, so it cannot remove the
-        // workspace between opening the item and linking it, and two
-        // decisions cannot both open it. The gate outlives the workspace.
+        // Cleanup holds the space's gate, so it cannot remove the space
+        // between opening the item and linking it, and two decisions cannot
+        // both open it. The gate outlives the space.
         // A proposal this one duplicates takes its finding, so its gate is
         // held too.
         let duplicated = self.duplicated_proposal(&decision).await?;
-        let changed = duplicated.iter().map(|original| &original.workspace_id);
+        let changed = duplicated.iter().map(|original| &original.space_id);
         let _gate = self
             .gates
-            .lock_prs(changed.chain([&request.workspace_id]))
+            .lock_prs(changed.chain([&request.space_id]))
             .await;
         let request = self.pending_proposal(request).await?;
         if let Some(workspace) = routed_to {
@@ -243,37 +244,37 @@ impl Manager {
             );
         }
         self.ensure_not_pushing(&request)?;
-        let workspace = self.find_workspace(&request.workspace_id).await?;
+        let space = self.find_link_space(&request.space_id).await?;
+        let space = space.as_ref();
         // A PR an earlier approval posted was pushed already.
         if approve && request.pending_push().is_some() && request.url.is_none() {
+            let workspace = space.and_then(LinkSpace::workspace);
             return self
-                .start_approved_push(request, workspace.as_ref(), &decision, env)
+                .start_approved_push(request, workspace, &decision, env)
                 .await;
         }
         let (request, message) = if approve {
-            self.approve_proposal(request, workspace.as_ref(), &decision)
-                .await?
+            self.approve_proposal(request, space, &decision).await?
         } else {
-            self.deny_proposal(request, workspace.as_ref(), &decision, duplicated.as_ref())
+            self.deny_proposal(request, space, &decision, duplicated.as_ref())
                 .await?
         };
-        self.conclude_proposal(&request, workspace.as_ref(), message)
-            .await?;
+        self.conclude_proposal(&request, space, message).await?;
         Ok(request)
     }
 
-    /// Forget the decided proposal and tell the proposing workspace's agents
-    /// `message`, while the workspace exists.
+    /// Forget the decided proposal and tell the proposing space's agent
+    /// `message`, while the space exists.
     pub(super) async fn conclude_proposal(
         &self,
         request: &ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
         message: String,
     ) -> Result<()> {
         self.forget_proposal(request.key.clone()).await?;
         self.prune_proposal_files().await;
-        if let Some(workspace) = workspace {
-            self.tell_workspace(&workspace.id, message).await;
+        if let Some(space) = space {
+            self.tell_space(space.id(), message).await;
         }
         Ok(())
     }
@@ -317,7 +318,7 @@ impl Manager {
     pub(super) async fn approve_proposal(
         &self,
         mut request: ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
         decision: &ProposalDecision,
     ) -> Result<(ApprovalRequest, String)> {
         if decision.title.is_some() || decision.body.is_some() {
@@ -330,14 +331,15 @@ impl Manager {
             self.save_proposal(request.clone()).await?;
         }
         let (item, linked) = match request.target {
-            Target::IssueOpen => self.open_proposed_issue(&mut request, workspace).await?,
+            Target::IssueOpen => self.open_proposed_issue(&mut request, space).await?,
             Target::PrOpen => {
-                let workspace = workspace.context("the workspace that proposed the PR is gone")?;
+                let workspace = (space.and_then(LinkSpace::workspace))
+                    .context("the workspace that proposed the PR is gone")?;
                 self.open_proposed_pull(&mut request, workspace).await?
             }
             _ => bail!("approval request {} is not a proposal", request.id),
         };
-        let warnings = self.convention_warnings(&request, workspace, &item).await;
+        let warnings = self.convention_warnings(&request, space, &item).await;
         request.warnings.extend(warnings);
         request.status = DecisionStatus::Approved;
         request.decided_at = Some(crate::time::unix_seconds());
@@ -360,21 +362,21 @@ impl Manager {
     async fn convention_warnings(
         &self,
         request: &ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
         item: &Item,
     ) -> Vec<String> {
-        // The workspace's conventions do not apply to another repository,
-        // and its item commands cannot change an issue there.
+        // The space's conventions do not apply to another repository, and
+        // its item commands cannot change an issue there.
         if request
             .proposed_issue()
             .is_some_and(|issue| issue.repository.is_some())
         {
             return Vec::new();
         }
-        let Ok((forge, account)) = self.proposal_forge_account(request, workspace).await else {
+        let Ok((forge, account)) = self.proposal_forge_account(request, space).await else {
             return Vec::new();
         };
-        let Ok((settings, path)) = self.proposal_settings(request, workspace).await else {
+        let Ok((settings, path)) = self.proposal_settings(request, space).await else {
             return Vec::new();
         };
         let body = match &request.specification {
@@ -387,57 +389,57 @@ impl Manager {
     }
 
     /// The settings a proposal opens under and the checkout whose templates
-    /// apply: its workspace's while it exists, otherwise its repository's.
+    /// apply: its space's while it exists, otherwise its repository's.
     async fn proposal_settings(
         &self,
         request: &ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
     ) -> Result<(Effective, PathBuf)> {
-        if let Some(workspace) = workspace {
-            let settings = self.workspace_settings(workspace).await?;
-            return Ok((settings, workspace.path.clone()));
+        if let Some(space) = space {
+            let settings = self.space_settings(space).await?;
+            return Ok((settings, space.origin_path().to_owned()));
         }
         let repository = request
             .repository_id
             .as_deref()
-            .context("the workspace that made the proposal is gone")?;
+            .context("the space that made the proposal is gone")?;
         let settings = self.repository_settings(repository).await?;
         Ok((settings, self.repository(repository).await?.path))
     }
 
-    /// Open the proposed issue as the agent account, through the workspace
-    /// while it exists and otherwise through the repository, and post the
-    /// findings of its duplicates. The request keeps the issue once it is
+    /// Open the proposed issue as the agent account, through the space while
+    /// it exists and otherwise through the repository, and post the findings
+    /// of its duplicates. The request keeps the issue once it is
     /// posted and the work left after it, so approving again after a failure
     /// finishes that work instead of opening another issue. Returns the issue
     /// and whether it was linked.
     async fn open_proposed_issue(
         &self,
         request: &mut ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
     ) -> Result<(Item, bool)> {
-        let (forge, account) = self.proposal_forge_account(request, workspace).await?;
+        let (forge, account) = self.proposal_forge_account(request, space).await?;
         let linked = match request.url {
             Some(_) => false,
             None => {
-                self.post_proposed_issue(request, workspace, &forge, &account)
+                self.post_proposed_issue(request, space, &forge, &account)
                     .await?
             }
         };
         let item = self
             .finish_proposed(request, &forge, &account, ItemKind::Issue)
             .await?;
-        self.post_findings(request, workspace, &forge, &account, &item)
+        self.post_findings(request, space, &forge, &account, &item)
             .await?;
         Ok((item, linked))
     }
 
     /// Post the issue, keep its URL and the edit that finishes it on the
-    /// request, and record it as the workspace's. Returns whether it was linked.
+    /// request, and record it as the space's. Returns whether it was linked.
     async fn post_proposed_issue(
         &self,
         request: &mut ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
         forge: &ForgeRepo,
         account: &Account,
     ) -> Result<bool> {
@@ -448,7 +450,7 @@ impl Manager {
         let (item, follow_up) = forge.post_issue(account, &proposed.issue).await?;
         self.keep_posted(request, &item.url, follow_up).await?;
         Ok(self
-            .record_proposed_issue(workspace, proposed.link, &item)
+            .record_proposed_issue(space, proposed.link, &item)
             .await)
     }
 
@@ -501,7 +503,7 @@ impl Manager {
     async fn post_findings(
         &self,
         request: &mut ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
         forge: &ForgeRepo,
         account: &Account,
         item: &Item,
@@ -513,7 +515,7 @@ impl Manager {
         };
         while let Some(finding) = request.findings().first().cloned() {
             let unfinished = self
-                .comment_as_proposer(workspace, forge, account, &target, comment(finding))
+                .comment_as_proposer(space, forge, account, &target, comment(finding))
                 .await
                 .with_context(|| {
                     format!(
@@ -528,23 +530,24 @@ impl Manager {
         Ok(())
     }
 
-    /// Record the opened issue as the workspace's and assign it when it was
+    /// Record the opened issue as the space's and assign it when it was
     /// proposed with `link` and none is assigned. The issue exists, so a
     /// failure only logs. Returns whether it was linked.
     async fn record_proposed_issue(
         &self,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
         link: bool,
         item: &Item,
     ) -> bool {
-        let Some(workspace) = workspace else {
+        let Some(space) = space else {
             return false;
         };
-        let link = link && workspace.links.issue.is_none();
-        match self
-            .keep_created(&workspace.id, ItemKind::Issue, item, link)
-            .await
-        {
+        let recorded = async {
+            let link = link && self.issue_registration(space.id()).await?.is_none();
+            self.keep_created(space.id(), ItemKind::Issue, item, link)
+                .await
+        };
+        match recorded.await {
             Ok((linked, _)) => linked,
             Err(error) => {
                 crate::daemon::log::log!("proposed issue not recorded: {error:#}");
@@ -624,7 +627,7 @@ impl Manager {
             request.id,
             request.subject()
         );
-        self.tell_workspace(&request.workspace_id, message).await;
+        self.tell_space(&request.space_id, message).await;
         Ok(Moved(Box::new(request.clone())))
     }
 
@@ -633,13 +636,13 @@ impl Manager {
     async fn deny_proposal(
         &self,
         mut request: ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
         decision: &ProposalDecision,
         duplicated: Option<&ApprovalRequest>,
     ) -> Result<(ApprovalRequest, String)> {
         let outcome = match &decision.duplicate_of {
             Some(Duplicate::Issue(input)) => {
-                let (url, unfinished) = self.add_to_issue(&request, workspace, input).await?;
+                let (url, unfinished) = self.add_to_issue(&request, space, input).await?;
                 request.warnings.extend(unfinished);
                 request.url = Some(url.clone());
                 format!(" as a duplicate of {url}; its text was added there as a comment")
@@ -675,10 +678,10 @@ impl Manager {
     async fn add_to_issue(
         &self,
         request: &ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
         input: &str,
     ) -> Result<(String, Option<String>)> {
-        let (forge, account) = self.proposal_forge_account(request, workspace).await?;
+        let (forge, account) = self.proposal_forge_account(request, space).await?;
         let (number, url) = forge.issue(input)?;
         let target = super::actions::Target {
             kind: ItemKind::Issue,
@@ -687,7 +690,7 @@ impl Manager {
         };
         let comment = comment(finding(request)?);
         let unfinished = self
-            .comment_as_proposer(workspace, &forge, &account, &target, comment)
+            .comment_as_proposer(space, &forge, &account, &target, comment)
             .await?;
         Ok((url, unfinished))
     }
@@ -735,21 +738,21 @@ impl Manager {
         self.save_proposal(original).await
     }
 
-    /// Post `comment` as the agent account, recorded as the workspace's own
+    /// Post `comment` as the agent account, recorded as the space's own
     /// change while it exists. A failure after the comment reached the forge,
     /// such as attaching its files, is returned as a warning for the user
     /// instead, since posting the comment again would repeat it.
     async fn comment_as_proposer(
         &self,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
         forge: &ForgeRepo,
         account: &Account,
         target: &super::actions::Target,
         comment: Action,
     ) -> Result<Option<String>> {
-        let posted = match workspace {
-            Some(workspace) => self
-                .apply_own(&workspace.id, forge, account, target.clone(), &comment)
+        let posted = match space {
+            Some(space) => self
+                .apply_own(space.id(), forge, account, target.clone(), &comment)
                 .await
                 .map(|_| ()),
             None => forge
@@ -771,9 +774,9 @@ impl Manager {
     async fn proposal_forge_account(
         &self,
         request: &ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
     ) -> Result<(ForgeRepo, Account)> {
-        let (forge, account) = self.proposer_forge_account(request, workspace).await?;
+        let (forge, account) = self.proposer_forge_account(request, space).await?;
         match request
             .proposed_issue()
             .and_then(|issue| issue.repository.as_deref())
@@ -783,22 +786,22 @@ impl Manager {
         }
     }
 
-    /// The forge and agent account of the proposer: its workspace's while it
+    /// The forge and agent account of the proposer: its space's while it
     /// exists, otherwise its repository's.
     async fn proposer_forge_account(
         &self,
         request: &ApprovalRequest,
-        workspace: Option<&Workspace>,
+        space: Option<&LinkSpace>,
     ) -> Result<(ForgeRepo, Account)> {
-        if let Some(workspace) = workspace {
+        if let Some(space) = space {
             // The worktree may have been replaced while the proposal waited.
-            self.verify_worktree(workspace).await?;
-            return self.workspace_forge_account(workspace).await;
+            self.verify_space(space).await?;
+            return Ok((self.space_forge(space).await?, self.agent_account()));
         }
         let repository = request
             .repository_id
             .as_deref()
-            .context("the workspace that made the proposal is gone")?;
+            .context("the space that made the proposal is gone")?;
         let repository = self.repository(repository).await?;
         self.checkout_forge_account(&repository).await
     }
@@ -887,21 +890,25 @@ fn remove_unattached(root: &Path, kept: &BTreeSet<OsString>) -> Result<()> {
     Ok(())
 }
 
-/// A pending request for `workspace` to open what `specification` describes.
+/// The branch and commit a space proposes an issue from: a workspace's; a
+/// chat works on neither.
+async fn proposed_from(space: &LinkSpace) -> Result<(Option<String>, Option<String>)> {
+    let Some(workspace) = space.workspace() else {
+        return Ok((None, None));
+    };
+    let commit = crate::git::revision(&workspace.path, "HEAD", crate::git::run).await?;
+    Ok((workspace.branch.clone(), Some(commit.trim().to_owned())))
+}
+
+/// A pending request for the space `id` to open what `specification`
+/// describes.
 pub(super) fn proposal(
-    workspace: &Workspace,
+    id: &str,
     target: Target,
     name: &str,
     specification: Specification,
 ) -> ApprovalRequest {
-    ApprovalRequest::new(
-        &workspace.id,
-        target,
-        name,
-        specification,
-        Lifetime::Lease,
-        None,
-    )
+    ApprovalRequest::new(id, target, name, specification, Lifetime::Lease, None)
 }
 
 /// A duplicate proposal's title, description and attachments, for what it
@@ -911,8 +918,8 @@ fn finding(request: &ApprovalRequest) -> Result<Finding> {
         .proposed_issue()
         .context("only an issue proposal can be a duplicate")?;
     let mut text = format!(
-        "Workspace {} proposed this as a separate issue, which was marked as a duplicate.\n\n### {}\n",
-        request.workspace, proposed.issue.title
+        "Space {} proposed this as a separate issue, which was marked as a duplicate.\n\n### {}\n",
+        request.space, proposed.issue.title
     );
     if !proposed.issue.body.trim().is_empty() {
         text.push('\n');

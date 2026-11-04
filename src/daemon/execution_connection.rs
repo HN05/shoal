@@ -142,7 +142,7 @@ pub(super) async fn execute(
         Err(error) => {
             let body = match error.downcast::<Undecided>() {
                 Ok(Undecided(request)) => {
-                    manager.notify_approval(&request.workspace, &request).await;
+                    manager.notify_approval(&request.space, &request).await;
                     Body::ApprovalRequest(request)
                 }
                 Err(error) => Body::error(ErrorCode::ExecutionFailed, format!("{error:#}")),

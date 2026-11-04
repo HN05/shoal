@@ -399,7 +399,7 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 122 {
         db.execute_batch(include_str!("chat_scopes.sql"))?;
     }
-    if version >= 123 {
+    if version >= 124 {
         db.execute_batch(CHAT_WORKSPACES)?;
     }
     db.pragma_update(None, "user_version", version)?;
@@ -1455,6 +1455,31 @@ fn a_workspaces_questions_keep_their_numbers_as_questions_of_spaces() -> Result<
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
     assert_eq!(kept, ("workspace".to_owned(), None, 4));
+    Ok(())
+}
+
+#[test]
+fn approval_requests_name_the_space_that_made_them() -> Result<()> {
+    let mut db = historical_database(122)?;
+    db.execute_batch(
+        r#"INSERT INTO access_requests(id,workspace_id,target_key,name,record,number) VALUES
+            ('named','workspace','port/web','web','{"workspace_id":"workspace","workspace":"worker"}',1),
+            ('unnamed','workspace','port/api','api','{"workspace_id":"workspace"}',2),
+            ('invalid','workspace','port/db','db','not json',3);"#,
+    )?;
+    migrate(&mut db)?;
+    let records = db
+        .prepare("SELECT record FROM access_requests ORDER BY number")?
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(
+        records,
+        [
+            r#"{"space_id":"workspace","space":"worker"}"#,
+            r#"{"space_id":"workspace","space":""}"#,
+            "not json",
+        ]
+    );
     Ok(())
 }
 

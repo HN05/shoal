@@ -50,7 +50,7 @@ fn save(db: &Connection, request: &ApprovalRequest) -> Result<()> {
             VALUES (?1,?2,?3,?4,?5,?6,?7)",
             params![
                 request.key,
-                request.workspace_id,
+                request.space_id,
                 request.target,
                 request.name,
                 serde_json::to_string(request)?,
@@ -393,7 +393,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
 }
 
 #[tokio::test]
-async fn a_chat_has_no_request_to_withdraw() {
+async fn a_chat_withdraws_only_its_own_requests() {
     let (root, manager) = crate::test_support::manager().await;
     let path = crate::test_support::repository(root.path(), "repo");
     let repo = manager
@@ -426,10 +426,7 @@ async fn a_chat_has_no_request_to_withdraw() {
         .unwrap_err();
     assert_eq!(
         error.to_string(),
-        format!(
-            "chat planning has no approval request {}; chats request no approvals",
-            request.id
-        )
+        format!("chat planning has no approval request {}", request.id)
     );
     let pending = manager.show_approval(request.id).await.unwrap();
     assert_eq!(pending.status, DecisionStatus::Pending);
@@ -619,7 +616,7 @@ async fn reuse_validates_all_candidates_but_not_unrelated_history() -> Result<()
             ] {
                 let mut unrelated = grant.clone();
                 unrelated.key = format!("unrelated-{owner}");
-                unrelated.workspace_id = owner.into();
+                unrelated.space_id = owner.into();
                 unrelated.target = target;
                 save(&tx, &unrelated)?;
             }

@@ -262,7 +262,7 @@ mod streams {
         let workspace = daemon.workspace("proposer").await;
         let proposal = crate::daemon::links::proposals::tests::store_issue_proposal(
             &daemon.manager,
-            &workspace,
+            &workspace.clone().into(),
         )
         .await;
         daemon
@@ -280,6 +280,41 @@ mod streams {
             shown.proposed_issue().unwrap().issue.title,
             "Flaky in proposer"
         );
+    }
+
+    #[tokio::test]
+    async fn a_chats_subscription_follows_the_issues_it_proposed() {
+        use crate::daemon::links::proposals::tests::store_issue_proposal;
+        let daemon = TestDaemon::start().await;
+        let chat = daemon
+            .manager
+            .start_chat(
+                daemon.repository.id.clone().into(),
+                "planning".into(),
+                "claude".into(),
+                std::process::id(),
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+        let other = daemon.workspace("other").await;
+        store_issue_proposal(&daemon.manager, &other.into()).await;
+        let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
+        let connector = daemon.connector().scope(token);
+        let mut subscription = subscribe(connector, &[Topic::Approvals]).await;
+        let records = snapshot(&mut subscription).await;
+        assert!(records.is_empty(), "{records:?}");
+        let space = daemon.manager.link_space(&chat.id).await.unwrap();
+        let proposal = store_issue_proposal(&daemon.manager, &space).await;
+        let Update::Changed(record) = until(&mut subscription, changed(RecordKind::Approval)).await
+        else {
+            unreachable!();
+        };
+        let Record::Approval(shown) = *record else {
+            unreachable!();
+        };
+        assert_eq!((shown.id, &*shown.space), (proposal.id, "planning"));
     }
 
     #[tokio::test]

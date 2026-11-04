@@ -138,7 +138,7 @@ fn picker_rows(requests: &[ApprovalRequest]) -> Result<Entries> {
             [
                 (request.id.to_string(), Some(Style::Muted)),
                 status_cell(request.status),
-                (request.workspace.clone(), None),
+                (request.space.clone(), None),
                 (about(request), None),
             ]
         })

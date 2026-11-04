@@ -12164,7 +12164,7 @@ fn inbox_lists_what_needs_the_user_by_kind() {
         .collect();
     assert_eq!(listed, ["question", "approval", "needs_input", "ready"]);
     assert_eq!(items[0]["question"]["space"], "asker");
-    assert_eq!(items[1]["request"]["workspace"], "agent");
+    assert_eq!(items[1]["request"]["space"], "agent");
     assert_eq!(items[2]["workspace"]["name"], "waiter");
     let text = String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
     let rows: Vec<_> = text.lines().collect();
@@ -23109,7 +23109,7 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
     let id = pending["id"].to_string();
     let id = id.as_str();
-    assert_eq!(pending["workspace"], "agent");
+    assert_eq!(pending["space"], "agent");
     assert_eq!(
         fixture.ok(&["catalog", "resource", "--workspace", "agent"])["pools"][0]["resources"]["signing"]
             ["requires_approval"],
