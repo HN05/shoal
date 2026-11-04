@@ -26,7 +26,11 @@ impl Operation {
                         | CiMethod::ListCiRuns { .. }
                 )
                 | Self::Demo(DemoMethod::ListDemos { .. })
-                | Self::Execution(ExecutionMethod::CheckMerge | ExecutionMethod::ListAgents)
+                | Self::Execution(
+                    ExecutionMethod::CheckMerge
+                        | ExecutionMethod::CheckUnmerge
+                        | ExecutionMethod::ListAgents
+                )
                 | Self::File(FileMethod::ListFiles { .. })
                 | Self::Hold(HoldMethod::HoldList { .. })
                 | Self::Item(

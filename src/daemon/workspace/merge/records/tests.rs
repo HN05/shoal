@@ -37,16 +37,25 @@ async fn a_merge_is_recorded_from_what_the_default_branch_holds() {
             .await
             .unwrap();
         crate::git::repo::finish_merge(plan.clone()).await.unwrap();
-        manager.record_merge(&plan).await;
+        manager.record_merge(&plan).await.unwrap();
     };
     // A branch the default branch already contains merges nothing.
     merge().await;
-    assert!(manager.store.run(|db| recorded(db)).await.unwrap().is_empty());
+    assert!(
+        manager
+            .store
+            .run(|db| recorded(db))
+            .await
+            .unwrap()
+            .is_empty()
+    );
 
     let main = git(&repo, &["rev-parse", "main"]).trim().to_owned();
     fs::write(workspace.path.join("feature"), "work\n").unwrap();
     commit(&workspace.path, "feature");
-    let head = git(&workspace.path, &["rev-parse", "HEAD"]).trim().to_owned();
+    let head = git(&workspace.path, &["rev-parse", "HEAD"])
+        .trim()
+        .to_owned();
     merge().await;
     let fast_forward = [
         "worker".to_owned(),
@@ -64,7 +73,9 @@ async fn a_merge_is_recorded_from_what_the_default_branch_holds() {
     let main = git(&repo, &["rev-parse", "main"]).trim().to_owned();
     fs::write(workspace.path.join("feature"), "more\n").unwrap();
     commit(&workspace.path, "feature");
-    let head = git(&workspace.path, &["rev-parse", "HEAD"]).trim().to_owned();
+    let head = git(&workspace.path, &["rev-parse", "HEAD"])
+        .trim()
+        .to_owned();
     merge().await;
     let result = git(&repo, &["rev-parse", "main"]).trim().to_owned();
     assert_eq!(git(&repo, &["rev-parse", "main^2"]).trim(), head);

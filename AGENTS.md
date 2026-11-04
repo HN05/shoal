@@ -214,7 +214,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   removal according to configuration. Never bypass existing allocation rules.
   A scoped merge
   is a request bound to the branch HEAD unless `[permissions] merge` is
-  `"direct"`; approval lets the retried merge proceed under every merge check.
+  `"direct"`, and a scoped unmerge one bound to the merge it undoes; approval
+  lets the retry proceed under every check.
   `[permissions] issue_open`/`pr_open = "propose"` make a scoped `issue open` or
   `pr open` an approval request the user may edit, deny or mark as a duplicate;
   approval opens it through the normal open path, a PR only at its recorded

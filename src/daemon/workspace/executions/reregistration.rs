@@ -64,6 +64,7 @@ impl Manager {
             ports: registration.ports,
             environment,
             merge: None,
+            unmerge: None,
         })
     }
 }

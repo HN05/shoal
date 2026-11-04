@@ -20,7 +20,7 @@ pub mod proposals;
 pub(crate) use crate::client::approvals::{
     ApprovalRequest, DecisionStatus, HoldSpecification, Lifetime, MERGE, MergeSpecification,
     PortSpecification, PushSpecification, ResourceSpecification, SecretSpecification,
-    SimulatorSpecification, Specification, Target, Undecided,
+    SimulatorSpecification, Specification, Target, Undecided, UnmergeSpecification,
 };
 
 impl Target {
@@ -485,17 +485,17 @@ pub fn release(tx: &Transaction<'_>, owner: &str, target: &Target, name: &str) -
     Ok(true)
 }
 
-/// Replace a merge request for an earlier commit, another push or another
-/// warning with `request`. Returns the request still awaiting or refused a
-/// decision; an approval for the same merge lets it proceed. A request
-/// for the same merge keeps the reason it was decided on, though the commit
-/// count or open PRs it names changed since.
+/// Replace a merge or unmerge request for another commit, another push or
+/// another warning with `request`. Returns the request still awaiting or
+/// refused a decision; an approval for the same merge lets it proceed. A
+/// request for the same merge keeps the reason it was decided on, though the
+/// commit count or open PRs it names changed since.
 pub fn request_merge(
     tx: &Transaction<'_>,
     mut request: ApprovalRequest,
 ) -> Result<Option<ApprovalRequest>> {
     let owner = request.space_id.clone();
-    if let Some(existing) = current(tx, &owner, &Target::Merge, MERGE)? {
+    if let Some(existing) = current(tx, &owner, &request.target, MERGE)? {
         if existing.specification == request.specification {
             request.reason = existing.reason;
         } else {

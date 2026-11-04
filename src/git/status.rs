@@ -274,7 +274,11 @@ async fn target_has_changes(repo: &Path, head: &str, target: &str) -> Result<boo
 
 /// The tree a clean merge of `head` into `target` would record, or `None`
 /// when it conflicts. `git merge-tree` writes objects only.
-async fn trial_merge_tree(repo: &Path, head: &str, target: &str) -> Result<Option<String>> {
+pub(crate) async fn trial_merge_tree(
+    repo: &Path,
+    head: &str,
+    target: &str,
+) -> Result<Option<String>> {
     let mut command = super::isolated_command_without_submodules(repo);
     command.args(["merge-tree", "--write-tree", "--no-messages", target, head]);
     let output = super::bounded(command).capture().await;

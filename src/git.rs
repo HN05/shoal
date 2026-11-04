@@ -22,6 +22,7 @@ pub mod repo;
 pub mod revert;
 pub mod seed;
 pub mod status;
+pub mod unmerge;
 pub mod worktrunk;
 
 use crate::tools::Tool;

@@ -1,17 +1,19 @@
-//! The user's approval of a scoped merge: requesting it for the commit and
-//! push a merge plans, and refusing it once the branch moved.
+//! The user's approval of a scoped merge or unmerge: requesting it for the
+//! commit and push a merge plans or the merge an unmerge undoes, and refusing
+//! a merge's once the branch moved.
 use anyhow::{Context, Result, bail};
 
 use crate::{
     daemon::{
         approvals::{
             ApprovalRequest, Lifetime, MERGE, MergeSpecification, Specification, Target, Undecided,
+            UnmergeSpecification,
         },
         log,
         workspace::Manager,
     },
     git,
-    model::{MergePlan, MergePreview},
+    model::{MergePlan, MergePreview, UnmergePlan, Workspace},
 };
 
 impl Manager {
@@ -24,13 +26,36 @@ impl Manager {
         &self,
         plan: &MergePlan,
     ) -> Result<()> {
-        use crate::config::repo::{Opening, Pushes};
-        let settings = self.workspace_settings(&plan.workspace).await?;
-        let permissions = &settings.permissions;
-        if permissions.merge == Opening::Direct && permissions.push == Pushes::Direct {
+        if self.merges_directly(&plan.workspace).await? {
             return Ok(());
         }
         let request = merge_request(plan, &self.plan_preview(plan).await?);
+        self.await_merge_decision(request).await
+    }
+
+    /// A scoped unmerge needs the user's approval for undoing the merge
+    /// `plan` names under the same settings a scoped merge does.
+    pub(in crate::daemon::workspace) async fn authorize_scoped_unmerge(
+        &self,
+        plan: &UnmergePlan,
+    ) -> Result<()> {
+        if self.merges_directly(&plan.workspace).await? {
+            return Ok(());
+        }
+        self.await_merge_decision(unmerge_request(plan)).await
+    }
+
+    /// Whether `[permissions] merge` and `[permissions] push` let
+    /// `workspace`'s processes merge, push and unmerge without approval.
+    async fn merges_directly(&self, workspace: &Workspace) -> Result<bool> {
+        use crate::config::repo::{Opening, Pushes};
+        let settings = self.workspace_settings(workspace).await?;
+        let permissions = &settings.permissions;
+        Ok(permissions.merge == Opening::Direct && permissions.push == Pushes::Direct)
+    }
+
+    /// Request `request`, refusing until the user approves it.
+    async fn await_merge_decision(&self, request: ApprovalRequest) -> Result<()> {
         match self.request_merge_approval(request).await? {
             Some(request) => Err(Undecided(Box::new(request)).into()),
             None => Ok(()),
@@ -97,4 +122,32 @@ fn merge_request(plan: &MergePlan, preview: &MergePreview) -> ApprovalRequest {
         Lifetime::Lease,
         Some(&preview.reason()),
     )
+}
+
+/// The unmerge request a scoped unmerge of `plan` asks the user to decide.
+fn unmerge_request(plan: &UnmergePlan) -> ApprovalRequest {
+    ApprovalRequest::new(
+        &plan.workspace.id,
+        Target::Unmerge,
+        MERGE,
+        Specification::Unmerge(UnmergeSpecification {
+            branch: plan.branch.clone(),
+            source: plan.source.clone(),
+            result: plan.result.clone(),
+        }),
+        Lifetime::Lease,
+        Some(&unmerge_reason(plan)),
+    )
+}
+
+/// What undoing the merge does to the default branch.
+fn unmerge_reason(plan: &UnmergePlan) -> String {
+    let default = &plan.default_branch;
+    match plan.tip == plan.result {
+        true => format!("Moves {default} back to {}", plan.previous),
+        false => format!(
+            "Replays the commits of {default} after the merge onto {}",
+            plan.previous
+        ),
+    }
 }

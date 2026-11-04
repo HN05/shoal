@@ -43,7 +43,8 @@ states!(DecisionStatus {
 
 /// What a decision authorizes; one active request per workspace, target and
 /// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>`, `hold/<name>`, `merge`, `issue_open`, `pr_open` or `push`.
+/// `secret/<name>`, `hold/<name>`, `merge`, `unmerge`, `issue_open`, `pr_open`
+/// or `push`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -56,6 +57,8 @@ pub enum Target {
     Secret(String),
     /// Merging a workspace branch into the default branch.
     Merge,
+    /// Undoing a workspace branch's local merge into the default branch.
+    Unmerge,
     /// Opening an issue a scoped caller proposed; the repository owns the
     /// request, so it outlives the workspace.
     IssueOpen,
@@ -68,7 +71,8 @@ pub enum Target {
     Hold(String),
 }
 
-/// The name of a workspace's single merge request.
+/// The name of a workspace's single merge request, and of its single
+/// unmerge request.
 pub const MERGE: &str = "branch";
 
 impl fmt::Display for Target {
@@ -79,6 +83,7 @@ impl fmt::Display for Target {
             Self::Simulator => f.write_str("simulator"),
             Self::Secret(name) => write!(f, "secret/{name}"),
             Self::Merge => f.write_str("merge"),
+            Self::Unmerge => f.write_str("unmerge"),
             Self::IssueOpen => f.write_str("issue_open"),
             Self::PrOpen => f.write_str("pr_open"),
             Self::Push => f.write_str("push"),
@@ -94,6 +99,7 @@ impl FromStr for Target {
         match text {
             "simulator" => return Ok(Self::Simulator),
             "merge" => return Ok(Self::Merge),
+            "unmerge" => return Ok(Self::Unmerge),
             "issue_open" => return Ok(Self::IssueOpen),
             "pr_open" => return Ok(Self::PrOpen),
             "push" => return Ok(Self::Push),
@@ -142,6 +148,7 @@ pub enum Specification {
     Simulator(SimulatorSpecification),
     Secret(SecretSpecification),
     Merge(MergeSpecification),
+    Unmerge(UnmergeSpecification),
     Issue(IssueSpecification),
     Pull(PullSpecification),
     Push(PushSpecification),
@@ -198,6 +205,17 @@ pub struct MergeSpecification {
     /// them too, so a warning recorded after the decision needs another.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed_on_both_sides: Vec<String>,
+}
+
+/// An unmerge decision covers undoing one recorded merge of the branch: the
+/// commit that merged and the default branch's commit it left; another merge
+/// needs a new one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UnmergeSpecification {
+    pub branch: String,
+    pub source: String,
+    pub result: String,
 }
 
 /// A secret grant covers the configured source; changing the command or the
@@ -492,6 +510,10 @@ impl ApprovalRequest {
                 ),
                 None => format!("merge {} at {}", merge.branch, merge.head),
             },
+            (Target::Unmerge, Specification::Unmerge(unmerge)) => format!(
+                "undo the merge of {} at {} ({})",
+                unmerge.branch, unmerge.source, unmerge.result
+            ),
             (Target::IssueOpen, Specification::Issue(issue)) => {
                 let title = &issue.issue.title;
                 match &issue.repository {

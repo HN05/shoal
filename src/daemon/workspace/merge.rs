@@ -2,6 +2,9 @@
 //! and refresh the default branch before the merge worker merges it.
 mod approval;
 mod records;
+mod unmerge;
+
+pub(crate) use records::RecordChange;
 
 use std::path::{Path, PathBuf};
 

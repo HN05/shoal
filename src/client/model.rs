@@ -943,6 +943,8 @@ pub struct ExecutionPlan {
     #[serde(default)]
     pub environment: std::collections::BTreeMap<String, std::ffi::OsString>,
     pub merge: Option<Box<MergePlan>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unmerge: Option<Box<UnmergePlan>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1121,6 +1123,28 @@ pub struct MergePlan {
     pub default_refresh: PulledBranch,
     /// Where the default branch is pushed after the merge, if it is.
     pub push: Option<MergePush>,
+}
+
+/// A daemon-authorized unmerge, held under the repository Git gate: the
+/// recorded merge of `branch` it undoes and the default branch it changes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnmergePlan {
+    pub workspace: Workspace,
+    pub repo: Repository,
+    pub default_branch: String,
+    /// The default branch's checkout, if it has one.
+    pub checkout: Option<PathBuf>,
+    /// The merge's record.
+    pub merge: i64,
+    pub branch: String,
+    /// The branch's commit that merged.
+    pub source: String,
+    /// The default branch's commit before the merge, and after it.
+    pub previous: String,
+    pub result: String,
+    /// The default branch's commit when the unmerge was planned: the
+    /// merge's result when it is the latest merge, a later commit otherwise.
+    pub tip: String,
 }
 
 /// The upstream a merge pushes the default branch to.

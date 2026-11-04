@@ -17,7 +17,7 @@ use crate::{
     hooks::HookKind,
     model::{
         Execution, ExecutionPlan, MergePlan, PortReservation, QueueEntry, Repository,
-        StoppedWorkspace, Workspace,
+        StoppedWorkspace, UnmergePlan, Workspace,
     },
     process::{
         execution::Processes,
@@ -231,6 +231,7 @@ struct PreparedExecution {
     registration_guard: Option<OwnedMutexGuard<()>>,
     lifetime_guard: Option<OwnedMutexGuard<()>>,
     merge: Option<Box<MergePlan>>,
+    unmerge: Option<Box<UnmergePlan>>,
     _resources: Option<ResourceGuard>,
 }
 
@@ -295,7 +296,7 @@ impl ExecutionKind {
     pub fn start_timeout(self) -> Duration {
         match self {
             Self::Command => timing::EXECUTION_START_TIMEOUT,
-            Self::Merge | Self::Setup => timing::PREPARED_EXECUTION_START_TIMEOUT,
+            Self::Merge | Self::Unmerge | Self::Setup => timing::PREPARED_EXECUTION_START_TIMEOUT,
         }
     }
 
@@ -310,7 +311,7 @@ impl ExecutionKind {
         // would otherwise accept.
         store::ensure_no_pending_move(tx, workspace_id)?;
         match self {
-            Self::Command | Self::Merge => store::require_ready(tx, workspace_id)?,
+            Self::Command | Self::Merge | Self::Unmerge => store::require_ready(tx, workspace_id)?,
             Self::Setup => {
                 let blocking: Option<String> = tx.query_row(
                     "SELECT id FROM executions WHERE workspace_id=?1 AND (?2 IS NULL OR id != ?2) LIMIT 1",
@@ -399,6 +400,7 @@ impl Manager {
             registration_guard,
             lifetime_guard,
             merge,
+            unmerge,
             _resources,
         } = preparation;
         let registered = self
@@ -426,6 +428,7 @@ impl Manager {
                 ports: registered.ports,
                 environment: registered.environment,
                 merge,
+                unmerge,
             },
             stop: registered.stop,
             _git_guard: lifetime_guard,
@@ -634,6 +637,18 @@ impl Manager {
                 }
                 Ok(PreparedExecution {
                     merge: Some(Box::new(merge)),
+                    lifetime_guard: Some(guard),
+                    ..Default::default()
+                })
+            }
+            ExecutionKind::Unmerge => {
+                let guard = self.gates.lock_git(&workspace.repository_id).await;
+                let unmerge = self.prepare_unmerge(&workspace.id).await?;
+                if scoped {
+                    self.authorize_scoped_unmerge(&unmerge).await?;
+                }
+                Ok(PreparedExecution {
+                    unmerge: Some(Box::new(unmerge)),
                     lifetime_guard: Some(guard),
                     ..Default::default()
                 })

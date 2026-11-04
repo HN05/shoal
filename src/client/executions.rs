@@ -23,6 +23,8 @@ states!(
         Command => "command",
         /// A merge authorized by an unscoped caller; the daemon holds its Git gate.
         Merge => "merge",
+        /// An unmerge authorized by an unscoped caller; the daemon holds its Git gate.
+        Unmerge => "unmerge",
         /// The repository's setup command; exclusive apart from the execution that
         /// requested it, and its exit decides whether the workspace becomes ready.
         Setup => "setup",

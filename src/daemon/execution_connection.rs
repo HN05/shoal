@@ -15,7 +15,7 @@ use super::{
     execution_recovery,
     scope::Caller,
     workspace::{
-        Completing, ExecutionKind, ExecutionRequest, Manager, ReattachedExecution,
+        Completing, ExecutionKind, ExecutionRequest, Manager, ReattachedExecution, RecordChange,
         StartedExecution, StopRequest, places::ExecutionPlace,
     },
 };
@@ -66,8 +66,8 @@ struct Connected {
     /// The daemon stopped the command before it finished.
     stopped: bool,
     stop: watch::Receiver<bool>,
-    /// The merge the execution runs, recorded once it ends.
-    merge: Option<Box<crate::model::MergePlan>>,
+    /// What the execution changes in the merge records once it ends.
+    records: Option<RecordChange>,
 }
 
 /// How the wrapper's connection ended.
@@ -187,7 +187,7 @@ pub(super) async fn execute(
         hears_restore_waits: true,
         stopped: false,
         stop,
-        merge: plan.merge.clone(),
+        records: RecordChange::of(&plan),
     };
     let response = Response::new(request_id, Body::Execution(plan));
     serve(stream, &manager, execution, response, operation).await
@@ -237,7 +237,7 @@ pub(super) async fn reattach(
         hears_restore_waits: version >= protocol::RESTORE_WAITS,
         stopped: false,
         stop,
-        merge: None,
+        records: None,
     };
     serve(
         stream,
@@ -284,11 +284,11 @@ async fn serve(
     .await;
     readers.abort_all();
     // The Git gate the registration holds keeps the default branch as the
-    // merge left it until it is recorded.
-    if let Some(merge) = &execution.merge
+    // execution left it until the records follow it.
+    if let Some(change) = &execution.records
         && !matches!(result, Ok(Ended::Detached))
     {
-        manager.record_merge(merge).await;
+        manager.update_merge_records(change).await;
     }
     let result = match result {
         Ok(Ended::Detached) => {

@@ -1332,7 +1332,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     && match requested {
                         ExecutionKind::Command => true,
                         ExecutionKind::Setup => kind != ExecutionKind::Setup,
-                        ExecutionKind::Merge => true,
+                        ExecutionKind::Merge | ExecutionKind::Unmerge => true,
                     };
                 let result = scope::authorize(&f.manager, Some(token), &mut method).await;
                 assert_eq!(result.is_ok(), allowed, "{kind:?}: {method:?}: {result:?}");

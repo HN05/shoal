@@ -39,6 +39,8 @@ pub enum ExecutionMethod {
     },
     /// Verify that this worker belongs to an unscoped caller's merge execution.
     CheckMerge,
+    /// Verify that this worker belongs to an unscoped caller's unmerge execution.
+    CheckUnmerge,
     /// Connected agents, and executions whose wrapper is gone, which may run one.
     ListAgents,
     /// Stop the agent of `execution` and start its session again in its
@@ -60,7 +62,7 @@ impl ExecutionMethod {
             Self::Execute { .. } => Lifetime::Open,
             // A restart waits for requests of the wrapper it restores.
             Self::RestartAgent { .. } => Lifetime::Open,
-            Self::CheckMerge | Self::ListAgents => Lifetime::Reply,
+            Self::CheckMerge | Self::CheckUnmerge | Self::ListAgents => Lifetime::Reply,
         }
     }
 }

@@ -194,7 +194,7 @@ instead of the PR delivery guidance below.
   removes the workspaces and chats below it that nothing of their own keeps,
   whatever their work, after the grace period. A scoped merge
   is an approval request bound to the branch HEAD unless `[permissions] merge`
-  and `[permissions] push` are both `"direct"`; approval never skips a merge check and merges only the approved commit.
+  and `[permissions] push` are both `"direct"`, and a scoped unmerge one bound to the merge it undoes; approval never skips a check and merges only the approved commit or undoes only the approved merge.
   Under `[permissions] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
   `pr open` records a proposal instead of opening, routed like other approval
   requests, though only the user approves it; approval opens it as the agent

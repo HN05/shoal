@@ -52,6 +52,7 @@ async fn adjacent_controls_child() {
         ports: vec![],
         environment: Default::default(),
         merge: None,
+        unmerge: None,
     };
     let (client, mut server) = UnixStream::pair().unwrap();
     let mut bytes = Vec::new();
@@ -239,6 +240,7 @@ async fn reattachment_child() {
         ports: vec![],
         environment: Default::default(),
         merge: None,
+        unmerge: None,
     };
     let mode = Mode::Command { record: false };
     let waiting = |marker: &str| -> Vec<OsString> {
@@ -419,6 +421,7 @@ async fn ended_session_child() {
         ports: vec![],
         environment: Default::default(),
         merge: None,
+        unmerge: None,
     };
     let mode = Mode::Command { record: false };
     let run =
