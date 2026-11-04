@@ -174,6 +174,8 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
 
     let admitted = admit_and_claim(manager).await;
     assert_eq!(admitted.len(), 1);
+    // The forge lists the job until its runner takes it, which queues it no more.
+    manager.refresh_waiting_jobs().await.unwrap();
     assert!(job_entries(manager).await.is_empty());
     let claimed = manager.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);

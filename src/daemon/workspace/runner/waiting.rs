@@ -111,7 +111,7 @@ impl Manager {
 
 /// Drop `repository_id`'s waiting job entries and passed-over jobs whose
 /// handles the forge no longer lists among `listed`, returning the handles
-/// the runner still knows: queued, starting or passed over.
+/// the runner still knows: queued, starting, claimed or passed over.
 fn forget_unlisted_jobs(
     db: &mut Connection,
     repository_id: &str,
@@ -135,6 +135,12 @@ fn forget_unlisted_jobs(
             known.insert(handle);
         }
     }
+    // The forge lists a claimed job until its runner takes it.
+    let claimed = tx
+        .prepare("SELECT json_extract(job,'$.job.handle') FROM ci_jobs WHERE repository_id=?1")?
+        .query_map([repository_id], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<String>>>()?;
+    known.extend(claimed);
     let passed = tx
         .prepare("SELECT handle FROM ci_passed_jobs WHERE repository_id=?1")?
         .query_map([repository_id], |row| row.get(0))?
