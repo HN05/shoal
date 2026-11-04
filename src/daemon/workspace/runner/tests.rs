@@ -511,3 +511,68 @@ async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
     assert!(manager.workspace("ci-rust-4").await.is_err());
     manager.agent_queue.suspend(false).await;
 }
+
+#[tokio::test]
+async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_claimed_again() {
+    let fixture = fixture(
+        vec![job("h1", 4, 1)],
+        "unused",
+        "permit = \"builds\"\n[resources.builds]\n",
+    )
+    .await;
+    let manager = &fixture.manager;
+    manager.refresh_waiting_jobs().await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    let admitted = manager.admitted_jobs().await.unwrap();
+    assert_eq!(admitted.len(), 1);
+    let entry = &admitted[0];
+    let job = entry.job.as_deref().unwrap();
+    // As if the daemon stopped once the claim's workspace held the permit.
+    let workspace = manager
+        .create_job_workspace(
+            &fixture.repository,
+            &entry.name,
+            &job.run.commit,
+            job.run.reference.as_deref(),
+        )
+        .await
+        .unwrap();
+    let forge = crate::forge::ForgeRepo::resolve(
+        &format!("http://{}/team/repo", fixture.server.host),
+        &manager.forge_hosts(),
+    )
+    .await
+    .unwrap();
+    manager
+        .record_claim(entry, &workspace.id, &forge, job)
+        .await
+        .unwrap();
+    let request = ResourceRequest {
+        mode: None,
+        kind: None,
+        pool: "builds".into(),
+        name: "ci-job".into(),
+        resource: None,
+        reason: None,
+        queue: false,
+    };
+    manager
+        .acquire_resource(&workspace.id, request, None)
+        .await
+        .unwrap();
+
+    // The cut-short claim's workspace goes with its permit, and the job,
+    // still admitted, is claimed again.
+    manager.finish_ended_jobs().await.unwrap();
+    assert!(manager.workspace(&workspace.id).await.is_err());
+    manager.claim_job(entry).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    assert_eq!(claimed.len(), 1);
+    assert_ne!(claimed[0].workspace_id, workspace.id);
+    let leases = manager
+        .list_resources(Some(&claimed[0].workspace_id))
+        .await
+        .unwrap();
+    assert_eq!(leases.len(), 1);
+    LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
+}

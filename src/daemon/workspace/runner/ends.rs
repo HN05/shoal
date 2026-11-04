@@ -178,6 +178,7 @@ impl Manager {
                 Ok(db
                     .prepare(
                         "SELECT repository_id,seen_at,job FROM agent_queue WHERE kind=?1 AND state=?2
+                             AND id NOT IN (SELECT id FROM ci_jobs)
                          UNION ALL SELECT repository_id,started_at,job FROM ci_jobs",
                     )?
                     .query_map(params![QueueKind::Job, QueueState::Starting], |row| {

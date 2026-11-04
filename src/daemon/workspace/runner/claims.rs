@@ -121,6 +121,15 @@ impl Manager {
                 job.run.reference.as_deref(),
             )
             .await?;
+        // Recorded before the workspace takes a permit or runs anything, so
+        // after a restart the claim's end removes it with what it holds.
+        let recorded = self.record_claim(entry, &workspace.id, &forge, job).await;
+        if let Err(error) = recorded {
+            if let Err(removal) = self.remove_job_workspace(&workspace.id).await {
+                crate::daemon::log!("runner: {removal:#}");
+            }
+            return Err(error);
+        }
         let claim = Claimed {
             entry,
             workspace: &workspace,
@@ -158,13 +167,6 @@ impl Manager {
             .job
             .as_deref()
             .context("the entry names no job")?;
-        let linked = self
-            .run_workspace(claim.forge, &claim.entry.repository_id, &job.run)
-            .await?;
-        let job = QueuedJob {
-            workspace_id: linked,
-            ..job.clone()
-        };
         // Held until the launch is recorded, so a system shutdown, which
         // suspends the queue under the same gate, either stops the job with
         // the rest or finds it not started.
@@ -172,9 +174,8 @@ impl Manager {
         if self.agent_queue.suspended() {
             return Ok(Claim::Suspended);
         }
-        self.record_claim(claim.entry, &claim.workspace.id, &job)
-            .await?;
-        let argv = self.write_job_files(&claim, &job)?;
+        self.take_over_entry(&claim.entry.id).await?;
+        let argv = self.write_job_files(&claim, job)?;
         let log = self.job_directory(&claim.entry.id).join("job.log");
         let execution = self.launch_job_command(claim.workspace, log, argv).await?;
         self.record_job_execution(&claim.entry.id, execution)
@@ -203,24 +204,32 @@ impl Manager {
         }
     }
 
-    /// Record the job of `entry` as claimed in `workspace`, which takes over
-    /// the slot its entry held.
-    async fn record_claim(
+    /// Record the job of `entry` as claimed in `workspace`, with the
+    /// workspace its run links now. Its entry keeps the job's slot until
+    /// [`Self::take_over_entry`], so a claim that cannot go on puts the job
+    /// back.
+    pub(super) async fn record_claim(
         &self,
         entry: &QueueEntry,
         workspace: &str,
+        forge: &ForgeRepo,
         job: &QueuedJob,
     ) -> Result<()> {
+        let linked = self
+            .run_workspace(forge, &entry.repository_id, &job.run)
+            .await?;
+        let job = serde_json::to_string(&QueuedJob {
+            workspace_id: linked,
+            ..job.clone()
+        })?;
         let (id, repository, workspace) = (
             entry.id.clone(),
             entry.repository_id.clone(),
             workspace.to_owned(),
         );
-        let job = serde_json::to_string(job)?;
         self.store
             .run(move |db| {
-                let tx = db.transaction()?;
-                tx.execute(
+                db.execute(
                     "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,started_at)
                      VALUES (?1,?2,?3,?4,?5)",
                     params![
@@ -231,8 +240,17 @@ impl Manager {
                         crate::time::unix_seconds() as i64
                     ],
                 )?;
-                tx.execute("DELETE FROM agent_queue WHERE id=?1", [&id])?;
-                tx.commit()?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// The claimed job of the entry `id` takes over the slot its entry held.
+    async fn take_over_entry(&self, id: &str) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute("DELETE FROM agent_queue WHERE id=?1", [id])?;
                 Ok(())
             })
             .await
