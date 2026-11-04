@@ -122,7 +122,9 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
         .with_context(|| format!("the repository of chat {} is missing", chat.name))?;
     let settings = chat::settings(ctx, &repo).await?;
     let topic = match &chat.workspace {
-        Some(workspace) => chat::Topic::workspace(chat::find_workspace(ctx, &workspace.id).await?),
+        Some(workspace) => {
+            chat::Topic::workspace(chat::hosting_workspace(ctx, &workspace.id).await?)
+        }
         None => chat::Topic::repository(&repo),
     };
     let options = chat::Options {

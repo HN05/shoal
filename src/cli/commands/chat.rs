@@ -76,16 +76,36 @@ pub(super) async fn start_in_workspace(
 /// among the ready workspaces.
 async fn chosen_workspace(ctx: &Context, selector: Option<String>) -> Result<Workspace> {
     let id = ui::select_ready_workspace(ctx, selector).await?;
-    find_workspace(ctx, &id).await
+    hosting_workspace(ctx, &id).await
 }
 
-/// The workspace `selector` names, by ID or name.
-pub(super) async fn find_workspace(ctx: &Context, selector: &str) -> Result<Workspace> {
-    client::workspaces(&ctx.paths)
+/// The workspace `selector` names, by ID or name, refused before anything
+/// is asked unless a chat may run in it; the daemon checks again.
+pub(super) async fn hosting_workspace(ctx: &Context, selector: &str) -> Result<Workspace> {
+    let workspace = client::workspaces(&ctx.paths)
         .await?
         .into_iter()
         .find(|workspace| workspace.id == selector || workspace.name == selector)
-        .with_context(|| format!("no workspace {selector}"))
+        .with_context(|| format!("no workspace {selector}"))?;
+    ensure_hosts_chat(&workspace)?;
+    Ok(workspace)
+}
+
+/// Refuse `workspace` unless it is ready with its worktree there.
+fn ensure_hosts_chat(workspace: &Workspace) -> Result<()> {
+    ensure!(
+        workspace.state == crate::state::WorkspaceState::Ready,
+        "workspace {} is {}, and a chat runs only in a ready workspace",
+        workspace.name,
+        workspace.state
+    );
+    ensure!(
+        workspace.path.is_dir(),
+        "the worktree of workspace {} is missing at {}",
+        workspace.name,
+        workspace.path.display()
+    );
+    Ok(())
 }
 
 /// The registered repository of `workspace`.
