@@ -174,7 +174,7 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         .issue_scope(
             "scope".into(),
             Caller {
-                workspace_id: first.id.clone(),
+                space_id: first.id.clone(),
                 execution: Some(ScopedExecution {
                     id: "execution".into(),
                     kind: ExecutionKind::Command,
@@ -210,6 +210,35 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
                 .is_err()
         );
     }
+}
+
+#[tokio::test]
+async fn a_chat_lists_no_demos_of_its_own() {
+    let (temp, manager) = manager().await;
+    let (first, _) = workspaces(&manager, temp.path()).await;
+    let chat = manager
+        .start_chat(
+            first.repository_id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    manager
+        .begin_execution_running(
+            &first.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(launch("web")),
+        )
+        .await
+        .unwrap();
+    assert!(manager.demos(Some(&chat.id)).await.unwrap().is_empty());
+    assert_eq!(manager.demos(None).await.unwrap().len(), 1);
 }
 
 #[tokio::test]

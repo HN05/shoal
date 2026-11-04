@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 124;
+pub(super) const SCHEMA_VERSION: i64 = 125;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -384,9 +384,10 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (119, DISPOSABLE_WORKSPACES, None),
     (120, MERGE_REQUESTS, None),
     (121, include_str!("space_parents.sql"), None),
-    (122, include_str!("runners.sql"), None),
-    (123, include_str!("agent_queue_jobs.sql"), None),
-    (124, include_str!("ci_jobs.sql"), None),
+    (122, include_str!("chat_scopes.sql"), None),
+    (123, include_str!("runners.sql"), None),
+    (124, include_str!("agent_queue_jobs.sql"), None),
+    (125, include_str!("ci_jobs.sql"), None),
 ];
 
 /// Whether every removal deletes a workspace whatever it holds.

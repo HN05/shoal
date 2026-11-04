@@ -301,6 +301,13 @@ impl Manager {
         Ok(())
     }
 
+    /// The scope token the agent of the chat `id` carries.
+    pub(crate) async fn chat_scope(&self, id: &str) -> Result<String> {
+        let id = id.to_owned();
+        let token = self.store.run(move |db| scope_token(db, &id)).await?;
+        token.context("no such chat")
+    }
+
     /// Give `workspace` to the chat that opened it, or to the user when it
     /// was opened outside one or the chat is gone. A workspace split from
     /// another stays below it.
@@ -313,7 +320,8 @@ impl Manager {
     }
 
     /// [`Self::open_branch`] for `chat` where and as `new` says, returning
-    /// the workspace with its parent.
+    /// the workspace with its parent. A `confined` chat, whose own agent
+    /// asks, takes over no existing workspace outside its subtree.
     pub async fn open_branch_for_chat(
         &self,
         repository: crate::repository::Selector,
@@ -321,10 +329,22 @@ impl Manager {
         base: Option<String>,
         new: NewWorkspace<'_>,
         chat: Option<String>,
+        confined: bool,
     ) -> Result<OpenedWorkspace> {
         self.ensure_chat_repository(&repository, chat.as_deref())
             .await?;
+        let new = NewWorkspace {
+            parent: chat.clone(),
+            ..new
+        };
         let mut opened = self.open_branch_with(repository, branch, base, new).await?;
+        if let Some(chat) = chat.as_deref().filter(|_| confined && opened.reused) {
+            ensure!(
+                self.within_subtree(chat, &opened.workspace.id).await?,
+                "{} is outside the chat; ask the user to open it",
+                opened.workspace.name
+            );
+        }
         opened.workspace = self.give_to_chat(&opened.workspace.id, chat).await?;
         Ok(opened)
     }
@@ -341,6 +361,10 @@ impl Manager {
     ) -> Result<Workspace> {
         self.ensure_chat_repository(&repository, chat.as_deref())
             .await?;
+        let new = NewWorkspace {
+            parent: chat.clone(),
+            ..new
+        };
         let workspace = self
             .create_workspace_with(repository, name, base, new)
             .await?;
@@ -385,8 +409,8 @@ fn insert(db: &mut Connection, chat: Chat, process: &Identity, hands_over: bool)
     store::ensure_name_available(&tx, &chat.name, None)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
-            unique_id)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            unique_id,scope_token)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
         params![
             chat.id,
             chat.repository_id,
@@ -400,11 +424,22 @@ fn insert(db: &mut Connection, chat: Chat, process: &Identity, hands_over: bool)
                 .map(serde_json::to_string)
                 .transpose()?,
             hands_over,
-            unique_id(process)?
+            unique_id(process)?,
+            Uuid::new_v4().to_string()
         ],
     )?;
     tx.commit()?;
     Ok(chat)
+}
+
+/// The scope token of the chat `id`, which its agent carries.
+pub(crate) fn scope_token(db: &Connection, id: &str) -> Result<Option<String>> {
+    Ok(db
+        .query_row("SELECT scope_token FROM chats WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()?
+        .flatten())
 }
 
 /// The never-reused ID of `process` as JSON, where the platform reports one,

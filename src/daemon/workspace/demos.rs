@@ -12,15 +12,19 @@ use super::{
 };
 use crate::{
     demos::{Launch, Progress, Running},
-    model::Execution,
+    model::{Execution, PresentSpace},
     process::identity as process,
 };
 
 impl Manager {
-    /// The running demos of `selector`'s workspace, or of every workspace.
+    /// The running demos of `selector`'s workspace, none of a chat's, or
+    /// those of every workspace.
     pub async fn demos(&self, selector: Option<&str>) -> Result<Vec<Running>> {
         let workspace = match selector {
-            Some(selector) => Some(self.workspace(selector).await?.id),
+            Some(selector) => match self.present_space(selector).await? {
+                PresentSpace::Workspace(workspace) => Some(workspace.id),
+                PresentSpace::Chat(_) => return Ok(Vec::new()),
+            },
             None => None,
         };
         self.store

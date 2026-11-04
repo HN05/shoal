@@ -78,6 +78,17 @@ async fn wake_due(manager: &Manager, workspace: &Workspace) {
         .unwrap();
 }
 
+/// Settle the run on the stopped settle clock once `wait` holds it, then
+/// return what `wait` returns. A wait that does not hold the run leaves
+/// nothing to advance the clock past.
+async fn settle_while<T>(manager: &Manager, wait: impl std::future::Future<Output = T>) -> T {
+    let settled = async { tokio::join!(wait, manager.settle_clock.advance()).0 };
+    // A hang guard only: the clock moves as soon as the wait sleeps.
+    tokio::time::timeout(std::time::Duration::from_secs(60), settled)
+        .await
+        .expect("the wait held the run until it settled")
+}
+
 async fn idle_agent(manager: &Manager, workspace: &Workspace) {
     manager
         .set_agent_state(&workspace.id, crate::state::AgentState::Idle, None, None)
@@ -127,21 +138,16 @@ async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
 async fn a_wait_returns_a_run_once_it_settles() {
     let (temp, manager) = manager().await;
     let workspace = settling_workspace(&temp, &manager, 60).await;
+    manager.settle_clock.stop();
     send(
         &manager,
         &workspace,
         &["Request 1 approved", "Request 2 approved"],
     )
     .await;
-    // Leave the run a moment to settle, so the wait holds it.
-    age_messages(&manager, &workspace, 59).await;
-    // A hang guard only: the run settles within two seconds.
     let selection = Selection::default();
     let wait = manager.wait_items(&workspace.id, &selection, None);
-    let updates = tokio::time::timeout(std::time::Duration::from_secs(60), wait)
-        .await
-        .expect("the run settled")
-        .unwrap();
+    let updates = settle_while(&manager, wait).await.unwrap();
     assert_eq!(updates.messages.len(), 2, "{updates:?}");
 }
 
@@ -150,10 +156,11 @@ async fn a_wake_prompt_follows_a_run_that_settles_while_it_waits() {
     let (temp, manager) = manager().await;
     let workspace = settling_workspace(&temp, &manager, 60).await;
     idle_agent(&manager, &workspace).await;
+    manager.settle_clock.stop();
     send(&manager, &workspace, &["Request 1 approved"]).await;
-    // The run settles within two seconds, announced by no signal.
-    age_messages(&manager, &workspace, 59).await;
-    wake_due(&manager, &workspace).await;
+    // No signal announces that the run settles.
+    let wake = manager.wait_agent_wake(&workspace.id, true, None);
+    settle_while(&manager, wake).await.unwrap();
 }
 
 #[tokio::test]

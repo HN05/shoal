@@ -63,7 +63,7 @@ impl Scoped for FileMethod {
                 Ok(None)
             }
             FileMethod::RemoveFiles { space: None, .. } => bail!(
-                "workspace processes can delete only the files of their own workspace and those split from it"
+                "workspace processes can delete only the files of their own space and those below it"
             ),
         }
     }
@@ -79,12 +79,12 @@ async fn narrow_to_removed(
 ) -> Result<()> {
     let space = manager.file_space(workspace).await?;
     let below = match &space.parent_id {
-        Some(parent) => manager.within_subtree(&caller.workspace_id, parent).await?,
+        Some(parent) => manager.within_subtree(&caller.space_id, parent).await?,
         None => false,
     };
     ensure!(
         below,
-        "workspace processes can only access their own workspace and those split from it"
+        "workspace processes can only access their own space and those below it"
     );
     *workspace = space.id;
     Ok(())

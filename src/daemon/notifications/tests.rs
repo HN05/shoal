@@ -135,7 +135,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
         .issue_scope(
             "scope".into(),
             Caller {
-                workspace_id: workspace.id.clone(),
+                space_id: workspace.id.clone(),
                 execution: None,
             },
         )

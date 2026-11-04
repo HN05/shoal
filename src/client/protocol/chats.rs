@@ -68,6 +68,17 @@ pub enum ChatMethod {
     FreeChatName {
         name: String,
     },
+    /// The scope token the agent of the chat `chat`, by ID, carries, which
+    /// confines it to the chat and the spaces below it.
+    ChatScope {
+        chat: String,
+    },
+}
+
+/// The scope token a chat's agent carries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScopeToken {
+    pub token: String,
 }
 
 impl ChatMethod {

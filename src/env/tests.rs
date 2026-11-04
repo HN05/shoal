@@ -164,3 +164,13 @@ fn configured_paths_preserve_non_utf8_bytes() {
         OsStr::from_bytes(b"/tmp/\xff/profile")
     );
 }
+
+#[test]
+fn a_workspace_process_a_chat_started_belongs_to_the_workspace() {
+    let chat = || Some("chat".to_owned());
+    assert_eq!(own_chat(None, chat()), chat());
+    assert_eq!(own_chat(Some(OsString::new()), chat()), chat());
+    // A command a chat ran in a workspace keeps the chat's marker.
+    assert_eq!(own_chat(Some("workspace".into()), chat()), None);
+    assert_eq!(own_chat(None, None), None);
+}

@@ -351,7 +351,7 @@ async fn scoped_callers_mark_only_their_own_workspace() {
         .issue_scope(
             "scope".into(),
             Caller {
-                workspace_id: own.id.clone(),
+                space_id: own.id.clone(),
                 execution: None,
             },
         )

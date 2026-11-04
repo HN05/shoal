@@ -43,7 +43,7 @@ async fn scoped_merge_answers_with_its_approval_request() {
             origin: None,
             merge: None,
             caller: Some(Caller {
-                workspace_id: workspace.id.clone(),
+                space_id: workspace.id.clone(),
                 execution: None,
             }),
         },

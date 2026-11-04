@@ -1165,7 +1165,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         .issue_scope(
             "scope".into(),
             crate::daemon::scope::Caller {
-                workspace_id: parent.id.clone(),
+                space_id: parent.id.clone(),
                 execution: None,
             },
         )

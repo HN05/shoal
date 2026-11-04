@@ -140,7 +140,7 @@ async fn target(ctx: &Context, explicit: Option<String>) -> Result<ConfigTarget>
         return Ok(ConfigTarget::Workspace(workspace));
     }
     let workspaces = client::workspaces(&ctx.paths).await?;
-    let scoped = env::is_scoped();
+    let scoped = env::workspace_scoped();
     let cwd = if scoped {
         None
     } else {

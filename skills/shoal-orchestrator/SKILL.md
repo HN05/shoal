@@ -15,11 +15,12 @@ command run over `ssh`, pass `--json` to each command. A command that prints
 text despite the setting comes from a Shoal that predates it; pass `--json` too. Do an assignment's work in its workspace through its agent, not in your
 own checkout. Change or remove another agent's workspace only when the user asks.
 
-Sessions launched through Shoal are scoped to their own workspace and the
-spaces below it, such as child workspaces they split from it with `shoal
-split`, which they work on themselves; they cannot create other workspaces or start sessions elsewhere;
-you and the user do. Unscoped
-commands also decide approval requests, so act on those only as the user directs.
+Sessions launched through Shoal are scoped to their own space and the spaces
+below it, such as child workspaces they split from it with `shoal split`, which
+they work on themselves; they cannot create other workspaces or start sessions
+elsewhere. A `shoal chat` is scoped the same way, to the chat and the spaces
+below it; only the user's own terminal is unscoped. Unscoped commands also
+decide approval requests, so act on those only as the user directs.
 
 ## Start work
 
@@ -120,10 +121,15 @@ questions, completion, ready marks and exits arrive as Shoal messages naming
 the workspace, the activity of those without an agent of their own arrives with
 your Shoal messages, and `shoal files <name>` shows the files a finished
 workspace handed back. Their approval requests come to you
-too: decide them with `shoal approvals --approve <number>` or `--deny <number>`,
-or hand one to the user with `shoal approvals --escalate <number>`; `shoal
-approvals --space <chat>` lists them. Proposed issues and PRs come too, and
-`--approve` takes `--title` and `--body-file` edits as it does for the user. Answer what you can decide with
+too: approve a request to hold a workspace below you with `shoal approvals
+--approve <number>`, deny one with `--deny <number>`, or hand one to the user
+with `shoal approvals --escalate <number>`, as you must for anything else, since
+you hold no grants; `shoal approvals --space <chat>` lists them. Proposed issues
+and PRs come too: deny one with `--reason` or hand it to the user, who alone
+approves them. You cannot merge, approve or request changes on PRs, approve CI
+runs or read the user's notifications; ask the user with `shoal alerts send`.
+Open issues with `shoal issue open` where the repository lets agents open them
+directly. Answer what you can decide with
 `shoal questions`, write to an agent with `shoal messages send --space <name>`
 (`--attach FILE` hands it a file), and ask the user about the rest. Link the
 issues, PRs and CI runs you follow yourself with `shoal link <item> <relation>`:

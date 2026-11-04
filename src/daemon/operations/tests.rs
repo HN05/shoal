@@ -191,7 +191,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         .await
         .unwrap();
     let acting = manager.caller(&issued).await.unwrap().unwrap();
-    assert_eq!(acting.workspace_id, own.id);
+    assert_eq!(acting.space_id, own.id);
     let entry = manager.operation(&id, Some(&caller)).await.unwrap();
     worker.exit(0);
     until(&entry, |_, ended| ended).await;
@@ -199,7 +199,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     // A worker started from an execution acts as that execution even once
     // it ended, as when a `shoal run` command goes before its operation.
     let ended = crate::daemon::scope::Caller {
-        workspace_id: own.id.clone(),
+        space_id: own.id.clone(),
         execution: Some(crate::daemon::scope::ScopedExecution {
             id: "ended".into(),
             kind: crate::daemon::workspace::ExecutionKind::Command,

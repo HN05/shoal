@@ -62,7 +62,8 @@ impl Manager {
     /// Open PR `url`'s `head` in a workspace at a commit in `repository`:
     /// the one made for or linked to the PR, moved to `head` when the PR's
     /// head moved, so there is at most one per PR, or else a new top-level
-    /// one given to `chat`, or to the user.
+    /// one given to `chat`, or to the user. A `confined` chat, whose own
+    /// agent asks, takes over no workspace outside its subtree.
     pub async fn open_pull_head(
         &self,
         repository: crate::repository::Selector,
@@ -70,11 +71,19 @@ impl Manager {
         head: PullHead,
         chat: Option<String>,
         options: CreationOptions,
+        confined: bool,
     ) -> Result<OpenedWorkspace> {
         self.ensure_chat_repository(&repository, chat.as_deref())
             .await?;
         let (repo, _guard) = self.lock_repository(repository).await?;
         if let Some(workspace) = self.pull_workspace(&repo.id, &url, head.number).await? {
+            if let Some(chat) = chat.as_deref().filter(|_| confined) {
+                anyhow::ensure!(
+                    self.within_subtree(chat, &workspace.id).await?,
+                    "{} is outside the chat; ask the user to open it",
+                    workspace.name
+                );
+            }
             self.move_to_pull_head(&repo, &workspace, &head).await?;
             if let Some(base) = head.base {
                 self.record_diff_ref(&workspace.id, base).await?;
@@ -111,8 +120,9 @@ impl Manager {
         chat: Option<String>,
         options: CreationOptions,
     ) -> Result<Workspace> {
-        // A child belongs to its parent, whose agent or owner coordinates it.
-        let chat = chat.filter(|_| parent.is_none());
+        // A child belongs to its parent, whose agent or owner coordinates
+        // it; a top-level one goes below the chat, recorded with it.
+        let parent = parent.or(chat);
         let start = self.resolve_start(repo, start).await?;
         let head = start.at.commit.clone();
         let workspace = self
@@ -121,8 +131,7 @@ impl Manager {
         let result = self
             .materialize_commit_worktree(repo, &workspace, &head, None)
             .await;
-        let created = self.settle_creation(&workspace, result).await?;
-        self.give_to_chat(&created.id, chat).await
+        self.settle_creation(&workspace, result).await
     }
 
     /// Create the workspace CI job `name` runs in: at `commit`, fetched

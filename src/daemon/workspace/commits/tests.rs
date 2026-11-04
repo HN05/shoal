@@ -228,7 +228,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
         .issue_scope(
             "scope".into(),
             Caller {
-                workspace_id: own.id.clone(),
+                space_id: own.id.clone(),
                 execution: Some(ScopedExecution {
                     id: "execution".into(),
                     kind: super::super::ExecutionKind::Command,
@@ -366,6 +366,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
             },
             None,
             Default::default(),
+            false,
         )
     };
     let first = push_head("first");
@@ -529,6 +530,7 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
             },
             None,
             Default::default(),
+            false,
         )
     };
     let opened = open(None).await.unwrap();
@@ -585,6 +587,7 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
             },
             None,
             Default::default(),
+            false,
         )
         .await
         .unwrap();
@@ -641,7 +644,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
         start("first").await.unwrap(),
         start("second").await.unwrap(),
     );
-    let open = |chat: Option<String>| {
+    let open = |chat: Option<String>, confined: bool| {
         manager.open_pull_head(
             repo.id.as_str().into(),
             "https://forge.example/team/repo/pulls/4".into(),
@@ -653,19 +656,31 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
             },
             chat,
             Default::default(),
+            confined,
         )
     };
-    let opened = open(Some(first.id.clone())).await.unwrap().workspace;
+    let opened = open(Some(first.id.clone()), true).await.unwrap().workspace;
     assert_eq!(
         opened.parent.map(|parent| parent.id),
         Some(first.id.clone())
     );
-    let reopened = open(Some(second.id.clone())).await.unwrap().workspace;
+    // Another chat's own agent cannot take it from the first.
+    let error = open(Some(second.id.clone()), true).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("is outside the chat"),
+        "{error:#}"
+    );
+    let kept = manager.workspace(&opened.id).await.unwrap();
+    assert_eq!(kept.parent.map(|parent| parent.id), Some(first.id.clone()));
+    let reopened = open(Some(second.id.clone()), false)
+        .await
+        .unwrap()
+        .workspace;
     assert_eq!(
         reopened.parent.map(|parent| parent.id),
         Some(second.id.clone())
     );
-    let by_user = open(None).await.unwrap().workspace;
+    let by_user = open(None, false).await.unwrap().workspace;
     assert_eq!(by_user.parent, None);
 }
 
@@ -786,6 +801,7 @@ async fn a_chat_opens_no_workspace_at_a_commit_in_another_repository() {
             },
             Some(chat.id.clone()),
             Default::default(),
+            true,
         )
         .await
         .unwrap_err();

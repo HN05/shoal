@@ -1287,7 +1287,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
         let caller = f.manager.caller(token).await.unwrap().unwrap();
         assert_eq!(caller.kind(), Some(kind));
         assert_eq!(caller.execution_id(), Some(started.plan.id.as_str()));
-        assert_eq!(caller.workspace_id, workspace.id);
+        assert_eq!(caller.space_id, workspace.id);
 
         for (mut method, allowed) in [
             (Operation::from(DaemonMethod::Status), true),
@@ -1521,7 +1521,7 @@ async fn begin_merge_as_agent(
 ) -> anyhow::Result<crate::daemon::workspace::StartedExecution> {
     let caller = scope::Caller {
         execution: None,
-        workspace_id: workspace.id.clone(),
+        space_id: workspace.id.clone(),
     };
     let request = crate::daemon::workspace::ExecutionRequest {
         merge: Some(crate::model::MergeOptions {
@@ -2291,7 +2291,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
         .issue_scope(
             "adoption-test".into(),
             scope::Caller {
-                workspace_id: w.id,
+                space_id: w.id,
                 execution: Some(scope::ScopedExecution {
                     id: "test".into(),
                     kind: ExecutionKind::Command,

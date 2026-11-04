@@ -42,7 +42,7 @@ async fn setup_with(
     .unwrap();
     commit(&workspace.path, ".shoal.toml");
     let caller = Caller {
-        workspace_id: workspace.id.clone(),
+        space_id: workspace.id.clone(),
         execution: None,
     };
     (root, manager, workspace, caller)

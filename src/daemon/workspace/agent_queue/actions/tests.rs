@@ -238,7 +238,7 @@ async fn workspace_processes_cancel_and_move_back_only_entries_below_theirs() {
     add(&manager, &repo, "first").await;
     let parent = create(&manager, &repo, "parent").await;
     let caller = Caller {
-        workspace_id: parent.id.clone(),
+        space_id: parent.id.clone(),
         execution: None,
     };
     let mut children = Vec::new();
@@ -283,7 +283,7 @@ async fn workspace_processes_cancel_and_move_back_only_entries_below_theirs() {
         .issue_scope(
             "scope".into(),
             Caller {
-                workspace_id: parent.id.clone(),
+                space_id: parent.id.clone(),
                 execution: None,
             },
         )
@@ -355,7 +355,7 @@ async fn only_restorable_agents_move_and_only_for_unscoped_callers() {
     assert!(!manager.agent_was_overloaded(&execution).await);
     assert!(manager.queue_entries().await.unwrap().is_empty());
     let caller = Caller {
-        workspace_id: create(&manager, &repo, "parent").await.id,
+        space_id: create(&manager, &repo, "parent").await.id,
         execution: None,
     };
     let error = manager

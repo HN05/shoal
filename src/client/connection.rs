@@ -435,6 +435,14 @@ pub async fn free_chat_name(daemon: &impl Daemon, name: String) -> Result<String
     request(daemon, ChatMethod::FreeChatName { name }).await
 }
 
+/// The scope token `chat`'s agent carries.
+pub async fn chat_scope(daemon: &impl Daemon, chat: &Chat) -> Result<String> {
+    let chat = chat.id.clone();
+    let scope: crate::protocol::ScopeToken =
+        request(daemon, ChatMethod::ChatScope { chat }).await?;
+    Ok(scope.token)
+}
+
 /// Hand `chat` to process `pid`, whose agent now runs it.
 pub async fn move_chat(daemon: &impl Daemon, chat: &Chat, pid: u32) -> Result<Chat> {
     request(

@@ -29,7 +29,7 @@ pub(super) async fn handle(
             workspace,
             name,
             reason,
-        } if caller.is_some_and(|caller| caller.workspace_id == workspace) => manager
+        } if caller.is_some_and(|caller| caller.space_id == workspace) => manager
             .request_hold(&workspace, name, reason)
             .await?
             .into_body(Body::Hold),

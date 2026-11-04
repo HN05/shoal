@@ -69,14 +69,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
 }
 
 pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -> Result<i32> {
-    let start = match entry.waiting_for.as_slice() {
-        [] => "when an agent slot is free".to_owned(),
-        [work] => format!("once {work} is complete and an agent slot is free"),
-        work => format!(
-            "once {} are complete and an agent slot is free",
-            work.join(", ")
-        ),
-    };
+    let start = starts_when(entry);
     ctx.emit(
         &format!(
             "Queued {} (position {} of {waiting}); it starts {start}",
@@ -86,6 +79,19 @@ pub(super) fn report_queued(ctx: &Context, entry: &QueueEntry, waiting: usize) -
         entry,
     )?;
     Ok(0)
+}
+
+/// When the queued `entry` starts: once the work it waits for is complete
+/// and an agent slot is free.
+pub(super) fn starts_when(entry: &QueueEntry) -> String {
+    match entry.waiting_for.as_slice() {
+        [] => "when an agent slot is free".to_owned(),
+        [work] => format!("once {work} is complete and an agent slot is free"),
+        work => format!(
+            "once {} are complete and an agent slot is free",
+            work.join(", ")
+        ),
+    }
 }
 
 /// Queue `plan`, a launch of `agent` in the existing `workspace`, which the

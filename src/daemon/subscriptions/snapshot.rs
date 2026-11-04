@@ -97,7 +97,7 @@ struct Visible {
 
 impl Visible {
     async fn load(manager: &Manager, caller: Option<&Caller>, topics: &Topics) -> Result<Self> {
-        let root = caller.map(|caller| caller.workspace_id.as_str());
+        let root = caller.map(|caller| caller.space_id.as_str());
         if topics.has(Topic::Workspaces) || topics.has(Topic::Links) {
             let workspaces = manager.list_workspaces_within(root).await?;
             let names = workspaces

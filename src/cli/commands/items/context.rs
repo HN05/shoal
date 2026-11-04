@@ -82,8 +82,8 @@ pub(in crate::cli::commands) async fn select_repo_context(
     Ok((current_or_picked_repository(ctx).await?, repo))
 }
 
-/// The current workspace or registered checkout, else the checkout of a
-/// registered repository the user picks.
+/// The current workspace, chat or registered checkout, else the checkout of
+/// a registered repository the user picks.
 async fn current_or_picked_repository(ctx: &Context) -> Result<ItemContext> {
     if let Some(context) = current_context(ctx).await? {
         return Ok(context);
@@ -129,7 +129,8 @@ async fn registered_checkout(ctx: &Context, repo: Option<&str>) -> Result<Option
     Ok(checkout.map(|checkout| ItemContext::Checkout(checkout.id)))
 }
 
-/// The workspace, else the registered checkout, the current directory is in.
+/// The workspace the current directory is in, else the chat this runs in,
+/// else the registered checkout the current directory is in.
 pub(in crate::cli::commands) async fn current_context(
     ctx: &Context,
 ) -> Result<Option<ItemContext>> {
@@ -137,6 +138,9 @@ pub(in crate::cli::commands) async fn current_context(
         Ok(workspace) => return Ok(Some(ItemContext::Workspace(workspace))),
         Err(error) if error.is::<ui::NoCurrentWorkspace>() => {}
         Err(error) => return Err(error),
+    }
+    if let Some(chat) = ui::current_chat(&None) {
+        return Ok(Some(ItemContext::Chat(chat)));
     }
     let repos = client::repositories(&ctx.paths).await?;
     let checkout = super::super::issues::current_checkout(&repos).await?;
