@@ -6,7 +6,9 @@
 use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
 
-use crate::client::output::agents::{StoppedProcesses, StoppedWorkspaces, WorkspaceStopped};
+use crate::client::output::agents::{
+    CancelledRun, StoppedProcesses, StoppedWorkspaces, WorkspaceStopped,
+};
 use crate::{
     cli::{
         args::SpaceTargets,
@@ -318,6 +320,7 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
                 stopped: Vec::new(),
                 failed: Vec::new(),
                 cancelled: Vec::new(),
+                cancelled_runs: Vec::new(),
             },
         )?;
         return Ok(0);
@@ -331,7 +334,7 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
 /// to continue them passes `shoal resume`; empty, it names each one.
 async fn stop_each(
     ctx: &Context,
-    mut report: ui::Report<String>,
+    mut report: ui::Report<Outcome>,
     workspaces: &[Workspace],
     resume: &str,
     acknowledge_unproven: bool,
@@ -364,7 +367,14 @@ async fn stop_each(
                     cancelled_run: Some(run),
                     ..
                 },
-            )) => report.done(ctx, &cancelled_run_message(name, &run), name.to_owned()),
+            )) => report.done(
+                ctx,
+                &cancelled_run_message(name, &run),
+                Outcome::Cancelled(CancelledRun {
+                    workspace: name.to_owned(),
+                    run,
+                }),
+            ),
             Ok((other, StoppedWorkspace { cancelled, .. })) => {
                 let mut message = match other.map_or(0, |other| other.processes) {
                     0 => format!("Stopped {name}"),
@@ -374,7 +384,7 @@ async fn stop_each(
                     message = format!("{message}. {}", removed_launches(cancelled.len()));
                 }
                 removed.extend(cancelled);
-                report.done(ctx, &message, name.to_owned());
+                report.done(ctx, &message, Outcome::Stopped(name.to_owned()));
                 if has_saved_work(ctx, workspace) {
                     resumable.push(name);
                 }
@@ -387,11 +397,28 @@ async fn stop_each(
         (false, true) => continue_hint(&resumable.join(" ")),
         (false, false) => continue_hint(resume),
     };
-    report.finish(ctx, &summary, |stopped, failed| StoppedWorkspaces {
-        stopped,
-        failed,
-        cancelled: removed,
+    report.finish(ctx, &summary, |outcomes, failed| {
+        let (mut stopped, mut cancelled_runs) = (Vec::new(), Vec::new());
+        for outcome in outcomes {
+            match outcome {
+                Outcome::Stopped(name) => stopped.push(name),
+                Outcome::Cancelled(run) => cancelled_runs.push(run),
+            }
+        }
+        StoppedWorkspaces {
+            stopped,
+            failed,
+            cancelled: removed,
+            cancelled_runs,
+        }
     })
+}
+
+/// What stopping one of several workspaces did.
+enum Outcome {
+    Stopped(String),
+    /// A CI job's workspace, whose run the forge was asked to cancel.
+    Cancelled(CancelledRun),
 }
 
 /// Whether `workspace` saved work for `shoal resume`, which refuses to

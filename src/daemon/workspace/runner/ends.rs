@@ -152,19 +152,18 @@ impl Manager {
     /// `workspace_id` before its removal stops it; a forge that refuses is
     /// told to the user, and the run times out there.
     pub(crate) async fn cancel_job_before_removal(&self, workspace_id: &str) {
-        let running = match self.workspace_claim(workspace_id).await {
-            Ok(Some(job)) => match &job.execution_id {
-                Some(execution) => match self.execution_recorded(execution).await {
-                    Ok(true) => Some(job),
-                    _ => None,
-                },
-                None => None,
-            },
-            _ => None,
-        };
-        let Some(job) = running else {
+        let Ok(Some(job)) = self.workspace_claim(workspace_id).await else {
             return;
         };
+        // The runner may run before its claim records its execution, so
+        // any execution of the workspace counts.
+        let running = match &job.execution_id {
+            Some(execution) => self.execution_recorded(execution).await,
+            None => self.workspace_has_executions(workspace_id).await,
+        };
+        if !running.unwrap_or(true) {
+            return;
+        }
         if let Err(error) = self.cancel_job_run(&job).await {
             self.notify(
                 None,

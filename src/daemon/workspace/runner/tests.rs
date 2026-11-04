@@ -602,3 +602,33 @@ async fn removing_a_running_jobs_workspace_cancels_its_run_first() {
     );
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn removing_a_job_whose_execution_is_not_recorded_yet_cancels_its_run() {
+    let fixture = fixture(vec![job("h3", 7, 3)], "unused", "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
+    let id = claimed[0].id.clone();
+    // As if removal came between the runner's start and its record.
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE ci_jobs SET execution_id=NULL WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager
+        .remove_job_workspace(&claimed[0].workspace_id)
+        .await
+        .unwrap();
+    assert!(
+        fixture
+            .server
+            .received()
+            .iter()
+            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
+    );
+}

@@ -43,6 +43,17 @@ pub struct StoppedWorkspaces {
     /// from the agent queue.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cancelled: Vec<QueueEntry>,
+    /// The CI jobs' workspaces whose runs the forge was asked to cancel,
+    /// which run until their runners stop them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cancelled_runs: Vec<CancelledRun>,
+}
+
+/// A CI job's workspace and the run the forge was asked to cancel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CancelledRun {
+    pub workspace: String,
+    pub run: String,
 }
 
 /// The processes Shoal does not track that a stop stopped, by space.
