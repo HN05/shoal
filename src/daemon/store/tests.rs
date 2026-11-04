@@ -414,6 +414,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 128 {
         db.execute_batch(include_str!("space_numbers.sql"))?;
     }
+    if version >= 129 {
+        super::item_numbers::number_items(&db)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -636,6 +639,88 @@ fn new_spaces_take_the_smallest_number_no_space_holds() -> Result<()> {
             ("reused".into(), 2)
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn migration_numbers_items_within_their_space() -> Result<()> {
+    let mut db = historical_database(128)?;
+    db.execute_batch(
+        r#"INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('chat','repo','planning','claude',1,'b',1);
+         INSERT INTO questions(number,workspace_id,chat_id,created_at,question,recommendation,choices)
+             VALUES (3,'workspace',NULL,1,'Which database?','SQLite','[]'),
+                (5,NULL,'chat',1,'Which cache?','Redis','[]');
+         INSERT INTO access_requests(id,workspace_id,repository_id,target_key,name,record,number)
+             VALUES ('port','workspace',NULL,'port/web','web','{}',3),
+                ('chat-issue',NULL,'repo','issue_open','issue','{"space_id":"chat"}',4),
+                ('gone-issue',NULL,'repo','issue_open','issue','{"space_id":"gone"}',6),
+                ('later-issue',NULL,'repo','issue_open','issue','{"space_id":"later"}',7),
+                ('gone-again',NULL,'repo','issue_open','issue','{"space_id":"gone"}',8);
+         INSERT INTO notifications(created_at,workspace,kind,message,workspace_id,subject) VALUES
+             (1,'worker','approval_requested','approval 3: port web; approve with shoal approvals --approve 3','workspace','port'),
+             (2,'worker','question_asked','question 3 (answer with shoal questions 3): Which database?','workspace',NULL),
+             (3,'planning','question_withdrawn','withdrew question 5 (no answer needed): Which cache?','chat',NULL),
+             (4,'worker','approval_withdrawn','approval 3: port web was withdrawn; no decision needed','workspace',NULL),
+             (5,'worker','approval_requested','approval 4: hold it; approve with shoal approvals --approve 4','workspace','decided'),
+             (6,'worker','approval_withdrawn','approval 4: hold it was withdrawn; no decision needed','workspace',NULL);"#,
+    )?;
+    migrate(&mut db)?;
+    let numbers = |table: &str| -> Result<Vec<(String, i64, i64)>> {
+        let key = match table {
+            "questions" => "question",
+            _ => "id",
+        };
+        Ok(db
+            .prepare(&format!(
+                "SELECT {key},space_number,number FROM {table} ORDER BY rowid"
+            ))?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<rusqlite::Result<_>>()?)
+    };
+    // Questions keep their numbers, so a running wait still finds them.
+    assert_eq!(
+        numbers("questions")?,
+        [
+            ("Which database?".into(), 1, 3),
+            ("Which cache?".into(), 2, 5)
+        ]
+    );
+    // A request whose number a question of its space holds takes the next
+    // free one; the proposals of a removed space reserve one number each.
+    assert_eq!(
+        numbers("access_requests")?,
+        [
+            ("port".into(), 1, 1),
+            ("chat-issue".into(), 2, 4),
+            ("gone-issue".into(), 3, 6),
+            ("later-issue".into(), 4, 7),
+            ("gone-again".into(), 3, 8)
+        ]
+    );
+    let messages = db
+        .prepare("SELECT message FROM notifications ORDER BY id")?
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    assert_eq!(
+        messages,
+        [
+            "approval 1.1: port web; approve with shoal approvals --approve 1.1",
+            "question 1.3 (answer with shoal questions 1.3): Which database?",
+            "withdrew question 2.5 (no answer needed): Which cache?",
+            "approval 1.1: port web was withdrawn; no decision needed",
+            // A request that is gone left its number to another, which
+            // these must not name.
+            "approval 4: hold it; approve with shoal approvals --approve 4",
+            "approval 4: hold it was withdrawn; no decision needed"
+        ]
+    );
+    // A new space skips the numbers the pending proposals reserve.
+    db.execute_batch(
+        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('new','repo','new','claude',1,'b',2);",
+    )?;
+    assert!(space_numbers(&db)?.contains(&("new".into(), 5)));
     Ok(())
 }
 

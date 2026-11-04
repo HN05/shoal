@@ -17,6 +17,7 @@ mod benchmark;
 mod chat_names;
 #[cfg(test)]
 mod event_tests;
+mod item_numbers;
 mod migrations;
 mod place_servers;
 mod worker;
