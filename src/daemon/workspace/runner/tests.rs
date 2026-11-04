@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     ffi::OsString,
     os::unix::fs::PermissionsExt as _,
+    os::unix::process::CommandExt as _,
     sync::{Arc, LazyLock, Mutex},
 };
 
@@ -696,34 +697,63 @@ async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
 }
 
 #[tokio::test]
-async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up() {
+async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_of_it_runs() {
+    use crate::process::identity::{Identity, capture};
     let fixture = fixture(vec![job("h1", 4, 1)], "unused", "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
     let execution = claimed[0].execution_id.clone().unwrap();
-    let mark = |wrapper: Option<String>| {
-        let execution = execution.clone();
+    let mark = |wrapper: &Identity, child: &Identity| {
+        let group = i64::from(child.pid);
+        let (execution, wrapper, child) = (
+            execution.clone(),
+            serde_json::to_string(wrapper).unwrap(),
+            serde_json::to_string(child).unwrap(),
+        );
         manager.store.run(move |db| {
             db.execute(
-                "UPDATE executions SET state='unknown',wrapper=?2 WHERE id=?1",
-                rusqlite::params![execution, wrapper],
+                "UPDATE executions SET state='unknown',wrapper=?2,child=?3,group_id=?4 WHERE id=?1",
+                rusqlite::params![execution, wrapper, child, group],
             )?;
             Ok(())
         })
     };
+    // A process that ended, standing for the lost wrapper and runner.
+    let mut ended = std::process::Command::new("sleep")
+        .arg("30")
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let gone = capture(ended.id()).unwrap().unwrap();
+    ended.kill().unwrap();
+    ended.wait().unwrap();
+
     // A wrapper still alive may reattach, so the job keeps running.
-    let alive = crate::process::identity::capture(std::process::id())
-        .unwrap()
-        .unwrap();
-    mark(Some(serde_json::to_string(&alive).unwrap()))
-        .await
-        .unwrap();
+    let alive = capture(std::process::id()).unwrap().unwrap();
+    mark(&alive, &gone).await.unwrap();
     manager.finish_ended_jobs().await.unwrap();
     assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
-    // Once neither the wrapper nor the runner is alive, the job ends here.
-    mark(None).await.unwrap();
+
+    // A descendant carrying the execution's marker keeps it too, and is
+    // stopped.
+    // It runs this test binary, whose environment the scan can read where a
+    // system binary's may be hidden.
+    let mut marked = crate::test_support::marked_child();
+    marked
+        .env_clear()
+        .env("SHOAL_TEST_PROCESS", "1")
+        .env(crate::env::EXECUTION_ID, &execution)
+        .process_group(0)
+        .kill_on_drop(true);
+    let mut survivor = crate::test_support::spawn_marked_child(&mut marked);
+    mark(&gone, &gone).await.unwrap();
+    manager.finish_ended_jobs().await.unwrap();
+    assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+    survivor.wait().await.unwrap();
+
+    // Once nothing of it runs, the job ends here.
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
     assert!(manager.workspace(&claimed[0].workspace_id).await.is_err());

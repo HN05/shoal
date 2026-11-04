@@ -4,7 +4,7 @@
 //! however its workspace went, is deleted. A job ends only on the forge's
 //! word: stopping it, or removing its workspace while it runs, cancels its
 //! run there, and the forge's runner then stops it.
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use anyhow::Result;
 use rusqlite::params;
@@ -16,7 +16,7 @@ use crate::{
     },
     forge::{ForgeRepo, ci::CiAction},
     model::QueuedJob,
-    process::identity::{self, Identity},
+    process::{execution::Processes, identity},
     state::ExecutionState,
     state::{QueueKind, QueueState},
 };
@@ -211,11 +211,15 @@ impl Manager {
     }
 
     /// Whether the execution `id` of a job in `workspace_id` may still run.
-    /// One whose wrapper has not reattached since a daemon restart counts as
-    /// ended, and is forgotten, once neither the wrapper nor the runner it
-    /// started is alive: a job's runner has no agent record that restart
-    /// recovery would settle.
+    /// One whose wrapper has not reattached since a daemon restart, which
+    /// restart recovery leaves to its owner since a job's runner has no agent
+    /// record, counts as ended, and is forgotten, once the shared process
+    /// proof finds nothing of it: no wrapper, and no process carrying its
+    /// marker or in its process group. Verified survivors are stopped and
+    /// checked again on the next pass; a launch whose identity was never
+    /// recorded proves nothing and keeps the job.
     async fn job_execution_runs(&self, workspace_id: &str, id: &str) -> Result<bool> {
+        let workspace = self.workspace(workspace_id).await?;
         let execution = self
             .workspace_executions(workspace_id)
             .await?
@@ -227,12 +231,13 @@ impl Manager {
         if execution.state != ExecutionState::Unknown {
             return Ok(true);
         }
-        let alive = |identity: &Option<Identity>| {
-            identity
-                .as_ref()
-                .is_some_and(|identity| identity::alive(identity).unwrap_or(true))
-        };
-        if alive(&execution.wrapper) || alive(&execution.child) {
+        let scan = identity::scan(HashSet::from([id.to_owned()])).await?;
+        let processes = Processes::inspect(&execution, &workspace.path, &scan).await?;
+        if processes.wrapper.is_some() || !processes.visibility_complete() {
+            return Ok(true);
+        }
+        if !processes.command_stopped() {
+            processes.stop_owned().await?;
             return Ok(true);
         }
         self.forget_execution(id).await?;
