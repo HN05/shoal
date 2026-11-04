@@ -215,6 +215,11 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
         "{argv:?}"
     );
     assert_eq!(std::fs::read_to_string(&token).unwrap(), "runner-token");
+    let config = std::fs::read_to_string(directory.join("config.yaml")).unwrap();
+    assert!(
+        config.contains(&format!("\"SHOAL_WORKSPACE_ID\": \"{}\"", workspace.id)),
+        "{config}"
+    );
     assert_eq!(
         std::fs::metadata(&token).unwrap().permissions().mode() & 0o777,
         0o600

@@ -113,6 +113,7 @@ fn one_job_claims_the_handle_on_the_host_backend_with_its_files_in_the_work_dire
         work_dir: Path::new("/work dir"),
         labels: &labels,
         handle: "h1",
+        env: &[("SHOAL_WORKSPACE_PATH".into(), "/work/ci rust".into())],
     };
     let command = job_command(&repo(), &launch).unwrap();
     let argv: Vec<_> = command
@@ -150,6 +151,13 @@ fn one_job_claims_the_handle_on_the_host_backend_with_its_files_in_the_work_dire
     );
     assert!(
         command.config.contains("file: \"/work dir/.runner\""),
+        "{}",
+        command.config
+    );
+    assert!(
+        command
+            .config
+            .contains("  envs:\n    \"SHOAL_WORKSPACE_PATH\": \"/work/ci rust\"\nhost:"),
         "{}",
         command.config
     );

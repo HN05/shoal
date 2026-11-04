@@ -79,6 +79,8 @@ pub struct JobLaunch<'a> {
     pub work_dir: &'a Path,
     pub labels: &'a [String],
     pub handle: &'a str,
+    /// Variables every step and the workflow's `env` context get.
+    pub env: &'a [(String, String)],
 }
 
 /// The command that runs one job, and the configuration it reads.

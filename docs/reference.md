@@ -2946,8 +2946,9 @@ workspace's build, and the workspace's agent's scope does not reach it.
 `forgejo-runner`'s host backend starts each step in a directory of its own,
 not the job's workspace, so a job for this runner names the workspace as its
 working directory and has no checkout step, since the workspace has the commit
-already. `SHOAL_WORKSPACE_PATH` and `SHOAL_WORKSPACE_ID`, which every Shoal job
-has, serve both, also in a job that other runners take too:
+already. `SHOAL_WORKSPACE_PATH` and `SHOAL_WORKSPACE_ID`, which Shoal gives
+every job's steps and its `env` context through the runner's `runner.envs`,
+serve both, also in a job that other runners take too:
 
 ```yaml
 jobs:

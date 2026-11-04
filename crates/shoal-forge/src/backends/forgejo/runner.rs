@@ -110,7 +110,8 @@ pub(super) fn delete(repo: &ForgeRepo, id: u64) -> Request {
 
 /// `forgejo-runner one-job` for the job `launch` names, each label on the
 /// host backend, with a configuration that keeps the runner's files in the
-/// launch's work directory.
+/// launch's work directory and gives the job the launch's variables, which
+/// `runner.envs` puts in every step's environment and the `env` context.
 pub(super) fn job_command(repo: &ForgeRepo, launch: &JobLaunch<'_>) -> Result<JobCommand> {
     let work = launch
         .work_dir
@@ -118,8 +119,13 @@ pub(super) fn job_command(repo: &ForgeRepo, launch: &JobLaunch<'_>) -> Result<Jo
         .context("the job's work directory is not UTF-8")?;
     // JSON strings are YAML scalars, quoted however the path is spelt.
     let quoted = |path: String| serde_json::to_string(&path).expect("a string serializes");
+    let envs: String = launch
+        .env
+        .iter()
+        .map(|(name, value)| format!("    {}: {}\n", quoted(name.clone()), quoted(value.clone())))
+        .collect();
     let config = format!(
-        "log:\n  level: info\nrunner:\n  file: {}\n  capacity: 1\nhost:\n  workdir_parent: {}\n",
+        "log:\n  level: info\nrunner:\n  file: {}\n  capacity: 1\n  envs:\n{envs}host:\n  workdir_parent: {}\n",
         quoted(format!("{work}/.runner")),
         quoted(format!("{work}/host")),
     );

@@ -301,6 +301,7 @@ impl Manager {
             work_dir: &directory,
             labels: &labels,
             handle: &job.job.handle,
+            env: &job_env(claim.workspace),
         })?;
         std::fs::write(&config_file, command.config)?;
         Ok(command.argv)
@@ -399,6 +400,19 @@ impl Manager {
         .await?;
         Ok(())
     }
+}
+
+/// What the workflow's `env` context and every step of a job get besides
+/// the runner's own environment, so a job's steps can find its workspace
+/// and tell it runs on Shoal.
+fn job_env(workspace: &Workspace) -> Vec<(String, String)> {
+    vec![
+        (
+            crate::env::WORKSPACE_PATH.into(),
+            workspace.path.to_string_lossy().into_owned(),
+        ),
+        (crate::env::WORKSPACE_ID.into(), workspace.id.clone()),
+    ]
 }
 
 /// What starting a claimed job needs.
