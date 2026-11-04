@@ -83,3 +83,21 @@ async fn a_workspace_that_cannot_move_fails_the_job() {
         fixture.head
     );
 }
+
+#[tokio::test]
+async fn a_job_whose_commit_cannot_be_fetched_still_names_its_run() {
+    let fixture = github_fixture().await;
+    let manager = &fixture.manager;
+    fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
+    let (job, directory) = report(manager, 4).await;
+    manager.follow_taken_jobs().await.unwrap();
+    assert!(directory.join("refused").exists());
+    // Stopping the job cancels the run it took, not the claimed one.
+    let claimed = manager.claimed_jobs().await.unwrap().remove(0);
+    assert!(claimed.job.run.url.ends_with("/actions/runs/4"));
+    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    assert_eq!(
+        git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
+        fixture.head
+    );
+}

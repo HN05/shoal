@@ -178,7 +178,8 @@ pub(super) struct GitHubFixture {
     pub _server: Server,
     pub manager: Arc<Manager>,
     pub head: String,
-    /// A commit only run 2, pushed to `topic`, is at.
+    /// A commit only run 2, pushed to `topic`, is at; run 4's commit is on
+    /// no remote.
     pub topic: String,
     pub state: Arc<Mutex<GitHubState>>,
 }
@@ -233,6 +234,8 @@ pub(super) async fn github_fixture() -> GitHubFixture {
             run(1, "main", &pushed)
         } else if line == "GET /api/v3/repos/team/repo/actions/runs/2" {
             run(2, "topic", &other)
+        } else if line == "GET /api/v3/repos/team/repo/actions/runs/4" {
+            run(4, "gone", "1111111111111111111111111111111111111111")
         } else if line == "POST /api/v3/repos/team/repo/actions/runners/generate-jitconfig" {
             json!({"runner": {"id": 77}, "encoded_jit_config": "Y29uZmln"})
         } else if line == "GET /api/v3/repos/team/repo/actions/runners/77" {

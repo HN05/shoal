@@ -49,8 +49,8 @@ impl Manager {
     }
 
     /// Record the job of `run` that `runner`, registered for `job` alone,
-    /// took, after moving the job's workspace to the commit of `run` when it
-    /// is not the claimed job's.
+    /// took, then move the job's workspace to the commit of `run` when it is
+    /// not the claimed job's.
     async fn follow_taken_job(&self, job: &ClaimedJob, runner: u64, run: u64) -> Result<()> {
         let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
@@ -59,14 +59,6 @@ impl Manager {
         } else {
             forge.job_run(&account, run).await?
         };
-        if taken_run.commit != job.job.run.commit {
-            self.move_job_workspace(
-                &job.workspace_id,
-                &taken_run.commit,
-                taken_run.reference.as_deref(),
-            )
-            .await?;
-        }
         // Only the run decides the commit; a job the forge does not list
         // yet keeps the claimed one's name.
         let taken = forge
@@ -81,7 +73,18 @@ impl Manager {
             run: taken_run,
             workspace_id: linked,
         };
-        self.record_taken_job(&job.id, &record).await
+        // Recorded first, so stopping the job cancels the run it belongs
+        // to also when its workspace cannot move.
+        self.record_taken_job(&job.id, &record).await?;
+        if record.run.commit != job.job.run.commit {
+            self.move_job_workspace(
+                &job.workspace_id,
+                &record.run.commit,
+                record.run.reference.as_deref(),
+            )
+            .await?;
+        }
+        Ok(())
     }
 
     async fn record_taken_job(&self, id: &str, job: &QueuedJob) -> Result<()> {
