@@ -10,8 +10,7 @@ use crate::{
         context::Context,
         ui,
     },
-    model::{QueueEntry, QueuePlace, RunningAgent},
-    protocol::ExecutionMethod,
+    model::{QueueEntry, QueuePlace},
     state::QueueState,
 };
 
@@ -106,7 +105,7 @@ async fn movable_agent(ctx: &Context, selector: &str) -> Result<()> {
         .with_context(|| format!("{selector} is not in the agent queue"))?
         .workspace;
     let name = &workspace.name;
-    let agents: Vec<RunningAgent> = client::request(&ctx.paths, ExecutionMethod::ListAgents)
+    let agents = crate::client::agents::all(&ctx.paths)
         .await
         .with_context(|| format!("{selector} is not in the agent queue"))?;
     let agents: Vec<_> = agents

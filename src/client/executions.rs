@@ -8,9 +8,11 @@ use serde::{Deserialize, Serialize};
 use crate::{
     agent::ModelChoice,
     client::{
+        connection::{Daemon, request},
         processes::Identity,
         sessions::{HostName, Origin},
     },
+    protocol::ExecutionMethod,
     state::{AgentState, TurnFailure, states},
 };
 
@@ -248,4 +250,9 @@ pub struct Discarded {
     /// The execution IDs of the forgotten stopped agents, last sessions and
     /// commands.
     pub executions: Vec<String>,
+}
+
+/// Refuse a caller other than a merge execution the user authorized.
+pub async fn check_merge(daemon: &impl Daemon) -> anyhow::Result<()> {
+    request(daemon, ExecutionMethod::CheckMerge).await
 }

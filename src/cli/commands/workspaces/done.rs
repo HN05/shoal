@@ -1,15 +1,15 @@
 //! Recording a space's work as done, and withdrawing that.
 use anyhow::Result;
 
+use crate::client::assignments;
 use crate::client::output::workspaces::Withdrawn;
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         ui::{self, Fallback},
     },
     model::{Completion, PresentSpace},
-    protocol::AssignmentMethod,
 };
 
 /// The space `space` names, else the current chat or workspace, else a
@@ -29,7 +29,7 @@ enum Selected {
 
 pub(in crate::cli::commands) async fn undone(ctx: &Context, space: Option<String>) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let withdrawn: Completion = request(&ctx.paths, AssignmentMethod::UndoDone { space }).await?;
+    let withdrawn = assignments::undo_done(&ctx.paths, space).await?;
     ctx.emit(
         "Completion withdrawn; run shoal done when finished.",
         Withdrawn { withdrawn },
@@ -74,14 +74,15 @@ pub(in crate::cli::commands) async fn done(
             workspace.clone()
         }
     };
-    let method = AssignmentMethod::MarkDone {
+    let completion = assignments::mark_done(
+        &ctx.paths,
         space,
-        cleanup: options.cleanup,
-        integrated: options.integrated,
-        results: options.results,
-        sender_chat: crate::env::chat(),
-    };
-    let completion: Completion = request(&ctx.paths, method).await?;
+        options.cleanup,
+        options.integrated,
+        options.results,
+        crate::env::chat(),
+    )
+    .await?;
     let message = match selected {
         Selected::Chat(_) if completion.cleanup => {
             "Chat marked done; cleanup requested. Its agent may stop and the chat may be removed."

@@ -20,7 +20,7 @@ use crate::{
     model::{MergeConfirmation, MergeOptions, MergePlan, MergePreview, MergedBranch},
     paths::Paths,
     protocol::{
-        ConfigTarget, ExecutionMethod, WorkspaceMethod,
+        ConfigTarget, WorkspaceMethod,
         operations::{OperationSpec, Step},
     },
 };
@@ -160,7 +160,7 @@ async fn finish(ctx: &Context, plan: String) -> Result<MergedBranch> {
         env::is_scoped(),
         "merge worker requires a tracked execution"
     );
-    request::<()>(&ctx.paths, ExecutionMethod::CheckMerge).await?;
+    crate::client::executions::check_merge(&ctx.paths).await?;
     let plan: MergePlan = serde_json::from_str(&plan)?;
     anyhow::ensure!(
         std::env::var(env::WORKSPACE_ID)? == plan.workspace.id,

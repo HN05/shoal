@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use crate::{
     client::connection::{Daemon, request},
-    model::{AgentSession, AgentStatus, RunningAgent},
-    protocol::{AgentMethod, TurnEnd, WokenTurn},
+    model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
+    protocol::{AgentMethod, ExecutionMethod, TurnEnd, WokenTurn},
     state::{AgentState, TurnFailure},
 };
 
@@ -75,6 +75,30 @@ pub async fn interrupt_turn(
         AgentMethod::InterruptTurn {
             workspace,
             execution,
+        },
+    )
+    .await
+}
+
+/// The agents connected in every workspace.
+pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
+    request(daemon, ExecutionMethod::ListAgents).await
+}
+
+/// Restart the agent of `execution` in place as part of the restart `run`,
+/// or join the restart `join` already pending.
+pub async fn restart(
+    daemon: &impl Daemon,
+    execution: String,
+    join: Option<PendingRestart>,
+    run: Option<String>,
+) -> Result<()> {
+    request(
+        daemon,
+        ExecutionMethod::RestartAgent {
+            execution,
+            join,
+            run,
         },
     )
     .await

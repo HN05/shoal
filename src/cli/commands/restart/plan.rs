@@ -7,7 +7,6 @@ pub(super) use crate::client::output::agents::Skipped;
 use crate::{
     cli::{args::WorkspaceTargets, client, context::Context, ui},
     model::{PendingRestart, RunningAgent, Workspace},
-    protocol::ExecutionMethod,
     state::AgentState,
 };
 
@@ -64,7 +63,7 @@ impl Selection {
             let selected = ui::select_workspaces(ctx, targets.workspace).await?;
             workspaces = in_order(ctx, workspaces, selected).await?;
         }
-        let agents = client::request(&ctx.paths, ExecutionMethod::ListAgents).await?;
+        let agents = crate::client::agents::all(&ctx.paths).await?;
         Ok(Self {
             workspaces,
             agents,

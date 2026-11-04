@@ -1,6 +1,7 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
 //! It queues restores unless asked to start them now, and restores the
 //! stopped chats at once.
+use crate::client::assignments;
 use crate::client::output::resume::{
     DiscardedWork, Queued, Resumed, ResumedAgent, StoppedCommands,
 };
@@ -8,16 +9,13 @@ use crate::{
     cli::{
         args::SpaceTargets, client, commands::turns::Continuation, context::Context, terminal, ui,
     },
-    client::{
-        executions::Discarded,
-        recovery::{ReconcileOptions, Report},
-    },
+    client::recovery::ReconcileOptions,
     execution::recovery::{
         LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,
         consume, saved_at,
     },
     model::{Chat, Inspection, QueueEntry, Workspace},
-    protocol::{AssignmentMethod, ConfigTarget, RecoveryMethod},
+    protocol::ConfigTarget,
     sessions::HostName,
     state::{ExecutionState, QueueState},
 };
@@ -369,14 +367,7 @@ pub async fn run(
 /// Forget the workspace's stopped work and last sessions, only
 /// `execution`'s when given.
 async fn discard_work(ctx: &Context, workspace: String, execution: Option<String>) -> Result<i32> {
-    let discarded = client::request::<Discarded>(
-        &ctx.paths,
-        AssignmentMethod::DiscardStoppedWork {
-            workspace,
-            execution,
-        },
-    )
-    .await?;
+    let discarded = assignments::discard_stopped_work(&ctx.paths, workspace, execution).await?;
     let forgotten = DiscardedWork {
         discarded: discarded.executions,
         chats: Vec::new(),
@@ -615,20 +606,18 @@ async fn reconcile_stale_execution(
     if execution.state != ExecutionState::Unknown {
         return Ok(());
     }
-    let reports = client::request::<Vec<Report>>(
+    let reports = crate::client::recovery::reconcile(
         &ctx.paths,
-        RecoveryMethod::Reconcile {
-            workspace: Some(inspection.workspace.id.clone()),
-            options: ReconcileOptions {
-                repair: true,
-                // A protection handoff is persisted only after Shoal has
-                // decided to stop this agent. The pause path clears the child
-                // identity before the daemon can restart, so the normal
-                // launch-proof acknowledgement is unavailable even though
-                // process scanning still proves that no survivor is visible.
-                acknowledge_stopped: true,
-                ..Default::default()
-            },
+        Some(inspection.workspace.id.clone()),
+        ReconcileOptions {
+            repair: true,
+            // A protection handoff is persisted only after Shoal has
+            // decided to stop this agent. The pause path clears the child
+            // identity before the daemon can restart, so the normal
+            // launch-proof acknowledgement is unavailable even though
+            // process scanning still proves that no survivor is visible.
+            acknowledge_stopped: true,
+            ..Default::default()
         },
     )
     .await?;
@@ -829,11 +818,9 @@ async fn discard_each(
 async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> Result<Vec<String>> {
     let mut ids = Vec::new();
     for execution in saved.execution_ids() {
-        let method = AssignmentMethod::DiscardStoppedWork {
-            workspace: workspace.id.clone(),
-            execution: Some(execution),
-        };
-        let discarded = client::request::<Discarded>(&ctx.paths, method).await?;
+        let workspace = workspace.id.clone();
+        let discarded =
+            assignments::discard_stopped_work(&ctx.paths, workspace, Some(execution)).await?;
         ids.extend(discarded.executions);
     }
     Ok(ids)

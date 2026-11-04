@@ -108,10 +108,7 @@ pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Availa
 /// a session left at its shell after a failed launch, but not the session
 /// of an agent Shoal stopped to restore later.
 async fn session_workspaces(paths: &Paths) -> HashSet<String> {
-    let agents: Vec<RunningAgent> =
-        client::request(paths, crate::protocol::ExecutionMethod::ListAgents)
-            .await
-            .unwrap_or_default();
+    let agents = crate::client::agents::all(paths).await.unwrap_or_default();
     let owned: Vec<crate::model::OwnedPlace> =
         client::request(paths, crate::protocol::WorkspaceMethod::OwnedPlaces)
             .await

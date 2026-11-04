@@ -10,11 +10,11 @@ use tokio::time::{Instant, sleep, sleep_until};
 use crate::client::output::agents::Restarted;
 use crate::{
     agent::Agent,
-    cli::{args::WorkspaceTargets, client::request, context::Context},
-    client::executions::STAGGER,
+    cli::{args::WorkspaceTargets, context::Context},
+    client::{agents, executions::STAGGER},
     execution::recovery,
     model::RunningAgent,
-    protocol::{ErrorCode, ExecutionMethod, RemoteError},
+    protocol::{ErrorCode, RemoteError},
 };
 
 mod plan;
@@ -102,15 +102,9 @@ async fn restart_all(
 impl Restart {
     /// Restart the agent, or join its restart, as part of `run`.
     async fn run(&self, ctx: &Context, run: &str) -> Result<()> {
-        let restarted = request::<()>(
-            &ctx.paths,
-            ExecutionMethod::RestartAgent {
-                execution: self.agent.execution.clone(),
-                join: self.joins.clone(),
-                run: Some(run.to_owned()),
-            },
-        )
-        .await;
+        let execution = self.agent.execution.clone();
+        let run = Some(run.to_owned());
+        let restarted = agents::restart(&ctx.paths, execution, self.joins.clone(), run).await;
         restarted.map_err(|error| {
             // A restart that waits still restores the agent itself.
             match recovery::pending(&ctx.paths, &self.workspace.id) {
@@ -246,7 +240,7 @@ async fn next_idle(
 }
 
 async fn list_agents(ctx: &Context) -> Result<Vec<RunningAgent>> {
-    request(&ctx.paths, ExecutionMethod::ListAgents).await
+    agents::all(&ctx.paths).await
 }
 
 /// Take each agent's turn state and restart from `running`, and drop the

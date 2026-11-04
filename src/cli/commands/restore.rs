@@ -6,6 +6,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::resume::Stopped;
 use crate::client::output::resume::{Queued, Reopened};
+use crate::client::recovery;
 use crate::{
     cli::{
         client::{self, request},
@@ -15,7 +16,7 @@ use crate::{
         ui::{self, Fallback},
     },
     model::{Checkpoint, CheckpointCause, RemovedWorkspace, RestoredCheckpoint, RestoredWorkspace},
-    protocol::{RecoveryMethod, RemovalMethod},
+    protocol::RemovalMethod,
     shell,
     state::WorkspaceState,
     time::local_seconds,
@@ -31,7 +32,7 @@ pub(super) async fn checkpoint(
     let checkpoint: Checkpoint = ctx
         .progress(
             "Taking checkpoint",
-            request(&ctx.paths, RecoveryMethod::Checkpoint { workspace, name }),
+            recovery::checkpoint(&ctx.paths, workspace, name),
         )
         .await?;
     let files = if checkpoint.files_omitted {
@@ -118,36 +119,14 @@ async fn choose_checkpoint(
 /// Every checkpoint of an existing workspace, requested page by page;
 /// `None` when no workspace matches.
 async fn checkpoints(ctx: &Context, workspace: &str) -> Result<Option<Vec<Checkpoint>>> {
-    let mut checkpoints = Vec::new();
-    loop {
-        let after = checkpoints
-            .last()
-            .map(|checkpoint: &Checkpoint| checkpoint.number);
-        let method = RecoveryMethod::Checkpoints {
-            workspace: workspace.to_owned(),
-            after,
-        };
-        let Some(page) = request::<Option<Vec<Checkpoint>>>(&ctx.paths, method).await? else {
-            return Ok(None);
-        };
-        if page.is_empty() {
-            return Ok(Some(checkpoints));
-        }
-        checkpoints.extend(page);
-    }
+    recovery::checkpoints(&ctx.paths, workspace).await
 }
 
 async fn restore_checkpoint(ctx: &Context, workspace: String, checkpoint: u64) -> Result<i32> {
     let restored: RestoredCheckpoint = ctx
         .progress(
             "Restoring checkpoint",
-            request(
-                &ctx.paths,
-                RecoveryMethod::RestoreCheckpoint {
-                    workspace,
-                    checkpoint,
-                },
-            ),
+            recovery::restore_checkpoint(&ctx.paths, workspace, checkpoint),
         )
         .await?;
     let files = if restored.checkpoint.files_omitted {

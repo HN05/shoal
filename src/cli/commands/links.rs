@@ -4,6 +4,7 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result, bail, ensure};
 
 use super::workspaces::{self, AgentLaunch, Creation};
+use crate::client::assignments;
 use crate::client::output::workspaces::Registered;
 use crate::{
     agent::Agent,
@@ -21,8 +22,8 @@ use crate::{
         },
     },
     git,
-    model::{ReadyMarks, ReadyOutcome, Relation, Repository, ReviewMark},
-    protocol::{AssignmentMethod, ItemContext, ItemMethod, PullHead},
+    model::{ReadyMarks, Relation, Repository, ReviewMark},
+    protocol::{ItemContext, ItemMethod, PullHead},
 };
 
 /// The space and the items selected in it, with the kind of a bare number
@@ -219,8 +220,7 @@ pub(super) async fn watch(
 pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
     let (space, selection) = select(ctx, items).await?;
     let itself = space_kind(ctx, &space).await?;
-    let outcomes: Vec<ReadyOutcome> =
-        client::request(&ctx.paths, AssignmentMethod::MarkReady { space, selection }).await?;
+    let outcomes = assignments::mark_ready(&ctx.paths, space, selection).await?;
     let ReadyMarks { marks, skipped } = outcomes.into();
     for skipped in &skipped {
         eprintln!("Skipped PR {}: {}", skipped.url, skipped.reason);
@@ -239,15 +239,7 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
 pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
     let (space, selection) = select(ctx, items).await?;
     let itself = space_kind(ctx, &space).await?;
-    let marks: Vec<ReviewMark> = client::request(
-        &ctx.paths,
-        AssignmentMethod::ClearReady {
-            space,
-            selection,
-            draft,
-        },
-    )
-    .await?;
+    let marks = assignments::clear_ready(&ctx.paths, space, selection, draft).await?;
     let message = format!(
         "Ready-for-review marks cleared:\n{}",
         review_lines(&marks, itself)
