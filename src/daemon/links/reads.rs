@@ -6,13 +6,13 @@ use anyhow::{Result, bail};
 use super::{actions::NOTHING_LINKED, space::LinkSpace};
 use crate::{
     daemon::workspace::Manager,
-    forge::{
-        ForgeRepo, account::Account, conventions::labels::Label, items::link::ItemKind,
-        review::reviewers::Reviewer,
-    },
+    forge::{ForgeRepo, account::Account, items::link::ItemKind},
     model::Repository,
     protocol::ItemContext,
 };
+
+mod items;
+mod repository;
 
 /// Where a read runs: a space, whose linked items it may default to, or a
 /// registered checkout.
@@ -74,36 +74,30 @@ impl Manager {
         self.read_place_forge(&place).await
     }
 
-    /// The labels of the repository of `context`, or of the one
+    /// The forge of the repository of `context`, or of the one
     /// `repository` names.
-    pub async fn labels(
+    pub(in crate::daemon::links) async fn repository_forge(
         &self,
         context: &ItemContext,
         repository: Option<&str>,
-        scoped: bool,
-    ) -> Result<Vec<Label>> {
+    ) -> Result<ForgeRepo> {
         let own = self.context_forge(context).await?;
-        let forge = self.named_forge(own, repository).await?;
-        forge.labels(&self.read_account(scoped)).await
+        self.named_forge(own, repository).await
     }
 
-    /// Who the PR `item` names in the repository of `context`, or the
-    /// space's linked PR, can ask for a review.
-    pub async fn reviewers(
+    /// The item `item` names where `place` reads, or the space's linked
+    /// one of `kind`.
+    pub(in crate::daemon::links) async fn place_item(
         &self,
-        context: &ItemContext,
         item: Option<String>,
-        scoped: bool,
-    ) -> Result<Vec<Reviewer>> {
-        let place = self.read_place(context).await?;
-        let input = match (item, &place) {
-            (Some(item), _) => item,
-            (None, ReadPlace::Space(space)) => self.linked_item(space.id(), ItemKind::Pr).await?,
+        place: &ReadPlace,
+        kind: ItemKind,
+    ) -> Result<String> {
+        match (item, place) {
+            (Some(item), _) => Ok(item),
+            (None, ReadPlace::Space(space)) => self.linked_item(space.id(), kind).await,
             (None, ReadPlace::Checkout(_)) => bail!(NOTHING_LINKED),
-        };
-        let forge = self.read_place_forge(&place).await?;
-        let (number, _) = forge.pull(&input)?;
-        forge.reviewers(&self.read_account(scoped), number).await
+        }
     }
 }
 

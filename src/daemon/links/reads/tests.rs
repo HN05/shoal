@@ -1,4 +1,5 @@
 use crate::{
+    forge::items::link::{LinkKind, Selection},
     protocol::ItemContext,
     test_support::{ProcessGroup, git, manager, repository},
 };
@@ -34,4 +35,26 @@ async fn a_stopped_chat_reads_in_its_repositorys_checkout() {
         .await
         .unwrap();
     assert!(forge == manager.forge(origin).await.unwrap());
+}
+
+#[tokio::test]
+async fn a_checkout_without_an_origin_selects_an_item_by_its_url() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let url = "https://github.com/team/other/issues/7";
+    let selection = Selection {
+        kind: Some(LinkKind::Issue),
+        input: Some(url.into()),
+    };
+
+    let selected = manager
+        .select_context_items(&ItemContext::Checkout(repo.id), &selection, true, false)
+        .await
+        .unwrap();
+    assert_eq!(selected.items.len(), 1);
+    assert_eq!(selected.items[0].url, url);
 }

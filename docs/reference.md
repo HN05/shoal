@@ -2053,6 +2053,9 @@ Issue and PR changes Shoal makes for a workspace use the agent account: the
 host's `agent_token` under [`[machine.forges."<host>"]`](#forges), with
 `agent_email` for a Bitbucket API token. Without an `agent_token`, changes use
 your token, as the agent would.
+Forge reads follow the same rule: processes inside a workspace and a chat's
+agent read issues, PRs, labels, reactions and the forge's capabilities as the
+agent account, anyone else with your own logins.
 
 The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
 variables, after any inherited entries, so it overrides every Git config file for
@@ -3427,7 +3430,9 @@ capability of the workspace repository's forge, such as resolving review
 threads, rerunning CI jobs, labels or a merge method, and whether the forge has
 it, asking the server where releases differ, with what to do instead when it
 does not; `--json` returns `forge` and `capabilities`, each with `capability`,
-`supported` and an optional `hint`.
+`supported` and an optional `hint`. Processes inside a workspace and a chat's
+agent read capabilities and reactions as the [agent account](#agent-accounts),
+anyone else with your own logins.
 A command that needs only a repository, such as this one, reads the repository
 of the workspace or registered checkout it runs in, such as a chat's, else a
 registered repository the user picks, and with `--repo`, named as for

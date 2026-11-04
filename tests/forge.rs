@@ -485,14 +485,11 @@ fn github_lists_assignable_users_and_an_organizations_teams_as_reviewers() {
 }
 
 #[test]
-fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
+fn apps_read_forge_items_through_the_daemon() {
     use shoal::client::forge::items::link::{ItemKind, LinkKind, Selection};
     use shoal::client::{
-        connection::{self, Connector},
-        output::view::Shown,
-        paths::Paths,
-        protocol::ItemContext,
-        views,
+        connection::Connector, forge_reads, output::view::Shown, paths::Paths,
+        protocol::ItemContext, views,
     };
     let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     let mut responses = failed_check_responses();
@@ -536,6 +533,16 @@ fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
             "GET repos/team/project/reviewers",
             json!([{"login": "kim", "full_name": "Kim Lee"}]),
         ),
+        (
+            "GET repos/team/project/issues/3",
+            json!({"number": 3, "title": "Crash", "body": "Steps", "state": "open",
+                "labels": [], "user": {"login": "sam"}}),
+        ),
+        ("GET version", json!({"version": "11.0.0+gitea-1.22.0"})),
+        (
+            "GET settings/ui",
+            json!({"allowed_reactions": ["+1", "heart"]}),
+        ),
     ] {
         responses[key] = json!({"body": body});
     }
@@ -561,14 +568,14 @@ fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
     // repository's checkout.
     for context in [workspace(), checkout()] {
         let labels = runtime
-            .block_on(connection::labels(&app, context.clone(), None))
+            .block_on(forge_reads::labels(&app, context.clone(), None))
             .unwrap();
         assert_eq!(
             labels.iter().map(|label| &label.name).collect::<Vec<_>>(),
             ["bug"]
         );
         let reviewers = runtime
-            .block_on(connection::reviewers(
+            .block_on(forge_reads::reviewers(
                 &app,
                 context.clone(),
                 Some("8".into()),
@@ -612,17 +619,52 @@ fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
     }
 
     // A number without a kind takes the one the forge reports for it.
-    let bare = Selection {
+    let bare_8 = || Selection {
         kind: None,
         input: Some("8".into()),
     };
     let shown = runtime
-        .block_on(views::read(&app, workspace(), bare, false))
+        .block_on(views::read(&app, workspace(), bare_8(), false))
         .unwrap();
     assert!(
         matches!(shown.as_slice(), [Shown::Item(view)] if view.kind == ItemKind::Pr && view.details.is_some()),
     );
     fixture.requests();
+
+    // What the CLI reads before it acts goes through the daemon too.
+    let capabilities = runtime
+        .block_on(forge_reads::capabilities(&app, workspace(), None))
+        .unwrap();
+    assert_eq!(capabilities.forge, "Forgejo or Gitea");
+    let reactions = runtime
+        .block_on(forge_reads::reactions(&app, checkout(), None))
+        .unwrap();
+    assert_eq!(reactions.names, ["+1", "heart"]);
+    let kind = runtime
+        .block_on(forge_reads::number_kind(&app, checkout(), 8))
+        .unwrap();
+    assert_eq!(kind, LinkKind::Pr);
+    let selected = runtime
+        .block_on(forge_reads::select_items(&app, checkout(), bare_8(), false))
+        .unwrap();
+    assert_eq!(selected.items.len(), 1);
+    assert_eq!(selected.items[0].kind, LinkKind::Pr);
+    let issue = runtime
+        .block_on(forge_reads::issue_details(&app, workspace(), "3".into()))
+        .unwrap();
+    assert_eq!(
+        (issue.number, issue.title.as_str(), issue.details.as_str()),
+        (3, "Crash", "Steps")
+    );
+    let pull = runtime
+        .block_on(forge_reads::pull_request(&app, checkout(), "8".into()))
+        .unwrap();
+    assert_eq!((pull.number, pull.head.as_str()), (8, "topic"));
+    let reads = fixture.requests();
+    assert!(
+        reads.iter().all(|request| request[2] == "token usertoken"),
+        "{reads:?}"
+    );
 
     // A workspace's agent reads as its agent account, and only from its
     // workspace.
@@ -632,15 +674,19 @@ fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
         .to_owned();
     let agent = app.clone().scope(scope);
     let labels = runtime
-        .block_on(connection::labels(&agent, workspace(), None))
+        .block_on(forge_reads::labels(&agent, workspace(), None))
         .unwrap();
     assert_eq!(labels.len(), 1);
+    let issue = runtime
+        .block_on(forge_reads::issue_details(&agent, workspace(), "3".into()))
+        .unwrap();
+    assert_eq!(issue.number, 3);
     let reads = fixture.requests();
     assert!(
         reads.iter().all(|request| request[2] == "token agenttoken"),
         "{reads:?}"
     );
-    let refused = runtime.block_on(connection::labels(&agent, checkout(), None));
+    let refused = runtime.block_on(forge_reads::labels(&agent, checkout(), None));
     assert!(format!("{:#}", refused.unwrap_err()).contains("not from a registered checkout"));
 
     // A scoped view fetches the agent's token once, for the PR and the logs
@@ -4399,7 +4445,7 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
     let pr = format!("{}/pulls/9", fixture.web);
     fixture.ok(&["link", "ci", "2765", "related", "--space", "planning"]);
     fixture.ok(&["link", "pr", "9", "assigned", "--space", "planning"]);
-    let selected = fixture.request(json!({"select_items": {"space": "planning",
+    let selected = fixture.request(json!({"select_items": {"chat": "planning",
         "selection": {"kind": null, "input": null}}}));
     let urls: Vec<&Value> = selected["data"]["items"]
         .as_array()
@@ -4430,7 +4476,7 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
     fixture.requests();
     fixture.ok(&["unlink", "11", "related", "--space", "planning"]);
     assert_eq!(fixture.requests(), Vec::<Value>::new());
-    let selected = fixture.request(json!({"select_items": {"space": "planning",
+    let selected = fixture.request(json!({"select_items": {"chat": "planning",
         "selection": {"kind": null, "input": null}}}));
     assert_eq!(selected["data"]["items"], json!([]), "{selected}");
     agent.kill().unwrap();

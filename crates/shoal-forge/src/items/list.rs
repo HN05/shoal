@@ -42,6 +42,20 @@ pub struct Search {
 }
 
 impl Search {
+    /// The open items a picker offers to choose from.
+    pub fn picker() -> Self {
+        Self::open(PICKER_LIMIT)
+    }
+
+    /// Open items labelled `label`. Unlike a picker's, the listing reaches
+    /// back far enough to hold the oldest of them.
+    pub fn labelled(label: &str) -> Self {
+        Self {
+            labels: vec![label.to_owned()],
+            ..Self::open(MAX_LIMIT)
+        }
+    }
+
     fn open(limit: usize) -> Self {
         Self {
             state: StateFilter::Open,
@@ -98,26 +112,6 @@ impl ForgeRepo {
         items.retain(|item| search.includes(item.state));
         items.truncate(search.limit);
         Ok(items)
-    }
-
-    pub async fn open_issues(&self, account: &Account) -> Result<Vec<Item>> {
-        self.list(account, ItemKind::Issue, &Search::open(PICKER_LIMIT))
-            .await
-    }
-
-    /// Open issues labelled `label`, newest first. Unlike a picker's, the
-    /// listing reaches back far enough to hold the oldest of them.
-    pub async fn open_issues_labelled(&self, account: &Account, label: &str) -> Result<Vec<Item>> {
-        let search = Search {
-            labels: vec![label.to_owned()],
-            ..Search::open(MAX_LIMIT)
-        };
-        self.list(account, ItemKind::Issue, &search).await
-    }
-
-    pub async fn open_pulls(&self, account: &Account) -> Result<Vec<Item>> {
-        self.list(account, ItemKind::Pr, &Search::open(PICKER_LIMIT))
-            .await
     }
 }
 

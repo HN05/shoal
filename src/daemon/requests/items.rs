@@ -74,6 +74,54 @@ pub(super) async fn handle(
             let reviewers = manager.reviewers(&context, item, caller.is_some()).await;
             return Ok(Answer::pages(reviewers, Body::Reviewers));
         }
+        ItemMethod::Capabilities {
+            context,
+            repository,
+        } => Body::Capabilities(
+            manager
+                .capabilities(&context, repository.as_deref(), caller.is_some())
+                .await?,
+        ),
+        ItemMethod::Reactions {
+            context,
+            repository,
+        } => Body::Reactions(
+            manager
+                .reactions(&context, repository.as_deref(), caller.is_some())
+                .await?,
+        ),
+        ItemMethod::ReviewThread {
+            context,
+            item,
+            comment,
+        } => Body::Thread(
+            manager
+                .review_thread(&context, item, comment, caller.is_some())
+                .await?,
+        ),
+        ItemMethod::NumberKind { context, number } => Body::LinkKind(
+            manager
+                .number_kind(&context, number, caller.is_some())
+                .await?,
+        ),
+        ItemMethod::IssueDetails { context, item } => {
+            let issue = manager
+                .issue_details(&context, &item, caller.is_some())
+                .await
+                .and_then(|issue| json_pieces(&issue));
+            return Ok(Answer::pages(issue, Body::ViewPieces));
+        }
+        ItemMethod::IssueBlockers { context, item } => {
+            let blockers = manager
+                .issue_blockers(&context, &item, caller.is_some())
+                .await;
+            return Ok(Answer::pages(blockers, Body::Dependencies));
+        }
+        ItemMethod::PullRequest { context, item } => Body::PullRequest(
+            manager
+                .pull_request(&context, &item, caller.is_some())
+                .await?,
+        ),
         ItemMethod::ViewItems {
             context,
             selection,
@@ -82,7 +130,7 @@ pub(super) async fn handle(
             let viewed = manager
                 .view_items(&context, &selection, comments, caller.is_some())
                 .await
-                .and_then(|viewed| view_pieces(&viewed));
+                .and_then(|viewed| json_pieces(&viewed));
             return Ok(Answer::pages(viewed, Body::ViewPieces));
         }
         ItemMethod::ForgeApi {
@@ -149,12 +197,12 @@ pub(super) async fn handle(
                 .await?,
         ),
         ItemMethod::SelectItems {
-            space: workspace,
+            context,
             selection,
             elsewhere,
         } => Body::SelectedItems(
             manager
-                .select_items(&workspace, &selection, elsewhere)
+                .select_context_items(&context, &selection, elsewhere, caller.is_some())
                 .await?,
         ),
         ItemMethod::SetIssue {
@@ -195,16 +243,12 @@ pub(super) async fn handle(
             manager.set_pr(&workspace, action).await?;
             Body::Ok
         }
-        ItemMethod::ForgeType { host, scheme } => {
-            Body::ForgeType(manager.requested_forge_type(&host, &scheme).await?)
-        }
     }))
 }
 
 impl Scoped for ItemMethod {
     async fn scope(&mut self, manager: &Manager, _: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
-            ItemMethod::ForgeType { .. } => None,
             ItemMethod::WatchItems {
                 space: workspace,
                 selection,
@@ -238,6 +282,14 @@ impl Scoped for ItemMethod {
             | ItemMethod::ListItems { context, .. }
             | ItemMethod::Labels { context, .. }
             | ItemMethod::Reviewers { context, .. }
+            | ItemMethod::Capabilities { context, .. }
+            | ItemMethod::Reactions { context, .. }
+            | ItemMethod::ReviewThread { context, .. }
+            | ItemMethod::NumberKind { context, .. }
+            | ItemMethod::IssueDetails { context, .. }
+            | ItemMethod::IssueBlockers { context, .. }
+            | ItemMethod::PullRequest { context, .. }
+            | ItemMethod::SelectItems { context, .. }
             | ItemMethod::ViewItems { context, .. }
             | ItemMethod::ForgeApi { context, .. }
             | ItemMethod::ForgeDownload { context, .. }
@@ -274,9 +326,6 @@ impl Scoped for ItemMethod {
             }
             | ItemMethod::MergedPull {
                 space: workspace, ..
-            }
-            | ItemMethod::SelectItems {
-                space: workspace, ..
             } => Some(workspace),
         })
     }
@@ -293,10 +342,10 @@ pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut String
     }
 }
 
-/// The views as pieces of their JSON, each fitting a frame: one PR's
-/// discussion may outgrow a frame of its own.
-fn view_pieces(viewed: &crate::client::views::Viewed) -> Result<Vec<ViewPiece>> {
-    let json = serde_json::to_string(viewed)?;
+/// `value` as pieces of its JSON, each fitting a frame: one PR's discussion
+/// or one issue's description may outgrow a frame of its own.
+fn json_pieces(value: &impl serde::Serialize) -> Result<Vec<ViewPiece>> {
+    let json = serde_json::to_string(value)?;
     Ok(protocol::text_pieces(&json)
         .into_iter()
         .map(ViewPiece)

@@ -3,9 +3,13 @@ use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     cli::{client, context::Context, ui},
-    forge::{ForgeRepo, IssueInput, items::link::ItemKind},
+    forge::{
+        ForgeRepo, IssueInput,
+        items::link::{ItemKind, LinkKind, Selection},
+    },
     git,
-    model::Repository,
+    model::{PresentSpace, Repository},
+    protocol::ItemContext,
     repository,
 };
 
@@ -278,55 +282,53 @@ fn title_words(title: &str) -> Vec<String> {
         .collect()
 }
 
-/// The forge that hosts the repository's origin remote.
-pub(super) async fn origin_forge(ctx: &Context, repo: &Repository) -> Result<ForgeRepo> {
-    let remote = repository::remote_url_from_path(&repo.path)
-        .await?
-        .context("forge lookup needs an origin remote")?;
-    ForgeRepo::resolve(&remote, &ctx.forge_hosts()?).await
+/// Where a command reads from the forge of `repo`: the workspace or chat
+/// this runs in, whose scope reads only there, when it is of `repo`, else
+/// the repository's registered checkout.
+pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Result<ItemContext> {
+    let own = if crate::env::workspace_scoped() {
+        Some(ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?)
+    } else {
+        crate::env::chat()
+    };
+    if let Some(space) = own
+        && let Some(space) = client::present_space(&ctx.paths, &space).await?
+        && space.repository_id() == repo.id
+    {
+        return Ok(match space {
+            PresentSpace::Workspace(workspace) => ItemContext::Workspace(workspace.id),
+            PresentSpace::Chat(chat) => ItemContext::Chat(chat.id),
+        });
+    }
+    Ok(ItemContext::Checkout(repo.id.clone()))
 }
 
-/// The issue `input` names in the repository, read with the user's logins.
-pub(in crate::cli) async fn load(ctx: &Context, repo: &Repository, input: &str) -> Result<Issue> {
-    let forge = origin_forge(ctx, repo).await?;
-    let (number, url) = forge.issue(input)?;
-    let (title, details) = forge.issue_details(&ctx.forge_account()?, number).await?;
+/// The issue `input` names in the repository of `context`, by number or
+/// URL.
+pub(in crate::cli) async fn load(
+    ctx: &Context,
+    context: ItemContext,
+    input: &str,
+) -> Result<Issue> {
+    let issue = client::issue_details(&ctx.paths, context, input.to_owned()).await?;
     Ok(Issue {
-        number,
-        title,
-        url,
-        details,
+        number: issue.number,
+        title: issue.title,
+        url: issue.url,
+        details: issue.details,
     })
 }
 
 /// The URL of the issue `input` names: a number in the repository, or a URL.
 pub(in crate::cli) async fn url(ctx: &Context, repo: &Repository, input: &str) -> Result<String> {
-    let forge = match crate::forge::IssueInput::parse(input) {
-        crate::forge::IssueInput::Url => {
-            ForgeRepo::resolve_issue_url(input, &ctx.forge_hosts()?).await?
-        }
-        _ => origin_forge(ctx, repo).await?,
+    let selection = Selection {
+        kind: Some(LinkKind::Issue),
+        input: Some(input.to_owned()),
     };
-    Ok(forge.issue(input)?.1)
-}
-
-/// The URLs of the open issues the forge records as blocking `issue`, read
-/// with the user's logins.
-pub(in crate::cli) async fn open_dependencies(
-    ctx: &Context,
-    repo: &Repository,
-    issue: &Issue,
-) -> Result<Vec<String>> {
-    let forge = origin_forge(ctx, repo).await?;
-    let mut urls = Vec::new();
-    let account = ctx.forge_account()?;
-    for url in forge
-        .open_issue_dependencies(&account, issue.number)
-        .await?
-    {
-        urls.push(ForgeRepo::from_issue_url(&url)?.issue(&url)?.1);
-    }
-    Ok(urls)
+    let context = read_context(ctx, repo).await?;
+    let selected = client::select_items(&ctx.paths, context, selection, true).await?;
+    let issue = selected.items.into_iter().next();
+    Ok(issue.context("no issue selected")?.url)
 }
 
 #[cfg(test)]

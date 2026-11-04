@@ -18,19 +18,11 @@ fn downloads_stop_when_their_client_hangs_up() {
 }
 
 #[test]
-fn reads_that_finish_or_record_work_run_to_the_end() {
-    // Planning moves first finishes an interrupted one; a forge type is
-    // recorded once learned.
+fn reads_that_finish_work_run_to_the_end() {
+    // Planning moves first finishes an interrupted one.
     let plan = RepositoryMethod::PlanRepositoryMoves {
         root: None,
         regular_dir: false,
     };
-    let forge = ItemMethod::ForgeType {
-        host: "example.com".into(),
-        scheme: "https".into(),
-    };
-    for operation in [plan.into(), forge.into()] {
-        let operation: Operation = operation;
-        assert!(!operation.reads_only(), "{operation:?}");
-    }
+    assert!(!Operation::from(plan).reads_only());
 }

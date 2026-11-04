@@ -141,18 +141,71 @@ pub enum ItemMethod {
         url: String,
         repository: Option<String>,
     },
-    /// Linked items, or an explicit one, for the CLI to look up; with
+    /// What the forge of the context's repository, or of the one
+    /// `repository` names, supports, asking its server where the forge's
+    /// versions differ.
+    Capabilities {
+        #[serde(flatten)]
+        context: ItemContext,
+        repository: Option<String>,
+    },
+    /// The reactions the forge of the context's repository, or of the one
+    /// `repository` names, allows.
+    Reactions {
+        #[serde(flatten)]
+        context: ItemContext,
+        repository: Option<String>,
+    },
+    /// The review thread of `comment` on the PR `item` names in the
+    /// context's repository, or on the space's linked PR.
+    ReviewThread {
+        #[serde(flatten)]
+        context: ItemContext,
+        item: Option<String>,
+        comment: u64,
+    },
+    /// The kind of the item numbered `number`: in a space, that of the
+    /// linked item with that number, otherwise the kind the forge reports.
+    NumberKind {
+        #[serde(flatten)]
+        context: ItemContext,
+        number: u64,
+    },
+    /// The issue `item` names in the context's repository, by number or
+    /// URL, answered as pieces of the JSON of
+    /// [`crate::forge::items::issue::IssueDetails`] in one or more
+    /// `view_pieces` frames and then `ok`.
+    IssueDetails {
+        #[serde(flatten)]
+        context: ItemContext,
+        item: String,
+    },
+    /// The open issues the forge records as blocking the issue `item`
+    /// names in the context's repository, as issue dependencies, answered in one or more `dependencies`
+    /// frames and then `ok`.
+    IssueBlockers {
+        #[serde(flatten)]
+        context: ItemContext,
+        item: String,
+    },
+    /// The PR `item` names in the context's repository, with where its
+    /// head is.
+    PullRequest {
+        #[serde(flatten)]
+        context: ItemContext,
+        item: String,
+    },
+    /// Linked items, or an explicit one, for the client to look up; with
     /// `elsewhere`, also an issue, PR or CI run of another repository by its
-    /// URL.
+    /// URL. In a registered checkout, where nothing is linked, only a number
+    /// or URL selects an item.
     SelectItems {
-        space: String,
+        #[serde(flatten)]
+        context: ItemContext,
         selection: crate::forge::items::link::Selection,
         #[serde(default)]
         elsewhere: bool,
     },
-    /// The forge `host` serves, asking it over `scheme` once when neither
-    /// the global config nor a recorded answer says.
-    ForgeType { host: String, scheme: String },
 }
 
 /// A piece of a downloaded file, sent in order: its content type, if the
@@ -196,7 +249,8 @@ impl DownloadPiece {
     }
 }
 
-/// A piece of the JSON of an item view response, which the client joins.
+/// A piece of the JSON of an item read the client joins: a view, or an
+/// issue's details.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ViewPiece(pub String);

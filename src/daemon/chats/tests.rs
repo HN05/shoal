@@ -893,7 +893,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
     use crate::{
         daemon::scope::{Caller, authorize},
         forge::items::link::Selection,
-        protocol::{ItemMethod, Operation, WorkspaceMethod},
+        protocol::{ItemContext, ItemMethod, Operation, WorkspaceMethod},
     };
     let (temp, manager) = manager().await;
     let (repo, workspace) = workspace(temp.path(), &manager).await;
@@ -930,7 +930,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         workspace: workspace.name.clone(),
     });
     let items = Operation::from(ItemMethod::SelectItems {
-        space: workspace.name.clone(),
+        context: ItemContext::Workspace(workspace.name.clone()),
         selection: Selection::default(),
         elsewhere: false,
     });

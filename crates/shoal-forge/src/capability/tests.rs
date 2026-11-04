@@ -33,6 +33,8 @@ fn capabilities_list_every_capability_in_order() -> Result<()> {
         .iter()
         .find(|entry| entry.capability == Capability::ReopenPrs);
     assert_eq!(reopen.map(|entry| entry.supported), Some(false));
+    assert!(!bitbucket.supports(Capability::ReopenPrs));
+    assert!(github.supports(Capability::ReopenPrs));
     Ok(())
 }
 

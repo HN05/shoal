@@ -4,7 +4,7 @@
 //! session; or a workspace at a commit, with no branch or agent of its own.
 use std::ffi::OsString;
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 
 use crate::client::output::split::Child;
 use crate::{
@@ -20,8 +20,8 @@ use crate::{
     daemon::refusal::{Reason, Refusal},
     model::{AgentSession, QueueEntry, SpaceRef, Workspace},
     protocol::{
-        AgentMethod, CommitStart, ConfigTarget, CreationOptions, OperationMethod, WorkspaceMethod,
-        operations::StartedWorkspace,
+        AgentMethod, CommitStart, ConfigTarget, CreationOptions, ItemContext, OperationMethod,
+        WorkspaceMethod, operations::StartedWorkspace,
     },
     shell,
     state::{QueueState, WorkspaceState},
@@ -274,17 +274,8 @@ fn report(ctx: &Context, child: &Workspace, agent: Option<&QueueEntry>) -> Resul
 
 /// The issue `input` names in the parent workspace's repository.
 async fn load_issue(ctx: &Context, parent: &str, input: &str) -> Result<Issue> {
-    let workspace = client::workspaces(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|workspace| workspace.id == parent || workspace.name == parent)
-        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown workspace: {parent}")))?;
-    let repository = client::repositories(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|repository| repository.id == workspace.repository_id)
-        .context("the parent workspace's repository is not registered")?;
-    super::issues::load(ctx, &repository, input).await
+    let context = ItemContext::Workspace(parent.to_owned());
+    super::issues::load(ctx, context, input).await
 }
 
 /// The parent and child spaces of a space, when it has any.

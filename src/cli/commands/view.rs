@@ -117,7 +117,7 @@ fn render_views(views: &[Shown], json: bool) {
 async fn open(ctx: &Context, items: ItemArgs, repo: Option<String>) -> Result<i32> {
     may_open_browser(ctx)?;
     let (context, selection) = links::select_in_context(ctx, items, repo).await?;
-    let selected = links::select_items(ctx, &context, selection, true).await?;
+    let selected = client::select_items(&ctx.paths, context, selection, true).await?;
     open_urls(
         ctx,
         selected.items.into_iter().map(|item| item.url).collect(),

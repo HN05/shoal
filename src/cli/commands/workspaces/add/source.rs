@@ -9,8 +9,9 @@ use crate::{
         context::Context,
         ui,
     },
+    forge::items::{link::ItemKind, list::Search},
     git::{self, existing_branch::Branch},
-    protocol::RepositoryMethod,
+    protocol::{ItemContext, RepositoryMethod},
     state::WorkspaceState,
 };
 
@@ -50,20 +51,18 @@ pub(super) async fn pick_add_source(
         Source::New => {}
         Source::Existing => creation.existing = Some(pick_add_branch(ctx, target).await?),
         Source::Issue => {
-            let repo = target.repository(ctx).await?;
-            let issues = issues::origin_forge(ctx, repo)
-                .await?
-                .open_issues(&ctx.forge_account()?)
-                .await?;
-            return ui::pick_item(ctx, "Issue> ", "issues", issues).map(Some);
+            let context = read_context(ctx, target).await?;
+            let search = Search::picker();
+            let issues = client::list_items(&ctx.paths, context, ItemKind::Issue, search, None);
+            return ui::pick_item(ctx, "Issue> ", "issues", issues.await?).map(Some);
         }
         Source::Pull => {
+            let context = read_context(ctx, target).await?;
+            let search = Search::picker();
+            let pulls = client::list_items(&ctx.paths, context.clone(), ItemKind::Pr, search, None);
+            let number = ui::pick_item(ctx, "Pull request> ", "pull requests", pulls.await?)?;
+            let pull = client::pull_request(&ctx.paths, context, number).await?;
             let repo = target.repository(ctx).await?;
-            let forge = issues::origin_forge(ctx, repo).await?;
-            let account = ctx.forge_account()?;
-            let pulls = forge.open_pulls(&account).await?;
-            let number = ui::pick_item(ctx, "Pull request> ", "pull requests", pulls)?;
-            let pull = forge.pull_request(&account, &number).await?;
             links::pull_creation(ctx, repo, pull, creation).await?;
         }
     }
@@ -78,11 +77,17 @@ pub(super) async fn load_add_issue(
     input: Option<String>,
 ) -> Result<Option<issues::Issue>> {
     match input {
-        Some(input) => Ok(Some(
-            issues::load(ctx, target.repository(ctx).await?, &input).await?,
-        )),
+        Some(input) => {
+            let context = read_context(ctx, target).await?;
+            Ok(Some(issues::load(ctx, context, &input).await?))
+        }
         None => Ok(None),
     }
+}
+
+/// Where the addition's forge reads run.
+async fn read_context(ctx: &Context, target: &AddTarget) -> Result<ItemContext> {
+    issues::read_context(ctx, target.repository(ctx).await?).await
 }
 
 pub(super) async fn select_add_creation(

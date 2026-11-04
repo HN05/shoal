@@ -1,8 +1,8 @@
 //! Issues and PRs the daemon reads for `shoal view` and apps, as the forge
 //! reports them now, with the logs of failed checks.
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use super::{actions::NOTHING_LINKED, reads::ReadPlace, space::LinkSpace};
+use super::{reads::ReadPlace, space::LinkSpace};
 use crate::{
     client::views::Viewed,
     daemon::workspace::Manager,
@@ -10,10 +10,10 @@ use crate::{
         ForgeRepo,
         account::Account,
         capability::Capability,
-        items::link::{ItemKind, LinkKind, Selection},
+        items::link::{ItemKind, Selection},
         review::view::ItemView,
     },
-    model::{Repository, Selected, SelectedItem},
+    model::SelectedItem,
     protocol::ItemContext,
 };
 
@@ -63,7 +63,7 @@ impl Manager {
                 Ok(self.select_items(space.id(), &selection, true).await?.items)
             }
             ReadPlace::Checkout(checkout) => {
-                let item = self.checkout_item(checkout, selection, account).await?;
+                let item = (self.checkout_item(checkout, selection, true, account)).await?;
                 Ok(vec![item])
             }
         }
@@ -84,44 +84,11 @@ impl Manager {
         let Ok(number) = input.parse::<u64>() else {
             return Ok(selection.clone());
         };
-        let kind = match linked_kind(space, number).await? {
-            Some(kind) => kind,
-            None => (self.space_forge(space).await?)
-                .item_kind(account, number)
-                .await?
-                .into(),
-        };
+        let kind = self.space_number_kind(space, number, account).await?;
         Ok(Selection {
             kind: Some(kind),
             input: selection.input.clone(),
         })
-    }
-
-    /// The item `selection` names in the repository of the registered
-    /// checkout, where nothing is linked, or the item of another repository
-    /// its URL names. A number without a kind takes the one the forge
-    /// reports for it.
-    async fn checkout_item(
-        &self,
-        checkout: &Repository,
-        selection: &Selection,
-        account: &Account,
-    ) -> Result<SelectedItem> {
-        let input = selection.input.as_deref().context(NOTHING_LINKED)?;
-        if let Some(item) = self.item_elsewhere(&checkout.path, selection).await? {
-            return Ok(item);
-        }
-        let forge = self.checkout_forge(checkout).await?;
-        let kind = match selection.kind {
-            Some(kind) => kind,
-            None => forge.item_kind(account, input.parse()?).await?.into(),
-        };
-        let (_, url) = match kind {
-            LinkKind::Issue => forge.issue(input)?,
-            LinkKind::Pr => forge.pull(input)?,
-            LinkKind::Ci => forge.run(input)?,
-        };
-        Ok(SelectedItem { url, kind })
     }
 
     /// Each issue and PR among `items` as the forge reports it now, in
@@ -160,26 +127,6 @@ impl Manager {
             _ => Ok(own.clone()),
         }
     }
-}
-
-/// The kind of the item numbered `number` linked to `space` under any
-/// relation.
-async fn linked_kind(space: &LinkSpace, number: u64) -> Result<Option<LinkKind>> {
-    let linked = Selected {
-        path: space.origin_path().to_owned(),
-        items: (space.links().items().into_iter())
-            .map(|item| SelectedItem {
-                url: item.url,
-                kind: item.kind,
-            })
-            .collect(),
-    };
-    // A number names an item of the space's repository; issues opened in
-    // another one share its numbers.
-    let remote = crate::repository::remote_url_from_path(space.origin_path())
-        .await?
-        .context("item lookup needs an origin remote")?;
-    linked.kind_of(&remote, number)
 }
 
 /// Add the logs of the failed checks of the PRs among `views` in `own`'s

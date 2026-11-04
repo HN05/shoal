@@ -18,7 +18,7 @@ use crate::{
         context::Context,
     },
     model::{Chat, OwnedPlace, Repository, Workspace},
-    protocol::{ConfigTarget, WorkspaceMethod},
+    protocol::{ConfigTarget, ItemContext, WorkspaceMethod},
     sessions::Origin,
 };
 
@@ -108,7 +108,9 @@ pub(super) async fn name_plan(
     let repo = crate::repository::select(&repos, &plan.repository).await?;
     // A queued start has only the issue's URL; the template may name it.
     let found = match (issue, plan.issue_url()) {
-        (None, Some(url)) => Some(issues::load(ctx, repo, url).await?),
+        (None, Some(url)) => {
+            Some(issues::load(ctx, plan.item_context(ctx, repo).await?, url).await?)
+        }
         _ => None,
     };
     plan.place_name = Some(PlaceName::new(
@@ -141,7 +143,10 @@ pub(super) async fn workspace_label(
             .find(|repo| repo.id == workspace.repository_id)
             .context("repository is no longer registered")?;
         let issue = match &workspace.links.issue {
-            Some(url) => Some(issues::load(ctx, repo, url).await?),
+            Some(url) => {
+                let context = ItemContext::Workspace(workspace.id.clone());
+                Some(issues::load(ctx, context, url).await?)
+            }
             None => None,
         };
         let name = PlaceName::new(template, repo, issue.as_ref());

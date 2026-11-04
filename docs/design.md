@@ -1418,7 +1418,8 @@ already done that an agent waits on. Protection stops a one-shot run before
 any agent, since it has no session to lose; it asks for a slot again and waits
 for healthy readings, as a stopped agent's restore does. A chat has no worktree or branch, so it
 reviews no changes of its own: it names the workspace it reviews, or reviews
-its one linked PR as a PR target, and its reviews are those of its linked PRs. A PR target, named by URL or `--pr`, resolves a same-repository PR with the user's forge login and
+its one linked PR as a PR target, and its reviews are those of its linked PRs. A PR target, named by URL or `--pr`, resolves a same-repository PR through the daemon's
+forge reads, as the agent account for a scoped caller and the user's logins otherwise, and
 reviews its head branch against the PR base, reusing the owning workspace after
 fast-forwarding it to the pushed head; local commits ahead stay, divergence is refused.
 The daemon fast-forwards under a lifecycle reservation and the repository's Git gate,
@@ -1796,12 +1797,14 @@ reacting reads first and changes only a reaction not already as asked, since
 forges differ in whether adding one twice fails. A comment edit changes only
 a comment the acting login wrote, checked against the item's discussion before
 anything is sent, since an account with admin rights could otherwise rewrite
-someone else's words. Listing issues and PRs, and
-reading items' views, a PR's possible reviewers and a repository's labels, also
-run in the daemon, so apps read them without choosing a login or a host's forge
-themselves: a scoped caller reads as the agent account and anyone else as the
-user's own logins, in another repository too, since checking for a duplicate
-before filing there is only a read. A search uses each forge's own search and
+someone else's words. Every forge read also runs in the daemon: listing issues
+and PRs, items' views, the kind of a bare number, an issue's details and
+blockers, a PR's head, possible reviewers and review threads, and a
+repository's labels, reactions and capabilities. Apps read them without
+choosing a login or a host's forge themselves, and the CLI resolves no forge
+host of its own: a scoped caller reads as the agent account and anyone else as
+the user's own logins, in another repository too, since checking for a
+duplicate before filing there is only a read. A search uses each forge's own search and
 reads pages only until the limit is met. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
 command models. The daemon

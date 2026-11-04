@@ -12,13 +12,12 @@ use crate::{
     cli::{
         args::changes::{RevertArgs, RevertedPr},
         client::{self, request},
-        commands::{capabilities::forge_of, issues, items::checkout_repository, split},
+        commands::split,
         context::Context,
         ui,
     },
     daemon::links::proposals::OpenOutcome,
     execution,
-    forge::ForgeRepo,
     forge::{
         capability::Capability,
         items::{
@@ -27,9 +26,9 @@ use crate::{
         },
     },
     git::revert::{self as git_revert, Merge, Merged, Reverted},
-    model::{Chat, PresentSpace, Repository, Workspace},
+    model::{Chat, PresentSpace, Workspace},
     protocol::{
-        AssignmentMethod, ItemMethod, OperationMethod, RemovalMethod, WorkspaceMethod,
+        AssignmentMethod, ItemContext, ItemMethod, OperationMethod, RemovalMethod, WorkspaceMethod,
         operations::{StartedWorkspace, WorkspaceStart},
     },
     removal::{RemovalResult, UnsavedWork},
@@ -40,7 +39,7 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
     let options = revert_args(args)?;
     let space = ui::select_space(ctx, selector.space, ui::Fallback::CurrentDirectory).await?;
     let from = Reverting::of(ctx, space).await?;
-    if from.forge(ctx).await?.supports(Capability::RevertPrs) {
+    if from.forge_reverts(ctx).await? {
         let method = ItemMethod::RevertPull {
             space: from.id().to_owned(),
             item: selector.item,
@@ -86,17 +85,14 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
 )]
 enum Reverting {
     Workspace(Box<Workspace>),
-    Chat { chat: Chat, repository: Repository },
+    Chat(Chat),
 }
 
 impl Reverting {
     /// The workspace or running chat `space` names.
     async fn of(ctx: &Context, space: String) -> Result<Self> {
         match client::present_space(&ctx.paths, &space).await? {
-            Some(PresentSpace::Chat(chat)) => {
-                let repository = checkout_repository(ctx, &chat.repository_id).await?;
-                Ok(Self::Chat { chat, repository })
-            }
+            Some(PresentSpace::Chat(chat)) => Ok(Self::Chat(chat)),
             _ => {
                 let method = WorkspaceMethod::VerifyWorkspace {
                     workspace: space,
@@ -112,16 +108,18 @@ impl Reverting {
     fn id(&self) -> &str {
         match self {
             Self::Workspace(workspace) => &workspace.id,
-            Self::Chat { chat, .. } => &chat.id,
+            Self::Chat(chat) => &chat.id,
         }
     }
 
-    /// The forge of the space's repository.
-    async fn forge(&self, ctx: &Context) -> Result<ForgeRepo> {
-        match self {
-            Self::Workspace(workspace) => forge_of(ctx, workspace).await,
-            Self::Chat { repository, .. } => issues::origin_forge(ctx, repository).await,
-        }
+    /// Whether the forge of the space's repository reverts PRs.
+    async fn forge_reverts(&self, ctx: &Context) -> Result<bool> {
+        let context = match self {
+            Self::Workspace(workspace) => ItemContext::Workspace(workspace.id.clone()),
+            Self::Chat(chat) => ItemContext::Chat(chat.id.clone()),
+        };
+        let capabilities = client::capabilities(&ctx.paths, context, None).await?;
+        Ok(capabilities.supports(Capability::RevertPrs))
     }
 }
 
@@ -170,7 +168,7 @@ async fn revert_workspace(
             let repository = workspace.repository_id.clone();
             start_workspace(ctx, repository, name, base, None).await?
         }
-        Reverting::Chat { chat, .. } => {
+        Reverting::Chat(chat) => {
             let repository = chat.repository_id.clone();
             start_workspace(ctx, repository, name, base, Some(chat.id.clone())).await?
         }

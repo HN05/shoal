@@ -319,49 +319,6 @@ where
     }
 }
 
-/// The forge's JSON response to `request` in `workspace`'s repository,
-/// reassembled from the pieces the daemon sends it in.
-pub async fn forge_api(
-    daemon: &impl Daemon,
-    context: crate::protocol::ItemContext,
-    request: crate::forge::raw::RawRequest,
-    repository: Option<String>,
-) -> Result<serde_json::Value> {
-    let method = ItemMethod::ForgeApi {
-        context,
-        request,
-        repository,
-    };
-    let pieces = pages::<String>(daemon, method).await?;
-    serde_json::from_str(&pieces.concat()).context("the daemon sent invalid JSON")
-}
-
-/// The labels of `context`'s repository, or of the one `repository` names.
-pub async fn labels(
-    daemon: &impl Daemon,
-    context: crate::protocol::ItemContext,
-    repository: Option<String>,
-) -> Result<Vec<crate::forge::conventions::labels::Label>> {
-    pages(
-        daemon,
-        ItemMethod::Labels {
-            context,
-            repository,
-        },
-    )
-    .await
-}
-
-/// Who the PR `item` names in `context`'s repository, or the space's linked
-/// PR, can ask for a review.
-pub async fn reviewers(
-    daemon: &impl Daemon,
-    context: crate::protocol::ItemContext,
-    item: Option<String>,
-) -> Result<Vec<crate::forge::review::reviewers::Reviewer>> {
-    pages(daemon, ItemMethod::Reviewers { context, item }).await
-}
-
 /// What a review request returns, a review or a listing of them,
 /// reassembled from the pieces of JSON the daemon sends it in.
 pub async fn reviews<T: serde::de::DeserializeOwned>(
@@ -371,23 +328,6 @@ pub async fn reviews<T: serde::de::DeserializeOwned>(
     let pieces = pages::<crate::protocol::ReviewPiece>(daemon, method).await?;
     let json: String = pieces.into_iter().map(|piece| piece.0).collect();
     serde_json::from_str(&json).context("the daemon sent an invalid review")
-}
-
-/// The file at `url` on the forge of `context`'s repository, or of the one
-/// `repository` names, reassembled from the pieces the daemon sends it in.
-pub async fn forge_download(
-    daemon: &impl Daemon,
-    context: crate::protocol::ItemContext,
-    url: String,
-    repository: Option<String>,
-) -> Result<crate::forge::download::Download> {
-    let method = ItemMethod::ForgeDownload {
-        context,
-        url,
-        repository,
-    };
-    let pieces = pages(daemon, method).await?;
-    crate::protocol::DownloadPiece::join(pieces)
 }
 
 /// The settings that apply to `target` after every layer. The global config

@@ -13,9 +13,8 @@ use crate::{
         action::{Action, MergeMethod},
         create::NewIssue,
         item::{Item, ItemState},
-        link::{ItemKind, LinkKind, Selection},
+        link::ItemKind,
     },
-    model::Selected,
     protocol::{ItemContext, ItemMethod},
 };
 
@@ -38,8 +37,7 @@ use self::{
 };
 pub(crate) use content::read_body;
 pub(super) use context::{
-    checkout_repository, context_repository, current_context, select_repo_context,
-    select_space_item_context,
+    current_context, select_repo_context, select_space_item_context, space_context,
 };
 pub(super) use open::push_and_open;
 
@@ -253,20 +251,4 @@ async fn act_in(
     };
     ctx.emit(&format!("{outcome}: {}", item.url), &item)?;
     Ok(0)
-}
-
-/// The PR `selector` names, or the workspace's linked ones.
-async fn select_prs(ctx: &Context, selector: &ItemSelector) -> Result<Selected> {
-    let context = select_space_item_context(
-        ctx,
-        selector.space.clone(),
-        selector.repo.name.clone(),
-        selector.item.as_deref(),
-    )
-    .await?;
-    let selection = Selection {
-        kind: Some(LinkKind::Pr),
-        input: selector.item.clone(),
-    };
-    super::links::select_items(ctx, &context, selection, false).await
 }

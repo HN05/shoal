@@ -33,6 +33,13 @@ impl Operation {
                     ItemMethod::ListItems { .. }
                         | ItemMethod::Labels { .. }
                         | ItemMethod::Reviewers { .. }
+                        | ItemMethod::Capabilities { .. }
+                        | ItemMethod::Reactions { .. }
+                        | ItemMethod::ReviewThread { .. }
+                        | ItemMethod::NumberKind { .. }
+                        | ItemMethod::IssueDetails { .. }
+                        | ItemMethod::IssueBlockers { .. }
+                        | ItemMethod::PullRequest { .. }
                         | ItemMethod::ViewItems { .. }
                         | ItemMethod::ForgeDownload { .. }
                 )

@@ -13,13 +13,13 @@ use crate::{
     },
     config::Effective,
     forge::{
-        ForgeRepo, IssueInput, PullRequest,
+        IssueInput, PullRequest,
         items::link::{ItemKind, Link, LinkTarget},
     },
     git,
     model::{Chat, Repository, Workspace},
     protocol::{
-        ConfigTarget, CreationOptions, OperationMethod, ReviewMethod, WorkspaceMethod,
+        ConfigTarget, CreationOptions, ItemContext, OperationMethod, ReviewMethod, WorkspaceMethod,
         operations::WorkspaceStart,
     },
     reviews::{Review, ReviewTarget},
@@ -121,7 +121,8 @@ pub(super) async fn start(
             super::Space::Chat(chat) => {
                 let (repo, url) = chat_pull(ctx, &chat).await?;
                 check_reviewer(ctx, &repo, &reviewer, post, &model).await?;
-                pull_request(ctx, &repo, &url, reviewer, post, model, args).await
+                let pull = read_pull(ctx, ItemContext::Chat(chat.id), url).await?;
+                pull_request(ctx, &repo, pull, reviewer, post, model, args).await
             }
             super::Space::Workspace(workspace) => {
                 ensure!(
@@ -146,7 +147,9 @@ pub(super) async fn start(
             )
             .await?;
             check_reviewer(ctx, &repo, &reviewer, post, &model).await?;
-            pull_request(ctx, &repo, &input, reviewer, post, model, args).await
+            let context = super::super::issues::read_context(ctx, &repo).await?;
+            let pull = read_pull(ctx, context, input).await?;
+            pull_request(ctx, &repo, pull, reviewer, post, model, args).await
         }
     }
 }
@@ -214,24 +217,24 @@ impl Reviewer {
     }
 }
 
-/// Review a PR in the workspace that owns its head branch, opening one from
-/// origin that is compared against the PR's base when none does.
+/// The PR `input` names in the repository of `context`, before a
+/// workspace is opened or updated for it.
+async fn read_pull(ctx: &Context, context: ItemContext, input: String) -> Result<PullRequest> {
+    let read = client::pull_request(&ctx.paths, context, input);
+    ctx.progress("Reading PR", read).await
+}
+
+/// Review `pull` in the workspace that owns its head branch, opening one
+/// from origin that is compared against the PR's base when none does.
 async fn pull_request(
     ctx: &Context,
     repo: &Repository,
-    input: &str,
+    pull: PullRequest,
     reviewer: Reviewer,
     post: Option<bool>,
     model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let remote = crate::repository::remote_url_from_path(&repo.path)
-        .await?
-        .context("PR review needs an origin remote")?;
-    let pull = ForgeRepo::resolve(&remote, &ctx.forge_hosts()?)
-        .await?
-        .pull_request(&ctx.forge_account()?, input)
-        .await?;
     if pull.fork {
         let workspace = fork_pull_workspace(ctx, repo, &pull).await?;
         let subject = Subject::Pull { pull, post };

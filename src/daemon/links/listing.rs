@@ -22,8 +22,7 @@ impl Manager {
         repository: Option<&str>,
         scoped: bool,
     ) -> Result<Vec<Item>> {
-        let own = self.context_forge(context).await?;
-        let forge = self.named_forge(own, repository).await?;
+        let forge = self.repository_forge(context, repository).await?;
         forge.list(&self.read_account(scoped), kind, search).await
     }
 }

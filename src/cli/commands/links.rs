@@ -13,16 +13,15 @@ use crate::{
         context::Context,
         ui,
     },
-    daemon::refusal::{Reason, Refusal},
     forge::{
-        ForgeRepo, IssueInput, PullRequest,
-        items::link::{ItemKind, Link, LinkKind, LinkTarget, Selection},
+        IssueInput, PullRequest,
+        items::{
+            link::{ItemKind, Link, LinkKind, LinkTarget, Selection},
+            list::Search,
+        },
     },
     git,
-    model::{
-        PresentSpace, ReadyMarks, ReadyOutcome, Relation, Repository, ReviewMark, Selected,
-        SelectedItem,
-    },
+    model::{ReadyMarks, ReadyOutcome, Relation, Repository, ReviewMark},
     protocol::{AssignmentMethod, ItemContext, ItemMethod, PullHead},
 };
 
@@ -31,7 +30,8 @@ use crate::{
 pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(String, Selection)> {
     let selection = Selection::parse(items.kind_or_url, items.item)?;
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
-    let selection = resolve_kind(ctx, &space, selection).await?;
+    let context = super::items::space_context(ctx, space.clone()).await?;
+    let selection = resolve_kind(ctx, context, selection).await?;
     Ok((space, selection))
 }
 
@@ -59,144 +59,31 @@ pub(super) async fn select_in_context(
 ) -> Result<(ItemContext, Selection)> {
     let (context, selection) = in_context(ctx, items, repo).await?;
     let selection = match &context {
-        ItemContext::Workspace(space) | ItemContext::Chat(space) => {
-            resolve_kind(ctx, space, selection).await?
+        ItemContext::Workspace(_) | ItemContext::Chat(_) => {
+            resolve_kind(ctx, context.clone(), selection).await?
         }
         ItemContext::Checkout(_) => selection,
     };
     Ok((context, selection))
 }
 
-/// The items `selection` names: in the workspace, where it may name linked
-/// ones, or in the repository of the registered checkout. With `elsewhere`,
-/// an issue, PR or CI run URL of another repository selects that item.
-pub(super) async fn select_items(
+/// Give a number selected without a kind the kind of the item with that
+/// number in `context`: in a space, that of the linked one, otherwise the
+/// kind the forge reports for it.
+async fn resolve_kind(
     ctx: &Context,
-    context: &ItemContext,
+    context: ItemContext,
     selection: Selection,
-    elsewhere: bool,
-) -> Result<Selected> {
-    match context {
-        ItemContext::Workspace(space) | ItemContext::Chat(space) => {
-            let method = ItemMethod::SelectItems {
-                space: space.clone(),
-                selection,
-                elsewhere,
-            };
-            client::request(&ctx.paths, method).await
-        }
-        ItemContext::Checkout(repository) => {
-            checkout_selected(ctx, repository, selection, elsewhere).await
-        }
-    }
-}
-
-/// The item `selection` names in the repository of its registered checkout,
-/// where nothing is linked, or with `elsewhere` in the repository its issue,
-/// PR or CI run URL names.
-async fn checkout_selected(
-    ctx: &Context,
-    repository: &str,
-    selection: Selection,
-    elsewhere: bool,
-) -> Result<Selected> {
-    let input = selection
-        .input
-        .context("outside a workspace or chat, nothing is linked; pass a number or URL")?;
-    let repo = super::items::checkout_repository(ctx, repository).await?;
-    let forge = match elsewhere {
-        true => item_url_forge(ctx, selection.kind, &input).await?,
-        false => None,
-    };
-    let forge = match forge {
-        Some(forge) => forge,
-        None => super::issues::origin_forge(ctx, &repo).await?,
-    };
-    let kind = match selection.kind {
-        Some(kind) => kind,
-        None => forge
-            .item_kind(&ctx.forge_account()?, input.parse()?)
-            .await?
-            .into(),
-    };
-    let (_, url) = match kind {
-        LinkKind::Issue => forge.issue(&input)?,
-        LinkKind::Pr => forge.pull(&input)?,
-        LinkKind::Ci => forge.run(&input)?,
-    };
-    Ok(Selected {
-        path: repo.path,
-        items: vec![SelectedItem { url, kind }],
-    })
-}
-
-/// The repository of the issue, PR or CI run whose URL `input` is.
-async fn item_url_forge(
-    ctx: &Context,
-    kind: Option<LinkKind>,
-    input: &str,
-) -> Result<Option<ForgeRepo>> {
-    if IssueInput::parse(input) != IssueInput::Url {
-        return Ok(None);
-    }
-    let hosts = ctx.forge_hosts()?;
-    Ok(Some(match kind {
-        Some(LinkKind::Issue) => ForgeRepo::resolve_issue_url(input, &hosts).await?,
-        Some(LinkKind::Pr) => ForgeRepo::resolve_pull_url(input, &hosts).await?,
-        Some(LinkKind::Ci) => ForgeRepo::resolve_run_url(input, &hosts).await?,
-        None => return Ok(None),
-    }))
-}
-
-/// Give a number selected without a kind the kind of the linked item with
-/// that number, otherwise the kind the forge reports for it.
-async fn resolve_kind(ctx: &Context, space: &str, selection: Selection) -> Result<Selection> {
+) -> Result<Selection> {
     let (None, Some(input)) = (selection.kind, &selection.input) else {
         return Ok(selection);
     };
     let number = input.parse::<u64>()?;
-    let kind = match linked_kind(ctx, space, number).await? {
-        Some(kind) => kind,
-        None => {
-            let repo = space_repository(ctx, space).await?;
-            super::issues::origin_forge(ctx, &repo)
-                .await?
-                .item_kind(&ctx.forge_account()?, number)
-                .await?
-                .into()
-        }
-    };
+    let kind = client::number_kind(&ctx.paths, context, number).await?;
     Ok(Selection {
         kind: Some(kind),
         ..selection
     })
-}
-
-/// The kind of the space's item numbered `number` under any relation.
-async fn linked_kind(ctx: &Context, space: &str, number: u64) -> Result<Option<LinkKind>> {
-    let mut linked: Selected = client::request(
-        &ctx.paths,
-        ItemMethod::SelectItems {
-            space: space.to_owned(),
-            selection: Selection::default(),
-            elsewhere: false,
-        },
-    )
-    .await?;
-    let links = (client::present_space(&ctx.paths, space).await?)
-        .map(PresentSpace::into_links)
-        .unwrap_or_default();
-    let recorded = links.opened.into_iter().chain(links.related);
-    linked.items.extend(recorded.map(|item| SelectedItem {
-        url: item.url,
-        kind: item.kind,
-    }));
-    // A number names an item of the workspace's repository; issues opened
-    // in another one share its numbers.
-    let remote = crate::repository::remote_url_from_path(&linked.path)
-        .await?
-        .context("issue lookup needs an origin remote")?;
-    linked.kind_of(&remote, number)
 }
 
 pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
@@ -207,16 +94,17 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         "link needs an issue or PR number, or an issue, PR or CI run URL"
     );
     let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
-    let selected = resolve_kind(ctx, &space, selected).await?;
+    let context = super::items::space_context(ctx, space.clone()).await?;
+    let selected = resolve_kind(ctx, context.clone(), selected).await?;
     let (kind, input) = match selected {
         Selection {
             kind: Some(kind),
             input: Some(input),
         } => (kind, input),
-        Selection { kind, .. } => pick_open_item(ctx, &space, kind).await?,
+        Selection { kind, .. } => pick_open_item(ctx, context.clone(), kind).await?,
     };
     let title = match kind {
-        LinkKind::Issue => issue_title(ctx, &space, &input).await,
+        LinkKind::Issue => issue_title(ctx, context, &input).await,
         LinkKind::Pr | LinkKind::Ci => None,
     };
     client::request::<()>(
@@ -260,13 +148,9 @@ fn link_outcome(kind: LinkKind, relation: Relation) -> String {
 
 /// The title lists show for the space; linking proceeds without one when
 /// the forge cannot be read.
-async fn issue_title(ctx: &Context, space: &str, input: &str) -> Option<String> {
-    let title = async {
-        let repo = space_repository(ctx, space).await?;
-        anyhow::Ok(super::issues::load(ctx, &repo, input).await?.title)
-    };
-    match title.await {
-        Ok(title) => Some(title),
+async fn issue_title(ctx: &Context, context: ItemContext, input: &str) -> Option<String> {
+    match super::issues::load(ctx, context, input).await {
+        Ok(issue) => Some(issue.title),
         Err(error) => {
             eprintln!("Issue title unavailable: {error:#}");
             None
@@ -274,24 +158,11 @@ async fn issue_title(ctx: &Context, space: &str, input: &str) -> Option<String> 
     }
 }
 
-/// The registered repository of the workspace or running chat `space` names.
-async fn space_repository(ctx: &Context, space: &str) -> Result<Repository> {
-    let Some(space) = client::present_space(&ctx.paths, space).await? else {
-        let unknown = format!("no workspace or running chat {space}");
-        return Err(Refusal::new(Reason::NotFound, unknown).into());
-    };
-    client::repositories(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|repo| repo.id == space.repository_id())
-        .context("the space's repository is missing")
-}
-
 /// Choose an open issue or PR of the space's repository, asking for the
 /// kind when it is not given; runs have no list to choose from.
 async fn pick_open_item(
     ctx: &Context,
-    space: &str,
+    context: ItemContext,
     kind: Option<LinkKind>,
 ) -> Result<(LinkKind, String)> {
     let kind = match kind {
@@ -306,17 +177,10 @@ async fn pick_open_item(
             &[(ItemKind::Issue, "Issue"), (ItemKind::Pr, "Pull request")],
         )?,
     };
-    let repo = space_repository(ctx, space).await?;
-    let forge = super::issues::origin_forge(ctx, &repo).await?;
+    let items = client::list_items(&ctx.paths, context, kind, Search::picker(), None).await?;
     let number = match kind {
-        ItemKind::Issue => {
-            let issues = forge.open_issues(&ctx.forge_account()?).await?;
-            ui::pick_item(ctx, "Issue> ", "issues", issues)?
-        }
-        ItemKind::Pr => {
-            let pulls = forge.open_pulls(&ctx.forge_account()?).await?;
-            ui::pick_item(ctx, "Pull request> ", "pull requests", pulls)?
-        }
+        ItemKind::Issue => ui::pick_item(ctx, "Issue> ", "issues", items)?,
+        ItemKind::Pr => ui::pick_item(ctx, "Pull request> ", "pull requests", items)?,
     };
     Ok((kind.into(), number))
 }
@@ -534,16 +398,11 @@ pub(super) async fn add(
         )
         .await;
     }
-    let forge = super::issues::origin_forge(ctx, repo).await?;
-    ensure!(
-        link.as_ref().is_some_and(|link| link.repository == forge),
-        "link belongs to a different repository"
-    );
+    ensure_link_in(repo, link.as_ref()).await?;
     match target.unwrap() {
         LinkTarget::Pr => {
-            let pull = forge
-                .pull_request(&ctx.forge_account()?, positional)
-                .await?;
+            let context = super::issues::read_context(ctx, repo).await?;
+            let pull = client::pull_request(&ctx.paths, context, positional.to_owned()).await?;
             pull_creation(ctx, repo, pull, &mut creation).await?;
         }
         LinkTarget::Branch(branch) => {
@@ -563,6 +422,19 @@ pub(super) async fn add(
         options,
     )
     .await
+}
+
+/// Refuse a link that is not of `repo`, the repository of its checkout's
+/// origin.
+async fn ensure_link_in(repo: &Repository, link: Option<&Link>) -> Result<()> {
+    let remote = crate::repository::remote_url_from_path(&repo.path)
+        .await?
+        .context("forge lookup needs an origin remote")?;
+    ensure!(
+        link.is_some_and(|link| link.repository.is_remote(&remote)),
+        "link belongs to a different repository"
+    );
+    Ok(())
 }
 
 /// Reopen the workspace that owns the PR's head branch, or open the pushed

@@ -8,12 +8,12 @@ use super::{
     issues::{self, Issue},
 };
 use crate::{
-    cli::{context::Context, ui},
+    cli::{client, context::Context, ui},
     config,
     forge::items::{
         item::Item,
         link::{ItemKind, LinkKind},
-        list::MAX_LIMIT,
+        list::{MAX_LIMIT, Search},
     },
     model::{LinkedItem, Relation, Repository},
 };
@@ -68,7 +68,8 @@ async fn begin(
         Some(issue) => issue,
         None => labelled(ctx, &repo, &settings.issue, pick).await?,
     };
-    let issue = issues::load(ctx, &repo, &input).await?;
+    let context = issues::read_context(ctx, &repo).await?;
+    let issue = issues::load(ctx, context, &input).await?;
     let topic = topic(&repo, &issue, &settings.issue);
     chat::begin(ctx, repo, settings, topic, options).await
 }
@@ -83,10 +84,9 @@ async fn labelled(
     let label = labels.plan_label.as_deref().context(
         "set [issue] plan_label to choose among the issues that need a plan, or name an issue",
     )?;
-    let issues = issues::origin_forge(ctx, repo)
-        .await?
-        .open_issues_labelled(&ctx.forge_account()?, label)
-        .await?;
+    let context = issues::read_context(ctx, repo).await?;
+    let search = Search::labelled(label);
+    let issues = client::list_items(&ctx.paths, context, ItemKind::Issue, search, None).await?;
     let kind = format!("issues labelled {label}");
     // The forge lists the newest first.
     let issue = match pick {

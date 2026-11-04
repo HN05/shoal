@@ -1,6 +1,7 @@
 //! Review threads on a PR: an inline comment and the replies to it, and
 //! whether the forge marks them resolved.
 use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     ForgeRepo, account::Account, backends::Backend, items::action::ThreadChange,
@@ -8,7 +9,7 @@ use crate::{
 };
 
 /// A review thread, found from any of its comments.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Thread {
     /// The comment that starts the thread.
     pub first: u64,
@@ -20,7 +21,8 @@ pub struct Thread {
 }
 
 /// What a forge's reply and resolution requests name besides the first comment.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum Target {
     /// The GraphQL node its resolution mutations take.
     GitHub {

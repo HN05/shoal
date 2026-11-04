@@ -19,6 +19,7 @@ pub mod transport;
 pub mod updates;
 
 use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize};
 
 use backends::{Backend, ForgeKind};
 use hosts::{HostType, HostTypes};
@@ -239,7 +240,7 @@ impl ForgeRepo {
 }
 
 /// A PR's branches, for checking it out locally.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct PullRequest {
     pub number: u64,
     pub title: String,

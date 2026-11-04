@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use super::Manager;
 use crate::{
     daemon::{spaces::status::Records, store},
-    forge::{IssueInput, items::link},
+    forge::{ForgeRepo, IssueInput, items::link},
     git,
     model::{DiffSummary, Inspection, Selected, SelectedItem, Workspace, WorktreeStatus},
     repository,
@@ -138,6 +138,24 @@ impl Manager {
         checkout: &std::path::Path,
         selection: &link::Selection,
     ) -> Result<Option<SelectedItem>> {
+        let Some((forge, item)) = self.item_at_url(selection).await? else {
+            return Ok(None);
+        };
+        let remote = repository::remote_url_from_path(checkout)
+            .await?
+            .context("item lookup needs an origin remote")?;
+        if forge == self.forge(&remote).await? {
+            return Ok(None);
+        }
+        Ok(Some(item))
+    }
+
+    /// The issue, PR or CI run whose URL `selection` names, in whichever
+    /// repository, with that repository's forge.
+    pub(crate) async fn item_at_url(
+        &self,
+        selection: &link::Selection,
+    ) -> Result<Option<(ForgeRepo, SelectedItem)>> {
         let (Some(kind), Some(input)) = (selection.kind, selection.input.as_deref()) else {
             return Ok(None);
         };
@@ -161,13 +179,7 @@ impl Manager {
                 (forge, url)
             }
         };
-        let remote = repository::remote_url_from_path(checkout)
-            .await?
-            .context("item lookup needs an origin remote")?;
-        if forge == self.forge(&remote).await? {
-            return Ok(None);
-        }
-        Ok(Some(SelectedItem { url, kind }))
+        Ok(Some((forge, SelectedItem { url, kind })))
     }
 }
 

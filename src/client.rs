@@ -14,6 +14,7 @@ pub mod env;
 pub mod events;
 pub mod executions;
 pub mod files;
+pub mod forge_reads;
 pub(crate) mod fsutil;
 pub mod item_numbers;
 pub mod links;

@@ -1,9 +1,31 @@
 //! Look up issue state.
 use anyhow::{Result, ensure};
+use serde::{Deserialize, Serialize};
 
 use crate::{ForgeRepo, account::Account, backends::Backend, items::item::ItemState};
 
+/// An issue's title and description, with the URL of its number.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IssueDetails {
+    pub number: u64,
+    pub url: String,
+    pub title: String,
+    pub details: String,
+}
+
 impl ForgeRepo {
+    /// The issue `input` names, a number or URL in this repository.
+    pub async fn read_issue(&self, account: &Account, input: &str) -> Result<IssueDetails> {
+        let (number, url) = self.issue(input)?;
+        let (title, details) = self.issue_details(account, number).await?;
+        Ok(IssueDetails {
+            number,
+            url,
+            title,
+            details,
+        })
+    }
+
     pub async fn issue_closed(&self, account: &Account, number: u64) -> Result<bool> {
         Ok(self.issue_state(account, number).await? == ItemState::Closed)
     }

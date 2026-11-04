@@ -1,7 +1,7 @@
 //! Where an item command that needs only a repository runs: a workspace, or
 //! a registered checkout, where `shoal chat` runs its agent and where the
 //! user names a registered repository to act in without a workspace.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 
 use crate::{
     cli::{client, context::Context, ui},
@@ -162,34 +162,4 @@ async fn registered(ctx: &Context, repo: &str) -> Result<Option<Repository>> {
         Err(error) if error.is::<NotRegistered>() => Ok(None),
         Err(error) => Err(error),
     }
-}
-
-/// The registered repository a request from `context` acts in outside a
-/// workspace: the checkout it names, or a running chat's.
-pub(in crate::cli::commands) async fn context_repository(
-    ctx: &Context,
-    context: &ItemContext,
-) -> Result<Repository> {
-    match context {
-        ItemContext::Checkout(repository) => checkout_repository(ctx, repository).await,
-        ItemContext::Chat(chat) => {
-            let chats = client::chats(&ctx.paths).await?;
-            let chat = (chats.iter().find(|recorded| recorded.id == *chat))
-                .with_context(|| format!("no running chat {chat}"))?;
-            checkout_repository(ctx, &chat.repository_id).await
-        }
-        ItemContext::Workspace(_) => anyhow::bail!("a workspace acts in its worktree"),
-    }
-}
-
-/// The repository registered with the checkout ID `repository`.
-pub(in crate::cli::commands) async fn checkout_repository(
-    ctx: &Context,
-    repository: &str,
-) -> Result<Repository> {
-    client::repositories(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|repo| repo.id == repository)
-        .context("the checkout's repository is no longer registered")
 }

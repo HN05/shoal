@@ -3,7 +3,7 @@
 //! answer, which is recorded so the host is asked once.
 use std::future::Future;
 
-use anyhow::{Result, anyhow, bail, ensure};
+use anyhow::{Result, anyhow};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{
@@ -86,27 +86,6 @@ impl Manager {
             return Ok(HostType::Answered(kind));
         }
         Ok(HostType::Answered(self.ask_forge_type(host, scheme).await?))
-    }
-
-    /// The forge type a request names for `host` over `scheme`, which the
-    /// caller does not supply as a static string.
-    pub(crate) async fn requested_forge_type(&self, host: &str, scheme: &str) -> Result<ForgeKind> {
-        let scheme = match scheme {
-            "http" => "http",
-            "https" => "https",
-            other => bail!("unsupported forge scheme {other:?}"),
-        };
-        ensure!(
-            !host.is_empty()
-                && host
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':')),
-            "invalid forge host {host:?}"
-        );
-        Ok(self
-            .host_type(&host.to_ascii_lowercase(), scheme)
-            .await?
-            .kind())
     }
 
     /// Remember the recorded answers for this process, as the daemon starts,

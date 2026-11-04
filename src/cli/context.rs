@@ -38,16 +38,6 @@ impl Context {
         crate::cli::progress::run(self.json, message, work).await
     }
 
-    /// Your own forge logins: the tokens the global config names.
-    pub fn forge_account(&self) -> Result<crate::forge::account::Account> {
-        let config = crate::config::Config::load(&self.paths)?;
-        let logins = config
-            .machine
-            .forges
-            .logins(crate::config::forges::Whose::User);
-        Ok(crate::forge::account::Account::user(logins))
-    }
-
     /// Classify pasted links of the forge hosts the global config pins as
     /// their forges, reading the config only once a forge link is parsed. A
     /// config that does not load reports itself to the command that reads it.
@@ -58,15 +48,6 @@ impl Context {
                 .map(|config| config.machine.forges.pins())
                 .unwrap_or_default()
         });
-    }
-
-    /// What the global config and the daemon say each forge host serves.
-    pub fn forge_hosts(&self) -> Result<super::forge_hosts::ForgeHosts<'_>> {
-        let config = crate::config::Config::load(&self.paths)?;
-        Ok(super::forge_hosts::ForgeHosts {
-            paths: &self.paths,
-            forges: config.machine.forges,
-        })
     }
 
     pub fn new(paths: Paths, json: bool) -> Self {

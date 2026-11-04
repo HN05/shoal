@@ -1,18 +1,15 @@
 //! `shoal pr reply`, `resolve` and `unresolve`: changes to a review thread.
 use anyhow::{Context as _, Result, ensure};
 
-use super::{content::read_body, select_prs};
+use super::{content::read_body, item_context};
 use crate::{
     cli::{
         args::{BodyArgs, changes::ItemSelector},
+        client,
         context::Context,
         ui,
     },
-    forge::{
-        ForgeRepo,
-        capability::Capability,
-        items::action::{Action, ThreadChange},
-    },
+    forge::items::action::{Action, ThreadChange},
 };
 
 /// A reply in the thread of `comment`, which needs a body.
@@ -46,22 +43,11 @@ pub(super) fn thread(comment: u64, reply: Option<String>, resolve: Option<bool>)
 }
 
 /// Ask before resolving a thread without a reply, which leaves the reviewer
-/// no reason. Without exactly one selected PR the action itself fails, so
-/// there is nothing to ask.
+/// no reason.
 async fn confirm_unanswered(ctx: &Context, selector: &ItemSelector, comment: u64) -> Result<()> {
-    let selected = select_prs(ctx, selector).await?;
-    let [item] = selected.items.as_slice() else {
-        return Ok(());
-    };
-    let forge = ForgeRepo::resolve_pull_url(&item.url, &ctx.forge_hosts()?).await?;
-    forge.require(Capability::ResolveThreads)?;
-    let (number, _) = forge.pull(&item.url)?;
-    let thread = ctx
-        .progress(
-            "Reading thread",
-            forge.thread(&ctx.forge_account()?, number, comment),
-        )
-        .await?;
+    let context = item_context(ctx, selector).await?;
+    let read = client::review_thread(&ctx.paths, context, selector.item.clone(), comment);
+    let thread = ctx.progress("Reading thread", read).await?;
     if thread.replies == 0 {
         ensure!(
             ui::confirm(

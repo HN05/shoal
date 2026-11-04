@@ -4243,8 +4243,7 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
     ));
     forge_origin(&fixture);
     let bin = fixture.root.path().join("issue-bin");
-    install_api_curl(&bin);
-    // The daemon reads the issue too, as it assigns it.
+    // The daemon reads the issue through the scripted curl.
     install_api_curl(&fixture.root.path().join("bin"));
     script_api(
         fixture.root.path(),
@@ -15486,8 +15485,7 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
 fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
     let fixture = Fixture::with_config(Some("[agents.codex]\ndefault_mode = 'app'\n"));
     let bin = fixture.root.path().join("issue-bin");
-    install_api_curl(&bin);
-    // The daemon reads the issue too, as it assigns it.
+    // The daemon reads the issue through the scripted curl.
     install_api_curl(&fixture.root.path().join("bin"));
     for tool in ["codex", "claude"] {
         let script = bin.join(tool);
@@ -15631,8 +15629,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     fixture.add_github_origin();
     let bin = fixture.root.path().join("issue-bin");
-    install_api_curl(&bin);
-    // The daemon reads the issue too, as it assigns it.
+    // The daemon reads the issue through the scripted curl.
     install_api_curl(&fixture.root.path().join("bin"));
     for tool in ["codex", "claude"] {
         let script = bin.join(tool);
@@ -15949,7 +15946,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
     );
     let bin = fixture.root.path().join("issue-bin");
     fs::create_dir(&bin).unwrap();
-    // Keep the missing-tool case independent of an installed curl.
+    // The command finds only Git and the agent.
     let git = std::env::split_paths(&std::env::var_os("PATH").unwrap())
         .map(|dir| dir.join("git"))
         .find(|path| path.is_file() && path.metadata().unwrap().permissions().mode() & 0o111 != 0)
@@ -15959,9 +15956,9 @@ fn issue_lookup_errors_never_create_a_workspace() {
     std::os::unix::fs::symlink(git, bin.join("git")).unwrap();
     // Agents are checked before the issue lookup these cases exercise.
     install_test_script_with_mode(bin.join("codex"), "#!/bin/sh\n", 0o700);
-    let tool = bin.join("curl");
+    // The daemon reads the issue with the curl on its own PATH.
+    let tool = fixture.root.path().join("bin/curl");
     for (input, script, diagnostic) in [
-        ("4", None, "curl is required"),
         (
             "4",
             Some("#!/bin/sh\necho login-required >&2\nexit 1\n"),
@@ -15980,8 +15977,6 @@ fn issue_lookup_errors_never_create_a_workspace() {
     ] {
         if let Some(script) = script {
             install_test_script_with_mode(&tool, script, 0o700);
-        } else if tool.exists() {
-            fs::remove_file(&tool).unwrap();
         }
         let output = fixture
             .command()
@@ -27299,6 +27294,67 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
             && call.iter().any(|arg| arg.contains(id))
     });
     assert_eq!(relabelled, None);
+}
+
+#[test]
+fn a_chats_agent_adds_a_workspace_for_an_issue_it_reads_in_its_chat() {
+    let fixture = Fixture::with_config(Some("[machine.overload.disk]\nenabled = false\n"));
+    fixture.add_github_origin();
+    fixture.script_github(&github_issue(12, "Clarify retries", "Retry twice."));
+    let home = fixture.root.path();
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    // The chat's scope reads the issue and its blockers only in the chat,
+    // never in the repository's registered checkout.
+    install_test_script(
+        home.join("bin/claude"),
+        format!(
+            "#!/bin/sh\n'{}' --json add \"$PWD\" --issue 12 --agent codex > \"$HOME/add.json\" 2> \"$HOME/add.err\"\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    );
+    install_test_script(home.join("bin/codex"), "#!/bin/sh\n");
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("ZMX_SESSION", "outer")
+            .args(["chat", "--agent", "claude", "--name", "planning"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let added = fs::read_to_string(home.join("add.json")).unwrap();
+    let error = fs::read_to_string(home.join("add.err")).unwrap();
+    let report: Value = serde_json::from_str(added.lines().next().unwrap_or_default())
+        .unwrap_or_else(|_| panic!("{added}\n{error}"));
+    assert_eq!(report["name"], "12-clarify-retries", "{added}");
+    let worker = fixture.ok(&["status", "12-clarify-retries"]);
+    assert_eq!(
+        worker["workspace"]["parent"]["name"], "planning",
+        "{worker}"
+    );
+}
+
+#[test]
+fn a_workspaces_agent_reads_the_issue_it_adds_or_plans_in_its_workspace() {
+    let fixture = Fixture::with_config(Some(
+        "[machine.overload.disk]\nenabled = false\n\
+         [agents.claude]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    fixture.add_github_origin();
+    fixture.script_github(&github_issue(12, "Clarify retries", "Retry twice."));
+    install_test_script(fixture.root.path().join("bin/zmx"), terminal_zmx());
+    fixture.add("parent");
+    // The workspace's scope reads the issue and its blockers only in its
+    // workspace, never in the repository's registered checkout.
+    let repo = fixture.repo.to_str().unwrap();
+    let added = scoped_command(&fixture, "parent", &["add", repo, "--issue", "12"]);
+    assert!(added.status.success(), "{added:?}");
+    let worker = fixture.ok(&["status", "12-clarify-retries"]);
+    assert_eq!(worker["workspace"]["parent"]["name"], "parent", "{worker}");
+    // Planning the issue reads it there too.
+    let planned = scoped_command(&fixture, "parent", &["plan", "12", "--agent", "claude"]);
+    assert!(planned.status.success(), "{planned:?}");
 }
 
 #[test]

@@ -5,20 +5,16 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        args::repository::RepositoryArgs, commands::capabilities::repository_forge,
+        args::repository::RepositoryArgs, client, commands::items::select_repo_context,
         context::Context,
     },
     forge::items::reaction::allowed::AllowedReactions,
 };
 
 pub(super) async fn reactions(ctx: &Context, repository: RepositoryArgs) -> Result<i32> {
-    let forge = repository_forge(ctx, repository).await?;
-    let reactions = ctx
-        .progress(
-            "Reading reactions",
-            forge.allowed_reactions(&ctx.forge_account()?),
-        )
-        .await?;
+    let (context, named) = select_repo_context(ctx, repository.repo).await?;
+    let read = client::reactions(&ctx.paths, context, named);
+    let reactions = ctx.progress("Reading reactions", read).await?;
     ctx.show(&reactions, render)?;
     Ok(0)
 }

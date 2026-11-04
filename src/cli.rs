@@ -6,7 +6,6 @@ pub mod commands;
 pub mod completion;
 pub mod context;
 mod desktop;
-pub mod forge_hosts;
 mod help;
 pub(crate) mod installed;
 pub mod internal;

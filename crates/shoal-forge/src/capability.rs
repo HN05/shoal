@@ -193,6 +193,15 @@ pub struct Capabilities {
     pub capabilities: Vec<Entry>,
 }
 
+impl Capabilities {
+    /// Whether the forge has `capability`.
+    pub fn supports(&self, capability: Capability) -> bool {
+        self.capabilities
+            .iter()
+            .any(|entry| entry.capability == capability && entry.supported)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub capability: Capability,

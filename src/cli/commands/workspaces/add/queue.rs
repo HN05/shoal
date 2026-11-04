@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     cli::{
-        client::request,
+        client::{self, request},
         commands::{agent_queue, issues},
         context::Context,
     },
@@ -155,9 +155,9 @@ async fn issue_blockers(
     target: &AddTarget,
     issue: &issues::Issue,
 ) -> Result<Vec<Dependency>> {
-    let repo = target.repository(ctx).await?;
-    match issues::open_dependencies(ctx, repo, issue).await {
-        Ok(urls) => Ok(urls.into_iter().map(Dependency::Issue).collect()),
+    let context = issues::read_context(ctx, target.repository(ctx).await?).await?;
+    match client::issue_blockers(&ctx.paths, context, issue.url.clone()).await {
+        Ok(blockers) => Ok(blockers),
         Err(error) => {
             eprintln!(
                 "warning: cannot list the issues blocking #{}, so the agent does not wait for them: {error:#}",

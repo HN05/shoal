@@ -13,8 +13,8 @@ use crate::{
         terminal::PlaceName,
     },
     env, git,
-    model::{QueueRequest, Workspace},
-    protocol::{CreationOptions, PullHead, WorkspaceMethod},
+    model::{QueueRequest, Repository, Workspace},
+    protocol::{CreationOptions, ItemContext, PullHead, WorkspaceMethod},
 };
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
@@ -224,6 +224,17 @@ impl AddPlan {
     /// The found issue's URL.
     pub fn issue_url(&self) -> Option<&str> {
         self.issue.as_deref()
+    }
+
+    /// Where the plan reads from the forge: the existing workspace it
+    /// launches in, else the chat that planned it, else where a command
+    /// reads from the forge of its repository `repo`.
+    pub async fn item_context(&self, ctx: &Context, repo: &Repository) -> Result<ItemContext> {
+        Ok(match (&self.workspace, &self.chat) {
+            (Some(workspace), _) => ItemContext::Workspace(workspace.clone()),
+            (None, Some(chat)) => ItemContext::Chat(chat.clone()),
+            (None, None) => crate::cli::commands::issues::read_context(ctx, repo).await?,
+        })
     }
 
     /// Whether the agent starts with input: an issue prompt or forwarded arguments.
