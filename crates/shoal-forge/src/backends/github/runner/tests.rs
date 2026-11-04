@@ -85,6 +85,17 @@ fn a_run_names_its_pr_or_branch_and_a_forks_pr_only_its_commit() {
     assert_eq!(pull.trigger, Trigger::Pull { number: 12 });
     assert_eq!(pull.reference.as_deref(), Some("refs/pull/12/head"));
 
+    let target = run(
+        "pull_request_target",
+        json!([{"number": 12}]),
+        json!("main"),
+    );
+    let target = job_run(&target).unwrap();
+    assert_eq!(
+        (target.trigger, target.reference),
+        (Trigger::Other, None),
+        "a run at the base branch's commit is no run of the PR's head"
+    );
     let fork = job_run(&run("pull_request", json!([]), json!("fix"))).unwrap();
     assert_eq!((fork.trigger, fork.reference), (Trigger::Other, None));
     let push = job_run(&run("push", json!([]), json!("main"))).unwrap();

@@ -114,15 +114,16 @@ fn names(value: &Value) -> Vec<String> {
         .collect()
 }
 
-/// The run `value` with the event that started it. A PR's run names the PR
-/// only when it comes from the repository itself; a fork's, like a tag's or
-/// a schedule's, is fetched by its commit.
+/// The run `value` with the event that started it. A PR's run at the PR's
+/// head names the PR only when it comes from the repository itself; a
+/// fork's, like a tag's or a schedule's, is fetched by its commit.
 pub(super) fn job_run(value: &Value) -> Result<JobRun> {
     let event = value["event"].as_str().unwrap_or_default();
     let pull = value["pull_requests"][0]["number"].as_u64();
     let branch = text(&value["head_branch"]);
     let (trigger, reference) = match (event, pull, branch) {
-        ("pull_request" | "pull_request_target", Some(number), _) => (
+        // A `pull_request_target` run is at its base branch's commit.
+        ("pull_request", Some(number), _) => (
             Trigger::Pull { number },
             Some(format!("refs/pull/{number}/head")),
         ),
