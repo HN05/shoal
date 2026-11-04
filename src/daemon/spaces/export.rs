@@ -98,11 +98,11 @@ impl Manager {
                     "workspace {} is disposable, so its removal keeps nothing to export",
                     workspace.name
                 );
-                self.ensure_no_chats_taken(&workspace).await?;
+                let taking = self.exported_with(&workspace, &unsaved).await?;
                 // Its own config may describe its agents, and goes with it.
                 let settings = self.workspace_settings(&workspace).await;
                 let removal = self
-                    .remove_workspace(&workspace.id, unsaved, inspection)
+                    .remove_workspace_taking(&workspace.id, unsaved, inspection, &taking)
                     .await?;
                 (Some((workspace.id.clone(), removal)), Some(settings))
             }
@@ -132,21 +132,32 @@ impl Manager {
         })
     }
 
-    /// Refuse to export `workspace` while chats run in its worktree or in
-    /// one below it, which its removal would take without exporting them.
-    async fn ensure_no_chats_taken(&self, workspace: &Workspace) -> Result<()> {
-        let chats: Vec<String> = (self.spaces_taken_with(&workspace.id).await?)
+    /// The IDs of the spaces the export of `workspace` removes first, of
+    /// those `unsaved` confirms, refusing while chats run in its worktree or
+    /// in one below it, which its removal would take without exporting
+    /// them. The removal takes only these, so a chat that starts meanwhile
+    /// retains the workspace.
+    async fn exported_with(
+        &self,
+        workspace: &Workspace,
+        unsaved: &UnsavedWork,
+    ) -> Result<Vec<String>> {
+        let (chats, taken): (Vec<_>, Vec<_>) = (self.spaces_taken_with(&workspace.id).await?)
             .into_iter()
-            .filter(|space| space.kind == SpaceKind::Chat)
-            .map(|chat| chat.name)
-            .collect();
+            .partition(|space| space.kind == SpaceKind::Chat);
+        let chats: Vec<String> = chats.into_iter().map(|chat| chat.name).collect();
         ensure!(
             chats.is_empty(),
             "chats run in workspace {} or below it ({}), which shoal move does not move; remove them first",
             workspace.name,
             chats.join(", ")
         );
-        Ok(())
+        let confirmed = |id: &String| unsaved.children().is_none_or(|ids| ids.contains(id));
+        Ok(taken
+            .into_iter()
+            .map(|space| space.id)
+            .filter(confirmed)
+            .collect())
     }
 
     /// Remove `chat` for its export, which takes no space below it, once its

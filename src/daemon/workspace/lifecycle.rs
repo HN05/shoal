@@ -94,6 +94,9 @@ enum Removal<'a> {
         unsaved: &'a UnsavedWork,
         inspection: InspectionPolicy,
         release_holds: bool,
+        /// The IDs of the only spaces it may take first, when the caller
+        /// narrows what `unsaved` confirms.
+        taking: Option<&'a [String]>,
     },
     /// Idle or disk-space cleanup; only safe, unchanged workspaces may go.
     Automatic {
@@ -254,7 +257,9 @@ impl<'a> Removal<'a> {
     /// confirmed, the only ones it takes; `None` takes whatever is below.
     fn confirmed_children(self) -> Option<&'a [String]> {
         match self {
-            Removal::Manual { unsaved, .. } => unsaved.children(),
+            Removal::Manual {
+                unsaved, taking, ..
+            } => taking.or(unsaved.children()),
             Removal::Parent { confirmed, .. } => confirmed,
             _ => None,
         }
@@ -541,6 +546,30 @@ impl Manager {
                 unsaved,
                 inspection,
                 release_holds: true,
+                taking: None,
+            },
+        )
+        .await
+    }
+
+    /// Remove the workspace as [`Self::remove_workspace`] does, taking only
+    /// the spaces `taking` names before it: one that appears in it or below
+    /// it meanwhile retains them all.
+    pub(crate) async fn remove_workspace_taking(
+        &self,
+        selector: &str,
+        unsaved: UnsavedWork,
+        inspection: InspectionPolicy,
+        taking: &[String],
+    ) -> Result<RemovalResult> {
+        let unsaved = &unsaved;
+        self.remove(
+            selector,
+            Removal::Manual {
+                unsaved,
+                inspection,
+                release_holds: true,
+                taking: Some(taking),
             },
         )
         .await
@@ -561,6 +590,7 @@ impl Manager {
                 unsaved,
                 inspection,
                 release_holds: false,
+                taking: None,
             },
         )
         .await

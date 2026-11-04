@@ -41,6 +41,7 @@ impl Manager {
             unsaved: &unsaved,
             inspection: InspectionPolicy::GitOnly,
             release_holds: true,
+            taking: None,
         };
         let children = self.remove_chat_for(&chat, removal).await?;
         Ok(RemovedChat { chat, children })
