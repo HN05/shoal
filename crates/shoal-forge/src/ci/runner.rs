@@ -230,6 +230,11 @@ pub fn took_run(work_dir: &Path) -> Result<Option<u64>> {
     Ok(Some(run))
 }
 
+/// Whether the runner of the job with `work_dir` reported taking a job.
+pub fn took_job(work_dir: &Path) -> bool {
+    work_dir.join(TOOK_RUN).exists()
+}
+
 /// Let the runner of the job with `work_dir` go on with the job it took,
 /// or fail it saying why its workspace could not move to the job's commit.
 pub fn answer_took_run(work_dir: &Path, answer: Result<(), String>) -> Result<()> {

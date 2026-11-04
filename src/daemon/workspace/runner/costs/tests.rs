@@ -41,7 +41,9 @@ async fn a_job_counts_at_the_peaks_of_its_recent_runs() {
             repository_id: repo.id.clone(),
             workspace_id: workspace.id.clone(),
             execution_id: None,
+            launched_at: None,
             job: rust.clone(),
+            runner_id: None,
         };
         let row = (job.id.clone(), repo.id.clone(), workspace.id.clone());
         manager

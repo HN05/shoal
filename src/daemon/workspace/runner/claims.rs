@@ -180,6 +180,26 @@ impl Manager {
         }
         self.take_over_entry(&claim.entry.id).await?;
         let command = self.job_command(&claim, job).await?;
+        let runner = command.runner;
+        let launched = self.launch_claimed(&claim, command).await;
+        if launched.is_err()
+            && let Some(runner) = runner
+            && let Err(error) = claim
+                .forge
+                .delete_runner(&self.user_account(), runner)
+                .await
+        {
+            crate::daemon::log!("runner: {error:#}");
+        }
+        launched.map(|()| Claim::Started)
+    }
+
+    /// Put in place what `command` needs and run it for `claim`'s job,
+    /// keeping the runner it registered for the job alone with the claim.
+    async fn launch_claimed(&self, claim: &Claimed<'_>, command: JobCommand) -> Result<()> {
+        if let Some(runner) = command.runner {
+            self.record_job_runner(&claim.entry.id, runner).await?;
+        }
         {
             // The sweep of unclaimed directories waits while one is filled.
             let _files = self.runners.job_files().await;
@@ -189,9 +209,7 @@ impl Manager {
         let execution = self
             .launch_job_command(claim.workspace, log, command)
             .await?;
-        self.record_job_execution(&claim.entry.id, execution)
-            .await?;
-        Ok(Claim::Started)
+        self.record_job_execution(&claim.entry.id, execution).await
     }
 
     /// Take one permit from `pool` for the job in `workspace`, returning

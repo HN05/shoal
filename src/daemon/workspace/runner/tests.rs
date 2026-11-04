@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// A test launch's command and the execution standing in for it.
-type Launched = (Vec<OsString>, StartedExecution);
+type Launched = (JobCommand, StartedExecution);
 
 /// Each test launch, by workspace.
 static LAUNCHED: LazyLock<Mutex<HashMap<String, Launched>>> = LazyLock::new(Default::default);
@@ -32,7 +32,6 @@ pub(super) async fn launch(
     workspace: &Workspace,
     command: JobCommand,
 ) -> anyhow::Result<String> {
-    let argv = command.argv;
     let started = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await?;
@@ -40,7 +39,7 @@ pub(super) async fn launch(
     LAUNCHED
         .lock()
         .unwrap()
-        .insert(workspace.id.clone(), (argv, started));
+        .insert(workspace.id.clone(), (command, started));
     Ok(id)
 }
 
@@ -159,8 +158,155 @@ fn job(handle: &str, id: u64, run: u64) -> Value {
     json!({"handle": handle, "id": id, "run_id": run, "name": "rust", "runs_on": ["shoal"], "status": "waiting"})
 }
 
+/// What a GitHub fixture's server answers and saw.
+#[derive(Default)]
+pub(super) struct GitHubState {
+    /// The queued jobs of run 1, which `push`ed `main` at the head.
+    pub queued: Vec<Value>,
+    /// Whether runner 77 runs a job; `None` once it is gone.
+    pub busy: Option<bool>,
+    /// The job each run lists as taken by runner 77.
+    pub taken: HashMap<u64, Value>,
+    /// The runners deleted.
+    pub deleted: Vec<String>,
+}
+
+/// A repository whose origin is a GitHub that registers runner 77 for each
+/// job, with an `actions/runner` installation on the daemon's `PATH`.
+pub(super) struct GitHubFixture {
+    pub _root: tempfile::TempDir,
+    pub _server: Server,
+    pub manager: Arc<Manager>,
+    pub head: String,
+    pub state: Arc<Mutex<GitHubState>>,
+}
+
+pub(super) async fn github_fixture() -> GitHubFixture {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let head = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(&path, &["commit", "--allow-empty", "-qm", "topic"]);
+    let topic = git(&path, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(&path, &["reset", "-q", "--hard", &head]);
+    let state = Arc::new(Mutex::new(GitHubState {
+        busy: Some(false),
+        ..GitHubState::default()
+    }));
+    let (seen, pushed, other) = (state.clone(), head.clone(), topic.clone());
+    let host = Arc::new(std::sync::OnceLock::<String>::new());
+    let named = host.clone();
+    let server = Server::start(move |request| {
+        let line = request.line.as_str();
+        let mut state = seen.lock().unwrap();
+        let run = |id: u64, branch: &str, commit: &str| {
+            let host = named.get().unwrap();
+            json!({
+                "id": id, "event": "push", "head_branch": branch, "head_sha": commit,
+                "pull_requests": [], "path": ".github/workflows/ci.yml",
+                "html_url": format!("http://{host}/team/repo/actions/runs/{id}"),
+            })
+        };
+        let body = if line == "GET /api/v3/repos/team/repo/actions/runs?status=queued&per_page=100"
+        {
+            json!({"workflow_runs": [{"id": 1}]})
+        } else if line.starts_with("GET /api/v3/repos/team/repo/actions/runs?status=") {
+            json!({"workflow_runs": []})
+        } else if let Some(listed) = line
+            .strip_prefix("GET /api/v3/repos/team/repo/actions/runs/")
+            .and_then(|rest| rest.strip_suffix("/jobs?filter=latest&per_page=100"))
+        {
+            let id: u64 = listed.parse().unwrap();
+            let mut jobs = if id == 1 {
+                state.queued.clone()
+            } else {
+                Vec::new()
+            };
+            jobs.extend(state.taken.get(&id).cloned());
+            json!({"jobs": jobs})
+        } else if line == "GET /api/v3/repos/team/repo/actions/runs/1" {
+            run(1, "main", &pushed)
+        } else if line == "GET /api/v3/repos/team/repo/actions/runs/2" {
+            run(2, "topic", &other)
+        } else if line == "POST /api/v3/repos/team/repo/actions/runners/generate-jitconfig" {
+            json!({"runner": {"id": 77}, "encoded_jit_config": "Y29uZmln"})
+        } else if line == "GET /api/v3/repos/team/repo/actions/runners/77" {
+            match state.busy {
+                Some(busy) => json!({"id": 77, "busy": busy}),
+                None => return (404, Vec::new(), b"{}".to_vec()),
+            }
+        } else if line.starts_with("DELETE /api/v3/repos/team/repo/actions/runners/") {
+            state
+                .deleted
+                .push(line.rsplit('/').next().unwrap().to_owned());
+            state.busy = None;
+            return (204, Vec::new(), Vec::new());
+        } else {
+            return (404, Vec::new(), b"{}".to_vec());
+        };
+        (200, Vec::new(), body.to_string().into())
+    });
+    host.set(server.host.clone()).unwrap();
+    crate::forge::hosts::learn(&server.host, ForgeKind::GitHub);
+    let install = root.path().join("actions-runner");
+    std::fs::create_dir_all(install.join("bin")).unwrap();
+    std::fs::write(install.join("run.sh"), "").unwrap();
+    *manager.runners.path.lock().unwrap() = Some(runner_program(&install, "Runner.Listener"));
+    let origin = format!("http://{}/team/repo", server.host);
+    git(&path, &["remote", "add", "origin", &origin]);
+    git(&path, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    git(
+        &path,
+        &[
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
+        ],
+    );
+    configure(
+        &manager,
+        &format!(
+            "[cleanup]\ngrace_minutes = 0\n[machine]\nmax_jobs = 2\n[machine.forges.\"{}\"]\ntype = \"github\"\ntoken = \"user\"\n[runner]\nenabled = true\n",
+            server.host
+        ),
+    )
+    .await;
+    let id = repo.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO runners(repository_id,forge_repository) VALUES (?1,?2)",
+                rusqlite::params![id, origin],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    GitHubFixture {
+        _root: root,
+        _server: server,
+        manager,
+        head,
+        state,
+    }
+}
+
+/// A queued job of GitHub's run `run` for the label `shoal`.
+pub(super) fn github_job(id: u64, run: u64) -> Value {
+    json!({"id": id, "run_id": run, "name": "rust", "status": "queued", "labels": ["shoal"], "runner_id": null})
+}
+
+/// The command launched in `workspace`, and the execution standing in for it.
+pub(super) fn launched(workspace: &str) -> Launched {
+    LAUNCHED.lock().unwrap().remove(workspace).unwrap()
+}
+
 /// Queue the forge's waiting jobs, admit them and claim each admitted one.
-async fn admit_and_claim(manager: &Manager) -> Vec<QueueEntry> {
+pub(super) async fn admit_and_claim(manager: &Manager) -> Vec<QueueEntry> {
     manager.refresh_waiting_jobs().await.unwrap();
     manager.dispatch_queue().await.unwrap();
     let admitted = manager.admitted_jobs().await.unwrap();
@@ -199,8 +345,12 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     assert_eq!(workspace.at.as_ref().unwrap().commit, fixture.head);
     assert!(workspace.disposable && workspace.setup_skipped);
 
-    let (argv, started) = LAUNCHED.lock().unwrap().remove(&workspace.id).unwrap();
-    let argv: Vec<_> = argv.iter().map(|arg| arg.to_str().unwrap()).collect();
+    let (command, started) = LAUNCHED.lock().unwrap().remove(&workspace.id).unwrap();
+    let argv: Vec<_> = command
+        .argv
+        .iter()
+        .map(|arg| arg.to_str().unwrap())
+        .collect();
     let directory = manager.job_directory(&claimed[0].id);
     let token = directory.join("token");
     assert!(argv[0].ends_with("/bin/forgejo-runner"), "{argv:?}");

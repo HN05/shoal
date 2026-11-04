@@ -7,6 +7,7 @@ mod costs;
 mod ends;
 mod listing;
 mod registration;
+mod single_use;
 mod waiting;
 
 pub(crate) use registration::Registration;

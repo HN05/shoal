@@ -1,5 +1,6 @@
 //! The end of a claimed job: once the execution running the forge's runner
-//! ends, however it ended, the job's workspace is removed whatever it holds,
+//! ends, however it ended, the runner registered for the job alone is
+//! deleted and the job's workspace is removed whatever it holds,
 //! with its permit, and the runner's directory of a job no longer claimed,
 //! however its workspace went, is deleted. A job ends only on the forge's
 //! word: stopping it, or removing its workspace while it runs, cancels its
@@ -30,7 +31,11 @@ pub(crate) struct ClaimedJob {
     pub workspace_id: String,
     /// The execution running the forge's runner, once it started.
     pub execution_id: Option<String>,
+    /// When that execution started.
+    pub launched_at: Option<i64>,
     pub job: QueuedJob,
+    /// The runner the forge registered for this job alone, if it did.
+    pub runner_id: Option<u64>,
 }
 
 impl Manager {
@@ -40,8 +45,8 @@ impl Manager {
             .run(|db| {
                 Ok(db
                     .prepare(
-                        "SELECT id,repository_id,workspace_id,execution_id,job FROM ci_jobs
-                         ORDER BY started_at",
+                        "SELECT id,repository_id,workspace_id,execution_id,job,launched_at,runner_id
+                         FROM ci_jobs ORDER BY started_at",
                     )?
                     .query_map([], |row| {
                         Ok(ClaimedJob {
@@ -49,6 +54,8 @@ impl Manager {
                             repository_id: row.get(1)?,
                             workspace_id: row.get(2)?,
                             execution_id: row.get(3)?,
+                            launched_at: row.get(5)?,
+                            runner_id: row.get::<_, Option<i64>>(6)?.map(|id| id as u64),
                             job: serde_json::from_str(&row.get::<_, String>(4)?).map_err(
                                 |error| {
                                     rusqlite::Error::FromSqlConversionFailure(
@@ -82,6 +89,9 @@ impl Manager {
                 continue;
             }
             self.record_job_usage(&job).await?;
+            if let Err(error) = self.delete_job_runner(&job).await {
+                crate::daemon::log!("runner: {error:#}");
+            }
             if let Err(error) = self.remove_job_workspace(&job.workspace_id).await {
                 self.notify(
                     None,

@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 130;
+pub(super) const SCHEMA_VERSION: i64 = 131;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -393,7 +393,29 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (128, include_str!("space_numbers.sql"), None),
     (129, "", Some(super::item_numbers::number_items)),
     (130, REPOSITORY_RUNNERS_OPTIONAL, None),
+    (131, CI_JOB_RUNNERS, None),
 ];
+
+/// The runner the forge registered for a claimed job alone, deleted once
+/// the job ends. Nothing references the table, so it is rebuilt, which a
+/// migration from an earlier version applies again.
+pub(super) const CI_JOB_RUNNERS: &str = "CREATE TABLE ci_jobs_runners (
+    id TEXT PRIMARY KEY,
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+    execution_id TEXT,
+    job TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    launched_at INTEGER,
+    peak_cpu REAL,
+    peak_memory INTEGER,
+    usage_recorded INTEGER NOT NULL DEFAULT 0 CHECK(usage_recorded IN (0,1)),
+    runner_id INTEGER
+);
+INSERT INTO ci_jobs_runners(id,repository_id,workspace_id,execution_id,job,started_at,launched_at,peak_cpu,peak_memory,usage_recorded)
+    SELECT id,repository_id,workspace_id,execution_id,job,started_at,launched_at,peak_cpu,peak_memory,usage_recorded FROM ci_jobs;
+DROP TABLE ci_jobs;
+ALTER TABLE ci_jobs_runners RENAME TO ci_jobs;";
 
 /// A repository on a forge whose runners each take one job keeps no runner
 /// of its own: its row records only the forge repository it serves. Nothing
