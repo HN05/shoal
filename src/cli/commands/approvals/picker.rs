@@ -6,14 +6,12 @@ use super::{about, ensure_scope_token, list_requests, show_request, submit};
 use crate::{
     cli::{
         args::approvals::Decision,
-        client::request,
         context::Context,
         internal::{self, Worker},
         output::{Palette, Style},
         ui::{self, Entries, WidthLimit},
     },
     client::approvals::{ApprovalRequest, DecisionStatus, ProposalDecision},
-    protocol::ApprovalMethod,
 };
 
 /// Open the chosen request; Ctrl-A approves and Ctrl-D denies the
@@ -98,9 +96,7 @@ async fn displayed(ctx: &Context, row: &str) -> Result<ApprovalRequest> {
         .split_once(':')
         .and_then(|(number, _)| number.parse().ok())
         .context("picker returned an invalid approval request")?;
-    let request =
-        request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ShowApproval { number })
-            .await?;
+    let request = crate::client::approvals::show(&ctx.paths, number).await?;
     ensure!(
         row_id(&request)? == row,
         "approval request {number} changed since it was listed"

@@ -20,11 +20,11 @@ use crate::{
     },
     client::{
         approvals::{ApprovalRequest, DecisionStatus},
-        questions::{Listing, Question},
+        questions::{self, Question},
     },
     demos::Running,
     model::{Chat, CheckoutSync, ReviewMark, SpaceLinks, UntrackedWorktree, Workspace},
-    protocol::{ApprovalMethod, DemoMethod, QuestionMethod, RepositoryMethod, WorkspaceMethod},
+    protocol::{DemoMethod, RepositoryMethod, WorkspaceMethod},
     state::WorkspaceState,
 };
 
@@ -78,15 +78,8 @@ impl Inbox {
         // keeps its open questions.
         let mut chats = client::recorded_chats(&ctx.paths).await?;
         chats.retain(|chat| filter.keeps_chat(chat));
-        let questions =
-            request::<Listing>(&ctx.paths, QuestionMethod::ListQuestions { space: None })
-                .await?
-                .questions;
-        let requests = request::<Vec<ApprovalRequest>>(
-            &ctx.paths,
-            ApprovalMethod::ListApprovals { space: None },
-        )
-        .await?;
+        let questions = questions::list(&ctx.paths, None).await?.questions;
+        let requests = crate::client::approvals::list(&ctx.paths, None).await?;
         let detached = |request: &ApprovalRequest| {
             !existing.contains(&request.space_id)
                 && request

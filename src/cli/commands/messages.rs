@@ -20,7 +20,7 @@ use crate::{
     },
     client::{agent_messages::AgentMessage, files::NewFile, links::Updates},
     forge::items::attach::Attachment,
-    protocol::{AgentMethod, QuestionMethod},
+    protocol::AgentMethod,
     repository::Selector,
 };
 
@@ -230,7 +230,7 @@ async fn report_reply(ctx: &Context, deadline: tokio::time::Instant) -> Result<(
     let reply = async {
         let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
         let space = inbox.space.clone();
-        request::<()>(&ctx.paths, QuestionMethod::RepliedInChat { space }).await
+        crate::client::questions::replied_in_chat(&ctx.paths, space).await
     };
     tokio::time::timeout_at(deadline, reply)
         .await

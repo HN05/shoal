@@ -22,8 +22,7 @@ use crate::{
     },
     model::{Inspection, PortOverview, PortRequest},
     protocol::{
-        ApprovalMethod, Method, PortMethod, ResourceMethod, SecretMethod, SimulatorMethod,
-        WorkspaceMethod,
+        Method, PortMethod, ResourceMethod, SecretMethod, SimulatorMethod, WorkspaceMethod,
     },
     sim::{SimRequest, SimulatorOverview},
 };
@@ -218,16 +217,11 @@ async fn select_held(
             }
         }
     });
-    let requests = client::request::<Vec<ApprovalRequest>>(
-        &ctx.paths,
-        ApprovalMethod::ListApprovals {
-            space: Some(workspace.to_owned()),
-        },
-    )
-    .await?
-    .into_iter()
-    .filter(|request| request.active)
-    .filter_map(requested);
+    let requests = crate::client::approvals::list(&ctx.paths, Some(workspace.to_owned()))
+        .await?
+        .into_iter()
+        .filter(|request| request.active)
+        .filter_map(requested);
     let mut selected = Vec::new();
     for held in ports.chain(simulators).chain(resources).chain(requests) {
         if matches_kind(&held, kind.as_ref()) && !selected.contains(&held) {

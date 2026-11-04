@@ -1,12 +1,15 @@
 //! Approval requests: what a workspace's agent asks the user, or a coordinating
 //! agent, to allow.
-use std::{fmt, str::FromStr};
+use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{
+        connection::{Daemon, request},
+        item_numbers::ItemNumber,
+        links::BranchPush,
         resources::{Definition, LockMode, RepositoryView, Scope},
         sim::Profile,
     },
@@ -16,6 +19,7 @@ use crate::{
         attach::Attachment,
         create::{NewIssue, NewPull},
     },
+    protocol::ApprovalMethod,
     state::{states, text_key},
 };
 
@@ -223,7 +227,7 @@ pub struct ApprovalRequest {
     /// The number the user decides it by, its space's and its own; reused
     /// once the request is deleted.
     #[serde(flatten)]
-    pub number: crate::client::item_numbers::ItemNumber,
+    pub number: ItemNumber,
     /// Stable identity behind the user-facing number, carried through displayed snapshots.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub key: String,
@@ -431,7 +435,7 @@ pub enum Duplicate {
     /// An issue number or URL in the same repository.
     Issue(String),
     /// Another pending issue proposal, by its number.
-    Approval(crate::client::item_numbers::ItemNumber),
+    Approval(ItemNumber),
 }
 
 impl ProposalDecision {
@@ -550,3 +554,75 @@ impl fmt::Display for Undecided {
 }
 
 impl std::error::Error for Undecided {}
+
+/// The approval requests of `space`, or of every space the caller decides.
+pub async fn list(daemon: &impl Daemon, space: Option<String>) -> Result<Vec<ApprovalRequest>> {
+    request(daemon, ApprovalMethod::ListApprovals { space }).await
+}
+
+/// The request `number`.
+pub async fn show(daemon: &impl Daemon, number: ItemNumber) -> Result<Box<ApprovalRequest>> {
+    request(daemon, ApprovalMethod::ShowApproval { number }).await
+}
+
+/// Approve or deny the request `number`, which `shown` names when the user
+/// chose it from a list, so a request reusing its number is refused. Only
+/// proposals take `details`; an approval runs with `env`.
+pub async fn decide(
+    daemon: &impl Daemon,
+    number: ItemNumber,
+    approve: bool,
+    shown: Option<Box<ApprovalRequest>>,
+    details: ProposalDecision,
+    env: BTreeMap<String, String>,
+) -> Result<Box<ApprovalRequest>> {
+    let method = ApprovalMethod::DecideApproval {
+        number,
+        approve,
+        shown,
+        details,
+        env: Some(env),
+    };
+    request(daemon, method).await
+}
+
+/// Pass the request `number`, routed to `space`, up to the space above it
+/// or to the user.
+pub async fn escalate(
+    daemon: &impl Daemon,
+    space: String,
+    number: ItemNumber,
+    shown: Option<Box<ApprovalRequest>>,
+) -> Result<Box<ApprovalRequest>> {
+    let method = ApprovalMethod::EscalateApproval {
+        space,
+        number,
+        shown,
+    };
+    request(daemon, method).await
+}
+
+/// Withdraw `space`'s pending request `number`.
+pub async fn withdraw(
+    daemon: &impl Daemon,
+    space: String,
+    number: ItemNumber,
+) -> Result<Box<ApprovalRequest>> {
+    request(daemon, ApprovalMethod::WithdrawApproval { space, number }).await
+}
+
+/// Whether `[permissions] push` holds back the push of `workspace`'s branch.
+pub async fn push_held(daemon: &impl Daemon, workspace: String) -> Result<bool> {
+    let BranchPush { held } = request(daemon, ApprovalMethod::BranchPush { workspace }).await?;
+    Ok(held)
+}
+
+/// Decide the approved push `key` by how it ended, with `failure` when it
+/// failed.
+pub async fn finish_push(
+    daemon: &impl Daemon,
+    key: String,
+    failure: Option<String>,
+) -> Result<Box<ApprovalRequest>> {
+    request(daemon, ApprovalMethod::FinishPush { key, failure }).await
+}

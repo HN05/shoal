@@ -19,7 +19,7 @@ use crate::{
         client, terminal, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    client::{approvals::ApprovalRequest, questions::Listing, resources::Overview},
+    client::resources::Overview,
     config::{
         Config,
         named_commands::{self, Commands},
@@ -30,8 +30,7 @@ use crate::{
     model::{Chat, PortCatalog, PortOverview, Workspace},
     paths::Paths,
     protocol::{
-        ApprovalMethod, ConfigTarget, PortMethod, QuestionMethod, RemovalMethod, ResourceMethod,
-        SimulatorMethod, WorkspaceMethod,
+        ConfigTarget, PortMethod, RemovalMethod, ResourceMethod, SimulatorMethod, WorkspaceMethod,
     },
     sim::Simulator,
 };
@@ -441,11 +440,7 @@ impl Typed {
                 .collect());
         }
         if matches!(target, Target::ApprovalRequests) {
-            let requests = client::request::<Vec<ApprovalRequest>>(
-                &paths,
-                ApprovalMethod::ListApprovals { space: None },
-            )
-            .await?;
+            let requests = crate::client::approvals::list(&paths, None).await?;
             return Ok(requests
                 .iter()
                 .filter(|r| r.status == crate::client::approvals::DecisionStatus::Pending)
@@ -456,8 +451,9 @@ impl Typed {
                 .collect());
         }
         if matches!(target, Target::Questions) {
-            let method = QuestionMethod::ListQuestions { space: None };
-            let questions = client::request::<Listing>(&paths, method).await?.questions;
+            let questions = crate::client::questions::list(&paths, None)
+                .await?
+                .questions;
             return Ok(questions
                 .iter()
                 .map(|q| {

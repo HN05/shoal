@@ -13,7 +13,7 @@ use crate::{
     },
     client::{
         approvals::Target,
-        links::{BranchPush, OpenOutcome, Proposed},
+        links::{OpenOutcome, Proposed},
     },
     forge::items::{
         create::{NewIssue, PullOptions},
@@ -22,7 +22,7 @@ use crate::{
     git,
     model::Workspace,
     protocol::{
-        ApprovalMethod, ItemMethod, ReviewMethod, WorkspaceMethod,
+        ItemMethod, ReviewMethod, WorkspaceMethod,
         operations::{Failure, OperationSpec, Step},
     },
 };
@@ -88,10 +88,7 @@ pub(in crate::cli::commands) async fn push_and_open(
         workspace: workspace.id.clone(),
     };
     client::request::<()>(&ctx.paths, gate).await?;
-    let held = ApprovalMethod::BranchPush {
-        workspace: workspace.id.clone(),
-    };
-    let BranchPush { held } = client::request(&ctx.paths, held).await?;
+    let held = crate::client::approvals::push_held(&ctx.paths, workspace.id.clone()).await?;
     if !held {
         reporter.step(Step::PushStarted).await?;
         push(ctx, &workspace).await?;

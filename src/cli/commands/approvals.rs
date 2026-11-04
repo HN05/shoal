@@ -13,16 +13,15 @@ use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
         args::approvals::ApprovalsArgs,
-        client::{self, request},
+        client::{self},
         context::Context,
         output::{Palette, Style},
         ui::{self, Cell},
     },
     client::approvals::{
-        ApprovalRequest, DecisionStatus, Duplicate, ProposalDecision, Specification,
+        self, ApprovalRequest, DecisionStatus, Duplicate, ProposalDecision, Specification,
     },
     client::item_numbers::ItemNumber,
-    protocol::ApprovalMethod,
 };
 
 pub(super) async fn run(ctx: &Context, args: ApprovalsArgs) -> Result<i32> {
@@ -64,7 +63,7 @@ async fn show(ctx: &Context, number: ItemNumber) -> Result<i32> {
 
 /// The request `number`.
 async fn numbered(ctx: &Context, number: ItemNumber) -> Result<Box<ApprovalRequest>> {
-    request(&ctx.paths, ApprovalMethod::ShowApproval { number }).await
+    approvals::show(&ctx.paths, number).await
 }
 
 pub(super) async fn show_request(ctx: &Context, request: Box<ApprovalRequest>) -> Result<i32> {
@@ -268,14 +267,8 @@ pub(super) async fn submit(
     shown: Option<Box<ApprovalRequest>>,
     details: ProposalDecision,
 ) -> Result<i32> {
-    let method = ApprovalMethod::DecideApproval {
-        number,
-        approve,
-        shown,
-        details,
-        env: Some(crate::env::without_secrets()),
-    };
-    let mut request = request::<Box<ApprovalRequest>>(&ctx.paths, method).await?;
+    let env = crate::env::without_secrets();
+    let mut request = approvals::decide(&ctx.paths, number, approve, shown, details, env).await?;
     // An approved push runs in an operation whose end decides the request.
     if let Some(operation) = request.operation.clone()
         && request.status == DecisionStatus::Pending
@@ -302,15 +295,7 @@ async fn escalate(
 ) -> Result<i32> {
     ensure_scope_token(ctx)?;
     let space = ui::select_space(ctx, None, ui::Fallback::OwnWorkspace).await?;
-    let request = request::<Box<ApprovalRequest>>(
-        &ctx.paths,
-        ApprovalMethod::EscalateApproval {
-            space,
-            number,
-            shown,
-        },
-    )
-    .await?;
+    let request = approvals::escalate(&ctx.paths, space, number, shown).await?;
     let decider = match &request.decider {
         Some(_) => "the space above",
         None => "the user",
@@ -335,8 +320,7 @@ pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
 /// longer needs.
 pub(super) async fn withdraw(ctx: &Context, number: ItemNumber) -> Result<i32> {
     let space = numbered(ctx, number).await?.space_id;
-    let method = ApprovalMethod::WithdrawApproval { space, number };
-    let request = request::<Box<ApprovalRequest>>(&ctx.paths, method).await?;
+    let request = approvals::withdraw(&ctx.paths, space, number).await?;
     ctx.emit(&outcome(&request), &request)?;
     Ok(0)
 }
@@ -361,7 +345,7 @@ pub(super) async fn list_requests(
     ctx: &Context,
     space: Option<String>,
 ) -> Result<Vec<ApprovalRequest>> {
-    request(&ctx.paths, ApprovalMethod::ListApprovals { space }).await
+    approvals::list(&ctx.paths, space).await
 }
 
 /// What a request asks for, and why when its agent said.

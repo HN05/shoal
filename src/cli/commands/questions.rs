@@ -7,7 +7,7 @@ use crate::client::output::workspaces::InChat;
 use crate::{
     cli::{
         args::coordination::QuestionsArgs,
-        client::{self, request},
+        client::request,
         commands::messages::hanging_indent,
         context::Context,
         installed::{Executable, arguments, replace_option, without_option},
@@ -15,8 +15,8 @@ use crate::{
         ui::{self, Cell, Entries, Fallback, WidthLimit},
     },
     client::item_numbers::ItemNumber,
-    client::questions::{Ask, Listing, Question},
-    protocol::{AgentMethod, QuestionMethod},
+    client::questions::{self, Ask, Question},
+    protocol::AgentMethod,
 };
 
 pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {
@@ -32,7 +32,7 @@ pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {
 
 /// The question `number`.
 async fn numbered(ctx: &Context, number: ItemNumber) -> Result<Question> {
-    request(&ctx.paths, QuestionMethod::ShowQuestion { number }).await
+    questions::show(&ctx.paths, number).await
 }
 
 async fn show(ctx: &Context, question: Question) -> Result<i32> {
@@ -55,13 +55,7 @@ pub(super) async fn ask(
     let attachments = super::messages::attachments(&attach)?;
     crate::client::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let method = QuestionMethod::AskQuestion {
-        space,
-        ask,
-        attachments,
-        sender_chat: crate::env::chat(),
-    };
-    let question: Question = request(&ctx.paths, method).await?;
+    let question = questions::ask(&ctx.paths, space, ask, attachments, crate::env::chat()).await?;
     if !wait && question.is_open() {
         ctx.emit(
             &format!(
@@ -86,7 +80,7 @@ pub(super) async fn ask(
 /// Mark the caller's agent's turn as asking the user in its conversation.
 pub(super) async fn ask_in_chat(ctx: &Context, space: Option<String>) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
-    request::<()>(&ctx.paths, QuestionMethod::AskInChat { space }).await?;
+    questions::ask_in_chat(&ctx.paths, space).await?;
     ctx.emit(
         "Ask your question as your final message and end your turn; it also reaches the user's questions.",
         InChat { in_chat: true },
@@ -145,15 +139,9 @@ async fn await_answer(
 ) -> Result<Question> {
     let asked = asked.into();
     let executable = Executable::current();
-    let method = || QuestionMethod::AwaitAnswer {
-        space: space.to_owned(),
-        item: asked.item,
-        ask: asked.ask.clone(),
-    };
-    match client::await_reply(&ctx.paths, method, restarted).await {
-        Ok(body) => Question::try_from(body),
-        Err(error) => Err(executable.resume_or(error, || resume_arguments(space, asked.item))),
-    }
+    questions::await_answer(&ctx.paths, space, asked.item, &asked.ask, restarted)
+        .await
+        .map_err(|error| executable.resume_or(error, || resume_arguments(space, asked.item)))
 }
 
 /// This command's arguments, which state the question, resuming the wait for
@@ -167,7 +155,7 @@ fn resume_arguments(space: &str, item: u32) -> Vec<OsString> {
 }
 
 pub(super) async fn list(ctx: &Context, space: Option<String>) -> Result<i32> {
-    let listing = request::<Listing>(&ctx.paths, QuestionMethod::ListQuestions { space }).await?;
+    let listing = questions::list(&ctx.paths, space).await?;
     if ctx.interactive_output() && !listing.questions.is_empty() {
         let question = pick_question(ctx, listing.questions)?;
         return show(ctx, question).await;
@@ -227,12 +215,7 @@ fn picker_rows(questions: &[Question]) -> Entries {
 /// answered.
 pub(super) async fn withdraw(ctx: &Context, number: ItemNumber) -> Result<i32> {
     let shown = numbered(ctx, number).await?;
-    let method = QuestionMethod::WithdrawQuestion {
-        space: shown.space_id.clone(),
-        number,
-        shown: Some(shown),
-    };
-    let question = request::<Question>(&ctx.paths, method).await?;
+    let question = questions::withdraw(&ctx.paths, shown).await?;
     ctx.emit(
         &format!(
             "Question {} withdrawn: {}",
@@ -249,22 +232,18 @@ async fn answer(
     answer: String,
     shown: Option<Question>,
 ) -> Result<i32> {
-    let method = QuestionMethod::AnswerQuestion {
-        number,
-        answer,
-        shown,
-    };
-    submit_answer(ctx, method).await
+    ensure_answering_scope(ctx)?;
+    let question = questions::answer(&ctx.paths, number, answer, shown).await?;
+    ctx.emit(&answered(&question), &question)?;
+    Ok(0)
 }
 
-async fn submit_answer(ctx: &Context, method: QuestionMethod) -> Result<i32> {
+fn ensure_answering_scope(ctx: &Context) -> Result<()> {
     ensure!(
         crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot answer questions without their scope token"
     );
-    let question = request::<Question>(&ctx.paths, method).await?;
-    ctx.emit(&answered(&question), &question)?;
-    Ok(0)
+    Ok(())
 }
 
 /// Names the question by its text too: a stale notification may name a
@@ -282,14 +261,10 @@ fn answered(question: &Question) -> String {
 async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
     match read_question_action(ctx, &question)? {
         QuestionAction::Recommend => {
-            submit_answer(
-                ctx,
-                QuestionMethod::AcceptQuestionRecommendation {
-                    number: question.number,
-                    shown: Some(question),
-                },
-            )
-            .await
+            ensure_answering_scope(ctx)?;
+            let question = questions::accept_recommendation(&ctx.paths, question).await?;
+            ctx.emit(&answered(&question), &question)?;
+            Ok(0)
         }
         QuestionAction::Answer(response) => {
             answer(ctx, question.number, response, Some(question)).await

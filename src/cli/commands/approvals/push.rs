@@ -5,16 +5,12 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        client,
         commands::operations::{Failed, Reporter},
         context::Context,
     },
     client::approvals::{ApprovalRequest, PushSpecification},
     git,
-    protocol::{
-        ApprovalMethod,
-        operations::{Failure, Step},
-    },
+    protocol::operations::{Failure, Step},
 };
 
 pub(in crate::cli::commands) async fn push_approved(
@@ -38,11 +34,8 @@ pub(in crate::cli::commands) async fn push_approved(
     if failure.is_none() {
         reporter.reached(Step::Pushed).await?;
     }
-    let finish = ApprovalMethod::FinishPush {
-        key: approval,
-        failure: failure.clone(),
-    };
-    let decided = client::request(&ctx.paths, finish).await;
+    let decided =
+        crate::client::approvals::finish_push(&ctx.paths, approval, failure.clone()).await;
     match failure {
         Some(message) => Err(Failed(Failure::PushFailed { message }).into()),
         None => decided,
