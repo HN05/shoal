@@ -124,8 +124,9 @@ pub enum OperationSpec {
     },
 }
 
-/// What preparing a workspace runs: its setup when `setup`, then its
-/// post-setup hook when `post_setup`, then linking `pr` and queuing `agent`.
+/// What preparing a workspace runs: its setup when `setup`, then linking
+/// `pr`, which only warns when refused, then its post-setup hook when
+/// `post_setup`, then queuing `agent`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Preparation {
     pub setup: bool,

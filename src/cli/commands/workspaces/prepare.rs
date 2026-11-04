@@ -1,11 +1,12 @@
 //! Preparing a workspace inside an operation's worker: its tracked setup,
-//! then its post-setup hook, each failing as the operation reports it, then
-//! linking its PR and queuing its agent.
+//! failing as the operation reports it, then linking its PR, then its
+//! post-setup hook, failing in turn, then queuing its agent.
 use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
 
 use super::environment::configured_environment;
+use super::link_pull::link_or_warn;
 use super::queued_agent_request;
 use crate::{
     agent::Agent,
@@ -16,11 +17,10 @@ use crate::{
         context::Context,
     },
     execution,
-    forge::items::link::LinkKind,
     hooks::{self, Hook, HookKind},
-    model::{QueueAdmission, QueueEntry, Relation, Workspace},
+    model::{QueueAdmission, QueueEntry, Workspace},
     protocol::{
-        ConfigTarget, ItemMethod, QueueMethod, WorkspaceMethod,
+        ConfigTarget, QueueMethod, WorkspaceMethod,
         operations::{Failure, Preparation, Prepared, QueuedLaunch, Step},
     },
     state::WorkspaceState,
@@ -39,6 +39,9 @@ pub(in crate::cli::commands) async fn prepare(
         workspace = run_setup(ctx, &workspace).await?;
         reporter.step(Step::Ready).await?;
     }
+    if let Some(pr) = steps.pr {
+        workspace = link_pr(ctx, workspace, &pr, reporter).await?;
+    }
     // A workspace created without setup runs none of its hooks.
     if steps.post_setup && !workspace.setup_skipped {
         reporter.step(Step::PostSetupStarted).await?;
@@ -49,11 +52,6 @@ pub(in crate::cli::commands) async fn prepare(
                     message: format!("{error:#}"),
                 })
             })?;
-    }
-    if let Some(pr) = steps.pr {
-        link_pr(ctx, &workspace, pr, reporter).await?;
-        reporter.reached(Step::PrLinked).await?;
-        workspace = client::inspect(&ctx.paths, workspace.id).await?.workspace;
     }
     let agent = match steps.agent {
         Some(launch) => {
@@ -119,23 +117,21 @@ async fn run_post_setup_hook(
     Ok(())
 }
 
-/// Link `pr`, a number or URL, as the PR the workspace works on, unless the
-/// operation was cancelled.
+/// Link `pr`, a number or URL, as the PR the ready workspace works on,
+/// unless the operation was cancelled, and return the workspace with it. The
+/// workspace is kept either way, so a refused link only warns.
 async fn link_pr(
     ctx: &Context,
-    workspace: &Workspace,
-    pr: String,
+    workspace: Workspace,
+    pr: &str,
     reporter: &Reporter<'_>,
-) -> Result<()> {
+) -> Result<Workspace> {
     reporter.ensure_running()?;
-    let method = ItemMethod::LinkItem {
-        space: workspace.id.clone(),
-        kind: LinkKind::Pr,
-        url: pr,
-        relation: Relation::Assigned,
-        title: None,
-    };
-    request(&ctx.paths, method).await
+    if !link_or_warn(ctx, &workspace.id, pr).await {
+        return Ok(workspace);
+    }
+    reporter.reached(Step::PrLinked).await?;
+    Ok(client::inspect(&ctx.paths, workspace.id).await?.workspace)
 }
 
 /// Queue `launch` in the ready workspace, which the agent queue starts

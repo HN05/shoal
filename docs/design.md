@@ -755,7 +755,8 @@ The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;
 failure marks setup failed. It may be configured without a setup command.
 The post-setup hook runs in setup's operation, without a terminal, once the
-workspace is ready and before any agent; failure keeps the ready workspace. The pre-remove
+workspace is ready, after its PR is linked and before any agent; failure keeps
+the ready workspace. The pre-remove
 hook runs in the daemon inside the single removal path for manual, repository,
 and automatic removal, after checks pass and commands stop, bounded in time;
 failure retains the workspace. Ownership and removal policy are rechecked after

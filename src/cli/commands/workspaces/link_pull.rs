@@ -17,17 +17,27 @@ pub(in crate::cli::commands) async fn link_pull(
     workspace: Workspace,
     url: String,
 ) -> Result<Workspace> {
-    let linked = request::<()>(
-        &ctx.paths,
-        ItemMethod::SetPr {
-            space: workspace.id.clone(),
-            action: crate::daemon::links::pr::Action::Watch { url: url.clone() },
-        },
-    )
-    .await;
-    if let Err(error) = linked {
-        eprintln!("warning: cannot link PR {url}: {error:#}");
+    if !link_or_warn(ctx, &workspace.id, &url).await {
         return Ok(workspace);
     }
     Ok(client::inspect(&ctx.paths, workspace.id).await?.workspace)
+}
+
+/// Link PR `url` as the one workspace `id` was opened on; whether it did,
+/// a refused link having warned.
+pub(super) async fn link_or_warn(ctx: &Context, id: &str, url: &str) -> bool {
+    let linked = request::<()>(
+        &ctx.paths,
+        ItemMethod::SetPr {
+            space: id.to_owned(),
+            action: crate::daemon::links::pr::Action::Watch {
+                url: url.to_owned(),
+            },
+        },
+    )
+    .await;
+    if let Err(error) = &linked {
+        eprintln!("warning: cannot link PR {url}: {error:#}");
+    }
+    linked.is_ok()
 }

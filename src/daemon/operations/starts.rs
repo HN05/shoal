@@ -73,8 +73,8 @@ impl Manager {
     }
 
     /// Assign `issue` to the new `workspace`, then start preparing it: its
-    /// setup while it is preparing, its post-setup hook, then linking the PR
-    /// and queuing the agent. A workspace whose issue cannot be assigned is
+    /// setup while it is preparing, linking the PR, its post-setup hook,
+    /// then queuing the agent. A workspace whose issue cannot be assigned is
     /// removed, since nothing ran in it yet.
     async fn prepare_new(
         self: &Arc<Self>,
