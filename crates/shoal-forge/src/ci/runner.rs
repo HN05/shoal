@@ -178,6 +178,22 @@ impl ForgeRepo {
         self.kind.job_command(self, account, launch).await
     }
 
+    /// Whether the runner `id` runs a job, or `None` once it is gone.
+    pub async fn runner_busy(&self, account: &Account, id: u64) -> Result<Option<bool>> {
+        self.kind.runner_busy(self, account, id).await
+    }
+
+    /// The job of the run with API ID `run` that the runner `runner` took,
+    /// if it took one.
+    pub async fn runner_job(
+        &self,
+        account: &Account,
+        run: u64,
+        runner: u64,
+    ) -> Result<Option<WaitingJob>> {
+        self.kind.runner_job(self, account, run, runner).await
+    }
+
     /// The web URL of the forge instance the repository is on.
     pub fn instance_url(&self) -> String {
         format!("{}://{}", self.web_scheme, self.host)

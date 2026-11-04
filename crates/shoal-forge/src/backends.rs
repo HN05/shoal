@@ -734,6 +734,27 @@ pub(crate) trait Backend {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
 
+    /// Whether the runner `id` runs a job, or `None` once it is gone.
+    async fn runner_busy(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _id: u64,
+    ) -> Result<Option<bool>> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
+
+    /// The job of `run` that the runner `runner` took, if any.
+    async fn runner_job(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _run: u64,
+        _runner: u64,
+    ) -> Result<Option<WaitingJob>> {
+        Err(crate::capability::unsupported(self, Capability::RunJobs))
+    }
+
     /// The endpoint under the repository that approves `run`, where the
     /// forge approves runs.
     fn approve_endpoint(&self, _run: &Run) -> Result<String> {
@@ -1518,6 +1539,25 @@ impl Backend for ForgeKind {
         launch: &JobLaunch<'_>,
     ) -> Result<JobCommand> {
         dispatch!(self, backend => backend.job_command(repo, account, launch).await)
+    }
+
+    async fn runner_busy(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        id: u64,
+    ) -> Result<Option<bool>> {
+        dispatch!(self, backend => backend.runner_busy(repo, account, id).await)
+    }
+
+    async fn runner_job(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        run: u64,
+        runner: u64,
+    ) -> Result<Option<WaitingJob>> {
+        dispatch!(self, backend => backend.runner_job(repo, account, run, runner).await)
     }
 
     fn plain_log(&self, log: &str) -> String {
