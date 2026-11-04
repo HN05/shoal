@@ -12,10 +12,29 @@ fn paths(files: &[&str]) -> Vec<PathBuf> {
     files.iter().map(PathBuf::from).collect()
 }
 
+/// An environment that inherits none of the user's own variables, such as
+/// a `CODEX_HOME` that would point the lookup at their sessions.
+fn isolated(home: &Path) -> AgentEnvironment<'_> {
+    AgentEnvironment {
+        inherited: |_| None,
+        ..AgentEnvironment::inherited(home)
+    }
+}
+
+/// [`super::locate`] in environments that inherit none of the user's
+/// variables.
+fn locate(home: &Path, sessions: &SpaceSessions) -> Vec<Transcript> {
+    let environments = Environments {
+        inherited: |_| None,
+        ..Environments::new(home, &sessions.environments)
+    };
+    locate_in(&environments, sessions)
+}
+
 #[test]
 fn claude_sessions_are_the_transcript_and_its_directory_in_any_project() {
     let home = tempfile::tempdir().unwrap();
-    let environment = AgentEnvironment::inherited(home.path());
+    let environment = isolated(home.path());
     let directory = Claude.session_dir(&environment).unwrap();
     assert_eq!(directory, home.path().join(".claude/projects"));
     assert_eq!(
@@ -43,8 +62,8 @@ fn claude_sessions_are_the_transcript_and_its_directory_in_any_project() {
         home.path().join("claude").into_os_string(),
     )]);
     let environment = AgentEnvironment {
-        home: home.path(),
         configured: &configured,
+        ..isolated(home.path())
     };
     assert_eq!(
         Claude.session_dir(&environment).unwrap(),
@@ -55,7 +74,7 @@ fn claude_sessions_are_the_transcript_and_its_directory_in_any_project() {
 #[test]
 fn codex_sessions_are_the_rollout_named_after_them() {
     let home = tempfile::tempdir().unwrap();
-    let environment = AgentEnvironment::inherited(home.path());
+    let environment = isolated(home.path());
     let directory = Codex.session_dir(&environment).unwrap();
     assert_eq!(directory, home.path().join(".codex/sessions"));
     write(&directory.join("2026/10/30/rollout-2026-10-30T01-02-03-s1.jsonl"));
@@ -72,16 +91,40 @@ fn codex_sessions_are_the_rollout_named_after_them() {
 }
 
 #[test]
+fn an_inherited_tool_directory_counts_unless_configured() {
+    let home = tempfile::tempdir().unwrap();
+    let mut environment = isolated(home.path());
+    environment.inherited =
+        |name| (name == crate::client::env::CODEX_HOME).then(|| "/codex".into());
+    assert_eq!(
+        Codex.session_dir(&environment).unwrap(),
+        Path::new("/codex/sessions")
+    );
+    let configured = BTreeMap::from([(
+        crate::client::env::CODEX_HOME.to_owned(),
+        home.path().join("codex").into_os_string(),
+    )]);
+    environment.configured = &configured;
+    assert_eq!(
+        Codex.session_dir(&environment).unwrap(),
+        home.path().join("codex/sessions")
+    );
+}
+
+#[test]
 fn a_session_is_found_in_the_first_environment_that_has_it() {
     let home = tempfile::tempdir().unwrap();
     let elsewhere = home.path().join("elsewhere");
-    let environments = Environments::new(
-        home.path(),
-        &[BTreeMap::from([(
-            crate::client::env::CODEX_HOME.to_owned(),
-            elsewhere.display().to_string(),
-        )])],
-    );
+    let environments = Environments {
+        inherited: |_| None,
+        ..Environments::new(
+            home.path(),
+            &[BTreeMap::from([(
+                crate::client::env::CODEX_HOME.to_owned(),
+                elsewhere.display().to_string(),
+            )])],
+        )
+    };
     let environments = environments.each();
     let found = |id| find(&Codex, &environments, id).unwrap();
     assert_eq!(found("s1"), None);

@@ -10,7 +10,7 @@ pub(super) struct Codex;
 impl Store for Codex {
     /// `sessions` in its home, with a directory per day.
     fn session_dir(&self, environment: &AgentEnvironment) -> Result<PathBuf> {
-        let home = crate::client::env::codex_home_with(environment.configured)?
+        let home = crate::client::env::codex_home_from(|name| environment.variable(name))?
             .unwrap_or_else(|| environment.home.join(".codex"));
         Ok(home.join("sessions"))
     }

@@ -90,6 +90,7 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
         let environment = AgentEnvironment {
             home: home.path(),
             configured: &configured,
+            inherited: |_| None,
         };
         let routing = super::super::Routing {
             url: "http://127.0.0.1:4000",

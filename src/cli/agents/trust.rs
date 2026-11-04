@@ -69,10 +69,7 @@ impl TrustFile {
         profile.layer(&mut configured, &ctx.paths.home);
         self.keep_config_location(ctx, Holder::Workspace(workspace), &configured)
             .await;
-        let environment = AgentEnvironment {
-            home: &ctx.paths.home,
-            configured: &configured,
-        };
+        let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
         self.trust_workspace(ctx, workspace, &environment).await;
     }
 
@@ -118,10 +115,7 @@ impl TrustFile {
         profile.layer(&mut configured, &ctx.paths.home);
         self.keep_config_location(ctx, Holder::Repository(repository), &configured)
             .await;
-        let environment = AgentEnvironment {
-            home: &ctx.paths.home,
-            configured: &configured,
-        };
+        let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
         self.trust(
             &environment,
             &repository_trust_paths(repository, &repository.path),
@@ -209,14 +203,14 @@ pub(super) fn repository_paths(
 }
 
 fn claude_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
-    env::claude_config_dir_with(environment.configured).map(|dir| {
+    env::claude_config_dir_from(|name| environment.variable(name)).map(|dir| {
         dir.unwrap_or_else(|| environment.home.to_owned())
             .join(".claude.json")
     })
 }
 
 pub(super) fn codex_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
-    env::codex_home_with(environment.configured).map(|dir| {
+    env::codex_home_from(|name| environment.variable(name)).map(|dir| {
         dir.unwrap_or_else(|| environment.home.join(".codex"))
             .join("config.toml")
     })

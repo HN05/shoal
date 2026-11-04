@@ -96,10 +96,7 @@ fn session_dir(
         .launch(name)
         .environment
         .layer(&mut configured, home);
-    let environment = AgentEnvironment {
-        home,
-        configured: &configured,
-    };
+    let environment = AgentEnvironment::new(home, &configured);
     transcripts::store(settings.integration(name))
         .map(|store| store.session_dir(&environment))
         .transpose()

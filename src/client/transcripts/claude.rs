@@ -11,7 +11,7 @@ impl Store for Claude {
     /// Its config directory's `projects` holds a directory per working
     /// directory.
     fn session_dir(&self, environment: &AgentEnvironment) -> Result<PathBuf> {
-        let config = crate::client::env::claude_config_dir_with(environment.configured)?
+        let config = crate::client::env::claude_config_dir_from(|name| environment.variable(name))?
             .unwrap_or_else(|| environment.home.join(".claude"));
         Ok(config.join("projects"))
     }

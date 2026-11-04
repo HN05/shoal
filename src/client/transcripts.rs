@@ -78,6 +78,11 @@ pub async fn space_transcripts(daemon: &impl Daemon, space: String) -> Result<Ve
 /// `home` or one their agents ran with put them.
 pub fn locate(home: &Path, sessions: &SpaceSessions) -> Vec<Transcript> {
     let environments = Environments::new(home, &sessions.environments);
+    locate_in(&environments, sessions)
+}
+
+/// `sessions` with their files, wherever one of `environments` put them.
+fn locate_in(environments: &Environments, sessions: &SpaceSessions) -> Vec<Transcript> {
     let environments = environments.each();
     sessions
         .sessions
@@ -116,23 +121,41 @@ fn transcript(
     }
 }
 
+/// Reads a variable of the environment agents inherit from this process.
+pub type Inherited = fn(&str) -> Option<OsString>;
+
 /// What an agent runs with, which says where its tool keeps its files: this
 /// process's environment with `configured`, the workspace's `[env]` for a
 /// tracked agent.
 pub struct AgentEnvironment<'a> {
     pub home: &'a Path,
     pub configured: &'a BTreeMap<String, OsString>,
+    /// What it inherits from this process: [`std::env::var_os`] but in
+    /// tests, which keep the user's own variables out.
+    pub inherited: Inherited,
 }
 
 impl<'a> AgentEnvironment<'a> {
+    /// This process's environment with `configured`.
+    pub fn new(home: &'a Path, configured: &'a BTreeMap<String, OsString>) -> Self {
+        Self {
+            home,
+            configured,
+            inherited: |name| std::env::var_os(name),
+        }
+    }
+
     /// This process's environment alone, which agents Shoal does not track,
     /// such as chats and desktop apps, run with.
     pub fn inherited(home: &'a Path) -> Self {
         static NONE: BTreeMap<String, OsString> = BTreeMap::new();
-        Self {
-            home,
-            configured: &NONE,
-        }
+        Self::new(home, &NONE)
+    }
+
+    /// Variable `name` as `configured` sets it, else as it is inherited.
+    pub fn variable(&self, name: &str) -> Option<OsString> {
+        let configured = self.configured.get(name).cloned();
+        configured.or_else(|| (self.inherited)(name))
     }
 }
 
@@ -142,6 +165,7 @@ impl<'a> AgentEnvironment<'a> {
 pub struct Environments {
     home: PathBuf,
     configured: Vec<BTreeMap<String, OsString>>,
+    inherited: Inherited,
 }
 
 impl Environments {
@@ -160,16 +184,20 @@ impl Environments {
         Self {
             home: home.to_owned(),
             configured,
+            inherited: |name| std::env::var_os(name),
         }
     }
 
     /// Each environment, this process's first.
     pub fn each(&self) -> Vec<AgentEnvironment<'_>> {
-        std::iter::once(AgentEnvironment::inherited(&self.home))
-            .chain(self.configured.iter().map(|configured| AgentEnvironment {
+        static NONE: BTreeMap<String, OsString> = BTreeMap::new();
+        std::iter::once(&NONE)
+            .chain(&self.configured)
+            .map(|configured| AgentEnvironment {
                 home: &self.home,
                 configured,
-            }))
+                inherited: self.inherited,
+            })
             .collect()
     }
 }

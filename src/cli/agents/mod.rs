@@ -936,7 +936,7 @@ pub(crate) fn route_through_proxy(
     home: &Path,
     configured: &BTreeMap<String, OsString>,
 ) -> Result<Vec<OsString>> {
-    let environment = AgentEnvironment { home, configured };
+    let environment = AgentEnvironment::new(home, configured);
     integration(kind).route_through_proxy(&mut command, routing, &environment)?;
     Ok(command)
 }
