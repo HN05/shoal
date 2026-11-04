@@ -1797,9 +1797,11 @@ chat, commands that act only on workspaces, such as `shoal diff`,
 `shoal status`, which takes the current directory's workspace before the chat;
 commands that act on chats, such as `shoal view`, `shoal ci`, `shoal link`,
 `shoal ready` and `shoal done`, act on the chat, and `--space <workspace>`
-reaches the workspace's. A running chat keeps the workspace from every
-unattended removal, and one Shoal saved keeps it from idle cleanup; removing the
-workspace removes its chats first, which `shoal rm` lists before asking. A chat
+reaches the workspace's. A running chat keeps the workspace from idle, merged,
+PR and completion cleanup, and one Shoal saved keeps it from idle cleanup.
+Removing the workspace, including the cleanup of a worktree deleted outside
+Shoal, which nothing keeps, removes its chats first and stops their agents;
+`shoal rm` lists them before asking. A chat
 never moves to another directory: one about another workspace is a new chat.
 
 `shoal chat rename [chat] NAME` gives a running chat, `shoal plan` chats
