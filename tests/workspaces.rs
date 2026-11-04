@@ -30882,6 +30882,47 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     };
     let first = push_fork_head("first");
     script(&first);
+    // An app's request for the head with an agent that can run is refused
+    // before anything is created, since the head holds no agent of its own.
+    let before = fixture.ok(&["work"]);
+    let start = shoal::client::protocol::OperationMethod::StartWorkspace {
+        repository: fixture.repo.to_str().unwrap().into(),
+        start: shoal::client::protocol::operations::WorkspaceStart::PullHead {
+            url: url.into(),
+            head: shoal::client::protocol::PullHead {
+                number: 8,
+                reference: "refs/pull/8/head".into(),
+                commit: first.clone(),
+                base: None,
+            },
+        },
+        base: None,
+        path: None,
+        git_profile: None,
+        parent: None,
+        options: Default::default(),
+        issue: None,
+        pr: Some(url.into()),
+        agent: Some(shoal::client::protocol::operations::QueuedLaunch {
+            agent: "reviewer".into(),
+            prompt: None,
+        }),
+        env: None,
+    };
+    let refused =
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(shoal::client::connection::request::<
+                shoal::client::protocol::operations::StartedWorkspace,
+            >(&fixture.connector(), start));
+    let Err(error) = refused else {
+        panic!("expected a refusal: {refused:?}");
+    };
+    assert!(
+        format!("{error:#}").contains("holds no agent of its own"),
+        "{error:#}"
+    );
+    assert_eq!(fixture.ok(&["work"]), before);
     let output = run(&["review", "run", "--pr", "8", "--agent", "reviewer"]);
     assert!(output.status.success(), "{output:?}");
     let ended = fixture.ok(&["watch", "review", "1"]);

@@ -56,6 +56,10 @@ impl Manager {
     ) -> Result<StartedWorkspace> {
         let repo = self.repository(repository.clone()).await?;
         if let Some(agent) = &preparing.agent {
+            ensure!(
+                !matches!(opening.start, WorkspaceStart::PullHead { .. }),
+                "a PR's head opens in a workspace at a commit, which holds no agent of its own"
+            );
             check_agent(agent, &self.repository_settings(&repo.id).await?)?;
         }
         let issue = match &preparing.issue {
