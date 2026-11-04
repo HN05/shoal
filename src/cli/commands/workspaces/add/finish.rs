@@ -60,7 +60,7 @@ pub(super) async fn execute_add_with_target(
 }
 
 /// Open the planned workspace and launch its agent here, or with `queued`
-/// queue the agent there.
+/// have its preparation queue the agent there.
 pub(super) async fn add_planned(
     ctx: &Context,
     plan: AddPlan,
@@ -82,10 +82,17 @@ pub(super) async fn add_planned(
         workspace,
     } = plan;
     let pr = creation.pr.clone();
+    // A queued agent starts detached, so the caller's terminal, such as a
+    // chat's session, stays its own.
+    let launch = match queued {
+        true => queued_launch(&agent, issue.as_ref(), (&prompt, &args, &fork))?,
+        false => None,
+    };
     let start = AddStart {
         creation,
         chat,
         workspace,
+        agent: launch.clone(),
     };
     let started = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
     if let Some(entry) = &queue_entry {
@@ -98,17 +105,21 @@ pub(super) async fn add_planned(
         (None, Some(issue), None) => issue.tab_label(target.repository(ctx).await?),
         (None, None, None) => branch.to_owned(),
     };
-    let agent_name = agent.agent.clone().map(String::from);
-    // A queued agent starts detached, so the caller's terminal, such as a
-    // chat's session, stays its own.
-    let queued = queued && agent_name.is_some();
-    if !queued {
-        terminal::host_workspace(ctx, &started.workspace, agent_name.is_some(), &label).await?;
+    if launch.is_none() {
+        let with_agent = agent.agent.is_some();
+        terminal::host_workspace(ctx, &started.workspace, with_agent, &label).await?;
     }
     let name = started.workspace.name.clone();
-    let own_prompt = prompt.clone();
     let prompt = issue.as_ref().map(issues::Issue::prompt).or(prompt);
-    let Some(workspace) = finish_add_workspace(ctx, started, pr, &agent, prompt.is_some()).await?
+    let rest = AfterSetup {
+        pr,
+        agent: launch.clone(),
+    };
+    let finished = finish_add_workspace(ctx, started, rest, &agent, prompt.is_some()).await?;
+    let Some(Prepared {
+        workspace,
+        agent: entry,
+    }) = finished
     else {
         if let Some(entry) = &queue_entry {
             let error = anyhow::anyhow!(
@@ -121,38 +132,34 @@ pub(super) async fn add_planned(
     if let Some(entry) = &queue_entry {
         crate::env::launch_queue_entry(entry);
     }
-    if queued {
-        let input = (own_prompt, args, fork);
-        return queue_added_agent(ctx, &workspace, agent, issue, input).await;
+    if launch.is_some() {
+        let entry = entry.context("preparation queued no agent")?;
+        return report_queued_in(ctx, &workspace, &entry);
     }
-    agent.launch(ctx, workspace, prompt, args, fork).await
+    agent.launch(ctx, *workspace, prompt, args, fork).await
 }
 
-/// Queue `agent` in the added `workspace`, prompted with `issue` or else the plan's own prompt, with its arguments
+/// The launch of `agent` that preparing the added workspace queues,
+/// prompted with `issue` or else the plan's own prompt, with its arguments
 /// and fork. The daemon starts it outside this process, so it gets the
 /// workspace's own scope, as `shoal split --agent` does.
-async fn queue_added_agent(
-    ctx: &Context,
-    workspace: &Workspace,
-    agent: ResolvedAddAgent,
-    issue: Option<issues::Issue>,
-    (prompt, args, fork): (Option<String>, Vec<OsString>, Option<String>),
-) -> Result<i32> {
-    let chosen = agent.agent.context("the queued launch has no agent")?;
-    let name = String::from(chosen.clone());
-    let launch = QueuedLaunch {
-        agent: name.clone(),
-        prompt,
-        model: agent.model,
-        args: super::plan::launch_args(args)?,
-        fork,
-        issue: issue.as_ref().map(issues::Issue::launch_issue),
-        env: None,
+fn queued_launch(
+    agent: &ResolvedAddAgent,
+    issue: Option<&issues::Issue>,
+    (prompt, args, fork): (&Option<String>, &[OsString], &Option<String>),
+) -> Result<Option<Box<QueuedLaunch>>> {
+    let Some(chosen) = &agent.agent else {
+        return Ok(None);
     };
-    let plan = AddPlan::agent_in(workspace, launch)?;
-    let title = issue.map(|issue| issue.title);
-    let entry = agent_queue::queue_in(ctx, &plan, workspace, name, title).await?;
-    report_queued_in(ctx, workspace, &entry)
+    Ok(Some(Box::new(QueuedLaunch {
+        agent: chosen.clone().into(),
+        prompt: prompt.clone(),
+        model: agent.model.clone(),
+        args: super::plan::launch_args(args.to_vec())?,
+        fork: fork.clone(),
+        issue: issue.map(issues::Issue::launch_issue),
+        env: Some(terminal::start_environment()),
+    })))
 }
 
 /// Report the agent queued in the added `workspace`.
@@ -204,6 +211,8 @@ struct AddStart {
     creation: Creation,
     chat: Option<String>,
     workspace: Option<String>,
+    /// The agent its preparation queues.
+    agent: Option<Box<QueuedLaunch>>,
 }
 
 /// Open the planned workspace, assigned `issue`, and start preparing it.
@@ -214,6 +223,7 @@ async fn start_add_workspace(
         creation,
         chat,
         workspace,
+        agent,
     }: AddStart,
     issue: Option<&issues::Issue>,
 ) -> Result<StartedWorkspace> {
@@ -246,74 +256,91 @@ async fn start_add_workspace(
         options,
         issue: issue.map(|issue| issue.url.clone()),
         pr,
+        agent,
     };
     crate::client::operations::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await
 }
 
-/// Follow the preparation of the started workspace, which sets it up and
-/// links its PR, before reporting it and entering it unless `agent`, given
-/// an issue prompt when `prompted`, takes the terminal.
+/// What preparing the added workspace does after setup: linking `pr`, then
+/// the post-setup hook, then queuing `agent`.
+struct AfterSetup {
+    pr: Option<String>,
+    agent: Option<Box<QueuedLaunch>>,
+}
+
+/// Follow the preparation of the started workspace, which sets it up, links
+/// its PR and queues its agent, before reporting it and entering it unless
+/// `agent`, given an issue prompt when `prompted`, takes the terminal.
 async fn finish_add_workspace(
     ctx: &Context,
     started: StartedWorkspace,
-    pr: Option<String>,
+    rest: AfterSetup,
     agent: &ResolvedAddAgent,
     prompted: bool,
-) -> Result<Option<Workspace>> {
+) -> Result<Option<Prepared>> {
     let reused = started.reused;
     let Some(SetUp {
-        mut workspace,
+        workspace,
         post_setup,
-        ..
+        agent: entry,
     }) = follow_setup(ctx, started).await?
     else {
         return Ok(None);
     };
     // The post-setup hook may change how the agent launches, so the shell's
     // destination waits for it; a failed hook starts no agent.
-    let post_setup = match post_setup {
-        Some(result) => result,
-        None => {
-            let result;
-            (workspace, result) = prepare_after_setup(ctx, workspace, reused, pr).await?;
-            result
-        }
+    let (prepared, post_setup) = match post_setup {
+        Some(result) => (
+            Prepared {
+                workspace: Box::new(workspace),
+                agent: entry,
+            },
+            result,
+        ),
+        None => prepare_after_setup(ctx, workspace, reused, rest).await?,
     };
+    let workspace = &prepared.workspace;
     ctx.emit(
         &format!(
             "{} {} {}",
             if reused { "Opened" } else { "Created" },
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
-            super::super::location_phrase(&workspace),
+            super::super::location_phrase(workspace),
         ),
-        &workspace,
+        workspace,
     )?;
     let starts = post_setup.is_ok().then_some(agent);
-    if enters_added(ctx, &workspace, starts, prompted).await? {
+    if enters_added(ctx, workspace, starts, prompted).await? {
         shell::navigate(&workspace.path, ctx.json)?;
     }
     post_setup?;
-    Ok(Some(workspace))
+    Ok(Some(prepared))
 }
 
 /// Run what preparation leaves after setup once the user ignored its
-/// failure: linking `pr`, then the post-setup hook unless the workspace was
-/// `reused`. Returns the workspace with its PR and how the hook went.
+/// failure: `rest`, with the post-setup hook unless the workspace was
+/// `reused`. Returns the workspace with its PR and agent, and how the hook
+/// went.
 async fn prepare_after_setup(
     ctx: &Context,
     workspace: Workspace,
     reused: bool,
-    pr: Option<String>,
-) -> Result<(Workspace, Result<()>)> {
+    AfterSetup { pr, agent }: AfterSetup,
+) -> Result<(Prepared, Result<()>)> {
     let spec = OperationSpec::Prepare {
         workspace: workspace.id.clone(),
         steps: Preparation {
             post_setup: !reused,
             pr,
+            agent,
             ..Default::default()
         },
     };
-    let prepared = operations::run::<Prepared>(ctx, spec).await;
+    let (agent, result) = match operations::run::<Prepared>(ctx, spec).await {
+        Ok(prepared) => (prepared.agent, Ok(())),
+        Err(error) => (None, Err(error)),
+    };
     let workspace = client::inspect(&ctx.paths, workspace.id).await?.workspace;
-    Ok((workspace, prepared.map(drop)))
+    let workspace = Box::new(workspace);
+    Ok((Prepared { workspace, agent }, result))
 }

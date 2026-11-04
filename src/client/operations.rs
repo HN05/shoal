@@ -101,6 +101,8 @@ pub struct NewWorkspace {
     pub issue: Option<String>,
     /// The PR to link, by URL.
     pub pr: Option<String>,
+    /// The agent its preparation queues.
+    pub agent: Option<Box<QueuedLaunch>>,
 }
 
 impl NewWorkspace {
@@ -117,6 +119,7 @@ impl NewWorkspace {
             options: CreationOptions::default(),
             issue: None,
             pr: None,
+            agent: None,
         }
     }
 }
@@ -137,6 +140,7 @@ pub async fn start_workspace(
         options,
         issue,
         pr,
+        agent,
     } = workspace;
     let method = OperationMethod::StartWorkspace {
         repository,
@@ -148,7 +152,7 @@ pub async fn start_workspace(
         options,
         issue,
         pr,
-        agent: None,
+        agent,
         env: Some(env),
     };
     connection::request(daemon, method).await

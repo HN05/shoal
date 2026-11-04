@@ -87,32 +87,6 @@ pub(super) fn starts_when(entry: &QueueEntry) -> String {
     }
 }
 
-/// Queue `plan`, a launch of `agent` in the existing `workspace`, which the
-/// daemon starts outside this process once a slot is free.
-pub(super) async fn queue_in(
-    ctx: &Context,
-    plan: &AddPlan,
-    workspace: &Workspace,
-    agent: String,
-    issue_title: Option<String>,
-) -> Result<QueueEntry> {
-    let request = QueueRequest {
-        repository: plan.repository.clone(),
-        name: workspace.name.clone(),
-        agent,
-        issue_title,
-        plan: serde_json::to_string(plan)?,
-        env: terminal::start_environment(),
-        now: false,
-        workspace: Some(workspace.id.clone()),
-        after: Vec::new(),
-    };
-    let admission = queue::add(&ctx.paths, request).await?;
-    admission
-        .entry
-        .ok_or_else(|| anyhow::anyhow!("the daemon queued the agent without an entry"))
-}
-
 /// Record the workspace a starting entry opened.
 pub(super) async fn attach(ctx: &Context, entry: &str, workspace: &Workspace) -> Result<()> {
     queue::attach(&ctx.paths, entry.to_owned(), workspace.id.clone()).await
