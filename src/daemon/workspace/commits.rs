@@ -240,6 +240,21 @@ impl Manager {
             .await
     }
 
+    /// Move the workspace `id` of a job, before the job's first step, to
+    /// `commit`, fetched from `origin` under `reference` when given.
+    pub(crate) async fn move_job_workspace(
+        &self,
+        id: &str,
+        commit: &str,
+        reference: Option<&str>,
+    ) -> Result<()> {
+        let workspace = self.workspace(id).await?;
+        let (repo, _guard) = self.lock_repository(&workspace.repository_id).await?;
+        fetch_job_commit(&repo, commit, reference).await?;
+        git::detached::move_to(&workspace.path, commit).await?;
+        self.record_starting_commit(id, commit.to_owned()).await
+    }
+
     /// Record `commit` as where the workspace `id` started, which is also
     /// what its diff compares with.
     async fn record_starting_commit(&self, id: &str, commit: String) -> Result<()> {

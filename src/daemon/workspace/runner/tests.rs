@@ -178,6 +178,8 @@ pub(super) struct GitHubFixture {
     pub _server: Server,
     pub manager: Arc<Manager>,
     pub head: String,
+    /// A commit only run 2, pushed to `topic`, is at.
+    pub topic: String,
     pub state: Arc<Mutex<GitHubState>>,
 }
 
@@ -291,6 +293,7 @@ pub(super) async fn github_fixture() -> GitHubFixture {
         _server: server,
         manager,
         head,
+        topic,
         state,
     }
 }

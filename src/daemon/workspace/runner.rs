@@ -8,6 +8,7 @@ mod ends;
 mod listing;
 mod registration;
 mod single_use;
+mod taken;
 mod waiting;
 
 pub(crate) use registration::Registration;

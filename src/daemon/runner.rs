@@ -163,12 +163,14 @@ pub(super) async fn run(manager: Arc<Manager>) {
 }
 
 /// Record the running jobs' usage, remove the workspaces of the jobs that
-/// ended, release the runners the forge gave no job, claim the jobs
+/// ended, move a job's workspace to the commit of the job its runner took
+/// instead, release the runners the forge gave no job, claim the jobs
 /// admission admitted, and read the forge's waiting jobs while one could
 /// start.
 async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
     manager.sample_job_usage().await?;
     manager.finish_ended_jobs().await?;
+    manager.follow_taken_jobs().await?;
     manager.release_idle_runners().await?;
     claim_admitted_jobs(manager).await?;
     if manager.job_could_start().await? {
