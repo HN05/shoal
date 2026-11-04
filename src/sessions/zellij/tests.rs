@@ -317,8 +317,17 @@ struct Isolated {
     zellij: Zellij,
     session: String,
     client: std::process::Child,
-    /// The end of what the client's terminal showed.
-    screen: Arc<Mutex<Vec<u8>>>,
+    /// What the client's terminal showed.
+    screen: Arc<Mutex<Screen>>,
+}
+
+/// What a client's terminal showed: the end of its output, and whether it
+/// drew the session's tab bar, which a later screen can leave out of that
+/// end.
+#[derive(Default)]
+struct Screen {
+    tail: Vec<u8>,
+    drew_session: bool,
 }
 
 /// How much of the client's terminal output a failure reports.
@@ -383,7 +392,7 @@ impl Isolated {
 
     /// A client attached to `session` on a terminal of its own, whose
     /// output a thread drains into `screen`.
-    fn client(dir: &Path, session: &str, screen: Arc<Mutex<Vec<u8>>>) -> std::process::Child {
+    fn client(dir: &Path, session: &str, screen: Arc<Mutex<Screen>>) -> std::process::Child {
         let (mut master, mut slave) = (-1, -1);
         let mut size = libc::winsize {
             ws_row: 40,
@@ -421,14 +430,13 @@ impl Isolated {
             });
         }
         let client = attach.spawn().unwrap();
+        let tab_bar = format!("({session})").into_bytes();
         std::thread::spawn(move || {
             let mut master = master;
             let mut read = [0; 4096];
             while let Ok(count @ 1..) = master.read(&mut read) {
                 let mut screen = screen.lock().unwrap_or_else(PoisonError::into_inner);
-                screen.extend_from_slice(&read[..count]);
-                let excess = screen.len().saturating_sub(SCREEN_TAIL);
-                screen.drain(..excess);
+                screen.show(&read[..count], &tab_bar);
             }
         });
         client
@@ -447,12 +455,20 @@ impl Isolated {
         }
     }
 
-    /// Wait until the client shows the session, which Zellij's tabs need.
+    /// Wait until the client shows the session, which Zellij's tabs need:
+    /// a tab opened before the client's terminal attaches finds no room for
+    /// its pane, and Zellij drops it. Zellij lists a client before then, so
+    /// the client's tab bar, which names the session, tells it shows it.
     /// Under load Zellij can tell a client attaching that the session is
     /// missing, and the client exits: another one attaches instead.
     async fn shown(&mut self) {
         for _ in 0..600 {
-            if !self.zellij.clients(&self.session).await.unwrap().is_empty() {
+            if self
+                .screen
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .drew_session
+            {
                 return;
             }
             if let Some(status) = self.client.try_wait().unwrap() {
@@ -497,7 +513,7 @@ impl Isolated {
     /// The text at the end of what the client's terminal showed.
     fn client_screen(&self) -> String {
         let screen = self.screen.lock().unwrap_or_else(PoisonError::into_inner);
-        without_escapes(&String::from_utf8_lossy(&screen))
+        without_escapes(&String::from_utf8_lossy(&screen.tail))
     }
 
     /// What `zellij list-sessions` prints in the session's socket directory.
@@ -522,6 +538,20 @@ impl Isolated {
             .filter(|line| line.contains(dir.as_ref()) || line.contains(&self.session))
             .collect::<Vec<_>>()
             .join("\n")
+    }
+}
+
+impl Screen {
+    /// Add `output` to the end of the screen, noting whether the screen
+    /// drew `tab_bar`, the session's name as its tab bar shows it.
+    fn show(&mut self, output: &[u8], tab_bar: &[u8]) {
+        let seen = self.tail.len().saturating_sub(tab_bar.len());
+        self.tail.extend_from_slice(output);
+        self.drew_session |= self.tail[seen..]
+            .windows(tab_bar.len())
+            .any(|window| window == tab_bar);
+        let excess = self.tail.len().saturating_sub(SCREEN_TAIL);
+        self.tail.drain(..excess);
     }
 }
 
