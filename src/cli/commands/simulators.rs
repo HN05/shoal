@@ -1,25 +1,21 @@
 //! CLI simulator requests, retry policy, and audit rendering.
 use anyhow::Result;
 
-use super::acquisition::{Acquisition, obtain};
+use super::acquisition::{Finish, obtain};
+use crate::client::leases;
 use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
         args::WorkspaceScope,
-        client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},
         ui,
     },
-    protocol::SimulatorMethod,
     sim::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, audit::AuditEntry},
 };
 
 pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<SimulatorCatalog> {
-    let method = SimulatorMethod::SimCatalog {
-        workspace: workspace.to_owned(),
-    };
-    request::<SimulatorCatalog>(&ctx.paths, method).await
+    leases::simulator_catalog(&ctx.paths, workspace.to_owned()).await
 }
 
 pub(super) fn render_catalog(catalog: &SimulatorCatalog, palette: Palette) {
@@ -83,15 +79,7 @@ pub(super) async fn history(
     before: Option<i64>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
-    let entries = request::<Vec<AuditEntry>>(
-        &ctx.paths,
-        SimulatorMethod::SimHistory {
-            workspace,
-            limit,
-            before,
-        },
-    )
-    .await?;
+    let entries = leases::simulator_history(&ctx.paths, workspace, limit, before).await?;
     ctx.show(&entries, |entries| {
         for entry in entries {
             render_history_entry(entry);
@@ -107,11 +95,7 @@ pub(super) async fn history(
 /// returns only once acquired or denied.
 pub(super) async fn acquire(ctx: &Context, workspace: String, request: SimRequest) -> Result<i32> {
     let outcome = obtain(ctx, "a simulator", request.queue, async || {
-        let method = SimulatorMethod::SimAcquire {
-            workspace: workspace.clone(),
-            request: request.clone(),
-        };
-        client::request::<Acquisition<Simulator>>(&ctx.paths, method).await
+        leases::acquire_simulator(&ctx.paths, workspace.clone(), request.clone()).await
     })
     .await?;
     outcome.finish(
@@ -123,9 +107,7 @@ pub(super) async fn acquire(ctx: &Context, workspace: String, request: SimReques
 
 pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
-    let overview =
-        request::<SimulatorOverview>(&ctx.paths, SimulatorMethod::SimOverview { workspace })
-            .await?;
+    let overview = leases::simulators(&ctx.paths, workspace).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))
     })?;

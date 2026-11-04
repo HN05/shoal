@@ -18,13 +18,12 @@ use crate::{
     },
     client::{
         approvals::{ApprovalRequest, Specification, Target},
+        leases,
         resources::{LockMode, ResourceKind, ResourceRequest},
     },
-    model::{Inspection, PortOverview, PortRequest},
-    protocol::{
-        Method, PortMethod, ResourceMethod, SecretMethod, SimulatorMethod, WorkspaceMethod,
-    },
-    sim::{SimRequest, SimulatorOverview},
+    model::{Inspection, PortRequest},
+    protocol::WorkspaceMethod,
+    sim::SimRequest,
 };
 
 pub(super) async fn acquire(
@@ -294,32 +293,14 @@ fn matches_kind(held: &Held, kind: Option<&ReleaseKind>) -> bool {
 
 async fn release_one(ctx: &Context, workspace: &str, held: &Held) -> Result<()> {
     let workspace = workspace.to_owned();
-    let method: Method = match held {
-        Held::Port { name } => PortMethod::PortRelease {
-            workspace,
-            name: name.clone(),
-        }
-        .into(),
-        Held::Sim { name } => SimulatorMethod::SimRelease {
-            workspace,
-            name: name.clone(),
-        }
-        .into(),
+    match held {
+        Held::Port { name } => leases::release_port(&ctx.paths, workspace, name.clone()).await,
+        Held::Sim { name } => leases::release_simulator(&ctx.paths, workspace, name.clone()).await,
         Held::Resource { pool, name } | Held::Repo { pool, name } => {
-            ResourceMethod::ResourceRelease {
-                workspace,
-                pool: pool.clone(),
-                name: name.clone(),
-            }
-            .into()
+            leases::release_resource(&ctx.paths, workspace, pool.clone(), name.clone()).await
         }
-        Held::Secret { name } => SecretMethod::SecretRelease {
-            workspace,
-            name: name.clone(),
-        }
-        .into(),
-    };
-    client::request::<()>(&ctx.paths, method).await
+        Held::Secret { name } => leases::release_secret(&ctx.paths, workspace, name.clone()).await,
+    }
 }
 
 pub(super) async fn show(
@@ -352,20 +333,8 @@ pub(super) async fn show(
 }
 
 async fn fetch_leases(ctx: &Context, workspace: &str) -> Result<Leases> {
-    let ports = client::request::<PortOverview>(
-        &ctx.paths,
-        PortMethod::PortOverview {
-            workspace: workspace.to_owned(),
-        },
-    )
-    .await?;
-    let simulators = client::request::<SimulatorOverview>(
-        &ctx.paths,
-        SimulatorMethod::SimOverview {
-            workspace: Some(workspace.to_owned()),
-        },
-    )
-    .await?;
+    let ports = leases::ports(&ctx.paths, workspace.to_owned()).await?;
+    let simulators = leases::simulators(&ctx.paths, Some(workspace.to_owned())).await?;
     let resources = resources::fetch_overview(ctx, workspace.to_owned(), Members::All).await?;
     Ok(Leases {
         workspace: ports.workspace.clone(),

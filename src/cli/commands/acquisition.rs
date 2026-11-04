@@ -1,37 +1,26 @@
-//! Allocation outcomes shared by every acquisition, and the queued wait for them.
-use std::time::Duration;
-
+//! How the CLI shows an acquisition's outcome, and its queued wait.
 use anyhow::Result;
-use tokio::time::sleep;
 
 use super::{EXIT_BUSY, approvals};
 use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{context::Context, output::Style},
-    client::approvals::{ApprovalRequest, DecisionStatus},
-    protocol::Body,
+    client::leases::{Acquisition, retry},
 };
 
-#[derive(Debug)]
-pub(super) enum Acquisition<T> {
-    Acquired(T),
-    Busy(String),
-    ApprovalPending(Box<ApprovalRequest>),
-    ApprovalDenied(Box<ApprovalRequest>),
-}
-
-impl<T> Acquisition<T> {
-    fn approval(request: Box<ApprovalRequest>) -> Self {
-        if request.status == DecisionStatus::Denied {
-            Self::ApprovalDenied(request)
-        } else {
-            Self::ApprovalPending(request)
-        }
-    }
-
+pub(super) trait Finish<T> {
     /// Domain handlers supply their successful payload and capacity details;
     /// approval rendering and exit status are shared by every acquisition.
-    pub(super) fn finish(
+    fn finish(
+        self,
+        ctx: &Context,
+        acquired: impl FnOnce(T) -> Result<()>,
+        busy: impl FnOnce(&str) -> NotAcquired,
+    ) -> Result<i32>;
+}
+
+impl<T> Finish<T> for Acquisition<T> {
+    fn finish(
         self,
         ctx: &Context,
         acquired: impl FnOnce(T) -> Result<()>,
@@ -53,18 +42,6 @@ impl<T> Acquisition<T> {
     }
 }
 
-impl<T: TryFrom<Body, Error = anyhow::Error>> TryFrom<Body> for Acquisition<T> {
-    type Error = anyhow::Error;
-
-    fn try_from(body: Body) -> Result<Self> {
-        match body {
-            Body::ApprovalRequest(request) => Ok(Self::approval(request)),
-            Body::Busy { message } => Ok(Self::Busy(message)),
-            body => T::try_from(body).map(Self::Acquired),
-        }
-    }
-}
-
 /// Attempt once, or wait in the queue with elapsed-time feedback on a terminal.
 pub(super) async fn obtain<T>(
     ctx: &Context,
@@ -79,24 +56,3 @@ pub(super) async fn obtain<T>(
         retry(false, attempt).await
     }
 }
-
-/// Without a queue, return the first outcome. A queued request polls capacity
-/// and pending approvals about once a second, keeping its place, until
-/// acquisition, denial or an error.
-async fn retry<T>(
-    queue: bool,
-    mut attempt: impl AsyncFnMut() -> Result<Acquisition<T>>,
-) -> Result<Acquisition<T>> {
-    loop {
-        let outcome = attempt().await?;
-        match outcome {
-            Acquisition::Busy(_) | Acquisition::ApprovalPending(_) if queue => {
-                sleep(Duration::from_secs(1)).await;
-            }
-            _ => return Ok(outcome),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests;

@@ -6,12 +6,12 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result};
 
 use super::Chosen;
+use crate::client::leases::{self, Acquisition, PortAcquisition};
 use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
-        client,
         commands::{
-            acquisition::{Acquisition, obtain},
+            acquisition::{Finish, obtain},
             approvals,
         },
         context::Context,
@@ -20,7 +20,6 @@ use crate::{
     demos::{Launch, PORT, Preset, SIM_UDID},
     model::PortRequest,
     model::{PortReservation, Workspace},
-    protocol::{Body, PortMethod, SimulatorMethod},
     sim::{SimRequest, Simulator},
 };
 
@@ -116,20 +115,21 @@ async fn reserve_port(
     workspace: &Workspace,
     name: &str,
 ) -> Result<Declinable<PortReservation>> {
-    let method = PortMethod::PortAcquire {
-        workspace: workspace.id.clone(),
-        name: name.to_owned(),
-        request: PortRequest {
-            port: None,
-            env_var: None,
-            reason: None,
-            on_conflict: Some(ConflictPolicy::Auto),
-        },
+    let request = PortRequest {
+        port: None,
+        env_var: None,
+        reason: None,
+        on_conflict: Some(ConflictPolicy::Auto),
     };
-    match client::call(&ctx.paths, method).await? {
-        Body::Port(reservation) => Ok(Ok(reservation)),
-        Body::ApprovalRequest(request) => Ok(Err(approvals::declined(ctx, &request)?)),
-        body => Err(body.unexpected("Port or ApprovalRequest")),
+    let acquired =
+        leases::acquire_port(&ctx.paths, workspace.id.clone(), name.to_owned(), request).await?;
+    match acquired {
+        PortAcquisition::Reserved(reservation) => Ok(Ok(reservation)),
+        PortAcquisition::Approval(request) => Ok(Err(approvals::declined(ctx, &request)?)),
+        PortAcquisition::Suggested(suggestion) => anyhow::bail!(
+            "the daemon suggested port {} instead of reserving a free one",
+            suggestion.suggested_port
+        ),
     }
 }
 
@@ -150,11 +150,7 @@ async fn lease_simulator(
         queue,
     };
     let outcome = obtain(ctx, "a simulator", queue, async || {
-        let method = SimulatorMethod::SimAcquire {
-            workspace: workspace.id.clone(),
-            request: request.clone(),
-        };
-        client::request::<Acquisition<Simulator>>(&ctx.paths, method).await
+        leases::acquire_simulator(&ctx.paths, workspace.id.clone(), request.clone()).await
     })
     .await?;
     match outcome {

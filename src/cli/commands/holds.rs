@@ -1,7 +1,8 @@
 //! CLI access to workspace holds.
 use anyhow::{Result, ensure};
 
-use super::acquisition::Acquisition;
+use super::acquisition::Finish;
+use crate::client::leases;
 use crate::client::output::acquisition::{NotAcquired, Released};
 use crate::{
     cli::{
@@ -12,7 +13,6 @@ use crate::{
         ui,
     },
     model::{HoldPlacer, WorkspaceHold},
-    protocol::HoldMethod,
 };
 
 /// Exit 2 means a pending or denied approval: a workspace process holding
@@ -23,12 +23,7 @@ pub(super) async fn acquire(
     name: String,
     reason: Option<String>,
 ) -> Result<i32> {
-    let method = HoldMethod::HoldAcquire {
-        workspace,
-        name,
-        reason,
-    };
-    let outcome = client::request::<Acquisition<WorkspaceHold>>(&ctx.paths, method).await?;
+    let outcome = leases::acquire_hold(&ctx.paths, workspace, name, reason).await?;
     outcome.finish(
         ctx,
         |hold| {
@@ -50,7 +45,7 @@ pub(super) async fn release(ctx: &Context, workspace: String, name: Option<Strin
         Some(name) => name,
         None => pick(ctx, &workspace).await?,
     };
-    client::request::<()>(&ctx.paths, HoldMethod::HoldRelease { workspace, name }).await?;
+    leases::release_hold(&ctx.paths, workspace, name).await?;
     ctx.emit_styled(Style::Success, "Hold released", Released { released: true })?;
     Ok(0)
 }
@@ -69,21 +64,13 @@ pub(super) async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
         })?;
         return Ok(0);
     };
-    let holds =
-        client::request::<Vec<WorkspaceHold>>(&ctx.paths, HoldMethod::HoldList { workspace })
-            .await?;
+    let holds = leases::holds(&ctx.paths, workspace).await?;
     ctx.show(&holds, |holds| render(holds))?;
     Ok(0)
 }
 
 async fn pick(ctx: &Context, workspace: &str) -> Result<String> {
-    let holds = client::request::<Vec<WorkspaceHold>>(
-        &ctx.paths,
-        HoldMethod::HoldList {
-            workspace: workspace.to_owned(),
-        },
-    )
-    .await?;
+    let holds = leases::holds(&ctx.paths, workspace.to_owned()).await?;
     ensure!(!holds.is_empty(), "no holds on this workspace");
     let entries = holds
         .into_iter()

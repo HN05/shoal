@@ -2,14 +2,14 @@
 use anyhow::{Result, ensure};
 
 use super::{
-    acquisition::{Acquisition, obtain},
+    acquisition::{Finish, obtain},
     workspace_overviews,
 };
+use crate::client::leases;
 use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
         args::WorkspaceScope,
-        client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},
         ui,
@@ -17,7 +17,6 @@ use crate::{
     client::resources::{
         Catalog, Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
     },
-    protocol::ResourceMethod,
 };
 
 /// Exit 2 means no compatible capacity or a pending or denied approval; a
@@ -31,13 +30,7 @@ pub(super) async fn acquire(
         ctx,
         &format!("pool {}", request.pool),
         request.queue,
-        async || {
-            let method = ResourceMethod::ResourceAcquire {
-                workspace: workspace.clone(),
-                request: request.clone(),
-            };
-            client::request::<Acquisition<ResourceLease>>(&ctx.paths, method).await
-        },
+        async || leases::acquire_resource(&ctx.paths, workspace.clone(), request.clone()).await,
     )
     .await?;
     outcome.finish(
@@ -130,8 +123,7 @@ pub(super) async fn fetch_overview(
     workspace: String,
     members: Members,
 ) -> Result<Overview> {
-    let mut overview =
-        request::<Overview>(&ctx.paths, ResourceMethod::ResourceOverview { workspace }).await?;
+    let mut overview = leases::resources(&ctx.paths, workspace).await?;
     members.retain(&mut overview);
     Ok(overview)
 }
@@ -141,10 +133,7 @@ pub(super) async fn fetch_catalog(
     workspace: &str,
     members: Members,
 ) -> Result<Catalog> {
-    let method = ResourceMethod::ResourceCatalog {
-        workspace: workspace.to_owned(),
-    };
-    let mut catalog = request::<Catalog>(&ctx.paths, method).await?;
+    let mut catalog = leases::resource_catalog(&ctx.paths, workspace.to_owned()).await?;
     members.retain_catalog(&mut catalog);
     Ok(catalog)
 }

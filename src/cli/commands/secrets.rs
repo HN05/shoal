@@ -2,16 +2,15 @@
 //! the secret is used.
 use anyhow::Result;
 
-use super::acquisition::{Acquisition, obtain};
+use super::acquisition::{Finish, obtain};
+use crate::client::leases;
 use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
-        client,
         context::Context,
         output::{Palette, Style},
     },
     client::secrets::{SecretCatalog, SecretGrant, SecretRequest},
-    protocol::SecretMethod,
 };
 
 /// Exit 2 means a pending or denied approval; a queued request returns only
@@ -24,15 +23,11 @@ pub(super) async fn acquire(
     queue: bool,
 ) -> Result<i32> {
     let outcome = obtain(ctx, &format!("secret {name}"), queue, async || {
-        let method = SecretMethod::SecretAcquire {
-            workspace: workspace.clone(),
-            name: name.clone(),
-            request: SecretRequest {
-                reason: reason.clone(),
-                source: None,
-            },
+        let request = SecretRequest {
+            reason: reason.clone(),
+            source: None,
         };
-        client::request::<Acquisition<SecretGrant>>(&ctx.paths, method).await
+        leases::acquire_secret(&ctx.paths, workspace.clone(), name.clone(), request).await
     })
     .await?;
     outcome.finish(
@@ -43,10 +38,7 @@ pub(super) async fn acquire(
 }
 
 pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<SecretCatalog> {
-    let method = SecretMethod::SecretCatalog {
-        workspace: workspace.to_owned(),
-    };
-    client::request::<SecretCatalog>(&ctx.paths, method).await
+    leases::secret_catalog(&ctx.paths, workspace.to_owned()).await
 }
 
 pub(super) fn render_catalog(catalog: &SecretCatalog, palette: Palette) {

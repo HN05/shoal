@@ -5,14 +5,13 @@ use crate::client::output::leases::Suggested;
 use crate::{
     cli::{
         args::WorkspaceScope,
-        client::{self, request},
         context::{Context, optional},
         output::{Palette, Style},
         ui,
     },
+    client::leases::{self, PortAcquisition},
     model::PortRequest,
     model::{PortCatalog, PortOverview, PortReservation},
-    protocol::{Body, PortMethod},
 };
 
 use super::workspace_overviews;
@@ -26,21 +25,19 @@ pub(super) async fn acquire(
     mut request: PortRequest,
 ) -> Result<i32> {
     loop {
-        let method = PortMethod::PortAcquire {
-            workspace: workspace.clone(),
-            name: name.clone(),
-            request: request.clone(),
-        };
-        match client::call(&ctx.paths, method).await? {
-            Body::Port(reservation) => {
+        let acquired =
+            leases::acquire_port(&ctx.paths, workspace.clone(), name.clone(), request.clone())
+                .await?;
+        match acquired {
+            PortAcquisition::Reserved(reservation) => {
                 ctx.emit(
                     &describe(&reservation, Palette::stdout(ctx.json)),
                     &reservation,
                 )?;
                 return Ok(0);
             }
-            Body::ApprovalRequest(request) => return super::approvals::declined(ctx, &request),
-            Body::PortSuggestion(proposal) => {
+            PortAcquisition::Approval(request) => return super::approvals::declined(ctx, &request),
+            PortAcquisition::Suggested(proposal) => {
                 if !ctx.interactive() {
                     let suggested = Suggested {
                         suggestion: proposal.clone(),
@@ -81,7 +78,6 @@ pub(super) async fn acquire(
                     on_conflict: request.on_conflict,
                 };
             }
-            body => return Err(body.unexpected("Port, ApprovalRequest or PortSuggestion")),
         }
     }
 }
@@ -100,21 +96,12 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
     let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
         return workspace_overviews(
             ctx,
-            async |workspace| {
-                request::<PortOverview>(
-                    &ctx.paths,
-                    PortMethod::PortOverview {
-                        workspace: workspace.id.clone(),
-                    },
-                )
-                .await
-            },
+            async |workspace| leases::ports(&ctx.paths, workspace.id.clone()).await,
             render_overview,
         )
         .await;
     };
-    let overview =
-        request::<PortOverview>(&ctx.paths, PortMethod::PortOverview { workspace }).await?;
+    let overview = leases::ports(&ctx.paths, workspace).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))
     })?;
@@ -153,10 +140,7 @@ pub(super) fn render_overview(overview: &PortOverview, palette: Palette) {
 }
 
 pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<PortCatalog> {
-    let method = PortMethod::PortCatalog {
-        workspace: workspace.to_owned(),
-    };
-    request::<PortCatalog>(&ctx.paths, method).await
+    leases::port_catalog(&ctx.paths, workspace.to_owned()).await
 }
 
 pub(super) fn render_catalog(catalog: &PortCatalog, palette: Palette) {

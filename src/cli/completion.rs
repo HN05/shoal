@@ -19,7 +19,7 @@ use crate::{
         client, terminal, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    client::resources::Overview,
+    client::leases,
     config::{
         Config,
         named_commands::{self, Commands},
@@ -27,12 +27,9 @@ use crate::{
         resolve::Stack,
     },
     env,
-    model::{Chat, PortCatalog, PortOverview, Workspace},
+    model::{Chat, Workspace},
     paths::Paths,
-    protocol::{
-        ConfigTarget, PortMethod, RemovalMethod, ResourceMethod, SimulatorMethod, WorkspaceMethod,
-    },
-    sim::Simulator,
+    protocol::{ConfigTarget, RemovalMethod, WorkspaceMethod},
 };
 
 /// What was already typed on the command line when completion was requested.
@@ -506,11 +503,7 @@ impl Typed {
         let mut names = vec![];
         match target {
             Target::Pools | Target::Members | Target::ResourceNames => {
-                let overview = client::request::<Overview>(
-                    &paths,
-                    ResourceMethod::ResourceOverview { workspace },
-                )
-                .await?;
+                let overview = leases::resources(&paths, workspace).await?;
                 match target {
                     Target::Pools => names.extend(overview.pools.into_iter().map(|p| p.name)),
                     Target::Members => names.extend(
@@ -531,22 +524,14 @@ impl Typed {
             }
             Target::Ports | Target::ReservedPorts => {
                 if matches!(target, Target::Ports) {
-                    let method = PortMethod::PortCatalog {
-                        workspace: workspace.clone(),
-                    };
-                    let catalog = client::request::<PortCatalog>(&paths, method).await?;
+                    let catalog = leases::port_catalog(&paths, workspace.clone()).await?;
                     names.extend(catalog.configured.into_keys());
                 }
-                let overview =
-                    client::request::<PortOverview>(&paths, PortMethod::PortOverview { workspace })
-                        .await?;
+                let overview = leases::ports(&paths, workspace).await?;
                 names.extend(overview.reserved.into_iter().map(|p| p.name));
             }
             Target::SimNames => {
-                let method = SimulatorMethod::SimList {
-                    workspace: Some(workspace),
-                };
-                let simulators = client::request::<Vec<Simulator>>(&paths, method).await?;
+                let simulators = leases::simulator_devices(&paths, Some(workspace)).await?;
                 names.extend(simulators.into_iter().filter_map(|s| s.lease_name));
             }
             Target::Commands
