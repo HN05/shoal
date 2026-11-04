@@ -7,6 +7,7 @@ use super::{
     workspace_files::{Attacher, NewFile},
 };
 use crate::{
+    config::Effective,
     daemon::notifications::NotificationKind,
     model::{Completion, PresentSpace, SpaceKind},
 };
@@ -31,6 +32,15 @@ impl Manager {
         match self.recorded_chat(selector).await? {
             Some(chat) => Ok(PresentSpace::Chat(chat)),
             None => Err(error),
+        }
+    }
+
+    /// The settings of `space`: a workspace's own, or a chat's
+    /// repository's.
+    pub(crate) async fn present_space_settings(&self, space: &PresentSpace) -> Result<Effective> {
+        match space {
+            PresentSpace::Workspace(workspace) => self.workspace_settings(workspace).await,
+            PresentSpace::Chat(chat) => self.repository_settings(&chat.repository_id).await,
         }
     }
 
@@ -118,4 +128,5 @@ pub(crate) fn space_kind(db: &rusqlite::Connection, id: &str) -> Result<Option<S
 
 mod export;
 mod find;
+mod sessions;
 pub(crate) mod status;

@@ -9,10 +9,10 @@ use crate::{
 };
 
 /// What removing `chat` takes besides it, as `spaces` shows: the spaces
-/// below it and its running agent.
+/// below it, with the chats in their worktrees, and its running agent.
 pub(in crate::cli::commands) fn losses(chat: &Chat, spaces: &Spaces) -> Vec<String> {
     let mut lines = Vec::new();
-    let below: Vec<String> = (spaces.below(&chat.id).into_iter())
+    let below: Vec<String> = (spaces.taken_with(&chat.id).into_iter())
         .map(|space| space.name)
         .collect();
     if !below.is_empty() {
@@ -34,7 +34,7 @@ pub(in crate::cli::commands) async fn remove(
     chat: &Chat,
     spaces: &Spaces,
 ) -> Result<RemovedChat> {
-    let children = (spaces.below(&chat.id).into_iter())
+    let children = (spaces.taken_with(&chat.id).into_iter())
         .map(|space| space.id)
         .collect();
     client::remove_chat(&ctx.paths, &chat.id, Some(children)).await

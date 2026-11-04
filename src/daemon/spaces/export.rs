@@ -4,9 +4,10 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
+    client::transcripts::Environments,
     config::Effective,
     daemon::workspace::Manager,
-    model::{Chat, PresentSpace, Repository},
+    model::{Chat, PresentSpace, Repository, SpaceKind, Workspace},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     transfer::{ExportedSpace, Manifest, SessionSource, Source},
 };
@@ -98,10 +99,11 @@ impl Manager {
                     "workspace {} is disposable, so its removal keeps nothing to export",
                     workspace.name
                 );
+                let taking = self.exported_with(&workspace, &unsaved).await?;
                 // Its own config may describe its agents, and goes with it.
                 let settings = self.workspace_settings(&workspace).await;
                 let removal = self
-                    .remove_workspace(&workspace.id, unsaved, inspection)
+                    .remove_workspace_taking(&workspace.id, unsaved, inspection, &taking)
                     .await?;
                 (Some((workspace.id.clone(), removal)), Some(settings))
             }
@@ -131,11 +133,46 @@ impl Manager {
         })
     }
 
+    /// The IDs of the spaces the export of `workspace` removes first, of
+    /// those `unsaved` confirms, refusing while chats run in its worktree or
+    /// in one below it, which its removal would take without exporting
+    /// them. The removal takes only these, so a chat that starts meanwhile
+    /// retains the workspace.
+    async fn exported_with(
+        &self,
+        workspace: &Workspace,
+        unsaved: &UnsavedWork,
+    ) -> Result<Vec<String>> {
+        let (chats, taken): (Vec<_>, Vec<_>) = (self.spaces_taken_with(&workspace.id).await?)
+            .into_iter()
+            .partition(|space| space.kind == SpaceKind::Chat);
+        let chats: Vec<String> = chats.into_iter().map(|chat| chat.name).collect();
+        ensure!(
+            chats.is_empty(),
+            "chats run in workspace {} or below it ({}), which shoal move does not move; remove them first",
+            workspace.name,
+            chats.join(", ")
+        );
+        let confirmed = |id: &String| unsaved.children().is_none_or(|ids| ids.contains(id));
+        Ok(taken
+            .into_iter()
+            .map(|space| space.id)
+            .filter(confirmed)
+            .collect())
+    }
+
     /// Remove `chat` for its export, which takes no space below it, once its
     /// agent has reported the session the package continues and its package
     /// is made, stopping a running one, so the session's files stop changing
     /// and only writing them is left.
     async fn end_chat_for_export(&self, chat: Chat) -> Result<Ended> {
+        if let Some(workspace) = &chat.workspace {
+            anyhow::bail!(
+                "chat {} runs in workspace {}, and shoal move does not move a chat in a workspace",
+                chat.name,
+                workspace.name
+            );
+        }
         let repo = self.repository(&chat.repository_id).await?;
         let Some(continues) = crate::transfer::continue_chat(&chat, crate::repository::name(&repo))
         else {
@@ -192,10 +229,10 @@ impl Manager {
                 ));
                 Vec::new()
             });
-        let home = self.paths.home.clone();
+        let environments = Environments::new(&self.paths.home, &environments);
         let sessions = manifest.sessions.clone().unwrap_or_default();
         let found = tokio::task::spawn_blocking(move || {
-            crate::cli::agents::session_sources(&settings, &home, &environments, &sessions)
+            crate::transfer::session_sources(&settings, &environments, &sessions)
         })
         .await;
         match found {

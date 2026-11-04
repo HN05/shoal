@@ -103,8 +103,9 @@ fn restored(chat: &Chat, started: Started) -> RestoredChat {
     }
 }
 
-/// Start the stopped `chat` again at `place`, in its repository's checkout,
-/// under its own name and agent, continuing the session it reported. A
+/// Start the stopped `chat` again at `place`, in its repository's checkout
+/// or the worktree of its workspace, under its own name and agent,
+/// continuing the session it reported. A
 /// failure here, such as a session this process starts for an app, reaches
 /// the user through the daemon, as one in the place it opens does.
 async fn restore(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Started> {
@@ -120,7 +121,12 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
         .find(|repo| repo.id == chat.repository_id)
         .with_context(|| format!("the repository of chat {} is missing", chat.name))?;
     let settings = chat::settings(ctx, &repo).await?;
-    let topic = chat::Topic::repository(&repo);
+    let topic = match &chat.workspace {
+        Some(workspace) => {
+            chat::Topic::workspace(chat::hosting_workspace(ctx, &workspace.id).await?)
+        }
+        None => chat::Topic::repository(&repo),
+    };
     let options = chat::Options {
         agent: Some(chat.agent.parse()?),
         place,

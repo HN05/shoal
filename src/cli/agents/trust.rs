@@ -7,7 +7,7 @@ use super::AgentEnvironment;
 use crate::{
     cli::{client, commands::workspaces, context::Context},
     env,
-    model::{Repository, Workspace},
+    model::{ChatHome, Repository, Workspace},
 };
 
 /// A tool's config file that records the directories it trusts, so a
@@ -69,10 +69,7 @@ impl TrustFile {
         profile.layer(&mut configured, &ctx.paths.home);
         self.keep_config_location(ctx, Holder::Workspace(workspace), &configured)
             .await;
-        let environment = AgentEnvironment {
-            home: &ctx.paths.home,
-            configured: &configured,
-        };
+        let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
         self.trust_workspace(ctx, workspace, &environment).await;
     }
 
@@ -105,26 +102,24 @@ impl TrustFile {
         }
     }
 
-    /// Trust a repository's checkout for a chat, which runs with this
+    /// Trust the directory of a chat at `home`, which runs with this
     /// process's environment changed by `profile`, as workspace launches
     /// trust theirs; repository removal clears the entries.
-    pub(super) async fn trust_checkout(
+    pub(super) async fn trust_chat(
         &self,
         ctx: &Context,
         repository: &Repository,
+        home: ChatHome<'_>,
         profile: &crate::ai::Environment,
     ) {
         let mut configured = std::collections::BTreeMap::new();
         profile.layer(&mut configured, &ctx.paths.home);
         self.keep_config_location(ctx, Holder::Repository(repository), &configured)
             .await;
-        let environment = AgentEnvironment {
-            home: &ctx.paths.home,
-            configured: &configured,
-        };
+        let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
         self.trust(
             &environment,
-            &repository_trust_paths(repository, &repository.path),
+            &repository_trust_paths(repository, home.path()),
         );
     }
 
@@ -209,14 +204,14 @@ pub(super) fn repository_paths(
 }
 
 fn claude_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
-    env::claude_config_dir_with(environment.configured).map(|dir| {
+    env::claude_config_dir_from(|name| environment.variable(name)).map(|dir| {
         dir.unwrap_or_else(|| environment.home.to_owned())
             .join(".claude.json")
     })
 }
 
 pub(super) fn codex_config(environment: &AgentEnvironment) -> Result<std::path::PathBuf> {
-    env::codex_home_with(environment.configured).map(|dir| {
+    env::codex_home_from(|name| environment.variable(name)).map(|dir| {
         dir.unwrap_or_else(|| environment.home.join(".codex"))
             .join("config.toml")
     })

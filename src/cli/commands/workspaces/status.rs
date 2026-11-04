@@ -4,13 +4,13 @@ mod render;
 use anyhow::{Context as _, Result, ensure};
 
 use self::render::render_status;
-use crate::client::output::status::StatusView;
+use crate::client::{output::status::StatusView, transcripts};
 use crate::{
     cli::{
         client::{self, request},
         context::Context,
         terminal::{self, Recorded},
-        ui::{self, Fallback},
+        ui,
     },
     forge::{IssueInput, items::link::Selection},
     model::{PresentSpace, SpaceDetail, SpaceStatus, SpaceTarget},
@@ -23,7 +23,7 @@ pub(in crate::cli::commands) async fn status(
     item: Option<String>,
 ) -> Result<i32> {
     let Some(target) = status_target(space.as_deref(), item)? else {
-        let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+        let space = ui::select_space_here(ctx, space).await?;
         let status = status_view(ctx, space).await?;
         ctx.show(&status, |status| render_status(status, ctx.json))?;
         return Ok(0);
@@ -45,14 +45,15 @@ pub(in crate::cli::commands) async fn status(
     Ok(0)
 }
 
-/// The status of `space`, with the sessions its terminal hosts keep.
+/// The status of `space`, with the sessions its terminal hosts keep and
+/// where its agents' transcripts are.
 async fn status_view(ctx: &Context, space: String) -> Result<StatusView> {
     let status =
         *request::<Box<SpaceStatus>>(&ctx.paths, WorkspaceMethod::SpaceStatus { space }).await?;
-    let (sessions, sessions_error) = match sessions(ctx, &status.space).await {
-        Ok(sessions) => (sessions, None),
-        Err(error) => (Vec::new(), Some(format!("{error:#}"))),
-    };
+    let (sessions, sessions_error) = listed(sessions(ctx, &status.space).await);
+    let id = status.space.id().to_owned();
+    let (transcripts, transcripts_error) =
+        listed(transcripts::space_transcripts(&ctx.paths, id).await);
     Ok(StatusView {
         status,
         sessions: sessions
@@ -60,7 +61,18 @@ async fn status_view(ctx: &Context, space: String) -> Result<StatusView> {
             .map(terminal::Session::output)
             .collect(),
         sessions_error,
+        transcripts,
+        transcripts_error,
     })
+}
+
+/// What `found` lists, or why it could not, which status shows in place of
+/// the list.
+fn listed<T>(found: Result<Vec<T>>) -> (Vec<T>, Option<String>) {
+    match found {
+        Ok(found) => (found, None),
+        Err(error) => (Vec::new(), Some(format!("{error:#}"))),
+    }
 }
 
 /// The agent sessions of `space`, in the hosts its settings enable and at

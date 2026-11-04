@@ -8,7 +8,7 @@ use futures_util::future::join_all;
 use rusqlite::{Connection, params};
 
 use super::{
-    ensure_checkout_free,
+    ensure_place_free,
     processes::{self, ChatProcesses},
     recorded, stopped,
 };
@@ -133,6 +133,9 @@ impl Manager {
             "Shoal is stopping work for a shutdown or a daemon stop"
         );
         self.ensure_ended(saved, pid).await?;
+        if let Some(workspace) = &saved.workspace {
+            self.chat_workspace(&workspace.id).await?;
+        }
         let repository = self
             .reserve_repository_directory(&saved.repository_id)
             .await?;
@@ -142,6 +145,10 @@ impl Manager {
         let restored = Restored {
             id: saved.id.clone(),
             repository: saved.repository_id.clone(),
+            workspace: saved
+                .workspace
+                .as_ref()
+                .map(|workspace| workspace.id.clone()),
             process,
             origin,
             hands_over,
@@ -319,6 +326,8 @@ pub(super) fn still_runs(db: &Connection, chat: &Chat) -> Result<bool> {
 struct Restored {
     id: String,
     repository: String,
+    /// The workspace whose worktree it runs in.
+    workspace: Option<String>,
     /// The process it runs as, or that hands it to a session it starts.
     process: Identity,
     origin: Option<Origin>,
@@ -331,7 +340,7 @@ struct Restored {
 /// they started.
 fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
     let tx = db.transaction()?;
-    ensure_checkout_free(&tx, &restored.repository)?;
+    ensure_place_free(&tx, &restored.repository, restored.workspace.as_deref())?;
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0,
             unique_id=?6

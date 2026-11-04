@@ -150,6 +150,15 @@ grace period, with the workspaces below it, stopping your agent. A chat stays
 after its agent exits until it is removed: the user continues it with
 `shoal resume <chat>`.
 
+`shoal chat --workspace <name>` starts a chat in a workspace's worktree, to
+debug, audit or review its live work beside the workspace's own agent, which
+stays its only editing agent: the chat changes nothing there. In such a chat,
+`shoal diff`, `shoal conflicts`, `shoal status` and `shoal branch base` act on
+the workspace, while the commands that act on chats act on the chat; pass
+`--space <name>` to read the workspace's issue, PRs and CI runs. The chat's
+scope reads the workspace and refuses changes to it. Removing the
+workspace removes the chat.
+
 To ask the user something in a chat, run `shoal questions ask --in-chat`, then
 write the question as your final message and end your turn: it also reaches
 the user's questions, so they can answer while away from the chat, and a reply

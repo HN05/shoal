@@ -279,3 +279,127 @@ async fn a_disposable_workspace_is_refused_before_its_removal() {
     assert!(refused.unwrap_err().to_string().contains("disposable"));
     assert!(workspace.path.exists());
 }
+
+#[tokio::test]
+async fn a_chat_in_a_workspace_is_not_moved() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat_in_workspace(
+            &workspace.id,
+            "worker-chat".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let file = root.path().join("worker-chat.shoal");
+    let error = export(&manager, &chat.name, &file).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("does not move a chat in a workspace"),
+        "{error:#}"
+    );
+    assert!(!file.exists());
+    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_workspace_with_a_chat_in_it_is_not_moved() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat_in_workspace(
+            &workspace.id,
+            "reading".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let file = root.path().join("worker.shoal");
+    let error = export(&manager, &workspace.name, &file).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("chats run in workspace worker or below it (reading)"),
+        "{error:#}"
+    );
+    assert!(!file.exists());
+    assert!(
+        manager
+            .find_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let split = manager
+        .split_workspace(&workspace.id, "split".into(), None)
+        .await
+        .unwrap();
+    // The export checked and listed what its removal takes, then a chat
+    // started in the workspace below.
+    let taking = [split.id.clone()];
+    let chat = manager
+        .start_chat_in_workspace(
+            &split.id,
+            "reading".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let error = manager
+        .remove_workspace_taking(
+            &workspace.id,
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+            &taking,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}")
+            .contains("reading was started in split after the removal was confirmed"),
+        "{error:#}"
+    );
+    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
+    for kept in [&workspace, &split] {
+        assert!(manager.find_workspace(&kept.id).await.unwrap().is_some());
+        assert!(kept.path.exists());
+    }
+}

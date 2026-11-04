@@ -40,15 +40,17 @@ instead of the PR delivery guidance below.
   this machine or needs its own worktree or branch. Flag a change that adds or extends such a feature for workspaces only, unless
   its PR says why it cannot apply to chats. A space is a workspace or a chat:
   flag a flag, text or name that says workspace for something a chat also
-  takes.
+  takes. A workspace has one editing agent, its own: flag anything that gives
+  a chat in a workspace's worktree the workspace's scope, identity, `[env]` or
+  leases, or makes it the workspace's child.
 - Space tree: every space has at most one parent in `space_parents`, a ready
   workspace or a chat of its own repository and never one below it; flag a
   write of a parent that skips that check, a child in another repository, and
   a reader of the tree that branches on kind instead of taking the one walk up
   or down and the one check for an agent.
 - Safety of user work: removal of any space goes through the one shared path,
-  which removes the spaces below it first and never lets one outlive its
-  parent; chats follow the workspace cleanup rules with none of the worktree
+  which removes the spaces below it first, and a workspace's chats with it, and
+  never lets one outlive its parent; chats follow the workspace cleanup rules with none of the worktree
   conditions, and a chat whose agent exits stops rather than ends. It preserves
   work and leases on failure, never adopts moved or replaced worktrees, stops
   every verified process carrying the workspace identity, and never signals a
@@ -114,8 +116,9 @@ instead of the PR delivery guidance below.
 - Scope: tracked executions, externally launched processes with exported
   environments and every chat's agent carry a scope token; only the user's own
   terminal is unscoped. Flag a chat process granted what a workspace process is
-  refused, other than opening workspaces below its chat in its repository and
-  renaming its own chat. Scoped callers get access to their own worktree and the
+  refused, other than opening workspaces below its chat in its repository,
+  renaming its own chat, and reading the workspace whose worktree it runs in
+  with requests that only read state. Scoped callers get access to their own worktree and the
   spaces below it, recursively, only (CLI refusals also follow ancestry
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.

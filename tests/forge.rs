@@ -484,6 +484,220 @@ fn github_lists_assignable_users_and_an_organizations_teams_as_reviewers() {
     );
 }
 
+#[test]
+fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
+    use shoal::client::forge::items::link::{ItemKind, LinkKind, Selection};
+    use shoal::client::{
+        connection::{self, Connector},
+        output::view::Shown,
+        paths::Paths,
+        protocol::ItemContext,
+        views,
+    };
+    let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
+    let mut responses = failed_check_responses();
+    let mut pr = pull(8, "open", "Fix", &[]);
+    pr["head"]["sha"] = json!("head");
+    pr["user"] = json!({"login": "sam"});
+    for (key, body) in [
+        ("GET repos/team/project/pulls/8", pr),
+        (
+            "GET repos/team/project/compare/head...main?files=false&stat=false&verification=false",
+            json!({"total_commits": 0}),
+        ),
+        (
+            "GET repos/team/project/issues/8/timeline?limit=50&page=1",
+            json!([]),
+        ),
+        (
+            "GET repos/team/project/pulls/8/reviews?limit=50&page=1",
+            json!([]),
+        ),
+        (
+            "GET repos/team/project/commits/head/status?limit=50",
+            json!({"total_count": 1, "statuses": [{"context": "rust", "status": "failure"}]}),
+        ),
+        (
+            "GET repos/team/project/actions/runs?limit=50&page=1&head_sha=head",
+            json!({"workflow_runs": []}),
+        ),
+        (
+            "GET repos/team/project/labels?limit=50&page=1",
+            json!([{"name": "bug"}]),
+        ),
+        ("GET orgs/team", json!({"username": "team"})),
+        ("GET orgs/team/labels?limit=50&page=1", json!([])),
+        ("GET repos/team/project/teams", json!([])),
+        (
+            "GET repos/team/project/issues/8",
+            json!({"number": 8, "pull_request": {}}),
+        ),
+        (
+            "GET repos/team/project/reviewers",
+            json!([{"login": "kim", "full_name": "Kim Lee"}]),
+        ),
+    ] {
+        responses[key] = json!({"body": body});
+    }
+    fixture.respond(responses.clone());
+    let state = fixture.root.path().join("state");
+    let app = Connector {
+        paths: Paths {
+            home: fixture.root.path().into(),
+            socket: state.join("daemon.sock"),
+            state,
+        },
+        scope: None,
+    };
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let workspace = || ItemContext::Workspace("topic".into());
+    let checkout = || ItemContext::Checkout(fixture.repo.to_str().unwrap().into());
+    let pr_8 = || Selection {
+        kind: Some(LinkKind::Pr),
+        input: Some("8".into()),
+    };
+
+    // The user's app reads as the user, from a workspace or a registered
+    // repository's checkout.
+    for context in [workspace(), checkout()] {
+        let labels = runtime
+            .block_on(connection::labels(&app, context.clone(), None))
+            .unwrap();
+        assert_eq!(
+            labels.iter().map(|label| &label.name).collect::<Vec<_>>(),
+            ["bug"]
+        );
+        let reviewers = runtime
+            .block_on(connection::reviewers(
+                &app,
+                context.clone(),
+                Some("8".into()),
+            ))
+            .unwrap();
+        assert_eq!(
+            reviewers
+                .iter()
+                .map(|reviewer| &reviewer.name)
+                .collect::<Vec<_>>(),
+            ["kim"]
+        );
+        let reads: Vec<Value> = fixture
+            .requests()
+            .into_iter()
+            .map(|request| request[2].clone())
+            .collect();
+        assert!(
+            reads.iter().all(|auth| auth == "token usertoken"),
+            "{reads:?}"
+        );
+
+        let shown = runtime
+            .block_on(views::read(&app, context, pr_8(), false))
+            .unwrap();
+        let [Shown::Item(view)] = shown.as_slice() else {
+            panic!("expected one item view");
+        };
+        let details = view.details.as_ref().expect("the PR's details");
+        assert_eq!((details.number, details.title.as_str()), (8, "Fix"));
+        assert_eq!(
+            view.check_logs
+                .iter()
+                .map(|log| log.failed_step.as_deref())
+                .collect::<Vec<_>>(),
+            [Some("Main Test")],
+            "{:?}",
+            view.errors
+        );
+        fixture.requests();
+    }
+
+    // A number without a kind takes the one the forge reports for it.
+    let bare = Selection {
+        kind: None,
+        input: Some("8".into()),
+    };
+    let shown = runtime
+        .block_on(views::read(&app, workspace(), bare, false))
+        .unwrap();
+    assert!(
+        matches!(shown.as_slice(), [Shown::Item(view)] if view.kind == ItemKind::Pr && view.details.is_some()),
+    );
+    fixture.requests();
+
+    // A workspace's agent reads as its agent account, and only from its
+    // workspace.
+    let scope = fixture.ok(&["work", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let agent = app.clone().scope(scope);
+    let labels = runtime
+        .block_on(connection::labels(&agent, workspace(), None))
+        .unwrap();
+    assert_eq!(labels.len(), 1);
+    let reads = fixture.requests();
+    assert!(
+        reads.iter().all(|request| request[2] == "token agenttoken"),
+        "{reads:?}"
+    );
+    let refused = runtime.block_on(connection::labels(&agent, checkout(), None));
+    assert!(format!("{:#}", refused.unwrap_err()).contains("not from a registered checkout"));
+
+    // A scoped view fetches the agent's token once, for the PR and the logs
+    // of each of its failed checks.
+    let script = fixture.root.path().join("agent-token");
+    support::install_test_script(
+        &script,
+        "#!/bin/sh\necho run >> \"$(dirname \"$0\")/token-runs\"\necho agenttoken\n",
+    );
+    let config = fs::read_to_string(fixture.root.path().join(".config/shoal/config.toml")).unwrap();
+    let command = format!("agent_token = {{ cmd = [{:?}] }}", script.to_str().unwrap());
+    fixture.write_config(&config.replace("agent_token = \"agenttoken\"", &command));
+    fixture.ok(&["daemon", "reload"]);
+    let target = "/team/project/actions/runs/2765/jobs/1";
+    responses["GET repos/team/project/commits/head/status?limit=50"]["body"] = json!({
+        "total_count": 2, "statuses": [
+            {"context": "rust", "status": "failure"},
+            {"context": "lint", "status": "failure"},
+        ]
+    });
+    responses["GET repos/team/project/commits/head/statuses?limit=50&page=1"]["body"] = json!([
+        {"context": "rust", "status": "failure", "target_url": target},
+        {"context": "lint", "status": "failure", "target_url": target},
+    ]);
+    fixture.respond(responses);
+    let shown = runtime
+        .block_on(views::read(&agent, workspace(), pr_8(), false))
+        .unwrap();
+    let [Shown::Item(view)] = shown.as_slice() else {
+        panic!("expected one item view");
+    };
+    assert_eq!(view.check_logs.len(), 2, "{:?}", view.errors);
+    let runs = fs::read_to_string(fixture.root.path().join("token-runs")).unwrap();
+    assert_eq!(runs.lines().count(), 1, "{runs}");
+
+    // Without an agent token, the user's app reads the logs with the user's
+    // token it already fetched for the view.
+    fs::remove_file(fixture.root.path().join("token-runs")).unwrap();
+    let command = format!("token = {{ cmd = [{:?}] }}", script.to_str().unwrap());
+    let user_only = config.replace(
+        "token = \"usertoken\"\nagent_token = \"agenttoken\"",
+        &command,
+    );
+    assert_ne!(user_only, config);
+    fixture.write_config(&user_only);
+    fixture.ok(&["daemon", "reload"]);
+    let shown = runtime
+        .block_on(views::read(&app, workspace(), pr_8(), false))
+        .unwrap();
+    let [Shown::Item(view)] = shown.as_slice() else {
+        panic!("expected one item view");
+    };
+    assert_eq!(view.check_logs.len(), 2, "{:?}", view.errors);
+    let runs = fs::read_to_string(fixture.root.path().join("token-runs")).unwrap();
+    assert_eq!(runs.lines().count(), 1, "{runs}");
+}
+
 /// Add the label `ready` to PR 8 of the workspace's repository.
 fn label_pr(fixture: &Fixture) -> Value {
     fixture.request(
@@ -1306,6 +1520,7 @@ fn views_count_reactions_and_mark_the_logins_own() {
 
     // Without a token, a public repository's reactions are still listed.
     fixture.write_config("");
+    fixture.ok(&["daemon", "reload"]);
     let view = &fixture.ok(&["view", "issue", "3", "--space", "topic"])[0];
     assert_eq!(view["reactions"][0]["reacted"], false, "{view}");
     assert!(view.get("errors").is_none(), "{view}");

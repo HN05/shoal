@@ -368,8 +368,8 @@ fn chat_dir_args(
     }
 }
 
-/// Start `chat` as a session of `app`, agent `name`, in the repository's
-/// checkout, detached as workspace sessions are, since the user continues
+/// Start `chat` as a session of `app`, agent `name`, in its checkout or
+/// worktree, detached as workspace sessions are, since the user continues
 /// it in the app. It is no tracked execution: the chat lasts while the
 /// session's process runs.
 pub(super) async fn start_chat(
@@ -390,16 +390,17 @@ pub(super) async fn start_chat(
     } = chat;
     super::ensure_available(name, settings)?;
     let model_args = model_args(app, settings, name, model)?;
+    let home = chat.home();
     if let Some(trust) = integration.trust_file() {
         trust
-            .trust_checkout(ctx, repository, &Default::default())
+            .trust_chat(ctx, repository, home, &Default::default())
             .await;
     }
     // This process holds the chat until the session runs, which is not in
     // this terminal.
     let record = client::record_chat(
         &ctx.paths,
-        repository,
+        home,
         chat_name,
         name,
         None,
@@ -413,7 +414,7 @@ pub(super) async fn start_chat(
     let files = ctx.paths.chat_files(&record);
     let session = Session {
         paths: &ctx.paths,
-        directory: &repository.path,
+        directory: home.path(),
         branch: None,
         files: &files,
         prompt,
@@ -421,7 +422,8 @@ pub(super) async fn start_chat(
     };
     let prepared = with_effort(app.prepare(session).await?, app, settings, model);
     let log = files.with_extension(crate::paths::SESSION_LOG);
-    let (record, prepared) = hand_to_session(ctx, app, repository, &record, &log, prepared).await?;
+    let (record, prepared) =
+        hand_to_session(ctx, app, home.path(), &record, &log, prepared).await?;
     let delivered = prepared.deliver().await;
     report_chat(ctx, app, repository, &record, &log, delivered)?;
     Ok(0)
@@ -467,13 +469,13 @@ fn chat_input(
 async fn hand_to_session(
     ctx: &Context,
     app: &dyn App,
-    repository: &Repository,
+    directory: &Path,
     chat: &Chat,
     log: &Path,
     prepared: Box<dyn Prepared>,
 ) -> Result<(Chat, Box<dyn Prepared>)> {
     let token = client::chat_scope(&ctx.paths, chat).await?;
-    let spawned = spawn_session(ctx, app, repository, (chat, &token), log, prepared.as_ref());
+    let spawned = spawn_session(ctx, app, directory, (chat, &token), log, prepared.as_ref());
     let handed_over = match spawned {
         Ok(session) => hand_over(ctx, chat, session).await,
         Err(error) => Err(error),
@@ -537,12 +539,12 @@ fn stop_session(mut session: Child) {
     let _ = session.wait();
 }
 
-/// Start the `prepared` session of `app` in a session of its own at the
-/// checkout with the chat's identity, writing to `log`.
+/// Start the `prepared` session of `app` in a session of its own in
+/// `directory` with the chat's identity, writing to `log`.
 fn spawn_session(
     ctx: &Context,
     app: &dyn App,
-    repository: &Repository,
+    directory: &Path,
     (chat, token): (&Chat, &str),
     log: &Path,
     prepared: &dyn Prepared,
@@ -553,9 +555,12 @@ fn spawn_session(
     let output = std::fs::File::create(log).with_context(|| format!("create {}", log.display()))?;
     let command = prepared.command();
     let mut session = std::process::Command::new(&command[0]);
+    for name in crate::env::not_chat_identity() {
+        session.env_remove(name);
+    }
     session
         .args(&command[1..])
-        .current_dir(&repository.path)
+        .current_dir(directory)
         .envs(crate::env::chat_environment(chat, token, &ctx.paths))
         .stdin(Stdio::null())
         .stdout(output.try_clone()?)

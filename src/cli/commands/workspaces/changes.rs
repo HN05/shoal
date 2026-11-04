@@ -1,5 +1,7 @@
 //! A workspace's diff and conflicts against its base.
-use anyhow::Result;
+use std::{ffi::OsString, path::Path};
+
+use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{
@@ -18,13 +20,24 @@ pub(in crate::cli::commands) async fn diff(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let base = request::<DiffBase>(&ctx.paths, WorkspaceMethod::DiffBase { workspace }).await?;
-    execution::run(
-        &ctx.paths,
-        base.workspace_id,
-        git::diff_command(&base.commit),
-        None,
-    )
-    .await
+    let command = git::diff_command(&base.commit);
+    if crate::env::in_chat().is_some() {
+        return diff_untracked(&base.path, &command);
+    }
+    execution::run(&ctx.paths, base.workspace_id, command, None).await
+}
+
+/// Run the diff `command` in the worktree at `path`, which the daemon
+/// verified, as a plain process, for a chat, which reads a workspace without
+/// running anything there as the workspace's: no tracked execution counts it
+/// as the workspace's use.
+fn diff_untracked(path: &Path, command: &[OsString]) -> Result<i32> {
+    let status = std::process::Command::new(&command[0])
+        .args(&command[1..])
+        .current_dir(path)
+        .status()
+        .context("run git diff")?;
+    Ok(execution::exit_code(status))
 }
 
 pub(in crate::cli::commands) async fn conflicts(

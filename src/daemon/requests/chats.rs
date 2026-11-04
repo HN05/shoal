@@ -18,16 +18,19 @@ pub(super) async fn handle(
     Ok(Answer::Body(match method {
         ChatMethod::StartChat {
             repository,
+            workspace,
             name,
             agent,
             pid,
             origin,
             hands_over,
-        } => Body::Chat(
-            manager
-                .start_chat(repository, name, agent, pid, origin, hands_over)
-                .await?,
-        ),
+        } => Body::Chat(match workspace {
+            Some(workspace) => {
+                (manager.start_chat_in_workspace(&workspace, name, agent, pid, origin, hands_over))
+                    .await?
+            }
+            None => (manager.start_chat(repository, name, agent, pid, origin, hands_over)).await?,
+        }),
         ChatMethod::RestoreChat {
             chat,
             pid,

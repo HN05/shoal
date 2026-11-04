@@ -120,6 +120,7 @@ fn topic(repo: &Repository, issue: &Issue, labels: &config::Issue) -> Topic {
                 title: Some(issue.title.clone()),
             },
         )],
+        workspace: None,
     }
 }
 

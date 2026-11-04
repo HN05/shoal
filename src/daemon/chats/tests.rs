@@ -839,3 +839,286 @@ async fn a_chat_being_removed_takes_no_new_workspace() {
     }
     assert!(manager.list_workspaces().await.unwrap().is_empty());
 }
+
+/// A registered repository with the ready workspace `worker`.
+async fn workspace(root: &std::path::Path, manager: &Manager) -> (Repository, Workspace) {
+    let checkout = repository(root, "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    (repo, workspace)
+}
+
+/// A chat runs the diff itself in the path the diff base names, so the base
+/// names only the workspace's own worktree.
+#[tokio::test]
+async fn the_diff_base_names_only_the_workspaces_own_worktree() {
+    let (temp, manager) = manager().await;
+    let (repo, workspace) = workspace(temp.path(), &manager).await;
+    let base = manager.diff_base(&workspace.name).await.unwrap();
+    assert_eq!(base.path, workspace.path);
+    // A clone at its path has the same history, so only the ownership check
+    // tells it apart.
+    std::fs::rename(&workspace.path, temp.path().join("moved")).unwrap();
+    let clone = [repo.path.as_os_str(), workspace.path.as_os_str()].map(|p| p.to_str().unwrap());
+    crate::test_support::git(temp.path(), &["clone", "-q", clone[0], clone[1]]);
+    crate::test_support::git(&workspace.path, &["checkout", "-q", "-b", "worker"]);
+    let error = manager.diff_base(&workspace.name).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("different repository"),
+        "{error:#}"
+    );
+}
+
+#[tokio::test]
+async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
+    use crate::{
+        daemon::scope::{Caller, authorize},
+        forge::items::link::Selection,
+        protocol::{ItemMethod, Operation, WorkspaceMethod},
+    };
+    let (temp, manager) = manager().await;
+    let (repo, workspace) = workspace(temp.path(), &manager).await;
+    let other = manager
+        .create_workspace(&repo.id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat_in_workspace(
+            &workspace.name,
+            "worker-chat".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let caller = Caller {
+        space_id: chat.id.clone(),
+        execution: None,
+    };
+    manager.executions.issue_scope("chat".into(), caller).await;
+    let listed = manager.visible_workspaces(Some(&chat.id)).await.unwrap();
+    let names: Vec<_> = listed.into_iter().map(|listed| listed.name).collect();
+    assert_eq!(names, ["worker"]);
+
+    let status = |space: &str| {
+        Operation::from(WorkspaceMethod::SpaceStatus {
+            space: space.into(),
+        })
+    };
+    let diff = Operation::from(WorkspaceMethod::DiffBase {
+        workspace: workspace.name.clone(),
+    });
+    let items = Operation::from(ItemMethod::SelectItems {
+        space: workspace.name.clone(),
+        selection: Selection::default(),
+        elsewhere: false,
+    });
+    for mut read in [status(&workspace.name), diff, items] {
+        authorize(&manager, Some("chat"), &mut read).await.unwrap();
+    }
+    let mut change = Operation::from(WorkspaceMethod::SetBaseWorkspace {
+        workspace: workspace.name.clone(),
+        base: None,
+    });
+    let error = authorize(&manager, Some("chat"), &mut change)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("only reads"), "{error:#}");
+    let error = authorize(&manager, Some("chat"), &mut status(&other.name))
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("own space"), "{error:#}");
+}
+
+#[tokio::test]
+async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_there() {
+    let (temp, manager) = manager().await;
+    let (repo, workspace) = workspace(temp.path(), &manager).await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat_in_workspace(
+            &workspace.name,
+            "worker-chat".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let named = Some(WorkspaceRef {
+        id: workspace.id.clone(),
+        name: workspace.name.clone(),
+        branch: workspace.branch.clone(),
+    });
+    assert_eq!((&chat.repository_id, &chat.workspace), (&repo.id, &named));
+    // The chat is no child of the workspace, whose agent it is not.
+    let recorded = manager.workspace(&workspace.id).await.unwrap();
+    assert!(recorded.children.is_empty());
+
+    // A stopped chat keeps naming the workspace.
+    process.kill();
+    let stopped = manager.chats().await.unwrap();
+    assert_eq!(stopped[0].restore, Some(ChatRestore::Resume));
+    assert_eq!(stopped[0].workspace, named);
+
+    let moved = temp.path().join("moved");
+    std::fs::rename(&workspace.path, &moved).unwrap();
+    let error = manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("is missing"), "{error:#}");
+    std::fs::rename(&moved, &workspace.path).unwrap();
+    let restored = manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap();
+    assert_eq!((restored.restore, restored.workspace), (None, named));
+}
+
+#[tokio::test]
+async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
+    let (temp, manager) = manager().await;
+    let (_, workspace) = workspace(temp.path(), &manager).await;
+    let start = |name: &str| {
+        manager.start_chat_in_workspace(
+            &workspace.id,
+            name.into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+    };
+    let moved = temp.path().join("moved");
+    std::fs::rename(&workspace.path, &moved).unwrap();
+    let missing = start("missing").await.unwrap_err();
+    assert!(format!("{missing:#}").contains("is missing"), "{missing:#}");
+    // Another directory at its path is not its worktree.
+    std::fs::create_dir(&workspace.path).unwrap();
+    crate::test_support::git(&workspace.path, &["init", "-q"]);
+    assert!(start("replaced").await.is_err());
+    std::fs::remove_dir_all(&workspace.path).unwrap();
+    std::fs::rename(&moved, &workspace.path).unwrap();
+
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("UPDATE workspaces SET state='failed' WHERE id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let failed = start("failed").await.unwrap_err();
+    assert!(
+        format!("{failed:#}").contains("runs only in a ready workspace"),
+        "{failed:#}"
+    );
+    assert!(manager.chats().await.unwrap().is_empty());
+}
+
+/// Processes a test left running in the background, killed when it ends.
+struct Orphans(Vec<u32>);
+
+impl Drop for Orphans {
+    fn drop(&mut self) {
+        for pid in &self.0 {
+            // SAFETY: kill only sends a signal.
+            unsafe { libc::kill(*pid as libc::pid_t, libc::SIGKILL) };
+        }
+    }
+}
+
+/// Run `script` in `directory` as a process whose starter exited, as a
+/// detached session's is, and return the process IDs it writes to the
+/// files it names `$1`, `$2`, ... in `files`.
+fn orphan(directory: &std::path::Path, script: &str, files: &[&std::path::Path]) -> Vec<u32> {
+    let status = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("cd \"$0\" && {{ sh -c '{script}' sh \"$@\" & }}"))
+        .arg(directory)
+        .args(files)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    files
+        .iter()
+        .map(|file| {
+            for _ in 0..400 {
+                if let Some(pid) = std::fs::read_to_string(file)
+                    .ok()
+                    .and_then(|pid| pid.trim().parse().ok())
+                {
+                    return pid;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            panic!("{} names no process", file.display());
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_chats_processes_in_a_workspace_are_not_its_leftovers() {
+    let (temp, manager) = manager().await;
+    let (_, workspace) = workspace(temp.path(), &manager).await;
+    let file = |name: &str| temp.path().join(name);
+    let (agent, child, stray) = (file("agent"), file("child"), file("stray"));
+    // The chat's agent runs detached in the worktree with a child there,
+    // beside a stray process its starter left there.
+    let chat_pids = orphan(
+        &workspace.path,
+        "echo $$ > \"$1\"; sleep 600 & echo $! > \"$2\"; wait",
+        &[&agent, &child],
+    );
+    let stray_pid = orphan(
+        &workspace.path,
+        "echo $$ > \"$1\"; exec sleep 600",
+        &[&stray],
+    );
+    let _orphans = Orphans([chat_pids.clone(), stray_pid.clone()].concat());
+    manager
+        .start_chat_in_workspace(
+            &workspace.id,
+            "worker-chat".into(),
+            "claude".into(),
+            chat_pids[0],
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+
+    let space = manager
+        .workspace_space(
+            &workspace,
+            crate::daemon::space_processes::WorktreeTies::All,
+        )
+        .await
+        .unwrap();
+    let found = manager
+        .untracked_processes(vec![space], None)
+        .await
+        .unwrap()
+        .remove(&workspace.id)
+        .unwrap_or_default();
+    let leftovers: Vec<u32> = (found.iter())
+        .filter(|process| process.leftover)
+        .map(|process| process.identity.pid)
+        .collect();
+    assert!(leftovers.contains(&stray_pid[0]), "{found:?}");
+    for pid in &chat_pids {
+        assert!(!leftovers.contains(pid), "{pid} in {found:?}");
+    }
+}

@@ -697,15 +697,16 @@ fn session_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
         .join(format!("{id}{SESSION_SUFFIX}"))
 }
 
-/// Record the session the hooks of execution `id` report, writing only a change.
+/// Record the session the hooks of execution `id` report, writing only a
+/// change; whether it changed.
 pub(crate) fn save_session(
     paths: &Paths,
     workspace_id: &str,
     id: &str,
     session: &str,
-) -> Result<()> {
+) -> Result<bool> {
     if reported_session(paths, workspace_id, id).as_deref() == Some(session) {
-        return Ok(());
+        return Ok(false);
     }
     std::fs::create_dir_all(paths.workspace_state(workspace_id))?;
     crate::fsutil::replace_atomically(
@@ -716,7 +717,7 @@ pub(crate) fn save_session(
             sync: false,
         },
     )?;
-    Ok(())
+    Ok(true)
 }
 
 /// The session the hooks of execution `id` last reported.

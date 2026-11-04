@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 126;
+pub(super) const SCHEMA_VERSION: i64 = 127;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -386,10 +386,18 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (121, include_str!("space_parents.sql"), None),
     (122, include_str!("chat_scopes.sql"), None),
     (123, REQUEST_SPACES, None),
-    (124, include_str!("runners.sql"), None),
-    (125, include_str!("agent_queue_jobs.sql"), None),
-    (126, include_str!("ci_jobs.sql"), None),
+    (124, CHAT_WORKSPACES, None),
+    (125, include_str!("runners.sql"), None),
+    (126, include_str!("agent_queue_jobs.sql"), None),
+    (127, include_str!("ci_jobs.sql"), None),
 ];
+
+/// The workspace whose worktree a chat runs in instead of its repository's
+/// checkout. Removing the workspace removes its chats first, so nothing
+/// cascades.
+pub(super) const CHAT_WORKSPACES: &str =
+    "ALTER TABLE chats ADD COLUMN workspace_id TEXT REFERENCES workspaces(id);
+    CREATE INDEX chats_workspace ON chats(workspace_id);";
 
 /// Whether every removal deletes a workspace whatever it holds.
 pub(super) const DISPOSABLE_WORKSPACES: &str = "ALTER TABLE workspaces ADD COLUMN disposable INTEGER NOT NULL DEFAULT 0 CHECK(disposable IN (0,1));";

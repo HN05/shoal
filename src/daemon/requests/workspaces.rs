@@ -177,6 +177,9 @@ pub(super) async fn handle(
         WorkspaceMethod::SpaceStatus { space } => {
             Body::SpaceStatus(Box::new(manager.space_status(&space).await?))
         }
+        WorkspaceMethod::SpaceSessions { space } => {
+            Body::SpaceSessions(manager.space_sessions(&space).await?)
+        }
         WorkspaceMethod::FindSpaces { target } => {
             Body::Spaces(manager.find_visible_spaces(&target, caller).await?)
         }
@@ -294,7 +297,9 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Workspace(workspace),
             } => Some(workspace),
-            WorkspaceMethod::SpaceStatus { space } => Some(space),
+            WorkspaceMethod::SpaceStatus { space } | WorkspaceMethod::SpaceSessions { space } => {
+                Some(space)
+            }
             WorkspaceMethod::ReopenWorkspace { .. }
             | WorkspaceMethod::AdoptWorkspace { .. }
             | WorkspaceMethod::WorkspaceEnv { .. }

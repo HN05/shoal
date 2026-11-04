@@ -346,6 +346,73 @@ mod streams {
     }
 
     #[tokio::test]
+    async fn a_session_an_agent_reports_reaches_a_subscription() {
+        use crate::{
+            client::transcripts::ReportedSession, daemon::workspace::ExecutionKind,
+            execution::TrackedAgent, state::AgentState,
+        };
+        let daemon = TestDaemon::start().await;
+        let manager = &daemon.manager;
+        let workspace = daemon.workspace("work").await;
+        let chat = manager
+            .start_chat(
+                daemon.repository.id.clone().into(),
+                "planning".into(),
+                "claude".into(),
+                std::process::id(),
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+        let mut subscription = subscribe(daemon.connector(), &[Topic::Sessions]).await;
+        let records = snapshot(&mut subscription).await;
+        assert_eq!(records.len(), 2, "{records:?}");
+        let reported = |space: String, session: &'static str| {
+            move |update: &Update| {
+                matches!(update, Update::Changed(record) if matches!(&**record,
+                    Record::Sessions(sessions) if sessions.space_id == space
+                        && sessions.sessions.iter().any(|reported: &ReportedSession| reported.session == session)))
+            }
+        };
+
+        let execution = manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .await
+            .unwrap()
+            .plan
+            .id;
+        manager
+            .track_agent(
+                &execution,
+                &TrackedAgent::named("claude"),
+                &workspace.id,
+                &workspace.name,
+                true,
+                std::time::Duration::ZERO,
+            )
+            .await;
+        for session in ["s1", "s2"] {
+            manager
+                .set_agent_state(
+                    &workspace.id,
+                    AgentState::Idle,
+                    Some(execution.clone()),
+                    Some(session.into()),
+                )
+                .await
+                .unwrap();
+            until(&mut subscription, reported(workspace.id.clone(), session)).await;
+        }
+
+        manager
+            .set_agent_state(&chat.id, AgentState::Idle, None, Some("c1".into()))
+            .await
+            .unwrap();
+        until(&mut subscription, reported(chat.id.clone(), "c1")).await;
+    }
+
+    #[tokio::test]
     async fn a_scoped_subscription_covers_its_tree_without_notifications() {
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;

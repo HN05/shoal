@@ -1767,10 +1767,12 @@ reacting reads first and changes only a reaction not already as asked, since
 forges differ in whether adding one twice fails. A comment edit changes only
 a comment the acting login wrote, checked against the item's discussion before
 anything is sent, since an account with admin rights could otherwise rewrite
-someone else's words. Listing issues and PRs also
-runs in the daemon, so a scoped caller's search goes out as the agent account
-and anyone else's as the user's own logins, in another repository too, since
-checking for a duplicate before filing there is only a read; it uses each forge's own search and
+someone else's words. Listing issues and PRs, and
+reading items' views, a PR's possible reviewers and a repository's labels, also
+run in the daemon, so apps read them without choosing a login or a host's forge
+themselves: a scoped caller reads as the agent account and anyone else as the
+user's own logins, in another repository too, since checking for a duplicate
+before filing there is only a read. A search uses each forge's own search and
 reads pages only until the limit is met. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
 command models. The daemon
@@ -1935,6 +1937,26 @@ which workers. Removing the chat first removes the spaces below it through the
 removal path of any space's children, and a stopped chat passes their events
 on up, to the user at the top, unless it waits for its automatic restore. A
 chat opens workspaces only in its own repository.
+A chat may run in a ready workspace's worktree instead of the checkout, to
+debug, audit or review that workspace's live work, committed and uncommitted,
+with the commands that read a branch, rather than reading another worktree by
+path. A workspace has one editing agent, its own: a chat in it reads and does
+not edit, which its instructions say and nothing enforces until modes decide
+what an agent may do. It stays a chat, with its own identity, scope,
+temporary directory and messages, and is not the workspace's child, since a
+child's questions and approvals go to its parent's agent while the user attends
+a chat; so Shoal commands it runs never act as the workspace's agent. Its scope
+reads the workspace as well as the chat and the spaces below it, and refuses
+any request that changes the workspace. Its
+record names the workspace, so a restore runs it there again, commands that
+take the workspace from the directory act on it, and those that act on chats
+keep acting on the chat. A running chat in a workspace is use, so no unattended
+removal takes the workspace from under it, and one Shoal saved is the
+workspace's saved stopped work, which keeps it from idle cleanup but not merged
+cleanup. Removing the workspace removes its chats first through the chat
+removal path, so a workspace one of them opened that cannot go keeps the chat,
+which keeps the workspace. Nothing moves a session between directories: a chat
+about another workspace is a new chat.
 Having no workspace, a chat keeps its messages in its own queue, which the same
 hooks deliver, including the user's request to rename it; a removed chat gives the user the notifications its unread
 messages stand for.
@@ -2335,9 +2357,10 @@ Issue linking and unlinking are own-workspace operations; associations are idemp
 and replacing one requires unlinking it first. Unlinking preserves recorded completion.
 Issue associations suppress idle cleanup, not merged cleanup.
 Item views let agents read issues and PRs without knowing the forge. The daemon
-selects linked or explicit items; the CLI looks them up with the user's forge
-login, because discussion can exceed a protocol frame: the forge's API with
-the host's token, or anonymously without one. Views automatically include the logs of
+selects linked or explicit items, gives a bare number the kind of the linked
+item or else the forge's, and reads them through the forge's API with the
+account a read uses, or anonymously without a token, sending a view whose
+discussion exceeds a protocol frame in pieces. Views automatically include the logs of
 failed CI jobs where the forge serves them, fetched by the daemon with the
 workspace's agent account and returned as bounded tails with the job's URL, so
 scoped callers never need forge credentials. Successful and pending checks omit
@@ -2436,9 +2459,11 @@ Exporting every workspace of a repository checks each one before removing any, s
 one that cannot leave refuses the set while all stay; a failure once removals
 begin leaves the exported ones moved and the rest in place, each reported.
 Agent conversations are the agent tools' private files, which Shoal never
-reads or changes. An export copies each reported session's files unread, found
-by ID where the agent's integration says its tool keeps them, under the
-daemon's environment or one its agents ran with, and an import puts them at the
+reads or changes. Shoal tells clients where they are without reading them: the
+daemon reports the sessions a space's agents reported, and `shoal::client`
+finds each one's files by ID where its tool keeps them, under the client's
+environment or one the repository's agents ran with, as an export does. An
+export copies each reported session's files unread, and an import puts them at the
 same path under the importing agent's session directory, replacing a file there
 only with one that continues it, as a session that went away and came back does,
 and leaving that to the installed Shoal in a development build; a session whose

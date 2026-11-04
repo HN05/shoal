@@ -66,6 +66,21 @@ pub async fn select_workspace(
     Ok(workspace)
 }
 
+/// The workspace `explicit` names, else the current one, else one picked
+/// among the ready workspaces, as a command that needs a ready workspace
+/// offers them.
+pub async fn select_ready_workspace(ctx: &Context, explicit: Option<String>) -> Result<String> {
+    let workspace = match resolve_workspace(ctx, explicit, Fallback::CurrentDirectory).await? {
+        Resolution::Workspace(id) => id,
+        Resolution::Picker(mut workspaces) => {
+            workspaces.retain(|workspace| workspace.state == crate::state::WorkspaceState::Ready);
+            pick_workspace(ctx, workspaces, WORKSPACE).await?
+        }
+    };
+    recent::record(ctx, &workspace).await;
+    Ok(workspace)
+}
+
 /// The workspace `select_workspace` selects, left out of the command's
 /// history for a command that records it once it has acted.
 pub async fn choose_workspace(
@@ -380,6 +395,21 @@ pub async fn select_space(
         return Ok(chat);
     }
     select_other_space(ctx, explicit, fallback).await
+}
+
+/// [`select_space`] for a command that shows where it runs: the workspace of
+/// the current directory comes before the chat this process runs in, so a
+/// chat in a workspace's worktree gets the workspace.
+pub async fn select_space_here(ctx: &Context, explicit: Option<String>) -> Result<String> {
+    if explicit.is_none() && current_chat(&None).is_some() {
+        let workspaces = client::workspaces(&ctx.paths).await?;
+        if let Some(workspace) = current_workspace(&workspaces)? {
+            let id = workspace.id.clone();
+            recent::record(ctx, &id).await;
+            return Ok(id);
+        }
+    }
+    select_space(ctx, explicit, Fallback::CurrentDirectory).await
 }
 
 /// [`select_space`] for a command that never acts on the chat it runs in,

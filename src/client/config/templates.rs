@@ -20,6 +20,9 @@ pub const WORKER_FILE: &str = "worker-template.md";
 pub const AGENT_GUIDANCE: &str = include_str!("templates/agent.md");
 pub const CHAT_FILE: &str = "chat-template.md";
 pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
+/// A chat's instructions in a workspace's worktree, in place of the chat
+/// template, which describes the registered checkout.
+pub const WORKSPACE_CHAT: &str = include_str!("templates/workspace_chat.md");
 pub const REVIEW_FILE: &str = "review-template.md";
 /// A review's instructions: the fixed task, read-only rules, output contract
 /// and treatment of history, then the base `agent.templates.review` replaces.

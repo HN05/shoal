@@ -269,13 +269,18 @@ pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> E
         .collect()
 }
 
+/// A chat's row: its name, the workspace it runs in, its status and agent.
 fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 5]) {
     let status = ListStatus::of_chat(chat);
+    let place = chat.workspace.as_ref();
     (
         palette.paint(Style::Heading, "◆"),
         [
             (indented(&chat.name, depth), Some(Style::Heading)),
-            (String::new(), None),
+            (
+                place.map_or_else(String::new, |workspace| format!("in {}", workspace.name)),
+                None,
+            ),
             (status.label().into(), Some(status.style())),
             (String::new(), None),
             (chat.agent.clone(), None),

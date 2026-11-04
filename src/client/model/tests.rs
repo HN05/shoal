@@ -100,6 +100,7 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_id_or_name() {
         repository_id: "repo".into(),
         name: name.into(),
         agent: "claude".into(),
+        workspace: None,
         pid: 1,
         started_at: 0,
         origin: None,

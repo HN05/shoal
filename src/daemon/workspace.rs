@@ -299,10 +299,14 @@ impl Manager {
 
     /// The workspaces a caller lists, with review marks checked against
     /// HEAD. A workspace process sees its own subtree with its own workspace
-    /// first, since scoped commands without a target act on the first one.
+    /// first, since scoped commands without a target act on the first one; a
+    /// chat in a workspace's worktree also sees that workspace, last.
     pub async fn visible_workspaces(&self, owner: Option<&str>) -> Result<Vec<Workspace>> {
         let mut workspaces = self.list_workspaces_within(owner).await?;
         if let Some(owner) = owner {
+            if let Some(home) = self.chat_home(owner).await? {
+                workspaces.push(self.workspace(&home).await?);
+            }
             workspaces.sort_by_key(|w| w.id != owner);
         }
         let deadline = review::check_deadline();

@@ -140,7 +140,7 @@ impl Inbox {
 
     /// One aligned row per item: its kind, workspace, the workspace's
     /// repository when the rows span several, what it is about, cut to fit
-    /// `width`, and a note.
+    /// `width`, and a note, which names the workspace a chat runs in.
     pub(in crate::cli) fn rows(
         &self,
         repositories: &[(String, String)],
@@ -161,7 +161,7 @@ impl Inbox {
                     (item.name(repositories).into(), None),
                     (repository, None),
                     (item.text(), None),
-                    (item.note(), Some(Style::Muted)),
+                    (note(&self.chats, item), Some(Style::Muted)),
                 ]
             })
             .collect();
@@ -186,6 +186,16 @@ fn repository_of<'a>(workspaces: &'a [Workspace], chats: &'a [Chat], item: &'a I
         })
         .or_else(|| item.repository_id())
         .unwrap_or("")
+}
+
+/// The item's note, after the workspace its chat runs in, if it is one.
+fn note(chats: &[Chat], item: &Item) -> String {
+    let space = item.space_id();
+    let place = (chats.iter().find(|chat| chat.id == space))
+        .and_then(|chat| chat.workspace.as_ref())
+        .map(|workspace| format!("in {}", workspace.name));
+    let note = Some(item.note()).filter(|note| !note.is_empty());
+    place.into_iter().chain(note).collect::<Vec<_>>().join("; ")
 }
 
 /// Questions of the listed workspaces and chats, approvals of the listed

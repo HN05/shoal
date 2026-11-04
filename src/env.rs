@@ -260,16 +260,19 @@ fn workspace_identity(workspace: &Workspace, paths: &Paths) -> BTreeMap<String, 
 /// Give `command` the identity of `chat`: the chat and the state directory
 /// whose daemon recorded it, as its hooks receive them.
 pub fn apply_chat_identity(command: &mut Command, chat: &crate::model::Chat, paths: &Paths) {
-    for name in inherited_port_exports() {
+    for name in not_chat_identity() {
         command.env_remove(name);
     }
-    command
-        .env(CHAT, &chat.id)
-        .env(STATE_DIR, &paths.state)
-        .env_remove(WORKSPACE_ID)
-        .env_remove(RUN_ID)
-        .env_remove(WORKSPACE_NAME)
-        .env_remove(SHELL_DIRECTIVE);
+    command.env(CHAT, &chat.id).env(STATE_DIR, &paths.state);
+}
+
+/// What a chat's processes leave out of this process's environment: a
+/// workspace's identity and port exports, which a shell Shoal opened in a
+/// workspace carries, and the shell's directive.
+pub fn not_chat_identity() -> Vec<OsString> {
+    let mut names = inherited_port_exports();
+    names.extend([WORKSPACE_ID, RUN_ID, WORKSPACE_NAME, SHELL_DIRECTIVE].map(OsString::from));
+    names
 }
 
 /// A chat agent's identity: its chat, the scope `token` that confines it

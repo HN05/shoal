@@ -19,6 +19,12 @@ use crate::{
 const SPACES: &str = "(SELECT id,repository_id,name,'workspace' AS kind,branch FROM workspaces
     UNION ALL SELECT id,repository_id,name,'chat' AS kind,NULL AS branch FROM chats)";
 
+/// Each space a removal of another takes first, as `space_id, parent_id`:
+/// the spaces below it, and the chats in a workspace's worktree, which are
+/// not below it but cannot outlive it.
+const TAKEN_FIRST: &str = "(SELECT space_id,parent_id FROM space_parents
+    UNION ALL SELECT id,workspace_id FROM chats WHERE workspace_id IS NOT NULL)";
+
 impl Manager {
     /// Create a workspace on a new branch named `name` in `parent`'s
     /// repository and record `parent` as its parent.
@@ -74,17 +80,37 @@ impl Manager {
         self.store.run(move |db| subtree(db, &id)).await
     }
 
-    /// The spaces below `id`, nearest first.
-    pub(crate) async fn spaces_below(&self, id: &str) -> Result<Vec<SpaceRef>> {
+    /// Every space a removal of `id` takes before it, nearest first: those
+    /// below it and the chats in each workspace's worktree among them.
+    pub(crate) async fn spaces_taken_with(&self, id: &str) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 Ok(db
                     .prepare(&format!(
-                        "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM down
+                        "{} SELECT spaces.id,spaces.name,spaces.kind,spaces.branch FROM taken
                             JOIN {SPACES} AS spaces USING(id)
                             WHERE depth > 0 ORDER BY depth, spaces.id",
-                        down("true")
+                        taken()
+                    ))?
+                    .query_map([id], space_ref)?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+    }
+
+    /// The spaces a removal of `id` takes first, each before those below
+    /// it: the chats in its worktree, then the spaces directly below it.
+    pub(crate) async fn taken_first(&self, id: &str) -> Result<Vec<SpaceRef>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .prepare(&format!(
+                        "SELECT spaces.id,spaces.name,spaces.kind,spaces.branch
+                            FROM {TAKEN_FIRST} AS first
+                            JOIN {SPACES} AS spaces ON spaces.id=first.space_id
+                            WHERE first.parent_id=?1 ORDER BY spaces.kind, spaces.name"
                     ))?
                     .query_map([id], space_ref)?
                     .collect::<rusqlite::Result<_>>()?)
@@ -227,6 +253,18 @@ fn up(climb: &str) -> String {
 /// space `?1` at depth 0 and the spaces below it, each with the IDs from
 /// `?1` down to it joined by commas, entering a space below only while
 /// `descend`, an SQL condition on its `space_parents.space_id`, holds.
+/// The recursive query `taken(id, depth)` of the space `?1` and each space
+/// its removal takes before it. [`ensure_parent`] keeps it free of cycles.
+fn taken() -> String {
+    format!(
+        "WITH RECURSIVE taken(id, depth) AS (
+            SELECT ?1, 0
+            UNION ALL SELECT first.space_id, taken.depth + 1
+                FROM taken JOIN {TAKEN_FIRST} AS first ON first.parent_id=taken.id
+        )"
+    )
+}
+
 fn down(descend: &str) -> String {
     format!(
         "WITH RECURSIVE down(id, depth, path) AS (
@@ -258,7 +296,8 @@ fn has_agent(column: &str) -> String {
 
 /// Check that `parent` may take the new or top-level space `space` of
 /// `repository_id` as its child: a ready workspace or a chat of the same
-/// repository, not below `space`. Removal reserves the parent first and
+/// repository, neither below `space` nor in the worktree of a workspace
+/// there, since removal takes both first. Removal reserves the parent first and
 /// rechecks its children afterwards, so a child either precedes that recheck
 /// or is refused here.
 pub(crate) fn ensure_parent(
@@ -274,9 +313,14 @@ pub(crate) fn ensure_parent(
             "parent workspace is {state}; open a child below a ready workspace"
         );
     }
+    let taken: bool = db.query_row(
+        &format!("{} SELECT EXISTS(SELECT 1 FROM taken WHERE id=?2)", taken()),
+        [space, parent],
+        |row| row.get(0),
+    )?;
     ensure!(
-        !subtree(db, space)?.iter().any(|below| below == parent),
-        "{name} is below the space it would take as a child"
+        !taken,
+        "{name} is below or in the space it would take as a child"
     );
     Ok(())
 }

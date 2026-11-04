@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::client::output::transfer::{Exported, Exports};
 use crate::{
@@ -319,6 +319,13 @@ async fn check_export(ctx: &Context, space: PresentSpace, output: &Output) -> Re
 /// continue elsewhere, or the one this process runs in, which ending the
 /// chat would end before the export finished.
 fn check_chat_export(chat: Chat) -> Result<Chat> {
+    if let Some(workspace) = &chat.workspace {
+        bail!(
+            "chat {} runs in workspace {}, and shoal move does not move a chat in a workspace",
+            chat.name,
+            workspace.name
+        );
+    }
     ensure!(
         chat.session.is_some(),
         "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
@@ -375,8 +382,15 @@ async fn check_workspace_export(
 /// below it, which removing it here would take unexported, unless they are
 /// among the `exported` too.
 fn ensure_children_exported(check: &RemovalCheck, exported: &[&str]) -> Result<()> {
-    let missing: Vec<&str> = check
-        .children
+    let (chats, workspaces): (Vec<_>, Vec<_>) =
+        (check.children.iter()).partition(|child| child.kind == crate::model::SpaceKind::Chat);
+    let chats: Vec<&str> = chats.iter().map(|chat| chat.name.as_str()).collect();
+    ensure!(
+        chats.is_empty(),
+        "chats run in it or below it ({}), which shoal move does not move; remove them first",
+        chats.join(", ")
+    );
+    let missing: Vec<&str> = workspaces
         .iter()
         .map(|child| child.name.as_str())
         .filter(|child| !exported.contains(child))
@@ -620,3 +634,6 @@ async fn export_each(
         directory: directory.path.clone(),
     })
 }
+
+#[cfg(test)]
+mod tests;

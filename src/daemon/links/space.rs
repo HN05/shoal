@@ -84,6 +84,14 @@ impl LinkSpace {
         }
     }
 
+    /// The issues and PRs linked to the space under any relation.
+    pub(crate) fn links(&self) -> &crate::model::SpaceLinks {
+        match self {
+            Self::Workspace(workspace) => &workspace.links,
+            Self::Chat { chat, .. } => &chat.links,
+        }
+    }
+
     /// The directory whose `origin` names the space's repository on its
     /// forge: the workspace's worktree, or the chat's checkout.
     pub(crate) fn origin_path(&self) -> &Path {

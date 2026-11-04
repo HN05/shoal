@@ -61,6 +61,7 @@ impl Manager {
             .ok()
             .flatten()
             .map(Box::new);
+        let chats = self.chats_in(&workspace.id).await?;
         let status = WorktreeStatus {
             workspace,
             executions,
@@ -81,6 +82,7 @@ impl Manager {
             sync,
             changed_on_both_sides,
             jobs,
+            chats,
         };
         let records = Records {
             issue,
@@ -131,7 +133,7 @@ impl Manager {
 
     /// The issue, PR or CI run whose URL `selection` names, when it is of
     /// another repository than the one whose origin `checkout` has.
-    async fn item_elsewhere(
+    pub(crate) async fn item_elsewhere(
         &self,
         checkout: &std::path::Path,
         selection: &link::Selection,

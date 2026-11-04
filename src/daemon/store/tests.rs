@@ -400,12 +400,15 @@ fn historical_database(version: i64) -> Result<Connection> {
         db.execute_batch(include_str!("chat_scopes.sql"))?;
     }
     if version >= 124 {
-        db.execute_batch(include_str!("runners.sql"))?;
+        db.execute_batch(CHAT_WORKSPACES)?;
     }
     if version >= 125 {
-        db.execute_batch(include_str!("agent_queue_jobs.sql"))?;
+        db.execute_batch(include_str!("runners.sql"))?;
     }
     if version >= 126 {
+        db.execute_batch(include_str!("agent_queue_jobs.sql"))?;
+    }
+    if version >= 127 {
         db.execute_batch(include_str!("ci_jobs.sql"))?;
     }
     db.pragma_update(None, "user_version", version)?;

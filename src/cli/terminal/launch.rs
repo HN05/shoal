@@ -423,13 +423,15 @@ async fn start_in_background(
     open_in_background(ctx, places, beside, &workspace.path, &label, &argv).await
 }
 
-/// Run Shoal with `args` for the chat `name` at the repository's checkout
-/// in a new background place, of the first host that would start a queued
-/// agent, for the user to attach to. Returns how that host reports it.
+/// Run Shoal with `args` for the chat `name` of `repository` in `cwd`, its
+/// checkout or worktree, in a new background place, of the first host that
+/// would start a queued agent, for the user to attach to. Returns how that
+/// host reports it.
 pub(in crate::cli) async fn start_chat_in_background(
     ctx: &Context,
     settings: &Effective,
     repository: &Repository,
+    cwd: &Path,
     name: &str,
     args: &[OsString],
 ) -> Result<String> {
@@ -441,13 +443,13 @@ pub(in crate::cli) async fn start_chat_in_background(
         settings,
         origin.as_ref(),
         &repo,
-        &repository.path,
+        cwd,
         async |host, group| {
             let Some(places) = host.places() else {
                 return Ok(None);
             };
             let beside = Beside::opening(group);
-            open_in_background(ctx, places, beside, &repository.path, name, &argv).await?;
+            open_in_background(ctx, places, beside, cwd, name, &argv).await?;
             Ok(Some(places.background_note(name)))
         },
     )
@@ -576,15 +578,16 @@ fn agent_worker(
     )
 }
 
-/// Run Shoal with `args` for the chat `name` at the repository's checkout:
-/// in a new session this terminal attaches to, as `run_agent` does for
-/// tracked agents, otherwise in a new focused place, shown here when its
-/// host does not serve this terminal. Returns whether it ran there; `false`
-/// means the chat runs in place.
+/// Run Shoal with `args` for the chat `name` of `repository` in `cwd`, its
+/// checkout or worktree: in a new session this terminal attaches to, as
+/// `run_agent` does for tracked agents, otherwise in a new focused place,
+/// shown here when its host does not serve this terminal. Returns whether
+/// it ran there; `false` means the chat runs in place.
 pub(in crate::cli) async fn start_chat(
     ctx: &Context,
     settings: &Effective,
     repository: &Repository,
+    cwd: &Path,
     name: &str,
     args: &[OsString],
 ) -> Result<bool> {
@@ -593,7 +596,7 @@ pub(in crate::cli) async fn start_chat(
         return Ok(false);
     };
     let repo = groups::Repo::Known(repository);
-    let origin = groups::beside(ctx, &host, &repo, &repository.path).await?;
+    let origin = groups::beside(ctx, &host, &repo, cwd).await?;
     let beside = host.beside(origin.as_ref());
     let attaches = host.host.attaches();
     let mut env = place_env(ctx)?;
@@ -605,7 +608,7 @@ pub(in crate::cli) async fn start_chat(
     let start = Start {
         state: &ctx.paths.state,
         origin: beside.origin,
-        cwd: &repository.path,
+        cwd,
         label: name,
         focus: true,
         split: beside.split,

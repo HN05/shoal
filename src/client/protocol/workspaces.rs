@@ -148,6 +148,10 @@ pub enum WorkspaceMethod {
     SpaceStatus {
         space: String,
     },
+    /// The sessions the agents of a workspace or chat reported.
+    SpaceSessions {
+        space: String,
+    },
     DiffBase {
         workspace: String,
     },

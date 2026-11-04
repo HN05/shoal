@@ -565,15 +565,18 @@ shoal = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<release tag>
 `shoal::client` holds every request the CLI makes, with its reply's types;
 `connection` sends them to the daemon a `Connector` names, and `subscriptions`
 follows repositories, workspaces with their agents, linked issues, PRs and CI
-runs, open questions, pending approval requests, messages and notifications as
-they change, subscribing again after a daemon restart. `operations` follows work
+runs, the sessions each space's agents reported, open questions, pending
+approval requests, messages and notifications as they change, subscribing again
+after a daemon restart. `operations` follows work
 the daemon runs for a request, such as the setup and post-setup hook of a
 workspace `StartWorkspace` creates: its steps and its processes' output lines as
 they come, then its result or a typed failure such as `setup_failed` or
 `hook_failed`. It also holds the logic
 the CLI applies on its side: which workspaces a command would act on, list
-status labels, the AI tools Shoal can launch, and reading and validating
-configuration, and in `output` the types every command prints with `--json`.
+status labels, the AI tools Shoal can launch, where a space's agent sessions
+keep their files on this machine, reading and validating configuration, and in
+`views` what `shoal view` reads; `output` holds the types every command prints
+with `--json`.
 Without a scope token the caller is the user; with one, it is
 that workspace's agent, under the rules of its `shoal` commands. The library
 speaks only its own release's protocol: a daemon of another release refuses
@@ -784,6 +787,7 @@ own stdin, stdout, stderr, and exit code.
 `shoal status [target]` summarizes one space, a workspace or a [chat](#chats),
 running or stopped, which the target names, else the current one: its state, a
 workspace's changes since its fork point and what it holds, its agent sessions,
+each session its agents reported with the path of its transcript on this machine,
 whether its linked issue is open or closed,
 and each watched PR as the forge reports it now: open, merged or closed, merge
 conflicts, each CI check's result, the CI runs on an open PR's head that
@@ -802,12 +806,23 @@ last check of HEAD against the default target found
 [changed on both sides](#conflicts), from a watch or `shoal conflicts`, in
 `changed_on_both_sides` (`target`, `target_commit`, `head` and `files`). Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
-open questions, a pending PR proposal or push request, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
-when nothing does, in `cleanup_reason`. A chat's status leaves out what needs a worktree: its
-branch, changes, setup, executions, leases, sync and cleanup. `--json`
+open questions, a pending PR proposal or push request, a running chat in it, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
+when nothing does, in `cleanup_reason`. It lists the chats in the worktree, in
+`chats`. A chat's status leaves out what needs a worktree: its
+branch, changes, setup, executions, leases, sync and cleanup; it names the
+workspace it runs in, as `shoal work --chats`, the inbox and the menu do with
+`in <workspace>`. `--json`
 returns the same data, with `kind` (`workspace` or `chat`) and the space's
 record in `workspace` or `chat`, PRs in `prs`, the issue in `issue_status` and sessions
-in `sessions`, or a failed `zmx list` in `sessions_error`. Workspace records from `work --json` and `status --json` include
+in `sessions`, or a failed `zmx list` in `sessions_error`. `transcripts` lists every
+session the space's agents reported, with `agent`, `session`, the `execution` a
+workspace's agent ran as, whether the agent runs it now in `current`, its
+transcript in `path` and all its files, the transcript included, in `files`,
+which Shoal finds where the agent's tool keeps them and never reads. A session
+whose files are not on this machine, or of an agent whose tool Shoal does not
+know, has no `path` and no files, and one whose files could not be looked for
+says why in `error`; sessions the agents' hooks never reported, such as those
+before a `/clear`, are not listed. Workspace records from `work --json` and `status --json` include
 the assigned issue in `links.issue`, assigned PR URLs in `links.prs`, and items
 recorded as opened or related in `links.opened` and `links.related`, each with
 `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
@@ -1725,7 +1740,7 @@ other commands do. Failed session closes notify and retry at startup or with
 
 ### Chats
 
-`shoal chat [repository] [--agent NAME] [--name NAME] [--here] [-- ARGS]` starts a new chat
+`shoal chat [repository | --workspace [WORKSPACE]] [--agent NAME] [--name NAME] [--here] [-- ARGS]` starts a new chat
 with an agent about a repository, to discuss it, its issues and plans, or to
 coordinate work, without changing code. The repository is the named one, else the
 current checkout's or workspace's, else a picker. The agent is `--agent`, else
@@ -1787,6 +1802,33 @@ Workspaces and chats share one set of names across
 repositories: a chat cannot take a workspace's name or a name an unfinished
 rename reserves, and a workspace cannot be created or renamed to a chat's name.
 The name frees once the chat is removed.
+
+`shoal chat --workspace [WORKSPACE]` starts the chat in a ready workspace's
+worktree instead of the checkout, to debug, audit or review its work, committed
+and uncommitted: the named workspace, else the current one, else a picker of the
+ready workspaces. The repository is the workspace's, the default name
+`<workspace>-chat`, and a workspace that is not ready or whose worktree is
+missing is refused. The chat is not the workspace's agent: it runs as any chat
+does, with its own identity, scope, `TMPDIR` and messages, without the
+workspace's scope, `[env]` or leases, and is not below the workspace. Its
+scope also reads the workspace, such as its status, diff, links and CI runs,
+but refuses changes to it. Its instructions,
+Shoal's own in place of the chat template, which describes the checkout, name
+the workspace, its branch or commit and its path, and tell the agent that the
+workspace's own agent may be editing there and not to change files, stage,
+commit, stash or switch branches; nothing else enforces it. Its record, and
+`--json`, name the `workspace`, and `shoal resume` restores it there. In the
+chat, commands that act only on workspaces, such as `shoal diff`,
+`shoal conflicts` and `shoal branch base`, act on the workspace, and so does
+`shoal status`, which takes the current directory's workspace before the chat;
+commands that act on chats, such as `shoal view`, `shoal ci`, `shoal link`,
+`shoal ready` and `shoal done`, act on the chat, and `--space <workspace>`
+reads the workspace's, as `shoal view --space` and `shoal ci list --space` do. A running chat keeps the workspace from idle, merged,
+PR and completion cleanup, and one Shoal saved keeps it from idle cleanup.
+Removing the workspace, including the cleanup of a worktree deleted outside
+Shoal, which nothing keeps, removes its chats first and stops their agents;
+`shoal rm` lists them before asking. A chat
+never moves to another directory: one about another workspace is a new chat.
 
 `shoal chat rename [chat] NAME` gives a running chat, `shoal plan` chats
 included, a new name that is free as a new chat's would be, and frees the old
@@ -2633,7 +2675,9 @@ of the base branch recorded at creation, using its reflog with merge-base as a
 fallback, so commits added to the base later are excluded even after a rebase.
 Fixed-commit bases use that commit; older workspaces without base metadata use
 `main`. Committed, staged, and unstaged tracked changes appear; untracked files
-follow Git. A missing or unrelated base is an error.
+follow Git. A missing or unrelated base is an error. A chat's agent runs it as a
+plain process in the worktree rather than a tracked execution of the
+workspace, which its scope may read but not run in.
 
 ### Conflicts
 
@@ -3130,7 +3174,8 @@ ending anything when the file exists, when the daemon cannot create a file in it
 directory within 30 seconds, or when `-` would stream from a place that closes
 with the space. A workspace is removed as `shoal rm` removes it, and its file
 holds its removal record and checkpoint. The export also refuses one whose file
-lies inside it, or whose uncommitted files a checkpoint cannot keep, and asks
+lies inside it, whose uncommitted files a checkpoint cannot keep, or with chats
+in its worktree or in one below it, and asks
 before releasing holds unless given `--yes`. A workspace already removed is
 exported from its removal record without another removal. The checkpoint
 travels as a Git bundle without the commits of the default remote's default
@@ -3139,7 +3184,7 @@ leases, permits, approvals, grants and holds stay behind; setup rebuilds what th
 workspace needs. A chat's file holds its name, agent and session: the export
 refuses a chat whose agent reported no session, or the one it runs in, and asks
 before stopping the agent unless given `--yes`, and one with workspaces below
-it; the chat is then removed. The file's manifest names its `kind`, `workspace` or `chat`.
+it or in a workspace's worktree; the chat is then removed. The file's manifest names its `kind`, `workspace` or `chat`.
 
 `shoal move export <space>... -o <directory>`, for several spaces or those the
 picker selects when `-o` names an existing directory, and `shoal move export
@@ -3487,7 +3532,9 @@ except its author, by the `name` that `--add-reviewer` takes, with the forge's
 `display_name` and whether it is a `team`. Users are GitHub's assignable
 users, Forgejo's review candidates, GitLab's project members and the members
 of a Bitbucket workspace, named by account ID; teams are those with access to
-an organization's repository on GitHub and Forgejo.
+an organization's repository on GitHub and Forgejo. Processes inside a
+workspace and a chat's agent read them as the [agent account](#agent-accounts),
+anyone else with your own logins.
 `open`, `edit` and `comment` also take repeated `--attach FILE` or
 `--attach 'FILE#ALT TEXT'`: a non-empty file of at most 10 MiB for an image and
 100 MiB otherwise, checked before anything is sent; the forge decides which types
@@ -3787,7 +3834,9 @@ as the forge reports them, including a group's or organization's labels, with
 each one's description, and `exclusive` for a label that allows no other of its
 scope: Forgejo's exclusive labels and GitLab's `key::value` labels. Reading a
 Forgejo organization's labels needs a token with the `read:organization`
-scope; Bitbucket has no labels.
+scope; Bitbucket has no labels. Processes inside a workspace and a chat's agent
+read them as the [agent account](#agent-accounts), anyone else with your own
+logins.
 
 `[pr] required_labels` and `[issue] required_labels` name entries that every new
 item's labels must each start with, so `area/` takes any area label. `pr open`
@@ -4066,7 +4115,9 @@ review whose inline comments could not be read keeps its body; the command exits
 of items with failed logs in `check_logs`, and runs with `kind` `ci`, or a check
 log object with `--check`;
 `reactions` on an item or comment lists each reaction's `content`, `count`, and
-whether your login `reacted`. Reactions use GitHub's names (`+1`, `-1`,
+whether the login that read it `reacted`: the daemon reads issues and PRs as the
+[agent account](#agent-accounts) for processes inside a workspace and a chat's
+agent, which read only from their space, and with your own logins otherwise. Reactions use GitHub's names (`+1`, `-1`,
 `laugh`, `hooray`, `confused`, `heart`, `rocket`, `eyes`); a GitLab emoji
 without one keeps its GitLab name.
 `--web` opens the selected items in the browser instead, with `open` on macOS
@@ -4271,8 +4322,8 @@ retaining branches; moved worktrees or recorded commands need manual recovery.
 HEAD and commands reset the timer; file changes, including ignored files, restart
 it when it expires, and Git state such as unpushed commits is checked when it
 starts and when it expires.
-Running/unknown commands, saved stopped work, directory users (including shells),
-dirty/unpushed work,
+Running/unknown commands, saved stopped work, a chat running in the worktree or
+saved there, directory users (including shells), dirty/unpushed work,
 simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, and failed checks block cleanup. Pushed means reachable
 from locally known remote branches, merged into the default branch as removal
 decides, or with its changes on the branch the workspace builds on: its base
@@ -4318,7 +4369,7 @@ minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitt
 [removal's checkpoint](#checkpoints-and-restore); they keep the workspace when the checkpoint cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
 Git operation under way, open [questions](#questions), running/unknown commands,
-directory users, leases, permits, holds and
+a running chat in it, directory users, leases, permits, holds and
 workspaces stacked on it keep it too; PR cleanup moves stacked workspaces once the base's PR merges. Shoal records the
 time of each command start and exit, lease and hold change, and takes the newest
 change time of the worktree's files, including ignored ones, and of its HEAD,

@@ -407,3 +407,16 @@ async fn repository_choices_label_unreadable_origins_by_their_recorded_source() 
     // The reads run at once, so the picker waits for one limit, not one per read.
     assert_eq!(started.elapsed(), REMOTE_READ_LIMIT);
 }
+
+#[test]
+fn a_chat_in_a_workspace_shows_the_workspace() {
+    let chat: Chat = serde_json::from_value(serde_json::json!({
+        "id": "c", "repository_id": "a", "name": "worker-chat", "agent": "claude",
+        "pid": 1, "started_at": 0,
+        "workspace": {"id": "w", "name": "worker", "branch": "worker"},
+    }))
+    .unwrap();
+    let plain = Palette::stdout(true);
+    let rows = workspace_tree_rows(&[], &[chat], &HashSet::new(), plain, None);
+    assert_eq!(rows, ["◆ worker-chat  in worker  process running  claude"]);
+}

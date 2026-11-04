@@ -232,6 +232,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
         repository_id: "repo".into(),
         name: "talk".into(),
         agent: "codex".into(),
+        workspace: None,
         pid: 1,
         started_at: 0,
         origin: None,

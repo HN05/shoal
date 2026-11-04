@@ -55,3 +55,22 @@ fn a_question_notes_its_recommendation_and_files() {
         "recommends A; files: a.png, b.png"
     );
 }
+
+#[test]
+fn a_chat_in_a_workspace_names_the_workspace() {
+    let chat: crate::model::Chat = serde_json::from_value(serde_json::json!({
+        "id": "c", "repository_id": "r1", "name": "worker-chat", "agent": "claude",
+        "pid": 1, "started_at": 0,
+        "workspace": {"id": "w", "name": "worker", "branch": "worker"},
+    }))
+    .unwrap();
+    let inbox = Inbox {
+        items: vec![Item::ChatDone { chat: chat.clone() }],
+        workspaces: Vec::new(),
+        chats: vec![chat],
+    };
+    let rows = inbox.rows(&[], Palette::stdout(true), None);
+    assert_eq!(rows.len(), 1);
+    assert!(rows[0].contains("worker-chat"), "{rows:?}");
+    assert!(rows[0].ends_with("in worker"), "{rows:?}");
+}

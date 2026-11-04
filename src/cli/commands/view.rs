@@ -1,5 +1,5 @@
 //! Show issues, PRs and linked CI runs as the forge reports them.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 
 use super::{ci, links};
 use crate::client::output::view::{RunRead, Shown, ShownReview, ShownRun};
@@ -9,24 +9,16 @@ use crate::{
         client,
         context::Context,
         desktop,
-        forge_hosts::ForgeHosts,
         output::{self, Palette, Style},
     },
+    client::views,
     env,
     forge::{
-        ForgeRepo,
-        account::Account,
-        capability::Capability,
         ci::{checks::CheckLog, run_view::JobRef},
-        items::{
-            link::{ItemKind, LinkKind, Selection},
-            reaction::Reaction,
-        },
+        items::{link::Selection, reaction::Reaction},
         review::view::{AutoMerge, Details, ItemView, PrDetails, Review},
     },
-    model::Selected,
     protocol::{CiMethod, ItemContext},
-    repository,
 };
 
 /// Show or open what `args` selects: one CI run as `ci` reads it, otherwise
@@ -62,12 +54,13 @@ async fn view(
 ) -> Result<i32> {
     // Plain `shoal view` in a workspace adds its latest review.
     let plain = items.kind_or_url.is_none();
-    let (context, selection) = links::select_in_context(ctx, items, repo).await?;
     if let Some(check) = check {
+        let (context, selection) = links::select_in_context(ctx, items, repo).await?;
         return show_log(ctx, context, selection, check).await;
     }
-    let selected = links::select_items(ctx, &context, selection, true).await?;
-    let mut views = read_views(ctx, &context, &selected, !no_comments).await?;
+    let (context, selection) = links::in_context(ctx, items, repo).await?;
+    let read = views::read(&ctx.paths, context.clone(), selection, !no_comments);
+    let mut views = ctx.progress("Reading items", read).await?;
     if plain && let ItemContext::Workspace(workspace) = &context {
         let latest = super::review::show::latest(ctx, workspace).await;
         views.extend(latest.map(|review| {
@@ -89,71 +82,6 @@ impl Shown {
             Self::Review(_) => false,
         }
     }
-}
-
-/// Each selected item as the forge reports it now, in selection order, with
-/// failed job logs.
-async fn read_views(
-    ctx: &Context,
-    context: &ItemContext,
-    selected: &Selected,
-    comments: bool,
-) -> Result<Vec<Shown>> {
-    // Nothing to read, so no forge is needed, as for a local repository.
-    if selected.items.is_empty() {
-        return Ok(Vec::new());
-    }
-    ctx.progress("Reading items", async {
-        let hosts = ctx.forge_hosts()?;
-        let own = own_forge(selected, &hosts).await?;
-        let account = ctx.forge_account()?;
-        let mut items = read(selected, &own, &hosts, &account, comments).await;
-        read_failed_logs(ctx, &own, context, &mut items).await;
-        let runs = read_runs(ctx, context, selected).await;
-        Ok(in_selection_order(selected, items, runs))
-    })
-    .await
-}
-
-/// The issues and PRs, and the runs, each read in selection order, merged
-/// back into that order.
-fn in_selection_order(
-    selected: &Selected,
-    items: Vec<ItemView>,
-    runs: Vec<ShownRun>,
-) -> Vec<Shown> {
-    let (mut items, mut runs) = (items.into_iter(), runs.into_iter());
-    selected
-        .items
-        .iter()
-        .filter_map(|item| match item.kind.item() {
-            Some(_) => items.next().map(|item| Shown::Item(Box::new(item))),
-            None => runs.next().map(Shown::Run),
-        })
-        .collect()
-}
-
-/// Each selected run with its jobs and failed jobs' logs, read in the
-/// context the items were selected in.
-async fn read_runs(ctx: &Context, context: &ItemContext, selected: &Selected) -> Vec<ShownRun> {
-    let mut runs = Vec::new();
-    for item in &selected.items {
-        if item.kind != LinkKind::Ci {
-            continue;
-        }
-        let read = ci::read_view(ctx, Some(context), &item.url).await;
-        let read = read
-            .map(RunRead::Read)
-            .unwrap_or_else(|error| RunRead::Failed {
-                url: item.url.clone(),
-                errors: vec![format!("{error:#}")],
-            });
-        runs.push(ShownRun {
-            kind: LinkKind::Ci,
-            read,
-        });
-    }
-    runs
 }
 
 /// The items one after another, separated by a blank line.
@@ -238,105 +166,6 @@ async fn show_log(
         .await?;
     ctx.show(&log, render_log)?;
     Ok(0)
-}
-
-/// Each item as the forge reports it now, in selection order.
-async fn read(
-    selected: &Selected,
-    own: &ForgeRepo,
-    hosts: &ForgeHosts<'_>,
-    account: &Account,
-    comments: bool,
-) -> Vec<ItemView> {
-    futures_util::future::join_all(selected.items.iter().filter_map(|item| {
-        let kind = item.kind.item()?;
-        Some(async move {
-            match item_forge(own, kind, &item.url, hosts).await {
-                Ok(forge) => forge.view(account, kind, &item.url, comments).await,
-                Err(error) => ItemView {
-                    url: item.url.clone(),
-                    kind,
-                    details: None,
-                    check_logs: Vec::new(),
-                    errors: vec![format!("{error:#}")],
-                },
-            }
-        })
-    }))
-    .await
-}
-
-/// The repository the items were selected in.
-async fn own_forge(selected: &Selected, hosts: &ForgeHosts<'_>) -> Result<ForgeRepo> {
-    let remote = repository::remote_url_from_path(&selected.path)
-        .await?
-        .context("item lookup needs an origin remote")?;
-    ForgeRepo::resolve(&remote, hosts).await
-}
-
-/// The repository the item at `url` is in: `own`, or the other one its URL
-/// names.
-async fn item_forge(
-    own: &ForgeRepo,
-    kind: ItemKind,
-    url: &str,
-    hosts: &ForgeHosts<'_>,
-) -> Result<ForgeRepo> {
-    match kind {
-        ItemKind::Issue if own.issue(url).is_err() => {
-            ForgeRepo::resolve_issue_url(url, hosts).await
-        }
-        ItemKind::Pr if own.pull(url).is_err() => ForgeRepo::resolve_pull_url(url, hosts).await,
-        _ => Ok(own.clone()),
-    }
-}
-
-/// The failed checks' logs of the PRs among `views` in the repository of
-/// `context`.
-async fn read_failed_logs(
-    ctx: &Context,
-    own: &ForgeRepo,
-    context: &ItemContext,
-    views: &mut [ItemView],
-) {
-    if !own.supports(Capability::ReadJobLogs) {
-        return;
-    }
-    for view in views {
-        if own.pull(&view.url).is_err() {
-            continue;
-        }
-        let Some(pr) = view
-            .details
-            .as_ref()
-            .and_then(|details| details.pr.as_ref())
-        else {
-            continue;
-        };
-        for check in &pr.checks {
-            if !check.failed() {
-                continue;
-            }
-            let result = client::request::<CheckLog>(
-                &ctx.paths,
-                CiMethod::CheckLog {
-                    context: context.clone(),
-                    selection: Selection {
-                        kind: Some(LinkKind::Pr),
-                        input: Some(view.url.clone()),
-                    },
-                    check: check.name.clone(),
-                },
-            )
-            .await;
-            match result {
-                Ok(log) => view.check_logs.push(log),
-                Err(error) => view
-                    .errors
-                    .push(format!("{}: log unavailable: {error:#}", check.name)),
-            }
-        }
-    }
 }
 
 pub(super) fn render_log(log: &CheckLog) {

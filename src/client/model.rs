@@ -784,6 +784,9 @@ pub struct WorktreeStatus {
     /// The workspaces of the CI jobs running for its PR or branch.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub jobs: Vec<Workspace>,
+    /// The chats running or stopped in its worktree, by name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chats: Vec<SpaceRef>,
 }
 
 /// How the background sync of a repository's default branch went.
@@ -819,6 +822,8 @@ pub enum CleanupReason {
     QueuedAgent,
     /// A chat's agent runs.
     AgentRunning,
+    /// A chat runs in the workspace's worktree.
+    ChatRunning,
     PrWatch,
     /// An ancestor finished its assignment with cleanup, which takes this
     /// workspace too.
@@ -862,6 +867,7 @@ impl std::fmt::Display for CleanupReason {
             Self::PushRequest => f.write_str("Push waiting for approval"),
             Self::QueuedAgent => f.write_str("Queued agent"),
             Self::AgentRunning => f.write_str("Agent running"),
+            Self::ChatRunning => f.write_str("Chat running"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
             Self::AncestorCompleted { workspace } => {
                 write!(f, "{workspace} done; completion cleanup pending")
@@ -973,6 +979,8 @@ pub struct PortCatalog {
 pub struct DiffBase {
     pub workspace_id: String,
     pub commit: String,
+    /// The worktree, verified as the workspace's.
+    pub path: PathBuf,
 }
 
 /// Whether a workspace's committed HEAD merges cleanly into a target.
@@ -1268,8 +1276,8 @@ fn count_commits(count: u64) -> String {
     }
 }
 
-/// An agent the user talks with in a repository's registered checkout,
-/// outside any workspace, until it is removed.
+/// An agent the user talks with in a repository's registered checkout, or
+/// in a workspace's worktree without being its agent, until it is removed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Chat {
     pub id: String,
@@ -1277,6 +1285,10 @@ pub struct Chat {
     /// Unique among workspace names and the names of other chats.
     pub name: String,
     pub agent: String,
+    /// The workspace whose worktree it runs in; none for a chat in the
+    /// registered checkout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<WorkspaceRef>,
     pub pid: u32,
     pub started_at: i64,
     /// Where it runs in a terminal host, when it runs in one.
@@ -1308,6 +1320,38 @@ pub struct Chat {
     /// The spaces below it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<SpaceRef>,
+}
+
+/// Where a new chat runs: its repository's registered checkout, or the
+/// worktree of a workspace in it.
+#[derive(Debug, Clone, Copy)]
+pub enum ChatHome<'a> {
+    Checkout(&'a Repository),
+    Workspace(&'a Workspace),
+}
+
+impl<'a> ChatHome<'a> {
+    /// The directory the chat's agent runs in.
+    pub fn path(self) -> &'a std::path::Path {
+        match self {
+            Self::Checkout(repository) => &repository.path,
+            Self::Workspace(workspace) => &workspace.path,
+        }
+    }
+
+    pub fn repository_id(self) -> &'a str {
+        match self {
+            Self::Checkout(repository) => &repository.id,
+            Self::Workspace(workspace) => &workspace.repository_id,
+        }
+    }
+
+    pub fn workspace(self) -> Option<&'a Workspace> {
+        match self {
+            Self::Checkout(_) => None,
+            Self::Workspace(workspace) => Some(workspace),
+        }
+    }
 }
 
 /// A chat after a rename, with the name it had before.
@@ -1419,6 +1463,40 @@ impl Spaces {
             next += 1;
         }
         below
+    }
+
+    /// Every space a removal of the space `id` takes before it, nearest
+    /// first: the spaces below it, and the chats in the worktree of each
+    /// workspace among them and of `id` itself.
+    pub fn taken_with(&self, id: &str) -> Vec<SpaceRef> {
+        let first = |id: &str| -> Vec<SpaceRef> {
+            let mut resident: Vec<SpaceRef> = (self.chats.iter())
+                .filter(|chat| chat.workspace.as_ref().is_some_and(|w| w.id == id))
+                .map(|chat| SpaceRef {
+                    id: chat.id.clone(),
+                    name: chat.name.clone(),
+                    kind: SpaceKind::Chat,
+                    branch: None,
+                })
+                .collect();
+            resident.sort_by(|a, b| a.name.cmp(&b.name));
+            let workspace = self.workspaces.iter().find(|workspace| workspace.id == id);
+            let chat = self.chats.iter().find(|chat| chat.id == id);
+            resident.extend(
+                (workspace.map(|workspace| workspace.children.clone()))
+                    .or_else(|| chat.map(|chat| chat.children.clone()))
+                    .unwrap_or_default(),
+            );
+            resident
+        };
+        let mut taken = first(id);
+        let mut next = 0;
+        while let Some(space) = taken.get(next) {
+            let id = space.id.clone();
+            taken.extend(first(&id));
+            next += 1;
+        }
+        taken
     }
 }
 
@@ -1620,8 +1698,8 @@ pub struct QueuedPlan {
     pub plan: String,
 }
 
-/// The items a view selects and the worktree whose origin and forge login
-/// look them up. Lookups run in the CLI: discussion can exceed a protocol frame.
+/// The items a selection names and the worktree or checkout whose origin
+/// names their repository.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Selected {
     pub path: PathBuf,

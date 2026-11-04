@@ -47,9 +47,11 @@ pub enum AgentsCommand {
     },
     /// Start a new chat with an agent about a repository in its registered checkout.
     ///
-    /// Inside Herdr the chat opens in a focused tab; on a terminal it runs in
-    /// a zmx session. A Happy chat starts detached, to continue in the Happy
-    /// app. Chats are not tracked executions.
+    /// With --workspace the chat runs in a workspace's worktree instead, to
+    /// debug, audit or review its work without being its agent. Inside Herdr
+    /// the chat opens in a focused tab; on a terminal it runs in a zmx
+    /// session. A Happy chat starts detached, to continue in the Happy app.
+    /// Chats are not tracked executions.
     #[command(args_conflicts_with_subcommands = true)]
     Chat {
         #[command(subcommand)]
@@ -59,10 +61,15 @@ pub enum AgentsCommand {
         here: bool,
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
+        /// Run in this ready workspace's worktree; without a value, the
+        /// current workspace, else a picker.
+        #[arg(long, num_args = 0..=1, value_name = "WORKSPACE", conflicts_with = "repository")]
+        workspace: Option<Option<String>>,
         /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
-        /// Name of the chat; defaults to <repo>-chat, asked for on a terminal.
+        /// Name of the chat; defaults to <repo>-chat, or <workspace>-chat
+        /// with --workspace, asked for on a terminal.
         #[arg(long)]
         name: Option<String>,
         #[command(flatten)]

@@ -35,25 +35,36 @@ pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(String, Se
     Ok((space, selection))
 }
 
-/// The items selected in the named or current space, with the kind of a bare
-/// number resolved, or in the checkout of the registered repository `repo`
-/// names or the current directory or a URL is in, where only a number or URL
-/// selects one.
-pub(super) async fn select_in_context(
+/// The items selected in the named or current space, or in the checkout of
+/// the registered repository `repo` names or the current directory or a URL
+/// is in, where only a number or URL selects one. A bare number keeps no
+/// kind, which the daemon gives it as it reads.
+pub(super) async fn in_context(
     ctx: &Context,
     items: ItemArgs,
     repo: Option<String>,
 ) -> Result<(ItemContext, Selection)> {
     let selection = Selection::parse(items.kind_or_url, items.item)?;
     let input = selection.input.as_deref();
-    match super::items::select_space_item_context(ctx, items.space, repo, input).await? {
+    let context = super::items::select_space_item_context(ctx, items.space, repo, input).await?;
+    Ok((context, selection))
+}
+
+/// [`in_context`], with the kind of a bare number selected in a space
+/// resolved.
+pub(super) async fn select_in_context(
+    ctx: &Context,
+    items: ItemArgs,
+    repo: Option<String>,
+) -> Result<(ItemContext, Selection)> {
+    let (context, selection) = in_context(ctx, items, repo).await?;
+    let selection = match &context {
         ItemContext::Workspace(space) | ItemContext::Chat(space) => {
-            let resolved = resolve_kind(ctx, &space, selection).await?;
-            let context = super::items::space_context(ctx, space).await?;
-            Ok((context, resolved))
+            resolve_kind(ctx, space, selection).await?
         }
-        checkout => Ok((checkout, selection)),
-    }
+        ItemContext::Checkout(_) => selection,
+    };
+    Ok((context, selection))
 }
 
 /// The items `selection` names: in the workspace, where it may name linked

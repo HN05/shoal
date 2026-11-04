@@ -33,7 +33,9 @@ when behavior changes, distinguishing decisions from proposals.
   this machine, such as leases, `shoal run` and demos, or needs its own
   worktree or branch. A change that adds or extends such a feature implements
   it for chats too, through the same code path, or its PR says why it cannot
-  apply to them.
+  apply to them. A workspace has one editing agent, its own: a chat in its
+  worktree reads it as a chat, never as the workspace's agent or child, and
+  goes with it.
 - A space is a workspace or a chat. Flags, arguments, user-facing text and
   code call what applies to both a space (`--space`), and say workspace only
   for what needs a worktree. A command's flag becomes `--space` in the change
@@ -105,7 +107,8 @@ when behavior changes, distinguishing decisions from proposals.
   it, recursively; targets name one of them, and the agent's hooks report for
   its own. A chat's agent follows the workspace-agent rules below, without what
   needs a worktree; it opens workspaces only below its chat, in its repository,
-  and renames its own chat. Enforce own-worktree resource access
+  and renames its own chat. A chat in a workspace's worktree also reads that
+  workspace, with requests that only read state, and changes nothing there. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery other than splitting a child and removing one the user holds nothing below, and shared
   repository/service administration. For the workspaces below their own, scoped callers may hold them, queue
   agents and the restores of agents they or the workspaces below them stopped, which the daemon starts detached, cancel their queue
