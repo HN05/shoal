@@ -125,15 +125,19 @@ pub(super) async fn run(manager: Arc<Manager>) {
     let mut config = manager.config_state.watch();
     let mut reconciled: Option<Instant> = None;
     loop {
-        let changed = manager.runners.take_changed();
-        if changed || reconciled.is_none_or(|at| at.elapsed() >= INTERVAL) {
-            if let Err(error) = manager.reconcile_runners().await {
+        {
+            // A daemon update waits for the pass, as for any background operation.
+            let _operation = manager.gates.operation().await;
+            let changed = manager.runners.take_changed();
+            if changed || reconciled.is_none_or(|at| at.elapsed() >= INTERVAL) {
+                if let Err(error) = manager.reconcile_runners().await {
+                    log!("runner: {error:#}");
+                }
+                reconciled = Some(Instant::now());
+            }
+            if let Err(error) = pass(&manager).await {
                 log!("runner: {error:#}");
             }
-            reconciled = Some(Instant::now());
-        }
-        if let Err(error) = pass(&manager).await {
-            log!("runner: {error:#}");
         }
         tokio::select! {
             _ = config.changed() => {
@@ -155,7 +159,9 @@ async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
     for entry in manager.admitted_jobs().await? {
         if manager.runners.begin_claim(&entry.id) {
             let manager = manager.clone();
+            let operation = manager.gates.owned_operation().await;
             tokio::spawn(async move {
+                let _operation = operation;
                 manager.claim_job(&entry).await;
                 manager.runners.end_claim(&entry.id);
                 manager.agent_queue.wake();

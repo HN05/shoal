@@ -317,25 +317,100 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
 }
 
 #[tokio::test]
-async fn a_claimed_job_without_a_started_command_goes_after_a_restart() {
+async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "unused", "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    let (_, started) = LAUNCHED
+        .lock()
+        .unwrap()
+        .remove(&claimed[0].workspace_id)
+        .unwrap();
+    let forget_execution = || {
+        let id = claimed[0].id.clone();
+        manager.store.run(move |db| {
+            db.execute("UPDATE ci_jobs SET execution_id=NULL WHERE id=?1", [id])?;
+            Ok(())
+        })
+    };
+    // As if the daemon stopped after the command started but before its
+    // execution was recorded: the running command is kept.
+    forget_execution().await.unwrap();
+    manager.finish_ended_jobs().await.unwrap();
+    let kept = manager.claimed_jobs().await.unwrap();
+    assert_eq!(
+        kept[0].execution_id.as_deref(),
+        Some(started.plan.id.as_str())
+    );
+
+    // As if it stopped before the command started.
+    manager
+        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
+    forget_execution().await.unwrap();
+    manager.finish_ended_jobs().await.unwrap();
+    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.workspace(&claimed[0].workspace_id).await.is_err());
+}
+
+#[tokio::test]
+async fn a_jobs_directory_goes_however_its_workspace_went() {
     let fixture = fixture(vec![job("h1", 4, 1)], "unused", "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
-    let id = claimed[0].id.clone();
-    // As if the daemon stopped between the claim and the command's start.
+    let directory = manager.job_directory(&claimed[0].id);
+    assert!(directory.join("token").exists());
     manager
-        .store
-        .run(move |db| {
-            db.execute("UPDATE ci_jobs SET execution_id=NULL WHERE id=?1", [id])?;
-            Ok(())
-        })
+        .remove_job_workspace(&claimed[0].workspace_id)
         .await
         .unwrap();
     manager.finish_ended_jobs().await.unwrap();
+    assert!(!directory.exists());
+}
+
+#[tokio::test]
+async fn turning_the_runner_off_withdraws_its_jobs_without_claiming_them() {
+    let fixture = fixture(vec![job("h1", 4, 1), job("h2", 5, 1)], "unused", "").await;
+    let manager = &fixture.manager;
+    manager.refresh_waiting_jobs().await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    let admitted = manager.admitted_jobs().await.unwrap();
+    assert_eq!(admitted.len(), 2);
+    let id = fixture.repository.clone();
+    manager
+        .write_local_config(&id, Some("[runner]\nenabled = false\n".into()))
+        .await
+        .unwrap();
+
+    // An admitted job leaves the queue unclaimed, and the other with it.
+    manager.claim_job(&admitted[0]).await;
+    assert!(job_entries(manager).await.is_empty());
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
-    assert!(manager.workspace(&claimed[0].workspace_id).await.is_err());
+    let notifications = manager.notifications(false, 50).await.unwrap();
+    assert!(
+        notifications
+            .iter()
+            .all(|notification| notification.kind != NotificationKind::RunnerFailed),
+        "{notifications:?}"
+    );
+    // So do waiting ones once the runners are checked.
+    manager.refresh_waiting_jobs().await.unwrap();
+    manager
+        .write_local_config(&id, Some("[runner]\nenabled = true\n".into()))
+        .await
+        .unwrap();
+    manager.refresh_waiting_jobs().await.unwrap();
+    assert_eq!(job_entries(manager).await.len(), 2);
+    manager
+        .write_local_config(&id, Some("[runner]\nenabled = false\n".into()))
+        .await
+        .unwrap();
+    manager.reconcile_runners().await.unwrap();
+    assert!(job_entries(manager).await.is_empty());
 }
 
 #[tokio::test]

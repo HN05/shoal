@@ -3,7 +3,8 @@
 //! at the job's commit that starts from the seed and holds a permit from the
 //! repository's `runner.permit` pool when it names one. A PR's job whose PR
 //! moved to a newer head is passed over instead, as is one that cannot
-//! start, and either stays with the forge for other runners.
+//! start, and either stays with the forge for other runners, as do the jobs
+//! of a repository whose runner was turned off.
 use std::{io::Write as _, os::unix::fs::OpenOptionsExt as _, path::PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -33,6 +34,8 @@ enum Claim {
     Superseded,
     /// The permit pool is full, so the job waits again.
     PermitsBusy,
+    /// The repository's runner was turned off, so the job leaves the queue.
+    Withdrawn,
 }
 
 impl Manager {
@@ -53,6 +56,12 @@ impl Manager {
         let error = match result {
             Ok(Claim::Started) => return,
             Ok(Claim::Superseded) => None,
+            Ok(Claim::Withdrawn) => {
+                if let Err(error) = self.forget_job_entries(&entry.repository_id).await {
+                    crate::daemon::log!("runner: {error:#}");
+                }
+                return;
+            }
             Ok(Claim::PermitsBusy) => {
                 self.runners.found_permits_busy(&entry.repository_id);
                 if let Err(error) = self.return_job(&entry.id).await {
@@ -81,6 +90,9 @@ impl Manager {
     async fn try_claim_job(&self, entry: &QueueEntry) -> Result<Claim> {
         let job = entry.job.as_deref().context("the entry names no job")?;
         let settings = self.repository_settings(&entry.repository_id).await?;
+        if !settings.runner.enabled {
+            return Ok(Claim::Withdrawn);
+        }
         let registration = self
             .runner_registration(&entry.repository_id)
             .await?
@@ -207,7 +219,7 @@ impl Manager {
             .await
     }
 
-    async fn record_job_execution(&self, id: &str, execution: String) -> Result<()> {
+    pub(super) async fn record_job_execution(&self, id: &str, execution: String) -> Result<()> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -281,6 +293,21 @@ impl Manager {
         argv: Vec<std::ffi::OsString>,
     ) -> Result<String> {
         super::tests::launch(self, workspace, argv).await
+    }
+
+    /// Take `repository_id`'s jobs out of the queue, as once its runner is
+    /// turned off; the forge keeps them for other runners.
+    pub(crate) async fn forget_job_entries(&self, repository_id: &str) -> Result<()> {
+        let id = repository_id.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "DELETE FROM agent_queue WHERE repository_id=?1 AND kind=?2",
+                    params![id, QueueKind::Job],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     /// Put the admitted job `id` back in the queue, where it waits again.

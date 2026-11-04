@@ -31,6 +31,10 @@ impl Manager {
                 // A config that does not resolve leaves the runner as it is.
                 Err(_) => continue,
             };
+            if !enabled {
+                // Its waiting jobs stay with the forge for other runners.
+                self.forget_job_entries(&repository.id).await?;
+            }
             let registered = self.runner_registration(&repository.id).await?;
             let result = match (enabled, registered) {
                 (true, None) if self.runners.due(&repository.id) => {

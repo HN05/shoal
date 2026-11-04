@@ -1,6 +1,7 @@
 //! The end of a claimed job: once the execution running the forge's runner
 //! ends, however it ended, the job's workspace is removed whatever it holds,
-//! with its permit, and so is the runner's directory of the job. A job ends
+//! with its permit, and the runner's directory of a job no longer claimed,
+//! however its workspace went, is deleted. A job ends
 //! only on the forge's word: stopping it cancels its run there, which the
 //! forge's runner then stops.
 use std::time::Duration;
@@ -69,7 +70,8 @@ impl Manager {
         for job in self.claimed_jobs().await? {
             let running = match &job.execution_id {
                 Some(execution) => self.execution_recorded(execution).await?,
-                None => self.runners.claiming(&job.id),
+                None if self.runners.claiming(&job.id) => true,
+                None => self.adopt_job_execution(&job).await?,
             };
             if running {
                 continue;
@@ -87,11 +89,46 @@ impl Manager {
                 .await;
                 continue;
             }
-            match std::fs::remove_dir_all(self.job_directory(&job.id)) {
-                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                    crate::daemon::log!("runner: {error:#}");
-                }
-                _ => {}
+        }
+        self.remove_unclaimed_job_directories().await
+    }
+
+    /// Record the execution running in the workspace of `job`, whose claim
+    /// a restart cut short after its command started but before its
+    /// execution was recorded, returning whether there is one.
+    async fn adopt_job_execution(&self, job: &ClaimedJob) -> Result<bool> {
+        let executions = self.workspace_executions(&job.workspace_id).await?;
+        let Some(execution) = executions.into_iter().next() else {
+            return Ok(false);
+        };
+        self.record_job_execution(&job.id, execution.id).await?;
+        Ok(true)
+    }
+
+    /// Delete the runner's directory of each job no longer claimed, however
+    /// its workspace went; one that cannot be deleted is tried again on the
+    /// next pass.
+    async fn remove_unclaimed_job_directories(&self) -> Result<()> {
+        let parent = self.paths.state.join("runner");
+        let entries = match std::fs::read_dir(&parent) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        let claimed: Vec<String> = self
+            .claimed_jobs()
+            .await?
+            .into_iter()
+            .map(|job| job.id)
+            .collect();
+        for entry in entries {
+            let entry = entry?;
+            let id = entry.file_name().to_string_lossy().into_owned();
+            if claimed.contains(&id) || self.runners.claiming(&id) {
+                continue;
+            }
+            if let Err(error) = std::fs::remove_dir_all(entry.path()) {
+                crate::daemon::log!("runner: {}: {error:#}", entry.path().display());
             }
         }
         Ok(())
