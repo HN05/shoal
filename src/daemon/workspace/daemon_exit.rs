@@ -1,8 +1,13 @@
 //! What becomes of tracked work as the daemon exits: a restart or an update
 //! leaves it running, `shoal daemon stop` stops it as `shoal stop --all` does
-//! but leaves queued launches to the next daemon, and a signal stops it saved
-//! first, since it may come from a shutdown.
-use super::{Manager, shutdown_stop::Shutdown};
+//! but leaves queued launches to the next daemon and stops CI jobs' runners
+//! after cancelling their runs, and a signal stops it saved first, since it
+//! may come from a shutdown.
+use super::{
+    Manager,
+    executions::{Save, StopRequest},
+    shutdown_stop::Shutdown,
+};
 use crate::{
     protocol::{Exit, QueuedLaunches},
     state::ChatRestore,
@@ -56,8 +61,21 @@ impl Manager {
         let _shutdown_stop = self.shutdown_stopped.lock().await;
         tokio::join!(
             self.stop_every_target("before the Shoal daemon stopped", |workspace| async move {
-                self.stop_workspace_manually(&workspace, false, None, QueuedLaunches::Keep)
+                let stopped = self
+                    .stop_workspace_manually(&workspace, false, None, QueuedLaunches::Keep)
                     .await?;
+                // A CI job's runner ends once it sees its run cancelled, after
+                // the daemon has gone; stop it now, as removal does.
+                if stopped.cancelled_run.is_some() {
+                    self.stop_workspace(
+                        &workspace,
+                        StopRequest {
+                            reason: "the Shoal daemon stopped".into(),
+                            save: Save::Everything,
+                        },
+                    )
+                    .await?;
+                }
                 Ok(())
             }),
             self.save_chats(ChatRestore::Resume)

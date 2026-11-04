@@ -506,6 +506,106 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
 }
 
+/// The next message on `stream`, failing the test when none comes.
+async fn read<T: serde::de::DeserializeOwned>(
+    stream: &mut tokio::io::BufReader<tokio::net::UnixStream>,
+) -> T {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        crate::protocol::read_buffered(stream),
+    )
+    .await
+    .expect("the daemon sent nothing")
+    .unwrap()
+}
+
+#[tokio::test]
+async fn daemon_stop_cancels_a_jobs_run_and_stops_its_runner() {
+    use tokio::{io::BufReader, net::UnixStream};
+
+    use crate::{
+        daemon::execution_connection::{ExecutionContext, execute},
+        protocol::{self, Body, Control, ExecutionEvent, Response},
+    };
+
+    let fixture = fixture(vec![job("h3", 7, 3)], "unused", "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    let workspace = claimed[0].workspace_id.clone();
+    let (_, started) = LAUNCHED.lock().unwrap().remove(&workspace).unwrap();
+    // The runner as its wrapper runs it: connected to the daemon.
+    manager
+        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    let (client, server) = UnixStream::pair().unwrap();
+    let executing = tokio::spawn(execute(
+        server,
+        1,
+        manager.clone(),
+        ExecutionContext {
+            workspace: workspace.clone(),
+            wrapper: wrapper.clone(),
+            kind: ExecutionKind::Command,
+            agent: None,
+            recover: false,
+            reattach: false,
+            queue_entry: None,
+            demo: None,
+            origin: None,
+            merge: None,
+            caller: None,
+        },
+        manager.gates.owned_operation().await,
+    ));
+    let mut connection = BufReader::new(client);
+    let response: Response = read(&mut connection).await;
+    assert!(matches!(response.body, Body::Execution(_)));
+    let event = ExecutionEvent::Started {
+        child: None,
+        group_id: wrapper.pid,
+        restored: false,
+    };
+    protocol::write(connection.get_mut(), &event).await.unwrap();
+    let control: Control = read(&mut connection).await;
+    assert!(matches!(control, Control::Started));
+
+    let ending = tokio::spawn({
+        let manager = manager.clone();
+        async move {
+            manager
+                .end_work(crate::daemon::workspace::Ending::Stop)
+                .await
+        }
+    });
+    // The runner does not outlive the daemon waiting to see the cancellation.
+    let control: Control = read(&mut connection).await;
+    assert!(
+        matches!(
+            &control,
+            Control::Pause { reason: Some(reason), .. } if reason == "the Shoal daemon stopped"
+        ),
+        "{control:?}"
+    );
+    assert!(
+        fixture
+            .server
+            .received()
+            .iter()
+            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
+    );
+    let event = ExecutionEvent::Finished { exit_code: 143 };
+    protocol::write(connection.get_mut(), &event).await.unwrap();
+    let control: Control = read(&mut connection).await;
+    assert!(matches!(control, Control::Finished { .. }), "{control:?}");
+    executing.await.unwrap().unwrap();
+    ending.await.unwrap();
+}
+
 #[tokio::test]
 async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
     let fixture = fixture(vec![job("h1", 4, 1)], "unused", "").await;
