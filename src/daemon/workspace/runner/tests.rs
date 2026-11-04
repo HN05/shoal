@@ -467,7 +467,7 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
             .is_none()
     );
 
-    manager
+    let stopped = manager
         .stop_workspace_manually(
             &claimed[0].workspace_id,
             false,
@@ -476,6 +476,11 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
         )
         .await
         .unwrap();
+    assert!(
+        stopped
+            .cancelled_run
+            .is_some_and(|run| run.ends_with("/team/repo/actions/runs/3"))
+    );
     assert!(
         fixture
             .server
@@ -575,4 +580,25 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
         .unwrap();
     assert_eq!(leases.len(), 1);
     LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
+}
+
+#[tokio::test]
+async fn removing_a_running_jobs_workspace_cancels_its_run_first() {
+    let fixture = fixture(vec![job("h3", 7, 3)], "unused", "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
+    manager
+        .remove_job_workspace(&claimed[0].workspace_id)
+        .await
+        .unwrap();
+    assert!(
+        fixture
+            .server
+            .received()
+            .iter()
+            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
+    );
+    assert!(manager.claimed_jobs().await.unwrap().is_empty());
 }

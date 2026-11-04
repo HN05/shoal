@@ -562,6 +562,7 @@ response_bodies! {
     Hold(crate::model::WorkspaceHold),
     QueueAdmission(crate::model::QueueAdmission),
     QueueEntries(Vec<crate::model::QueueEntry>),
+    StoppedWorkspace(crate::model::StoppedWorkspace),
     RunningAgents(Vec<crate::model::RunningAgent>),
     OwnedPlaces(Vec<crate::model::OwnedPlace>),
     PlaceClose(crate::client::sessions::PlaceClose),

@@ -2931,7 +2931,10 @@ a daemon restart, a job whose runner is gone goes the same way and the forge
 times it out. Protection never stops a running job; the workflow's
 `timeout-minutes` bounds it. `shoal stop` on the job's workspace, and `shoal ci
 cancel`, cancel the job's run on the forge, which cancels each of its jobs; the
-forge's runner then stops the job and its workspace goes. A job that cannot
+forge's runner then stops the job and its workspace goes. `shoal stop` says
+which run it asked the forge to cancel (`cancelled_run` with `--json`), and
+`shoal rm` of a running job's workspace cancels the run before it stops the
+runner. A job that cannot
 start is passed over with a `runner_failed` notification.
 
 `shoal work` lists a running job's workspace below the workspace that links its

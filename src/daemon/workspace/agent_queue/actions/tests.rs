@@ -67,13 +67,17 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
         .stop_workspace_manually(&child.id, false, None, QueuedLaunches::Keep)
         .await
         .unwrap();
-    assert!(kept.is_empty());
+    assert!(kept.cancelled.is_empty());
     assert_eq!(waiting(&manager).await, ["child", "later"]);
     let cancelled = manager
         .stop_workspace_manually(&child.id, false, None, QueuedLaunches::Cancel)
         .await
         .unwrap();
-    let cancelled: Vec<_> = cancelled.into_iter().map(|entry| entry.id).collect();
+    let cancelled: Vec<_> = cancelled
+        .cancelled
+        .into_iter()
+        .map(|entry| entry.id)
+        .collect();
     assert_eq!(cancelled, [launch.id]);
     // A launch of a new workspace stays queued.
     assert_eq!(waiting(&manager).await, ["later"]);

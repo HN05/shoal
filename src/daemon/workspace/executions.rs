@@ -16,7 +16,8 @@ use crate::{
     fsutil::off_runtime,
     hooks::HookKind,
     model::{
-        Execution, ExecutionPlan, MergePlan, PortReservation, QueueEntry, Repository, Workspace,
+        Execution, ExecutionPlan, MergePlan, PortReservation, QueueEntry, Repository,
+        StoppedWorkspace, Workspace,
     },
     process::{
         execution::Processes,
@@ -994,9 +995,12 @@ impl Manager {
         acknowledge_unproven: bool,
         stopped_by: Option<&str>,
         launches: QueuedLaunches,
-    ) -> Result<Vec<QueueEntry>> {
-        if self.cancel_job_in(selector).await? {
-            return Ok(Vec::new());
+    ) -> Result<StoppedWorkspace> {
+        if let Some(run) = self.cancel_job_in(selector).await? {
+            return Ok(StoppedWorkspace {
+                cancelled: Vec::new(),
+                cancelled_run: Some(run),
+            });
         }
         let policy = if acknowledge_unproven {
             StopPolicy::Acknowledged
@@ -1007,14 +1011,19 @@ impl Manager {
             stopped_by,
             launches,
         };
-        self.stop_workspace_executions(
-            selector,
-            StopRequest::manual(),
-            Protected::Stop,
-            policy,
-            keep,
-        )
-        .await
+        let cancelled = self
+            .stop_workspace_executions(
+                selector,
+                StopRequest::manual(),
+                Protected::Stop,
+                policy,
+                keep,
+            )
+            .await?;
+        Ok(StoppedWorkspace {
+            cancelled,
+            cancelled_run: None,
+        })
     }
 
     /// Stop executions other than agents that protection already stopped,

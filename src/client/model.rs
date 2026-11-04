@@ -1539,6 +1539,17 @@ impl QueueEntry {
     }
 }
 
+/// What stopping a workspace did: the agent launches waiting to start in it
+/// that it removed from the queue, or for a CI job's workspace the run it
+/// asked the forge to cancel, whose runner then stops the job.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StoppedWorkspace {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cancelled: Vec<QueueEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancelled_run: Option<String>,
+}
+
 /// An entry `shoal queue move` placed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MovedEntry {

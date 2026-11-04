@@ -34,7 +34,7 @@ pub(super) async fn handle(
             launches,
         } => {
             let stopped_by = caller.map(|caller| caller.workspace_id.as_str());
-            Body::QueueEntries(
+            Body::StoppedWorkspace(
                 manager
                     .stop_workspace_manually(&workspace, acknowledge_unproven, stopped_by, launches)
                     .await?,

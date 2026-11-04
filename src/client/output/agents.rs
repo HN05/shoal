@@ -18,7 +18,8 @@ pub struct Agent {
 /// A stopped workspace's processes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceStopped {
-    /// Always true.
+    /// Whether its processes stopped; false for a CI job's workspace, whose
+    /// run the forge was asked to cancel instead.
     pub stopped: bool,
     /// Whether agents or commands wait for `shoal resume`.
     pub saved: bool,
@@ -28,6 +29,9 @@ pub struct WorkspaceStopped {
     /// the agent queue.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cancelled: Vec<QueueEntry>,
+    /// The run of the CI job in it the forge was asked to cancel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cancelled_run: Option<String>,
 }
 
 /// The workspaces whose agents and commands a stop stopped, by name.

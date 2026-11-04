@@ -1,7 +1,9 @@
 //! The end of a claimed job: once the execution running the forge's runner
 //! ends, however it ended, the job's workspace is removed whatever it holds,
 //! with its permit, and the runner's directory of a job no longer claimed,
-//! however its workspace went, is deleted. A job ends
+//! however its workspace went, is deleted. A job ends only on the forge's
+//! word: stopping it cancels its run there, as does removing its workspace
+//! while it runs. A job ends
 //! only on the forge's word: stopping it cancels its run there, which the
 //! forge's runner then stops.
 use std::time::Duration;
@@ -135,18 +137,59 @@ impl Manager {
     }
 
     /// Cancel on the forge the run of the job running in the workspace
-    /// `selector` names, returning whether the workspace runs one.
-    pub(crate) async fn cancel_job_in(&self, selector: &str) -> Result<bool> {
+    /// `selector` names, returning the run's URL, or `None` when the
+    /// workspace runs no job.
+    pub(crate) async fn cancel_job_in(&self, selector: &str) -> Result<Option<String>> {
         let workspace = self.workspace(selector).await?;
-        let Some(job) = self
+        let Some(job) = self.workspace_claim(&workspace.id).await? else {
+            return Ok(None);
+        };
+        self.cancel_job_run(&job).await?;
+        Ok(Some(job.job.run.url))
+    }
+
+    /// Cancel on the forge the run of a job still running in the workspace
+    /// `workspace_id` before its removal stops it; a forge that refuses is
+    /// told to the user, and the run times out there.
+    pub(crate) async fn cancel_job_before_removal(&self, workspace_id: &str) {
+        let running = match self.workspace_claim(workspace_id).await {
+            Ok(Some(job)) => match &job.execution_id {
+                Some(execution) => match self.execution_recorded(execution).await {
+                    Ok(true) => Some(job),
+                    _ => None,
+                },
+                None => None,
+            },
+            _ => None,
+        };
+        let Some(job) = running else {
+            return;
+        };
+        if let Err(error) = self.cancel_job_run(&job).await {
+            self.notify(
+                None,
+                NotificationKind::RunnerFailed,
+                format!(
+                    "Removing the workspace of CI job {} could not cancel {} on the forge, where it times out: {error:#}",
+                    job.job.job.name, job.job.run.url
+                ),
+            )
+            .await;
+        }
+    }
+
+    /// The job claimed in the workspace `workspace_id`, if any.
+    async fn workspace_claim(&self, workspace_id: &str) -> Result<Option<ClaimedJob>> {
+        Ok(self
             .claimed_jobs()
             .await?
             .into_iter()
-            .find(|job| job.workspace_id == workspace.id)
-        else {
-            return Ok(false);
-        };
-        // The run names its repository, also once the runner is gone.
+            .find(|job| job.workspace_id == workspace_id))
+    }
+
+    /// Cancel `job`'s run on the forge its URL names, also once its runner
+    /// is gone.
+    async fn cancel_job_run(&self, job: &ClaimedJob) -> Result<()> {
         let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
         let run = forge
@@ -155,7 +198,7 @@ impl Manager {
         forge
             .act_on_run(&account, &run, CiAction::Cancel, false)
             .await?;
-        Ok(true)
+        Ok(())
     }
 
     /// Whether the daemon still records the execution `id`, running or
