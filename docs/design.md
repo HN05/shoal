@@ -2314,9 +2314,10 @@ Issue linking and unlinking are own-workspace operations; associations are idemp
 and replacing one requires unlinking it first. Unlinking preserves recorded completion.
 Issue associations suppress idle cleanup, not merged cleanup.
 Item views let agents read issues and PRs without knowing the forge. The daemon
-selects linked or explicit items; the CLI looks them up with the user's forge
-login, because discussion can exceed a protocol frame: the forge's API with
-the host's token, or anonymously without one. Views automatically include the logs of
+selects linked or explicit items, gives a bare number the kind of the linked
+item or else the forge's, and reads them through the forge's API with the
+account a read uses, or anonymously without a token, sending a view whose
+discussion exceeds a protocol frame in pieces. Views automatically include the logs of
 failed CI jobs where the forge serves them, fetched by the daemon with the
 workspace's agent account and returned as bounded tails with the job's URL, so
 scoped callers never need forge credentials. Successful and pending checks omit

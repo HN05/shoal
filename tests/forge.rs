@@ -486,7 +486,7 @@ fn github_lists_assignable_users_and_an_organizations_teams_as_reviewers() {
 
 #[test]
 fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
-    use shoal::client::forge::items::link::{LinkKind, Selection};
+    use shoal::client::forge::items::link::{ItemKind, LinkKind, Selection};
     use shoal::client::{
         connection::{self, Connector},
         output::view::Shown,
@@ -528,6 +528,10 @@ fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
         ("GET orgs/team", json!({"username": "team"})),
         ("GET orgs/team/labels?limit=50&page=1", json!([])),
         ("GET repos/team/project/teams", json!([])),
+        (
+            "GET repos/team/project/issues/8",
+            json!({"number": 8, "pull_request": {}}),
+        ),
         (
             "GET repos/team/project/reviewers",
             json!([{"login": "kim", "full_name": "Kim Lee"}]),
@@ -606,6 +610,19 @@ fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
         );
         fixture.requests();
     }
+
+    // A number without a kind takes the one the forge reports for it.
+    let bare = Selection {
+        kind: None,
+        input: Some("8".into()),
+    };
+    let shown = runtime
+        .block_on(views::read(&app, workspace(), bare, false))
+        .unwrap();
+    assert!(
+        matches!(shown.as_slice(), [Shown::Item(view)] if view.kind == ItemKind::Pr && view.details.is_some()),
+    );
+    fixture.requests();
 
     // A workspace's agent reads as its agent account, and only from its
     // workspace.

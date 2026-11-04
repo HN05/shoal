@@ -1587,8 +1587,8 @@ pub struct QueuedPlan {
     pub plan: String,
 }
 
-/// The items a view selects and the worktree whose origin and forge login
-/// look them up. Lookups run in the CLI: discussion can exceed a protocol frame.
+/// The items a selection names and the worktree or checkout whose origin
+/// names their repository.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Selected {
     pub path: PathBuf,

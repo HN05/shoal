@@ -2,7 +2,7 @@
 //! reports them now, with the logs of failed checks.
 use anyhow::{Context, Result};
 
-use super::actions::NOTHING_LINKED;
+use super::{actions::NOTHING_LINKED, reads::ReadPlace, space::LinkSpace};
 use crate::{
     client::views::Viewed,
     daemon::workspace::Manager,
@@ -13,7 +13,7 @@ use crate::{
         items::link::{ItemKind, LinkKind, Selection},
         review::view::ItemView,
     },
-    model::{Repository, SelectedItem},
+    model::{Repository, Selected, SelectedItem},
     protocol::ItemContext,
 };
 
@@ -29,7 +29,8 @@ impl Manager {
         scoped: bool,
     ) -> Result<Viewed> {
         let account = self.read_account(scoped);
-        let items = self.view_selection(context, selection, &account).await?;
+        let place = self.read_place(context).await?;
+        let items = self.view_selection(&place, selection, &account).await?;
         // Nothing to read, so no forge is needed, as for a local repository.
         if !items.iter().any(|item| item.kind.item().is_some()) {
             return Ok(Viewed {
@@ -37,7 +38,7 @@ impl Manager {
                 views: Vec::new(),
             });
         }
-        let own = self.context_forge(context).await?;
+        let own = self.read_place_forge(&place).await?;
         let mut views = self.read_views(&own, &account, &items, comments).await;
         self.read_failed_logs(context, &own, &mut views).await;
         Ok(Viewed { items, views })
@@ -48,20 +49,62 @@ impl Manager {
     /// or CI run URL of another repository selects that item.
     async fn view_selection(
         &self,
-        context: &ItemContext,
+        place: &ReadPlace,
         selection: &Selection,
         account: &Account,
     ) -> Result<Vec<SelectedItem>> {
-        match context {
-            ItemContext::Workspace(space) | ItemContext::Chat(space) => {
-                Ok(self.select_items(space, selection, true).await?.items)
+        match place {
+            ReadPlace::Space(space) => {
+                let selection = self.classify_number(space, selection, account).await?;
+                Ok(self.select_items(space.id(), &selection, true).await?.items)
             }
-            ItemContext::Checkout(_) => {
-                let checkout = self.context_checkout(context).await?;
-                let item = self.checkout_item(&checkout, selection, account).await?;
+            ReadPlace::Checkout(checkout) => {
+                let item = self.checkout_item(checkout, selection, account).await?;
                 Ok(vec![item])
             }
         }
+    }
+
+    /// `selection` with the kind of a number selected without one: the kind
+    /// of the item with that number linked to the space under any relation,
+    /// otherwise the kind the forge reports for it.
+    async fn classify_number(
+        &self,
+        space: &LinkSpace,
+        selection: &Selection,
+        account: &Account,
+    ) -> Result<Selection> {
+        let (None, Some(input)) = (selection.kind, &selection.input) else {
+            return Ok(selection.clone());
+        };
+        let Ok(number) = input.parse::<u64>() else {
+            return Ok(selection.clone());
+        };
+        let linked = Selected {
+            path: space.origin_path().to_owned(),
+            items: (space.links().items().into_iter())
+                .map(|item| SelectedItem {
+                    url: item.url,
+                    kind: item.kind,
+                })
+                .collect(),
+        };
+        // A number names an item of the space's repository; issues opened
+        // in another one share its numbers.
+        let remote = crate::repository::remote_url_from_path(space.origin_path())
+            .await?
+            .context("item lookup needs an origin remote")?;
+        let kind = match linked.kind_of(&remote, number)? {
+            Some(kind) => kind,
+            None => (self.space_forge(space).await?)
+                .item_kind(account, number)
+                .await?
+                .into(),
+        };
+        Ok(Selection {
+            kind: Some(kind),
+            input: selection.input.clone(),
+        })
     }
 
     /// The item `selection` names in the repository of the registered

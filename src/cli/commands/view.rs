@@ -54,10 +54,11 @@ async fn view(
 ) -> Result<i32> {
     // Plain `shoal view` in a workspace adds its latest review.
     let plain = items.kind_or_url.is_none();
-    let (context, selection) = links::select_in_context(ctx, items, repo).await?;
     if let Some(check) = check {
+        let (context, selection) = links::select_in_context(ctx, items, repo).await?;
         return show_log(ctx, context, selection, check).await;
     }
+    let (context, selection) = links::in_context(ctx, items, repo).await?;
     let read = views::read(&ctx.paths, context.clone(), selection, !no_comments);
     let mut views = ctx.progress("Reading items", read).await?;
     if plain && let ItemContext::Workspace(workspace) = &context {
