@@ -35,10 +35,8 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Entries, KeyBindings, PickerView, ViewPicker, WidthLimit},
     },
-    daemon::{
-        notifications::Notification,
-        refusal::{Reason, Refusal},
-    },
+    client::notifications::Notification,
+    daemon::refusal::{Reason, Refusal},
     env,
     forge::items::link,
     model::{LinkedItem, PresentSpace},

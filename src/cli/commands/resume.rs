@@ -8,9 +8,9 @@ use crate::{
     cli::{
         args::SpaceTargets, client, commands::turns::Continuation, context::Context, terminal, ui,
     },
-    daemon::{
+    client::{
+        executions::Discarded,
         recovery::{ReconcileOptions, Report},
-        workspace::Discarded,
     },
     execution::recovery::{
         LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,

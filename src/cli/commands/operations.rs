@@ -9,8 +9,8 @@ use tokio::signal::unix::{SignalKind, signal};
 
 use crate::{
     cli::{client, context::Context},
+    client::approvals::Undecided,
     client::operations::{Followed, Following},
-    daemon::approvals::Undecided,
     execution::SetupVerificationFailure,
     protocol::{
         OperationMethod, RemoteError,

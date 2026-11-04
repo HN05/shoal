@@ -15,7 +15,7 @@ use crate::{
         ui::{self, Cell, Entries, Fallback, WidthLimit},
     },
     client::item_numbers::ItemNumber,
-    daemon::questions::{Ask, Listing, Question},
+    client::questions::{Ask, Listing, Question},
     protocol::{AgentMethod, QuestionMethod},
 };
 

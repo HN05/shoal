@@ -11,10 +11,9 @@ use crate::{
         context::Context,
         ui,
     },
-    client::links::BranchPush,
-    daemon::{
+    client::{
         approvals::Target,
-        links::proposals::{OpenOutcome, Proposed},
+        links::{BranchPush, OpenOutcome, Proposed},
     },
     forge::items::{
         create::{NewIssue, PullOptions},

@@ -10,7 +10,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    daemon::ports::PortRequest,
+    model::PortRequest,
     model::{PortCatalog, PortOverview, PortReservation},
     protocol::{Body, PortMethod},
 };

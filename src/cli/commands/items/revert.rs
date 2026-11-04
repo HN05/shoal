@@ -16,7 +16,7 @@ use crate::{
         context::Context,
         ui,
     },
-    daemon::links::proposals::OpenOutcome,
+    client::links::OpenOutcome,
     execution,
     forge::{
         capability::Capability,

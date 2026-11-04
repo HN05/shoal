@@ -47,7 +47,7 @@ pub(in crate::cli::commands) struct Done {
     pub keep_demos: bool,
     /// The files to hand back, checked before anything is picked or
     /// stopped.
-    pub results: Vec<crate::daemon::workspace_files::NewFile>,
+    pub results: Vec<crate::client::files::NewFile>,
 }
 
 /// Stop the workspace's demos unless `keep_demos`, then record completion;

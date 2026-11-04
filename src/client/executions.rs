@@ -1,7 +1,7 @@
 //! Tracked executions: what they run, where their executable came from, the
 //! agents Shoal stopped or that exited with a session to resume, and the
 //! retries of their failed turns.
-use std::{collections::BTreeMap, fs, io, path::Path};
+use std::{collections::BTreeMap, fs, io, path::Path, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +26,9 @@ states!(
         Setup => "setup",
     }
 );
+
+/// The least time between dynamic starts, so their first reads do not collide.
+pub const STAGGER: Duration = Duration::from_secs(10);
 
 /// What tells a file at a path apart from its replacement. It follows
 /// symlinks, so retargeting a link, renaming another file over it or rewriting

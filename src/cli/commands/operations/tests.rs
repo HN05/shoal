@@ -1,6 +1,6 @@
 use super::{Failed, error, failure};
 use crate::{
-    daemon::approvals::Undecided,
+    client::approvals::Undecided,
     execution::SetupVerificationFailure,
     protocol::{ErrorCode, RemoteError, operations::Failure},
 };

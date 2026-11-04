@@ -20,9 +20,6 @@ use crate::{
 /// workspaces handed back, which no workspace ID names.
 const RESULTS: &str = "results";
 
-/// The largest file a message may attach.
-pub(crate) const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
-
 /// The directory of one repository's attached files.
 #[derive(Debug, Clone)]
 pub(crate) struct Layout {
@@ -80,7 +77,7 @@ impl Layout {
         files: &[NewFile],
     ) -> Result<Kept> {
         for file in files {
-            check(&file.path)?;
+            super::check_path(&file.path)?;
             file.check()?;
         }
         create_marked_dir(&self.root, &self.owner)
@@ -299,21 +296,6 @@ impl Kept {
             _ => Ok(()),
         }
     }
-}
-
-/// Refuse what a message cannot attach: a relative path, something other
-/// than a file, or a file over [`MAX_FILE_BYTES`].
-pub(crate) fn check(path: &Path) -> Result<()> {
-    let shown = path.display();
-    ensure!(path.is_absolute(), "{shown}: give an absolute path");
-    let metadata = std::fs::metadata(path).with_context(|| format!("read {shown}"))?;
-    ensure!(metadata.is_file(), "{shown} is not a file");
-    ensure!(
-        metadata.len() <= MAX_FILE_BYTES,
-        "{shown}: attached files must be at most {} MiB",
-        MAX_FILE_BYTES / 1024 / 1024
-    );
-    Ok(())
 }
 
 /// The entries of `directory`, none when it does not exist.

@@ -10,10 +10,8 @@ use std::{
 use crate::client::output::error::{CommandError, ErrorDetail};
 use crate::{
     cli::commands::operations::Failed,
-    daemon::{
-        approvals::{DecisionStatus, Undecided},
-        refusal::Reason,
-    },
+    client::approvals::{DecisionStatus, Undecided},
+    daemon::refusal::Reason,
     execution::SetupVerificationFailure,
     forge::review::status::ReviewState,
     protocol::{ErrorCode, RemoteError},

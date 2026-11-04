@@ -18,7 +18,7 @@ use crate::{
         output::{self, Palette, Style},
         ui::{self, Cell, WidthLimit},
     },
-    daemon::{
+    client::{
         approvals::{ApprovalRequest, DecisionStatus},
         questions::{Listing, Question},
     },

@@ -8,7 +8,7 @@ use super::{EXIT_BUSY, approvals};
 use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{context::Context, output::Style},
-    daemon::approvals::{ApprovalRequest, DecisionStatus},
+    client::approvals::{ApprovalRequest, DecisionStatus},
     protocol::Body,
 };
 

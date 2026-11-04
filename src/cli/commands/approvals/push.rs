@@ -9,7 +9,7 @@ use crate::{
         commands::operations::{Failed, Reporter},
         context::Context,
     },
-    daemon::approvals::{ApprovalRequest, PushSpecification},
+    client::approvals::{ApprovalRequest, PushSpecification},
     git,
     protocol::{
         ApprovalMethod,

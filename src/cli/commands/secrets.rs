@@ -10,7 +10,7 @@ use crate::{
         context::Context,
         output::{Palette, Style},
     },
-    daemon::secrets::{SecretCatalog, SecretGrant, SecretRequest},
+    client::secrets::{SecretCatalog, SecretGrant, SecretRequest},
     protocol::SecretMethod,
 };
 

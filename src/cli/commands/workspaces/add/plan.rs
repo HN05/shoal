@@ -106,7 +106,7 @@ pub(super) async fn planned_workspace_name(
         },
         (None, None) => String::new(),
     };
-    Ok(crate::daemon::workspace::derive_workspace_name(&branch))
+    Ok(crate::validate::derive_workspace_name(&branch))
 }
 
 /// The queue request of `agent`'s launch in `workspace` with `prompt` as its

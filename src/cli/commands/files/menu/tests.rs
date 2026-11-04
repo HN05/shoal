@@ -25,7 +25,7 @@ fn each_file_is_a_row_by_its_record_before_the_add_row() {
         id: 7,
         workspace: Some("audit".into()),
         chat: None,
-        source: crate::daemon::workspace_files::FileSource::Result,
+        source: crate::client::files::FileSource::Result,
         name: "report.md".into(),
         title: Some("Audit findings".into()),
         path: "/repo/.attachments/results/id/key/0/report.md".into(),

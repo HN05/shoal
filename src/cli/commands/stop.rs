@@ -18,7 +18,7 @@ use crate::{
         output::Style,
         ui,
     },
-    daemon::space_processes::{Selection, Stopped},
+    client::processes::{Selection, Stopped},
     execution::recovery,
     model::{SpaceKind, StoppedWorkspace, Workspace},
     protocol::{ErrorCode, QueuedLaunches, RemoteError, RemovalMethod},

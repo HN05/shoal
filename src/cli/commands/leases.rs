@@ -16,12 +16,11 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    daemon::{
+    client::{
         approvals::{ApprovalRequest, Specification, Target},
-        ports::PortRequest,
         resources::{LockMode, ResourceKind, ResourceRequest},
     },
-    model::{Inspection, PortOverview},
+    model::{Inspection, PortOverview, PortRequest},
     protocol::{
         ApprovalMethod, Method, PortMethod, ResourceMethod, SecretMethod, SimulatorMethod,
         WorkspaceMethod,

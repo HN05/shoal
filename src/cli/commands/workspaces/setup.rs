@@ -12,7 +12,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    daemon::recovery::ReconcileOptions,
+    client::recovery::ReconcileOptions,
     env, execution, git,
     model::Workspace,
     protocol::{

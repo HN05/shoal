@@ -20,7 +20,7 @@ pub mod proposals;
 pub(crate) use crate::client::approvals::{
     ApprovalRequest, DecisionStatus, HoldSpecification, Lifetime, MERGE, MergeSpecification,
     PortSpecification, PushSpecification, ResourceSpecification, SecretSpecification,
-    SimulatorSpecification, Specification, Target,
+    SimulatorSpecification, Specification, Target, Undecided,
 };
 
 impl Target {
@@ -504,24 +504,6 @@ pub fn request_merge(
     }
     check(tx, request)
 }
-
-/// An operation waiting for, or refused by, the user's decision on a request.
-#[derive(Debug)]
-pub struct Undecided(pub Box<ApprovalRequest>);
-
-impl fmt::Display for Undecided {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "approval {} for {} is {}",
-            self.0.number,
-            self.0.subject(),
-            self.0.status
-        )
-    }
-}
-
-impl std::error::Error for Undecided {}
 
 /// A decided request; `new` is false when the decision repeats the recorded one.
 pub struct Decision {

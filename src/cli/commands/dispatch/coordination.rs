@@ -33,7 +33,7 @@ pub(in crate::cli::commands) async fn run(
                 return questions::ask_in_chat(&ctx, space).await;
             }
             // Clap requires the question and recommendation without --in-chat.
-            let ask = crate::daemon::questions::Ask {
+            let ask = crate::client::questions::Ask {
                 question: question.unwrap_or_default(),
                 recommendation: recommend.unwrap_or_default(),
                 reason,
@@ -133,7 +133,7 @@ pub(in crate::cli::commands) async fn run(
                     keep_demos,
                     results: {
                         let results = messages::attachments(&attach)?;
-                        crate::daemon::workspace_files::check_results(&results)?;
+                        crate::client::files::check_results(&results)?;
                         results
                     },
                 };

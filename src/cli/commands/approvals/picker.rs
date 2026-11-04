@@ -12,7 +12,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Entries, WidthLimit},
     },
-    daemon::approvals::{ApprovalRequest, DecisionStatus, proposals::ProposalDecision},
+    client::approvals::{ApprovalRequest, DecisionStatus, ProposalDecision},
     protocol::ApprovalMethod,
 };
 

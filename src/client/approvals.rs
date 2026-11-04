@@ -532,3 +532,21 @@ impl ApprovalRequest {
         }
     }
 }
+
+/// An operation waiting for, or refused by, the user's decision on a request.
+#[derive(Debug)]
+pub struct Undecided(pub Box<ApprovalRequest>);
+
+impl fmt::Display for Undecided {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "approval {} for {} is {}",
+            self.0.number,
+            self.0.subject(),
+            self.0.status
+        )
+    }
+}
+
+impl std::error::Error for Undecided {}

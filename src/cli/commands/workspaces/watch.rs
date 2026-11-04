@@ -29,7 +29,7 @@ pub(in crate::cli::commands) async fn watch_items(
         .map_err(|error| {
             executable.resume_or(error, || resume_watch_arguments(&workspace, deadline))
         })?;
-    let updates = crate::daemon::links::wait::Updates::try_from(body)?;
+    let updates = crate::client::links::Updates::try_from(body)?;
     ctx.show(&updates, |updates| {
         for message in &updates.messages {
             outln!(
@@ -90,7 +90,7 @@ async fn wait_for_items(
     };
     match tokio::time::timeout_at(deadline, reply).await {
         Ok(reply) => reply,
-        Err(_) => Ok(Body::PrUpdates(crate::daemon::links::wait::Updates {
+        Err(_) => Ok(Body::PrUpdates(crate::client::links::Updates {
             updates: Vec::new(),
             messages: Vec::new(),
             leftovers: Vec::new(),

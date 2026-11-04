@@ -18,11 +18,10 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Cell},
     },
-    client::item_numbers::ItemNumber,
-    daemon::approvals::{
-        ApprovalRequest, DecisionStatus, Specification,
-        proposals::{Duplicate, ProposalDecision},
+    client::approvals::{
+        ApprovalRequest, DecisionStatus, Duplicate, ProposalDecision, Specification,
     },
+    client::item_numbers::ItemNumber,
     protocol::ApprovalMethod,
 };
 

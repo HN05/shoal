@@ -11,7 +11,7 @@ use crate::{
         output::Palette,
         ui::{self, KeyBindings, WidthLimit},
     },
-    daemon::workspace_files::AttachedFile,
+    client::files::AttachedFile,
 };
 
 const ADD_ENTRY: &str = "add-file";

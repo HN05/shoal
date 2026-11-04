@@ -7,12 +7,11 @@
 //! limits apply the same free disk space rule.
 use std::{path::Path, time::Duration};
 
+pub(crate) use crate::client::executions::STAGGER;
 use crate::{config::overload::Overload, fsutil, process::load};
 
 /// How long a new agent counts at a settled agent's load instead of its own.
 pub(crate) const WARM_UP: Duration = Duration::from_secs(3 * 60);
-/// The least time between dynamic starts, so their first reads do not collide.
-pub(crate) const STAGGER: Duration = Duration::from_secs(10);
 /// The window current load is averaged over.
 pub(crate) const RECENT: Duration = Duration::from_secs(60);
 /// The window a settled agent's load is learned over.

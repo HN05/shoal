@@ -11,7 +11,7 @@ use crate::client::output::agents::Restarted;
 use crate::{
     agent::Agent,
     cli::{args::WorkspaceTargets, client::request, context::Context},
-    daemon::workspace::capacity::STAGGER,
+    client::executions::STAGGER,
     execution::recovery,
     model::RunningAgent,
     protocol::{ErrorCode, ExecutionMethod, RemoteError},

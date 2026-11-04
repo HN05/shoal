@@ -1,7 +1,7 @@
 //! Files attached to a workspace or chat: Shoal's copies and how they came.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::state::states;
@@ -50,6 +50,24 @@ pub enum Attacher {
         /// The chat's ID.
         chat: String,
     },
+}
+
+/// The largest file a message may attach.
+pub const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
+
+/// Refuse what a message cannot attach: a relative path, something other
+/// than a file, or a file over [`MAX_FILE_BYTES`].
+pub fn check_path(path: &Path) -> Result<()> {
+    let shown = path.display();
+    ensure!(path.is_absolute(), "{shown}: give an absolute path");
+    let metadata = std::fs::metadata(path).with_context(|| format!("read {shown}"))?;
+    ensure!(metadata.is_file(), "{shown} is not a file");
+    ensure!(
+        metadata.len() <= MAX_FILE_BYTES,
+        "{shown}: attached files must be at most {} MiB",
+        MAX_FILE_BYTES / 1024 / 1024
+    );
+    Ok(())
 }
 
 /// The most files one completion hands back, which keeps the completion that

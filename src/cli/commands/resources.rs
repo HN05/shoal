@@ -14,7 +14,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    daemon::resources::{
+    client::resources::{
         Catalog, Overview, ResourceKind, ResourceLease, ResourceRequest, WorkspaceOverview,
     },
     protocol::ResourceMethod,

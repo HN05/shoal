@@ -18,7 +18,7 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
-    daemon::{agent_messages::AgentMessage, links::wait::Updates, workspace_files::NewFile},
+    client::{agent_messages::AgentMessage, files::NewFile, links::Updates},
     forge::items::attach::Attachment,
     protocol::{AgentMethod, QuestionMethod},
     repository::Selector,
@@ -127,7 +127,7 @@ pub(super) fn attachments(args: &[String]) -> Result<Vec<NewFile>> {
             let given = Attachment::parse(arg, Path::new(""));
             let path = std::path::absolute(&given.path)
                 .with_context(|| format!("read {}", given.path.display()))?;
-            crate::daemon::workspace_files::layout::check(&path)?;
+            crate::client::files::check_path(&path)?;
             let file = NewFile {
                 path,
                 title: given.alt,

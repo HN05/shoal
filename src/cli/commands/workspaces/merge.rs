@@ -14,7 +14,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    daemon::approvals::Undecided,
+    client::approvals::Undecided,
     env,
     execution::{self, MergeResult},
     model::{MergeConfirmation, MergeOptions, MergePlan, MergePreview, MergedBranch},

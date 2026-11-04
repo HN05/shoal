@@ -30,7 +30,7 @@ pub(super) async fn link_or_warn(ctx: &Context, id: &str, url: &str) -> bool {
         &ctx.paths,
         ItemMethod::SetPr {
             space: id.to_owned(),
-            action: crate::daemon::links::pr::Action::Watch {
+            action: crate::client::links::pr::Action::Watch {
                 url: url.to_owned(),
             },
         },

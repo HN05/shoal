@@ -152,7 +152,7 @@ pub enum AcquireKind {
         member: Option<String>,
         /// Lock mode (defaults to permit for semaphores, write for rwlocks).
         #[arg(long, value_enum)]
-        mode: Option<crate::daemon::resources::LockMode>,
+        mode: Option<crate::client::resources::LockMode>,
         #[command(flatten)]
         lease: LeaseOptions,
     },

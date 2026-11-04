@@ -8,7 +8,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    daemon::links::pr::RegistrationKind,
+    client::links::pr::RegistrationKind,
     forge::review::status::PrStatus,
     model::{Chat, SpaceDetail, SpaceStatus, WorktreeStatus},
 };
@@ -435,7 +435,7 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
 }
 
 /// A request the agent's proxy waits to retry as `status` shows it.
-fn proxy_retry_label(retry: &crate::daemon::workspace::proxy_retries::ProxyRetry) -> String {
+fn proxy_retry_label(retry: &crate::client::executions::ProxyRetry) -> String {
     let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
     format!(
         "{} (attempt {} failed), next attempt in {}s",
@@ -458,7 +458,7 @@ fn prompt_cache_label(expires_at: i64) -> String {
 }
 
 /// A pending retry of the agent's failed turn as `status` shows it.
-fn turn_retry_label(retry: &crate::daemon::workspace::turn_retry::TurnRetry) -> String {
+fn turn_retry_label(retry: &crate::client::executions::TurnRetry) -> String {
     let (failure, attempt) = (retry.failure.describe(), retry.attempt);
     if retry.delivered {
         format!("{failure} (attempt {attempt}), agent asked to continue")

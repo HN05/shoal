@@ -11,7 +11,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    daemon::workspace_files::{AttachedFile, FileSource},
+    client::files::{AttachedFile, FileSource},
     protocol::FileMethod,
 };
 
@@ -128,7 +128,7 @@ async fn check_selected(ctx: &Context, space: &str, names: &[String], ids: &[i64
         space: space.to_owned(),
     };
     let files = client::pages::<AttachedFile>(&ctx.paths, method).await?;
-    let missing = crate::daemon::workspace_files::missing_selection(&files, names, ids);
+    let missing = crate::client::files::missing_selection(&files, names, ids);
     ensure!(
         missing.is_empty(),
         "no attached file {}",

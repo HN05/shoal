@@ -3,7 +3,7 @@ use anyhow::Result;
 
 use crate::{
     cli::{client::request, context::Context},
-    daemon::recovery::{ReconcileOptions, Report},
+    client::recovery::{ReconcileOptions, Report},
     model::Workspace,
     protocol::RecoveryMethod,
 };

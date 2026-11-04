@@ -6,7 +6,7 @@ use crate::{
         commands::{cleanup, stop, transfer, turns, workspaces},
         context::Context,
     },
-    daemon::space_processes::Selection,
+    client::processes::Selection,
 };
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: LifecycleCommand) -> Result<i32> {

@@ -31,12 +31,12 @@ fn a_question_notes_its_recommendation_and_files() {
         title: None,
         path: format!("/files/{name}").into(),
     };
-    let question = crate::daemon::questions::Question {
+    let question = crate::client::questions::Question {
         number: crate::client::item_numbers::ItemNumber { space: 2, item: 3 },
         space_id: "w1".into(),
         space: "cache".into(),
         created_at: 0,
-        ask: crate::daemon::questions::Ask {
+        ask: crate::client::questions::Ask {
             question: "Which layout?".into(),
             recommendation: "A".into(),
             reason: None,

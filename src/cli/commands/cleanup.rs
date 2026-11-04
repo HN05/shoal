@@ -10,10 +10,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    daemon::{
-        caches::Emptying,
-        cleanup::{ManualCleanup, Pick, Selection},
-    },
+    client::cleanup::{Emptying, ManualCleanup, Pick, Selection},
     model::KeptBranch,
     protocol::RemovalMethod,
 };

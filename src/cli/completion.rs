@@ -19,13 +19,13 @@ use crate::{
         client, terminal, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
+    client::{approvals::ApprovalRequest, questions::Listing, resources::Overview},
     config::{
         Config,
         named_commands::{self, Commands},
         repo::ConfigLayers,
         resolve::Stack,
     },
-    daemon::{approvals::ApprovalRequest, questions::Listing, resources::Overview},
     env,
     model::{Chat, PortCatalog, PortOverview, Workspace},
     paths::Paths,
@@ -448,7 +448,7 @@ impl Typed {
             .await?;
             return Ok(requests
                 .iter()
-                .filter(|r| r.status == crate::daemon::approvals::DecisionStatus::Pending)
+                .filter(|r| r.status == crate::client::approvals::DecisionStatus::Pending)
                 .map(|r| {
                     CompletionCandidate::new(r.number.to_string())
                         .help(Some(super::commands::approval_summary(r).into()))

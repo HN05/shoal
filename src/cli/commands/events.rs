@@ -5,7 +5,7 @@ use crate::{
         context::Context,
         installed::{Executable, arguments_with},
     },
-    daemon::events::EventItem,
+    client::events::EventItem,
     protocol::{self, Body, Response, WorkspaceMethod},
 };
 use anyhow::{Context as _, Result};

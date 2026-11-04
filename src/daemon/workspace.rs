@@ -65,7 +65,8 @@ pub(crate) use holds::place_approved as place_approved_hold;
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use restore::removal_notice;
 pub(crate) use stack::record_base_changed;
-pub use stopped_work::Discarded;
+
+pub(crate) use crate::validate::derive_workspace_name;
 pub(crate) use tree::{
     Source, TrackedAgents, children, deciders, delegated, ensure_parent, parent, receiving_paths,
     set_parent, spaces_above,
@@ -1027,26 +1028,6 @@ impl Manager {
     pub(crate) async fn forget_workspace(&self, id: &str) {
         self.usage.forget_workspace(id);
         self.executions.forget_workspace(id).await;
-    }
-}
-
-/// Keep directory/selector names portable without restricting Git branch syntax.
-pub(crate) fn derive_workspace_name(branch: &str) -> String {
-    let name: String = branch
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    let name = name.trim_start_matches(['-', '_']);
-    if name.is_empty() {
-        "workspace".into()
-    } else {
-        name.chars().take(crate::validate::MAX_NAME_LEN).collect()
     }
 }
 

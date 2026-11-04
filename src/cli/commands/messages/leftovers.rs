@@ -1,6 +1,6 @@
 //! How an agent hook tells the agent about the leftovers of its workspace or
 //! chat, processes its commands left running, and how to stop them.
-use crate::daemon::leftovers::Leftover;
+use crate::client::processes::Leftover;
 
 /// The longest command a notice shows of a leftover.
 const COMMAND_LIMIT: usize = 80;

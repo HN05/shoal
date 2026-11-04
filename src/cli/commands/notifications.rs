@@ -15,7 +15,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    daemon::notifications::{Cleared, Notification, Sent},
+    client::notifications::{Cleared, Notification, Sent},
     protocol::{self, NotificationMethod, Response},
 };
 
