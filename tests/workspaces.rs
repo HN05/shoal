@@ -26608,12 +26608,17 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let output = fixture.run(&["claude", "persist"]);
     assert!(output.status.success(), "{output:?}");
-    let calls = zmx_calls(&fixture);
-    // The execution tells its session apart from a later one under the name.
-    assert_eq!(calls.len(), before + 2, "{calls:?}");
-    assert_eq!(calls[before][..2], ["set", "outer"]);
-    assert!(calls[before].contains(&format!("shoal.workspace={id}")));
-    assert_eq!(calls[before + 1], ["list"]);
+    // Watching sessions lists them on its own schedule, so only the other
+    // calls are counted. The execution tells its session apart from a later
+    // one under the name, and neither run opens a session.
+    let calls: Vec<_> = zmx_calls(&fixture)
+        .split_off(before)
+        .into_iter()
+        .filter(|call| call[0] != "list")
+        .collect();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert_eq!(calls[0][..2], ["set", "outer"]);
+    assert!(calls[0].contains(&labels), "{calls:?}");
     assert_eq!(
         runs(),
         "persist tracked\npersist-2 tracked\nouter tracked\nnone tracked\n"
