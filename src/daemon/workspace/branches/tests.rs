@@ -2216,6 +2216,9 @@ async fn adoption_replaces_markers_of_forgotten_workspaces_only() {
         .await
         .unwrap();
     assert_eq!(fs::read_to_string(&marker).unwrap(), format!("{}\n", w.id));
+    // It reports the number it took.
+    assert_eq!(w.number, f.manager.workspace(&w.id).await.unwrap().number);
+    assert_ne!(w.number, 0);
     // One naming a recorded workspace refuses adoption and stays in place.
     let (path, marker) = marked("adopt/owned", &w.id);
     let error = f

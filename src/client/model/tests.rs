@@ -96,6 +96,7 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_id_or_name() {
     }))
     .unwrap();
     let chat = |id: &str, name: &str, restore| Chat {
+        number: 1,
         id: id.into(),
         repository_id: "repo".into(),
         name: name.into(),

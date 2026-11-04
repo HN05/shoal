@@ -567,7 +567,8 @@ impl Manager {
                 WorkspaceState::Preparing,
             )
         };
-        self.insert_workspace(workspace.clone(), base_branch, parent)
+        let workspace = self
+            .insert_workspace(workspace, base_branch, parent)
             .await?;
         let result = self
             .materialize_worktree(repo, &workspace, source, git_profile)
@@ -605,13 +606,13 @@ impl Manager {
 
     /// Record a new workspace, stacked on the workspace that owns `base_branch`
     /// and below `parent`, refusing a parent chat being removed, which takes
-    /// no new workspace.
+    /// no new workspace. Returns the record with the number it took.
     async fn insert_workspace(
         &self,
         record: Workspace,
         base_branch: Option<String>,
         parent: Option<String>,
-    ) -> Result<()> {
+    ) -> Result<Workspace> {
         let marker = match record.git_dir.clone() {
             Some(git_dir) => off_runtime::run(move || identity::marked_owner(&git_dir)).await?,
             None => None,
@@ -667,7 +668,7 @@ impl Manager {
                         record.path.to_str(),
                         record.branch,
                         record.state,
-                        record.git_dir.and_then(|p| p.to_str().map(str::to_owned)),
+                        record.git_dir.as_ref().and_then(|p| p.to_str().map(str::to_owned)),
                         record.git_dir_id,
                         record.base_commit,
                         record.base_ref,
@@ -681,10 +682,15 @@ impl Manager {
                 )?;
                 tx.execute(
                     "UPDATE repositories SET last_used=(SELECT COALESCE(MAX(last_used),0)+1 FROM repositories) WHERE id=?1",
-                    [record.repository_id],
+                    [&record.repository_id],
+                )?;
+                let number = tx.query_row(
+                    "SELECT number FROM workspaces WHERE id=?1",
+                    [&record.id],
+                    |row| row.get(0),
                 )?;
                 tx.commit()?;
-                Ok(())
+                Ok(Workspace { number, ..record })
             })
             .await
     }

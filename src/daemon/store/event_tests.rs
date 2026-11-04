@@ -176,6 +176,12 @@ fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
+    // Spaces have no numbers again; chats take their triggers with them.
+    db.execute_batch(
+        "DROP TRIGGER workspace_numbered; DROP TRIGGER chat_started;
+         DROP VIEW free_space_number; DROP VIEW space_numbers;
+         DROP INDEX workspaces_number; ALTER TABLE workspaces DROP COLUMN number;",
+    )?;
     db.execute_batch("DROP TABLE changed_on_both_sides;")?;
     // Pending updates sit in their activity records again.
     db.execute_batch(

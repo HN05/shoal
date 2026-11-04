@@ -12,6 +12,7 @@ fn spaces() -> Spaces {
     }))
     .unwrap();
     let chat = |id: &str, name: &str, restore| Chat {
+        number: 1,
         id: id.into(),
         repository_id: "repo".into(),
         name: name.into(),

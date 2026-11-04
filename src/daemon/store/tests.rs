@@ -411,6 +411,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 127 {
         db.execute_batch(include_str!("ci_jobs.sql"))?;
     }
+    if version >= 128 {
+        db.execute_batch(include_str!("space_numbers.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -585,6 +588,66 @@ fn migration_keeps_one_parent_for_each_space() -> Result<()> {
         1
     );
     Ok(())
+}
+
+#[test]
+fn migration_numbers_recorded_spaces_workspaces_first() -> Result<()> {
+    let mut db = historical_database(127)?;
+    db.execute_batch(
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+             VALUES ('second','repo','second','/second','second','ready');
+         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('later','repo','later','claude',1,'b',9),
+                ('earlier','repo','earlier','claude',1,'b',3);",
+    )?;
+    migrate(&mut db)?;
+    assert_eq!(
+        space_numbers(&db)?,
+        [
+            ("earlier".into(), 3),
+            ("later".into(), 4),
+            ("second".into(), 2),
+            ("worker".into(), 1)
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn new_spaces_take_the_smallest_number_no_space_holds() -> Result<()> {
+    let db = historical_database(SCHEMA_VERSION)?;
+    db.execute_batch(
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+             VALUES ('second','repo','second','/second','second','ready');
+         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('chat','repo','chat','claude',1,'b',1);
+         DELETE FROM workspaces WHERE id='second';
+         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('reused','repo','reused','claude',1,'b',2),
+                ('next','repo','next','claude',1,'b',3);
+         UPDATE workspaces SET name='renamed' WHERE id='workspace';",
+    )?;
+    assert_eq!(
+        space_numbers(&db)?,
+        [
+            ("chat".into(), 3),
+            ("next".into(), 4),
+            ("renamed".into(), 1),
+            ("reused".into(), 2)
+        ]
+    );
+    Ok(())
+}
+
+/// Every space's name and number, by name.
+fn space_numbers(db: &Connection) -> Result<Vec<(String, i64)>> {
+    Ok(db
+        .prepare(
+            "SELECT name,number FROM workspaces UNION ALL SELECT name,number FROM chats
+                ORDER BY name",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 #[test]
@@ -999,7 +1062,7 @@ fn mappers_use_named_columns() -> Result<()> {
         WORKSPACE_COLUMNS,
         workspace,
         serde_json::json!({
-            "id": "workspace", "repository_id": "repo", "name": "worker", "path": "/work",
+            "id": "workspace", "number": 1, "repository_id": "repo", "name": "worker", "path": "/work",
             "branch": "feature", "state": "failed", "error": "setup error",
             "base_commit": "abc", "base_ref": "refs/heads/main",
             "git_dir": "/git/worktrees/worker", "git_dir_id": "1:2",

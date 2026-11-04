@@ -39,6 +39,7 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
         palette.paint(Style::Heading, &workspace.name),
         palette.workspace_state(workspace.state)
     );
+    outln!("Number:        {}", workspace.number);
     outln!("Path:          {}", workspace.path.display());
     match (&workspace.branch, &workspace.at) {
         (Some(branch), _) => outln!("Branch:        {branch}"),
@@ -121,6 +122,7 @@ fn render_chat(chat: &Chat, palette: Palette) {
         palette.paint(Style::Heading, &chat.name),
         palette.paint(status.style(), status.label())
     );
+    outln!("Number:        {}", chat.number);
     outln!("Agent:         {}", chat.agent);
     if let Some(workspace) = &chat.workspace {
         outln!("Workspace:     {}", workspace.name);

@@ -319,6 +319,7 @@ fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
 #[test]
 fn a_chat_package_names_its_kind_and_continues_its_session() {
     let chat = Chat {
+        number: 1,
         id: "c1".into(),
         repository_id: "r1".into(),
         name: "plan-cache".into(),

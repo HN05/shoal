@@ -2324,7 +2324,10 @@ another could integrate and no parent to tell, so it notifies the user and its
 agent keeps running until completion cleanup removes the chat after the grace
 period, with the done state shown until `--undo` withdraws it. A workspace or a chat is a space: the user returns to both by name, from
 one namespace, so what applies to both is named for
-the space, and the flag that selects one is `--space`. A chat owns attached
+the space, and the flag that selects one is `--space`. Each space also has a
+number, the smallest no other space holds when it is recorded, from one
+sequence across repositories, so it stays short to type and read; it lasts as
+long as the space, survives renames and stops, and is freed when the space goes. A chat owns attached
 files as a workspace does, since its
 agent hands the user reports and pages too; they stay for the same retention
 after the chat is removed, as a chat has no worktree to clean up and its files

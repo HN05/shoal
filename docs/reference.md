@@ -692,7 +692,8 @@ commands that only Shoal, its agent hooks and integrations run live under the
 hidden `shoal internal`). Workspace processes see only the workspaces.
 Its rows, like `shoal work` and workspace pickers, are aligned and marked by what
 their status asks of you: ● your turn to answer, review or resume, ◐ an agent
-or process works, ○ quiet, ◌ changing state, or ✗ failed. Each names the workspace, its repository when the
+or process works, ○ quiet, ◌ changing state, or ✗ failed. Each shows the
+space's number, then names the workspace, its repository when the
 rows span several, its status, what its processes use while any run, and the
 linked issue's title, cut with `…` to fit a terminal's width. Usage counts every
 process carrying the workspace's `SHOAL_WORKSPACE_ID`: CPU as a percent of one
@@ -705,6 +706,10 @@ state unless ready; for a ready workspace it is, in order of precedence,
 `needs input`, `finished` after `shoal done` until `shoal done --undo`, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
 `ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
+Every space, a workspace or a [chat](#chats), has a number no other space
+holds, the smallest free when it is created; it stays through renames and
+stops, and a later space may take it once the space is removed. `shoal status`
+shows it, and `--json` gives it as `number`.
 The header names the keys the list binds, most used first, on as many lines as
 the terminal needs. Enter enters the selection; Ctrl-T attaches, Ctrl-F shows
 the diff, Ctrl-V lists the workspace's linked issues and PRs in its repository,

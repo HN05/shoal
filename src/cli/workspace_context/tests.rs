@@ -3,6 +3,7 @@ use crate::state::WorkspaceState;
 
 fn workspace(name: &str, path: &Path) -> Workspace {
     Workspace {
+        number: 1,
         holds: Vec::new(),
         review: Vec::new(),
         latest_review: None,

@@ -228,6 +228,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
         ]
     );
     let chat = Chat {
+        number: 1,
         id: "chat-id".into(),
         repository_id: "repo".into(),
         name: "talk".into(),

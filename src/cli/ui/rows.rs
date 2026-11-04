@@ -95,9 +95,9 @@ pub fn usage_label(usage: &WorkspaceUsage) -> String {
     }
 }
 
-/// One aligned row per workspace: a status marker, the name, the repository
-/// when the rows span several (`(id, name)` pairs), the status, what its
-/// processes use, and the linked issue's title when known.
+/// One aligned row per workspace: a status marker, the number, the name,
+/// the repository when the rows span several (`(id, name)` pairs), the
+/// status, what its processes use, and the linked issue's title when known.
 pub fn workspace_rows(
     workspaces: &[Workspace],
     repositories: &[(String, String)],
@@ -201,7 +201,7 @@ impl<'a> SpaceTree<'a> {
     }
 
     /// The row of `space` at `depth`, then those of the spaces below it.
-    fn push(&self, rows: &mut Vec<(String, [Cell; 5])>, space: Listed<'a>, depth: usize) {
+    fn push(&self, rows: &mut Vec<(String, [Cell; 6])>, space: Listed<'a>, depth: usize) {
         rows.push(match space {
             Listed::Workspace(workspace) => {
                 tree_workspace_row(workspace, depth, self.stopped, self.palette)
@@ -230,12 +230,13 @@ fn tree_workspace_row(
     depth: usize,
     stopped: &HashSet<String>,
     palette: Palette,
-) -> (String, [Cell; 5]) {
+) -> (String, [Cell; 6]) {
     let name = indented(&workspace.name, depth);
     let status = ListStatus::of_workspace(workspace, stopped.contains(&workspace.id));
     (
         status.marker(palette),
         [
+            number_cell(workspace.number),
             (name, Some(Style::Heading)),
             (String::new(), None),
             workspace_status_cell(workspace, status),
@@ -269,13 +270,15 @@ pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> E
         .collect()
 }
 
-/// A chat's row: its name, the workspace it runs in, its status and agent.
-fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 5]) {
+/// A chat's row: its number, its name, the workspace it runs in, its
+/// status and agent.
+fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 6]) {
     let status = ListStatus::of_chat(chat);
     let place = chat.workspace.as_ref();
     (
         palette.paint(Style::Heading, "◆"),
         [
+            number_cell(chat.number),
             (indented(&chat.name, depth), Some(Style::Heading)),
             (
                 place.map_or_else(String::new, |workspace| format!("in {}", workspace.name)),
@@ -304,12 +307,13 @@ pub(super) fn rows_with_status(
         .into_iter()
         .map(|(status, cell)| (status.marker(palette), cell))
         .unzip();
-    let cells: Vec<[Cell; 5]> = workspaces
+    let cells: Vec<[Cell; 6]> = workspaces
         .iter()
         .zip(repository_column(workspaces, repositories))
         .zip(statuses)
         .map(|((w, repository), status)| {
             [
+                number_cell(w.number),
                 (w.name.clone(), Some(Style::Heading)),
                 (repository, None),
                 status,
@@ -331,10 +335,15 @@ pub(super) fn rows_with_status(
         .collect()
 }
 
+/// A space's number, as the first cell of its row.
+fn number_cell(number: u32) -> Cell {
+    (number.to_string(), Some(Style::Muted))
+}
+
 /// Rows of `width` with a state marker before their cells cut the title.
 fn title_limit(width: Option<usize>) -> Option<WidthLimit> {
     width.map(|width| WidthLimit {
-        column: 4,
+        column: 5,
         width: width.saturating_sub(2),
     })
 }

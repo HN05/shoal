@@ -320,9 +320,7 @@ impl Manager {
             disposable: options.disposable,
             ..Workspace::new_record(repo.id.clone(), name, path, None, WorkspaceState::Preparing)
         };
-        self.insert_workspace(workspace.clone(), None, parent)
-            .await?;
-        Ok(workspace)
+        self.insert_workspace(workspace, None, parent).await
     }
 
     /// Check out `head` and configure the worktree with `files` written into

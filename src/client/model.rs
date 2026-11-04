@@ -69,6 +69,10 @@ pub struct MovedRepository {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
     pub id: String,
+    /// Unique among the spaces that exist, workspaces and chats; freed when
+    /// it goes.
+    #[serde(default)]
+    pub number: u32,
     pub repository_id: String,
     pub name: String,
     /// What its agent calls the work, which its tabs show.
@@ -517,6 +521,7 @@ impl Workspace {
     ) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
+            number: 0,
             repository_id,
             name,
             title: None,
@@ -1281,6 +1286,10 @@ fn count_commits(count: u64) -> String {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Chat {
     pub id: String,
+    /// Unique among the spaces that exist, workspaces and chats; freed when
+    /// it goes.
+    #[serde(default)]
+    pub number: u32,
     pub repository_id: String,
     /// Unique among workspace names and the names of other chats.
     pub name: String,

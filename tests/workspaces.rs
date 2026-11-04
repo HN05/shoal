@@ -26867,15 +26867,15 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
                 .collect()
         })
         .collect();
+    let (chat_number, worker_number) = (
+        format!("◆ {}", listed["number"]),
+        format!("○ {}", added["number"]),
+    );
     assert_eq!(
         rows,
         [
-            vec![
-                format!("◆ {CHAT_NAME}").as_str(),
-                "process running",
-                "claude"
-            ],
-            vec!["○ └ chat-worker", "inactive"],
+            vec![chat_number.as_str(), CHAT_NAME, "process running", "claude"],
+            vec![worker_number.as_str(), "└ chat-worker", "inactive"],
         ]
     );
 

@@ -2,13 +2,16 @@ use super::*;
 use crate::{forge::items::link::ItemKind, state::WorkspaceState};
 
 fn workspace(repository: &str, name: &str, branch: &str, state: WorkspaceState) -> Workspace {
-    Workspace::new_record(
-        repository.into(),
-        name.into(),
-        format!("/work/{name}").into(),
-        Some(branch.into()),
-        state,
-    )
+    Workspace {
+        number: 1,
+        ..Workspace::new_record(
+            repository.into(),
+            name.into(),
+            format!("/work/{name}").into(),
+            Some(branch.into()),
+            state,
+        )
+    }
 }
 
 #[test]
@@ -92,8 +95,8 @@ fn usage_shows_cpu_once_measured_and_memory_in_binary_units() {
     assert_eq!(
         rows,
         [
-            "○ busy   inactive  50% CPU, 1 MiB  Title",
-            "○ quiet  inactive                  Title",
+            "○ 1  busy   inactive  50% CPU, 1 MiB  Title",
+            "○ 1  quiet  inactive                  Title",
         ]
     );
 }
@@ -123,7 +126,12 @@ fn tree_rows_list_children_below_their_parent() {
         branch: Some("unlisted".into()),
     });
     let rows = workspace_tree_rows(&workspaces, &[], &HashSet::new(), plain, None);
-    let expected = ["○ orphan ", "○ parent ", "○ └ child ", "○   └ grandchild "];
+    let expected = [
+        "○ 1  orphan ",
+        "○ 1  parent ",
+        "○ 1  └ child ",
+        "○ 1    └ grandchild ",
+    ];
     assert_eq!(rows.len(), expected.len());
     for (row, start) in rows.iter().zip(expected) {
         assert!(row.starts_with(start), "{row:?}");
@@ -151,8 +159,8 @@ fn a_ci_jobs_workspace_lists_under_the_workspace_its_run_links() {
     ));
     let rows = workspace_tree_rows(&[job, pull], &[], &HashSet::new(), plain, None);
     assert_eq!(rows.len(), 2);
-    assert!(rows[0].starts_with("○ pull "), "{rows:?}");
-    assert!(rows[1].starts_with("○ └ ci-rust-4 "), "{rows:?}");
+    assert!(rows[0].starts_with("○ 1  pull "), "{rows:?}");
+    assert!(rows[1].starts_with("○ 1  └ ci-rust-4 "), "{rows:?}");
     assert!(rows[1].contains("250% CPU, 1.5 GiB"), "{rows:?}");
     assert!(
         rows[1]
@@ -287,6 +295,9 @@ fn workspace_rows_align_status_and_titles() {
     workspaces[9].agent_state = agent(AgentState::Idle);
     workspaces[10].done = true;
     workspaces[10].agent_state = agent(AgentState::Waiting);
+    for (number, workspace) in (1..).zip(&mut workspaces) {
+        workspace.number = number;
+    }
     assert_eq!(
         workspace_rows(
             &workspaces,
@@ -296,17 +307,17 @@ fn workspace_rows_align_status_and_titles() {
             None,
         ),
         [
-            "● fix-login  stopped",
-            "✗ x          failed",
-            "◌ new        preparing",
-            "◐ busy       process running   Refine the list view",
-            "● review     ready",
-            "○ quiet      ready (outdated)",
-            "● asking     needs input",
-            "● marked     ready",
-            "○ agent      waiting",
-            "○ done       finished",
-            "● follow-up  needs input",
+            "● 1   fix-login  stopped",
+            "✗ 2   x          failed",
+            "◌ 3   new        preparing",
+            "◐ 4   busy       process running   Refine the list view",
+            "● 5   review     ready",
+            "○ 6   quiet      ready (outdated)",
+            "● 7   asking     needs input",
+            "● 8   marked     ready",
+            "○ 9   agent      waiting",
+            "○ 10  done       finished",
+            "● 11  follow-up  needs input",
         ]
     );
     let repositories = [("a".into(), "shoal".into()), ("b".into(), "app".into())];
@@ -317,8 +328,8 @@ fn workspace_rows_align_status_and_titles() {
     assert_eq!(
         workspace_rows(&workspaces, &repositories, &HashSet::new(), plain, None),
         [
-            "○ fix-login  shoal  inactive",
-            "○ y          app    inactive"
+            "○ 1  fix-login  shoal  inactive",
+            "○ 1  y          app    inactive"
         ]
     );
 }
@@ -411,12 +422,15 @@ async fn repository_choices_label_unreadable_origins_by_their_recorded_source() 
 #[test]
 fn a_chat_in_a_workspace_shows_the_workspace() {
     let chat: Chat = serde_json::from_value(serde_json::json!({
-        "id": "c", "repository_id": "a", "name": "worker-chat", "agent": "claude",
+        "id": "c", "number": 4, "repository_id": "a", "name": "worker-chat", "agent": "claude",
         "pid": 1, "started_at": 0,
         "workspace": {"id": "w", "name": "worker", "branch": "worker"},
     }))
     .unwrap();
     let plain = Palette::stdout(true);
     let rows = workspace_tree_rows(&[], &[chat], &HashSet::new(), plain, None);
-    assert_eq!(rows, ["◆ worker-chat  in worker  process running  claude"]);
+    assert_eq!(
+        rows,
+        ["◆ 4  worker-chat  in worker  process running  claude"]
+    );
 }

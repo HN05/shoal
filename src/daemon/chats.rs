@@ -171,6 +171,7 @@ impl Manager {
         }
         let chat = Chat {
             id: Uuid::new_v4().to_string(),
+            number: 0,
             repository_id: repository.id.clone(),
             name,
             agent,
@@ -541,6 +542,9 @@ fn insert(
             workspace
         ],
     )?;
+    chat.number = tx.query_row("SELECT number FROM chats WHERE id=?1", [&chat.id], |row| {
+        row.get(0)
+    })?;
     // Checked with the record, so a removal that began while the start
     // waited finds the chat below the parent or refuses it.
     if let Some((parent, removing)) = &parent {
@@ -688,7 +692,7 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
         "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
                     chats.restore,chats.completion,
-                    workspaces.id,workspaces.name,workspaces.branch
+                    workspaces.id,workspaces.name,workspaces.branch,chats.number
              FROM chats JOIN repositories ON repositories.id=chats.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
              ORDER BY chats.started_at, chats.rowid",
@@ -701,6 +705,7 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
         });
         Ok(Chat {
             id,
+            number: row.get(14)?,
             repository_id,
             name: row.get(2)?,
             agent: row.get(3)?,

@@ -86,7 +86,7 @@ impl Manager {
         self.verify_worktree(&workspace).await?;
         // Record identity, base and readiness together: a crash must never leave
         // an adopted directory with weaker ownership checks or pending setup.
-        self.insert_workspace(workspace.clone(), None, None).await?;
+        let workspace = self.insert_workspace(workspace, None, None).await?;
         // Mark only once the record exists, so a refused insertion leaves the
         // metadata untouched; the committed identity protects it if marking fails.
         if let Err(error) = self.record_worktree_identity(&workspace).await {
@@ -119,7 +119,7 @@ impl Manager {
             WorkspaceState::Preparing,
         );
         // Reserve the branch and destination before Worktrunk can mutate Git.
-        self.insert_workspace(workspace.clone(), None, None).await?;
+        let workspace = self.insert_workspace(workspace, None, None).await?;
         let result = self.materialize_copy(repo, source, &workspace).await;
         match result {
             Ok(()) => self.workspace(&workspace.id).await,

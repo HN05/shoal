@@ -1106,7 +1106,18 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
 
 /// Return a current state database to version 87, before Shoal recorded
 /// attached files, undoing the later migrations that cannot run twice.
-const BEFORE_ATTACHED_FILES: &str = "DROP INDEX chats_scope_token;
+const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_numbered;
+    DROP TRIGGER chat_started;
+    CREATE TRIGGER chat_started AFTER INSERT ON chats BEGIN SELECT 1; END;
+    DROP VIEW free_space_number;
+    DROP VIEW space_numbers;
+    DROP INDEX workspaces_number;
+    ALTER TABLE workspaces DROP COLUMN number;
+    DROP TRIGGER chat_ended;
+    CREATE TRIGGER chat_ended AFTER DELETE ON chats BEGIN SELECT 1; END;
+    DROP INDEX chats_number;
+    ALTER TABLE chats DROP COLUMN number;
+    DROP INDEX chats_scope_token;
     ALTER TABLE chats DROP COLUMN scope_token;
     DROP TRIGGER workspace_created;
     CREATE TRIGGER workspace_created AFTER INSERT ON workspaces BEGIN SELECT 1; END;

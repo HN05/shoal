@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 127;
+pub(super) const SCHEMA_VERSION: i64 = 128;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -390,6 +390,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (125, include_str!("runners.sql"), None),
     (126, include_str!("agent_queue_jobs.sql"), None),
     (127, include_str!("ci_jobs.sql"), None),
+    (128, include_str!("space_numbers.sql"), None),
 ];
 
 /// The workspace whose worktree a chat runs in instead of its repository's
