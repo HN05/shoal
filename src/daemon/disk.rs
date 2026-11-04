@@ -426,9 +426,9 @@ fn emptying_notice(
 }
 
 /// Stop every running agent through protection, so it restores once free
-/// space recovers, then the remaining executions as `shoal stop` does, saving
-/// what `shoal resume` restores. Executions started while space stays this
-/// low stop on the next check.
+/// space recovers, then the remaining executions but CI jobs' as `shoal stop`
+/// does, saving what `shoal resume` restores. Executions started while space
+/// stays this low stop on the next check.
 async fn stop_executions(
     manager: &Manager,
     settings: &Disk,
@@ -500,7 +500,10 @@ async fn workspaces_with_unprotected_executions(manager: &Manager) -> Result<Vec
         .store
         .run(|db| {
             Ok(db
-                .prepare("SELECT id, workspace_id FROM executions")?
+                .prepare(
+                    "SELECT id, workspace_id FROM executions
+                     WHERE workspace_id NOT IN (SELECT workspace_id FROM ci_jobs)",
+                )?
                 .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
                 .collect::<rusqlite::Result<_>>()?)
         })

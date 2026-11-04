@@ -986,7 +986,8 @@ impl Manager {
     /// stopped them. With `acknowledge_unproven`, executions whose launch
     /// identity was never recorded count as ended once nothing of them is
     /// visible, because the user checked. Returns the waiting launches it
-    /// cancelled as `launches` says.
+    /// cancelled as `launches` says. A CI job's workspace cancels the job's
+    /// run on the forge instead, whose runner then stops it.
     pub async fn stop_workspace_manually(
         &self,
         selector: &str,
@@ -994,6 +995,9 @@ impl Manager {
         stopped_by: Option<&str>,
         launches: QueuedLaunches,
     ) -> Result<Vec<QueueEntry>> {
+        if self.cancel_job_in(selector).await? {
+            return Ok(Vec::new());
+        }
         let policy = if acknowledge_unproven {
             StopPolicy::Acknowledged
         } else {

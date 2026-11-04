@@ -1,9 +1,11 @@
 //! The end of a claimed job: once the execution running the forge's runner
 //! ends, however it ended, the job's workspace is removed whatever it holds,
-//! with its permit, and so is the runner's directory of the job.
+//! with its permit, and so is the runner's directory of the job. A job ends
+//! only on the forge's word: stopping it cancels its run there, which the
+//! forge's runner then stops.
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rusqlite::params;
 
 use crate::{
@@ -11,6 +13,7 @@ use crate::{
         notifications::NotificationKind,
         workspace::{Manager, capacity::Activity},
     },
+    forge::{ForgeRepo, ci::CiAction},
     model::QueuedJob,
     state::{QueueKind, QueueState},
 };
@@ -92,6 +95,33 @@ impl Manager {
             }
         }
         Ok(())
+    }
+
+    /// Cancel on the forge the run of the job running in the workspace
+    /// `selector` names, returning whether the workspace runs one.
+    pub(crate) async fn cancel_job_in(&self, selector: &str) -> Result<bool> {
+        let workspace = self.workspace(selector).await?;
+        let Some(job) = self
+            .claimed_jobs()
+            .await?
+            .into_iter()
+            .find(|job| job.workspace_id == workspace.id)
+        else {
+            return Ok(false);
+        };
+        let registration = self
+            .runner_registration(&job.repository_id)
+            .await?
+            .context("the repository's runner is no longer registered")?;
+        let forge = ForgeRepo::resolve(&registration.forge_repository, &self.forge_hosts()).await?;
+        let account = self.user_account();
+        let run = forge
+            .find_run(&account, &job.job.run.url, CiAction::Cancel)
+            .await?;
+        forge
+            .act_on_run(&account, &run, CiAction::Cancel, false)
+            .await?;
+        Ok(true)
     }
 
     /// Whether the daemon still records the execution `id`, running or

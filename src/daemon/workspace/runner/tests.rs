@@ -50,7 +50,7 @@ struct Fixture {
     manager: Arc<Manager>,
     repository: String,
     head: String,
-    _server: Server,
+    server: Server,
 }
 
 async fn fixture(jobs: Vec<Value>, pull_head: &'static str, settings: &str) -> Fixture {
@@ -131,7 +131,7 @@ async fn fixture(jobs: Vec<Value>, pull_head: &'static str, settings: &str) -> F
         manager,
         repository: repo.id,
         head,
-        _server: server,
+        server,
     }
 }
 
@@ -360,4 +360,43 @@ async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
     let linked = manager.linked_job_workspaces(&topic.id).await.unwrap();
     assert_eq!(linked.len(), 1);
     assert_eq!(linked[0].id, claimed[0].workspace_id);
+}
+
+#[tokio::test]
+async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_forge() {
+    let fixture = fixture(vec![job("h3", 7, 3)], "unused", "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    let (_, started) = LAUNCHED
+        .lock()
+        .unwrap()
+        .remove(&claimed[0].workspace_id)
+        .unwrap();
+
+    manager
+        .stop_workspace_manually(
+            &claimed[0].workspace_id,
+            false,
+            None,
+            crate::protocol::QueuedLaunches::Cancel,
+        )
+        .await
+        .unwrap();
+    assert!(
+        fixture
+            .server
+            .received()
+            .iter()
+            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
+    );
+    // The job runs until the forge's runner stops it.
+    manager.finish_ended_jobs().await.unwrap();
+    assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+    manager
+        .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(1))
+        .await
+        .unwrap();
+    manager.finish_ended_jobs().await.unwrap();
+    assert!(manager.claimed_jobs().await.unwrap().is_empty());
 }
