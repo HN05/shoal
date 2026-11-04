@@ -96,9 +96,9 @@ impl Manager {
     }
 
     /// Create the workspace `opening` names in `repository` on a new
-    /// branch, or open the one on its existing branch or PR head. A
-    /// `confined` parent, whose own agent asks, takes over no workspace
-    /// outside its subtree.
+    /// branch, or open the one on its existing branch or PR head, or the
+    /// recorded one it names. A `confined` parent, whose own agent asks,
+    /// takes over no workspace outside its subtree.
     async fn open_for_start(
         &self,
         repository: Selector,
@@ -110,6 +110,7 @@ impl Manager {
         }: Opening<'_>,
         confined: bool,
     ) -> Result<OpenedWorkspace> {
+        let placed = base.is_some() || new.path.is_some() || new.git_profile.is_some();
         match start {
             WorkspaceStart::Name(name) => {
                 let workspace = self
@@ -126,11 +127,25 @@ impl Manager {
             }
             WorkspaceStart::PullHead { url, head } => {
                 ensure!(
-                    base.is_none() && new.path.is_none() && new.git_profile.is_none(),
+                    !placed,
                     "a workspace at a PR's head takes no base, path or Git profile"
                 );
                 self.open_pull_head(repository, url, head, parent, new.options, confined)
                     .await
+            }
+            WorkspaceStart::Workspace(workspace) => {
+                ensure!(
+                    !placed && parent.is_none(),
+                    "an existing workspace takes no base, path, Git profile or parent"
+                );
+                let repository = self.repository(repository).await?;
+                let workspace = self.workspace(&workspace).await?;
+                ensure!(
+                    workspace.repository_id == repository.id,
+                    "workspace {} is not in the requested repository",
+                    workspace.name
+                );
+                self.reopen_workspace(&workspace.id).await
             }
         }
     }

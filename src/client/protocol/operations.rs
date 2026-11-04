@@ -113,6 +113,10 @@ pub enum WorkspaceStart {
     /// PR `url`'s head, at a commit, reopening the workspace made for the
     /// PR; it takes no base, path or Git profile.
     PullHead { url: String, head: PullHead },
+    /// The recorded workspace of the repository this selector names,
+    /// reopened for a launch in it, never created again; it takes no base,
+    /// path, Git profile or parent.
+    Workspace(String),
 }
 
 /// An operation preparing a workspace a request opened, and the workspace

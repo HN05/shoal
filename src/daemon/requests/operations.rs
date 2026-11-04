@@ -10,10 +10,13 @@ use super::super::{
         Entry,
         starts::{Opening, Preparing},
     },
-    scope::{Caller, Scoped},
+    scope::{Caller, Scoped, denied},
     workspace::{Manager, NewWorkspace},
 };
-use crate::protocol::{Body, ErrorCode, OperationMethod, Response, operations::Started};
+use crate::protocol::{
+    Body, ErrorCode, OperationMethod, Response,
+    operations::{Started, WorkspaceStart},
+};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -110,6 +113,11 @@ impl Scoped for OperationMethod {
         Ok(match self {
             OperationMethod::StartOperation { spec, .. } => Some(spec.workspace_mut()),
             OperationMethod::StartSplit { workspace, .. } => Some(workspace),
+            // Only the user reopens a recorded workspace for a launch.
+            OperationMethod::StartWorkspace {
+                start: WorkspaceStart::Workspace(_),
+                ..
+            } => return Err(denied()),
             // A scoped caller opens workspaces only below its own space,
             // which must be in their repository.
             OperationMethod::StartWorkspace { parent, .. } => {

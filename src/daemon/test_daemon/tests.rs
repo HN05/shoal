@@ -384,6 +384,42 @@ async fn an_existing_branch_reopens_its_workspace_without_its_post_setup_hook() 
 }
 
 #[tokio::test]
+async fn only_the_user_reopens_a_recorded_workspace_for_a_launch() {
+    let daemon = TestDaemon::start().await;
+    let existing = daemon.workspace("api").await;
+    let mut reopen = start_workspace(&daemon, WorkspaceStart::Workspace("api".into()));
+    if let OperationMethod::StartWorkspace { base, .. } = &mut reopen {
+        *base = None;
+    }
+    let agent = daemon.scoped(&existing).await;
+    assert_eq!(
+        code(connection::request::<StartedWorkspace>(&agent, reopen).await),
+        ErrorCode::ScopeDenied
+    );
+    let app = daemon.connector();
+    let based = start_workspace(&daemon, WorkspaceStart::Workspace("api".into()));
+    assert!(
+        connection::request::<StartedWorkspace>(&app, based)
+            .await
+            .is_err(),
+        "a recorded workspace takes no base"
+    );
+    let mut reopen = start_workspace(&daemon, WorkspaceStart::Workspace("api".into()));
+    if let OperationMethod::StartWorkspace { base, .. } = &mut reopen {
+        *base = None;
+    }
+    let started: StartedWorkspace = connection::request(&app, reopen).await.unwrap();
+    assert!(started.reused);
+    assert_eq!(started.workspace.id, existing.id);
+    let worker = fake::take(&started.operation);
+    let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
+        panic!("expected a preparation: {:?}", worker.order);
+    };
+    assert!(!steps.setup && !steps.post_setup);
+    worker.exit(1);
+}
+
+#[tokio::test]
 async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     let daemon = TestDaemon::start().await;
     let app = daemon.connector();
