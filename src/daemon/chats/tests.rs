@@ -858,7 +858,8 @@ async fn workspace(root: &std::path::Path, manager: &Manager) -> (Repository, Wo
 async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
     use crate::{
         daemon::scope::{Caller, authorize},
-        protocol::{Operation, WorkspaceMethod},
+        forge::items::link::Selection,
+        protocol::{ItemMethod, Operation, WorkspaceMethod},
     };
     let (temp, manager) = manager().await;
     let (repo, workspace) = workspace(temp.path(), &manager).await;
@@ -894,7 +895,12 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
     let diff = Operation::from(WorkspaceMethod::DiffBase {
         workspace: workspace.name.clone(),
     });
-    for mut read in [status(&workspace.name), diff] {
+    let items = Operation::from(ItemMethod::SelectItems {
+        space: workspace.name.clone(),
+        selection: Selection::default(),
+        elsewhere: false,
+    });
+    for mut read in [status(&workspace.name), diff, items] {
         authorize(&manager, Some("chat"), &mut read).await.unwrap();
     }
     let mut change = Operation::from(WorkspaceMethod::SetBaseWorkspace {

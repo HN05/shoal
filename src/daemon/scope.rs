@@ -3,7 +3,7 @@
 //! the OS user.
 use crate::{
     daemon::workspace::{ExecutionKind, Manager},
-    protocol::Operation,
+    protocol::{ItemMethod, Operation},
 };
 use anyhow::{Result, ensure};
 
@@ -41,7 +41,7 @@ pub(crate) async fn authorize(
         .caller(token)
         .await?
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
-    let reads_only = method.reads_only();
+    let reads_only = method.reads_space();
     if let Some(target) = method.scope(manager, &caller).await? {
         let id = manager.present_space(target).await?.id().to_owned();
         if !manager.within_subtree(&caller.space_id, &id).await? {
@@ -67,9 +67,9 @@ pub(crate) trait Scoped {
     /// caller's own or one below it.
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>>;
 
-    /// Whether the request only reads state, which a chat may do in the
-    /// workspace it runs in.
-    fn reads_only(&self) -> bool {
+    /// Whether the request only reads the space it targets, which a chat
+    /// may do in the workspace it runs in.
+    fn reads_space(&self) -> bool {
         false
     }
 }
@@ -105,8 +105,11 @@ impl Scoped for Operation {
         }
     }
 
-    fn reads_only(&self) -> bool {
-        Operation::reads_only(self)
+    /// The requests that only read state, and the selection of a space's
+    /// items to look up, which may record what a forge host serves but
+    /// changes nothing of the space.
+    fn reads_space(&self) -> bool {
+        self.reads_only() || matches!(self, Operation::Item(ItemMethod::SelectItems { .. }))
     }
 }
 
