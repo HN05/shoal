@@ -6,7 +6,7 @@ use anyhow::{Context, Result, ensure};
 use crate::{
     config::Effective,
     daemon::workspace::Manager,
-    model::{Chat, PresentSpace, Repository},
+    model::{Chat, PresentSpace, Repository, SpaceKind, Workspace},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     transfer::{ExportedSpace, Manifest, SessionSource, Source},
 };
@@ -98,6 +98,7 @@ impl Manager {
                     "workspace {} is disposable, so its removal keeps nothing to export",
                     workspace.name
                 );
+                self.ensure_no_chats_taken(&workspace).await?;
                 // Its own config may describe its agents, and goes with it.
                 let settings = self.workspace_settings(&workspace).await;
                 let removal = self
@@ -129,6 +130,23 @@ impl Manager {
             settings,
             continues: None,
         })
+    }
+
+    /// Refuse to export `workspace` while chats run in its worktree or in
+    /// one below it, which its removal would take without exporting them.
+    async fn ensure_no_chats_taken(&self, workspace: &Workspace) -> Result<()> {
+        let chats: Vec<String> = (self.spaces_taken_with(&workspace.id).await?)
+            .into_iter()
+            .filter(|space| space.kind == SpaceKind::Chat)
+            .map(|chat| chat.name)
+            .collect();
+        ensure!(
+            chats.is_empty(),
+            "chats run in workspace {} or below it ({}), which shoal move does not move; remove them first",
+            workspace.name,
+            chats.join(", ")
+        );
+        Ok(())
     }
 
     /// Remove `chat` for its export, which takes no space below it, once its

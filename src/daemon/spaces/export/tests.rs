@@ -312,3 +312,43 @@ async fn a_chat_in_a_workspace_is_not_moved() {
     assert!(!file.exists());
     assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
 }
+
+#[tokio::test]
+async fn a_workspace_with_a_chat_in_it_is_not_moved() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat_in_workspace(
+            &workspace.id,
+            "reading".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let file = root.path().join("worker.shoal");
+    let error = export(&manager, &workspace.name, &file).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("chats run in workspace worker or below it (reading)"),
+        "{error:#}"
+    );
+    assert!(!file.exists());
+    assert!(
+        manager
+            .find_workspace(&workspace.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
+}
