@@ -241,7 +241,8 @@ impl Manager {
     }
 
     /// Move the workspace `id` of a job, before the job's first step, to
-    /// `commit`, fetched from `origin` under `reference` when given. The
+    /// `commit`, fetched from `origin` under `reference` when given, unless
+    /// its checkout is there already. The
     /// lifecycle reservation excludes removal meanwhile.
     pub(crate) async fn move_job_workspace(
         &self,
@@ -263,7 +264,7 @@ impl Manager {
     }
 
     /// Move the reserved job `workspace`, once its worktree is proven its
-    /// own, to `commit`.
+    /// own, to `commit`, unless its checkout is there already.
     async fn move_reserved_job_workspace(
         &self,
         repo: &Repository,
@@ -272,6 +273,9 @@ impl Manager {
         reference: Option<&str>,
     ) -> Result<()> {
         self.verify_worktree(workspace).await?;
+        if crate::daemon::links::pr::current_head(workspace).await? == commit {
+            return Ok(());
+        }
         fetch_job_commit(repo, commit, reference).await?;
         git::detached::move_to(&workspace.path, commit).await?;
         self.record_starting_commit(&workspace.id, commit.to_owned())

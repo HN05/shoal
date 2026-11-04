@@ -48,9 +48,9 @@ impl Manager {
         Ok(())
     }
 
-    /// Record the job of `run` that `runner`, registered for `job` alone,
-    /// took, then move the job's workspace to the commit of `run` when it is
-    /// not the claimed job's.
+    /// Record that `runner`, registered for `job` alone, took a job of
+    /// `run`, move the job's workspace to the commit of `run`, and then name
+    /// the job it took.
     async fn follow_taken_job(&self, job: &ClaimedJob, runner: u64, run: u64) -> Result<()> {
         let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
@@ -59,30 +59,32 @@ impl Manager {
         } else {
             forge.job_run(&account, run).await?
         };
-        // Only the run decides the commit; a job the forge does not list
-        // yet keeps the claimed one's name.
-        let taken = forge
-            .runner_job(&account, run, runner)
-            .await?
-            .unwrap_or_else(|| job.job.job.clone());
         let linked = self
             .run_workspace(&forge, &job.repository_id, &taken_run)
             .await?;
-        let record = QueuedJob {
-            job: taken,
+        let mut record = QueuedJob {
+            job: job.job.job.clone(),
             run: taken_run,
             workspace_id: linked,
         };
         // Recorded first, so stopping the job cancels the run it belongs
-        // to also when its workspace cannot move.
+        // to whatever fails next.
         self.record_taken_job(&job.id, &record).await?;
-        if record.run.commit != job.job.run.commit {
-            self.move_job_workspace(
-                &job.workspace_id,
-                &record.run.commit,
-                record.run.reference.as_deref(),
-            )
-            .await?;
+        self.move_job_workspace(
+            &job.workspace_id,
+            &record.run.commit,
+            record.run.reference.as_deref(),
+        )
+        .await?;
+        // Only the run decides the commit; a job the forge does not name
+        // keeps the claimed one's name.
+        match forge.runner_job(&account, run, runner).await {
+            Ok(Some(taken)) => {
+                record.job = taken;
+                self.record_taken_job(&job.id, &record).await?;
+            }
+            Ok(None) => {}
+            Err(error) => crate::daemon::log!("runner: {}: {error:#}", job.job.job.name),
         }
         Ok(())
     }

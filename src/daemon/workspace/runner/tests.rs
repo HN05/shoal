@@ -178,8 +178,8 @@ pub(super) struct GitHubFixture {
     pub _server: Server,
     pub manager: Arc<Manager>,
     pub head: String,
-    /// A commit only run 2, pushed to `topic`, is at; run 4's commit is on
-    /// no remote.
+    /// A commit only runs 2 and 5, pushed to `topic`, are at; run 4's
+    /// commit is on no remote, and run 5's jobs cannot be listed.
     pub topic: String,
     pub state: Arc<Mutex<GitHubState>>,
 }
@@ -224,6 +224,9 @@ pub(super) async fn github_fixture() -> GitHubFixture {
             .and_then(|rest| rest.strip_suffix("/jobs?filter=latest&per_page=100&page=1"))
         {
             let id: u64 = listed.parse().unwrap();
+            if id == 5 {
+                return (500, Vec::new(), b"{}".to_vec());
+            }
             let mut jobs = if id == 1 {
                 state.queued.clone()
             } else {
@@ -235,6 +238,8 @@ pub(super) async fn github_fixture() -> GitHubFixture {
             run(1, "main", &pushed)
         } else if line == "GET /api/v3/repos/team/repo/actions/runs/2" {
             run(2, "topic", &other)
+        } else if line == "GET /api/v3/repos/team/repo/actions/runs/5" {
+            run(5, "topic", &other)
         } else if line == "GET /api/v3/repos/team/repo/actions/runs/4" {
             run(4, "gone", "1111111111111111111111111111111111111111")
         } else if line == "POST /api/v3/repos/team/repo/actions/runners/generate-jitconfig" {

@@ -101,3 +101,48 @@ async fn a_job_whose_commit_cannot_be_fetched_still_names_its_run() {
         fixture.head
     );
 }
+
+#[tokio::test]
+async fn a_job_whose_name_cannot_be_read_still_runs_at_its_runs_commit() {
+    let fixture = github_fixture().await;
+    let manager = &fixture.manager;
+    fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
+    let (job, directory) = report(manager, 5).await;
+    manager.follow_taken_jobs().await.unwrap();
+    assert!(directory.join("prepared").exists());
+    let claimed = manager.claimed_jobs().await.unwrap().remove(0);
+    assert!(claimed.job.run.url.ends_with("/actions/runs/5"));
+    assert_eq!(claimed.job.job.id, 11);
+    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    assert_eq!(
+        git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
+        fixture.topic
+    );
+}
+
+#[tokio::test]
+async fn a_report_recorded_before_a_restart_still_moves_the_workspace() {
+    let fixture = github_fixture().await;
+    let manager = &fixture.manager;
+    {
+        let mut state = fixture.state.lock().unwrap();
+        state.queued = vec![github_job(11, 1)];
+        state.taken.insert(2, taken(21, 2, "rust"));
+    }
+    let (job, directory) = report(manager, 2).await;
+    // A restart cut the follow short after it recorded run 2's job.
+    let mut recorded = job.job.clone();
+    let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &manager.forge_hosts())
+        .await
+        .unwrap();
+    recorded.run = forge.job_run(&manager.user_account(), 2).await.unwrap();
+    manager.record_taken_job(&job.id, &recorded).await.unwrap();
+
+    manager.follow_taken_jobs().await.unwrap();
+    assert!(directory.join("prepared").exists());
+    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    assert_eq!(
+        git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
+        fixture.topic
+    );
+}
