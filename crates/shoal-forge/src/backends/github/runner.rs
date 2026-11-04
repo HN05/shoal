@@ -1,12 +1,19 @@
-//! GitHub's self-hosted runners: the queued jobs of the repository's active
-//! runs, a run's event, and the repository's runners.
+//! GitHub's self-hosted runners and `actions/runner`: the queued jobs of the
+//! repository's active runs, a run's event, and a just-in-time runner for
+//! each job, which takes one job its labels match and ends with it. GitHub
+//! picks that job, so a job-started hook reports the run it belongs to and
+//! waits for the daemon when it is not the claimed one's.
+use std::{ffi::OsString, path::Path};
+
 use anyhow::{Context, Result};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::{
     ForgeRepo,
     account::Account,
-    ci::runner::{JobRun, Trigger, WaitingJob},
+    ci::runner::{
+        Installation, JobCommand, JobLaunch, JobRun, Trigger, WaitingJob, quote, took_run_hook,
+    },
     items::item::text,
     transport::api::{HttpMethod, Request},
 };
@@ -14,6 +21,9 @@ use crate::{
 /// The program `actions/runner` runs each job with; its installation is the
 /// directory above the one that holds it.
 pub(super) const PROGRAM: &str = "Runner.Listener";
+
+/// The runner group every repository runner joins.
+const DEFAULT_GROUP: u64 = 1;
 
 /// The run states whose runs may have queued jobs.
 const ACTIVE_RUNS: [&str; 2] = ["queued", "in_progress"];
@@ -157,6 +167,108 @@ pub(super) async fn runner_job(
         name: text(&job["name"]).context("Actions job has no name")?,
         labels: names(&job["labels"]),
     }))
+}
+
+/// Register a just-in-time runner named for the job `launch` claims and
+/// run it from a copy of the installation in the job's work directory,
+/// where it writes its credentials and work: its working directory links to
+/// the job's workspace, its configuration arrives through the environment,
+/// off the command line, and its job-started hook gives every step the
+/// launch's variables and reports the run of the job GitHub gave it.
+pub(super) async fn job_command(
+    repo: &ForgeRepo,
+    account: &Account,
+    launch: &JobLaunch<'_>,
+) -> Result<JobCommand> {
+    let installation = installation(launch)?;
+    let hook = launch.work_dir.join("job-started.sh");
+    let script = took_run_hook(launch.work_dir, launch.job.run, &job_env_lines(launch.env))?;
+    let request = Request::new(
+        HttpMethod::Post,
+        repo.repo_endpoint("actions/runners/generate-jitconfig"),
+        Some(json!({
+            "name": launch.name,
+            "runner_group_id": DEFAULT_GROUP,
+            "labels": launch.labels,
+            "work_folder": "_work",
+        })),
+    );
+    let registered = repo.send(account, &request).await?;
+    let runner = registered["runner"]["id"]
+        .as_u64()
+        .context("the registered runner has no ID")?;
+    let config = text(&registered["encoded_jit_config"])
+        .context("the registered runner has no configuration")?;
+    let name = repo
+        .path
+        .rsplit('/')
+        .next()
+        .context("the repository has no name")?;
+    let destination = &installation.destination;
+    Ok(JobCommand {
+        argv: vec![destination.join("run.sh").into()],
+        env: vec![
+            ("ACTIONS_RUNNER_INPUT_JITCONFIG".into(), config),
+            (
+                "ACTIONS_RUNNER_HOOK_JOB_STARTED".into(),
+                hook.to_str()
+                    .context("the job's hook path is not UTF-8")?
+                    .into(),
+            ),
+        ],
+        files: vec![(hook, script)],
+        workspace_links: vec![destination.join("_work").join(name).join(name)],
+        runner: Some(runner),
+        installation: Some(installation),
+    })
+}
+
+/// The installation `launch.program` belongs to, without the files and
+/// directories a runner writes into it: its configuration, which begins
+/// with a dot, its work and logs, and the versions an update replaced.
+fn installation(launch: &JobLaunch<'_>) -> Result<Installation> {
+    let program = std::fs::canonicalize(launch.program)
+        .with_context(|| format!("resolve {}", launch.program.display()))?;
+    let source = program
+        .parent()
+        .and_then(Path::parent)
+        .context("the runner's program is not in its installation's bin directory")?
+        .to_owned();
+    let mut entries: Vec<OsString> = std::fs::read_dir(&source)
+        .with_context(|| format!("read {}", source.display()))?
+        .map(|entry| Ok(entry?.file_name()))
+        .collect::<std::io::Result<Vec<_>>>()?
+        .into_iter()
+        .filter(installed)
+        .collect();
+    entries.sort();
+    Ok(Installation {
+        source,
+        destination: launch.work_dir.join("runner"),
+        entries,
+    })
+}
+
+fn installed(name: &OsString) -> bool {
+    let name = name.to_string_lossy();
+    !name.starts_with('.')
+        && !["_work", "_diag"].contains(&name.as_ref())
+        && !name.starts_with("bin.")
+        && !name.starts_with("externals.")
+}
+
+/// Lines of a `sh` script that add `env` to the variables of the job's later
+/// steps and its `env` context.
+fn job_env_lines(env: &[(String, String)]) -> String {
+    env.iter()
+        .map(|(name, value)| {
+            format!(
+                "printf '%s=%s\\n' {} {} >> \"$GITHUB_ENV\" || exit 1\n",
+                quote(name),
+                quote(value)
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]

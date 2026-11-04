@@ -28,7 +28,7 @@ use crate::{
         run::{NewRun, workflow_segment},
         run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
-        runner::{JobRun, RegisteredRunner, WaitingJob},
+        runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, WaitingJob},
     },
     conventions::{Lookup, shared_lookups},
     items::{
@@ -698,6 +698,15 @@ impl Backend for GitHub {
 
     fn delete_runner(&self, repo: &ForgeRepo, id: u64) -> Result<Request> {
         Ok(runner::delete(repo, id))
+    }
+
+    async fn job_command(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        launch: &JobLaunch<'_>,
+    ) -> Result<JobCommand> {
+        runner::job_command(repo, account, launch).await
     }
 
     async fn runner_busy(

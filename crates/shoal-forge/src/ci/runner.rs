@@ -200,6 +200,85 @@ impl ForgeRepo {
     }
 }
 
+/// The file in a job's work directory where a runner that may take another
+/// job than the one claimed names the run of the job it took, as it starts
+/// it, before its first step.
+const TOOK_RUN: &str = "took-run";
+/// The file the daemon writes once the job's workspace is at the commit of
+/// the run the runner took, and the one that says why it cannot be.
+const PREPARED: &str = "prepared";
+const REFUSED: &str = "refused";
+
+/// The run the runner of the job with `work_dir` reported taking a job of,
+/// unless it has not started one or was answered.
+pub fn took_run(work_dir: &Path) -> Result<Option<u64>> {
+    if [PREPARED, REFUSED]
+        .iter()
+        .any(|answer| work_dir.join(answer).exists())
+    {
+        return Ok(None);
+    }
+    let reported = match std::fs::read_to_string(work_dir.join(TOOK_RUN)) {
+        Ok(reported) => reported,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error).context("read the run the runner took"),
+    };
+    let run = reported
+        .trim()
+        .parse()
+        .with_context(|| format!("the runner took a job of an unknown run: {reported}"))?;
+    Ok(Some(run))
+}
+
+/// Let the runner of the job with `work_dir` go on with the job it took,
+/// or fail it saying why its workspace could not move to the job's commit.
+pub fn answer_took_run(work_dir: &Path, answer: Result<(), String>) -> Result<()> {
+    let (file, contents) = match answer {
+        Ok(()) => (PREPARED, String::new()),
+        Err(reason) => (REFUSED, reason),
+    };
+    let path = work_dir.join(file);
+    let partial = work_dir.join(format!("{file}.partial"));
+    std::fs::write(&partial, contents).context("answer the runner")?;
+    std::fs::rename(&partial, &path).context("answer the runner")
+}
+
+/// A `sh` script for a runner's job-started hook that runs `before`, reports
+/// the run whose job it took and goes on at once with a job of `run`, whose
+/// commit the workspace has; with another run's job it waits for the daemon
+/// to move the workspace, failing the job when the daemon refuses or does
+/// not answer within ten minutes.
+pub(crate) fn took_run_hook(work_dir: &Path, run: u64, before: &str) -> Result<String> {
+    let quoted = |name: &str| shell_quote(&work_dir.join(name));
+    let (took, prepared, refused) = (quoted(TOOK_RUN)?, quoted(PREPARED)?, quoted(REFUSED)?);
+    Ok(format!(
+        "#!/bin/sh\n{before}\
+printf '%s\\n' \"$GITHUB_RUN_ID\" > {took}.partial && mv {took}.partial {took} || exit 1\n\
+[ \"$GITHUB_RUN_ID\" = {run} ] && exit 0\n\
+echo \"Shoal moves this job's workspace to the commit of run $GITHUB_RUN_ID\"\n\
+waited=0\n\
+while [ \"$waited\" -lt 600 ]; do\n\
+[ -e {prepared} ] && exit 0\n\
+if [ -e {refused} ]; then cat {refused}; exit 1; fi\n\
+sleep 1\n\
+waited=$((waited + 1))\n\
+done\n\
+echo 'Shoal did not move the workspace within ten minutes'\n\
+exit 1\n"
+    ))
+}
+
+/// `path` as one `sh` word.
+fn shell_quote(path: &Path) -> Result<String> {
+    let path = path.to_str().context("a path of the job is not UTF-8")?;
+    Ok(quote(path))
+}
+
+/// `text` as one `sh` word.
+pub(crate) fn quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "'\\''"))
+}
+
 /// The request that registers a runner at `endpoint` as `name`.
 pub(crate) fn registration(endpoint: String, name: &str) -> Request {
     let body = serde_json::json!({
