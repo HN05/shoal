@@ -493,3 +493,21 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "unused", "").await;
+    let manager = &fixture.manager;
+    manager.refresh_waiting_jobs().await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    let admitted = manager.admitted_jobs().await.unwrap();
+    assert_eq!(admitted.len(), 1);
+    manager.agent_queue.suspend(true).await;
+    manager.claim_job(&admitted[0]).await;
+    let waiting = job_entries(manager).await;
+    assert_eq!(waiting.len(), 1);
+    assert_eq!(waiting[0].state, QueueState::Queued);
+    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.workspace("ci-rust-4").await.is_err());
+    manager.agent_queue.suspend(false).await;
+}

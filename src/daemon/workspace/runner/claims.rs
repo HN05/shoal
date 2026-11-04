@@ -4,7 +4,8 @@
 //! repository's `runner.permit` pool when it names one. A PR's job whose PR
 //! moved to a newer head is passed over instead, as is one that cannot
 //! start, and either stays with the forge for other runners, as do the jobs
-//! of a repository whose runner was turned off.
+//! of a repository whose runner was turned off. A job admitted as the system
+//! shuts down waits in the queue again.
 use std::{io::Write as _, os::unix::fs::OpenOptionsExt as _, path::PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -36,6 +37,8 @@ enum Claim {
     PermitsBusy,
     /// The repository's runner was turned off, so the job leaves the queue.
     Withdrawn,
+    /// The system shuts down, so the job waits for the queue to admit it again.
+    Suspended,
 }
 
 impl Manager {
@@ -69,6 +72,12 @@ impl Manager {
                 }
                 return;
             }
+            Ok(Claim::Suspended) => {
+                if let Err(error) = self.return_job(&entry.id).await {
+                    crate::daemon::log!("runner: {error:#}");
+                }
+                return;
+            }
             Err(error) => Some(error),
         };
         if let Err(error) = self.pass_over_claimed(entry).await {
@@ -92,6 +101,9 @@ impl Manager {
         let settings = self.repository_settings(&entry.repository_id).await?;
         if !settings.runner.enabled {
             return Ok(Claim::Withdrawn);
+        }
+        if self.agent_queue.suspended() {
+            return Ok(Claim::Suspended);
         }
         let registration = self
             .runner_registration(&entry.repository_id)
@@ -153,6 +165,13 @@ impl Manager {
             workspace_id: linked,
             ..job.clone()
         };
+        // Held until the launch is recorded, so a system shutdown, which
+        // suspends the queue under the same gate, either stops the job with
+        // the rest or finds it not started.
+        let _admission = self.agent_queue.lock_admission().await;
+        if self.agent_queue.suspended() {
+            return Ok(Claim::Suspended);
+        }
         self.record_claim(claim.entry, &claim.workspace.id, &job)
             .await?;
         let argv = self.write_job_files(&claim, &job)?;
