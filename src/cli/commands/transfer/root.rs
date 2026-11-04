@@ -78,7 +78,8 @@ async fn plan_moves(
 /// Stop the workspaces `executions` run in, keeping their agents' sessions,
 /// and add to `stopped` the executions each stop saved for `shoal resume`,
 /// by workspace, including any started since the plan or ended by a stop
-/// that failed. An execution Shoal cannot prove ended stops once the user
+/// that failed. A CI job's workspace is waited for until the job, whose run
+/// the stop cancelled, ends and its workspace goes. An execution Shoal cannot prove ended stops once the user
 /// confirms it did, or when `confirmed`.
 async fn stop_running(
     ctx: &Context,
@@ -100,9 +101,35 @@ async fn stop_running(
             workspace.clone(),
             saved.difference(&saved_before).cloned().collect(),
         );
-        result?;
+        if result?.cancelled_run.is_some() {
+            ctx.progress(
+                "Waiting for a cancelled CI job to end",
+                job_ended(ctx, workspace),
+            )
+            .await?;
+        }
     }
     Ok(())
+}
+
+/// How long a move waits for a cancelled CI job's runner to stop it.
+const JOB_END: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// Wait until the workspace of a CI job whose run was cancelled is gone,
+/// which the daemon removes once the forge's runner stops the job.
+async fn job_ended(ctx: &Context, workspace: &str) -> Result<()> {
+    let deadline = tokio::time::Instant::now() + JOB_END;
+    loop {
+        let workspaces = client::workspaces(&ctx.paths).await?;
+        if workspaces.iter().all(|listed| listed.id != workspace) {
+            return Ok(());
+        }
+        ensure!(
+            tokio::time::Instant::now() < deadline,
+            "the cancelled CI job in workspace {workspace} still runs; move the root once the forge has stopped it"
+        );
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
 }
 
 /// The executions whose stopped work the workspace saves for `shoal resume`.

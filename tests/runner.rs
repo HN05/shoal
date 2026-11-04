@@ -19,11 +19,24 @@ use shoal_forge::test_support::Server;
 use support::{cli, install_test_script, wait::wait_until};
 
 /// A Forgejo whose `team/repo` holds job `h1` waiting in run 1, a push to
-/// `main` at `head`, and registers runner 5.
-fn forgejo(head: String) -> Server {
+/// `main` at `head`, and registers runner 5; cancelling the run creates
+/// `finish`, which ends the recording runner.
+fn forgejo(head: String, finish: std::path::PathBuf) -> Server {
     Server::start(move |request| {
         let line = request.line.as_str();
+        let run = json!({
+            "id": 1, "index_in_repo": 1, "event": "push", "commit_sha": head,
+            "workflow_id": "checks.yml", "status": "running",
+            "event_payload": json!({"ref": "refs/heads/main"}).to_string(),
+        });
         let body = match line {
+            "GET /api/v1/repos/team/repo/actions/runs?run_number=1" => {
+                json!({"workflow_runs": [run]})
+            }
+            "POST /api/v1/repos/team/repo/actions/runs/1/cancel" => {
+                fs::write(&finish, "").unwrap();
+                return (204, Vec::new(), Vec::new());
+            }
             "GET /api/v1/version" => json!({"version": "17.0.1+gitea-1.22.0"}),
             "POST /api/v1/repos/team/repo/actions/runners" => {
                 json!({"id": 5, "uuid": "runner-uuid", "token": "runner-token"})
@@ -31,11 +44,7 @@ fn forgejo(head: String) -> Server {
             "DELETE /api/v1/repos/team/repo/actions/runners/5" => {
                 return (204, Vec::new(), Vec::new());
             }
-            "GET /api/v1/repos/team/repo/actions/runs/1" => json!({
-                "id": 1, "index_in_repo": 1, "event": "push", "commit_sha": head,
-                "workflow_id": "checks.yml",
-                "event_payload": json!({"ref": "refs/heads/main"}).to_string(),
-            }),
+            "GET /api/v1/repos/team/repo/actions/runs/1" => run,
             line if line.starts_with("GET /api/v1/repos/team/repo/actions/runners/jobs?") => {
                 json!([
                     {"handle": "h1", "id": 4, "run_id": 1, "name": "rust", "runs_on": ["shoal"], "status": "waiting"},
@@ -67,7 +76,8 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
     let root = &fs::canonicalize(root.path()).unwrap();
     let repo = init_repo(root, "repo", &[("README", "runner\n")]);
     let head = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
-    let server = forgejo(head.clone());
+    let finish = root.join("finish");
+    let server = forgejo(head.clone(), finish.clone());
     let origin = format!("http://{}/team/repo", server.host);
     git(&repo, &["remote", "add", "origin", &origin]);
     git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
@@ -80,7 +90,6 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
         ],
     );
     let calls = root.join("runner-calls");
-    let finish = root.join("finish");
     install_test_script(
         root.join("bin/forgejo-runner"),
         format!(
@@ -139,13 +148,21 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
     assert_eq!(job["at"]["commit"], head.as_str());
     assert_eq!(job["job"]["job"]["handle"], "h1");
 
-    // Once the runner ends, its workspace goes.
-    fs::write(&finish, "").unwrap();
-    wait_until("the job's workspace to go", || {
+    // Moving the root cancels the job's run, and moves once its runner has
+    // ended and its workspace is gone.
+    let new_root = root.join("moved");
+    run(root, &["move", "root", new_root.to_str().unwrap(), "--yes"]);
+    assert!(
+        server
+            .received()
+            .iter()
+            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/1/cancel")
+    );
+    assert!(
         workspaces(root)
             .iter()
             .all(|workspace| workspace["id"] != workspace_id.trim())
-    });
+    );
 
     run(
         root,
