@@ -2,10 +2,8 @@
 //! ends, however it ended, the job's workspace is removed whatever it holds,
 //! with its permit, and the runner's directory of a job no longer claimed,
 //! however its workspace went, is deleted. A job ends only on the forge's
-//! word: stopping it cancels its run there, as does removing its workspace
-//! while it runs. A job ends
-//! only on the forge's word: stopping it cancels its run there, which the
-//! forge's runner then stops.
+//! word: stopping it, or removing its workspace while it runs, cancels its
+//! run there, and the forge's runner then stops it.
 use std::time::Duration;
 
 use anyhow::Result;

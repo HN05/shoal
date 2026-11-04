@@ -39,7 +39,10 @@ impl Manager {
             if job.job.workspace_id.as_deref() != Some(id) {
                 continue;
             }
-            let mut workspace = self.workspace(&job.workspace_id).await?;
+            // A job that ended meanwhile is gone with its workspace.
+            let Ok(mut workspace) = self.workspace(&job.workspace_id).await else {
+                continue;
+            };
             workspace.usage = self.workspace_usage(&workspace.id);
             workspace.job = Some(Box::new(job.job));
             workspaces.push(workspace);

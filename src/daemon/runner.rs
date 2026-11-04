@@ -129,6 +129,10 @@ pub(super) async fn run(manager: Arc<Manager>) {
             // A daemon update waits for the pass, as for any background operation.
             let _operation = manager.gates.operation().await;
             let changed = manager.runners.take_changed();
+            if changed {
+                // A changed setting deserves a try at once.
+                manager.runners.forget_failures();
+            }
             if changed || reconciled.is_none_or(|at| at.elapsed() >= INTERVAL) {
                 if let Err(error) = manager.reconcile_runners().await {
                     log!("runner: {error:#}");
