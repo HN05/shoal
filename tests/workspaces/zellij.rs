@@ -296,20 +296,28 @@ impl ZellijServer {
     /// What Zellij shows of the user's session: its client, its panes, the
     /// sessions and Zellij's log.
     fn report(&mut self) -> String {
-        let list_panes = self
-            .zellij()
-            .args(["--session", "caller", "action", "list-panes", "--all"])
-            .output();
-        let list_sessions = self
-            .zellij()
-            .args(["list-sessions", "--no-formatting"])
-            .output();
         format!(
-            "client: {}\nclient screen:\n{}\nlist-panes: {list_panes:?}\nlist-sessions: {list_sessions:?}\nzellij log:\n{}",
+            "client: {}\nclient screen:\n{}\nlist-panes: {:?}\nlist-sessions: {:?}\nzellij log:\n{}",
             self.client_state(),
             self.client_screen(),
+            self.pane_table(),
+            self.session_table(),
             zellij_log(),
         )
+    }
+
+    /// What `zellij action list-panes` prints of the user's session.
+    fn pane_table(&self) -> std::io::Result<std::process::Output> {
+        self.zellij()
+            .args(["--session", "caller", "action", "list-panes", "--all"])
+            .output()
+    }
+
+    /// What `zellij list-sessions` prints.
+    fn session_table(&self) -> std::io::Result<std::process::Output> {
+        self.zellij()
+            .args(["list-sessions", "--no-formatting"])
+            .output()
     }
 
     /// Whether the client still runs, or how it exited.
