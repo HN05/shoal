@@ -66,6 +66,8 @@ struct Connected {
     /// The daemon stopped the command before it finished.
     stopped: bool,
     stop: watch::Receiver<bool>,
+    /// The merge the execution runs, recorded once it ends.
+    merge: Option<Box<crate::model::MergePlan>>,
 }
 
 /// How the wrapper's connection ended.
@@ -185,6 +187,7 @@ pub(super) async fn execute(
         hears_restore_waits: true,
         stopped: false,
         stop,
+        merge: plan.merge.clone(),
     };
     let response = Response::new(request_id, Body::Execution(plan));
     serve(stream, &manager, execution, response, operation).await
@@ -234,6 +237,7 @@ pub(super) async fn reattach(
         hears_restore_waits: version >= protocol::RESTORE_WAITS,
         stopped: false,
         stop,
+        merge: None,
     };
     serve(
         stream,
@@ -279,6 +283,13 @@ async fn serve(
     }
     .await;
     readers.abort_all();
+    // The Git gate the registration holds keeps the default branch as the
+    // merge left it until it is recorded.
+    if let Some(merge) = &execution.merge
+        && !matches!(result, Ok(Ended::Detached))
+    {
+        manager.record_merge(merge).await;
+    }
     let result = match result {
         Ok(Ended::Detached) => {
             manager.detach_execution(&execution.id).await;

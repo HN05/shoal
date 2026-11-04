@@ -1,6 +1,7 @@
 //! Merge preparation: validate a workspace branch, say what merging it does,
 //! and refresh the default branch before the merge worker merges it.
 mod approval;
+mod records;
 
 use std::path::Path;
 

@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 131;
+pub(super) const SCHEMA_VERSION: i64 = 132;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -394,6 +394,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (129, "", Some(super::item_numbers::number_items)),
     (130, REPOSITORY_RUNNERS_OPTIONAL, None),
     (131, CI_JOB_RUNNERS, None),
+    (132, include_str!("merges.sql"), None),
 ];
 
 /// The runner the forge registered for a claimed job alone, deleted once

@@ -1109,7 +1109,7 @@ pub struct MergedBranch {
 }
 
 /// A daemon-authorized merge, held under the repository Git gate.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MergePlan {
     pub workspace: Workspace,
     /// The workspace's branch, which merges.
