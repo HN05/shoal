@@ -57,6 +57,8 @@ impl Manager {
             })
         })
         .await??;
+        // The runner follows `runner.enabled` as soon as it changes.
+        self.runners.settings_changed();
         Ok(LocalConfigEdit { config, backup })
     }
 

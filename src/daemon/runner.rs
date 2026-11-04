@@ -1,6 +1,6 @@
 //! The runner's background work: each repository's runner follows its
-//! `runner.enabled` setting, checked when the global config changes and
-//! every [`INTERVAL`] for the repositories' own files; every
+//! `runner.enabled` setting, checked when the global config or a local
+//! config changes and every [`INTERVAL`] for the repositories' own files; every
 //! [`POLL_INTERVAL`], and whenever admission admits a job, the jobs that
 //! ended give up their workspaces, admitted jobs are claimed, and the
 //! forge's waiting jobs are read while the machine has room for one.
@@ -35,6 +35,8 @@ pub(crate) struct Runners {
     claiming: Mutex<HashSet<String>>,
     /// Admission admitted a job, or one ended.
     wake: Notify,
+    /// A repository's settings changed since the runners were checked.
+    changed: std::sync::atomic::AtomicBool,
     /// The `PATH` tests find the runner's program on instead of the process's.
     #[cfg(test)]
     pub(crate) path: Mutex<Option<std::ffi::OsString>>,
@@ -96,6 +98,19 @@ impl Runners {
         self.wake.notify_one();
     }
 
+    /// Check the runners against the repositories' settings now, as after
+    /// an edit of a repository's local config.
+    pub(crate) fn settings_changed(&self) {
+        self.changed
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.wake();
+    }
+
+    fn take_changed(&self) -> bool {
+        self.changed
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// Try every repository again, as after the user changed the config.
     fn forget_failures(&self) {
         lock(&self.failures).clear();
@@ -110,7 +125,8 @@ pub(super) async fn run(manager: Arc<Manager>) {
     let mut config = manager.config_state.watch();
     let mut reconciled: Option<Instant> = None;
     loop {
-        if reconciled.is_none_or(|at| at.elapsed() >= INTERVAL) {
+        let changed = manager.runners.take_changed();
+        if changed || reconciled.is_none_or(|at| at.elapsed() >= INTERVAL) {
             if let Err(error) = manager.reconcile_runners().await {
                 log!("runner: {error:#}");
             }
