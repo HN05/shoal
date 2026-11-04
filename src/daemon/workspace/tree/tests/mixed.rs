@@ -191,7 +191,7 @@ async fn a_space_never_takes_one_above_it_as_its_child() {
         .await
         .unwrap_err();
     assert!(
-        format!("{error:#}").contains("planning is below the space it would take"),
+        format!("{error:#}").contains("planning is below or in the space it would take"),
         "{error:#}"
     );
     assert!(manager.workspace(&root.id).await.unwrap().parent.is_none());
@@ -323,4 +323,47 @@ async fn removing_a_workspace_removes_the_chats_in_it_first() {
         let found = manager.find_workspace(&workspace.id).await.unwrap();
         assert!(found.is_none(), "{}", workspace.name);
     }
+}
+
+#[tokio::test]
+async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let host = manager
+        .create_workspace(&repo.id, "host".into(), None, None, None)
+        .await
+        .unwrap();
+    let split = manager
+        .split_workspace(&host.id, "split".into(), None)
+        .await
+        .unwrap();
+    let (watching, _process) = chat_in(&manager, &split, "watching").await;
+    // Removing host takes the chat first, so host cannot be below it.
+    let error = manager
+        .assign_chat(&host.id, Some(watching.id.clone()))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("watching is below or in the space"),
+        "{error:#}"
+    );
+    assert!(manager.workspace(&host.id).await.unwrap().parent.is_none());
+    // A split workspace stays below the one it was split from.
+    manager
+        .assign_chat(&split.id, Some(watching.id.clone()))
+        .await
+        .unwrap();
+    let parent = manager.workspace(&split.id).await.unwrap().parent;
+    assert_eq!(parent.map(|parent| parent.id), Some(host.id.clone()));
+    let below: Vec<_> = (manager.check_manual_removal(&host.id, false).await)
+        .unwrap()
+        .children
+        .into_iter()
+        .map(|space| space.name)
+        .collect();
+    assert_eq!(below, ["watching", "split"]);
 }
