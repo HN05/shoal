@@ -6,7 +6,7 @@
 //! forge's runner then stops.
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rusqlite::params;
 
 use crate::{
@@ -146,11 +146,8 @@ impl Manager {
         else {
             return Ok(false);
         };
-        let registration = self
-            .runner_registration(&job.repository_id)
-            .await?
-            .context("the repository's runner is no longer registered")?;
-        let forge = ForgeRepo::resolve(&registration.forge_repository, &self.forge_hosts()).await?;
+        // The run names its repository, also once the runner is gone.
+        let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
         let run = forge
             .find_run(&account, &job.job.run.url, CiAction::Cancel)

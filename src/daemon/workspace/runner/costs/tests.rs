@@ -57,6 +57,8 @@ async fn a_job_counts_at_the_peaks_of_its_recent_runs() {
             .await
             .unwrap();
         manager.record_job_usage(&job).await.unwrap();
+        // A removal tried again records the run no second time.
+        manager.record_job_usage(&job).await.unwrap();
     }
     assert_eq!(
         manager.job_cost(&repo.id, &rust).await.unwrap(),

@@ -44,7 +44,8 @@ impl Manager {
     }
 
     /// Keep the peaks of the ended `job` as its latest run, unless no
-    /// sample saw it run, forgetting runs older than [`RECENT_RUNS`].
+    /// sample saw it run or they are kept already, as before a removal that
+    /// is tried again, forgetting runs older than [`RECENT_RUNS`].
     pub(super) async fn record_job_usage(&self, job: &ClaimedJob) -> Result<()> {
         let (id, repository) = (job.id.clone(), job.repository_id.clone());
         let (workflow, name) = key(&job.job);
@@ -53,7 +54,7 @@ impl Manager {
                 let tx = db.transaction()?;
                 let peaks: Option<(Option<f64>, Option<i64>)> = tx
                     .query_row(
-                        "SELECT peak_cpu,peak_memory FROM ci_jobs WHERE id=?1",
+                        "SELECT peak_cpu,peak_memory FROM ci_jobs WHERE id=?1 AND usage_recorded=0",
                         [&id],
                         |row| Ok((row.get(0)?, row.get(1)?)),
                     )
@@ -61,6 +62,7 @@ impl Manager {
                 let Some((Some(cpu), Some(memory))) = peaks else {
                     return Ok(());
                 };
+                tx.execute("UPDATE ci_jobs SET usage_recorded=1 WHERE id=?1", [&id])?;
                 tx.execute(
                     "INSERT INTO ci_job_usage(repository_id,workflow,name,ended_at,peak_cpu,peak_memory)
                      VALUES (?1,?2,?3,?4,?5,?6)",

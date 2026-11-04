@@ -450,6 +450,22 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
         .unwrap()
         .remove(&claimed[0].workspace_id)
         .unwrap();
+    // A running job stays cancellable once its runner is turned off.
+    manager
+        .write_local_config(
+            &fixture.repository,
+            Some("[runner]\nenabled = false\n".into()),
+        )
+        .await
+        .unwrap();
+    manager.reconcile_runners().await.unwrap();
+    assert!(
+        manager
+            .runner_registration(&fixture.repository)
+            .await
+            .unwrap()
+            .is_none()
+    );
 
     manager
         .stop_workspace_manually(

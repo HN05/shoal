@@ -2,7 +2,8 @@
 -- job's commit, by the execution that runs the forge's runner once it
 -- started, and leaves with that workspace once the execution ends. Its peaks
 -- are the most CPU, in percent of one core, and resident memory its
--- workspace's usage samples showed.
+-- workspace's usage samples showed, which join the job's usage once, when
+-- it ends.
 CREATE TABLE IF NOT EXISTS ci_jobs (
     id TEXT PRIMARY KEY,
     repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
@@ -11,7 +12,8 @@ CREATE TABLE IF NOT EXISTS ci_jobs (
     job TEXT NOT NULL,
     started_at INTEGER NOT NULL,
     peak_cpu REAL,
-    peak_memory INTEGER
+    peak_memory INTEGER,
+    usage_recorded INTEGER NOT NULL DEFAULT 0 CHECK(usage_recorded IN (0,1))
 );
 
 -- The peaks of each repository's recent runs of a job, by its workflow
