@@ -1949,7 +1949,8 @@ machine-wide, or of one with `--repo`, as `queued, position N` or `starting`,
 followed by the work a waiting launch is after, or `after an update` for a
 restore of an idle agent, and a restore with its agent; `shoal work` lists them
 after the workspaces. `queue --json` gives the entries with their `kind`,
-`launch` or `restore`, a restore's stopped `execution`, `waiting_for` while dependencies remain,
+`launch`, `restore` or `job`, a restore's stopped `execution`, a job's `job`
+with its run, `waiting_for` while dependencies remain,
 `waits_for_update` for a restore of an idle agent and
 `base` once a launch starts on a dependency's branch, while `work --json` stays
 a list of workspaces. Entries are named as listed, by workspace name or by ID
@@ -2870,6 +2871,93 @@ repository's caches, configured or not, while none of its tracked executions and
 no seed build of it is running; disk space cleanup records a `caches_emptied`
 notification. Processes started with an exported environment are not tracked.
 Removing the repository deletes `.caches`.
+
+### Runner
+
+```toml
+[runner]
+enabled = true        # Run the repository's CI jobs on this machine; default false
+labels = ["shoal"]    # Default; shoal-<os>-<arch> is always added
+permit = "builds"     # Optional: a resource pool each job holds one permit from
+
+[machine]
+max_jobs = "dynamic"  # Default; or a positive number, or "none"
+```
+
+While `runner.enabled` is on for a registered repository, the daemon registers
+a runner for that repository on its forge with your own login, the `token` of
+its [forge host](#forges), which must be allowed to administer the
+repository's Actions, and keeps the runner's UUID and token in its state.
+Turning the setting off, or removing the repository, deletes the runner on the
+forge; when the forge cannot be reached, removal goes ahead and a
+`runner_failed` notification names the runner to delete by hand. `[runner]`
+resolves like any repository option; a change to the local config applies at
+once, others within a minute. The runner takes jobs whose `runs-on` labels are
+among `labels` and `shoal-<os>-<arch>`, such as `shoal-linux-x86_64` or
+`shoal-macos-arm64`. It needs Forgejo 15 or later and `forgejo-runner` on the
+daemon's `PATH`; otherwise, or when the forge refuses the registration, a
+`runner_failed` notification says why and nothing is claimed, and the daemon
+tries again five minutes later or when the config changes. Other forges and
+Gitea report the `run_jobs` capability as unsupported.
+
+The jobs the forge holds for the runner's labels join the [agent
+queue](#agent-queue) as `job` entries named `ci-<job>-<ID>`, in the order the
+forge queued them, except that a job goes ahead of a queued restore of the
+agent of the workspace its run links. The daemon reads them every ten seconds
+while a job could start, so an idle runner or a full machine sends no requests,
+and drops the entries of jobs the forge no longer lists. `machine.max_jobs`
+limits jobs as `machine.max_agents` limits agents, counting only jobs. Under
+`dynamic`, agents and jobs start through one admission, one at a time at least
+10 seconds apart, while measured CPU, memory and disk leave room below the
+`[machine.overload.warning]` thresholds: a job counts at the most CPU and
+resident memory its last five runs reached, by repository, workflow and job
+name, or at two cores before it has run, and a job's recent start counts
+against an agent's as an agent's counts against a job's. With
+`runner.permit`, a job waits until its pool has a free permit and holds one
+while it runs. Until a job is admitted, any other runner may take it. `queue
+start` admits a job regardless of the limits, `queue move` moves it, and
+`queue cancel` passes it over, leaving it to other runners. A PR's job whose PR
+has a newer head when it is admitted is passed over too.
+
+An admitted job runs `forgejo-runner one-job --handle <handle>` with each label
+on the host backend, as a tracked execution in a disposable workspace at the
+job's commit, fetched from its PR's or branch's ref. The workspace skips setup
+and starts from the [seed build](#seed-builds) like any workspace, so the job
+rebuilds only what its commit changed. The job gets its workspace's
+environment, scope token, `TMPDIR` and `[env]`, but no agent secrets and no
+forge login besides the token the forge gives the job. Once the execution ends,
+however it ended, the workspace goes whatever it holds, with its permit; after
+a daemon restart, a job whose runner is gone goes the same way and the forge
+times it out. Protection never stops a running job; the workflow's
+`timeout-minutes` bounds it. `shoal stop` on the job's workspace, and `shoal ci
+cancel`, cancel the job's run on the forge, which cancels each of its jobs; the
+forge's runner then stops the job and its workspace goes. A job that cannot
+start is passed over with a `runner_failed` notification.
+
+`shoal work` lists a running job's workspace below the workspace that links its
+run's PR, or owns the branch it ran on, with the job and what its processes
+use, and that workspace's `shoal status` lists the job under `CI jobs`. The job
+is not that workspace's child: it starts from the seed rather than the
+workspace's build, and the workspace's agent's scope does not reach it.
+
+`forgejo-runner`'s host backend starts each step in a directory of its own,
+not the job's workspace, so a job for this runner names the workspace as its
+working directory and has no checkout step, since the workspace has the commit
+already. `SHOAL_WORKSPACE_PATH` and `SHOAL_WORKSPACE_ID`, which every Shoal job
+has, serve both, also in a job that other runners take too:
+
+```yaml
+jobs:
+  rust:
+    runs-on: shoal
+    defaults:
+      run:
+        working-directory: ${{ env.SHOAL_WORKSPACE_PATH }}
+    steps:
+      - uses: actions/checkout@v4
+        if: ${{ !env.SHOAL_WORKSPACE_ID }}
+      - run: cargo test --locked
+```
 
 ### Temporary directories
 
@@ -4334,7 +4422,7 @@ The daemon records what happens while you are not looking: a resource or
 simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `shoal stop` when it left processes
-behind), an agent's failed [turn-state report](#agent-state), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
+behind), an agent's failed [turn-state report](#agent-state), [agent queue](#agent-queue) starts and failures, [runner](#runner) failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup, automatic cleanup that starts failing, a directory whose file access
 stalled, and, when the daemon starts or
 reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,

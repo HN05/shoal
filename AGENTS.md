@@ -317,6 +317,10 @@ night (and on `shoal ci run flaky.yml --branch main`) and rewrites the evergreen
 `Flaky test report` issue with every test that failed; a failure fails the run.
 The run log keeps each failed test's output for the issue that fixes it.
 It is never a required check.
+`.forgejo/workflows/shoal-runner.yml` runs the rust job's checks with
+`runs-on: shoal` on a machine whose Shoal runs this repository's CI jobs
+(`runner.enabled`), only on `shoal ci run shoal-runner.yml`; it is never a
+required check.
 `.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
 opens or leaves draft and whenever `review/default`, `review/claude` or
 `review/codex` is added; `review/none` suppresses it. Pushing commits does not

@@ -136,6 +136,12 @@ limit and starts them as slots free; `--now` starts one anyway, and `shoal rm
 that work is done and starts it on the finished branch; an issue's agent also
 waits for the issues blocking it. See the [agent queue](docs/reference.md#agent-queue).
 
+Shoal can also run a registered repository's CI jobs on this machine:
+`shoal config set runner.enabled true --repo my-project` registers a runner on
+its Forgejo, and jobs with `runs-on: shoal` wait in the same queue, run in a
+workspace at their commit that starts from the seed build, and go once they
+end. See the [runner](docs/reference.md#runner).
+
 ## Everyday commands
 
 After [adding an AI tool](docs/reference.md#agents), run

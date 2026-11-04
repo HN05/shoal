@@ -15,7 +15,8 @@ direct resource access; filesystem restrictions are future work.
 
 Caller-specific integration stays outside the daemon core: Superlogical owns terminals;
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
-browsers, schedule agent tasks beyond the `max_agents` queue, or store conversations. Agent shortcuts
+browsers, schedule work beyond the agent queue, which also admits registered
+repositories' CI jobs, or store conversations. Agent shortcuts
 (`claude`, `codex`, `happy`, `t3`) are thin launchers around the generic execution
 path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Shoal does not switch the user's or
@@ -862,6 +863,24 @@ repository runs; registering an execution prepares the directories in the
 transaction that records it, so emptying under the store's write lock cannot
 race a start.
 
+Build acceleration and the CI runner belong in core: Shoal runs the CI jobs of
+the repositories registered with it, so a job starts from the seed and rebuilds
+only what its commit changed, and the machine's agents and jobs share one
+admission instead of competing for memory. The forge's own runner runs the
+steps, `forgejo-runner one-job --handle` on the host, which keeps the workflow
+semantics, actions and log streaming, while Shoal decides which job runs when:
+it lists the jobs waiting for its labels as agent queue entries, admits them
+with agents, and claims a job only once admitted, so until then any other
+runner may take it. Each job runs as a tracked execution in a disposable
+workspace at its commit, which goes once the forge's runner exits. A job ends
+only on the forge's word, so stopping it cancels its run there and protection
+leaves it running. The workspace a run's PR or branch links lists the job, but
+neither owns it, lends it a build nor reaches it with its scope. The runner is
+registered per repository with the user's own login, never for a user,
+organisation or instance, and what the forge does its own way is a `Backend`
+operation, so another forge adds an implementation, not daemon code. Container
+jobs and forges other than Forgejo remain proposals.
+
 ## Scope and user interfaces
 
 Tracked executions and processes started with exported workspace environments
@@ -1178,7 +1197,11 @@ critical readings admit none. Dynamic is machine-wide, so a repository's
 `dynamic` adds no limit. A positive number fixes a limit and `none` disables it
 for that layer. Fixed limits keep dynamic admission's disk rule, since an agent
 started on a nearly full disk is soon stopped by disk protection. Per-agent
-memory profiles remain a proposal.
+memory profiles remain a proposal. CI jobs go through the same admission and
+order: `machine.max_jobs` limits them apart from agents, and under `dynamic` a
+job counts at the CPU and memory its recent runs reached, which a job repeats
+far more closely than an agent, and takes the one staggered start an agent
+would.
 Automatic restores are typed queue entries ordered with launches, queued when
 the stopped agent's processes are proven stopped. A restore of an agent stopped
 between turns waits for an update instead, holding no slot and holding back
