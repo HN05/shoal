@@ -3,7 +3,7 @@
 mod approval;
 mod records;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail, ensure};
 
@@ -71,15 +71,7 @@ impl Manager {
             push,
         } = merge;
         let default_refresh = self.refresh_default(&repo, &default).await?;
-        let checkout = git::checkout_of(&repo.path, &default, git::run)
-            .await?
-            .map(|tree| tree.path);
-        if let Some(checkout) = &checkout {
-            clean_branch(checkout, &default).await?;
-            if let Some(marker) = unfinished_operation(checkout).await? {
-                bail!("{default} has an unfinished Git operation ({marker})");
-            }
-        }
+        let checkout = clean_checkout(&repo, &default).await?;
         let merge_temporaries = checkout
             .as_deref()
             .map(merge_temporaries)
@@ -135,11 +127,8 @@ impl Manager {
             .with_context(|| format!("workspace {} is not ready to merge", workspace.name))?;
         let source =
             git::resolve_commit(&workspace.path, &git::local_ref(&branch), git_run).await?;
-        if let Some(checkout) = self.managed_checkout(&repo, &default).await? {
-            bail!(
-                "{default} is checked out in workspace {checkout}; merge needs it outside managed workspaces"
-            );
-        }
+        self.ensure_unmanaged_checkout(&repo, &default, "merge")
+            .await?;
         let push = match push {
             true => Some(push_target(&repo, &default).await?),
             false => None,
@@ -216,6 +205,22 @@ impl Manager {
         })
     }
 
+    /// Refuse `command` while a managed workspace has the default branch
+    /// `default` checked out.
+    async fn ensure_unmanaged_checkout(
+        &self,
+        repo: &Repository,
+        default: &str,
+        command: &str,
+    ) -> Result<()> {
+        if let Some(checkout) = self.managed_checkout(repo, default).await? {
+            bail!(
+                "{default} is checked out in workspace {checkout}; {command} needs it outside managed workspaces"
+            );
+        }
+        Ok(())
+    }
+
     /// The managed workspace that has `branch` checked out, if any.
     async fn managed_checkout(&self, repo: &Repository, branch: &str) -> Result<Option<String>> {
         let Some(checkout) = git::checkout_of(&repo.path, branch, git::run).await? else {
@@ -282,6 +287,21 @@ async fn synced_to(
     )
     .await?
         && git::is_ancestor(path, current, &tracking, git::isolated_command).await?)
+}
+
+/// The checkout of `repo`'s `default` branch, if it has one, which must be
+/// clean and between Git operations before a merge or unmerge moves it.
+async fn clean_checkout(repo: &Repository, default: &str) -> Result<Option<PathBuf>> {
+    let checkout = git::checkout_of(&repo.path, default, git::run)
+        .await?
+        .map(|tree| tree.path);
+    if let Some(checkout) = &checkout {
+        clean_branch(checkout, default).await?;
+        if let Some(marker) = unfinished_operation(checkout).await? {
+            bail!("{default} has an unfinished Git operation ({marker})");
+        }
+    }
+    Ok(checkout)
 }
 
 /// The commits of `default_commit` that the upstream of `default`, which a
