@@ -1992,8 +1992,8 @@ does, recording no branch or commit, since it has none; approval opens the
 issue from the chat's checkout and records it as the chat's. It starts at once from the default branch the
 background sync keeps current, so an offline or diverged checkout still gets its
 chat. Its
-instructions describe the discussion only, from a chat template that
-repositories can extend like the other prompt templates; the orchestrator skill is available when the user asks for coordination. Belonging
+instructions describe the discussion only, from the `chat` rule that
+repositories can extend like the other rules; the orchestrator skill is available when the user asks for coordination. Belonging
 to no workspace, a chat is not a tracked execution: queuing and overload stops
 serve unattended agents, while the user attends a chat. It is still a
 daemon record, so lists and integrations can follow it: the agent replaces Shoal's
@@ -2157,27 +2157,34 @@ One declaration of each option, the field of the repository schema with its
 kind, generates its built-in default, merge, resolved form and provenance, so a
 reported layer is the one whose value is in use; the daemon resolves a workspace's settings
 once per request and every use site reads them rather than layering on its own.
-Prompt templates select repository additions by local/worktree precedence and
-append them to global guidance, using the bundled chat template when
-no global one is configured. Empty repository values suppress only the addition.
-Repository Markdown files, at the root or in `.shoal/` like the repository
-config and refused in both, and global files beside `config.toml` sit below
-inline TOML values at each level; provenance names the highest configured layer
-and the file it read, and reports the combined text.
-Shoal's agent guidance is built in and precedes every worker template, so
-adding instructions never freezes or replaces it. It holds only what the launch
+An agent starts in a mode: a named entry that lists the rules its system text
+carries, holds the instructions its first message ends with, and says which kind
+of space it starts in. Rules are named and shared, since several modes need the
+same guidance, while instructions say how to do one mode's job. Rules go
+through the agent CLI's system channel so they hold for the whole session,
+across restores and compaction; instructions follow the subject once, in the
+first message, so a restore never repeats a task the session already has. The
+subject, an issue or the prompt given, is worded the same in every mode, so modes
+differ only in what they add. Modes and rules are named sections whose options
+layer one by one; their texts select repository additions by local/worktree
+precedence and append them to the global text. Empty repository values suppress
+only the addition. Repository Markdown files, at the root or in `.shoal/` like the
+repository config and refused in both, and global files beside `config.toml` sit
+below inline TOML values at each level; provenance names the highest configured
+layer and the file it read, and reports the combined text.
+Shoal's agent guidance is built in and precedes every workspace agent's rules, so
+adding rules never freezes or replaces it. It holds only what the launch
 knows (the workspace, branch, path and how activity arrives), the rules an
 agent needs before it loads the `shoal-worker` skill, and a demand to load it
 before any other action, since agents otherwise load it only once they judge a
 Shoal command needs it. The skill owns how to work with Shoal, so the two are
-never kept in step by hand; `install` adds a missing
-chat template from the bundled default and never touches existing files;
-rendering substitutes known fields once without evaluating their contents.
-The issue prompt is built in and states only the task, pointing to `shoal view`
-for the rest: a seeded issue template froze the default for whoever had a copy,
-and instructions for issue work belong in the worker template. That template was
-the agent template, a name that read as one per AI tool although it applies to
-every workspace agent. Former option names fail as unknown keys rather than
+never kept in step by hand. The `chat` rule of a chat starts with Shoal's
+description of where the chat runs, the checkout or a workspace's worktree, so
+what a user or repository adds to it reaches chats in either place. Nothing is
+seeded into the config directory: a seeded copy froze the default for whoever
+had it. Rendering substitutes known fields once without evaluating their
+contents, and never renders the subject, which the forge or the user wrote.
+The former prompt templates are refused with what replaces them rather than
 loading with a warning: the format broke once, so no setting keeps two names.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart

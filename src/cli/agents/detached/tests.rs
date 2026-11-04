@@ -52,20 +52,12 @@ fn a_workspace_session_gets_the_workspace_directories_before_its_own_arguments()
     let settings = config
         .resolve(&crate::config::repo::ConfigLayers::default())
         .unwrap();
-    let workspace = Workspace::new_record(
-        "repo".into(),
-        "feature".into(),
-        PathBuf::from("/root/repo/feature"),
-        Some("feature".into()),
-        crate::state::WorkspaceState::Ready,
-    );
     let happy = &super::super::happy::CLAUDE;
     let directories = vec![OsString::from("--add-dir=/root/repo")];
     let (_, args) = workspace_input(
         happy,
-        happy,
         &settings,
-        &workspace,
+        "Guidance".into(),
         directories,
         None,
         vec!["--own".into()],

@@ -61,7 +61,6 @@ pub(super) async fn install(
         Err(error) => return Err(error),
     };
     let (config, config_created) = crate::config::Config::install(&ctx.paths)?;
-    crate::config::templates::install(&ctx.paths)?;
     ctx.progress(
         "Installing daemon service",
         service::setup(&ctx.paths, &executable, preserve_running),

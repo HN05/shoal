@@ -23,7 +23,7 @@ menus, but not zmx, the default terminal host: install it with
 instead. For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal daemon install`.
 `shoal daemon install` starts the per-user
-daemon and writes missing config and chat template defaults in `~/.config/shoal/`;
+daemon and writes a missing config with its defaults in `~/.config/shoal/`;
 `shoal skill install` installs the worker and orchestrator skills into each
 [AI tool's existing skill directory](docs/reference.md#agent-skill-outside-project-repositories);
 `shoal skill install <tool>` creates one. Later `shoal` commands keep installed
@@ -118,10 +118,11 @@ tools, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
 Happy app. Interactive `shoal add` uses `--agent` or picks an installed agent.
 Issue additions also use `agent.default = "codex"` from the repository or global
-config. Edit `~/.config/shoal/worker-template.md` to add instructions for every
-workspace agent and `chat-template.md` for `shoal chat`. Agents read a
-repository's own rules from its `AGENTS.md` or `CLAUDE.md`; the same template
-files in a repository root add instructions only Shoal's agents need.
+config. Edit `~/.config/shoal/rules/worker.md` to add instructions for every
+workspace agent and `rules/chat.md` for every chat. Agents read a
+repository's own rules from its `AGENTS.md` or `CLAUDE.md`; the same rule
+files in a repository's `.shoal/` directory add instructions only Shoal's agents
+need.
 New workspaces branch from the repository's default branch unless `--base REF`
 is supplied to `add`. With shell integration, `shoal add` enters the
 workspace unless its agent runs in a zmx session.

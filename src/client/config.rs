@@ -4,6 +4,7 @@ pub mod forges;
 pub mod git_profiles;
 pub mod hooks;
 pub mod machine;
+pub mod modes;
 pub mod named_commands;
 pub mod options;
 pub mod overload;
@@ -94,9 +95,9 @@ impl<'de> Deserialize<'de> for RunLimit {
 pub struct Config {
     pub machine: Machine,
     pub repository: RepoConfig,
-    /// The file each template came from, once
+    /// The file each mode's instructions or rule's text came from, once
     /// [`Self::load_with_templates`] read them.
-    pub template_files: templates::Files,
+    pub template_files: modes::Files,
 }
 
 impl Ports {
@@ -295,7 +296,7 @@ impl Config {
         Ok(Self {
             machine,
             repository,
-            template_files: templates::Files::new(),
+            template_files: modes::Files::new(),
         })
     }
 
@@ -342,7 +343,7 @@ impl Config {
     fn resolve_over(
         &self,
         global: RepoConfig,
-        files: templates::Files,
+        files: modes::Files,
         layers: &ConfigLayers,
     ) -> Result<Effective> {
         let settings = resolve::Stack::over(global, files, layers).resolve()?;
@@ -354,12 +355,12 @@ impl Config {
     }
 }
 
-/// Fill `global`'s omitted inline templates from the files beside the
-/// global config, returning the file each came from.
-fn read_template_files(global: &mut RepoConfig, paths: &Paths) -> Result<templates::Files> {
+/// Fill `global`'s omitted inline instructions and rule texts from the
+/// files beside the global config, returning the file each came from.
+fn read_template_files(global: &mut RepoConfig, paths: &Paths) -> Result<modes::Files> {
     let path = Config::path(paths);
     let directory = path.parent().context("config has no directory")?;
-    templates::fill(&mut global.agent.templates, &[directory.to_owned()])
+    modes::fill(global, &[directory.to_owned()])
 }
 
 fn default_template() -> &'static str {

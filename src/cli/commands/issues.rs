@@ -246,19 +246,23 @@ impl Issue {
         crate::cli::terminal::issue_label(crate::repository::name(repo), self.number)
     }
 
-    /// The task an issue workspace's agent starts with; the body is the
-    /// issue's description when the workspace was created.
-    pub fn prompt(&self) -> String {
-        let mut prompt = format!(
-            "Work on issue #{}: {}\n{}\n",
-            self.number, self.title, self.url
-        );
+    /// The issue as an agent's subject, worded the same in every mode; the
+    /// body is the issue's description when the agent starts.
+    pub fn subject(&self) -> crate::config::templates::Subject {
+        let mut text = format!("Issue #{}: {}\n{}\n", self.number, self.title, self.url);
         let details = self.details.trim();
         if !details.is_empty() {
-            prompt.push_str(&format!("\nIssue description:\n{details}\n"));
+            text.push_str(&format!("\nIssue description:\n{details}\n"));
         }
-        prompt.push_str("\n`shoal view` shows the issue with its comments and later edits.");
-        prompt
+        text.push_str("\n`shoal view` shows the issue with its comments and later edits.");
+        crate::config::templates::Subject {
+            text,
+            issue: Some(crate::config::templates::IssueFields {
+                number: self.number,
+                title: self.title.clone(),
+                url: self.url.clone(),
+            }),
+        }
     }
 
     /// The issue as a queued agent's launch names it.

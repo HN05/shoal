@@ -726,22 +726,12 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     assert_eq!(output["config"], config.to_str().unwrap());
     assert_eq!(output["config_created"], true);
     let seeded = fs::read_to_string(&config).unwrap();
-    let template = config.with_file_name("chat-template.md");
-    assert_eq!(
-        fs::read_to_string(&template).unwrap(),
-        include_str!("../src/client/config/templates/chat.md")
-    );
-    fs::write(&template, "custom chat template").unwrap();
-    // Shoal's agent guidance is built in; the file holds only additions.
-    assert!(!config.with_file_name("worker-template.md").exists());
+    // Shoal's guidance and rules are built in; files hold only additions.
+    assert!(!config.with_file_name("rules").exists());
     fs::write(&config, "agent.default = 'claude'\n").unwrap();
     let output: Value =
         serde_json::from_slice(&run(&["--json", "daemon", "install"]).stdout).unwrap();
     assert_eq!(output["config_created"], false);
-    assert_eq!(
-        fs::read_to_string(&template).unwrap(),
-        "custom chat template"
-    );
     assert_eq!(
         fs::read_to_string(&config).unwrap(),
         "agent.default = 'claude'\n"

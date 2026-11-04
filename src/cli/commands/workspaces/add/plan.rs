@@ -80,6 +80,7 @@ pub(super) async fn plan_addition(
         agent,
         args,
         prompt: None,
+        mode: None,
         fork: None,
         queue_entry: None,
         chat: env::in_chat(),
@@ -171,10 +172,13 @@ pub(in crate::cli) struct AddPlan {
     pub(super) issue: Option<String>,
     pub(super) agent: ResolvedAddAgent,
     pub(super) args: Vec<OsString>,
-    /// The agent's first message when no issue gives it one, which a
-    /// launcher with `{prompt}` receives there.
+    /// The agent's subject when no issue gives it one, which a launcher
+    /// with `{prompt}` receives there.
     #[serde(default)]
     pub(super) prompt: Option<String>,
+    /// The mode the agent starts in; the default mode when `None`.
+    #[serde(default)]
+    pub(in crate::cli::commands) mode: Option<String>,
     /// The session the agent starts from a fork of.
     #[serde(default)]
     pub(super) fork: Option<String>,
@@ -199,6 +203,7 @@ impl AddPlan {
         let QueuedLaunch {
             agent,
             prompt,
+            mode,
             model,
             args,
             fork,
@@ -220,6 +225,7 @@ impl AddPlan {
             },
             args: args.into_iter().map(OsString::from).collect(),
             prompt,
+            mode,
             fork,
             queue_entry: None,
             chat: None,

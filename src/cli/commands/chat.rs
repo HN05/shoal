@@ -32,6 +32,9 @@ mod rename;
 
 pub(super) use rename::{rename, request_name};
 
+/// The mode of a chat started without one.
+pub(super) const CHAT_MODE: &str = "chat";
+
 pub(super) async fn start(
     ctx: &Context,
     repository: Option<String>,
@@ -216,8 +219,10 @@ pub(super) struct Topic {
     pub name: String,
     /// Whether an interactive start without `--name` asks for the name.
     pub asks_name: bool,
-    /// The task the agent starts on, or `None` to wait for the user.
-    pub opening: Option<String>,
+    /// The mode the agent starts in.
+    pub mode: String,
+    /// What the agent starts on, or `None` to wait for the user.
+    pub subject: Option<templates::Subject>,
     /// Other working directories the task needs, beside the chat's own.
     pub directories: Vec<PathBuf>,
     /// What the chat is linked to once recorded, such as the issue it plans.
@@ -233,7 +238,8 @@ impl Topic {
             relaunch: vec!["chat".into(), repo.id.clone().into()],
             name: format!("{}-chat", repository::name(repo)),
             asks_name: true,
-            opening: None,
+            mode: CHAT_MODE.to_owned(),
+            subject: None,
             directories: Vec::new(),
             links: Vec::new(),
             workspace: None,
@@ -250,7 +256,8 @@ impl Topic {
             ],
             name: format!("{}-chat", workspace.name),
             asks_name: true,
-            opening: None,
+            mode: CHAT_MODE.to_owned(),
+            subject: None,
             directories: Vec::new(),
             links: Vec::new(),
             workspace: Some(workspace),
@@ -338,16 +345,11 @@ pub(super) async fn launch(
     let name = initial_name(ctx, &topic, requested).await?;
     let settings = self::settings(ctx, &repo).await?;
     let resumed = resumed_args(&settings, &agent, session.as_deref())?;
+    let brief = brief(&settings, &agent, &repo, &topic, session.is_some())?;
     let launch = agents::ChatLaunch {
         name,
-        instructions: instructions(
-            &settings,
-            &agent,
-            &repo,
-            topic.home(&repo),
-            session.is_some(),
-        ),
-        opening: topic.opening.clone().filter(|_| session.is_none()),
+        instructions: brief.system,
+        opening: brief.first_message,
         directories: topic.directories.clone(),
         model: agents::resolve_model(&settings, agent.name(), model.clone()),
         repository: repo,
@@ -701,49 +703,32 @@ fn command(
     )
 }
 
-/// The resolved chat template with the repository's name and checkout, or
-/// nothing for a chat that `resumes` a session with an agent that takes it
-/// only in its first message, which the session already has.
-fn instructions(
+/// What the chat about `topic` in `repo` is told: its mode's rules, or
+/// nothing for a chat that `resumes` a session with an agent that takes
+/// them only in its first message, which the session already has; and its
+/// subject, unless it resumes a session.
+fn brief(
     settings: &Effective,
     agent: &Agent,
     repo: &Repository,
-    home: ChatHome<'_>,
+    topic: &Topic,
     resumes: bool,
-) -> String {
+) -> Result<templates::Brief> {
+    let place = templates::Place::Chat {
+        repo: repository::name(repo),
+        home: topic.home(repo),
+    };
+    let subject = topic.subject.as_ref().filter(|_| !resumes);
+    let mut brief = templates::brief(settings, &topic.mode, place, subject)?;
     let in_first_message = settings
         .launch(agent.name())
         .arguments
         .instructions
         .is_none();
     if resumes && in_first_message {
-        return String::new();
+        brief.system.clear();
     }
-    let (repo, path) = (repository::name(repo), home.path().to_string_lossy());
-    match home.workspace() {
-        Some(workspace) => templates::render(
-            templates::WORKSPACE_CHAT,
-            &[
-                ("{workspace}", &workspace.name),
-                ("{repo}", repo),
-                ("{head}", &head_label(workspace)),
-                ("{path}", &path),
-            ],
-        ),
-        None => templates::render(
-            &settings.agent.templates.chat,
-            &[("{repo}", repo), ("{path}", &path)],
-        ),
-    }
-}
-
-/// What `workspace` has checked out, as its chat's instructions name it.
-fn head_label(workspace: &Workspace) -> String {
-    match (&workspace.branch, &workspace.at) {
-        (Some(branch), _) => format!("on branch {branch}"),
-        (None, Some(at)) => format!("at commit {}", at.label()),
-        (None, None) => "on a detached HEAD".to_owned(),
-    }
+    Ok(brief)
 }
 
 /// Replace this process with the agent in `path`, so the terminal's signals

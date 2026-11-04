@@ -18,6 +18,9 @@ use crate::{
     model::{LinkedItem, Relation, Repository},
 };
 
+/// The mode of a planning chat.
+const MODE: &str = "plan";
+
 /// Which issue labelled as needing a plan is planned without naming one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Pick {
@@ -70,7 +73,7 @@ async fn begin(
     };
     let context = issues::read_context(ctx, &repo).await?;
     let issue = issues::load(ctx, context, &input).await?;
-    let topic = topic(&repo, &issue, &settings.issue);
+    let topic = topic(&repo, &issue);
     chat::begin(ctx, repo, settings, topic, options).await
 }
 
@@ -114,7 +117,7 @@ fn oldest<'a>(issues: &'a [Item], kind: &str) -> Result<Option<&'a Item>> {
 }
 
 /// A chat that plans `issue`, reopened in a new tab by the issue's URL.
-fn topic(repo: &Repository, issue: &Issue, labels: &config::Issue) -> Topic {
+fn topic(repo: &Repository, issue: &Issue) -> Topic {
     Topic {
         relaunch: vec![
             "plan".into(),
@@ -124,7 +127,8 @@ fn topic(repo: &Repository, issue: &Issue, labels: &config::Issue) -> Topic {
         ],
         name: format!("{}-plan-{}", crate::repository::name(repo), issue.number),
         asks_name: false,
-        opening: Some(prompt(issue, labels)),
+        mode: MODE.to_owned(),
+        subject: Some(issue.subject()),
         directories: Vec::new(),
         links: vec![(
             Relation::Assigned,
@@ -135,43 +139,6 @@ fn topic(repo: &Repository, issue: &Issue, labels: &config::Issue) -> Topic {
             },
         )],
         workspace: None,
-    }
-}
-
-/// The task a planning chat starts on.
-fn prompt(issue: &Issue, labels: &config::Issue) -> String {
-    format!(
-        "Plan issue #{number}: {title}\n{url}\n\n{body}\n\n\
-         Settle a plan for this issue with the user before anyone implements it. Check the \
-         issue against the default branch, then talk through what is unclear or still open \
-         with the user here, one point at a time, recommending an answer for each. Keep the \
-         discussion in this conversation: do not post questions to the forge or ask them with \
-         `shoal questions ask`.\n\n\
-         Once the user agrees, rewrite the issue's body so it states the goal and a Plan \
-         section with the decisions, the approach and what done looks like, since an \
-         implementing agent receives only the body.{relabel} Open follow-up issues for \
-         work the plan splits off. Then offer to start an agent on it with \
-         `shoal add --issue {number} --agent <name>`.",
-        number = issue.number,
-        title = issue.title,
-        url = issue.url,
-        body = issue.details,
-        relabel = relabel(labels),
-    )
-}
-
-/// The sentence that swaps the issue's labels once its plan is settled.
-fn relabel(labels: &config::Issue) -> String {
-    match (
-        labels.plan_label.as_deref(),
-        labels.planned_label.as_deref(),
-    ) {
-        (Some(plan), Some(planned)) => {
-            format!(" Then replace its `{plan}` label with `{planned}`.")
-        }
-        (Some(plan), None) => format!(" Then remove its `{plan}` label."),
-        (None, Some(planned)) => format!(" Then add the `{planned}` label."),
-        (None, None) => String::new(),
     }
 }
 

@@ -141,11 +141,14 @@ dirs = ["/tmp"]
 # The Git profile from [machine.git_profiles] for tracked agents' Git commands.
 # git_profile = "agent"
 
-# Prompt templates normally live beside this file as worker-template.md and
-# chat-template.md. Inline text takes precedence over the corresponding file.
-# [agent.templates]
-# worker = "Follow repository instructions in {workspace} at {path}."
-# chat = "Discuss the {repo} repository at {path} without changing it."
+# What agents are told: rules join their system text, a mode's instructions
+# follow their subject. Rules and instructions normally live beside this file
+# as rules/<name>.md and modes/<name>.md; inline text takes precedence.
+# [rules.worker]
+# text = "Follow repository instructions in {workspace} at {path}."
+# [modes.plan]
+# kind = "chat"
+# rules = ["chat"]
 
 # Each AI tool's launch settings, merged option by option with a repository's.
 [agents.claude]

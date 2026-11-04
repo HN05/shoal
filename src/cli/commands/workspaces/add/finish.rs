@@ -76,6 +76,7 @@ pub(super) async fn add_planned(
         agent,
         args,
         prompt,
+        mode,
         fork,
         queue_entry,
         chat,
@@ -85,7 +86,7 @@ pub(super) async fn add_planned(
     // A queued agent starts detached, so the caller's terminal, such as a
     // chat's session, stays its own.
     let launch = match queued {
-        true => queued_launch(&agent, issue.as_ref(), (&prompt, &args, &fork))?,
+        true => queued_launch(&agent, issue.as_ref(), &mode, (&prompt, &args, &fork))?,
         false => None,
     };
     let start = AddStart {
@@ -110,12 +111,13 @@ pub(super) async fn add_planned(
         terminal::host_workspace(ctx, &started.workspace, with_agent, &label).await?;
     }
     let name = started.workspace.name.clone();
-    let prompt = issue.as_ref().map(issues::Issue::prompt).or(prompt);
+    let subject = (issue.as_ref().map(issues::Issue::subject))
+        .or(prompt.map(crate::config::templates::Subject::told));
     let rest = AfterSetup {
         pr,
         agent: launch.clone(),
     };
-    let finished = finish_add_workspace(ctx, started, rest, &agent, prompt.is_some()).await?;
+    let finished = finish_add_workspace(ctx, started, rest, &agent, subject.is_some()).await?;
     let Some(Prepared {
         workspace,
         agent: entry,
@@ -136,16 +138,21 @@ pub(super) async fn add_planned(
         let entry = entry.context("preparation queued no agent")?;
         return report_queued_in(ctx, &workspace, &entry);
     }
-    agent.launch(ctx, *workspace, prompt, args, fork).await
+    let opening = agents::Opening::New {
+        mode: mode.unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
+        subject,
+    };
+    agent.launch(ctx, *workspace, opening, args, fork).await
 }
 
-/// The launch of `agent` that preparing the added workspace queues,
-/// prompted with `issue` or else the plan's own prompt, with its arguments
-/// and fork. The daemon starts it outside this process, so it gets the
+/// The launch of `agent` in `mode` that preparing the added workspace
+/// queues, prompted with `issue` or else the plan's own prompt, with its
+/// arguments and fork. The daemon starts it outside this process, so it gets the
 /// workspace's own scope, as `shoal split --agent` does.
 fn queued_launch(
     agent: &ResolvedAddAgent,
     issue: Option<&issues::Issue>,
+    mode: &Option<String>,
     (prompt, args, fork): (&Option<String>, &[OsString], &Option<String>),
 ) -> Result<Option<Box<QueuedLaunch>>> {
     let Some(chosen) = &agent.agent else {
@@ -154,6 +161,7 @@ fn queued_launch(
     Ok(Some(Box::new(QueuedLaunch {
         agent: chosen.clone().into(),
         prompt: prompt.clone(),
+        mode: mode.clone(),
         model: agent.model.clone(),
         args: super::plan::launch_args(args.to_vec())?,
         fork: fork.clone(),

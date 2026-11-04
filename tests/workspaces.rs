@@ -5060,8 +5060,9 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
         String::from_utf8(output.stdout).unwrap(),
         format!("\napp\n{path}\nrepo-default\n")
     );
-    // An explicit desktop handoff does not load terminal prompt templates.
-    fs::write(config_dir.join("worker-template.md"), [0xff]).unwrap();
+    // An explicit desktop handoff does not load the rules of terminal launches.
+    fs::create_dir_all(config_dir.join("rules")).unwrap();
+    fs::write(config_dir.join("rules/worker.md"), [0xff]).unwrap();
     for mode in ["--app", "--cli"] {
         let output = fixture
             .command()
@@ -5314,14 +5315,14 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
 }
 
 #[test]
-fn worker_templates_resolve_per_launch_and_reach_native_instruction_options() {
+fn worker_rules_resolve_per_launch_and_reach_native_instruction_options() {
     let fixture = Fixture::new();
     let workspace = fixture.add("instructions");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let config_dir = fixture.root.path().join(".config/shoal");
-    fs::create_dir_all(&config_dir).unwrap();
+    fs::create_dir_all(config_dir.join("rules")).unwrap();
     fs::write(
-        config_dir.join("worker-template.md"),
+        config_dir.join("rules/worker.md"),
         "global {workspace} {branch}",
     )
     .unwrap();
@@ -5341,17 +5342,18 @@ fn worker_templates_resolve_per_launch_and_reach_native_instruction_options() {
     .enumerate()
     {
         if index == 1 {
-            fs::write(path.join("worker-template.md"), "repo {path}").unwrap();
+            fs::create_dir_all(path.join(".shoal/rules")).unwrap();
+            fs::write(path.join(".shoal/rules/worker.md"), "repo {path}").unwrap();
         }
         if index == 4 {
-            fs::write(config_dir.join("worker-template.md"), "").unwrap();
+            fs::write(config_dir.join("rules/worker.md"), "").unwrap();
         }
         if index >= 2 {
             let local = fixture.root.path().join("local.toml");
             fs::write(
                 &local,
                 format!(
-                    "agent.templates.worker = {}",
+                    "rules.worker.text = {}",
                     toml::Value::String(expected.clone())
                 ),
             )
@@ -8194,12 +8196,12 @@ fn the_daemon_alerts_about_global_config_problems_on_start_and_reload() {
             .any(|message| message.contains(setting))
     };
     let fixture = Fixture::with_config(Some(
-        "agent.templates.worker = 'You are working in Shoal workspace {workspace} on branch {branch} at {path}.'\n",
+        "rules.worker.text = 'You are working in Shoal workspace {workspace} on branch {branch} at {path}.'\n",
     ));
     // The startup check reads the config before it records its alerts, so
     // this one shows it is past reading by the time the config changes.
     wait_until("the startup environment alert", || {
-        reported(&fixture, "agent.templates.worker")
+        reported(&fixture, "rules.worker.text")
     });
     // A problem added later is reported only by the reload. A root inside a
     // file cannot be created.
@@ -17370,8 +17372,8 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
 fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
     let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
     let config_dir = fixture.root.path().join(".config/shoal");
-    fs::create_dir_all(&config_dir).unwrap();
-    fs::write(config_dir.join("worker-template.md"), "General {workspace}").unwrap();
+    fs::create_dir_all(config_dir.join("rules")).unwrap();
+    fs::write(config_dir.join("rules/worker.md"), "General {workspace}").unwrap();
     let record = install_fake_happy(&fixture);
     let title = "Fix API timeout";
     let body = "Keep the connection alive.";
@@ -17558,7 +17560,12 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         let session_id = launch["happy_session_id"].as_str().unwrap().to_owned();
         assert!(session_id.starts_with("session-"));
         let message = fs::read_to_string(launch["prompt_file"].as_str().unwrap()).unwrap();
-        assert_eq!(after_guidance(&message), prompt);
+        // The prompt is the subject, which the worker mode's instructions
+        // follow.
+        assert_eq!(
+            after_guidance(&message),
+            format!("{prompt}\n\nImplement this, open a PR for it, and finish with `shoal done`.")
+        );
         let plaintext = serde_json::json!({
             "role": "user",
             "content": {"type": "text", "text": message},
@@ -19226,7 +19233,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
 #[test]
 fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'helper'\nagent.templates.worker = 'Follow {branch}'\n[agents.helper]\ncommand = ['missing-global-launcher']\n",
+        "agent.default = 'helper'\nrules.worker.text = 'Follow {branch}'\n[agents.helper]\ncommand = ['missing-global-launcher']\n",
     ));
     let bin = fixture.root.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
@@ -19344,7 +19351,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
 #[test]
 fn configured_ai_tools_run_as_agents_from_their_own_command() {
     let fixture = Fixture::with_config(Some(
-        "agent.templates.worker = 'Follow {branch}'\n[agents.droid]\ncommand = ['fake-droid', '{args}']\n[machine.agents.notes]\nskill_dir = '~/notes'\n",
+        "rules.worker.text = 'Follow {branch}'\n[agents.droid]\ncommand = ['fake-droid', '{args}']\n[machine.agents.notes]\nskill_dir = '~/notes'\n",
     ));
     let bin = fixture.root.path().join("bin");
     for name in ["fake-droid", "repo-droid"] {
@@ -26191,18 +26198,15 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
 }
 
 #[test]
-fn chat_instructions_append_the_checkout_template_to_the_global_one() {
+fn chat_instructions_append_the_chat_rules_to_shoals_description() {
     let fixture = Fixture::new();
     install_recording_agent(&fixture, "claude");
     let config_dir = fixture.root.path().join(".config/shoal");
-    fs::create_dir_all(&config_dir).unwrap();
+    fs::create_dir_all(config_dir.join("rules")).unwrap();
+    fs::write(config_dir.join("rules/chat.md"), "Discuss {repo} at {path}").unwrap();
+    fs::create_dir_all(fixture.repo.join(".shoal/rules")).unwrap();
     fs::write(
-        config_dir.join("chat-template.md"),
-        "Discuss {repo} at {path}",
-    )
-    .unwrap();
-    fs::write(
-        fixture.repo.join("chat-template.md"),
+        fixture.repo.join(".shoal/rules/chat.md"),
         "Plans live in docs {branch}",
     )
     .unwrap();
@@ -26221,20 +26225,32 @@ fn chat_instructions_append_the_checkout_template_to_the_global_one() {
         chat_args(&fixture)
     };
     let name = checkout.file_name().unwrap().to_str().unwrap();
-    assert_eq!(
-        chat()[..2],
-        [
-            "--append-system-prompt".to_owned(),
-            format!(
-                "Discuss {name} at {}\n\nPlans live in docs {{branch}}",
-                checkout.display()
-            ),
-        ]
+    let args = chat();
+    assert_eq!(args[0], "--append-system-prompt");
+    let description = format!(
+        "You are chatting with the user about the {name} repository in its registered\n\
+         checkout at {}.",
+        checkout.display()
     );
-    // Empty templates pass no instructions.
-    fs::write(config_dir.join("chat-template.md"), "").unwrap();
-    fs::write(fixture.repo.join("chat-template.md"), "").unwrap();
-    assert!(!chat().iter().any(|arg| arg == "--append-system-prompt"));
+    assert!(args[1].starts_with(&description), "{}", args[1]);
+    assert!(
+        args[1].ends_with(&format!(
+            "\n\nDiscuss {name} at {}\n\nPlans live in docs {{branch}}",
+            checkout.display()
+        )),
+        "{}",
+        args[1]
+    );
+    // Without additions, Shoal's description stands alone.
+    fs::write(config_dir.join("rules/chat.md"), "").unwrap();
+    fs::write(fixture.repo.join(".shoal/rules/chat.md"), "").unwrap();
+    let args = chat();
+    assert!(args[1].starts_with(&description), "{}", args[1]);
+    assert!(
+        args[1].ends_with("stays after the chat\nends."),
+        "{}",
+        args[1]
+    );
 }
 
 /// A chat in a workspace runs its agent in the worktree as a chat, told
@@ -26362,7 +26378,11 @@ fn chat_starts_from_the_checkout_without_syncing() {
         "#!/bin/sh\ngit rev-parse HEAD > \"$HOME/chat-head\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\n",
     );
     let author = upstream_remote(&fixture);
-    commit_file(&author, "chat-template.md", "Upstream chat guidance\n");
+    commit_file(
+        &author,
+        ".shoal.toml",
+        "rules.chat.text = 'Upstream chat guidance'\n",
+    );
     git(&author, &["push", "origin", "main"]);
     let chat = || {
         let (output, transcript) = fixture.terminal_command(

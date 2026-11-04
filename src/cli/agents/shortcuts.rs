@@ -73,7 +73,8 @@ pub(in crate::cli) async fn happy(
 ) -> Result<i32> {
     let name = format!("happy-{}", agent.as_str()).parse()?;
     let options = super::LaunchOptions::default();
-    super::launch::shortcut(ctx, name, workspace, prompt, args, options).await
+    let subject = prompt.map(crate::config::templates::Subject::told);
+    super::launch::shortcut(ctx, name, workspace, subject, args, options).await
 }
 
 /// The agents `shoal happy <agent>` can start: each `happy-<agent>` offered

@@ -41,12 +41,13 @@ pub(super) async fn shortcut(
     ctx: &Context,
     agent: Agent,
     workspace: Option<String>,
-    prompt: Option<String>,
+    subject: Option<templates::Subject>,
     args: Vec<OsString>,
     options: LaunchOptions,
 ) -> Result<i32> {
     let workspace = shortcut_workspace(ctx, workspace).await?;
-    super::launch_agent(ctx, agent, workspace, prompt, args, options).await
+    let opening = super::Opening::worker(subject);
+    super::launch_agent(ctx, agent, workspace, opening, args, options).await
 }
 
 /// Hand the workspace a shortcut names to desktop `app`, as [`open_app`]
@@ -103,7 +104,7 @@ pub(super) async fn tracked(
         let profile = &launch.settings.launch(&launch.name).environment;
         trust.trust_tracked(ctx, &launch.workspace, profile).await;
     }
-    let command = command(ctx, integration, &launch, model_args).await?;
+    let command = command(ctx, &launch, model_args).await?;
     let Launch {
         name,
         workspace,
@@ -130,7 +131,6 @@ pub(super) async fn tracked(
 /// and the forwarded arguments.
 async fn command(
     ctx: &Context,
-    integration: &dyn Integration,
     launch: &Launch,
     model_args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
@@ -138,20 +138,16 @@ async fn command(
         name,
         workspace,
         settings,
+        instructions,
         prompt,
         args,
         fork,
         ..
     } = launch;
-    let instructions = templates::instructions(
-        settings.agent.templates.worker.as_deref(),
-        workspace,
-        delivery(integration, settings),
-    );
     let (args, prompt) = input(
         settings,
         name,
-        instructions,
+        instructions.clone(),
         prompt.clone(),
         [
             model_args,

@@ -209,16 +209,14 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
     );
     let directory = repository.path().join(LOCAL_DIR);
     fs::create_dir(&directory).unwrap();
-    // A template beside it works without a config file.
-    fs::write(directory.join("chat-template.md"), "Local chat").unwrap();
+    // A rule beside it works without a config file.
+    fs::create_dir_all(directory.join("rules")).unwrap();
+    fs::write(directory.join("rules/chat.md"), "Local chat").unwrap();
     let (config, files) = load_local(repository.path()).unwrap();
-    assert_eq!(config.agent.templates.chat.as_deref(), Some("Local chat"));
+    assert_eq!(config.rules["chat"].text.as_deref(), Some("Local chat"));
     assert_eq!(
         files,
-        templates::Files::from([(
-            "agent.templates.chat".into(),
-            directory.join("chat-template.md")
-        )])
+        modes::Files::from([("rules.chat.text".into(), directory.join("rules/chat.md"))])
     );
     fs::write(
         local_config_path(repository.path()),
@@ -226,7 +224,8 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
          [secrets.TOKEN]\ncommand = ['token']\n[setup.seed]\ncommand = 'scripts/seed'\n",
     )
     .unwrap();
-    fs::write(directory.join("worker-template.md"), "Local additions").unwrap();
+    fs::create_dir_all(directory.join("modes")).unwrap();
+    fs::write(directory.join("modes/worker.md"), "Local additions").unwrap();
     let (config, _) = load_local(repository.path()).unwrap();
     let expected = directory.join("setup.sh");
     assert_eq!(config.setup.command.as_deref(), expected.to_str());
@@ -235,16 +234,18 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
     // The seed runs in the worktree, so its path stays relative to it.
     assert_eq!(config.setup.seed.command.as_deref(), Some("scripts/seed"));
     assert_eq!(
-        config.agent.templates.worker.as_deref(),
+        config.modes["worker"].instructions.as_deref(),
         Some("Local additions")
     );
 }
 
 #[test]
-fn worktree_templates_come_from_the_root_or_the_shoal_directory() {
+fn worktree_rules_and_modes_come_from_the_root_or_the_shoal_directory() {
     let read = |files: &[(&str, &[u8])], toml: &str| {
         let worktree = tempfile::tempdir().unwrap();
-        fs::create_dir(worktree.path().join(".shoal")).unwrap();
+        for directory in [".shoal/rules", ".shoal/modes", "rules", "modes"] {
+            fs::create_dir_all(worktree.path().join(directory)).unwrap();
+        }
         for (path, text) in files {
             fs::write(worktree.path().join(path), text).unwrap();
         }
@@ -257,51 +258,58 @@ fn worktree_templates_come_from_the_root_or_the_shoal_directory() {
                     (key, path)
                 })
                 .collect();
-            (config.agent.templates, files)
+            (config, files)
         })
     };
     for directory in ["", ".shoal/"] {
-        let worker = format!("{directory}worker-template.md");
-        let chat = format!("{directory}chat-template.md");
-        let (templates, files) = read(&[(&worker, b"Worker"), (&chat, b"Chat")], "").unwrap();
-        assert_eq!(templates.worker.as_deref(), Some("Worker"));
-        assert_eq!(templates.chat.as_deref(), Some("Chat"));
+        let rule = format!("{directory}rules/worker.md");
+        let mode = format!("{directory}modes/review-docs.md");
+        let (config, files) = read(&[(&rule, b"Worker"), (&mode, b"Docs")], "").unwrap();
+        assert_eq!(config.rules["worker"].text.as_deref(), Some("Worker"));
+        // A file names a mode no table declares.
+        let docs = &config.modes["review-docs"];
+        assert_eq!(docs.instructions.as_deref(), Some("Docs"));
+        assert_eq!(docs.kind, None);
         assert_eq!(
             files,
             [
-                ("agent.templates.chat".into(), chat.into()),
-                ("agent.templates.worker".into(), worker.into()),
+                ("modes.review-docs.instructions".into(), mode.into()),
+                ("rules.worker.text".into(), rule.into()),
             ]
         );
     }
-    // Each template stands alone, and inline TOML wins over its file,
-    // which is never read.
-    let (templates, files) = read(
+    // Each file stands alone, and inline TOML wins over its file, which is
+    // never read.
+    let (config, files) = read(
         &[
-            ("worker-template.md", b"\xff not UTF-8"),
-            (".shoal/chat-template.md", b"Chat"),
+            ("rules/worker.md", b"\xff not UTF-8"),
+            (".shoal/rules/chat.md", b"Chat"),
+            ("rules/notes.txt", b"Not a rule"),
         ],
-        "agent.templates.worker = 'Inline'",
+        "rules.worker.text = 'Inline'",
     )
     .unwrap();
-    assert_eq!(templates.worker.as_deref(), Some("Inline"));
-    assert_eq!(templates.chat.as_deref(), Some("Chat"));
+    assert_eq!(config.rules["worker"].text.as_deref(), Some("Inline"));
+    assert_eq!(config.rules["chat"].text.as_deref(), Some("Chat"));
+    assert!(!config.rules.contains_key("notes"));
     assert_eq!(
         files,
-        [(
-            "agent.templates.chat".into(),
-            ".shoal/chat-template.md".into()
-        )]
+        [("rules.chat.text".into(), ".shoal/rules/chat.md".into())]
     );
-    for name in ["worker-template.md", "chat-template.md"] {
-        let error = read(
-            &[(name, b"Root"), (&format!(".shoal/{name}"), b"Shoal")],
-            "",
-        )
+    let error = read(
+        &[
+            ("rules/chat.md", b"Root"),
+            (".shoal/rules/chat.md", b"Shoal"),
+        ],
+        "",
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains(".shoal/rules/chat.md"), "{error}");
+    let error = read(&[("modes/.hidden.md", b"Hidden")], "")
         .unwrap_err()
         .to_string();
-        assert!(error.contains(&format!(".shoal/{name}")), "{error}");
-    }
+    assert!(error.ends_with("modes/.hidden.md"), "{error}");
 }
 
 #[test]

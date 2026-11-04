@@ -120,9 +120,18 @@ fn issue_names_are_portable_bounded_and_stable() {
     assert_eq!(issue.branch_name(), "34-fix");
     issue.title = "日本語 to the".into();
     assert_eq!(issue.branch_name(), "issue-34");
-    let prompt = issue.prompt();
-    assert!(prompt.contains("#34: 日本語 to the\nurl\n"), "{prompt}");
-    assert!(prompt.contains("Issue description:\nbody\n"), "{prompt}");
+    let subject = issue.subject();
+    assert!(
+        (subject.text).contains("#34: 日本語 to the\nurl\n"),
+        "{}",
+        subject.text
+    );
+    assert!(
+        (subject.text).contains("Issue description:\nbody\n"),
+        "{}",
+        subject.text
+    );
+    assert_eq!(subject.issue.unwrap().number, 34);
     issue.details = " \n".into();
-    assert!(!issue.prompt().contains("Issue description"));
+    assert!(!issue.subject().text.contains("Issue description"));
 }

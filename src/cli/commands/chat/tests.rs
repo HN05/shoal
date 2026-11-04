@@ -8,7 +8,8 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         relaunch: vec!["chat".into(), "repo".into()],
         name: "repo-chat".into(),
         asks_name: true,
-        opening: None,
+        mode: CHAT_MODE.into(),
+        subject: None,
         directories: Vec::new(),
         links: Vec::new(),
         workspace: None,
@@ -118,7 +119,9 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
     let settings = crate::config::Config::default()
         .resolve(&Default::default())
         .unwrap();
-    let told = instructions(&settings, &agent, &repo, topic.home(&repo), false);
+    let told = brief(&settings, &agent, &repo, &topic, false)
+        .unwrap()
+        .system;
     for expected in [
         "workspace worker of the shoal",
         "branch feature",
@@ -136,7 +139,9 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         made_for: None,
     });
     let at_commit = Topic::workspace(workspace);
-    let told = instructions(&settings, &agent, &repo, at_commit.home(&repo), false);
+    let told = brief(&settings, &agent, &repo, &at_commit, false)
+        .unwrap()
+        .system;
     assert!(told.contains("at commit 0123456"), "{told}");
 }
 

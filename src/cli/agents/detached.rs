@@ -100,6 +100,7 @@ pub(super) async fn start(
         name,
         workspace,
         settings,
+        instructions,
         prompt,
         args,
         model,
@@ -109,15 +110,7 @@ pub(super) async fn start(
     let model_args = model_args(app, &settings, &name, &model)?;
     let directories = workspace_dir_args(ctx, app, &settings, &workspace).await;
     let directories = [model_args, directories].concat();
-    let (prompt, args) = workspace_input(
-        integration,
-        app,
-        &settings,
-        &workspace,
-        directories,
-        prompt,
-        args,
-    );
+    let (prompt, args) = workspace_input(app, &settings, instructions, directories, prompt, args);
     if let Some(trust) = integration.trust_file() {
         trust
             .trust_tracked(ctx, &workspace, &Default::default())
@@ -226,23 +219,17 @@ fn session_files(paths: &Paths, workspace: &Workspace, name: &str) -> PathBuf {
         .join(format!("{name}-{stamp_millis}"))
 }
 
-/// The first message and arguments of a workspace session, which runs
-/// without Shoal's hooks, as a tracked launch separates them, with the
-/// arguments that give it `directories`.
+/// The first message and arguments of a workspace session with
+/// `instructions`, which runs without Shoal's hooks, as a tracked launch
+/// separates them, with the arguments that give it `directories`.
 fn workspace_input(
-    integration: &dyn Integration,
     app: &dyn App,
     settings: &Effective,
-    workspace: &Workspace,
+    instructions: String,
     directories: Vec<OsString>,
     prompt: Option<String>,
     args: Vec<OsString>,
 ) -> (Option<String>, Vec<OsString>) {
-    let instructions = templates::instructions(
-        settings.agent.templates.worker.as_deref(),
-        workspace,
-        super::launch::delivery(integration, settings),
-    );
     let instruction_args = instruction_args(app, settings, &instructions);
     let (instruction_args, prompt) =
         super::launch::separate_instructions(instruction_args, instructions, prompt);

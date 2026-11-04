@@ -111,8 +111,7 @@ current `PATH` for the service, so install runtime dependencies and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
 [configs/default.toml](../configs/default.toml), which states every default,
-and installs the [bundled chat template](../src/client/config/templates/chat.md) beside
-it, never touching an existing file; `--dry-run` writes
+never touching an existing file; `--dry-run` writes
 nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
 `ZDOTDIR` when set) contains an active initialization command, and names the
@@ -972,7 +971,7 @@ agent = "codex"           # Default: agent.default
 fallback_agent = "claude" # Optional
 ```
 
-The [review template](#prompt-templates) gives the instructions. Each review also
+The [`review` rule](#modes-and-rules) gives the instructions. Each review also
 receives, as context, the workspace's earlier reviews with their findings, replies,
 outcomes and fix checks, and for a PR its description, conversation and reviews.
 It checks every finding resolved `fixed` and reports it `confirmed` or
@@ -1768,8 +1767,8 @@ with an agent about a repository, to discuss it, its issues and plans, or to
 coordinate work, without changing code. The repository is the named one, else the
 current checkout's or workspace's, else a picker. The agent is `--agent`, else
 `agent.default`, else a picker of the installed ones. The
-agent's configured launcher runs in the registered checkout with the rendered [chat
-template](#prompt-templates) as its instructions. An agent with an
+agent's configured launcher runs in the registered checkout with the rendered
+[`chat` mode's rules](#modes-and-rules) as its instructions. An agent with an
 `instructions` template (built in for Claude Code and Codex CLI) takes them
 apart from its first message and waits for yours; another receives them as its
 first message, through `{prompt}` or as its first argument, ending with a
@@ -1842,9 +1841,9 @@ workspace's scope, `[env]` or leases, and is not below the workspace, but
 below the space of the agent that started it, if any; such an agent names only
 its own workspace or one below it. Its
 scope also reads the workspace, such as its status, diff, links and CI runs,
-but refuses changes to it. Its instructions,
-Shoal's own in place of the chat template, which describes the checkout, name
-the workspace, its branch or commit and its path, and tell the agent that the
+but refuses changes to it. Its `chat` rule
+starts with Shoal's description of a chat in a worktree instead of the checkout,
+which names the workspace, its branch or commit and its path, and tells the agent that the
 workspace's own agent may be editing there and not to change files, stage,
 commit, stash or switch branches; nothing else enforces it. Its record, and
 `--json`, name the `workspace`, and `shoal resume` restores it there. In the
@@ -2130,39 +2129,66 @@ fails too. A launcher serves the config of its agent launch, so once a
 secret's `command` or `tools` change, its runs fail until the agent restarts. `shoal release secret NAME` cancels the request or
 ends a lease grant.
 
-### Prompt templates
+### Modes and rules
 
-Each `agent.templates.<name>`, `worker`, `chat` or `review`, may also be written as
-`<name>-template.md`. The local config's value or the file beside it wins over the
-worktree's TOML value or the file in the repository root or its `.shoal/`
-directory. A template file in both places is an error naming both.
-The selected repository template is appended after the global TOML value or
-corresponding file beside `config.toml`, with a blank line between nonempty
-templates. Inline TOML wins over Markdown at each level. An empty repository
-value suppresses local additions while preserving global guidance; an empty
-global value suppresses its base text. Without a global chat or review template,
-Shoal uses its bundled default as the base. A [local review](#local-reviews)'s
-instructions start with the fixed part of the
-[review template](../src/client/config/templates/review.md), its task, read-only rules,
-output contract and treatment of history, which no layer replaces; the review
-style after it is the base. `{workspace}`, `{branch}`, `{path}`, the review's
-checkout, and `{base}`, the commit it compares against, expand in them. `config show` reports the combined text and the highest
-layer that configured it, with the file that layer read it from. Unknown placeholders stay literal. Templates are
-read at launch without a daemon restart. The issue prompt is built in.
-`config show` warns for each layer whose worker template repeats the opening of
-Shoal's guidance, as a copy of an earlier default does; the daemon alerts about
-it in the global config when it starts or reloads its config.
+A mode decides what an agent is told and the kind of space it starts in.
+`[modes.<name>]` sets `kind`, `workspace` or `chat`; `rules`, the named rules
+the agent's system text carries, in order; and `instructions`, sent once after
+the agent's subject in its first message and never again on a restore.
+`[rules.<name>]` sets a rule's `text`, which any mode can list. Shoal ships
+these modes:
 
-Every agent launch receives Shoal's [agent guidance](../src/client/config/templates/agent.md),
-followed by the worker template, which holds only your additions and cannot
-replace or suppress the guidance. Both may use `{workspace}`, `{branch}` and
-`{path}` from the target worktree, and `{updates}` saying how the launch
-receives issue and PR activity: delivered by its hooks for Claude Code and for
-Codex in a zmx session, Rex block or Herdr pane, otherwise by running `shoal watch pr`. Claude receives `--append-system-prompt`,
-Codex CLI receives a `developer_instructions` config override, and Happy Codex
-receives the instructions before its first prompt through Happy's delivery path
-(or as the first message when no prompt was supplied). Desktop handoffs do not
-consume templates. User prompt arguments are preserved.
+| Mode | Kind | Rules | Instructions |
+|---|---|---|---|
+| `worker` | workspace | `worker` | [implement the subject](../src/client/config/modes/worker.md) |
+| `chat` | chat | `chat` | none |
+| `plan` | chat | `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
+
+Workspace agents start in `worker`, `shoal chat` in `chat` and `shoal plan` in
+`plan`. The built-in rules have no text of their own except `review`, the style
+of a [local review](#local-reviews). The `chat` rule of a chat starts with
+Shoal's [description of a chat in the checkout](../src/client/config/templates/chat.md)
+or [in a workspace's worktree](../src/client/config/templates/workspace_chat.md),
+whichever the chat runs in, followed by the rule's text.
+
+A mode's instructions may also be written as `modes/<name>.md` and a rule's
+text as `rules/<name>.md`, beside `config.toml`, beside the local config, or in
+the repository root or its `.shoal/` directory; a file names its mode or rule,
+which it adds when no table declares it. A file in more than one of a layer's
+directories is an error naming both. Inline TOML wins over Markdown at each
+level. A repository's text is appended after the global text with a blank line
+between nonempty texts, and the local config's wins over the worktree's; an
+empty repository value suppresses the repository's additions while preserving
+the global text, and an empty global value suppresses the built-in text. Other
+options follow the usual layering, option by option. A mode naming a rule no
+layer defines is refused. `config show` reports the combined text and the
+highest layer that configured it, with the file that layer read it from, and
+warns for each layer whose rule repeats the opening of Shoal's guidance; the
+daemon alerts about it in the global config when it starts or reloads its
+config. Texts are read at launch without a daemon restart.
+
+Every workspace agent receives Shoal's [agent guidance](../src/client/config/templates/agent.md)
+ahead of its mode's rules; no layer replaces or suppresses it. A launch's first
+message is its subject, an issue or the prompt it was given, worded the same in
+every mode, followed by its mode's instructions; without a subject it has no
+first message. Rules and instructions may use `{workspace}`, `{branch}` and
+`{path}` of the space, `{repo}` and `{head}` for a chat, `{updates}` saying how a
+workspace agent receives issue and PR activity (delivered by its hooks for
+Claude Code and for Codex in a zmx session, Rex block or Herdr pane, otherwise
+by running `shoal watch pr`), `{issue.number}`, `{issue.title}` and
+`{issue.url}` of the subject's issue, and `{relabel}`, the sentence that swaps
+the `[issue]` `plan_label` for `planned_label`. Unknown placeholders stay
+literal. Claude receives the system text as `--append-system-prompt`, Codex CLI
+as a `developer_instructions` config override, and Happy Codex before its first
+prompt through Happy's delivery path (or as the first message when there is no
+subject). Desktop handoffs receive neither. User prompt arguments are preserved.
+
+A [local review](#local-reviews)'s instructions start with the fixed part of the
+[review template](../src/client/config/templates/review.md), its task,
+read-only rules, output contract and treatment of history, which no layer
+replaces, followed by the `review` rule's text. `{workspace}`, `{branch}`,
+`{path}`, the review's checkout, and `{base}`, the commit it compares against,
+expand in them.
 
 ### Branch and workspace names
 `shoal add <repository> [branch]` creates a literal Git branch;
@@ -4598,7 +4624,7 @@ behind), an agent's failed [turn-state report](#agent-state), [agent queue](#age
 idle cleanup, automatic cleanup that starts failing, a directory whose file access
 stalled, and, when the daemon starts or
 reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
-a checkout with `core.bare` set, or a global worker template repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
+a checkout with `core.bare` set, or a global rule repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a space, a workspace or chat, which the entry names;
 agents use it to ask for attention without marking the assignment done.
 `--attach FILE`, repeated for up to 20, sends files with it, such as a
@@ -4946,7 +4972,7 @@ the daemon starts and when `daemon reload` rereads its config, it checks that
 `git`, `wt` and `lsof` are executable on its PATH, that the host the global
 `terminal.default_host` names is installed, that it can create a
 file in `root_dir`, which registered checkouts set `core.bare` although they have
-a working tree, whether the global worker template repeats Shoal's guidance, and which forge each
+a working tree, whether a global rule repeats Shoal's guidance, and which forge each
 recorded host serves, asking it again unless `[machine.forges]` sets its type. Each
 problem becomes an `environment_problem` alert; a missing optional tool such as
 `fzf` raises none, and a host that cannot be asked keeps its answer. The inbox lists

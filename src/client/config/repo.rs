@@ -1,6 +1,6 @@
 use crate::agent::Agent;
 use crate::client::sessions::HostName;
-use crate::config::{options::Options, templates};
+use crate::config::{modes, options::Options};
 use crate::state::states;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -17,11 +17,12 @@ pub struct ConfigLayers {
     pub worktree_file: RepoConfig,
     /// The file in the repository's own directory, outside every Git tree.
     pub local_config: RepoConfig,
-    /// The Markdown file each template of a layer came from.
+    /// The Markdown file each mode's instructions or rule's text of a layer
+    /// came from.
     #[serde(default)]
-    pub worktree_template_files: templates::Files,
+    pub worktree_template_files: modes::Files,
     #[serde(default)]
-    pub local_template_files: templates::Files,
+    pub local_template_files: modes::Files,
 }
 
 /// Display uses human-readable layer labels rather than the snake_case JSON names.
@@ -74,6 +75,12 @@ pub struct RepoConfig {
     pub git_profile: Option<String>,
     #[option(section)]
     pub agent: AgentConfig,
+    /// What agents are told and the kind of space they start in, by mode.
+    #[option(named_sections, default = crate::config::modes::built_in_modes())]
+    pub modes: BTreeMap<String, crate::config::modes::ModeConfig>,
+    /// Text a mode's agents receive after Shoal's guidance, by name.
+    #[option(named_sections, default = crate::config::modes::built_in_rules())]
+    pub rules: BTreeMap<String, crate::config::modes::RuleConfig>,
     #[option(section)]
     pub terminal: TerminalConfig,
     #[option(section)]
@@ -143,22 +150,6 @@ pub struct AgentConfig {
     pub dirs: Option<Vec<String>>,
     /// The Git profile of tracked agents' Git commands.
     pub git_profile: Option<String>,
-    #[option(section)]
-    pub templates: TemplatesConfig,
-}
-
-/// Instructions agents and chats receive after Shoal's own.
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
-#[serde(default, deny_unknown_fields)]
-#[options(resolved = Templates)]
-pub struct TemplatesConfig {
-    #[option(template)]
-    pub worker: Option<String>,
-    #[option(template, default = crate::config::templates::CHAT_DEFAULT.into())]
-    pub chat: Option<String>,
-    /// A local review's style, after its fixed instructions.
-    #[option(template, default = crate::config::templates::review_base().into())]
-    pub review: Option<String>,
 }
 
 /// Where and how Shoal opens places for a workspace.
@@ -350,10 +341,11 @@ pub fn false_positives_path(repository_dir: &Path) -> PathBuf {
 }
 
 /// The local config of the repository whose directory is `repository_dir`,
-/// read in place, with the templates beside it and the files they came from.
+/// read in place, with the mode and rule files beside it and the files
+/// they came from.
 /// Relative hook paths and `setup.command` name scripts in its directory, so
 /// they become absolute.
-pub fn load_local(repository_dir: &Path) -> Result<(RepoConfig, templates::Files)> {
+pub fn load_local(repository_dir: &Path) -> Result<(RepoConfig, modes::Files)> {
     let path = local_config_path(repository_dir);
     let directory = repository_dir.join(LOCAL_DIR);
     let text = crate::client::fsutil::read_optional(&path)
@@ -363,7 +355,7 @@ pub fn load_local(repository_dir: &Path) -> Result<(RepoConfig, templates::Files
         None => RepoConfig::default(),
     };
     resolve_script_paths(&mut config, &directory);
-    let files = templates::fill(&mut config.agent.templates, &[directory])?;
+    let files = modes::fill(&mut config, &[directory])?;
     Ok((config, files))
 }
 
@@ -377,9 +369,9 @@ fn resolve_script_paths(config: &mut RepoConfig, directory: &Path) {
     }
 }
 
-/// The worktree's repository config with its templates, and the files they
-/// came from.
-pub fn load(workspace_dir: &Path) -> Result<(RepoConfig, templates::Files)> {
+/// The worktree's repository config with its mode and rule files, and the
+/// files they came from.
+pub fn load(workspace_dir: &Path) -> Result<(RepoConfig, modes::Files)> {
     let paths = [
         workspace_dir.join(".shoal.toml"),
         workspace_dir.join(".shoal/config.toml"),
@@ -403,30 +395,28 @@ pub fn load(workspace_dir: &Path) -> Result<(RepoConfig, templates::Files)> {
         }
         None => RepoConfig::default(),
     };
-    let files = templates::fill(
-        &mut config.agent.templates,
+    let files = modes::fill(
+        &mut config,
         &[workspace_dir.to_owned(), workspace_dir.join(".shoal")],
     )?;
     Ok((config, files))
 }
 
 impl RepoConfig {
-    /// Warn about a worker template that repeats the built-in guidance.
-    pub fn normalize(&self) -> Vec<&'static str> {
-        let mut warnings = Vec::new();
-        if self
-            .agent
-            .templates
-            .worker
-            .as_deref()
-            .is_some_and(crate::config::templates::repeats_guidance)
-        {
-            warnings.push(
-                "agent.templates.worker repeats Shoal's built-in guidance, which every launch \
-                 already receives; keep only your additions",
-            );
-        }
-        warnings
+    /// Warn about a rule that repeats the built-in guidance.
+    pub fn normalize(&self) -> Vec<String> {
+        self.rules
+            .iter()
+            .filter(|(_, rule)| {
+                (rule.text.as_deref()).is_some_and(crate::config::templates::repeats_guidance)
+            })
+            .map(|(name, _)| {
+                format!(
+                    "rules.{name}.text repeats Shoal's built-in guidance, which every launch \
+                     already receives; keep only your additions"
+                )
+            })
+            .collect()
     }
 
     /// Each option's value on its own; layers combine into settings that
@@ -434,6 +424,7 @@ impl RepoConfig {
     pub fn validate(&self) -> Result<()> {
         crate::config::named_commands::validate(&self.commands)?;
         crate::config::agents::validate(&self.agents, &self.commands)?;
+        crate::config::modes::validate(self)?;
         for name in [&self.git_profile, &self.agent.git_profile]
             .into_iter()
             .flatten()

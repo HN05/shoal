@@ -466,15 +466,11 @@ async fn start_moved(
         model: crate::cli::agents::ModelRequest::Kept(session.model.clone()),
         ..Default::default()
     };
-    crate::cli::agents::launch_agent(
-        ctx,
-        launch,
-        workspace.clone(),
-        Some(crate::execution::recovery::moved_prompt(handoff)),
-        vec![],
-        options,
-    )
-    .await
+    let opening = crate::cli::agents::Opening::Told {
+        mode: crate::config::modes::DEFAULT.to_owned(),
+        message: crate::execution::recovery::moved_prompt(handoff),
+    };
+    crate::cli::agents::launch_agent(ctx, launch, workspace.clone(), opening, vec![], options).await
 }
 
 /// Start the restore command, consuming `records` once the agent runs.

@@ -142,7 +142,7 @@ impl Manager {
     async fn worktree_file(
         &self,
         path: &std::path::Path,
-    ) -> Result<(RepoConfig, config::templates::Files)> {
+    ) -> Result<(RepoConfig, config::modes::Files)> {
         self.check_access(path, load_worktree_file(path)).await
     }
 
@@ -210,7 +210,7 @@ impl Manager {
     async fn config_layers(
         &self,
         repository_id: &str,
-        (worktree_file, worktree_template_files): (RepoConfig, config::templates::Files),
+        (worktree_file, worktree_template_files): (RepoConfig, config::modes::Files),
     ) -> Result<ConfigLayers> {
         let repository = self.repository(repository_id).await?;
         // Registration and workspace creation keep checkouts out of the
@@ -334,9 +334,7 @@ impl Manager {
 }
 
 /// The config file and template files of the checkout or worktree at `path`.
-async fn load_worktree_file(
-    path: &std::path::Path,
-) -> Result<(RepoConfig, config::templates::Files)> {
+async fn load_worktree_file(path: &std::path::Path) -> Result<(RepoConfig, config::modes::Files)> {
     let path = path.to_owned();
     off_runtime::run(move || config::repo::load(&path)).await
 }

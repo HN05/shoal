@@ -329,13 +329,15 @@ instead of the PR delivery guidance below.
   README on each host; reruns synchronize notes without replacing
   complete asset sets. Homebrew releases install checksummed binaries after
   both release hosts publish assets; the formula has no head channel.
-- Prompt templates append the selected local/worktree repository value to global
-  guidance, falling back to the bundled chat template for an omitted global base.
-  Empty repository values suppress only local additions; provenance reports the
+- An agent's mode lists the rules of its system text and the instructions that
+  follow its subject in its first message, once. Rule and instruction texts
+  append the selected local/worktree repository value to the global text; empty
+  repository values suppress only local additions; provenance reports the
   combined text and highest configured layer. Inline TOML wins over Markdown.
-  Shoal's built-in agent guidance precedes every worker template, which holds
-  only additions. `install` preserves existing template files; substitutions never evaluate or
-  recursively expand inserted text.
+  Shoal's built-in agent guidance precedes every workspace agent's rules, and a
+  chat's `chat` rule starts with Shoal's description of its place; neither is
+  replaceable. Substitutions never evaluate or recursively expand inserted text,
+  and the subject is never rendered.
 - Issue numbers use an explicit repository, the current registered checkout or
   managed workspace, or an interactive picker. Issue URLs must match the selected
   repository's remote; unregistered issue or PR URLs offer interactive callers to

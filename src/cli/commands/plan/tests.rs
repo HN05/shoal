@@ -1,15 +1,4 @@
 use super::*;
-use crate::config::options::Options;
-
-fn labels(plan: Option<&str>, planned: Option<&str>) -> config::Issue {
-    config::Issue {
-        plan_label: plan.map(str::to_owned),
-        planned_label: planned.map(str::to_owned),
-        ..config::repo::IssueConfig::built_in()
-            .resolve("issue")
-            .unwrap()
-    }
-}
 
 #[test]
 fn the_oldest_issue_is_refused_beyond_the_listing_limit() {
@@ -25,31 +14,6 @@ fn the_oldest_issue_is_refused_beyond_the_listing_limit() {
     issues.insert(0, item(MAX_LIMIT as u64));
     assert!(oldest(&issues, "issues").is_err());
     assert!(oldest(&[], "issues").unwrap().is_none());
-}
-
-#[test]
-fn the_prompt_carries_the_issue_and_swaps_only_configured_labels() {
-    let issue = Issue {
-        number: 7,
-        title: "Decide {title}".into(),
-        url: "https://forge.example/team/repo/issues/7".into(),
-        details: "Which way?".into(),
-    };
-    let prompt = prompt(&issue, &labels(Some("needs-plan"), Some("planned")));
-    assert!(
-        prompt.starts_with(
-            "Plan issue #7: Decide {title}\nhttps://forge.example/team/repo/issues/7\n\nWhich way?\n\n"
-        ),
-        "{prompt}"
-    );
-    assert!(prompt.contains("`needs-plan`"), "{prompt}");
-    assert!(prompt.contains("`planned`"), "{prompt}");
-    assert!(prompt.contains("--issue 7 "), "{prompt}");
-    let removes = relabel(&labels(Some("needs-plan"), None));
-    assert!(removes.contains("remove its `needs-plan`"), "{removes}");
-    let adds = relabel(&labels(None, Some("planned")));
-    assert!(adds.contains("add the `planned`"), "{adds}");
-    assert_eq!(relabel(&labels(None, None)), "");
 }
 
 #[test]
@@ -69,7 +33,9 @@ fn a_plan_chat_is_named_after_its_issue_without_asking() {
         url: "https://forge.example/team/shoal/issues/1211".into(),
         details: String::new(),
     };
-    let topic = topic(&repo, &issue, &labels(None, None));
+    let topic = topic(&repo, &issue);
+    assert_eq!(topic.mode, "plan");
+    assert_eq!(topic.subject.unwrap().issue.unwrap().number, 1211);
     assert_eq!(topic.name, "shoal-plan-1211");
     assert!(!topic.asks_name);
 }

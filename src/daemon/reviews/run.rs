@@ -350,7 +350,7 @@ impl Manager {
     ) -> Result<String> {
         let checkout = files.checkout();
         let instructions = templates::review_instructions(
-            Some(&settings.agent.templates.review),
+            (settings.rules.get(crate::config::modes::REVIEW_RULE)).map(|rule| rule.text.as_str()),
             &templates::ReviewFields {
                 workspace: &workspace.name,
                 branch: workspace.branch.as_deref().unwrap_or_default(),

@@ -22,6 +22,10 @@ const REMOVED: &[(&[&str], &str)] = &[
         &["agent", "forge_clis"],
         "[agent.forge_clis] is gone: Shoal's commands act as the agent account, so set agent_token under [machine.forges.\"<host>\"] in the global config",
     ),
+    (
+        &["agent", "templates"],
+        "[agent.templates] is gone: add text to [rules.worker], [rules.chat] or [rules.review], or to a mode's instructions under [modes.<name>]",
+    ),
 ];
 
 /// Fail at the first setting of `root` that [`REMOVED`] names.

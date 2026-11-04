@@ -8,7 +8,8 @@ use serde_json::Value;
 const FULL: &str = "\
 git_profile = 'work'\n\
 [agent]\ndefault = 'claude'\nmodel = 'sonnet'\neffort = 'low'\nmax_running = 2\ndirs = ['/tmp', '~/cache']\ngit_profile = 'agent'\n\
-[agent.templates]\nworker = 'agent'\nchat = 'chat'\nreview = 'review'\n\
+[modes.worker]\nkind = 'chat'\nrules = ['chat']\ninstructions = 'work'\n[modes.chat]\nkind = 'workspace'\nrules = ['worker']\ninstructions = 'talk'\n\
+[modes.plan]\nkind = 'workspace'\nrules = ['review']\ninstructions = 'plan'\n[rules.worker]\ntext = 'agent'\n[rules.chat]\ntext = 'chat'\n[rules.review]\ntext = 'review'\n\
 [terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
 [terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\
 [terminal.rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
@@ -49,38 +50,67 @@ fn stack(global: &str, worktree: &str, saved: &str) -> Stack {
 #[test]
 fn former_template_files_are_not_read() {
     let directory = tempfile::tempdir().unwrap();
-    for name in ["agent-template.md", "issue-template.md"] {
+    for name in ["worker-template.md", "chat-template.md"] {
         std::fs::write(directory.path().join(name), name).unwrap();
     }
-    let (config, _) = config::repo::load(directory.path()).unwrap();
-    assert_eq!(config.agent.templates.worker, None);
+    let (config, files) = config::repo::load(directory.path()).unwrap();
+    assert!(config.rules.is_empty());
+    assert!(files.is_empty());
 }
 
 #[test]
-fn a_worker_template_repeating_the_guidance_warns() {
+fn a_rule_repeating_the_guidance_warns() {
     let stack = stack(
-        "agent.templates.worker = 'You are working in Shoal workspace {workspace} on branch {branch} at {path}.'",
-        "agent.templates.worker = 'Babysit {branch}.'",
+        "rules.worker.text = 'You are working in Shoal workspace {workspace} on branch {branch} at {path}.'",
+        "rules.worker.text = 'Babysit {branch}.'",
         "",
     );
     let warnings = stack.warnings();
     assert!(
-        matches!(warnings, [warning] if warning.starts_with("global config: agent.templates.worker repeats")),
+        matches!(warnings, [warning] if warning.starts_with("global config: rules.worker.text repeats")),
         "{warnings:?}"
     );
 }
 
 #[test]
+fn a_mode_naming_an_undefined_rule_is_refused() {
+    let error = stack("", "[modes.triage]\nrules = ['triage']\n", "")
+        .resolve()
+        .unwrap_err();
+    assert!(error.to_string().contains("names rule triage"), "{error}");
+    let settings = stack(
+        "[rules.triage]\ntext = 'Label it.'\n",
+        "[modes.triage]\nrules = ['triage']\n",
+        "",
+    )
+    .resolve()
+    .unwrap();
+    let mode = &settings.modes["triage"];
+    assert_eq!(mode.kind, crate::model::SpaceKind::Workspace);
+    assert_eq!(mode.instructions, "");
+    // A repository changes a built-in mode option by option.
+    let settings = stack("", "[modes.plan]\nkind = 'workspace'\n", "")
+        .resolve()
+        .unwrap();
+    assert_eq!(
+        settings.modes["plan"].kind,
+        crate::model::SpaceKind::Workspace
+    );
+    assert_eq!(settings.modes["plan"].rules, ["chat"]);
+}
+
+#[test]
 fn templates_append_one_repository_value_and_report_the_composed_text() {
     for key in [
-        "agent.templates.worker",
-        "agent.templates.chat",
-        "agent.templates.review",
+        "rules.worker.text",
+        "rules.chat.text",
+        "rules.review.text",
+        "modes.plan.instructions",
     ] {
         let default = match key {
-            "agent.templates.chat" => Some(config::templates::CHAT_DEFAULT),
-            "agent.templates.review" => Some(config::templates::review_base()),
-            _ => None,
+            "rules.review.text" => Some(config::templates::review_base()),
+            "modes.plan.instructions" => Some(include_str!("../modes/plan.md")),
+            _ => Some(""),
         };
         let config = |value: Option<&str>| {
             value.map_or_else(String::new, |value| {
@@ -148,7 +178,10 @@ fn templates_append_one_repository_value_and_report_the_composed_text() {
                 None,
                 Some("file"),
                 None,
-                Some(default.map_or_else(|| "file".into(), |base| format!("{base}\n\nfile"))),
+                Some(default.filter(|base| !base.is_empty()).map_or_else(
+                    || "file".into(),
+                    |base| format!("{}\n\nfile", base.trim_end()),
+                )),
                 Layer::WorktreeFile,
             ),
             (
@@ -181,12 +214,15 @@ fn templates_append_one_repository_value_and_report_the_composed_text() {
 
 #[test]
 fn a_template_reports_the_file_of_the_layer_it_came_from() {
-    let file = |path: &str| {
-        config::templates::Files::from([("agent.templates.worker".into(), path.into())])
-    };
+    let file = |path: &str| config::modes::Files::from([("rules.worker.text".into(), path.into())]);
     let mut global = Config::from_toml("").unwrap();
-    global.repository.agent.templates.worker = Some("Global".into());
-    global.template_files = file("/global/worker-template.md");
+    global
+        .repository
+        .rules
+        .entry("worker".into())
+        .or_default()
+        .text = Some("Global".into());
+    global.template_files = file("/global/rules/worker.md");
     let report = |layers: &ConfigLayers| {
         Stack::new(&global, layers)
             .report()
@@ -198,28 +234,22 @@ fn a_template_reports_the_file_of_the_layer_it_came_from() {
     let mut layers = ConfigLayers::default();
     let entries = report(&layers);
     assert_eq!(
-        entries["agent.templates.worker"],
-        (
-            Layer::GlobalConfig,
-            Some("/global/worker-template.md".into())
-        )
+        entries["rules.worker.text"],
+        (Layer::GlobalConfig, Some("/global/rules/worker.md".into()))
     );
-    assert_eq!(
-        entries["agent.templates.chat"],
-        (Layer::BuiltInDefault, None)
-    );
+    assert_eq!(entries["rules.chat.text"], (Layer::BuiltInDefault, None));
     // An inline value is not from a file.
-    layers.worktree_file = parse("agent.templates.worker = 'Worktree'").unwrap();
+    layers.worktree_file = parse("rules.worker.text = 'Worktree'").unwrap();
     assert_eq!(
-        report(&layers)["agent.templates.worker"],
+        report(&layers)["rules.worker.text"],
         (Layer::WorktreeFile, None)
     );
-    layers.worktree_template_files = file("/worktree/.shoal/worker-template.md");
+    layers.worktree_template_files = file("/worktree/.shoal/rules/worker.md");
     assert_eq!(
-        report(&layers)["agent.templates.worker"],
+        report(&layers)["rules.worker.text"],
         (
             Layer::WorktreeFile,
-            Some("/worktree/.shoal/worker-template.md".into())
+            Some("/worktree/.shoal/rules/worker.md".into())
         )
     );
 }

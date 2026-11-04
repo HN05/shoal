@@ -63,7 +63,11 @@ fn topic(repo: &Repository, config: &Path) -> chat::Topic {
         ],
         name: format!("{}-setup", repository::name(repo)),
         asks_name: false,
-        opening: Some(prompt(repository::name(repo), config)),
+        mode: chat::CHAT_MODE.to_owned(),
+        subject: Some(crate::config::templates::Subject::told(prompt(
+            repository::name(repo),
+            config,
+        ))),
         directories: config.parent().map(Path::to_path_buf).into_iter().collect(),
         links: Vec::new(),
         workspace: None,

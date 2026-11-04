@@ -91,7 +91,7 @@ pub fn template(base: &mut Option<String>, top: Option<String>, merge: Merge) {
 fn append_template(base: Option<String>, addition: Option<String>) -> Option<String> {
     match (base, addition) {
         (Some(base), Some(addition)) if !base.is_empty() && !addition.is_empty() => {
-            Some(format!("{base}\n\n{addition}"))
+            Some(format!("{}\n\n{addition}", base.trim_end()))
         }
         (Some(base), Some(addition)) if base.is_empty() => Some(addition),
         (Some(base), _) => Some(base),

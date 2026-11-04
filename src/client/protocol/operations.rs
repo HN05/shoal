@@ -187,6 +187,9 @@ pub struct QueuedLaunch {
     pub agent: String,
     /// Its first message when no issue gives it one.
     pub prompt: Option<String>,
+    /// The mode it starts in; the default mode when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
     /// The model and effort requested over the configured ones.
     #[serde(default, skip_serializing_if = "ModelChoice::is_empty")]
     pub model: ModelChoice,

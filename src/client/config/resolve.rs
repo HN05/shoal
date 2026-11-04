@@ -9,9 +9,9 @@ use serde::Serialize;
 use crate::config::{
     Config,
     agents::AgentTool,
+    modes,
     options::{self, Entry, Merge, Options},
     repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig, Settings},
-    templates,
 };
 
 /// Settings after every layer, with each AI tool resolved from them and
@@ -53,7 +53,7 @@ impl std::ops::DerefMut for Effective {
 pub struct Stack {
     layers: [(RepoConfig, Layer); 4],
     /// The file each template of a layer that reads them came from.
-    template_files: [(templates::Files, Layer); 3],
+    template_files: [(modes::Files, Layer); 3],
     /// Settings a layer sets that repeat Shoal's guidance.
     warnings: Vec<String>,
 }
@@ -69,11 +69,7 @@ impl Stack {
 
     /// The stack of `global`, the global config's repository layer with its
     /// templates read from `global_files`, under `repository`'s layers.
-    pub fn over(
-        global: RepoConfig,
-        global_files: templates::Files,
-        repository: &ConfigLayers,
-    ) -> Self {
+    pub fn over(global: RepoConfig, global_files: modes::Files, repository: &ConfigLayers) -> Self {
         let mut warnings = Vec::new();
         let mut normalize = |config: RepoConfig, layer: Layer| {
             warnings.extend(
@@ -119,6 +115,7 @@ impl Stack {
         base.merge(repository, Merge::RepositoryOverGlobal);
         let settings = base.resolve("")?;
         settings.ports.validate()?;
+        modes::check(&settings.modes, &settings.rules)?;
         Ok(settings)
     }
 

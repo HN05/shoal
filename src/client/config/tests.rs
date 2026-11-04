@@ -551,21 +551,19 @@ fn a_snapshot_resolves_with_the_template_files_beside_its_file() {
     let snapshot = Config::load(&paths).unwrap();
     // Edits after the snapshot reach only the template files.
     std::fs::write(&file, "[review]\nagent = 'claude'\n").unwrap();
-    std::fs::write(
-        file.parent().unwrap().join(templates::REVIEW_FILE),
-        "Follow the brief.",
-    )
-    .unwrap();
+    let rules = file.parent().unwrap().join("rules");
+    std::fs::create_dir(&rules).unwrap();
+    std::fs::write(rules.join("review.md"), "Follow the brief.").unwrap();
     let settings = snapshot
         .resolve_with_template_files(&Default::default(), &paths)
         .unwrap();
-    assert_eq!(settings.agent.templates.review, "Follow the brief.");
+    assert_eq!(settings.rules["review"].text, "Follow the brief.");
     assert_eq!(
         settings.review.agent.as_ref().map(|agent| agent.name()),
         Some("codex")
     );
     let plain = snapshot.resolve(&Default::default()).unwrap();
-    assert_eq!(plain.agent.templates.review, templates::review_base());
+    assert_eq!(plain.rules["review"].text, templates::review_base());
 }
 
 #[test]

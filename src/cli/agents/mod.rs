@@ -30,7 +30,7 @@ use crate::{
     ai::IntegrationKind,
     cli::{client, commands::configured, context::Context, terminal, ui},
     client::transcripts::Environments,
-    config::{Config, Effective, named_commands::Commands},
+    config::{Config, Effective, modes, named_commands::Commands, templates},
     execution::recovery,
     fsutil,
     model::{Chat, ChatHome, LinkedItem, Relation, RemovedWorkspace, Repository, Workspace},
@@ -289,7 +289,9 @@ pub(in crate::cli) struct Launch {
     pub name: String,
     pub workspace: Workspace,
     pub settings: Effective,
-    /// The first message, such as an issue prompt.
+    /// Shoal's guidance and the mode's rules.
+    pub instructions: String,
+    /// The first message, such as an issue with the mode's instructions.
     pub prompt: Option<String>,
     pub args: Vec<OsString>,
     /// The arguments that start the agent from a fork of a session, which
@@ -352,6 +354,42 @@ pub(in crate::cli) async fn link_chat(
     }
 }
 
+/// What a workspace agent's launch is told: its mode decides the rules
+/// of its system text and the instructions after its subject.
+pub(in crate::cli) enum Opening {
+    /// A new session, starting on `subject` when it has one.
+    New {
+        mode: String,
+        subject: Option<templates::Subject>,
+    },
+    /// A session in `mode` told `message` as it is, such as one that
+    /// replaces a stopped session.
+    Told { mode: String, message: String },
+}
+
+impl Opening {
+    /// A new session of the default mode, on `subject` when given.
+    pub fn worker(subject: Option<templates::Subject>) -> Self {
+        Self::New {
+            mode: modes::DEFAULT.to_owned(),
+            subject,
+        }
+    }
+
+    /// The system text and first message of the launch at `place`.
+    fn brief(&self, settings: &Effective, place: templates::Place<'_>) -> Result<templates::Brief> {
+        match self {
+            Self::New { mode, subject } => {
+                templates::brief(settings, mode, place, subject.as_ref())
+            }
+            Self::Told { mode, message } => Ok(templates::Brief {
+                first_message: Some(message.clone()),
+                ..templates::brief(settings, mode, place, None)?
+            }),
+        }
+    }
+}
+
 /// How a launch relates to the agents around it.
 #[derive(Default)]
 pub(in crate::cli) struct LaunchOptions {
@@ -402,7 +440,7 @@ pub(super) async fn launch_agent(
     ctx: &Context,
     agent: Agent,
     workspace: Workspace,
-    prompt: Option<String>,
+    opening: Opening,
     args: Vec<OsString>,
     options: LaunchOptions,
 ) -> Result<i32> {
@@ -413,6 +451,14 @@ pub(super) async fn launch_agent(
         Some(session) => fork_args(&settings, agent.name(), session, &workspace.path)?,
         None => Vec::new(),
     };
+    let place = templates::Place::Workspace {
+        workspace: &workspace,
+        delivery: launch::delivery(integration, &settings),
+    };
+    let templates::Brief {
+        system: instructions,
+        first_message: prompt,
+    } = opening.brief(&settings, place)?;
     let app = opens_app(
         agent_options(&settings, agent.name()),
         prompt.is_some(),
@@ -426,6 +472,7 @@ pub(super) async fn launch_agent(
         name: agent.into(),
         workspace,
         settings,
+        instructions,
         prompt,
         args,
         fork,

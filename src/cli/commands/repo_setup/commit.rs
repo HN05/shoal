@@ -42,11 +42,15 @@ pub(super) async fn start(
     };
     eprintln!("Setting up Shoal in workspace {}", workspace.name);
     let prompt = prompt(repository::name(repo), BRANCH);
+    let opening = agents::Opening::Told {
+        mode: crate::config::modes::DEFAULT.to_owned(),
+        message: prompt,
+    };
     agents::launch_agent(
         ctx,
         agent,
         workspace,
-        Some(prompt),
+        opening,
         args,
         agents::LaunchOptions {
             model: agents::ModelRequest::Override(model),
