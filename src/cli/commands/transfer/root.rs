@@ -89,6 +89,11 @@ async fn stop_running(
 ) -> Result<()> {
     let workspaces: BTreeSet<_> = executions.iter().map(|e| &e.workspace_id).collect();
     for workspace in workspaces {
+        // A CI job ends with the other jobs of its run, which a stop before
+        // cancelled, and its workspace goes with it.
+        if !workspace_listed(ctx, workspace).await? {
+            continue;
+        }
         let saved_before = saved_executions(ctx, workspace)?;
         let result = ctx
             .progress(
@@ -112,6 +117,12 @@ async fn stop_running(
     Ok(())
 }
 
+/// Whether the daemon still lists `workspace`.
+async fn workspace_listed(ctx: &Context, workspace: &str) -> Result<bool> {
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    Ok(workspaces.iter().any(|listed| listed.id == workspace))
+}
+
 /// How long a move waits for a cancelled CI job's runner to stop it.
 const JOB_END: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
@@ -120,8 +131,7 @@ const JOB_END: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 async fn job_ended(ctx: &Context, workspace: &str) -> Result<()> {
     let deadline = tokio::time::Instant::now() + JOB_END;
     loop {
-        let workspaces = client::workspaces(&ctx.paths).await?;
-        if workspaces.iter().all(|listed| listed.id != workspace) {
+        if !workspace_listed(ctx, workspace).await? {
             return Ok(());
         }
         ensure!(
