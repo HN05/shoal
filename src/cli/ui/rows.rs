@@ -159,12 +159,21 @@ impl<'a> Listed<'a> {
         }
     }
 
+    /// The space it lists under: its parent, or for a CI job's workspace,
+    /// which has none, the workspace its run's PR or branch links.
     fn parent(&self) -> Option<&'a str> {
         let parent = match self {
             Self::Workspace(workspace) => workspace.parent.as_ref(),
             Self::Chat(chat) => chat.parent.as_ref(),
         };
-        parent.map(|parent| parent.id.as_str())
+        let linked = match self {
+            Self::Workspace(workspace) => workspace
+                .job
+                .as_ref()
+                .and_then(|job| job.workspace_id.as_deref()),
+            Self::Chat(_) => None,
+        };
+        parent.map(|parent| parent.id.as_str()).or(linked)
     }
 }
 
@@ -231,12 +240,18 @@ fn tree_workspace_row(
             (String::new(), None),
             workspace_status_cell(workspace, status),
             usage_cell(workspace),
-            (
-                workspace.links.issue_title.clone().unwrap_or_default(),
-                None,
-            ),
+            (workspace_title(workspace), None),
         ],
     )
+}
+
+/// What a workspace row names as its work: the CI job it runs, or the
+/// linked issue's title when known.
+fn workspace_title(workspace: &Workspace) -> String {
+    match &workspace.job {
+        Some(job) => job_subject(job),
+        None => workspace.links.issue_title.clone().unwrap_or_default(),
+    }
 }
 
 /// Picker entries for running chats, labelled as lists show them.
@@ -294,7 +309,7 @@ pub(super) fn rows_with_status(
                 (repository, None),
                 status,
                 usage_cell(w),
-                (w.links.issue_title.clone().unwrap_or_default(), None),
+                (workspace_title(w), None),
             ]
         })
         .collect();
@@ -346,7 +361,7 @@ fn queue_subject(entry: &QueueEntry) -> String {
 
 /// `CI job ci.yml / rust for PR #12`, naming the workflow where the forge
 /// reports it and the PR or branch the run is for.
-fn job_subject(queued: &crate::model::QueuedJob) -> String {
+pub fn job_subject(queued: &crate::model::QueuedJob) -> String {
     use crate::forge::ci::runner::Trigger;
     let mut subject = match &queued.run.workflow {
         Some(workflow) => format!("CI job {workflow} / {}", queued.job.name),

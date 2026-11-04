@@ -58,6 +58,10 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
     if workspace.disposable {
         outln!("Disposable:    yes");
     }
+    if let Some(job) = &workspace.job {
+        outln!("Job:           {}", ui::job_subject(job));
+        outln!("Run:           {}", job.run.url);
+    }
     match &status.diff {
         Some(diff) => outln!(
             "Changes:       {} file{}, +{} -{}",
@@ -186,6 +190,7 @@ fn render_processes(status: &WorktreeStatus, palette: Palette) {
         ),
         None => outln!("Usage:         none"),
     }
+    render_jobs(status, palette);
     outln!("Leftovers:     {}", status.leftover_count);
     for leftover in &status.leftovers {
         outln!("  {}  {}", leftover.pid, leftover.command);
@@ -194,6 +199,24 @@ fn render_processes(status: &WorktreeStatus, palette: Palette) {
         && more > 0
     {
         outln!("  and {more} more");
+    }
+}
+
+/// The CI jobs running for the workspace's PR or branch, each with what its
+/// processes use.
+fn render_jobs(status: &WorktreeStatus, palette: Palette) {
+    if status.jobs.is_empty() {
+        return;
+    }
+    outln!("CI jobs:       {}", status.jobs.len());
+    for job in &status.jobs {
+        let subject = job.job.as_deref().map(ui::job_subject).unwrap_or_default();
+        let usage = job.usage.as_ref().map(ui::usage_label).unwrap_or_default();
+        outln!(
+            "  {}  {subject}  {}",
+            palette.paint(Style::Heading, &job.name),
+            palette.paint(Style::Muted, &usage)
+        );
     }
 }
 

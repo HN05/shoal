@@ -128,6 +128,9 @@ pub struct Workspace {
     /// What its processes use, while any run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<WorkspaceUsage>,
+    /// The CI job the runner runs here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job: Option<Box<QueuedJob>>,
 }
 
 /// The CPU and memory a workspace's processes use, from the daemon's latest
@@ -540,6 +543,7 @@ impl Workspace {
             setup_skipped: false,
             disposable: false,
             usage: None,
+            job: None,
         }
     }
 
@@ -777,6 +781,9 @@ pub struct WorktreeStatus {
     /// the committed HEAD; boxed to keep the response small.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub changed_on_both_sides: Option<Box<ChangedOnBothSides>>,
+    /// The workspaces of the CI jobs running for its PR or branch.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jobs: Vec<Workspace>,
 }
 
 /// How the background sync of a repository's default branch went.

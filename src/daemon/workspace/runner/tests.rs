@@ -77,6 +77,14 @@ async fn fixture(jobs: Vec<Value>, pull_head: &'static str, settings: &str) -> F
                 "old",
                 json!({"pull_request": {"number": 12}}),
             )
+        } else if line == "GET /api/v1/repos/team/repo/actions/runs/3" {
+            run(3, "push", &pushed, json!({"ref": "refs/heads/topic"}))
+        } else if line == "GET /api/v1/repos/team/repo/actions/runs?run_number=3" {
+            let mut running = run(3, "push", &pushed, json!({}));
+            running["status"] = json!("running");
+            json!({"workflow_runs": [running]})
+        } else if line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel" {
+            return (204, Vec::new(), Vec::new());
         } else if line == "GET /api/v1/repos/team/repo/pulls/12" {
             json!({"number": 12, "title": "Fix", "state": "open", "head": {"sha": pull_head, "ref": "fix"}, "base": {"ref": "main"}})
         } else {
@@ -326,4 +334,30 @@ async fn a_claimed_job_without_a_started_command_goes_after_a_restart() {
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
     assert!(manager.workspace(&claimed[0].workspace_id).await.is_err());
+}
+
+#[tokio::test]
+async fn a_jobs_workspace_names_its_job_and_lists_with_its_branchs_workspace() {
+    let fixture = fixture(vec![job("h3", 7, 3)], "unused", "").await;
+    let manager = &fixture.manager;
+    let topic = manager
+        .create_workspace(&fixture.repository, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    assert_eq!(claimed.len(), 1);
+    LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
+
+    let listed = manager.visible_workspaces(None).await.unwrap();
+    let job = listed
+        .iter()
+        .find(|workspace| workspace.id == claimed[0].workspace_id)
+        .unwrap();
+    let named = job.job.as_ref().unwrap();
+    assert_eq!(named.job.name, "rust");
+    assert_eq!(named.workspace_id.as_deref(), Some(topic.id.as_str()));
+    let linked = manager.linked_job_workspaces(&topic.id).await.unwrap();
+    assert_eq!(linked.len(), 1);
+    assert_eq!(linked[0].id, claimed[0].workspace_id);
 }

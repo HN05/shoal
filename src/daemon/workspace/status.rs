@@ -46,6 +46,8 @@ impl Manager {
             })
             .await?;
         workspace.usage = self.workspace_usage(&workspace.id);
+        workspace.job = self.workspace_job(&workspace.id).await?;
+        let jobs = self.linked_job_workspaces(&workspace.id).await?;
         let proxy_retry = self.proxy_retry(&executions);
         simulators
             .retain(|simulator| simulator.workspace_id.as_deref() == Some(workspace.id.as_str()));
@@ -78,6 +80,7 @@ impl Manager {
             leftovers,
             sync,
             changed_on_both_sides,
+            jobs,
         };
         let records = Records {
             issue,

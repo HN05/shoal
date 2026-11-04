@@ -131,6 +131,38 @@ fn tree_rows_list_children_below_their_parent() {
 }
 
 #[test]
+fn a_ci_jobs_workspace_lists_under_the_workspace_its_run_links() {
+    let plain = Palette::stdout(true);
+    let pull = workspace("a", "pull", "pull", WorkspaceState::Ready);
+    let mut job = workspace("a", "ci-rust-4", "unused", WorkspaceState::Ready);
+    job.branch = None;
+    job.usage = Some(crate::model::WorkspaceUsage {
+        cpu_percent: Some(250.0),
+        memory_bytes: 3 << 29,
+        processes: 4,
+    });
+    job.job = Some(Box::new(
+        serde_json::from_value(serde_json::json!({
+            "job": {"handle": "h", "id": 4, "run": 1, "name": "rust", "labels": ["shoal"]},
+            "run": {"url": "", "workflow": "ci.yml", "commit": "abc", "trigger": {"pull": {"number": 12}}},
+            "workspace_id": pull.id,
+        }))
+        .unwrap(),
+    ));
+    let rows = workspace_tree_rows(&[job, pull], &[], &HashSet::new(), plain, None);
+    assert_eq!(rows.len(), 2);
+    assert!(rows[0].starts_with("○ pull "), "{rows:?}");
+    assert!(rows[1].starts_with("○ └ ci-rust-4 "), "{rows:?}");
+    assert!(rows[1].contains("250% CPU, 1.5 GiB"), "{rows:?}");
+    assert!(
+        rows[1]
+            .trim_end()
+            .ends_with("CI job ci.yml / rust for PR #12"),
+        "{rows:?}"
+    );
+}
+
+#[test]
 fn width_limits_cut_one_column_and_keep_the_rest_aligned() {
     let plain = Palette::stdout(true);
     let cell = |text: &str| (text.to_owned(), None);

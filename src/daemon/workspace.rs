@@ -308,6 +308,7 @@ impl Manager {
         for workspace in &mut workspaces {
             workspace.usage = self.workspace_usage(&workspace.id);
         }
+        self.attach_jobs(&mut workspaces).await?;
         Ok(workspaces)
     }
 

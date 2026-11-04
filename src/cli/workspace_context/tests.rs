@@ -17,6 +17,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
         setup_skipped: false,
         disposable: false,
         usage: None,
+        job: None,
         id: format!("id-{name}"),
         repository_id: "repo".into(),
         name: name.into(),

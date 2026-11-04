@@ -392,6 +392,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         running: false,
         done: false,
         usage: None,
+        job: None,
         setup_skipped: row.get("setup_skipped")?,
         disposable: row.get("disposable")?,
         id: row.get("id")?,
