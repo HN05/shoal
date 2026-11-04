@@ -98,11 +98,11 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
     assert_eq!(request.target, Target::Secret("GATED".into()));
     // The launcher's check names the same request until the user decides.
     assert_eq!(
-        pending(acquire(&manager, scoped, "GATED", None).await?).id,
-        request.id
+        pending(acquire(&manager, scoped, "GATED", None).await?).number,
+        request.number
     );
     manager
-        .decide_approval(request.id, true, None, Default::default(), None)
+        .decide_approval(request.number, true, None, Default::default(), None)
         .await?;
     assert_eq!(
         granted(acquire(&manager, scoped, "GATED", None).await?),
@@ -138,12 +138,12 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
 
     let denied = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
     manager
-        .decide_approval(denied.id, false, None, Default::default(), None)
+        .decide_approval(denied.number, false, None, Default::default(), None)
         .await?;
     let retry = pending(acquire(&manager, scoped, "GATED", None).await?);
     assert_eq!(
-        (retry.id, retry.status),
-        (denied.id, DecisionStatus::Denied)
+        (retry.number, retry.status),
+        (denied.number, DecisionStatus::Denied)
     );
     Ok(())
 }
@@ -155,7 +155,7 @@ async fn workspace_grants_outlast_release() -> Result<()> {
     let scoped = Some(&caller);
     let request = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
     manager
-        .decide_approval(request.id, true, None, Default::default(), None)
+        .decide_approval(request.number, true, None, Default::default(), None)
         .await?;
     manager.release_secret("worker", "GATED".into()).await?;
     assert_eq!(

@@ -660,19 +660,19 @@ fn update_is_administrative() {
 #[test]
 fn numbered_requests_keep_inspection_and_actions_distinct() {
     for args in [
-        vec!["shoal", "approvals", "42"],
-        vec!["shoal", "approvals", "42", "--approve"],
-        vec!["shoal", "questions", "17"],
-        vec!["shoal", "questions", "17", "--answer", "SQLite"],
+        vec!["shoal", "approvals", "4.2"],
+        vec!["shoal", "approvals", "4.2", "--approve"],
+        vec!["shoal", "questions", "1.7"],
+        vec!["shoal", "questions", "1.7", "--answer", "SQLite"],
     ] {
         assert!(Cli::try_parse_from(args).is_ok());
     }
     for args in [
-        vec!["shoal", "approvals", "42", "--approve", "--deny"],
+        vec!["shoal", "approvals", "4.2", "--approve", "--deny"],
         vec![
             "shoal",
             "questions",
-            "17",
+            "1.7",
             "--answer",
             "SQLite",
             "--withdraw",
@@ -686,6 +686,26 @@ fn numbered_requests_keep_inspection_and_actions_distinct() {
             Cli::try_parse_from(["shoal", name]).unwrap().command,
             Some(Command::Custom(_))
         ));
+    }
+}
+
+#[test]
+fn item_numbers_name_their_space() {
+    for args in [
+        vec!["shoal", "approvals", "42"],
+        vec!["shoal", "approvals", "withdraw", "42"],
+        vec!["shoal", "questions", "17", "--answer", "SQLite"],
+        vec![
+            "shoal",
+            "approvals",
+            "4.2",
+            "--deny",
+            "--duplicate-of-approval",
+            "5",
+        ],
+    ] {
+        let error = Cli::try_parse_from(args).unwrap_err().to_string();
+        assert!(error.contains("names no space"), "{error}");
     }
 }
 

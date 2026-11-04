@@ -167,7 +167,7 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
             .await
             .unwrap(),
     );
-    let approve = || manager.decide_approval(request.id, true, None, Default::default(), None);
+    let approve = || manager.decide_approval(request.number, true, None, Default::default(), None);
     let running = approve().await.unwrap();
     assert_eq!(running.status, DecisionStatus::Pending);
     assert!(running.operation.is_some());
@@ -179,13 +179,13 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
     pushing(approve().await.unwrap_err());
     pushing(
         manager
-            .decide_approval(request.id, false, None, Default::default(), None)
+            .decide_approval(request.number, false, None, Default::default(), None)
             .await
             .unwrap_err(),
     );
     pushing(
         manager
-            .withdraw_approval(&workspace.id, request.id)
+            .withdraw_approval(&workspace.id, request.number)
             .await
             .unwrap_err(),
     );
@@ -245,7 +245,7 @@ async fn approving_a_push_of_a_branch_that_moved_outdates_it() {
     std::fs::write(workspace.path.join("tracked"), "changed\n").unwrap();
     commit(&workspace.path, "tracked");
     let error = manager
-        .decide_approval(request.id, true, None, Default::default(), None)
+        .decide_approval(request.number, true, None, Default::default(), None)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("outdated"), "{error:#}");
@@ -275,7 +275,7 @@ async fn denying_a_push_tells_the_agent_not_to_push_it_another_way() {
             .unwrap(),
     );
     let denied = manager
-        .decide_approval(request.id, false, None, Default::default(), None)
+        .decide_approval(request.number, false, None, Default::default(), None)
         .await
         .unwrap();
     assert_eq!(denied.status, DecisionStatus::Denied);

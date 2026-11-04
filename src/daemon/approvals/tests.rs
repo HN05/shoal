@@ -36,38 +36,55 @@ fn owners(db: &Connection) -> Result<()> {
 fn save(db: &Connection, request: &ApprovalRequest) -> Result<()> {
     let number = match db
         .query_row(
-            "SELECT number FROM access_requests WHERE id=?1",
+            "SELECT space_number,number FROM access_requests WHERE id=?1",
             [&request.key],
-            |r| r.get(0),
+            |r| {
+                Ok(ItemNumber {
+                    space: r.get(0)?,
+                    item: r.get(1)?,
+                })
+            },
         )
         .optional()?
     {
         Some(number) => number,
-        None => store::free_number(db, "access_requests")?,
+        None => item_numbers::next(db, &request.space_id)?,
     };
     db.execute(
-            "INSERT OR REPLACE INTO access_requests(id,workspace_id,target_key,name,record,active,number)
-            VALUES (?1,?2,?3,?4,?5,?6,?7)",
-            params![
-                request.key,
-                request.space_id,
-                request.target,
-                request.name,
-                serde_json::to_string(request)?,
-                request.active,
-                number
-            ],
-        )?;
+        "INSERT OR REPLACE INTO access_requests(id,workspace_id,target_key,name,record,active,
+                space_number,number)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        params![
+            request.key,
+            request.space_id,
+            request.target,
+            request.name,
+            serde_json::to_string(request)?,
+            request.active,
+            number.space,
+            number.item
+        ],
+    )?;
     Ok(())
 }
 
 /// The number stored under `key`.
-fn number(db: &Connection, key: &str) -> Result<i64> {
+fn number(db: &Connection, key: &str) -> Result<ItemNumber> {
     Ok(db.query_row(
-        "SELECT number FROM access_requests WHERE id=?1",
+        "SELECT space_number,number FROM access_requests WHERE id=?1",
         [key],
-        |r| r.get(0),
+        |r| {
+            Ok(ItemNumber {
+                space: r.get(0)?,
+                item: r.get(1)?,
+            })
+        },
     )?)
+}
+
+/// Item `item` of the space numbered `space`.
+fn item(space: u32, item: u32) -> ItemNumber {
+    ItemNumber { space, item }
 }
 
 fn sample(owner: &str, target: Target) -> ApprovalRequest {
@@ -127,12 +144,12 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
                 request.name = key.into();
                 save(db, &request)?;
             }
-            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number) VALUES ('broken','other','simulator','default','invalid',0,3)", [])?;
+            db.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,space_number,number) VALUES ('broken','other','simulator','default','invalid',0,2,3)", [])?;
             Ok(())
         }).await?;
     for (id, approve, status) in [
-        (1, true, DecisionStatus::Approved),
-        (2, false, DecisionStatus::Denied),
+        (item(1, 1), true, DecisionStatus::Approved),
+        (item(1, 2), false, DecisionStatus::Denied),
     ] {
         let decision = manager
             .decide_approval(id, approve, None, Default::default(), None)
@@ -165,7 +182,13 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
     // request holding its number.
     let shown = manager.approval_requests(Some("worker")).await?;
     let error = manager
-        .decide_approval(1, true, Some(shown[1].clone()), Default::default(), None)
+        .decide_approval(
+            item(1, 1),
+            true,
+            Some(shown[1].clone()),
+            Default::default(),
+            None,
+        )
         .await
         .unwrap_err();
     assert!(
@@ -177,16 +200,16 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
     let mut replaced = snapshot.clone();
     replaced.key = "a different request with the same visible details".into();
     let error = manager
-        .decide_approval(1, true, Some(replaced), Default::default(), None)
+        .decide_approval(item(1, 1), true, Some(replaced), Default::default(), None)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("changed since it was shown"));
     manager
-        .decide_approval(1, true, Some(snapshot), Default::default(), None)
+        .decide_approval(item(1, 1), true, Some(snapshot), Default::default(), None)
         .await?;
     for (id, message) in [
-        (4, "unknown approval request 4"),
-        (3, "approval request 3 has an invalid record"),
+        (item(1, 4), "unknown approval request 1.4"),
+        (item(2, 3), "approval request 2.3 has an invalid record"),
     ] {
         assert!(
             manager
@@ -206,7 +229,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
         .await?;
     assert!(
         manager
-            .decide_approval(1, true, None, Default::default(), None)
+            .decide_approval(item(1, 1), true, None, Default::default(), None)
             .await
             .is_err()
     );
@@ -239,8 +262,8 @@ async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Re
                 );
                 requests.push(request_merge(&tx, request)?.unwrap());
             }
-            let numbers: Vec<_> = requests.iter().map(|request| request.id).collect();
-            assert_eq!(numbers, [1, 2, 3]);
+            let numbers: Vec<_> = requests.iter().map(|request| request.number).collect();
+            assert_eq!(numbers, [item(1, 1), item(1, 2), item(1, 3)]);
             for outdated in &requests[..2] {
                 let error = decide(&tx, &outdated.key, true).err().unwrap();
                 assert!(error.to_string().contains("is outdated"), "{error:#}");
@@ -321,7 +344,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     };
     let unseen = request().await;
     let error = manager
-        .withdraw_approval(&other.name, unseen.id)
+        .withdraw_approval(&other.name, unseen.number)
         .await
         .unwrap_err();
     assert!(
@@ -330,7 +353,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     );
 
     let withdrawn = manager
-        .withdraw_approval(&workspace.name, unseen.id)
+        .withdraw_approval(&workspace.name, unseen.number)
         .await
         .unwrap();
     assert_eq!(withdrawn.status, DecisionStatus::Withdrawn);
@@ -339,11 +362,11 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     let default = proposals::ProposalDecision::default;
     for error in [
         manager
-            .decide_approval(unseen.id, true, None, default(), None)
+            .decide_approval(unseen.number, true, None, default(), None)
             .await
             .unwrap_err(),
         manager
-            .withdraw_approval(&workspace.name, unseen.id)
+            .withdraw_approval(&workspace.name, unseen.number)
             .await
             .unwrap_err(),
     ] {
@@ -353,14 +376,14 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     // Requesting again asks anew under another number; once the user saw
     // that one, withdrawing it tells them.
     let shown = request().await;
-    assert_ne!(shown.id, unseen.id);
+    assert_ne!(shown.number, unseen.number);
     let notifications = manager.notifications(true, 50).await.unwrap();
     manager
         .mark_notifications_read(notifications.iter().map(|n| n.id).collect())
         .await
         .unwrap();
     manager
-        .withdraw_approval(&workspace.name, shown.id)
+        .withdraw_approval(&workspace.name, shown.number)
         .await
         .unwrap();
     let unread = manager.notifications(true, 50).await.unwrap();
@@ -370,7 +393,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
         unread[0].message,
         format!(
             "approval {}: port web (workspace) was withdrawn; no decision needed",
-            shown.id
+            shown.number
         )
     );
 
@@ -383,7 +406,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         let mut method = crate::protocol::ApprovalMethod::WithdrawApproval {
             space: target.clone(),
-            id: shown.id,
+            number: shown.number,
         };
         let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
             .await
@@ -421,14 +444,14 @@ async fn a_chat_withdraws_only_its_own_requests() {
         .unwrap()
         .unwrap();
     let error = manager
-        .withdraw_approval(&chat.name, request.id)
+        .withdraw_approval(&chat.name, request.number)
         .await
         .unwrap_err();
     assert_eq!(
         error.to_string(),
-        format!("chat planning has no approval request {}", request.id)
+        format!("chat planning has no approval request {}", request.number)
     );
-    let pending = manager.show_approval(request.id).await.unwrap();
+    let pending = manager.show_approval(request.number).await.unwrap();
     assert_eq!(pending.status, DecisionStatus::Pending);
 }
 
@@ -450,7 +473,7 @@ async fn a_withdrawn_request_is_never_announced_afterwards() {
         .unwrap()
         .unwrap();
     manager
-        .withdraw_approval(&workspace.name, request.id)
+        .withdraw_approval(&workspace.name, request.number)
         .await
         .unwrap();
     // The allocation announces the request it recorded only now.
@@ -476,7 +499,7 @@ async fn withdrawal_never_reaches_a_request_that_took_the_number_meanwhile() -> 
             // Decided and gone while the withdrawal waited for its gate.
             release(&tx, "owner", &Target::Port("web".into()), "default")?;
             let later = check(&tx, sample("owner", Target::Port("api".into())))?.unwrap();
-            assert_eq!(later.id, selected.id);
+            assert_eq!(later.number, selected.number);
             let error = withdraw(&tx, &selected).unwrap_err();
             assert!(error.to_string().contains("decided meanwhile"), "{error:#}");
             let stored = by_key(&tx, &later.key)?.unwrap();
@@ -489,16 +512,16 @@ async fn withdrawal_never_reaches_a_request_that_took_the_number_meanwhile() -> 
 #[test]
 fn decision_messages_name_the_request_target_and_next_step() {
     let mut request = sample("owner", Target::Port("web".into()));
-    request.id = 7;
+    request.number = item(2, 7);
     request.status = DecisionStatus::Approved;
     assert_eq!(
         request.decision_message(),
-        "Approval 7 for port web (workspace) was approved: retry the command that requested it."
+        "Approval 2.7 for port web (workspace) was approved: retry the command that requested it."
     );
     request.status = DecisionStatus::Denied;
     assert_eq!(
         request.decision_message(),
-        "Approval 7 for port web (workspace) was denied: do not retry it."
+        "Approval 2.7 for port web (workspace) was denied: do not retry it."
     );
     request.target = Target::Merge;
     request.specification = Specification::Merge(MergeSpecification {
@@ -510,7 +533,7 @@ fn decision_messages_name_the_request_target_and_next_step() {
     });
     assert_eq!(
         request.decision_message(),
-        "Approval 7 for merge feature at abc was denied: do not retry it."
+        "Approval 2.7 for merge feature at abc was denied: do not retry it."
     );
     crate::validate::message(&request.decision_message()).unwrap();
 }
@@ -838,7 +861,7 @@ async fn invalid_records_are_reported_instead_of_ignored() {
             let mut record = serde_json::to_value(&request)?;
             record["id"] = 1.into();
             let insert = |db: &Connection, key: &str, number: i64, record: &serde_json::Value| db.execute(
-                "INSERT INTO access_requests(id,workspace_id,target_key,name,record,number) VALUES (?1,'owner','simulator',?1,?2,?3)",
+                "INSERT INTO access_requests(id,workspace_id,target_key,name,record,space_number,number) VALUES (?1,'owner','simulator',?1,?2,1,?3)",
                 params![key, record.to_string(), number]);
             insert(db, "valid", 1, &record)?;
             assert_eq!(list(db, Some("owner"))?.len(), 1);
@@ -847,7 +870,7 @@ async fn invalid_records_are_reported_instead_of_ignored() {
             broken["id"] = 2.into();
             insert(db, "broken", 2, &broken)?;
             let error = list(db, Some("owner")).unwrap_err().to_string();
-            assert!(error.contains("approval request 2 has an invalid record"), "{error}");
+            assert!(error.contains("approval request 1.2 has an invalid record"), "{error}");
             db.execute("DELETE FROM access_requests WHERE id='broken'", [])?;
             broken["specification"] = record["specification"].clone();
             broken["target"] = "resource/lock".into();
@@ -873,7 +896,7 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
                 let request = ApprovalRequest::new("owner", target, "default",
                     resource(LockMode::Read), lifetime, Some("read shared data"));
                 let pending = check(&tx, request.clone())?.unwrap();
-                assert_eq!(check(&tx, request.clone())?.unwrap().id, pending.id);
+                assert_eq!(check(&tx, request.clone())?.unwrap().number, pending.number);
                 assert_eq!(list(&tx, Some("owner"))?.len(), 1);
                 let mut changed = request.clone();
                 changed.specification = resource(LockMode::Write);

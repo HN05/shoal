@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 
+use crate::client::item_numbers::ItemNumber;
+
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum CoordinationCommand {
@@ -107,16 +109,16 @@ pub enum FilesCommand {
 
 #[derive(Debug, Default, Args)]
 pub struct QuestionsArgs {
-    /// Question number; omit to choose an open question.
-    pub id: Option<i64>,
+    /// Question number, such as 3.2; omit to choose an open question.
+    pub number: Option<ItemNumber>,
     /// List questions from this space, a workspace or chat.
-    #[arg(long, conflicts_with = "id")]
+    #[arg(long, conflicts_with = "number")]
     pub space: Option<String>,
     /// Send an answer or choice number.
-    #[arg(long, requires = "id", conflicts_with = "withdraw")]
+    #[arg(long, requires = "number", conflicts_with = "withdraw")]
     pub answer: Option<String>,
     /// Withdraw a question no longer needed.
-    #[arg(long, requires = "id")]
+    #[arg(long, requires = "number")]
     pub withdraw: bool,
 }
 
@@ -190,10 +192,11 @@ pub struct QuestionAskArgs {
         requires = "resume"
     )]
     pub handed_over: Option<String>,
-    /// Continue waiting for this question, as the installed release does
-    /// after an upgrade restarted the daemon.
+    /// Continue waiting for the question with this number within the
+    /// space, as the installed release does after an upgrade restarted the
+    /// daemon.
     #[arg(long, hide = true, requires = "asking_space")]
-    pub resume: Option<i64>,
+    pub resume: Option<u32>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -203,11 +206,7 @@ pub enum QuestionsCommand {
     Ask(QuestionAskArgs),
     /// Withdraw an open question the space's agent no longer needs answered.
     Withdraw {
-        /// Question number.
-        id: i64,
-        /// Space, a workspace or chat, that asked it; defaults to the one
-        /// that did.
-        #[arg(long)]
-        space: Option<String>,
+        /// Question number, such as 3.2.
+        number: ItemNumber,
     },
 }

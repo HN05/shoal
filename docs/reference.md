@@ -726,8 +726,9 @@ chats and queued agents. `work --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`needs-input`, `ready-outdated`, `queued`);
 a chat's status is `process running`.
-<a id="inbox"></a>The inbox lists what needs you, each with its workspace: open questions,
-pending approval requests that no coordinating agent decides, including issue
+<a id="inbox"></a>The inbox lists what needs you, each with its workspace: open questions
+and pending approval requests that no coordinating agent decides, each with its
+[number](#questions), including issue
 [proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces whose
 agent needs input, failed
 workspaces, [ready marks](#ready-for-review) at the current HEAD, one row per
@@ -2365,7 +2366,7 @@ the workspace's agent exited or was stopped. Without a coordinator, or when its 
 the user receives them as before. A workspace without an agent of its own is its
 coordinator's own work, so what a process does there reaches the user. A
 coordinator answers a question asked below it with
-`shoal questions <number> --answer <answer>`, or passes it up: an agent with its own
+`shoal questions <S.N> --answer <answer>`, or passes it up: an agent with its own
 `shoal questions ask`, a chat by asking the user in the chat.
 
 ### Repositories
@@ -3722,7 +3723,9 @@ pr_open = "propose" # Default: "direct"
 A proposed `issue open` records every option it was given, with the space, a
 workspace's branch and commit, and the agent; running it again unchanged returns
 the same request. The request belongs to the repository, so it stays when the
-space is removed.
+space is removed, keeping its number: no new space takes that space's number
+until its last such proposal is decided, and lists show it with the space's
+name marked `(removed)` (`space_removed` in `--json`).
 A proposed `pr open` pushes the branch as usual, unless
 [`[permissions] push`](#approval-for-agent-pushes) holds the push back, links the branch's open PR if
 there is one, and otherwise records the PR it would open, with its defaults
@@ -3739,10 +3742,10 @@ parent space may deny it with `--reason` or pass it up.
 
 ```sh
 shoal approvals                     # proposals show their labels and description
-shoal approvals --approve 4 --title "Fix login timeout" --body-file edited.md
-shoal approvals --deny 5 --reason "Not a bug"
-shoal approvals --deny 6 --duplicate-of 120     # an existing issue's number or URL
-shoal approvals --deny 7 --duplicate-of-approval 4
+shoal approvals --approve 3.4 --title "Fix login timeout" --body-file edited.md
+shoal approvals --deny 3.5 --reason "Not a bug"
+shoal approvals --deny 3.6 --duplicate-of 120     # an existing issue's number or URL
+shoal approvals --deny 3.7 --duplicate-of-approval 3.4
 ```
 
 `approve` opens the item as the space's agent account, with `--title`,
@@ -4691,9 +4694,9 @@ reach a chat's files.
 shoal questions ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--attach FILE]... [--wait]
 shoal questions ask --in-chat        # The turn's final message in the chat is the question
 shoal questions [--space S]          # Pick an open question on a terminal
-shoal questions withdraw <number>    # Close a question the agent no longer needs answered
-shoal questions <number>             # Inspect and choose an answer
-shoal questions <number> --answer <answer> # Answer text or a choice number
+shoal questions withdraw <S.N>       # Close a question the agent no longer needs answered
+shoal questions <S.N>                # Inspect and choose an answer
+shoal questions <S.N> --answer <answer> # Answer text or a choice number
 ```
 
 `shoal questions ask` records a question for the user from the agents of a space, a
@@ -4702,13 +4705,17 @@ decision, the recommended answer, an optional reason and optional choices, each
 one line with the same limits as `alerts send`, and files sent with `--attach`
 as `alerts send` sends them, such as screenshots of the choices. It raises a `question_asked`
 notification and prints the question number. Listings and the inbox name its
-files, and `--json` lists them as `files` as alerts do. `shoal questions <number> --answer <answer>` records the answer,
+files, and `--json` lists them as `files` as alerts do. `shoal questions <S.N> --answer <answer>` records the answer,
 resolving a choice number to that choice, and queues it for the space's agents
 as a message naming the question, so the [agent messages](#agent-messages) hooks
 deliver it and wake an idle agent; it confirms with the question text, since a
 stale notification may name a reused number. An answer may span lines, up to 4096 bytes.
-Delivering the answer deletes the question. A new question takes the smallest
-number no stored question holds, across spaces. On a terminal,
+Delivering the answer deletes the question. Questions and [approval
+requests](#resource-approvals) are numbered `S.N`: the [number of the
+space](#workspaces) that asked, then the smallest number no question or request
+of that space holds, so `3.2` names one item of either kind. A number without
+its space, or one that names a request, is refused with the form or command to
+use, and `--json` gives `space_number`, `item` and the `number` text. On a terminal,
 `shoal questions` opens a picker; selecting a question or naming its number shows
 its text, space, recommendation, reason and numbered choices, then an `Answer`
 prompt. Enter accepts the recommendation shown in brackets; type a choice number or
@@ -5125,24 +5132,23 @@ these requests, merge requests from a scoped `shoal merge`,
 [proposed issues and PRs](#approval-for-agent-issues-and-prs), and retained workspace grants; `shoal approvals --space <workspace>` filters
 by workspace, and `--space <chat>` lists the issues a chat proposed and the
 requests it decides. Scoped callers can inspect requests in their workspace tree. On a terminal,
-`shoal approvals` opens a picker; selecting a pending request or naming its number
-shows its recorded settings and prompts for `y` to approve or `n` to deny,
+`shoal approvals` opens a picker; selecting a pending request or naming its
+[number](#questions), such as `shoal approvals 3.2`, shows its recorded settings and prompts for `y` to approve or `n` to deny,
 case-insensitively; any other input cancels. In the list, Ctrl-A approves
 and Ctrl-D denies the highlighted request without leaving it: the outcome or
 error shows above the key hints and the list updates. JSON and nonterminal output
 print records without prompting. An unscoped user
-reviews the recorded settings and uses `shoal approvals --approve [number]` or
-`shoal approvals --deny [number]`; without a number, they pick among pending requests, shown
+reviews the recorded settings and uses `shoal approvals --approve [S.N]` or
+`shoal approvals --deny [S.N]`; without a number, they pick among pending requests, shown
 with their space, reason and settings, and a request that took the chosen
-number meanwhile is refused. A request takes the smallest number no
-stored request holds. A keep or merge request that no longer applies, because a request
+number meanwhile is refused. A keep or merge request that no longer applies, because a request
 for a newer commit replaced it, its completion was withdrawn or it was found stale,
 stays listed as `outdated` until the workspace is removed, so its number is not reused and deciding it is refused. Approval reserves no capacity: retry acquisition after
 the decision. Pending requests produce a daemon notification, collapsed until read;
 a decision queues an [agent message](#agent-messages) for the requesting space
 naming the request, its target and the decision.
 
-`shoal approvals withdraw <number> [--space S]` lets the requesting space
+`shoal approvals withdraw <S.N>` lets the requesting space
 take back a pending request it no longer needs, as releasing a lease does for a
 lease request. The request stays listed as `withdrawn` on the same terms as
 `outdated`, except a proposed issue, which is deleted as a decided proposal is.
@@ -5155,8 +5161,8 @@ A request from a space with an agent of its own goes first to the nearest
 space above it with an agent: a parent [workspace](#child-workspaces) or a
 [chat](#chats), whichever comes first. That space's
 agent is told and decides it instead of the user, by number with
-`shoal approvals --approve <number>` or `shoal approvals --deny <number>`, or
-passes it up with `shoal approvals --escalate <number>`, to the next such
+`shoal approvals --approve <S.N>` or `shoal approvals --deny <S.N>`, or
+passes it up with `shoal approvals --escalate <S.N>`, to the next such
 space above and at the top to the user. A parent space, workspace or chat,
 approves only what it holds an approved grant for, with the same target and
 settings, or a request to hold the workspace, which needs none; otherwise

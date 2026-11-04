@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
+use crate::client::item_numbers::ItemNumber;
 
 /// Requests about agents' questions to the user and their answers.
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,13 +21,13 @@ pub enum QuestionMethod {
     },
     /// Open questions, in every space unless one is named.
     ListQuestions { space: Option<String> },
-    /// One question by ID, for the user.
-    ShowQuestion { id: i64 },
-    /// Close the space's open question `id`, which its agents no longer
-    /// need answered.
+    /// One question by number, for the user.
+    ShowQuestion { number: ItemNumber },
+    /// Close the space's open question `number`, which its agents no
+    /// longer need answered.
     WithdrawQuestion {
         space: String,
-        id: i64,
+        number: ItemNumber,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<crate::client::questions::Question>,
     },
@@ -34,14 +35,14 @@ pub enum QuestionMethod {
     /// `shown` is the question the user was shown, which a later question
     /// reusing its number does not match.
     AnswerQuestion {
-        id: i64,
+        number: ItemNumber,
         answer: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<crate::client::questions::Question>,
     },
     /// Accept the stored recommendation literally, including numeric text.
     AcceptQuestionRecommendation {
-        id: i64,
+        number: ItemNumber,
         shown: Option<crate::client::questions::Question>,
     },
     /// The caller's agent asks the user in its conversation this turn: the
@@ -50,11 +51,11 @@ pub enum QuestionMethod {
     /// The user replied in the conversation of the caller's agent, which
     /// closes the questions the space's agents asked there.
     RepliedInChat { space: String },
-    /// Long-lived: the question once it is answered. What it asks tells it
-    /// from a later question reusing its number.
+    /// Long-lived: the question `item` of the space once it is answered.
+    /// What it asks tells it from a later question reusing its number.
     AwaitAnswer {
         space: String,
-        id: i64,
+        item: u32,
         ask: crate::client::questions::Ask,
     },
 }

@@ -117,18 +117,18 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
         .await
         .unwrap();
     let mut requests = Vec::new();
-    for name in ["original", "duplicate", "replacement"] {
+    for name in ["original", "duplicate"] {
         let workspace = manager
             .create_workspace(&repo.id, name.into(), None, None, None)
             .await
             .unwrap();
         requests.push(store_issue_proposal(&manager, &workspace.clone().into()).await);
     }
-    let [original, duplicate, replacement] = &requests[..] else {
+    let [original, duplicate] = &requests[..] else {
         unreachable!()
     };
     let decision = ProposalDecision {
-        duplicate_of: Some(Duplicate::Approval(original.id)),
+        duplicate_of: Some(Duplicate::Approval(original.number)),
         ..ProposalDecision::default()
     };
     let locked = manager.duplicated_proposal(&decision).await.unwrap();
@@ -137,26 +137,62 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
         Some(&original.key)
     );
 
-    // The original is decided and another workspace's proposal takes
-    // its number while the duplicate decision waits for the gates.
+    // The original is decided and its workspace's next proposal takes its
+    // number while the duplicate decision waits for the gates.
     manager.forget_proposal(original.key.clone()).await.unwrap();
-    manager
-        .forget_proposal(replacement.key.clone())
-        .await
-        .unwrap();
-    let workspace = manager.workspace(&replacement.space_id).await.unwrap();
+    let workspace = manager.workspace(&original.space_id).await.unwrap();
     let reused = store_issue_proposal(&manager, &workspace.clone().into()).await;
-    assert_eq!(reused.id, original.id);
+    assert_eq!(reused.number, original.number);
     let error = manager
-        .add_to_proposal(duplicate, original.id, locked.as_ref())
+        .add_to_proposal(duplicate, original.number, locked.as_ref())
         .await
         .unwrap_err();
     assert!(
         format!("{error:#}").contains("changed while this decision waited"),
         "{error:#}"
     );
-    let unchanged = manager.approval_request(reused.id).await.unwrap().unwrap();
+    let unchanged = manager
+        .approval_request(reused.number)
+        .await
+        .unwrap()
+        .unwrap();
     assert!(unchanged.proposed_issue().unwrap().duplicates.is_empty());
+}
+
+#[tokio::test]
+async fn a_proposal_keeps_its_number_and_reserves_its_removed_space() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let proposer = create("proposer").await.unwrap();
+    let proposed = store_issue_proposal(&manager, &proposer.clone().into()).await;
+    assert_eq!(proposed.number.space, proposer.number);
+    manager
+        .remove_workspace(
+            &proposer.id,
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+
+    // The user still decides it by the number it was announced with, shown
+    // with the space it came from.
+    let listed = manager.approval_requests(None).await.unwrap();
+    let [kept] = &listed[..] else {
+        panic!("{listed:?}")
+    };
+    assert_eq!((kept.number, kept.space_removed), (proposed.number, true));
+    // No new space takes the number while it waits.
+    let next = create("next").await.unwrap();
+    assert_ne!(next.number, proposer.number);
+    manager.forget_proposal(kept.key.clone()).await.unwrap();
+    let freed = create("freed").await.unwrap();
+    assert_eq!(freed.number, proposer.number);
 }
 
 /// A pending issue proposal from `workspace`.
@@ -233,7 +269,7 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
     manager.save_proposal(edited).await.unwrap();
 
     let withdrawn = manager
-        .withdraw_approval(&workspace.name, proposed.id)
+        .withdraw_approval(&workspace.name, proposed.number)
         .await
         .unwrap();
     assert_eq!(withdrawn.status, DecisionStatus::Withdrawn);
@@ -294,7 +330,7 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
         .unwrap();
     manager.notify_approval(&child.name, &proposed).await;
     let routed = manager
-        .approval_request(proposed.id)
+        .approval_request(proposed.number)
         .await
         .unwrap()
         .unwrap();
@@ -312,7 +348,7 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
         ),
     ] {
         let error = manager
-            .decide_routed_approval(&parent.id, proposed.id, approve, None, details)
+            .decide_routed_approval(&parent.id, proposed.number, approve, None, details)
             .await
             .unwrap_err();
         assert!(format!("{error:#}").contains("--escalate"), "{error:#}");
@@ -320,7 +356,7 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
     let denied = manager
         .decide_routed_approval(
             &parent.id,
-            proposed.id,
+            proposed.number,
             false,
             None,
             ProposalDecision {
@@ -365,7 +401,11 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
             .await
             .unwrap();
     }
-    let given_back = manager.approval_request(pending.id).await.unwrap().unwrap();
+    let given_back = manager
+        .approval_request(pending.number)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(
         (given_back.status, given_back.decider),
         (DecisionStatus::Pending, None)

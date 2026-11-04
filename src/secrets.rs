@@ -224,11 +224,11 @@ async fn confirm_grant(paths: &Paths, tool: &str, name: &str, secret: &Secret) -
         Body::SecretGrant(_) => Ok(()),
         Body::ApprovalRequest(request) if request.status == DecisionStatus::Denied => bail!(
             "{tool} needs secrets.{name}: the user denied approval {}",
-            request.id
+            request.number
         ),
         Body::ApprovalRequest(request) => bail!(
             "{tool} needs secrets.{name}: approval {} is pending; retry after the user decides",
-            request.id
+            request.number
         ),
         body => Err(body.unexpected("SecretGrant or ApprovalRequest")),
     }

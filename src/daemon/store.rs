@@ -88,19 +88,6 @@ impl Store {
     }
 }
 
-/// The smallest positive number no row of `table` holds in its `number`
-/// column, so the numbers users type stay short.
-pub fn free_number(db: &Connection, table: &str) -> Result<i64> {
-    Ok(db.query_row(
-        &format!(
-            "SELECT MIN(n) FROM (SELECT 1 AS n UNION ALL SELECT number+1 FROM {table})
-                WHERE n NOT IN (SELECT number FROM {table})"
-        ),
-        [],
-        |row| row.get(0),
-    )?)
-}
-
 /// Whether the supplied SELECT query returns any rows.
 pub fn exists(db: &Connection, sql: &str, params: impl Params) -> Result<bool> {
     Ok(db.query_row(&format!("SELECT EXISTS({sql})"), params, |row| row.get(0))?)

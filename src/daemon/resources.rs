@@ -616,7 +616,7 @@ fn acquire_lease(
         let Specification::Resource(bound) = &pending.specification else {
             bail!(
                 "approval request {} for {target} does not select a pool member; release the name and request again",
-                pending.id
+                pending.number
             );
         };
         ensure!(

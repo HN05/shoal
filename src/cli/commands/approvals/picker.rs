@@ -51,7 +51,7 @@ pub(in crate::cli::commands) async fn decide_row(
     let approve = decision == Decision::Approve;
     submit(
         ctx,
-        request.id,
+        request.number,
         approve,
         Some(Box::new(request)),
         ProposalDecision::default(),
@@ -94,15 +94,16 @@ fn decision_key<'a>(
 /// The request `row` shows, by its number wherever its workspace is,
 /// refusing one that changed or replaced it since.
 async fn displayed(ctx: &Context, row: &str) -> Result<ApprovalRequest> {
-    let id = row
+    let number = row
         .split_once(':')
-        .and_then(|(id, _)| id.parse().ok())
+        .and_then(|(number, _)| number.parse().ok())
         .context("picker returned an invalid approval request")?;
     let request =
-        request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ShowApproval { id }).await?;
+        request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ShowApproval { number })
+            .await?;
     ensure!(
         row_id(&request)? == row,
-        "approval request {id} changed since it was listed"
+        "approval request {number} changed since it was listed"
     );
     Ok(*request)
 }
@@ -129,16 +130,15 @@ pub(super) async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
 }
 
 /// One aligned row per request, by [`row_id`]: its number, its status once
-/// decided, the workspace, and what it asks for and why, cut to fit the
-/// picker.
+/// decided, the space, and what it asks for and why, cut to fit the picker.
 fn picker_rows(requests: &[ApprovalRequest]) -> Result<Entries> {
     let cells = requests
         .iter()
         .map(|request| {
             [
-                (request.id.to_string(), Some(Style::Muted)),
+                (request.number.to_string(), Some(Style::Muted)),
                 status_cell(request.status),
-                (request.space.clone(), None),
+                (super::space_label(request), None),
                 (about(request), None),
             ]
         })
@@ -169,5 +169,5 @@ fn row_id(request: &ApprovalRequest) -> Result<String> {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
-    Ok(format!("{}:{digest}", request.id))
+    Ok(format!("{}:{digest}", request.number))
 }

@@ -14,8 +14,10 @@ pub struct Ask {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Question {
-    /// The number the user answers it by; reused once the question is deleted.
-    pub id: i64,
+    /// The number the user answers it by, its space's and its own; reused
+    /// once the question is deleted.
+    #[serde(flatten)]
+    pub number: crate::client::item_numbers::ItemNumber,
     /// The workspace or chat whose agent asked it.
     pub space_id: String,
     /// The space's current name.

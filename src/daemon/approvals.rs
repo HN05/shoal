@@ -1,11 +1,11 @@
 //! Human decisions authorize cooperative allocations; they never reserve capacity.
-use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use std::fmt;
 
 use crate::{
     daemon::{
+        item_numbers::{self, ItemKind, ItemNumber},
         log,
         notifications::{self, About, NotificationKind},
         scope::Caller,
@@ -38,14 +38,25 @@ impl Target {
     }
 }
 
-const COLUMNS: &str = "SELECT id,record,active,number FROM access_requests";
-const BY_KEY: &str = "SELECT id,record,active,number FROM access_requests WHERE id=?1";
-const BY_NUMBER: &str = "SELECT id,record,active,number FROM access_requests WHERE number=?1";
-const CURRENT: &str = "SELECT id,record,active,number FROM access_requests
-    WHERE workspace_id=?1 AND target_key=?2 AND name=?3 AND active=1";
+/// A stored request's key, record, active flag, numbers, and whether its
+/// space is gone, which only a proposed issue outlives.
+macro_rules! select {
+    ($($filter:literal)?) => {
+        concat!(
+            "SELECT id,record,active,space_number,number,
+                workspace_id IS NULL AND NOT EXISTS (SELECT 1 FROM workspaces
+                        WHERE workspaces.number=access_requests.space_number
+                    UNION ALL SELECT 1 FROM chats WHERE chats.number=access_requests.space_number)
+            FROM access_requests "$(, $filter)?
+        )
+    };
+}
 
-const CANDIDATES: &str = "SELECT id,record,active,number FROM access_requests
-    WHERE workspace_id=?1 AND target_key=?2 ORDER BY rowid";
+const COLUMNS: &str = select!();
+const BY_KEY: &str = select!("WHERE id=?1");
+const BY_NUMBER: &str = select!("WHERE space_number=?1 AND number=?2");
+const CURRENT: &str = select!("WHERE workspace_id=?1 AND target_key=?2 AND name=?3 AND active=1");
+const CANDIDATES: &str = select!("WHERE workspace_id=?1 AND target_key=?2 ORDER BY rowid");
 
 /// Whether a request the repository owns, an issue proposal, was made by
 /// the space `?1`; a malformed record of another space's history stays out
@@ -53,20 +64,26 @@ const CANDIDATES: &str = "SELECT id,record,active,number FROM access_requests
 const REPOSITORY_OWNED: &str = "(workspace_id IS NULL
     AND CASE WHEN json_valid(record) THEN json_extract(record, '$.space_id') END=?1)";
 
-/// A stored request's key, record, active flag and number.
-type RecordRow = (String, String, bool, i64);
+/// A stored request's key, record, active flag, number and whether its
+/// space is gone.
+type RecordRow = (String, String, bool, ItemNumber, bool);
 
-fn decode_record((key, record, active, number): RecordRow) -> Result<ApprovalRequest> {
+fn decode_record((key, record, active, number, removed): RecordRow) -> Result<ApprovalRequest> {
     let mut request: ApprovalRequest = serde_json::from_str(&record)
         .with_context(|| format!("approval request {number} has an invalid record"))?;
     request.key = key;
-    request.id = number;
+    request.number = number;
     request.active = active;
+    request.space_removed = removed;
     Ok(request)
 }
 
 fn record_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RecordRow> {
-    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+    let number = ItemNumber {
+        space: row.get(3)?,
+        item: row.get(4)?,
+    };
+    Ok((row.get(0)?, row.get(1)?, row.get(2)?, number, row.get(5)?))
 }
 
 fn lookup(db: &Connection, sql: &str, params: impl Params) -> Result<Option<ApprovalRequest>> {
@@ -152,8 +169,8 @@ fn write_record(db: &Connection, request: &ApprovalRequest) -> Result<()> {
     Ok(())
 }
 
-fn by_number(db: &Connection, number: i64) -> Result<Option<ApprovalRequest>> {
-    lookup(db, BY_NUMBER, [number])
+fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<ApprovalRequest>> {
+    lookup(db, BY_NUMBER, params![number.space, number.item])
 }
 
 /// Every request, or those `owner` made, including the issues it proposed
@@ -220,9 +237,9 @@ pub fn check(
         |r| r.get(0),
     )?;
     request.key = uuid::Uuid::new_v4().to_string();
-    request.id = store::free_number(tx, "access_requests")?;
-    tx.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,number) VALUES (?1,?2,?3,?4,?5,?6)",
-        params![request.key,request.space_id,request.target,request.name,serde_json::to_string(&request)?,request.id])?;
+    request.number = item_numbers::next(tx, &request.space_id)?;
+    tx.execute("INSERT INTO access_requests(id,workspace_id,target_key,name,record,space_number,number) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+        params![request.key,request.space_id,request.target,request.name,serde_json::to_string(&request)?,request.number.space,request.number.item])?;
     Ok(Some(request))
 }
 
@@ -253,10 +270,11 @@ impl ApprovalRequest {
         reason: Option<&str>,
     ) -> Self {
         Self {
-            id: 0,
+            number: ItemNumber::default(),
             key: String::new(),
             space_id: owner.into(),
             space: String::new(),
+            space_removed: false,
             repository_id: None,
             target,
             name: name.into(),
@@ -278,7 +296,7 @@ impl ApprovalRequest {
     /// Whether `other` is this request as recorded, though its decision may
     /// differ: the same key, workspace, target, settings, reason and time.
     fn is_same(&self, other: &ApprovalRequest) -> bool {
-        self.id == other.id
+        self.number == other.number
             && self.key == other.key
             && self.space_id == other.space_id
             && self.target == other.target
@@ -294,10 +312,10 @@ impl ApprovalRequest {
     fn notification(&self) -> String {
         format!(
             "approval {}: {}{}; approve with shoal approvals --approve {}",
-            self.id,
+            self.number,
             self.subject(),
             reason_suffix(self),
-            self.id
+            self.number
         )
     }
 
@@ -306,7 +324,7 @@ impl ApprovalRequest {
     fn withdrawal_notification(&self) -> String {
         format!(
             "approval {}: {} was withdrawn; no decision needed",
-            self.id,
+            self.number,
             self.subject()
         )
     }
@@ -319,7 +337,7 @@ impl ApprovalRequest {
         };
         format!(
             "Approval {} for {} was {}: {next}.",
-            self.id,
+            self.number,
             self.subject(),
             self.status
         )
@@ -361,7 +379,7 @@ fn route(
     ensure!(
         request.status == DecisionStatus::Pending,
         "approval request {} is already decided",
-        request.id
+        request.number
     );
     match from {
         None if request.routed => return Ok(request),
@@ -369,7 +387,7 @@ fn route(
         Some(from) => ensure!(
             request.decider.as_deref() == Some(from),
             "approval request {} is no longer this space's to decide",
-            request.id
+            request.number
         ),
     }
     // Without a decider above, the request stays the user's, as recorded.
@@ -406,13 +424,17 @@ fn close(
     Ok(request)
 }
 
-/// The space's request `id`, as the agent names it to withdraw.
-fn own_request(db: &Connection, space: &PresentSpace, id: i64) -> Result<ApprovalRequest> {
-    by_number(db, id)?
+/// The space's request `number`, as the agent names it to withdraw.
+fn own_request(
+    db: &Connection,
+    space: &PresentSpace,
+    number: ItemNumber,
+) -> Result<ApprovalRequest> {
+    by_number(db, number)?
         .filter(|request| request.space_id == space.id())
         .with_context(|| {
             format!(
-                "{} {} has no approval request {id}",
+                "{} {} has no approval request {number}",
                 space.kind(),
                 space.name()
             )
@@ -425,7 +447,7 @@ fn own_request(db: &Connection, space: &PresentSpace, id: i64) -> Result<Approva
 /// The stored request is found by its key, so a later request that took the
 /// number since it was selected is never withdrawn in its place.
 fn withdraw(tx: &Transaction<'_>, selected: &ApprovalRequest) -> Result<ApprovalRequest> {
-    let id = selected.id;
+    let id = selected.number;
     let request = by_key(tx, &selected.key)?
         .with_context(|| format!("approval request {id} was decided meanwhile"))?;
     ensure!(
@@ -492,7 +514,7 @@ impl fmt::Display for Undecided {
         write!(
             f,
             "approval {} for {} is {}",
-            self.0.id,
+            self.0.number,
             self.0.subject(),
             self.0.status
         )
@@ -518,7 +540,7 @@ pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision
             DecisionStatus::Outdated | DecisionStatus::Withdrawn
         ),
         "approval request {} is {}: it no longer applies",
-        request.id,
+        request.number,
         request.status
     );
     let status = if approve {
@@ -654,15 +676,19 @@ impl Manager {
             .await
     }
 
-    /// Withdraw the pending request `id` of the space `selector` names,
-    /// which its agent no longer needs, and take back its notification while
-    /// unread; once shown, its decider is told instead.
-    pub async fn withdraw_approval(&self, selector: &str, id: i64) -> Result<ApprovalRequest> {
+    /// Withdraw the pending request `number` of the space `selector`
+    /// names, which its agent no longer needs, and take back its
+    /// notification while unread; once shown, its decider is told instead.
+    pub async fn withdraw_approval(
+        &self,
+        selector: &str,
+        number: ItemNumber,
+    ) -> Result<ApprovalRequest> {
         let space = self.present_space(selector).await?;
         let space_id = space.id().to_owned();
         let selected = self
             .store
-            .run(move |db| own_request(db, &space, id))
+            .run(move |db| own_request(db, &space, number))
             .await?;
         // Deciding a proposal opens its item under the space's gate before
         // forgetting the request, which withdrawal must not split.
@@ -747,12 +773,13 @@ impl Manager {
         self.store.run(move |db| list(db, owner.as_deref())).await
     }
 
-    /// Decide request `id` as `caller`: a workspace process decides only what
-    /// was routed to it, and denies a proposal with a reason at most.
+    /// Decide request `number` as `caller`: a workspace process decides
+    /// only what was routed to it, and denies a proposal with a reason at
+    /// most.
     pub(super) async fn decide_approval_as(
         &self,
         caller: Option<&Caller>,
-        id: i64,
+        number: ItemNumber,
         approve: bool,
         shown: Option<ApprovalRequest>,
         details: proposals::ProposalDecision,
@@ -760,10 +787,13 @@ impl Manager {
     ) -> Result<ApprovalRequest> {
         match caller {
             Some(caller) => {
-                self.decide_routed_approval(&caller.space_id, id, approve, shown, details)
+                self.decide_routed_approval(&caller.space_id, number, approve, shown, details)
                     .await
             }
-            None => self.decide_approval(id, approve, shown, details, env).await,
+            None => {
+                self.decide_approval(number, approve, shown, details, env)
+                    .await
+            }
         }
     }
 
@@ -773,18 +803,16 @@ impl Manager {
     /// approved push runs in `env`.
     pub async fn decide_approval(
         &self,
-        id: i64,
+        number: ItemNumber,
         approve: bool,
         shown: Option<ApprovalRequest>,
         details: proposals::ProposalDecision,
         env: Option<std::collections::BTreeMap<String, String>>,
     ) -> Result<ApprovalRequest> {
-        let request = self.approval_request(id).await?.ok_or_else(|| {
-            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
-        })?;
+        let request = self.show_approval(number).await?;
         crate::daemon::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
-            format_args!("approval request {id}"),
+            format_args!("approval request {number}"),
         )?;
         if request.target.is_proposal() {
             return self
@@ -810,17 +838,15 @@ impl Manager {
     pub async fn decide_routed_approval(
         &self,
         coordinator: &str,
-        id: i64,
+        number: ItemNumber,
         approve: bool,
         shown: Option<ApprovalRequest>,
         details: proposals::ProposalDecision,
     ) -> Result<ApprovalRequest> {
-        let request = self.approval_request(id).await?.ok_or_else(|| {
-            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
-        })?;
+        let request = self.show_approval(number).await?;
         crate::daemon::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
-            format_args!("approval request {id}"),
+            format_args!("approval request {number}"),
         )?;
         if request.target.is_proposal() {
             return self
@@ -850,7 +876,7 @@ impl Manager {
         approve: bool,
         details: proposals::ProposalDecision,
     ) -> Result<ApprovalRequest> {
-        let id = request.id;
+        let id = request.number;
         ensure!(
             !approve && details.duplicate_of.is_none(),
             "approval {id}: a workspace may only deny a proposal, with --reason; pass it up with shoal approvals --escalate {id}"
@@ -868,7 +894,7 @@ impl Manager {
         approve: bool,
     ) -> Result<Decision> {
         let request = request.clone();
-        let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.id);
+        let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.number);
         let _hold = self.hold_decision_guard(&request, approve).await?;
         let _guard = self.gates.lock_simulators().await;
         self.store
@@ -937,16 +963,24 @@ impl Manager {
         self.store.run(move |db| by_key(db, &key)).await
     }
 
-    pub async fn show_approval(&self, id: i64) -> Result<ApprovalRequest> {
-        self.approval_request(id).await?.ok_or_else(|| {
-            Refusal::new(Reason::NotFound, format!("unknown approval request {id}")).into()
-        })
+    /// The request `number`, refusing a number that names none, or that
+    /// names a question.
+    pub async fn show_approval(&self, number: ItemNumber) -> Result<ApprovalRequest> {
+        self.store
+            .run(move |db| match by_number(db, number)? {
+                Some(request) => Ok(request),
+                None => Err(item_numbers::unknown(db, ItemKind::Approval, number)?),
+            })
+            .await
     }
 
     /// A request's target never changes, so it can be read before taking the
     /// gate its decision needs.
-    pub(crate) async fn approval_request(&self, id: i64) -> Result<Option<ApprovalRequest>> {
-        self.store.run(move |db| by_number(db, id)).await
+    pub(crate) async fn approval_request(
+        &self,
+        number: ItemNumber,
+    ) -> Result<Option<ApprovalRequest>> {
+        self.store.run(move |db| by_number(db, number)).await
     }
 
     /// Tell whoever decides a pending request about it: the space directly
@@ -960,7 +994,7 @@ impl Manager {
             Ok(Some(stored)) if stored.status == DecisionStatus::Pending => stored,
             Ok(_) => return,
             Err(error) => {
-                log!("approval {} not rechecked: {error:#}", request.id);
+                log!("approval {} not rechecked: {error:#}", request.number);
                 request.clone()
             }
         };
@@ -972,7 +1006,7 @@ impl Manager {
         match routed {
             Ok(routed) => self.announce_approval(workspace, &routed).await,
             Err(error) => {
-                log!("approval {} not routed: {error:#}", request.id);
+                log!("approval {} not routed: {error:#}", request.number);
                 self.ask_user(workspace, request).await;
             }
         }
@@ -984,20 +1018,18 @@ impl Manager {
     pub async fn escalate_approval(
         &self,
         space: &str,
-        id: i64,
+        number: ItemNumber,
         shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
         let space = self.present_space(space).await?;
-        let request = self.approval_request(id).await?.ok_or_else(|| {
-            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
-        })?;
+        let request = self.show_approval(number).await?;
         crate::daemon::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
-            format_args!("approval request {id}"),
+            format_args!("approval request {number}"),
         )?;
         ensure!(
             request.decider.as_deref() == Some(space.id()),
-            "approval request {id} is not {}'s to decide",
+            "approval request {number} is not {}'s to decide",
             space.name()
         );
         let _gate = self.gates.lock_announcements().await;
@@ -1039,7 +1071,7 @@ impl Manager {
     async fn announce_approval(&self, workspace: &str, request: &ApprovalRequest) {
         let about = format!(
             "{workspace}: approval {}: {}: {}",
-            request.id,
+            request.number,
             request.subject(),
             request.reason
         );
@@ -1049,7 +1081,7 @@ impl Manager {
                     decider,
                     format!(
                         "{about}; decide with shoal approvals --approve {id} or shoal approvals --deny {id}, or pass it up with shoal approvals --escalate {id}",
-                        id = request.id
+                        id = request.number
                     ),
                 )
                 .await
@@ -1076,7 +1108,7 @@ impl Manager {
             let stored = match self.approval_by_key(&request.key).await {
                 Ok(stored) => stored,
                 Err(error) => {
-                    log!("approval {} not rechecked: {error:#}", request.id);
+                    log!("approval {} not rechecked: {error:#}", request.number);
                     continue;
                 }
             };
@@ -1102,7 +1134,7 @@ impl Manager {
             })
             .await;
         if let Err(error) = released {
-            log!("approval {} not given back: {error:#}", request.id);
+            log!("approval {} not given back: {error:#}", request.number);
         }
     }
 

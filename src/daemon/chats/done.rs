@@ -150,7 +150,11 @@ impl Manager {
 /// Record `completion` for the running chat `id` and close its open
 /// questions, which its finished work waits on no longer; the questions it
 /// closed. A completion that would change nothing fails.
-fn record_completion(db: &mut Connection, id: &str, completion: &Completion) -> Result<Vec<i64>> {
+fn record_completion(
+    db: &mut Connection,
+    id: &str,
+    completion: &Completion,
+) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
     let tx = db.transaction()?;
     let previous: Option<Option<String>> = tx
         .query_row(

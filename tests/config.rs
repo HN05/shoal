@@ -104,15 +104,15 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
         ("alerts", "cannot read or clear notifications"),
         ("alerts clear", "cannot read or clear notifications"),
         (
-            "questions 1 --answer yes",
+            "questions 1.1 --answer yes",
             "cannot answer questions without their scope token",
         ),
         (
-            "approvals 1 --approve",
+            "approvals 1.1 --approve",
             "cannot decide approval requests without their scope token",
         ),
         (
-            "approvals 1 --escalate",
+            "approvals 1.1 --escalate",
             "cannot decide approval requests without their scope token",
         ),
         ("add . child", "add workspaces only with their scope token"),

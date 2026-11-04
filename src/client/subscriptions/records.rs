@@ -83,7 +83,7 @@ impl Record {
             Self::Workspace(record) => (RecordKind::Workspace, record.workspace.id.clone()),
             Self::Link(record) => (RecordKind::Link, record.id.clone()),
             Self::Sessions(record) => (RecordKind::Sessions, record.space_id.clone()),
-            Self::Question(record) => (RecordKind::Question, record.id.to_string()),
+            Self::Question(record) => (RecordKind::Question, record.number.to_string()),
             Self::Approval(record) => (RecordKind::Approval, record.key.clone()),
             Self::Message(record) => (RecordKind::Message, record.id.clone()),
             Self::Notification(record) => (RecordKind::Notification, record.id.to_string()),

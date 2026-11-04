@@ -334,7 +334,7 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         .unwrap();
     assert_eq!(reason().await, CleanupReason::Question);
     manager
-        .answer_question(question.id, "No".into(), None)
+        .answer_question(question.number, "No".into(), None)
         .await
         .unwrap();
     assert_eq!(

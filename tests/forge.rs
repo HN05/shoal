@@ -5024,11 +5024,14 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     assert_eq!(proposed["specification"]["branch"], "topic");
     // Repeating the command returns the same proposal; asking to link it is
     // another proposal.
-    assert_eq!(scoped(&fixture, &open)["proposed"]["id"], proposed["id"]);
+    assert_eq!(
+        scoped(&fixture, &open)["proposed"]["number"],
+        proposed["number"]
+    );
     let linked = scoped(&fixture, &[&open[..], &["--link"]].concat())["proposed"].clone();
-    assert_ne!(linked["id"], proposed["id"]);
+    assert_ne!(linked["number"], proposed["number"]);
     assert_eq!(linked["specification"]["link"], true);
-    fixture.ok(&["approvals", "--deny", &linked["id"].to_string()]);
+    fixture.ok(&["approvals", "--deny", linked["number"].as_str().unwrap()]);
     messages(&fixture);
     assert!(writes(&fixture).is_empty());
     let listed = fixture.ok(&["approvals"]);
@@ -5041,7 +5044,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     let marker = Path::new(workspace["git_dir"].as_str().unwrap()).join("shoal-workspace");
     let owner = fs::read_to_string(&marker).unwrap();
     fs::write(&marker, "another-workspace\n").unwrap();
-    let id = proposed["id"].to_string();
+    let id = proposed["number"].as_str().unwrap().to_owned();
     let refused = fixture.run(&["approvals", "--approve", &id]);
     assert!(
         String::from_utf8_lossy(&refused.stderr).contains("another Shoal workspace"),
@@ -5116,14 +5119,17 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
     assert_eq!(proposed["space"], "planning", "{proposed}");
     assert_eq!(proposed["specification"]["branch"], Value::Null);
     assert_eq!(proposed["specification"].get("commit"), None);
-    let other = in_chat(&["issue", "open", "--title", "Noise"])["proposed"]["id"].to_string();
+    let other = in_chat(&["issue", "open", "--title", "Noise"])["proposed"]["number"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     assert!(writes(&fixture).is_empty());
     // The chat's agent lists its own proposals and withdraws one.
     assert_eq!(in_chat(&["approvals"]).as_array().unwrap().len(), 2);
     in_chat(&["approvals", "withdraw", &other]);
-    let id = proposed["id"].to_string();
+    let id = proposed["number"].as_str().unwrap().to_owned();
     let listed: Vec<_> = (in_chat(&["approvals"]).as_array().unwrap().iter())
-        .map(|request| request["id"].to_string())
+        .map(|request| request["number"].as_str().unwrap().to_owned())
         .collect();
     assert_eq!(listed, std::slice::from_ref(&id));
 
@@ -5176,7 +5182,10 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
     fixture.respond(responses.clone());
     let propose = |title: &str, body: &str| {
         let open = ["issue", "open", "--title", title, "--body", body];
-        scoped(&fixture, &open)["proposed"]["id"].to_string()
+        scoped(&fixture, &open)["proposed"]["number"]
+            .as_str()
+            .unwrap()
+            .to_owned()
     };
     let flaky = propose("Flaky", "");
     let again = propose("Flaky again", "Also on CI");
@@ -5225,7 +5234,8 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
     fixture.ok(&["rm", "topic", "--yes"]);
     let listed = fixture.ok(&["approvals"]);
     assert_eq!(listed.as_array().unwrap().len(), 1);
-    assert_eq!(listed[0]["id"].to_string(), flaky);
+    assert_eq!(listed[0]["number"].as_str().unwrap().to_owned(), flaky);
+    assert_eq!(listed[0]["space_removed"], true);
     let inbox = fixture.ok(&["inbox"]);
     assert_eq!(inbox[0]["kind"], "approval", "{inbox}");
     assert_eq!(inbox.as_array().unwrap().len(), 1);
@@ -5316,7 +5326,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
             "more",
         ],
     );
-    let first_id = first["id"].to_string();
+    let first_id = first["number"].as_str().unwrap().to_owned();
     let stale = fixture.run(&["approvals", "--approve", &first_id]);
     assert!(
         String::from_utf8_lossy(&stale.stderr).contains("is outdated"),
@@ -5325,7 +5335,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     assert!(writes(&fixture).is_empty());
     assert!(messages(&fixture)[0].contains("Run shoal pr open again"));
     let second = scoped(&fixture, &["pr", "open"])["proposed"].clone();
-    assert_ne!(second["id"], first["id"]);
+    assert_ne!(second["number"], first["number"]);
     assert_eq!(second["specification"]["commit"], head());
 
     // A commit pushed past Shoal outdates the request too.
@@ -5346,7 +5356,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     let pushed = git(&path, &[&identity[..], &tree].concat());
     let target = format!("{}:refs/heads/topic", pushed.trim());
     git(&path, &["push", "-q", remote.to_str().unwrap(), &target]);
-    let second_id = second["id"].to_string();
+    let second_id = second["number"].as_str().unwrap().to_owned();
     let stale = fixture.run(&["approvals", "--approve", &second_id]);
     assert!(
         String::from_utf8_lossy(&stale.stderr).contains("is outdated"),
@@ -5361,7 +5371,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
     let approved = fixture.ok(&[
         "approvals",
         "--approve",
-        &second["id"].to_string(),
+        second["number"].as_str().unwrap(),
         "--title",
         "Fix",
     ]);
@@ -5421,7 +5431,7 @@ fn a_proposed_fork_pr_opens_only_at_the_commit_the_fork_has() {
         }))
     };
     let outdated = |id: &Value| {
-        let stale = fixture.run(&["approvals", "--approve", &id.to_string()]);
+        let stale = fixture.run(&["approvals", "--approve", id.as_str().unwrap()]);
         assert!(
             String::from_utf8_lossy(&stale.stderr).contains("is outdated"),
             "{stale:?}"
@@ -5444,25 +5454,25 @@ fn a_proposed_fork_pr_opens_only_at_the_commit_the_fork_has() {
     config(&["config", "remote.pushDefault", "bob"]);
     // Proposing again from the other fork replaces the pending proposal.
     let reproposed = scoped(&fixture, &["pr", "open"])["proposed"].clone();
-    assert_ne!(reproposed["id"], proposed["id"]);
+    assert_ne!(reproposed["number"], proposed["number"]);
     assert_eq!(
         reproposed["specification"]["pull"]["head_repository"],
         "bob/project"
     );
-    outdated(&proposed["id"]);
+    outdated(&proposed["number"]);
     config(&["config", "remote.pushDefault", "alice"]);
 
     // The fork's branch on the forge decides, whatever the push URL reached.
     respond(&"0".repeat(40));
     let proposed = scoped(&fixture, &["pr", "open"])["proposed"].clone();
-    outdated(&proposed["id"]);
+    outdated(&proposed["number"]);
 
     respond(&head);
     let proposed = scoped(&fixture, &["pr", "open"])["proposed"].clone();
     fixture.ok(&[
         "approvals",
         "--approve",
-        &proposed["id"].to_string(),
+        proposed["number"].as_str().unwrap(),
         "--title",
         "Fix",
     ]);
@@ -5495,7 +5505,10 @@ fn proposed_issues_keep_their_attachments_until_decided() {
     ];
     let proposed = scoped(&fixture, &open)["proposed"].clone();
     // The copies are named by the proposal, so proposing again finds it.
-    assert_eq!(scoped(&fixture, &open)["proposed"]["id"], proposed["id"]);
+    assert_eq!(
+        scoped(&fixture, &open)["proposed"]["number"],
+        proposed["number"]
+    );
     let kept = proposed["specification"]["issue"]["attachments"][0]["path"]
         .as_str()
         .unwrap()
@@ -5511,13 +5524,17 @@ fn proposed_issues_keep_their_attachments_until_decided() {
     // Changing a file proposes anew and leaves the earlier copy alone.
     fs::write(&image, "png2").unwrap();
     let changed = scoped(&fixture, &open)["proposed"].clone();
-    assert_ne!(changed["id"], proposed["id"]);
+    assert_ne!(changed["number"], proposed["number"]);
     assert_eq!(fs::read_to_string(&kept).unwrap(), "png");
-    fixture.ok(&["approvals", "--deny", &changed["id"].to_string()]);
+    fixture.ok(&["approvals", "--deny", changed["number"].as_str().unwrap()]);
 
     // The agent's files are gone by the time the user approves.
     fs::remove_dir_all(fixture.root.path().join("shots")).unwrap();
-    fixture.ok(&["approvals", "--approve", &proposed["id"].to_string()]);
+    fixture.ok(&[
+        "approvals",
+        "--approve",
+        proposed["number"].as_str().unwrap(),
+    ]);
     let sent: Vec<_> = fixture
         .requests()
         .into_iter()
@@ -5549,7 +5566,10 @@ fn an_issue_approval_that_fails_after_opening_finishes_on_retry() {
     });
     fixture.respond(responses.clone());
     let open = ["issue", "open", "--title", "Flaky", "--label", "bug"];
-    let id = scoped(&fixture, &open)["proposed"]["id"].to_string();
+    let id = scoped(&fixture, &open)["proposed"]["number"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let failed = fixture.run(&["approvals", "--approve", &id]);
     assert!(
         String::from_utf8_lossy(&failed.stderr).contains("approve again to retry"),
@@ -5594,7 +5614,10 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
             "body": {"message": "unavailable"}},
     });
     fixture.respond(responses.clone());
-    let id = scoped(&fixture, &["pr", "open", "--label", "bug"])["proposed"]["id"].to_string();
+    let id = scoped(&fixture, &["pr", "open", "--label", "bug"])["proposed"]["number"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let failed = fixture.run(&["approvals", "--approve", &id]);
     assert!(
         String::from_utf8_lossy(&failed.stderr).contains("approve again to retry"),
@@ -5662,7 +5685,10 @@ fn a_finding_that_reached_the_forge_is_not_posted_again() {
     }));
     let propose = |title: &str| {
         let open = ["issue", "open", "--title", title];
-        scoped(&fixture, &open)["proposed"]["id"].to_string()
+        scoped(&fixture, &open)["proposed"]["number"]
+            .as_str()
+            .unwrap()
+            .to_owned()
     };
     let flaky = propose("Flaky");
     let again = propose("Flaky again");
@@ -5971,7 +5997,10 @@ fn approving_a_proposal_warns_about_the_repository_conventions() {
             "state": "open", "labels": []}},
     }));
     let open = ["issue", "open", "--title", "Flaky", "--label", "type/bug"];
-    let id = scoped(&fixture, &open)["proposed"]["id"].to_string();
+    let id = scoped(&fixture, &open)["proposed"]["number"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let approved = fixture.ok(&["approvals", "--approve", &id]);
     assert!(
         approved["warnings"][0].as_str().unwrap().contains("type/"),
@@ -6009,7 +6038,10 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
         &open[4..],
     ]
     .concat();
-    assert_eq!(scoped(&fixture, &by_url)["proposed"]["id"], proposed["id"]);
+    assert_eq!(
+        scoped(&fixture, &by_url)["proposed"]["number"],
+        proposed["number"]
+    );
     assert!(writes(&fixture).is_empty());
 
     // Another repository's issue cannot be the workspace's assignment.
@@ -6021,7 +6053,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
         "{linked:?}"
     );
 
-    let id = proposed["id"].to_string();
+    let id = proposed["number"].as_str().unwrap().to_owned();
     let approved = fixture.ok(&["approvals", "--approve", &id]);
     let url = "https://github.com/team/tool/issues/5";
     assert_eq!(approved["url"], url);

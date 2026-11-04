@@ -58,7 +58,7 @@ impl CleanRequest {
                 } else {
                     CleanRequestStatus::Busy
                 };
-                self.error = Some(format!("approval {} ({})", request.status, request.id));
+                self.error = Some(format!("approval {} ({})", request.status, request.number));
             }
             Err(error) => {
                 self.status = CleanRequestStatus::Failed;

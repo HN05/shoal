@@ -95,7 +95,7 @@ async fn a_marked_turn_asks_its_final_message_until_the_user_replies_in_the_chat
         notification.message,
         format!(
             "question {0} (answer with shoal questions {0}): Which database should the cache use?  I recommend SQLite.",
-            asked[0].id
+            asked[0].number
         )
     );
     // The mark lasts one turn.
@@ -106,7 +106,7 @@ async fn a_marked_turn_asks_its_final_message_until_the_user_replies_in_the_chat
         .reply_in_chat(&workspace.name, Some(&id))
         .await
         .unwrap();
-    assert_eq!(closed, [asked[0].id]);
+    assert_eq!(closed, [asked[0].number]);
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
     // The user had not read it, so the notification goes with it.
     assert!(manager.notifications(true, 50).await.unwrap().is_empty());
@@ -166,7 +166,7 @@ async fn an_inbox_answer_reaches_the_agent_without_repeating_its_message() {
         question.ask.question
     );
     manager
-        .answer_question(question.id, "SQLite".into(), None)
+        .answer_question(question.number, "SQLite".into(), None)
         .await
         .unwrap();
     let messages = manager.agent_messages(&workspace.name).await.unwrap();
@@ -174,7 +174,7 @@ async fn an_inbox_answer_reaches_the_agent_without_repeating_its_message() {
         messages[0].message,
         format!(
             "Answer to question {}, which you asked in the chat: SQLite",
-            question.id
+            question.number
         )
     );
 }
@@ -302,11 +302,11 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
         [
             format!(
                 "child: question {0} (answer with shoal questions {0}): Which one?",
-                question.id
+                question.number
             ),
             format!(
                 "child: withdrew question {} (no answer needed): Which one?",
-                question.id
+                question.number
             ),
         ]
     );
@@ -350,7 +350,7 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
     // The answer waits in the chat's inbox, and its delivery deletes the
     // question.
     manager
-        .answer_question(asked.id, "Postgres".into(), None)
+        .answer_question(asked.number, "Postgres".into(), None)
         .await
         .unwrap();
     let messages = manager.chat_messages(&chat.id).await.unwrap();
@@ -358,14 +358,14 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         messages[0].message,
         format!(
             "Answer to question {} (Which database?): Postgres",
-            asked.id
+            asked.number
         )
     );
     manager
         .mark_chat_messages_delivered(&chat.id, vec![messages[0].id])
         .await
         .unwrap();
-    assert!(manager.question(asked.id).await.is_err());
+    assert!(manager.question(asked.number).await.is_err());
 
     // The chat marks its own turn, which no execution tracks.
     manager.mark_chat_question(&chat.name, None).await.unwrap();
@@ -378,7 +378,7 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
     assert!(asked[0].in_chat);
     assert_eq!(asked[0].space, "planning");
     let closed = manager.reply_in_chat(&chat.name, None).await.unwrap();
-    assert_eq!(closed, [asked[0].id]);
+    assert_eq!(closed, [asked[0].number]);
 
     // An open question stays while the chat is stopped and goes with it.
     manager.mark_chat_question(&chat.name, None).await.unwrap();

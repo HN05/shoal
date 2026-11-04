@@ -1,11 +1,13 @@
 //! The named checks and views that confine a scoped caller to what its
 //! scope allows.
-use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 
 use super::Caller;
 use crate::{
-    daemon::{approvals::ApprovalRequest, questions::Question, workspace::Manager},
+    daemon::{
+        approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question,
+        workspace::Manager,
+    },
     execution::recovery,
     model::{Chat, PresentSpace, QueueEntry, QueueRequest, Repository, SpaceTarget},
     repository::Selector,
@@ -151,16 +153,15 @@ impl Manager {
         Ok(workspace)
     }
 
-    /// Approval request `id`, which must be routed to the caller to decide.
-    /// Only the stored routing counts; the decision rechecks it with its grant.
+    /// Approval request `number`, which must be routed to the caller to
+    /// decide. Only the stored routing counts; the decision rechecks it with
+    /// its grant.
     pub(in crate::daemon) async fn routed_approval(
         &self,
         caller: &Caller,
-        id: i64,
+        number: ItemNumber,
     ) -> Result<ApprovalRequest> {
-        let request = self.approval_request(id).await?.ok_or_else(|| {
-            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
-        })?;
+        let request = self.show_approval(number).await?;
         ensure!(
             request.decider.as_deref() == Some(caller.space_id.as_str()),
             "workspace processes decide only the approval requests routed to them; ask the user to run this command"
@@ -213,23 +214,23 @@ impl Manager {
         self.workspace_below(caller, target, REFUSAL).await
     }
 
-    /// Question `id` for the caller to answer, which must be one of a
+    /// Question `number` for the caller to answer, which must be one of a
     /// workspace below its own. The answer binds to the question returned,
     /// `shown` when given, and refuses it once a later question reuses its
     /// number.
     pub(in crate::daemon) async fn answerable_question(
         &self,
         caller: &Caller,
-        id: i64,
+        number: ItemNumber,
         shown: Option<Question>,
     ) -> Result<Question> {
         let owner = &caller.space_id;
         let question = match shown {
             Some(shown) => shown,
-            None => self.question(id).await?,
+            None => self.question(number).await?,
         };
         ensure!(
-            question.id == id
+            question.number == number
                 && question.space_id != *owner
                 && self.within_subtree(owner, &question.space_id).await?,
             "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal questions ask"

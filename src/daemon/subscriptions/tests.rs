@@ -208,7 +208,7 @@ mod streams {
         .await;
 
         manager
-            .answer_question(question.id, "Postgres".into(), None)
+            .answer_question(question.number, "Postgres".into(), None)
             .await
             .unwrap();
         until(
@@ -275,7 +275,7 @@ mod streams {
         let [Record::Approval(shown)] = records.as_slice() else {
             panic!("expected the proposal: {records:?}");
         };
-        assert_eq!(shown.id, proposal.id);
+        assert_eq!(shown.number, proposal.number);
         assert_eq!(
             shown.proposed_issue().unwrap().issue.title,
             "Flaky in proposer"
@@ -314,7 +314,7 @@ mod streams {
         let Record::Approval(shown) = *record else {
             unreachable!();
         };
-        assert_eq!((shown.id, &*shown.space), (proposal.id, "planning"));
+        assert_eq!((shown.number, &*shown.space), (proposal.number, "planning"));
     }
 
     #[tokio::test]
@@ -342,7 +342,7 @@ mod streams {
         let [Record::Question(shown)] = records.as_slice() else {
             panic!("expected the chat's question: {records:?}");
         };
-        assert_eq!((shown.id, &*shown.space), (question.id, "planning"));
+        assert_eq!((shown.number, &*shown.space), (question.number, "planning"));
     }
 
     #[tokio::test]

@@ -42,7 +42,10 @@ impl Manager {
     /// lookup keeps the request. The merge itself merges only the approved commit.
     pub(crate) async fn ensure_merge_current(&self, request: &ApprovalRequest) -> Result<()> {
         let Specification::Merge(merge) = &request.specification else {
-            bail!("approval request {} has no merge specification", request.id);
+            bail!(
+                "approval request {} has no merge specification",
+                request.number
+            );
         };
         let workspace = self.workspace(&request.space_id).await?;
         let head = git::status::local_branch_commit(&workspace.path, &merge.branch)
@@ -56,7 +59,7 @@ impl Manager {
         self.retire_stale_merge_request(request).await?;
         bail!(
             "approval request {} is stale: {} moved since it was requested",
-            request.id,
+            request.number,
             merge.branch
         )
     }
@@ -67,7 +70,7 @@ impl Manager {
         self.retire_approval(request.clone()).await?;
         let message = format!(
             "Approval {} for {} is stale: the branch moved; run shoal merge again to request merging it.",
-            request.id,
+            request.number,
             request.subject()
         );
         if let Err(error) = self.queue_agent_message(&request.space_id, message).await {

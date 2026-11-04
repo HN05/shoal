@@ -95,9 +95,12 @@ finding it asks about to the user.
 
 ```sh
 shoal approvals
-shoal approvals --approve <number>
-shoal approvals --deny <number>
+shoal approvals --approve <S.N>
+shoal approvals --deny <S.N>
 ```
+
+Approval requests and questions are numbered `S.N`: the number of the space
+that asked, then the item's own, such as `3.2`.
 
 Report pending requests to the user with their recorded settings and reason,
 then approve or deny as the user decides. Resource approval reserves no
@@ -107,7 +110,7 @@ capacity; the agent retries its acquisition.
 
 ```sh
 shoal questions
-shoal questions <number> --answer "<answer or choice number>"
+shoal questions <S.N> --answer "<answer or choice number>"
 ```
 
 Agents ask with `shoal questions ask`; each question names the decision, the agent's
@@ -123,8 +126,8 @@ the workspace, the activity of those without an agent of their own arrives with
 your Shoal messages, and `shoal files <name>` shows the files a finished
 workspace handed back. Their approval requests come to you
 too: approve a request to hold a workspace below you with `shoal approvals
---approve <number>`, deny one with `--deny <number>`, or hand one to the user
-with `shoal approvals --escalate <number>`, as you must for anything else, since
+--approve <S.N>`, deny one with `--deny <S.N>`, or hand one to the user
+with `shoal approvals --escalate <S.N>`, as you must for anything else, since
 you hold no grants; `shoal approvals --space <chat>` lists them. Proposed issues
 and PRs come too: deny one with `--reason` or hand it to the user, who alone
 approves them. You cannot merge, approve or request changes on PRs, approve CI

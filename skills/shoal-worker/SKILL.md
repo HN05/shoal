@@ -12,9 +12,11 @@ comes from a Shoal that predates it; pass `--json` too.
 
 Omit targets for the current context, and request only needed resources.
 When acquisition returns `approval_pending`, give the user the request number and wait
-for an unscoped `shoal approvals --approve <number>` or `shoal approvals --deny <number>`. When you no
+for an unscoped `shoal approvals --approve <S.N>` or `shoal approvals --deny <S.N>`.
+Approval requests and questions are numbered `S.N`, your space's number and the
+item's own, such as `3.2`; always write both parts. When you no
 longer need a pending request, withdraw it with
-`shoal approvals withdraw <number>`. Supply `--reason` for
+`shoal approvals withdraw <S.N>`. Supply `--reason` for
 protected access; inspect your requests with `shoal approvals`. Retry after approval,
 and stop on `approval_denied`. Never remove scope to approve your own request.
 
@@ -105,7 +107,7 @@ A repository can also keep your pushes off the forge until the user approves
 them (`[permissions] push`). Then `pr open` pushes nothing: it proposes the PR
 together with the push of your branch, or, when the PR is open already,
 proposes only the push. Plain `git push` reports the push as rejected and
-`waits for approval <number>`; `--force-with-lease` works as usual. Push and
+`waits for approval <S.N>`; `--force-with-lease` works as usual. Push and
 commit as you normally would, and do not push another way. On approval Shoal
 pushes the commit the user approved, without you, and opens the PR that waited
 for it; the message says so. A new commit outdates the request, so push again,
@@ -307,7 +309,7 @@ it in the background when your tool calls time out. Asking the identical questio
 again waits for the same one. Only the user answers, with `shoal questions`;
 `shoal questions` lists your workspace's open questions. When you no
 longer need an answer, withdraw the question with
-`shoal questions withdraw <number>`. An open question keeps your
+`shoal questions withdraw <S.N>`. An open question keeps your
 workspace from idle cleanup.
 
 ## Workspace context
@@ -432,7 +434,7 @@ and needs only its task after `--`. You coordinate it: its
 messages, questions, completion and ready marks, and its exits, reach you as
 messages naming the child instead of reaching the user; `shoal files <child>`
 shows the files it hands back with `done --attach`. Answer its questions
-with `shoal questions <number> --answer <answer>`, or ask the user yourself with
+with `shoal questions <S.N> --answer <answer>`, or ask the user yourself with
 `shoal questions ask` when the decision is theirs. Send it instructions with
 `shoal messages send --space <child> "<text>"`, or `--body-file <path>` for
 several lines; `--attach FILE` hands it a file such as a log or screenshot.
@@ -444,10 +446,10 @@ When a stopped child agent should not come back, such as one whose work is
 done, forget its saved session with `shoal resume <child> --discard`.
 
 A child agent's approval request comes to you first. Approve it with
-`shoal approvals --approve <number>` only when you hold an approved grant for
+`shoal approvals --approve <S.N>` only when you hold an approved grant for
 the same thing, or when it asks to hold its own workspace; otherwise approving
-is refused. Deny it with `shoal approvals --deny <number>`, or pass it up with
-`shoal approvals --escalate <number>` when the space above you or the user
+is refused. Deny it with `shoal approvals --deny <S.N>`, or pass it up with
+`shoal approvals --escalate <S.N>` when the space above you or the user
 should decide.
 
 ## Ports

@@ -79,7 +79,7 @@ async fn decider(manager: &Manager, workspace: &Workspace, secret: &str) -> Opti
         .unwrap()
         .unwrap();
     manager.notify_approval(&workspace.name, &requested).await;
-    let routed = manager.approval_request(requested.id).await.unwrap();
+    let routed = manager.approval_request(requested.number).await.unwrap();
     routed.unwrap().decider
 }
 

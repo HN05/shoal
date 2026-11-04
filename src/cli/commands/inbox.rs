@@ -158,7 +158,7 @@ impl Inbox {
             .map(|(item, repository)| {
                 [
                     item.kind(),
-                    (item.name(repositories).into(), None),
+                    (item.name(repositories), None),
                     (repository, None),
                     (item.text(), None),
                     (note(&self.chats, item), Some(Style::Muted)),
@@ -296,13 +296,14 @@ impl Item {
         }
     }
 
-    /// What the row names: its space, an untracked worktree's directory,
-    /// or the repository whose sync failed, which the repository column
-    /// leaves out when every row shares it. Repositories are `(id, name)` pairs.
-    fn name<'a>(&'a self, repositories: &'a [(String, String)]) -> &'a str {
-        match self {
+    /// What the row names: its space, marked when a proposal outlived it,
+    /// an untracked worktree's directory, or the repository whose sync
+    /// failed, which the repository column leaves out when every row shares
+    /// it. Repositories are `(id, name)` pairs.
+    fn name(&self, repositories: &[(String, String)]) -> String {
+        let name: &str = match self {
             Self::Question { question } => &question.space,
-            Self::Approval { request } => &request.space,
+            Self::Approval { request } => return super::approvals::space_label(request),
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,
@@ -319,13 +320,22 @@ impl Item {
                 .iter()
                 .find(|(id, _)| id == &sync.repository_id)
                 .map_or(sync.repository_id.as_str(), |(_, name)| name.as_str()),
-        }
+        };
+        name.to_owned()
     }
 
+    /// What kind of item it is, with a question's or request's number.
     fn kind(&self) -> Cell {
         let (label, style) = match self {
-            Self::Question { .. } => ("question", Style::Warning),
-            Self::Approval { .. } => ("approval", Style::Warning),
+            Self::Question { question } => {
+                return (
+                    format!("question {}", question.number),
+                    Some(Style::Warning),
+                );
+            }
+            Self::Approval { request } => {
+                return (format!("approval {}", request.number), Some(Style::Warning));
+            }
             Self::NeedsInput { .. } => ("needs input", Style::Warning),
             Self::Failed { .. } => ("failed", Style::Error),
             Self::Ready { .. } | Self::ChatReady { .. } => ("ready", Style::Success),

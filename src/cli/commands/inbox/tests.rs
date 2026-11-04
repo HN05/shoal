@@ -32,7 +32,7 @@ fn a_question_notes_its_recommendation_and_files() {
         path: format!("/files/{name}").into(),
     };
     let question = crate::daemon::questions::Question {
-        id: 3,
+        number: crate::client::item_numbers::ItemNumber { space: 2, item: 3 },
         space_id: "w1".into(),
         space: "cache".into(),
         created_at: 0,
@@ -54,6 +54,8 @@ fn a_question_notes_its_recommendation_and_files() {
         super::question_note(&question),
         "recommends A; files: a.png, b.png"
     );
+    let item = Item::Question { question };
+    assert_eq!(item.kind().0, "question 2.3");
 }
 
 #[test]

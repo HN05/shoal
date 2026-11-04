@@ -2,7 +2,7 @@ use super::*;
 
 fn question(text: &str, in_chat: bool) -> Question {
     Question {
-        id: 3,
+        number: crate::client::item_numbers::ItemNumber { space: 2, item: 3 },
         space_id: "w1".into(),
         space: "cache".into(),
         created_at: 0,
@@ -32,15 +32,15 @@ fn a_question_asked_in_the_chat_shows_the_message_without_a_recommendation() {
     let plain = Palette::stdout(true);
     assert_eq!(
         details(&asked, plain),
-        "Question 3, asked in the chat\n  Which database?\n\n  I recommend SQLite.\n  Space  cache"
+        "Question 2.3, asked in the chat\n  Which database?\n\n  I recommend SQLite.\n  Space  cache"
     );
     assert_eq!(
         render(&asked, plain),
-        "3 [open] cache: Which database?\n\n  I recommend SQLite."
+        "2.3 [open] cache: Which database?\n\n  I recommend SQLite."
     );
     assert_eq!(
         summary(&asked),
-        "3  cache: Which database?  I recommend SQLite."
+        "2.3  cache: Which database?  I recommend SQLite."
     );
 }
 
@@ -50,11 +50,11 @@ fn other_questions_show_their_recommendation() {
     let plain = Palette::stdout(true);
     assert_eq!(
         details(&asked, plain),
-        "Question 3: Which database?\n  Space        cache\n  Recommended  SQLite"
+        "Question 2.3: Which database?\n  Space        cache\n  Recommended  SQLite"
     );
     assert_eq!(
         summary(&asked),
-        "3  cache: Which database?  Recommended: SQLite"
+        "2.3  cache: Which database?  Recommended: SQLite"
     );
 }
 
@@ -74,12 +74,12 @@ fn questions_show_the_files_sent_with_them() {
     let plain = Palette::stdout(true);
     assert_eq!(
         details(&asked, plain),
-        "Question 3: Which layout?\n  Space        cache\n  Recommended  SQLite\n  \
+        "Question 2.3: Which layout?\n  Space        cache\n  Recommended  SQLite\n  \
             Files        /files/a.png\n               /files/b.png"
     );
     assert_eq!(
         render(&asked, plain),
-        "3 [open] cache: Which layout?\n  Recommended: SQLite\n  \
+        "2.3 [open] cache: Which layout?\n  Recommended: SQLite\n  \
             Attached file: /files/a.png\n  Attached file: /files/b.png"
     );
 }

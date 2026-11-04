@@ -11811,12 +11811,13 @@ esac
     );
     assert!(args.contains("internal menu-next"), "{args}");
     assert!(rows.contains("Which database?"), "{rows}");
+    let number = format!("{}.1", asker["number"]);
     assert!(
-        transcript.contains("Question 1 answered: Which database?"),
+        transcript.contains(&format!("Question {number} answered: Which database?")),
         "{transcript}"
     );
     assert!(
-        transcript.contains("Question 1: Which database?")
+        transcript.contains(&format!("Question {number}: Which database?"))
             && transcript.contains("Answer [SQLite]:"),
         "{transcript}"
     );
@@ -11855,7 +11856,7 @@ esac
         command.arg("inbox").env("PICK", pick);
         fixture.terminal_command(&mut command, "y\n", true)
     };
-    let id = pending["id"].as_u64().unwrap();
+    let id = pending["number"].as_str().unwrap();
     let workspace = agent["id"].as_str().unwrap();
     // A request listed with another creation time is not the one shown.
     let (output, transcript) = decide(&format!("=approval:{workspace}:{id}:1"));
@@ -12241,15 +12242,23 @@ fn inbox_lists_what_needs_the_user_by_kind() {
     let text = String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
     let rows: Vec<_> = text.lines().collect();
     assert_eq!(rows.len(), 4, "{text}");
+    let (question, request) = (
+        &items[0]["question"]["number"],
+        &items[1]["request"]["number"],
+    );
     assert!(
-        rows[0].starts_with("question     asker ")
+        rows[0].starts_with(&format!("question {}  asker ", question.as_str().unwrap()))
             && rows[0].contains("Which database?")
             && rows[0].ends_with("recommends SQLite"),
         "{text}"
     );
-    assert!(rows[1].starts_with("approval     agent ") && rows[1].contains("serve preview"));
-    assert_eq!(rows[2].trim_end(), "needs input  waiter");
-    assert_eq!(rows[3].trim_end(), "ready        reviewed", "{text}");
+    assert!(
+        rows[1].starts_with(&format!("approval {}  agent ", request.as_str().unwrap()))
+            && rows[1].contains("serve preview"),
+        "{text}"
+    );
+    assert_eq!(rows[2].trim_end(), "needs input   waiter");
+    assert_eq!(rows[3].trim_end(), "ready         reviewed", "{text}");
     assert!(
         !fixture
             .run(&["inbox", "--repo", "missing"])
@@ -17509,7 +17518,7 @@ fn merge_into_main_without_a_remote_needs_approval_in_scoped_processes() {
     fixture.ok(&[
         "approvals",
         "--approve",
-        &pending["request"]["id"].to_string(),
+        pending["request"]["number"].as_str().unwrap(),
     ]);
     let merged = fixture.run(&[
         "run",
@@ -19696,7 +19705,7 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
         &["acquire", "secret", "TOOL_TOKEN", "--reason", "sign in"],
     ));
     assert_eq!(request["target"], "secret/TOOL_TOKEN");
-    let id = request["id"].to_string();
+    let id = request["number"].as_str().unwrap().to_owned();
     let id = id.as_str();
     let (success, stderr, _) = launch();
     assert!(!success);
@@ -22269,7 +22278,7 @@ fn agents_withdraw_questions_they_no_longer_need_answered() {
     );
     assert!(output.status.success(), "{output:?}");
     let question: Value = serde_json::from_slice(&output.stdout).unwrap();
-    let id = question["id"].to_string();
+    let id = question["number"].as_str().unwrap().to_owned();
     let output = scoped_command(&fixture, "asker", &["questions", "withdraw", &id]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
@@ -22307,10 +22316,13 @@ fn a_chats_agent_asks_the_user_and_reads_the_answer_in_its_inbox() {
         "SQLite",
     ]);
     assert_eq!(asked["space"], "planning", "{asked}");
-    let id = asked["id"].to_string();
+    let id = asked["number"].as_str().unwrap().to_owned();
     // The user sees it under the chat's name, and the answer reaches the chat.
     let listed = fixture.ok(&["questions", "--space", "planning"]);
-    assert_eq!(listed["questions"][0]["id"], asked["id"], "{listed}");
+    assert_eq!(
+        listed["questions"][0]["number"], asked["number"],
+        "{listed}"
+    );
     let inbox = fixture.ok(&["inbox"]);
     let item = &inbox[0]["question"];
     assert_eq!(item["space"], "planning", "{inbox}");
@@ -22322,7 +22334,7 @@ fn a_chats_agent_asks_the_user_and_reads_the_answer_in_its_inbox() {
     );
     // The chat withdraws a question it no longer needs answered.
     let asked = in_chat(&["questions", "ask", "Which cache?", "--recommend", "None"]);
-    let id = asked["id"].to_string();
+    let id = asked["number"].as_str().unwrap().to_owned();
     in_chat(&["questions", "withdraw", &id]);
     assert_eq!(
         fixture.ok(&["questions"]),
@@ -22361,7 +22373,7 @@ fn agents_wait_for_the_answer_to_their_question() {
     });
     assert_eq!(question["space"], "asker");
     assert_eq!(question["recommendation"], "SQLite");
-    let id = question["id"].to_string();
+    let id = question["number"].as_str().unwrap().to_owned();
 
     let output = scoped_command(&fixture, "asker", &["questions", &id, "--answer", "1"]);
     assert!(!output.status.success(), "agents cannot answer: {output:?}");
@@ -22388,7 +22400,7 @@ fn agents_wait_for_the_answer_to_their_question() {
     let open: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(open["answer"], Value::Null);
     // The delivered answer freed the first question's number.
-    assert_eq!(open["id"], question["id"]);
+    assert_eq!(open["number"], question["number"]);
     assert_eq!(
         fixture.ok(&["questions"])["questions"]
             .as_array()
@@ -22400,7 +22412,8 @@ fn agents_wait_for_the_answer_to_their_question() {
     // An upgraded release resumes a wait by the recorded number and the
     // question's text, without asking again.
     let space = open["space_id"].as_str().unwrap();
-    let id = open["id"].to_string();
+    let id = open["number"].as_str().unwrap().to_owned();
+    let item = open["item"].to_string();
     let resumed = fixture
         .command()
         .args([
@@ -22412,7 +22425,7 @@ fn agents_wait_for_the_answer_to_their_question() {
             "None",
             "--wait",
         ])
-        .args(["--space", space, "--resume", &id])
+        .args(["--space", space, "--resume", &item])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -22720,7 +22733,11 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
         pending["specification"]["repository"]["path"],
         related.to_str().unwrap()
     );
-    fixture.ok(&["approvals", "--approve", &pending["id"].to_string()]);
+    fixture.ok(&[
+        "approvals",
+        "--approve",
+        pending["number"].as_str().unwrap(),
+    ]);
     // Reusing the configured name for another registration cannot reuse approval.
     fixture.ok(&["repo", "rm", "server", "--yes"]);
     let replacement = init_repo(
@@ -22758,7 +22775,11 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
             "Read replacement contract",
         ],
     ));
-    fixture.ok(&["approvals", "--approve", &pending["id"].to_string()]);
+    fixture.ok(&[
+        "approvals",
+        "--approve",
+        pending["number"].as_str().unwrap(),
+    ]);
     let granted = scoped_command(&fixture, "consumer", &["acquire", "repo", "server"]);
     assert!(
         granted.status.success(),
@@ -22790,9 +22811,15 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
     ]);
     install_test_script(fixture.root.path().join("bin/fzf"), "#!/bin/sh\nexit 77\n");
     for args in [
-        vec!["approvals".to_owned(), pending["id"].to_string()],
+        vec![
+            "approvals".to_owned(),
+            pending["number"].as_str().unwrap().to_owned(),
+        ],
         vec!["approvals".into()],
-        vec!["questions".into(), question["id"].to_string()],
+        vec![
+            "questions".into(),
+            question["number"].as_str().unwrap().to_owned(),
+        ],
         vec!["questions".into()],
     ] {
         let (output, transcript) =
@@ -22809,23 +22836,23 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
         );
     }
     assert_eq!(
-        fixture.ok(&["approvals", &pending["id"].to_string()])["status"],
+        fixture.ok(&["approvals", pending["number"].as_str().unwrap()])["status"],
         "pending"
     );
     assert_eq!(
-        fixture.ok(&["questions", &question["id"].to_string()])["answer"],
+        fixture.ok(&["questions", question["number"].as_str().unwrap()])["answer"],
         Value::Null
     );
     // An explicit decision remains scriptable with redirected output.
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["approvals", &pending["id"].to_string(), "--deny"]),
+            .args(["approvals", pending["number"].as_str().unwrap(), "--deny"]),
         "",
     );
     assert!(output.status.success(), "{output:?} {transcript}");
     assert_eq!(
-        fixture.ok(&["approvals", &pending["id"].to_string()])["status"],
+        fixture.ok(&["approvals", pending["number"].as_str().unwrap()])["status"],
         "denied"
     );
 }
@@ -22840,7 +22867,7 @@ fn approval_picker_inspects_before_deciding_the_selected_request() {
         "agent",
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
-    let id = pending["id"].to_string();
+    let id = pending["number"].as_str().unwrap().to_owned();
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "pending");
     let (output, rows) = fixture.pick(&["approvals"], &approval_row(&fixture, &pending), "Y\n");
     assert!(output.status.success(), "{output:?}");
@@ -22858,7 +22885,7 @@ fn approval_prompt_accepts_only_case_insensitive_y_or_n() {
         "agent",
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
-    let id = pending["id"].to_string();
+    let id = pending["number"].as_str().unwrap().to_owned();
     for response in ["yes\n", "approve\n", "x\n", "\n"] {
         let (output, transcript) =
             fixture.terminal_command(fixture.command().args(["approvals", &id]), response, true);
@@ -22914,14 +22941,16 @@ exit 130
         let header = read("picker-header");
         let statuses: Vec<_> = pending
             .iter()
-            .map(|request| fixture.ok(&["approvals", &request["id"].to_string()])["status"].clone())
+            .map(|request| {
+                fixture.ok(&["approvals", request["number"].as_str().unwrap()])["status"].clone()
+            })
             .collect();
         let decided = statuses
             .iter()
             .position(|decided| decided == status)
             .unwrap_or_else(|| panic!("{statuses:?} {header}"));
         assert!(statuses.contains(&Value::from("pending")), "{statuses:?}");
-        let id = &pending[decided]["id"];
+        let id = pending[decided]["number"].as_str().unwrap();
         assert!(
             header.starts_with(&format!("Approval {id} {status}")),
             "{header}"
@@ -22947,7 +22976,7 @@ fn approval_list_shortcuts_refuse_a_request_that_changed_since_it_was_listed() {
         "agent",
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
-    let id = pending["id"].to_string();
+    let id = pending["number"].as_str().unwrap().to_owned();
     let row = approval_row(&fixture, &pending);
     let (shown, _) = row.split_once(':').unwrap();
     // The same number with another record, as a replacement would list.
@@ -23015,9 +23044,9 @@ fn question_picker_answers_the_selected_question_with_a_suggestion() {
         "--space",
         "asker",
     ]);
-    let id = question["id"].to_string();
+    let id = question["number"].as_str().unwrap().to_owned();
     assert_eq!(fixture.ok(&["questions", &id])["answer"], Value::Null);
-    let (output, rows) = fixture.pick(&["questions"], "1", "1\n");
+    let (output, rows) = fixture.pick(&["questions"], &id, "1\n");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("Which database?"), "{rows}");
     assert_eq!(fixture.ok(&["questions", &id])["answer"], "SQLite");
@@ -23048,7 +23077,7 @@ fn question_prompt_accepts_the_recommendation_with_enter() {
             args.extend(["--choice", choice]);
         }
         let question = fixture.ok(&args);
-        let id = question["id"].to_string();
+        let id = question["number"].as_str().unwrap().to_owned();
         let (output, transcript) =
             fixture.terminal_command(fixture.command().args(["questions", &id]), input, true);
         assert!(output.status.success(), "{transcript}");
@@ -23082,7 +23111,8 @@ fn approval_decisions_pick_an_omitted_pending_request() {
         approval_row(&fixture, &signing),
         approval_row(&fixture, &web),
     );
-    let (signing, web) = (signing["id"].to_string(), web["id"].to_string());
+    let number = |request: &Value| request["number"].as_str().unwrap().to_owned();
+    let (signing, web) = (number(&signing), number(&web));
     let (output, rows) = fixture.pick(&["approvals", "--approve"], &web_row, "");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains(&format!("{signing_row}\t")) && rows.contains(&format!("{web_row}\t")));
@@ -23094,7 +23124,12 @@ fn approval_decisions_pick_an_omitted_pending_request() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|request| (request["id"].to_string(), request["status"].clone()))
+        .map(|request| {
+            (
+                request["number"].as_str().unwrap().to_owned(),
+                request["status"].clone(),
+            )
+        })
         .collect();
     assert!(statuses.contains(&(web, "approved".into())));
     assert!(statuses.contains(&(signing, "denied".into())));
@@ -23110,7 +23145,7 @@ fn agents_withdraw_requests_they_no_longer_need() {
         "agent",
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
-    let id = web["id"].to_string();
+    let id = web["number"].as_str().unwrap().to_owned();
     let output = scoped_command(&fixture, "agent", &["approvals", "withdraw", &id]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fixture.ok(&["approvals"])[0]["status"], "withdrawn");
@@ -23125,7 +23160,7 @@ fn agents_withdraw_requests_they_no_longer_need() {
 /// number and a digest of the record, serialized with sorted keys.
 fn approval_row(fixture: &Fixture, request: &Value) -> String {
     use sha2::Digest;
-    let id = request["id"].to_string();
+    let id = request["number"].as_str().unwrap().to_owned();
     let record = serde_json::to_vec(&fixture.ok(&["approvals", &id])).unwrap();
     let digest: String = sha2::Sha256::digest(record)
         .iter()
@@ -23196,7 +23231,7 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
     fixture.add("human");
     let args = ["acquire", "resource", "signing", "--reason", "sign build"];
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
-    let id = pending["id"].to_string();
+    let id = pending["number"].as_str().unwrap().to_owned();
     let id = id.as_str();
     assert_eq!(pending["space"], "agent");
     assert_eq!(
@@ -23210,10 +23245,10 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
             .is_none()
     );
     assert_eq!(
-        pending_approval(scoped_command(&fixture, "agent", &args))["id"],
-        pending["id"]
+        pending_approval(scoped_command(&fixture, "agent", &args))["number"],
+        pending["number"]
     );
-    assert_eq!(fixture.ok(&["approvals"])[0]["id"], pending["id"]);
+    assert_eq!(fixture.ok(&["approvals"])[0]["number"], pending["number"]);
     assert!(
         fixture.ok(&["leases", "resource", "--workspace", "agent"])["leases"]
             .as_array()
@@ -23266,8 +23301,8 @@ fn resource_approvals_require_unscoped_decisions_and_preserve_capacity() {
     // Release deleted the decided request, so the new one reuses its number.
     let next = pending_approval(scoped_command(&fixture, "agent", &args));
     assert_eq!(next["status"], "pending");
-    assert_eq!(next["id"], pending["id"]);
-    fixture.ok(&["approvals", "--deny", &next["id"].to_string()]);
+    assert_eq!(next["number"], pending["number"]);
+    fixture.ok(&["approvals", "--deny", next["number"].as_str().unwrap()]);
     let denied: Value =
         serde_json::from_slice(&scoped_command(&fixture, "agent", &args).stdout).unwrap();
     assert_eq!(denied["code"], "approval_denied");
@@ -23303,7 +23338,7 @@ fn resource_approvals_bind_a_member_even_when_the_pool_is_busy() {
     ]);
     let args = ["acquire", "resource", "devices", "--reason", "test device"];
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
-    let id = pending["id"].to_string();
+    let id = pending["number"].as_str().unwrap().to_owned();
     let id = id.as_str();
     assert_eq!(pending["specification"]["member"], "alpha");
     assert_eq!(pending["specification"]["mode"], "permit");
@@ -23362,7 +23397,11 @@ fn workspace_approvals_survive_release_but_do_not_expand_access_modes() {
         "inspect cache",
     ];
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
-    fixture.ok(&["approvals", "--approve", &pending["id"].to_string()]);
+    fixture.ok(&[
+        "approvals",
+        "--approve",
+        pending["number"].as_str().unwrap(),
+    ]);
     assert!(scoped_command(&fixture, "agent", &args).status.success());
     fixture.ok(&[
         "release",
@@ -23397,7 +23436,7 @@ fn workspace_approvals_survive_release_but_do_not_expand_access_modes() {
             "rebuild cache",
         ],
     ));
-    assert_ne!(write["id"], pending["id"]);
+    assert_ne!(write["number"], pending["number"]);
     fixture.ok(&["rm", "agent", "--yes"]);
     assert!(fixture.ok(&["approvals"]).as_array().unwrap().is_empty());
 }
@@ -23419,7 +23458,7 @@ fn port_approvals_bind_overrides_and_follow_both_lifetimes() {
                 .unwrap()
                 .is_empty()
         );
-        let id = pending["id"].to_string();
+        let id = pending["number"].as_str().unwrap().to_owned();
         let id = id.as_str();
         fixture.ok(&["approvals", "--approve", id]);
         assert!(
@@ -23450,7 +23489,7 @@ fn port_approvals_bind_overrides_and_follow_both_lifetimes() {
                 String::from_utf8_lossy(&next.stderr)
             );
         } else {
-            assert_ne!(pending_approval(next)["id"], id);
+            assert_eq!(pending_approval(next)["status"], "pending");
         }
         fixture.ok(&["release", "port", "web", "--workspace", "agent"]);
     }
@@ -23479,8 +23518,8 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         "test app",
     ];
     assert_eq!(
-        pending_approval(scoped_command(&fixture, "agent", &explicit))["id"],
-        pending["id"]
+        pending_approval(scoped_command(&fixture, "agent", &explicit))["number"],
+        pending["number"]
     );
     let events = fs::read_to_string(fixture.root.path().join("sim-events")).unwrap();
     assert!(
@@ -23489,7 +23528,11 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
             .all(|line| serde_json::from_str::<Value>(line).unwrap()[0] == "list")
     );
     assert!(!fixture.root.path().join("sim-devices.json").exists());
-    fixture.ok(&["approvals", "--approve", &pending["id"].to_string()]);
+    fixture.ok(&[
+        "approvals",
+        "--approve",
+        pending["number"].as_str().unwrap(),
+    ]);
     assert!(scoped_command(&fixture, "agent", &args).status.success());
     fixture.ok(&[
         "release",
@@ -23518,8 +23561,8 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
         "agent",
         &["acquire", "sim", "--clean", "--reason", "isolate app state"],
     ));
-    assert_ne!(clean["id"], pending["id"]);
-    fixture.ok(&["approvals", "--deny", &clean["id"].to_string()]);
+    assert_ne!(clean["number"], pending["number"]);
+    fixture.ok(&["approvals", "--deny", clean["number"].as_str().unwrap()]);
     let denied: Value = serde_json::from_slice(
         &scoped_command(
             &fixture,
@@ -23567,7 +23610,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
             .unwrap()
             .iter()
             .find(|r| r["status"] == "pending")
-            .map(|request| request["id"].to_string())
+            .map(|request| request["number"].as_str().unwrap().to_owned())
     });
     fixture.ok(&["approvals", "--approve", &id]);
     let output = child.wait_with_output().unwrap();
@@ -23605,7 +23648,11 @@ fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants
     let args = ["acquire", "sim", "--reason", "test app"];
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
     assert_eq!(pending["lifetime"], "lease");
-    fixture.ok(&["approvals", "--approve", &pending["id"].to_string()]);
+    fixture.ok(&[
+        "approvals",
+        "--approve",
+        pending["number"].as_str().unwrap(),
+    ]);
     assert!(scoped_command(&fixture, "agent", &args).status.success());
     fixture.ok(&[
         "release",
@@ -23652,7 +23699,7 @@ fn exported_scopes_request_simulator_approval_before_mutations() {
             .unwrap()
     };
     let pending = pending_approval(acquire(&["--reason", "test app"]));
-    fixture.ok(&["approvals", "--deny", &pending["id"].to_string()]);
+    fixture.ok(&["approvals", "--deny", pending["number"].as_str().unwrap()]);
     fixture.ok(&[
         "release",
         "sim",
@@ -23678,7 +23725,11 @@ fn tampered_resource_approvals_fail_instead_of_selecting_a_member() {
     fixture.add("agent");
     let args = ["acquire", "resource", "signing", "--reason", "sign build"];
     let pending = pending_approval(scoped_command(&fixture, "agent", &args));
-    fixture.ok(&["approvals", "--approve", &pending["id"].to_string()]);
+    fixture.ok(&[
+        "approvals",
+        "--approve",
+        pending["number"].as_str().unwrap(),
+    ]);
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     let mut record = pending.clone();
     record["status"] = "approved".into();
@@ -23687,8 +23738,12 @@ fn tampered_resource_approvals_fail_instead_of_selecting_a_member() {
     });
     let tamper = |record: &Value| {
         db.execute(
-            "UPDATE access_requests SET record=?2 WHERE number=?1",
-            rusqlite::params![pending["id"].as_i64().unwrap(), record.to_string()],
+            "UPDATE access_requests SET record=?3 WHERE space_number=?1 AND number=?2",
+            rusqlite::params![
+                pending["space_number"].as_i64().unwrap(),
+                pending["item"].as_i64().unwrap(),
+                record.to_string()
+            ],
         )
         .unwrap();
     };
@@ -23732,7 +23787,11 @@ fn releasing_resource_names_clears_requests_from_previous_pool_scopes() {
     fixture.restart();
     let current = pending_approval(scoped_command(&fixture, "agent", &args));
     assert_ne!(previous["target"], current["target"]);
-    fixture.ok(&["approvals", "--approve", &current["id"].to_string()]);
+    fixture.ok(&[
+        "approvals",
+        "--approve",
+        current["number"].as_str().unwrap(),
+    ]);
     assert!(scoped_command(&fixture, "agent", &args).status.success());
     fixture.ok(&[
         "release",
@@ -23745,8 +23804,8 @@ fn releasing_resource_names_clears_requests_from_previous_pool_scopes() {
     ]);
     assert!(fixture.ok(&["approvals"]).as_array().unwrap().is_empty());
     assert_ne!(
-        pending_approval(scoped_command(&fixture, "agent", &args))["id"],
-        current["id"]
+        pending_approval(scoped_command(&fixture, "agent", &args))["number"],
+        current["number"]
     );
 }
 
@@ -27389,7 +27448,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
     wait_until("the worker's request", || home.join("asked").exists());
     let asked: Value =
         serde_json::from_str(&fs::read_to_string(home.join("asked")).unwrap()).unwrap();
-    let request = fixture.ok(&["approvals", &asked["request"]["id"].to_string()]);
+    let request = fixture.ok(&["approvals", asked["request"]["number"].as_str().unwrap()]);
     assert_eq!(request["decider"], middle.as_str(), "{request}");
     // The chat coordinates it: the workspace's activity reaches the chat.
     fixture.ok(&["alerts", "send", "--space", "deep", "Tests pass"]);
@@ -30608,7 +30667,11 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
     let request = &requests[0];
     assert_eq!(request["target"], "push", "{requests}");
     assert_eq!(request["specification"]["commit"], head.trim());
-    let approved = fixture.ok(&["approvals", "--approve", &request["id"].to_string()]);
+    let approved = fixture.ok(&[
+        "approvals",
+        "--approve",
+        request["number"].as_str().unwrap(),
+    ]);
     assert_eq!(approved["status"], "approved", "{approved}");
     assert!(pushed());
     assert_eq!(

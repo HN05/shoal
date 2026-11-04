@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::client::item_numbers::ItemNumber;
+
 /// Requests about approval requests and their decisions.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -8,12 +10,12 @@ pub enum ApprovalMethod {
         space: Option<String>,
     },
     ShowApproval {
-        id: i64,
+        number: ItemNumber,
     },
     /// `shown` is the request the user was shown, which a later request
     /// reusing its number does not match.
     DecideApproval {
-        id: i64,
+        number: ItemNumber,
         approve: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<Box<crate::client::approvals::ApprovalRequest>>,
@@ -29,15 +31,15 @@ pub enum ApprovalMethod {
     /// to the user.
     EscalateApproval {
         space: String,
-        id: i64,
+        number: ItemNumber,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<Box<crate::client::approvals::ApprovalRequest>>,
     },
-    /// Withdraw the pending approval request `id` of the space `space`,
-    /// which its agent no longer needs.
+    /// Withdraw the pending approval request `number` of the space
+    /// `space`, which its agent no longer needs.
     WithdrawApproval {
         space: String,
-        id: i64,
+        number: ItemNumber,
     },
     /// Whether `[permissions] push` holds back the push of the workspace's
     /// branch that `shoal pr open` would run.

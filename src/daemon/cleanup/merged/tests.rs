@@ -358,7 +358,7 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
         .unwrap();
     assert!(f.kept_after(5).await, "an open question");
     manager
-        .answer_question(question.id, "No".into(), None)
+        .answer_question(question.number, "No".into(), None)
         .await
         .unwrap();
 

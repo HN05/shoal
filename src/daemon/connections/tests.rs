@@ -80,7 +80,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     });
     let await_answer = || QuestionMethod::AwaitAnswer {
         space: workspace.name.clone(),
-        id: question.id,
+        item: question.number.item,
         ask: ask.clone(),
     };
     let mut waiting = send(socket, await_answer()).await;
@@ -145,7 +145,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     let status = reply(&mut send(socket, DaemonMethod::Status).await).await;
     assert!(matches!(status, Body::Status(_)), "{status:?}");
     let answer = QuestionMethod::AnswerQuestion {
-        id: question.id,
+        number: question.number,
         answer: "SQLite".into(),
         shown: None,
     };

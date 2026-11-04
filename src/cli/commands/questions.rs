@@ -14,23 +14,25 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Cell, Entries, Fallback, WidthLimit},
     },
+    client::item_numbers::ItemNumber,
     daemon::questions::{Ask, Listing, Question},
     protocol::{AgentMethod, QuestionMethod},
 };
 
 pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {
-    match args.id {
-        Some(id) if args.withdraw => withdraw(ctx, None, id).await,
-        Some(id) if args.answer.is_some() => {
-            answer(ctx, id, args.answer.unwrap_or_default(), None).await
+    match args.number {
+        Some(number) if args.withdraw => withdraw(ctx, number).await,
+        Some(number) if args.answer.is_some() => {
+            answer(ctx, number, args.answer.unwrap_or_default(), None).await
         }
-        Some(id) => {
-            let question =
-                request::<Question>(&ctx.paths, QuestionMethod::ShowQuestion { id }).await?;
-            show(ctx, question).await
-        }
+        Some(number) => show(ctx, numbered(ctx, number).await?).await,
         None => list(ctx, args.space).await,
     }
+}
+
+/// The question `number`.
+async fn numbered(ctx: &Context, number: ItemNumber) -> Result<Question> {
+    request(&ctx.paths, QuestionMethod::ShowQuestion { number }).await
 }
 
 async fn show(ctx: &Context, question: Question) -> Result<i32> {
@@ -64,7 +66,7 @@ pub(super) async fn ask(
         ctx.emit(
             &format!(
                 "Question {} recorded; the answer arrives as a message.",
-                question.id
+                question.number
             ),
             &question,
         )?;
@@ -92,10 +94,10 @@ pub(super) async fn ask_in_chat(ctx: &Context, space: Option<String>) -> Result<
     Ok(0)
 }
 
-/// Continue an earlier `ask --wait` for question `id` of `space`, which asks
-/// `ask`.
-pub(super) async fn resume(ctx: &Context, space: String, id: i64, ask: Ask) -> Result<i32> {
-    let question = await_answer(ctx, &space, Asked { id, ask }, true).await?;
+/// Continue an earlier `ask --wait` for question `item` of `space`, which
+/// asks `ask`.
+pub(super) async fn resume(ctx: &Context, space: String, item: u32, ask: Ask) -> Result<i32> {
+    let question = await_answer(ctx, &space, Asked { item, ask }, true).await?;
     print_answer(ctx, space, &question).await?;
     Ok(0)
 }
@@ -117,17 +119,17 @@ async fn print_answer(ctx: &Context, space: String, question: &Question) -> Resu
     .await
 }
 
-/// The question a wait follows: its number and what it asks, since a later
-/// question may reuse the number.
+/// The question a wait follows: its number within its space and what it
+/// asks, since a later question may reuse the number.
 struct Asked {
-    id: i64,
+    item: u32,
     ask: Ask,
 }
 
 impl From<&Question> for Asked {
     fn from(question: &Question) -> Self {
         Self {
-            id: question.id,
+            item: question.number.item,
             ask: question.ask.clone(),
         }
     }
@@ -145,23 +147,23 @@ async fn await_answer(
     let executable = Executable::current();
     let method = || QuestionMethod::AwaitAnswer {
         space: space.to_owned(),
-        id: asked.id,
+        item: asked.item,
         ask: asked.ask.clone(),
     };
     match client::await_reply(&ctx.paths, method, restarted).await {
         Ok(body) => Question::try_from(body),
-        Err(error) => Err(executable.resume_or(error, || resume_arguments(space, asked.id))),
+        Err(error) => Err(executable.resume_or(error, || resume_arguments(space, asked.item))),
     }
 }
 
 /// This command's arguments, which state the question, resuming the wait for
-/// its number `id` in `space` without asking again. A wait an earlier
+/// its number `item` in `space` without asking again. A wait an earlier
 /// release handed over names its workspace the earlier way, which the space
 /// replaces.
-fn resume_arguments(space: &str, id: i64) -> Vec<OsString> {
+fn resume_arguments(space: &str, item: u32) -> Vec<OsString> {
     let arguments = without_option(arguments(), "--workspace");
     let arguments = replace_option(arguments, "--space", space);
-    replace_option(arguments, "--resume", &id.to_string())
+    replace_option(arguments, "--resume", &item.to_string())
 }
 
 pub(super) async fn list(ctx: &Context, space: Option<String>) -> Result<i32> {
@@ -185,10 +187,10 @@ pub(super) async fn list(ctx: &Context, space: Option<String>) -> Result<i32> {
 }
 
 fn pick_question(ctx: &Context, questions: Vec<Question>) -> Result<Question> {
-    let id: i64 = ui::pick(ctx, "Question> ", picker_rows(&questions))?.parse()?;
+    let number: ItemNumber = ui::pick(ctx, "Question> ", picker_rows(&questions))?.parse()?;
     questions
         .into_iter()
-        .find(|question| question.id == id)
+        .find(|question| question.number == number)
         .context("picker returned an unknown question")
 }
 
@@ -199,7 +201,7 @@ fn picker_rows(questions: &[Question]) -> Entries {
         .iter()
         .map(|question| {
             [
-                (question.id.to_string(), Some(Style::Muted)),
+                (question.number.to_string(), Some(Style::Muted)),
                 (question.space.clone(), None),
                 (question.one_line(), None),
                 (
@@ -216,40 +218,43 @@ fn picker_rows(questions: &[Question]) -> Entries {
     let labels = ui::aligned_to(cells, Palette::picker(), limit);
     questions
         .iter()
-        .map(|question| question.id.to_string())
+        .map(|question| question.number.to_string())
         .zip(labels)
         .collect()
 }
 
-pub(super) async fn withdraw(ctx: &Context, space: Option<String>, id: i64) -> Result<i32> {
-    let question = request::<Question>(&ctx.paths, QuestionMethod::ShowQuestion { id }).await?;
-    let space = space.unwrap_or_else(|| question.space_id.clone());
-    withdraw_shown(ctx, space, question).await
-}
-
-async fn withdraw_shown(ctx: &Context, space: String, shown: Question) -> Result<i32> {
-    let id = shown.id;
-    let question = request::<Question>(
-        &ctx.paths,
-        QuestionMethod::WithdrawQuestion {
-            space,
-            id,
-            shown: Some(shown),
-        },
-    )
-    .await?;
+/// Withdraw the question `number`, which its space's agent no longer needs
+/// answered.
+pub(super) async fn withdraw(ctx: &Context, number: ItemNumber) -> Result<i32> {
+    let shown = numbered(ctx, number).await?;
+    let method = QuestionMethod::WithdrawQuestion {
+        space: shown.space_id.clone(),
+        number,
+        shown: Some(shown),
+    };
+    let question = request::<Question>(&ctx.paths, method).await?;
     ctx.emit(
         &format!(
             "Question {} withdrawn: {}",
-            question.id, question.ask.question
+            question.number, question.ask.question
         ),
         &question,
     )?;
     Ok(0)
 }
 
-async fn answer(ctx: &Context, id: i64, answer: String, shown: Option<Question>) -> Result<i32> {
-    submit_answer(ctx, QuestionMethod::AnswerQuestion { id, answer, shown }).await
+async fn answer(
+    ctx: &Context,
+    number: ItemNumber,
+    answer: String,
+    shown: Option<Question>,
+) -> Result<i32> {
+    let method = QuestionMethod::AnswerQuestion {
+        number,
+        answer,
+        shown,
+    };
+    submit_answer(ctx, method).await
 }
 
 async fn submit_answer(ctx: &Context, method: QuestionMethod) -> Result<i32> {
@@ -267,7 +272,7 @@ async fn submit_answer(ctx: &Context, method: QuestionMethod) -> Result<i32> {
 fn answered(question: &Question) -> String {
     format!(
         "Question {} answered: {}\n  Answer: {}",
-        question.id,
+        question.number,
         question.ask.question,
         question.answer.as_deref().unwrap_or_default()
     )
@@ -280,14 +285,14 @@ async fn prompt_answer(ctx: &Context, question: Question) -> Result<i32> {
             submit_answer(
                 ctx,
                 QuestionMethod::AcceptQuestionRecommendation {
-                    id: question.id,
+                    number: question.number,
                     shown: Some(question),
                 },
             )
             .await
         }
         QuestionAction::Answer(response) => {
-            answer(ctx, question.id, response, Some(question)).await
+            answer(ctx, question.number, response, Some(question)).await
         }
     }
 }
@@ -318,7 +323,7 @@ fn read_question_action(ctx: &Context, question: &Question) -> Result<QuestionAc
 pub(in crate::cli) fn summary(question: &Question) -> String {
     let mut line = format!(
         "{}  {}: {}",
-        question.id,
+        question.number,
         question.space,
         question.one_line()
     );
@@ -342,12 +347,12 @@ fn details(question: &Question, palette: Palette) -> String {
     // follows the heading.
     let (heading, message) = if question.in_chat {
         (
-            format!("Question {}, asked in the chat", question.id),
+            format!("Question {}, asked in the chat", question.number),
             Some(&question.ask.question),
         )
     } else {
         (
-            format!("Question {}: {}", question.id, question.ask.question),
+            format!("Question {}: {}", question.number, question.ask.question),
             None,
         )
     };
@@ -409,7 +414,7 @@ fn status(question: &Question) -> &'static str {
 fn render(question: &Question, palette: Palette) -> String {
     let mut lines = vec![format!(
         "{} {} {}: {}",
-        palette.paint(Style::Heading, question.id),
+        palette.paint(Style::Heading, question.number),
         palette.paint(Style::Muted, format_args!("[{}]", status(question))),
         question.space,
         hanging_indent(&question.ask.question, "  ")

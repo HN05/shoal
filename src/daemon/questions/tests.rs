@@ -25,6 +25,11 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     (root, manager, workspace)
 }
 
+/// Item `item` of the space numbered `space`.
+fn item(space: u32, item: u32) -> ItemNumber {
+    ItemNumber { space, item }
+}
+
 fn ask(question: &str, choices: &[&str]) -> Ask {
     Ask {
         question: question.into(),
@@ -69,7 +74,7 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
         asked[0].message,
         format!(
             "question {} (answer with shoal questions {}): Which database? Recommended: SQLite",
-            first.id, first.id
+            first.number, first.number
         )
     );
 
@@ -111,14 +116,14 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
     for invalid in ["3", "0", " "] {
         assert!(
             manager
-                .answer_question(question.id, invalid.into(), None)
+                .answer_question(question.number, invalid.into(), None)
                 .await
                 .is_err(),
             "{invalid:?}"
         );
     }
     let answered = manager
-        .answer_question(question.id, "2".into(), None)
+        .answer_question(question.number, "2".into(), None)
         .await
         .unwrap();
     assert_eq!(answered.answer.as_deref(), Some("Postgres"));
@@ -129,18 +134,18 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
         messages[0].message,
         format!(
             "Answer to question {} (Which database?): Postgres",
-            question.id
+            question.number
         )
     );
     let error = manager
-        .answer_question(question.id, "1".into(), None)
+        .answer_question(question.number, "1".into(), None)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("already answered"));
 
     let open = manager.questions(Some(&workspace.name)).await.unwrap();
     assert!(open.questions.is_empty());
-    assert_eq!(manager.question(question.id).await.unwrap(), answered);
+    assert_eq!(manager.question(question.number).await.unwrap(), answered);
 }
 
 #[tokio::test]
@@ -155,12 +160,12 @@ async fn recommended_numeric_answers_are_literal_and_bound_to_the_shown_question
     let mut stale = question.clone();
     stale.ask.recommendation = "4".into();
     let error = manager
-        .accept_question_recommendation(question.id, Some(stale))
+        .accept_question_recommendation(question.number, Some(stale))
         .await
         .unwrap_err();
     assert!(error.to_string().contains("changed since it was shown"));
     let answered = manager
-        .accept_question_recommendation(question.id, Some(question))
+        .accept_question_recommendation(question.number, Some(question))
         .await
         .unwrap();
     assert_eq!(answered.answer.as_deref(), Some("2"));
@@ -183,7 +188,11 @@ async fn free_text_answers_may_span_lines() {
         .await
         .unwrap();
     let answered = manager
-        .answer_question(question.id, "Postgres,\nsince staging has it".into(), None)
+        .answer_question(
+            question.number,
+            "Postgres,\nsince staging has it".into(),
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -205,7 +214,7 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
         .await
         .unwrap();
     let answered = manager
-        .answer_question(question.id, "Postgres".into(), None)
+        .answer_question(question.number, "Postgres".into(), None)
         .await
         .unwrap();
     let again = manager
@@ -225,7 +234,7 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
         .await
         .unwrap();
     // Delivery deletes the question and frees its number.
-    assert!(manager.question(question.id).await.is_err());
+    assert!(manager.question(question.number).await.is_err());
     let new = manager
         .ask_question(
             &workspace.name,
@@ -235,12 +244,12 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
         )
         .await
         .unwrap();
-    assert_eq!(new.id, question.id);
+    assert_eq!(new.number, question.number);
     assert!(new.is_open());
 }
 
 #[tokio::test]
-async fn questions_take_the_smallest_free_number_across_workspaces() {
+async fn questions_take_the_smallest_free_number_of_their_space() {
     let (_root, manager, workspace) = fixture().await;
     let other = manager
         .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
@@ -256,44 +265,45 @@ async fn questions_take_the_smallest_free_number_across_workspaces() {
             .ask_question(&asker.name, ask(text, &[]), Vec::new(), &Attacher::User)
             .await
             .unwrap();
-        numbers.push(question.id);
+        numbers.push(question.number);
     }
-    assert_eq!(numbers, [1, 2, 3]);
+    let (first, second) = (workspace.number, other.number);
+    assert_eq!(numbers, [item(first, 1), item(second, 1), item(first, 2)]);
 
     // An answer keeps its number until the agent receives it.
     let answered = manager
-        .answer_question(2, "Redis".into(), None)
+        .answer_question(item(second, 1), "Redis".into(), None)
         .await
         .unwrap();
     let next = manager
         .ask_question(
-            &workspace.name,
+            &other.name,
             ask("Which logger?", &[]),
             Vec::new(),
             &Attacher::User,
         )
         .await
         .unwrap();
-    assert_eq!(next.id, 4);
+    assert_eq!(next.number, item(second, 2));
     manager
         .mark_agent_messages_delivered(&other.name, vec![answered.message_id.unwrap()])
         .await
         .unwrap();
     let reused = manager
         .ask_question(
-            &workspace.name,
+            &other.name,
             ask("Which scheduler?", &[]),
             Vec::new(),
             &Attacher::User,
         )
         .await
         .unwrap();
-    assert_eq!(reused.id, 2);
+    assert_eq!(reused.number, item(second, 1));
 
     // An answer chosen from the question the user was shown does not reach
     // the later question reusing its number.
     let error = manager
-        .answer_question(2, "cron".into(), Some(answered))
+        .answer_question(item(second, 1), "cron".into(), Some(answered))
         .await
         .unwrap_err();
     assert!(
@@ -302,7 +312,7 @@ async fn questions_take_the_smallest_free_number_across_workspaces() {
     );
     let shown = reused.clone();
     let answered = manager
-        .answer_question(2, "cron".into(), Some(shown))
+        .answer_question(item(second, 1), "cron".into(), Some(shown))
         .await
         .unwrap();
     assert_eq!(answered.ask, reused.ask);
@@ -324,10 +334,14 @@ async fn a_wait_returns_the_answer() {
         let manager = manager.clone();
         let name = workspace.name.clone();
         let ask = question.ask.clone();
-        async move { manager.await_answer(&name, question.id, &ask).await }
+        async move {
+            manager
+                .await_answer(&name, question.number.item, &ask)
+                .await
+        }
     });
     manager
-        .answer_question(question.id, "Postgres".into(), None)
+        .answer_question(question.number, "Postgres".into(), None)
         .await
         .unwrap();
     let answered = waiter.await.unwrap().unwrap();
@@ -338,7 +352,7 @@ async fn a_wait_returns_the_answer() {
         .await
         .unwrap();
     let error = manager
-        .await_answer(&other.name, question.id, &question.ask)
+        .await_answer(&other.name, question.number.item, &question.ask)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("has no question"));
@@ -359,9 +373,9 @@ async fn a_wait_returns_the_answer() {
         )
         .await
         .unwrap();
-    assert_eq!(reused.id, question.id);
+    assert_eq!(reused.number, question.number);
     let error = manager
-        .await_answer(&workspace.name, question.id, &question.ask)
+        .await_answer(&workspace.name, question.number.item, &question.ask)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("has no question"));
@@ -384,7 +398,7 @@ async fn open_questions_keep_the_workspace_and_removal_deletes_them() {
         CleanupReason::Question
     );
     manager
-        .answer_question(question.id, "Postgres".into(), None)
+        .answer_question(question.number, "Postgres".into(), None)
         .await
         .unwrap();
     assert_eq!(
@@ -435,7 +449,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             },
             QuestionMethod::AwaitAnswer {
                 space: target.clone(),
-                id: 1,
+                item: 1,
                 ask: ask("Which database?", &[]),
             },
             QuestionMethod::ListQuestions {
@@ -443,7 +457,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             },
             QuestionMethod::WithdrawQuestion {
                 space: target.clone(),
-                id: 1,
+                number: item(1, 1),
                 shown: None,
             },
         ] {
@@ -465,11 +479,11 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
     ));
     for mut method in [
         QuestionMethod::AnswerQuestion {
-            id: 1,
+            number: item(1, 1),
             answer: "yes".into(),
             shown: None,
         },
-        QuestionMethod::ShowQuestion { id: 1 },
+        QuestionMethod::ShowQuestion { number: item(1, 1) },
     ] {
         assert!(
             scope::authorize(&manager, Some("scope"), &mut method)
@@ -508,7 +522,7 @@ async fn listings_and_unread_answers_fit_one_response() {
             .await
             .unwrap();
         match manager
-            .answer_question(question.id, answer.clone(), None)
+            .answer_question(question.number, answer.clone(), None)
             .await
         {
             Ok(_) => unread += 1,
@@ -564,14 +578,15 @@ async fn notifications_of_maximal_questions_fit_one_response() {
     assert!(message.len() <= crate::validate::MAX_MESSAGE_LEN);
     assert!(message.starts_with(&format!(
         "question {} (answer with shoal questions {}): question 0 ",
-        first.id, first.id
+        first.number, first.number
     )));
     assert!(message.ends_with('…'));
     let body = crate::protocol::Body::Notifications(notifications);
     assert!(serde_json::to_vec(&body).unwrap().len() < crate::protocol::MAX_FRAME);
 
-    assert_eq!(manager.question(first.id).await.unwrap(), first);
-    assert!(manager.question(first.id + 100).await.is_err());
+    assert_eq!(manager.question(first.number).await.unwrap(), first);
+    let absent = item(first.number.space, first.number.item + 100);
+    assert!(manager.question(absent).await.is_err());
 }
 
 #[tokio::test]
@@ -615,7 +630,7 @@ async fn done_closes_open_questions_for_good() {
         .await
         .unwrap();
     manager
-        .answer_question(answered.id, "Postgres".into(), None)
+        .answer_question(answered.number, "Postgres".into(), None)
         .await
         .unwrap();
     let open = manager
@@ -645,21 +660,21 @@ async fn done_closes_open_questions_for_good() {
                 && n.message
                     == format!(
                         "assignment finished; cleanup requested; closed question {}",
-                        open.id
+                        open.number
                     ))
     );
     // The undelivered answer still reaches the agents.
-    let delivered = manager.question(answered.id).await.unwrap();
+    let delivered = manager.question(answered.number).await.unwrap();
     assert_eq!(delivered.answer.as_deref(), Some("Postgres"));
     assert!(delivered.closed_at.is_none());
 
     for error in [
         manager
-            .answer_question(open.id, "Redis".into(), None)
+            .answer_question(open.number, "Redis".into(), None)
             .await
             .unwrap_err(),
         manager
-            .await_answer(&workspace.name, open.id, &open.ask)
+            .await_answer(&workspace.name, open.number.item, &open.ask)
             .await
             .unwrap_err(),
     ] {
@@ -679,7 +694,7 @@ async fn done_closes_open_questions_for_good() {
         .await
         .unwrap();
     assert!(asked_again.is_open());
-    assert_ne!(asked_again.id, open.id);
+    assert_ne!(asked_again.number, open.number);
 }
 
 #[tokio::test]
@@ -695,7 +710,7 @@ async fn withdrawing_a_displayed_question_refuses_a_reused_number() {
         .await
         .unwrap();
     let answered = manager
-        .answer_question(shown.id, "SQLite".into(), None)
+        .answer_question(shown.number, "SQLite".into(), None)
         .await
         .unwrap();
     manager
@@ -711,15 +726,21 @@ async fn withdrawing_a_displayed_question_refuses_a_reused_number() {
         )
         .await
         .unwrap();
-    assert_eq!(shown.id, replacement.id);
+    assert_eq!(shown.number, replacement.number);
     let error = manager
-        .withdraw_question(&workspace.id, shown.id, Some(shown))
+        .withdraw_question(&workspace.id, shown.number, Some(shown))
         .await
         .unwrap_err();
     assert!(error.to_string().contains("changed since it was shown"));
-    assert!(manager.question(replacement.id).await.unwrap().is_open());
+    assert!(
+        manager
+            .question(replacement.number)
+            .await
+            .unwrap()
+            .is_open()
+    );
     let withdrawn = manager
-        .withdraw_question(&workspace.id, replacement.id, Some(replacement))
+        .withdraw_question(&workspace.id, replacement.number, Some(replacement))
         .await
         .unwrap();
     assert!(withdrawn.withdrawn);
@@ -745,16 +766,20 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
         let manager = manager.clone();
         let name = workspace.name.clone();
         let ask = question.ask.clone();
-        async move { manager.await_answer(&name, question.id, &ask).await }
+        async move {
+            manager
+                .await_answer(&name, question.number.item, &ask)
+                .await
+        }
     });
     let error = manager
-        .withdraw_question(&other.name, question.id, None)
+        .withdraw_question(&other.name, question.number, None)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("has no question"), "{error:#}");
 
     let withdrawn = manager
-        .withdraw_question(&workspace.name, question.id, None)
+        .withdraw_question(&workspace.name, question.number, None)
         .await
         .unwrap();
     assert!(withdrawn.withdrawn && !withdrawn.is_open());
@@ -768,11 +793,11 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
     for error in [
         waiter.await.unwrap().unwrap_err(),
         manager
-            .answer_question(question.id, "Postgres".into(), None)
+            .answer_question(question.number, "Postgres".into(), None)
             .await
             .unwrap_err(),
         manager
-            .withdraw_question(&workspace.name, question.id, None)
+            .withdraw_question(&workspace.name, question.number, None)
             .await
             .unwrap_err(),
     ] {
@@ -789,7 +814,7 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
         .await
         .unwrap();
     assert!(again.is_open());
-    assert_ne!(again.id, question.id);
+    assert_ne!(again.number, question.number);
 }
 
 #[tokio::test]
@@ -809,7 +834,7 @@ async fn withdrawing_after_a_rename_still_takes_back_the_notification() {
         .await
         .unwrap();
     manager
-        .withdraw_question(&workspace.id, question.id, None)
+        .withdraw_question(&workspace.id, question.number, None)
         .await
         .unwrap();
     assert!(manager.notifications(true, 50).await.unwrap().is_empty());
@@ -833,7 +858,7 @@ async fn withdrawing_a_shown_question_tells_the_user() {
         .await
         .unwrap();
     manager
-        .withdraw_question(&workspace.name, question.id, None)
+        .withdraw_question(&workspace.name, question.number, None)
         .await
         .unwrap();
     let unread = manager.notifications(true, 50).await.unwrap();
@@ -843,7 +868,7 @@ async fn withdrawing_a_shown_question_tells_the_user() {
         unread[0].message,
         format!(
             "withdrew question {} (no answer needed): Which database?",
-            question.id
+            question.number
         )
     );
 }
@@ -861,7 +886,7 @@ async fn a_withdrawn_question_is_never_announced_afterwards() {
         .await
         .unwrap();
     manager
-        .withdraw_question(&workspace.name, question.id, None)
+        .withdraw_question(&workspace.name, question.number, None)
         .await
         .unwrap();
     // An announcement that lost the race to the withdrawal comes too late.

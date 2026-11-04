@@ -123,7 +123,7 @@ impl Manager {
         {
             bail!(
                 "approval request {} is pushing; wait for the push to end",
-                request.id
+                request.number
             );
         }
         Ok(())
@@ -203,13 +203,13 @@ impl Manager {
         }
         let message = format!(
             "Approval {} to {} is outdated: the branch moved. Push again to request the current commit.",
-            request.id,
+            request.number,
             request.subject()
         );
         self.tell_space(&request.space_id, message).await;
         anyhow!(
             "approval request {} is outdated: the branch moved since it was requested; the agent was told to push again",
-            request.id
+            request.number
         )
     }
 
@@ -240,7 +240,7 @@ impl Manager {
             self.release_push_operation(key).await?;
             let message = format!(
                 "approval {}: {}: {error:#}; approve it again to retry",
-                request.id,
+                request.number,
                 request.subject()
             );
             self.notify(Some(&request.space), NotificationKind::PushFailed, message)
@@ -286,7 +286,7 @@ impl Manager {
                 request.decided_at = Some(crate::time::unix_seconds());
                 let message = format!(
                     "Approval {} to {} was approved: Shoal pushed it.",
-                    request.id,
+                    request.number,
                     request.subject()
                 );
                 (request, message)

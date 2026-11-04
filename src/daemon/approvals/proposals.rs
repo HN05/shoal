@@ -12,7 +12,7 @@ pub(crate) use crate::client::approvals::{
     PushSpecification,
 };
 use crate::{
-    daemon::{links::space::require_ready_space, store},
+    daemon::{item_numbers, links::space::require_ready_space, store},
     forge::{items::action::Edit, items::attach::Attachment},
 };
 
@@ -191,13 +191,14 @@ pub fn propose_push(tx: &Transaction<'_>, request: ApprovalRequest) -> Result<Re
 fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<ApprovalRequest> {
     (request.space, _) = space_record(tx, &request.space_id)?;
     request.key = uuid::Uuid::new_v4().to_string();
-    request.id = store::free_number(tx, "access_requests")?;
+    request.number = item_numbers::next(tx, &request.space_id)?;
     // A repository-owned request names no workspace row, so it stays when
-    // the space goes.
+    // the space goes, and keeps its space's number from another space.
     let workspace = request.repository_id.is_none().then_some(&request.space_id);
     tx.execute(
-        "INSERT INTO access_requests(id,workspace_id,repository_id,target_key,name,record,number)
-            VALUES (?1,?2,?3,?4,?5,?6,?7)",
+        "INSERT INTO access_requests(id,workspace_id,repository_id,target_key,name,record,
+                space_number,number)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
         params![
             request.key,
             workspace,
@@ -205,7 +206,8 @@ fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Approval
             request.target,
             request.name,
             serde_json::to_string(&request)?,
-            request.id
+            request.number.space,
+            request.number.item
         ],
     )?;
     Ok(request)
@@ -239,7 +241,7 @@ pub fn save(tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
     ensure!(
         stored.is_some_and(|stored| stored.status == DecisionStatus::Pending),
         "approval request {} is no longer pending",
-        request.id
+        request.number
     );
     tx.execute(
         "UPDATE access_requests SET record=?2 WHERE id=?1",

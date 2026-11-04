@@ -16,6 +16,7 @@ pub(crate) use crate::client::questions::{Ask, Listing, Question};
 use crate::{
     daemon::{
         agent_messages, chat_messages,
+        item_numbers::{self, ItemKind, ItemNumber},
         notifications::{self, About, NotificationKind},
         workspace::Manager,
         workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files},
@@ -105,17 +106,17 @@ impl Question {
         ensure!(
             self.answer.is_none(),
             "question {} is already answered",
-            self.id
+            self.number
         );
         ensure!(
             !self.withdrawn,
             "question {} was withdrawn: its agent no longer needs an answer",
-            self.id
+            self.number
         );
         ensure!(
             self.closed_at.is_none(),
             "question {} is closed: its workspace's assignment was marked done",
-            self.id
+            self.number
         );
         Ok(())
     }
@@ -134,8 +135,8 @@ impl Question {
     fn notification(&self) -> String {
         let mut text = format!(
             "question {} (answer with shoal questions {}): {}",
-            self.id,
-            self.id,
+            self.number,
+            self.number,
             self.one_line()
         );
         if let Some(recommendation) = self.recommendation() {
@@ -150,7 +151,7 @@ impl Question {
         crate::validate::shorten(
             format!(
                 "withdrew question {} (no answer needed): {}",
-                self.id,
+                self.number,
                 self.one_line()
             ),
             crate::validate::MAX_MESSAGE_LEN,
@@ -162,12 +163,12 @@ impl Question {
         if self.in_chat {
             return format!(
                 "Answer to question {}, which you asked in the chat: {answer}",
-                self.id
+                self.number
             );
         }
         format!(
             "Answer to question {} ({}): {answer}",
-            self.id, self.ask.question
+            self.number, self.ask.question
         )
     }
 }
@@ -201,7 +202,7 @@ impl Ask {
 const SPACE: &str = "COALESCE(q.workspace_id,q.chat_id)";
 
 const SELECT: &str = concat!(
-    "SELECT q.number,COALESCE(q.workspace_id,q.chat_id),COALESCE(w.name,c.name),q.created_at,
+    "SELECT q.space_number,q.number,COALESCE(q.workspace_id,q.chat_id),COALESCE(w.name,c.name),q.created_at,
     q.question,q.recommendation,q.reason,q.choices,q.answer,q.answered_at,
     CASE WHEN q.chat_id IS NULL THEN (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id)
         ELSE (SELECT m.id FROM chat_messages m WHERE m.id=q.message_id) END,
@@ -214,25 +215,28 @@ const SELECT: &str = concat!(
 fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
     Ok((
         Question {
-            id: row.get(0)?,
-            space_id: row.get(1)?,
-            space: row.get(2)?,
-            created_at: row.get(3)?,
+            number: ItemNumber {
+                space: row.get(0)?,
+                item: row.get(1)?,
+            },
+            space_id: row.get(2)?,
+            space: row.get(3)?,
+            created_at: row.get(4)?,
             ask: Ask {
-                question: row.get(4)?,
-                recommendation: row.get(5)?,
-                reason: row.get(6)?,
+                question: row.get(5)?,
+                recommendation: row.get(6)?,
+                reason: row.get(7)?,
                 choices: Vec::new(),
             },
-            answer: row.get(8)?,
-            answered_at: row.get(9)?,
-            message_id: row.get(10)?,
-            closed_at: row.get(11)?,
-            withdrawn: row.get(12)?,
-            in_chat: row.get(13)?,
+            answer: row.get(9)?,
+            answered_at: row.get(10)?,
+            message_id: row.get(11)?,
+            closed_at: row.get(12)?,
+            withdrawn: row.get(13)?,
+            in_chat: row.get(14)?,
             files: crate::daemon::store::json_column(row, "files")?.unwrap_or_default(),
         },
-        row.get(7)?,
+        row.get(8)?,
     ))
 }
 
@@ -242,14 +246,28 @@ fn query(db: &Connection, filter: &str, params: impl rusqlite::Params) -> Result
         .map(|row| {
             let (mut question, choices) = row?;
             question.ask.choices = serde_json::from_str(&choices)
-                .with_context(|| format!("question {} has invalid choices", question.id))?;
+                .with_context(|| format!("question {} has invalid choices", question.number))?;
             Ok(question)
         })
         .collect()
 }
 
-fn by_id(db: &Connection, id: i64) -> Result<Option<Question>> {
-    Ok(query(db, "WHERE q.number=?1", [id])?.pop())
+fn by_number(db: &Connection, number: ItemNumber) -> Result<Option<Question>> {
+    Ok(query(
+        db,
+        "WHERE q.space_number=?1 AND q.number=?2",
+        params![number.space, number.item],
+    )?
+    .pop())
+}
+
+/// The question `number`, refusing a number that names none, or that
+/// names an approval request.
+fn known(db: &Connection, number: ItemNumber) -> Result<Question> {
+    match by_number(db, number)? {
+        Some(question) => Ok(question),
+        None => Err(item_numbers::unknown(db, ItemKind::Question, number)?),
+    }
 }
 
 /// An identical question with the same `files` that the agents have not
@@ -277,13 +295,13 @@ fn repeated(
     ensure!(
         question.ask == *ask && ids(&question.files) == ids(files),
         "question {} asks the same with different details; ask a different question",
-        question.id
+        question.number
     );
     Ok(Some(question))
 }
 
 /// Record `ask` from the agents of `space` with the files `files`, asked in
-/// the conversation when `in_chat`, under the smallest free number and
+/// the conversation when `in_chat`, under the space's next number and
 /// return that number.
 fn insert(
     tx: &Transaction<'_>,
@@ -291,18 +309,19 @@ fn insert(
     ask: &Ask,
     files: &[SentFile],
     in_chat: bool,
-) -> Result<i64> {
-    let number = crate::daemon::store::free_number(tx, "questions")?;
+) -> Result<ItemNumber> {
+    let number = item_numbers::next(tx, space.id())?;
     let (workspace_id, chat_id) = match space {
         PresentSpace::Workspace(workspace) => (Some(&workspace.id), None),
         PresentSpace::Chat(chat) => (None, Some(&chat.id)),
     };
     tx.execute(
-        "INSERT INTO questions(number,workspace_id,chat_id,created_at,question,recommendation,
-                reason,choices,in_chat,files)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+        "INSERT INTO questions(space_number,number,workspace_id,chat_id,created_at,question,
+                recommendation,reason,choices,in_chat,files)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
         params![
-            number,
+            number.space,
+            number.item,
             workspace_id,
             chat_id,
             i64::try_from(crate::time::unix_seconds())?,
@@ -317,11 +336,30 @@ fn insert(
     Ok(number)
 }
 
-fn open_question(tx: &Transaction<'_>, id: i64) -> Result<Question> {
-    let question = by_id(tx, id)?
-        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown question {id}")))?;
+fn open_question(tx: &Transaction<'_>, number: ItemNumber) -> Result<Question> {
+    let question = known(tx, number)?;
     question.ensure_open()?;
     Ok(question)
+}
+
+/// Close `question` at `closed_at`, withdrawn when its agent or the chat
+/// closed it.
+fn store_closed(
+    tx: &Transaction<'_>,
+    question: &Question,
+    closed_at: i64,
+    withdrawn: bool,
+) -> Result<()> {
+    tx.execute(
+        "UPDATE questions SET closed_at=?3,withdrawn=?4 WHERE space_number=?1 AND number=?2",
+        params![
+            question.number.space,
+            question.number.item,
+            closed_at,
+            withdrawn
+        ],
+    )?;
+    Ok(())
 }
 
 /// Persist `answer` and the message carrying it on `question`.
@@ -333,8 +371,15 @@ fn store_answer(
 ) -> Result<()> {
     let answered_at = i64::try_from(crate::time::unix_seconds())?;
     tx.execute(
-        "UPDATE questions SET answer=?2,answered_at=?3,message_id=?4 WHERE number=?1",
-        params![question.id, answer, answered_at, message_id],
+        "UPDATE questions SET answer=?3,answered_at=?4,message_id=?5
+            WHERE space_number=?1 AND number=?2",
+        params![
+            question.number.space,
+            question.number.item,
+            answer,
+            answered_at,
+            message_id
+        ],
     )?;
     question.answer = Some(answer);
     question.answered_at = Some(answered_at);
@@ -364,14 +409,14 @@ impl Answer {
 /// number is refused.
 fn record_answer(
     tx: &Transaction<'_>,
-    id: i64,
+    number: ItemNumber,
     answer: &Answer,
     shown: Option<&Question>,
 ) -> Result<Question> {
-    let mut question = open_question(tx, id)?;
+    let mut question = open_question(tx, number)?;
     crate::daemon::refusal::ensure_unchanged(
         shown.is_none_or(|shown| question.is_same(shown)),
-        format_args!("question {id}"),
+        format_args!("question {number}"),
     )?;
     let answer = answer.resolve(&question.ask)?;
     let message = question.answer_message(&answer);
@@ -384,8 +429,8 @@ fn record_answer(
 /// its ID, or `None` when an identical message is already unread.
 fn queue_answer(tx: &Transaction<'_>, question: &Question, message: &str) -> Result<Option<i64>> {
     let asked_by_chat: bool = tx.query_row(
-        "SELECT chat_id IS NOT NULL FROM questions WHERE number=?1",
-        [question.id],
+        "SELECT chat_id IS NOT NULL FROM questions WHERE space_number=?1 AND number=?2",
+        params![question.number.space, question.number.item],
         |row| row.get(0),
     )?;
     if asked_by_chat {
@@ -408,45 +453,47 @@ pub(crate) fn open_count(db: &Connection, space_id: &str) -> Result<usize> {
 
 /// Close the space's open questions, which its finished assignment no
 /// longer waits on, and return their numbers.
-pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<i64>> {
+pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<ItemNumber>> {
     let closed_at = i64::try_from(crate::time::unix_seconds())?;
     let mut numbers = tx
         .prepare(
             "UPDATE questions SET closed_at=?2
                 WHERE COALESCE(workspace_id,chat_id)=?1 AND answer IS NULL AND closed_at IS NULL
-                RETURNING number",
+                RETURNING space_number,number",
         )?
-        .query_map(params![space_id, closed_at], |row| row.get(0))?
-        .collect::<rusqlite::Result<Vec<i64>>>()?;
+        .query_map(params![space_id, closed_at], |row| {
+            Ok(ItemNumber {
+                space: row.get(0)?,
+                item: row.get(1)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     numbers.sort_unstable();
     Ok(numbers)
 }
 
-/// Close the space's open question `id` as withdrawn by its agent.
+/// Close the space's open question `number` as withdrawn by its agent.
 fn withdraw(
     tx: &Transaction<'_>,
     space: &PresentSpace,
-    id: i64,
+    number: ItemNumber,
     shown: Option<&Question>,
 ) -> Result<Question> {
-    let mut question = by_id(tx, id)?
+    let mut question = by_number(tx, number)?
         .filter(|question| question.space_id == space.id())
         .ok_or_else(|| {
             Refusal::new(
                 Reason::NotFound,
-                format!("{} has no question {id}", space.name()),
+                format!("{} has no question {number}", space.name()),
             )
         })?;
     question.ensure_open()?;
     crate::daemon::refusal::ensure_unchanged(
-        shown.is_none_or(|shown| question.id == shown.id && question.is_same(shown)),
-        format_args!("question {id}"),
+        shown.is_none_or(|shown| question.number == shown.number && question.is_same(shown)),
+        format_args!("question {number}"),
     )?;
     let closed_at = i64::try_from(crate::time::unix_seconds())?;
-    tx.execute(
-        "UPDATE questions SET closed_at=?2,withdrawn=1 WHERE number=?1",
-        params![id, closed_at],
-    )?;
+    store_closed(tx, &question, closed_at, true)?;
     question.closed_at = Some(closed_at);
     question.withdrawn = true;
     Ok(question)
@@ -511,8 +558,8 @@ fn record(
         return Ok(Recorded::Repeated(question));
     }
     let in_chat = matches!(asker, Asker::Chat(_));
-    let id = insert(&tx, space, ask, files, in_chat)?;
-    let question = by_id(&tx, id)?.context("recorded question is missing")?;
+    let number = insert(&tx, space, ask, files, in_chat)?;
+    let question = by_number(&tx, number)?.context("recorded question is missing")?;
     tx.commit()?;
     Ok(Recorded::New(question))
 }
@@ -551,10 +598,7 @@ fn close_in_chat(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<(Question, 
     let closed_at = i64::try_from(crate::time::unix_seconds())?;
     open.into_iter()
         .map(|question| {
-            tx.execute(
-                "UPDATE questions SET closed_at=?2,withdrawn=1 WHERE number=?1",
-                params![question.id, closed_at],
-            )?;
+            store_closed(tx, &question, closed_at, true)?;
             let retracted = notifications::retract(
                 tx,
                 space_id,
@@ -671,12 +715,12 @@ impl Manager {
     /// since it was asked.
     async fn announce_question(&self, question: &Question) {
         let _gate = self.gates.lock_announcements().await;
-        let id = question.id;
-        let stored = self.store.run(move |db| by_id(db, id)).await;
+        let number = question.number;
+        let stored = self.store.run(move |db| by_number(db, number)).await;
         match stored {
             Ok(Some(stored)) if stored.is_same(question) && stored.is_open() => {}
             Ok(_) => return,
-            Err(error) => crate::daemon::log!("question {id} not rechecked: {error:#}"),
+            Err(error) => crate::daemon::log!("question {number} not rechecked: {error:#}"),
         }
         let about = About::workspace(&question.space, &question.space_id);
         let kind = NotificationKind::QuestionAsked;
@@ -719,11 +763,8 @@ impl Manager {
             .await
     }
 
-    pub async fn question(&self, id: i64) -> Result<Question> {
-        self.store
-            .run(move |db| by_id(db, id))
-            .await?
-            .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown question {id}")).into())
+    pub async fn question(&self, number: ItemNumber) -> Result<Question> {
+        self.store.run(move |db| known(db, number)).await
     }
 
     pub async fn has_open_questions(&self, space_id: &str) -> Result<bool> {
@@ -741,30 +782,30 @@ impl Manager {
             .await
     }
 
-    /// Record the user's answer to question `id`, or to `shown` when the user
-    /// chose it from a listing, and queue it for the workspace's agents.
+    /// Record the user's answer to question `number`, or to `shown` when the
+    /// user chose it from a listing, and queue it for the workspace's agents.
     pub async fn answer_question(
         &self,
-        id: i64,
+        number: ItemNumber,
         answer: String,
         shown: Option<Question>,
     ) -> Result<Question> {
-        self.record_question_answer(id, Answer::Text(answer), shown)
+        self.record_question_answer(number, Answer::Text(answer), shown)
             .await
     }
 
     pub async fn accept_question_recommendation(
         &self,
-        id: i64,
+        number: ItemNumber,
         shown: Option<Question>,
     ) -> Result<Question> {
-        self.record_question_answer(id, Answer::Recommendation, shown)
+        self.record_question_answer(number, Answer::Recommendation, shown)
             .await
     }
 
     async fn record_question_answer(
         &self,
-        id: i64,
+        number: ItemNumber,
         answer: Answer,
         shown: Option<Question>,
     ) -> Result<Question> {
@@ -772,7 +813,7 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let question = record_answer(&tx, id, &answer, shown.as_ref())?;
+                let question = record_answer(&tx, number, &answer, shown.as_ref())?;
                 tx.commit()?;
                 Ok(question)
             })
@@ -784,13 +825,13 @@ impl Manager {
         Ok(question)
     }
 
-    /// Withdraw the space's open question `id`, which its agents no
+    /// Withdraw the space's open question `number`, which its agents no
     /// longer need answered. Its notification goes while unread; once shown,
     /// the user or the coordinating agent is told instead.
     pub async fn withdraw_question(
         &self,
         selector: &str,
-        id: i64,
+        number: ItemNumber,
         shown: Option<Question>,
     ) -> Result<Question> {
         let space = self.present_space(selector).await?;
@@ -799,7 +840,7 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let question = withdraw(&tx, &space, id, shown.as_ref())?;
+                let question = withdraw(&tx, &space, number, shown.as_ref())?;
                 let retracted = notifications::retract(
                     &tx,
                     &question.space_id,
@@ -829,7 +870,7 @@ impl Manager {
         &self,
         selector: &str,
         turn: Option<Turn>,
-    ) -> Result<Vec<i64>> {
+    ) -> Result<Vec<ItemNumber>> {
         let space = self.present_space(selector).await?;
         let _gate = self.gates.lock_announcements().await;
         let closed = self
@@ -857,26 +898,30 @@ impl Manager {
             )
             .await;
         }
-        Ok(closed.iter().map(|(question, _)| question.id).collect())
+        Ok(closed.iter().map(|(question, _)| question.number).collect())
     }
 
-    /// Return the space's question `id` asking `ask` once it is answered.
+    /// Return the space's question `item` asking `ask` once it is answered.
     /// What it asks tells it from a later question reusing the number; a
     /// later identical question asks the same, so its answer serves the wait
     /// too.
-    pub async fn await_answer(&self, selector: &str, id: i64, ask: &Ask) -> Result<Question> {
+    pub async fn await_answer(&self, selector: &str, item: u32, ask: &Ask) -> Result<Question> {
         let space = self.present_space(selector).await?;
+        let number = ItemNumber {
+            space: space.number(),
+            item,
+        };
         // Subscribe before reading, so an answer in between still wakes.
         let mut changed = self.signals.watch_questions();
         loop {
             let question = self
                 .store
-                .run(move |db| by_id(db, id))
+                .run(move |db| by_number(db, number))
                 .await?
                 .filter(|question| question.space_id == space.id() && question.ask == *ask)
                 .with_context(|| {
                     format!(
-                        "{} has no question {id} awaiting delivery; a delivered answer removes its question",
+                        "{} has no question {number} awaiting delivery; a delivered answer removes its question",
                         space.name()
                     )
                 })?;

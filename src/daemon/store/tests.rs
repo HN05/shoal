@@ -958,14 +958,8 @@ fn migration_keeps_question_numbers_numbers_approvals_and_drops_delivered_questi
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     assert_eq!(requests, [("grant".into(), 1, 1), ("land".into(), 2, 2)]);
-    assert_eq!(free_number(&db, "questions")?, 1);
-    assert_eq!(free_number(&db, "access_requests")?, 3);
-    db.execute(
-        "INSERT INTO questions(number,workspace_id,created_at,question,recommendation,choices)
-            VALUES (1,'workspace',3,'Which logger?','tracing','[]')",
-        [],
-    )?;
-    assert_eq!(free_number(&db, "questions")?, 2);
+    // Both kinds now share their space's numbers.
+    assert_eq!(crate::daemon::item_numbers::free(&db, 1)?, 3);
     Ok(())
 }
 

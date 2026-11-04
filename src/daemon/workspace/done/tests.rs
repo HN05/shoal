@@ -640,7 +640,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     assert!(workspace.path.exists());
     assert!(manager.has_open_questions(&workspace.id).await.unwrap());
     manager
-        .answer_question(question.id, "No".into(), None)
+        .answer_question(question.number, "No".into(), None)
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();

@@ -1,7 +1,6 @@
 //! Issues and PRs a repository's `[permissions]` makes scoped callers propose
 //! instead of opening: recording them, and opening, denying or merging them
 //! as duplicates once the user decides.
-use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use std::{
     collections::BTreeSet,
@@ -61,7 +60,7 @@ impl std::fmt::Display for Moved {
         write!(
             f,
             "approval request {} is outdated: the branch or its pushed commit changed; the agent was told to propose the PR again",
-            self.0.id
+            self.0.number
         )
     }
 }
@@ -240,7 +239,7 @@ impl Manager {
             ensure!(
                 request.decider.as_deref() == Some(workspace),
                 "approval request {} is not routed to this workspace",
-                request.id
+                request.number
             );
         }
         self.ensure_not_pushing(&request)?;
@@ -294,14 +293,14 @@ impl Manager {
     /// The stored request the user chose, still undecided.
     async fn pending_proposal(&self, chosen: ApprovalRequest) -> Result<ApprovalRequest> {
         let request = self
-            .approval_request(chosen.id)
+            .approval_request(chosen.number)
             .await?
             .filter(|request| request.key == chosen.key)
-            .with_context(|| format!("approval request {} was already decided", chosen.id))?;
+            .with_context(|| format!("approval request {} was already decided", chosen.number))?;
         ensure!(
             request.status == DecisionStatus::Pending,
             "approval request {} is {}: it no longer applies",
-            request.id,
+            request.number,
             request.status
         );
         // Another decision may have saved edits, or opened the item, while
@@ -309,7 +308,7 @@ impl Manager {
         ensure!(
             request.specification == chosen.specification && request.url == chosen.url,
             "approval request {} changed while it waited; review it again",
-            request.id
+            request.number
         );
         Ok(request)
     }
@@ -325,7 +324,7 @@ impl Manager {
             ensure!(
                 request.url.is_none(),
                 "approval request {} already opened its issue; approve it again without edits to finish",
-                request.id
+                request.number
             );
             request.edit(decision);
             self.save_proposal(request.clone()).await?;
@@ -337,7 +336,7 @@ impl Manager {
                     .context("the workspace that proposed the PR is gone")?;
                 self.open_proposed_pull(&mut request, workspace).await?
             }
-            _ => bail!("approval request {} is not a proposal", request.id),
+            _ => bail!("approval request {} is not a proposal", request.number),
         };
         let warnings = self.convention_warnings(&request, space, &item).await;
         request.warnings.extend(warnings);
@@ -347,7 +346,7 @@ impl Manager {
         let linked = if linked { " and linked" } else { "" };
         let message = format!(
             "Approval {} to {} was approved: {} was opened{linked}.",
-            request.id,
+            request.number,
             request.subject(),
             item.url
         );
@@ -624,7 +623,7 @@ impl Manager {
         self.retire_approval(request.clone()).await?;
         let message = format!(
             "Approval {} to {} is outdated: the branch or its pushed commit changed. Run shoal pr open again to propose the PR at the current commit.",
-            request.id,
+            request.number,
             request.subject()
         );
         self.tell_space(&request.space_id, message).await;
@@ -667,7 +666,7 @@ impl Manager {
         };
         let message = format!(
             "Approval {} to {} was denied{outcome}. Do not {verb} it another way.{reason}",
-            request.id,
+            request.number,
             request.subject(),
         );
         Ok((request, message))
@@ -701,15 +700,10 @@ impl Manager {
     async fn add_to_proposal(
         &self,
         request: &ApprovalRequest,
-        number: i64,
+        number: crate::daemon::item_numbers::ItemNumber,
         locked: Option<&ApprovalRequest>,
     ) -> Result<()> {
-        let mut original = self.approval_request(number).await?.ok_or_else(|| {
-            Refusal::new(
-                Reason::NotFound,
-                format!("unknown approval request {number}"),
-            )
-        })?;
+        let mut original = self.show_approval(number).await?;
         ensure!(
             locked.is_some_and(|locked| locked.key == original.key),
             "approval request {number} changed while this decision waited; decide again"

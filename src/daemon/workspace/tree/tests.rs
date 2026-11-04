@@ -829,7 +829,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
     assert!(
         messages[0]
             .message
-            .starts_with(&format!("child: question {}", below.id)),
+            .starts_with(&format!("child: question {}", below.number)),
         "{messages:?}"
     );
     manager
@@ -867,7 +867,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
     }
     for (question, allowed) in [(&below, true), (&own, false), (&beside, false)] {
         let mut answer = QuestionMethod::AnswerQuestion {
-            id: question.id,
+            number: question.number,
             answer: "Yes".into(),
             shown: None,
         };
@@ -998,7 +998,6 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         .unwrap();
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
     let parent = create("parent").await.unwrap();
-    let sibling = create("sibling").await.unwrap();
     let child = manager
         .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
@@ -1024,21 +1023,26 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         )
         .await;
     let mut answer = QuestionMethod::AnswerQuestion {
-        id: asked.id,
+        number: asked.number,
         answer: "Yes".into(),
         shown: None,
     };
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut answer)
         .await
         .unwrap();
-    let QuestionMethod::AnswerQuestion { id, answer, shown } = answer else {
+    let QuestionMethod::AnswerQuestion {
+        number,
+        answer,
+        shown,
+    } = answer
+    else {
         panic!("authorization keeps the method");
     };
     assert!(shown.is_some());
-    // Meanwhile the question is answered and delivered, and the sibling's
+    // Meanwhile the question is answered and delivered, and the child's
     // next question reuses its number.
     let answered = manager
-        .answer_question(asked.id, "No".into(), None)
+        .answer_question(asked.number, "No".into(), None)
         .await
         .unwrap();
     manager
@@ -1046,16 +1050,23 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         .await
         .unwrap();
     let reused = manager
-        .ask_question(&sibling.id, ask("Rename it?"), Vec::new(), &Attacher::User)
+        .ask_question(&child.id, ask("Rename it?"), Vec::new(), &Attacher::User)
         .await
         .unwrap();
-    assert_eq!(reused.id, asked.id);
+    assert_eq!(reused.number, asked.number);
     let error = manager
-        .answer_question(id, answer, shown)
+        .answer_question(number, answer, shown)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("changed since it was shown"));
-    assert!(manager.question(reused.id).await.unwrap().answer.is_none());
+    assert!(
+        manager
+            .question(reused.number)
+            .await
+            .unwrap()
+            .answer
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -1137,7 +1148,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .unwrap()
         .unwrap();
     manager
-        .decide_approval(granted.id, true, None, Default::default(), None)
+        .decide_approval(granted.number, true, None, Default::default(), None)
         .await
         .unwrap();
     let requested = manager
@@ -1147,7 +1158,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .unwrap();
     manager.notify_approval(&child.name, &requested).await;
     let routed = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
@@ -1201,7 +1212,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         forged.decider = Some(workspace.id.clone());
         let mut decide = ApprovalMethod::DecideApproval {
             details: Default::default(),
-            id: requested.id,
+            number: requested.number,
             approve: true,
             shown: Some(Box::new(forged)),
             env: None,
@@ -1215,13 +1226,13 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         assert_eq!(authorized.is_ok(), allowed, "{}", workspace.name);
     }
     let refused = manager
-        .decide_routed_approval(&root.id, requested.id, true, None, Default::default())
+        .decide_routed_approval(&root.id, requested.number, true, None, Default::default())
         .await
         .unwrap_err();
     assert!(format!("{refused:#}").contains("not routed to this workspace"));
     // Without a grant the parent may only deny or pass it up.
     let refused = manager
-        .decide_routed_approval(&parent.id, requested.id, true, None, Default::default())
+        .decide_routed_approval(&parent.id, requested.number, true, None, Default::default())
         .await
         .unwrap_err();
     assert!(
@@ -1246,7 +1257,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .await
         .unwrap();
     let escalated = manager
-        .escalate_approval(&parent.id, requested.id, None)
+        .escalate_approval(&parent.id, requested.number, None)
         .await
         .unwrap();
     assert_eq!(escalated.decider.as_deref(), Some(root.id.as_str()));
@@ -1258,14 +1269,14 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
             .contains("shoal approvals --escalate")
     );
     let escalated = manager
-        .escalate_approval(&root.id, requested.id, None)
+        .escalate_approval(&root.id, requested.number, None)
         .await
         .unwrap();
     assert_eq!(escalated.decider, None);
     assert_eq!(escalated.status, DecisionStatus::Pending);
     assert_eq!(user().await, 1);
     let error = manager
-        .escalate_approval(&root.id, requested.id, None)
+        .escalate_approval(&root.id, requested.number, None)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("not root's to decide"));
@@ -1275,7 +1286,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     assert!(!requested.routed);
     manager.notify_approval(&child.name, &requested).await;
     let again = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
@@ -1341,7 +1352,7 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
         n += 1;
     }
     let escalated = manager
-        .escalate_approval(&parent.id, requested.id, None)
+        .escalate_approval(&parent.id, requested.number, None)
         .await
         .unwrap();
     assert_eq!(escalated.decider, None);
@@ -1388,7 +1399,7 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
     // Given back as an ending chat gives it, then withdrawn before the user
     // is told.
     manager
-        .withdraw_approval(&worker.id, requested.id)
+        .withdraw_approval(&worker.id, requested.number)
         .await
         .unwrap();
     manager
@@ -1468,7 +1479,7 @@ async fn a_saved_chat_leaves_its_workspaces_requests_to_the_user() {
         .unwrap();
     manager.notify_approval(&worker.name, &requested).await;
     let routed = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
@@ -1532,7 +1543,7 @@ async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
         .unwrap();
     manager.notify_approval(&worker.name, &requested).await;
     let routed = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
@@ -1541,7 +1552,7 @@ async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
     // Saved after the request reached it, the chat decides it no more.
     manager.save_chats(ChatRestore::Resume).await;
     let given_back = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
@@ -1619,7 +1630,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .unwrap();
     manager.notify_approval(&child.name, &requested).await;
     let routed = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
@@ -1665,7 +1676,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
     // An ended chat decides nothing more; the user does.
     manager.chats().await.unwrap();
     let passed = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
@@ -1741,7 +1752,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
             .unwrap()
             .unwrap();
         manager
-            .decide_approval(grant.id, true, None, Default::default(), None)
+            .decide_approval(grant.number, true, None, Default::default(), None)
             .await
             .unwrap();
     }
@@ -1765,12 +1776,12 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .await
         .unwrap();
     let error = manager
-        .decide_routed_approval(&parent.id, requested.id, true, None, Default::default())
+        .decide_routed_approval(&parent.id, requested.number, true, None, Default::default())
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("holds no grant"), "{error:#}");
     let kept = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
@@ -1790,7 +1801,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .unwrap()
         .unwrap();
     manager
-        .decide_approval(lease.id, true, None, Default::default(), None)
+        .decide_approval(lease.number, true, None, Default::default(), None)
         .await
         .unwrap();
     let longer = manager
@@ -1801,12 +1812,12 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     manager.notify_approval(&child.name, &longer).await;
     assert!(
         manager
-            .decide_routed_approval(&parent.id, longer.id, true, None, Default::default())
+            .decide_routed_approval(&parent.id, longer.number, true, None, Default::default())
             .await
             .is_err()
     );
     let denied = manager
-        .decide_routed_approval(&parent.id, longer.id, false, None, Default::default())
+        .decide_routed_approval(&parent.id, longer.number, false, None, Default::default())
         .await
         .unwrap();
     assert_eq!(denied.status, DecisionStatus::Denied);
@@ -1829,7 +1840,11 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     manager.notify_approval(&child.name, &other).await;
     assert_eq!(user_requests().await, 1);
     // It is the user's now, so their inbox lists it.
-    let given_back = manager.approval_request(other.id).await.unwrap().unwrap();
+    let given_back = manager
+        .approval_request(other.number)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(given_back.decider, None);
 }
 
@@ -1880,7 +1895,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         .unwrap()
         .unwrap();
     manager
-        .decide_approval(grant.id, true, None, Default::default(), None)
+        .decide_approval(grant.number, true, None, Default::default(), None)
         .await
         .unwrap();
     let caller = Caller {
@@ -1899,12 +1914,12 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             .unwrap();
         manager.notify_approval(&child.name, &requested).await;
         let shown = manager
-            .approval_request(requested.id)
+            .approval_request(requested.number)
             .await
             .unwrap()
             .unwrap();
         let mut method = ApprovalMethod::DecideApproval {
-            id: shown.id,
+            number: shown.number,
             approve: true,
             shown: displayed.then(|| Box::new(shown.clone())),
             details: Default::default(),
@@ -1932,7 +1947,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(replacement.id, shown.id);
+        assert_eq!(replacement.number, shown.number);
         assert_ne!(replacement.key, shown.key);
         manager.notify_approval(&child.name, &replacement).await;
         if displayed {
@@ -1952,7 +1967,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         assert!(format!("{error:#}").contains("changed since it was shown"));
         assert_eq!(
             manager
-                .approval_request(replacement.id)
+                .approval_request(replacement.number)
                 .await
                 .unwrap()
                 .unwrap()
@@ -1960,7 +1975,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             DecisionStatus::Pending
         );
         manager
-            .withdraw_approval(&child.id, replacement.id)
+            .withdraw_approval(&child.id, replacement.number)
             .await
             .unwrap();
     }
@@ -2030,12 +2045,12 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             )
             .await
             .unwrap();
-        for (id, approval_request) in [(approval.id, true), (question.id, false)] {
+        for (number, approval_request) in [(approval.number, true), (question.number, false)] {
             let read = || -> Operation {
                 if approval_request {
-                    ApprovalMethod::ShowApproval { id }.into()
+                    ApprovalMethod::ShowApproval { number }.into()
                 } else {
-                    QuestionMethod::ShowQuestion { id }.into()
+                    QuestionMethod::ShowQuestion { number }.into()
                 }
             };
             let mut method = read();
@@ -2057,11 +2072,11 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             manager.store.run(move |db| {
                 if approval_request {
                     db.execute(
-                        "UPDATE access_requests SET workspace_id=?1, record=json_set(record,'$.space_id',?1) WHERE number=?2",
-                        rusqlite::params![replacement_owner, id],
+                        "UPDATE access_requests SET workspace_id=?1, record=json_set(record,'$.space_id',?1) WHERE space_number=?2 AND number=?3",
+                        rusqlite::params![replacement_owner, number.space, number.item],
                     )?;
                 } else {
-                    db.execute("UPDATE questions SET workspace_id=?1 WHERE number=?2", rusqlite::params![replacement_owner, id])?;
+                    db.execute("UPDATE questions SET workspace_id=?1 WHERE space_number=?2 AND number=?3", rusqlite::params![replacement_owner, number.space, number.item])?;
                 }
                 Ok(())
             }).await.unwrap();
@@ -2077,10 +2092,17 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             manager
                 .store
                 .run(move |db| {
+                    let params = rusqlite::params![number.space, number.item];
                     if approval_request {
-                        db.execute("DELETE FROM access_requests WHERE number=?1", [id])?;
+                        db.execute(
+                            "DELETE FROM access_requests WHERE space_number=?1 AND number=?2",
+                            params,
+                        )?;
                     } else {
-                        db.execute("DELETE FROM questions WHERE number=?1", [id])?;
+                        db.execute(
+                            "DELETE FROM questions WHERE space_number=?1 AND number=?2",
+                            params,
+                        )?;
                     }
                     Ok(())
                 })
@@ -2149,7 +2171,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
     };
     // The parent's agent decides it without a grant of its own.
     let routed = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
@@ -2162,18 +2184,18 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .resource_guard(&child.id, crate::daemon::workspace::GuardMode::Exclusive)
         .unwrap();
     manager
-        .decide_routed_approval(&parent.id, requested.id, true, None, Default::default())
+        .decide_routed_approval(&parent.id, requested.number, true, None, Default::default())
         .await
         .unwrap_err();
     let pending = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(pending.status, DecisionStatus::Pending);
     drop(hook);
     let decided = manager
-        .decide_routed_approval(&parent.id, requested.id, true, None, Default::default())
+        .decide_routed_approval(&parent.id, requested.number, true, None, Default::default())
         .await
         .unwrap();
     assert_eq!(decided.status, DecisionStatus::Approved);
@@ -2225,13 +2247,13 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         panic!("holding its own workspace needs approval");
     };
     let routed = manager
-        .approval_request(requested.id)
+        .approval_request(requested.number)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(routed.decider, None);
     manager
-        .decide_approval(requested.id, true, None, Default::default(), None)
+        .decide_approval(requested.number, true, None, Default::default(), None)
         .await
         .unwrap();
     assert_eq!(manager.workspace(&parent.id).await.unwrap().holds.len(), 1);

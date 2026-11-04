@@ -7,8 +7,8 @@ use super::{GuardMode, Manager, ResourceGuard};
 use crate::{
     config::Effective,
     daemon::{
-        events::EventCause, notifications::NotificationKind, questions, store,
-        workspace_files::Attacher,
+        events::EventCause, item_numbers::ItemNumber, notifications::NotificationKind, questions,
+        store, workspace_files::Attacher,
     },
     hooks::{self, Hook, HookKind},
     model::{Completion, HandedBack, Workspace},
@@ -344,7 +344,7 @@ struct Persisted {
     /// question.
     changed: bool,
     /// The numbers of the questions it closed.
-    closed: Vec<i64>,
+    closed: Vec<ItemNumber>,
 }
 
 /// Record `completion`, returning whether it differs from the recorded one:
@@ -373,7 +373,7 @@ fn record_completion(
 
 /// What the user is told about a completion, the questions it closed and
 /// the files it handed back.
-fn done_notice(workspace: &str, completion: &Completion, closed: &[i64]) -> String {
+fn done_notice(workspace: &str, completion: &Completion, closed: &[ItemNumber]) -> String {
     let mut notice = String::from("assignment finished");
     if completion.integrated {
         notice.push_str("; integrated elsewhere");
@@ -393,7 +393,7 @@ pub(crate) fn push_closed_and_results(
     notice: &mut String,
     space: &str,
     completion: &Completion,
-    closed: &[i64],
+    closed: &[ItemNumber],
 ) {
     if let [number] = closed {
         notice.push_str(&format!("; closed question {number}"));

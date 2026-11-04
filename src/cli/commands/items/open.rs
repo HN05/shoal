@@ -170,7 +170,7 @@ pub(super) fn report_proposed(ctx: &Context, item: &str, proposed: &Proposed) ->
     ctx.emit(
         &format!(
             "{kind} proposed for approval {}: the user decides whether Shoal {decides}, and the decision arrives as a message.",
-            request.id
+            request.number
         ),
         proposed,
     )?;

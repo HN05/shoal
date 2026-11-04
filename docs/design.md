@@ -1709,12 +1709,19 @@ turn's final message, which the `Stop` hook passes, so the agent writes it once.
 A prompt the user submits in the chat closes it, since the user answered there,
 while one Shoal submits does not.
 
-Questions and approval requests are named by the smallest number no stored one
-holds, because the user types them; their records keep a separate internal key
-that is never shown. A wait follows its question's number and text, so a later
-question reusing the number cannot answer it, and a keep or merge request that no
-longer applies stays as outdated until the workspace goes, so its number is never
-reused and a decision meant for it cannot approve a newer commit. An agent may
+Questions and approval requests are named `S.N`: the number of the space that
+asked, then the smallest number no question or request of that space holds.
+Both kinds share the space's sequence, so a number names one item and says
+which space it belongs to, and counting per space keeps the numbers short
+because the user types them. A bare number or one of the other kind is refused
+with the form or command to use rather than guessed. Their records keep a
+separate internal key that is never shown. A wait follows its question's space,
+number and text, so a later question reusing the number cannot answer it, and a
+keep or merge request that no longer applies stays as outdated until the
+workspace goes, so its number is never reused and a decision meant for it cannot
+approve a newer commit. A proposed issue outlives its space, so its space's
+number stays reserved until the last such proposal is decided, keeping the
+number the user was told. An agent may
 withdraw a pending request it no longer needs, as it may a question: it stays as
 withdrawn on the same terms, except a proposed issue, which would outlive the
 workspace and goes as a decided proposal does.

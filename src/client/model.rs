@@ -1399,6 +1399,13 @@ impl PresentSpace {
         }
     }
 
+    pub fn number(&self) -> u32 {
+        match self {
+            Self::Workspace(workspace) => workspace.number,
+            Self::Chat(chat) => chat.number,
+        }
+    }
+
     pub fn repository_id(&self) -> &str {
         match self {
             Self::Workspace(workspace) => &workspace.repository_id,

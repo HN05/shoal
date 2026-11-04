@@ -134,7 +134,7 @@ impl Session {
             match outcome {
                 Ok(PushOutcome::Direct) => direct.push(refspec),
                 Ok(PushOutcome::Proposed(proposed)) => {
-                    let id = proposed.proposed.id;
+                    let id = proposed.proposed.number;
                     eprintln!(
                         "Push of {destination} proposed for approval {id}: the user decides whether Shoal pushes it, and the decision arrives as a message."
                     );

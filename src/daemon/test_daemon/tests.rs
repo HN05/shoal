@@ -180,7 +180,7 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
         .unwrap();
     let app = daemon.connector();
     let answer = |shown| QuestionMethod::AnswerQuestion {
-        id: question.id,
+        number: question.number,
         answer: "Postgres".into(),
         shown,
     };
@@ -220,7 +220,7 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
         .unwrap()
         .unwrap();
     let decide = |shown: Option<ApprovalRequest>| ApprovalMethod::DecideApproval {
-        id: pending.id,
+        number: pending.number,
         approve: true,
         shown: shown.map(Box::new),
         details: Default::default(),

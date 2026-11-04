@@ -450,7 +450,7 @@ impl Typed {
                 .iter()
                 .filter(|r| r.status == crate::daemon::approvals::DecisionStatus::Pending)
                 .map(|r| {
-                    CompletionCandidate::new(r.id.to_string())
+                    CompletionCandidate::new(r.number.to_string())
                         .help(Some(super::commands::approval_summary(r).into()))
                 })
                 .collect());
@@ -461,7 +461,7 @@ impl Typed {
             return Ok(questions
                 .iter()
                 .map(|q| {
-                    CompletionCandidate::new(q.id.to_string())
+                    CompletionCandidate::new(q.number.to_string())
                         .help(Some(super::commands::question_summary(q).into()))
                 })
                 .collect());

@@ -220,9 +220,10 @@ impl fmt::Display for Specification {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalRequest {
-    /// The number the user decides it by; reused once the request is deleted.
-    #[serde(default)]
-    pub id: i64,
+    /// The number the user decides it by, its space's and its own; reused
+    /// once the request is deleted.
+    #[serde(flatten)]
+    pub number: crate::client::item_numbers::ItemNumber,
     /// Stable identity behind the user-facing number, carried through displayed snapshots.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub key: String,
@@ -230,6 +231,9 @@ pub struct ApprovalRequest {
     pub space_id: String,
     #[serde(default)]
     pub space: String,
+    /// Whether the space is gone, which a proposed issue outlives.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub space_removed: bool,
     /// The repository that owns a proposed issue, which outlives the
     /// space that proposed it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -427,7 +431,7 @@ pub enum Duplicate {
     /// An issue number or URL in the same repository.
     Issue(String),
     /// Another pending issue proposal, by its number.
-    Approval(i64),
+    Approval(crate::client::item_numbers::ItemNumber),
 }
 
 impl ProposalDecision {

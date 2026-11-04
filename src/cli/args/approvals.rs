@@ -1,15 +1,15 @@
 //! Arguments of `shoal approvals`.
 use clap::{Args, Subcommand, ValueEnum};
 
-use crate::cli::args::BodyArgs;
+use crate::{cli::args::BodyArgs, client::item_numbers::ItemNumber};
 
 #[derive(Debug, Default, Args)]
 pub struct ApprovalsArgs {
-    /// Request number; omit to choose a request.
-    pub id: Option<i64>,
+    /// Request number, such as 3.2; omit to choose a request.
+    pub number: Option<ItemNumber>,
     /// List requests and grants for this space; a chat's are the requests
     /// it decides.
-    #[arg(long, conflicts_with_all = ["id", "approval_action"])]
+    #[arg(long, conflicts_with_all = ["number", "approval_action"])]
     pub space: Option<String>,
     /// Approve the recorded settings, or open a proposed issue or PR.
     #[arg(long, group = "approval_action")]
@@ -18,10 +18,10 @@ pub struct ApprovalsArgs {
     #[arg(long, group = "approval_action")]
     pub deny: bool,
     /// Pass a request routed to this space up to the space above it or the user.
-    #[arg(long, group = "approval_action", requires = "id")]
+    #[arg(long, group = "approval_action", requires = "number")]
     pub escalate: bool,
     /// Withdraw a request no longer needed.
-    #[arg(long, group = "approval_action", requires = "id")]
+    #[arg(long, group = "approval_action", requires = "number")]
     pub withdraw: bool,
     /// Replace a proposed issue's or PR's title.
     #[arg(long, requires = "approve")]
@@ -34,9 +34,10 @@ pub struct ApprovalsArgs {
     /// Deny an issue proposal as a duplicate of this issue number or URL.
     #[arg(long, requires = "deny", conflicts_with = "duplicate_of_approval")]
     pub duplicate_of: Option<String>,
-    /// Deny an issue proposal as a duplicate of another pending proposal.
+    /// Deny an issue proposal as a duplicate of another pending proposal,
+    /// by its number.
     #[arg(long, requires = "deny")]
-    pub duplicate_of_approval: Option<i64>,
+    pub duplicate_of_approval: Option<ItemNumber>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -44,11 +45,8 @@ pub struct ApprovalsArgs {
 pub enum ApprovalsCommand {
     /// Withdraw a pending request the space's agent no longer needs.
     Withdraw {
-        /// Request number.
-        id: i64,
-        /// Space whose request it is; defaults to the request's.
-        #[arg(long)]
-        space: Option<String>,
+        /// Request number, such as 3.2.
+        number: ItemNumber,
     },
 }
 

@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    item_numbers::ItemNumber,
     questions::Question,
     scope::{Caller, Scoped, inspect_owner},
     workspace::Manager,
@@ -17,10 +18,10 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        QuestionMethod::AwaitAnswer { space, id, ask } => {
+        QuestionMethod::AwaitAnswer { space, item, ask } => {
             let manager = manager.clone();
             return Ok(Answer::wait(async move {
-                let question = manager.await_answer(&space, id, &ask).await?;
+                let question = manager.await_answer(&space, item, &ask).await?;
                 Ok(Body::Question(question))
             }));
         }
@@ -49,18 +50,24 @@ pub(super) async fn handle(
         QuestionMethod::ListQuestions { space } => {
             Body::Questions(manager.questions(space.as_deref()).await?)
         }
-        QuestionMethod::ShowQuestion { id } => {
-            Body::Question(show_question(manager, caller, id).await?)
+        QuestionMethod::ShowQuestion { number } => {
+            Body::Question(show_question(manager, caller, number).await?)
         }
-        QuestionMethod::WithdrawQuestion { space, id, shown } => {
-            Body::Question(manager.withdraw_question(&space, id, shown).await?)
-        }
-        QuestionMethod::AcceptQuestionRecommendation { id, shown } => {
-            Body::Question(manager.accept_question_recommendation(id, shown).await?)
-        }
-        QuestionMethod::AnswerQuestion { id, answer, shown } => {
-            Body::Question(manager.answer_question(id, answer, shown).await?)
-        }
+        QuestionMethod::WithdrawQuestion {
+            space,
+            number,
+            shown,
+        } => Body::Question(manager.withdraw_question(&space, number, shown).await?),
+        QuestionMethod::AcceptQuestionRecommendation { number, shown } => Body::Question(
+            manager
+                .accept_question_recommendation(number, shown)
+                .await?,
+        ),
+        QuestionMethod::AnswerQuestion {
+            number,
+            answer,
+            shown,
+        } => Body::Question(manager.answer_question(number, answer, shown).await?),
     }))
 }
 
@@ -73,15 +80,15 @@ impl Scoped for QuestionMethod {
             | QuestionMethod::WithdrawQuestion { space, .. }
             | QuestionMethod::AwaitAnswer { space, .. } => Some(space),
             QuestionMethod::ListQuestions { space } => Some(caller.own_by_default(space)),
-            QuestionMethod::ShowQuestion { id } => {
-                show_question(manager, Some(caller), *id).await?;
+            QuestionMethod::ShowQuestion { number } => {
+                show_question(manager, Some(caller), *number).await?;
                 None
             }
-            QuestionMethod::AnswerQuestion { id, shown, .. }
-            | QuestionMethod::AcceptQuestionRecommendation { id, shown } => {
+            QuestionMethod::AnswerQuestion { number, shown, .. }
+            | QuestionMethod::AcceptQuestionRecommendation { number, shown } => {
                 *shown = Some(
                     manager
-                        .answerable_question(caller, *id, shown.take())
+                        .answerable_question(caller, *number, shown.take())
                         .await?,
                 );
                 None
@@ -90,8 +97,12 @@ impl Scoped for QuestionMethod {
     }
 }
 
-async fn show_question(manager: &Manager, caller: Option<&Caller>, id: i64) -> Result<Question> {
-    let question = manager.question(id).await?;
+async fn show_question(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    number: ItemNumber,
+) -> Result<Question> {
+    let question = manager.question(number).await?;
     inspect_owner(manager, caller, &question.space_id, "questions").await?;
     Ok(question)
 }

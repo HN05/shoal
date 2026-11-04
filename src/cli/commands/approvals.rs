@@ -18,6 +18,7 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Cell},
     },
+    client::item_numbers::ItemNumber,
     daemon::approvals::{
         ApprovalRequest, DecisionStatus, Specification,
         proposals::{Duplicate, ProposalDecision},
@@ -28,16 +29,16 @@ use crate::{
 pub(super) async fn run(ctx: &Context, args: ApprovalsArgs) -> Result<i32> {
     let details = decision_details(&args)?;
     if args.approve || args.deny {
-        return decide(ctx, args.id, args.approve, details).await;
+        return decide(ctx, args.number, args.approve, details).await;
     }
     ensure!(
         details == ProposalDecision::default(),
         "use --approve with a title or body"
     );
-    match args.id {
-        Some(id) if args.escalate => escalate(ctx, id, None).await,
-        Some(id) if args.withdraw => withdraw(ctx, None, id).await,
-        Some(id) => show(ctx, id).await,
+    match args.number {
+        Some(number) if args.escalate => escalate(ctx, number, None).await,
+        Some(number) if args.withdraw => withdraw(ctx, number).await,
+        Some(number) => show(ctx, number).await,
         None => list(ctx, args.space).await,
     }
 }
@@ -58,10 +59,13 @@ fn decision_details(args: &ApprovalsArgs) -> Result<ProposalDecision> {
     })
 }
 
-async fn show(ctx: &Context, id: i64) -> Result<i32> {
-    let request =
-        request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ShowApproval { id }).await?;
-    show_request(ctx, request).await
+async fn show(ctx: &Context, number: ItemNumber) -> Result<i32> {
+    show_request(ctx, numbered(ctx, number).await?).await
+}
+
+/// The request `number`.
+async fn numbered(ctx: &Context, number: ItemNumber) -> Result<Box<ApprovalRequest>> {
+    request(&ctx.paths, ApprovalMethod::ShowApproval { number }).await
 }
 
 pub(super) async fn show_request(ctx: &Context, request: Box<ApprovalRequest>) -> Result<i32> {
@@ -81,7 +85,7 @@ async fn prompt_decision(ctx: &Context, request: Box<ApprovalRequest>) -> Result
     let approve = prompt_decision_answer(ctx)?;
     submit(
         ctx,
-        request.id,
+        request.number,
         approve,
         Some(request),
         ProposalDecision::default(),
@@ -124,7 +128,7 @@ fn print_request(request: &ApprovalRequest) {
 /// needs to decide it, and a proposal's description below them.
 fn print_details(ctx: &Context, request: &ApprovalRequest) {
     let palette = Palette::stdout(ctx.json);
-    let heading = format!("Approval {}: {}", request.id, request.subject());
+    let heading = format!("Approval {}: {}", request.number, request.subject());
     outln!("{}", palette.paint(Style::Heading, heading));
     for line in ui::aligned(detail_rows(request), palette) {
         outln!("  {line}");
@@ -149,7 +153,7 @@ fn detail_rows(request: &ApprovalRequest) -> Vec<[Cell; 2]> {
     if request.status != DecisionStatus::Pending {
         row("Status", request.status.to_string());
     }
-    row("Space", request.space.clone());
+    row("Space", space_label(request));
     row("Reason", request.reason.clone());
     match proposed_labels(request) {
         Some(labels) => row("Labels", labels.join(", ")),
@@ -211,58 +215,62 @@ fn settings(specification: &Specification) -> String {
 /// given. Only proposals take `details`.
 pub(super) async fn decide(
     ctx: &Context,
-    id: Option<i64>,
+    number: Option<ItemNumber>,
     approve: bool,
     details: ProposalDecision,
 ) -> Result<i32> {
     ensure_scope_token(ctx)?;
     // Refused before the picker asks which request.
     details.check(approve)?;
-    let (id, shown) = match id {
-        Some(id) => (id, None),
+    let (number, shown) = match number {
+        Some(number) => (number, None),
         // Workspace processes decide only the requests routed to them, by number.
         None if crate::env::inherits_scope(&ctx.paths.state) => {
             anyhow::bail!(
-                "workspace processes decide by number: shoal approvals <number> --approve"
+                "workspace processes decide by number: shoal approvals SPACE.ITEM --approve"
             )
         }
         None => {
             let picked = picker::pick_pending(ctx).await?;
-            (picked.id, Some(Box::new(picked)))
+            (picked.number, Some(Box::new(picked)))
         }
     };
-    submit(ctx, id, approve, shown, details).await
+    submit(ctx, number, approve, shown, details).await
 }
 
-/// Approve or deny the pending request `id` created at `created_at`, as a
-/// list showed it: refuse one that replaced it, and ask which with what it
-/// grants in view.
-pub(super) async fn decide_listed(ctx: &Context, id: i64, created_at: u64) -> Result<i32> {
+/// Approve or deny the pending request `number` created at `created_at`,
+/// as a list showed it: refuse one that replaced it, and ask which with
+/// what it grants in view.
+pub(super) async fn decide_listed(
+    ctx: &Context,
+    number: ItemNumber,
+    created_at: u64,
+) -> Result<i32> {
     ensure_scope_token(ctx)?;
     let request = list_requests(ctx, None)
         .await?
         .into_iter()
         .find(|request| {
-            request.id == id
+            request.number == number
                 && request.created_at == created_at
                 && request.status == DecisionStatus::Pending
         })
-        .with_context(|| format!("approval request {id} changed since it was listed"))?;
+        .with_context(|| format!("approval request {number} changed since it was listed"))?;
     prompt_decision(ctx, Box::new(request)).await
 }
 
-/// Send the decision on request `id`, which `shown` names when the user
-/// chose it from a list, so a request reusing its number is refused. Only
-/// proposals take `details`.
+/// Send the decision on request `number`, which `shown` names when the
+/// user chose it from a list, so a request reusing its number is refused.
+/// Only proposals take `details`.
 pub(super) async fn submit(
     ctx: &Context,
-    id: i64,
+    number: ItemNumber,
     approve: bool,
     shown: Option<Box<ApprovalRequest>>,
     details: ProposalDecision,
 ) -> Result<i32> {
     let method = ApprovalMethod::DecideApproval {
-        id,
+        number,
         approve,
         shown,
         details,
@@ -288,12 +296,20 @@ pub(super) async fn submit(
 
 /// Pass a request routed to this space up to the space above it, or to the
 /// user.
-async fn escalate(ctx: &Context, id: i64, shown: Option<Box<ApprovalRequest>>) -> Result<i32> {
+async fn escalate(
+    ctx: &Context,
+    number: ItemNumber,
+    shown: Option<Box<ApprovalRequest>>,
+) -> Result<i32> {
     ensure_scope_token(ctx)?;
     let space = ui::select_space(ctx, None, ui::Fallback::OwnWorkspace).await?;
     let request = request::<Box<ApprovalRequest>>(
         &ctx.paths,
-        ApprovalMethod::EscalateApproval { space, id, shown },
+        ApprovalMethod::EscalateApproval {
+            space,
+            number,
+            shown,
+        },
     )
     .await?;
     let decider = match &request.decider {
@@ -301,7 +317,7 @@ async fn escalate(ctx: &Context, id: i64, shown: Option<Box<ApprovalRequest>>) -
         None => "the user",
     };
     ctx.emit(
-        &format!("Passed approval {} to {decider}", request.id),
+        &format!("Passed approval {} to {decider}", request.number),
         &request,
     )?;
     Ok(0)
@@ -316,18 +332,12 @@ pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-/// Withdraw the workspace's pending request `id`, which its agent no longer needs.
-pub(super) async fn withdraw(ctx: &Context, space: Option<String>, id: i64) -> Result<i32> {
-    let space = match space {
-        Some(space) => space,
-        None => request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ShowApproval { id })
-            .await?
-            .space_id
-            .clone(),
-    };
-    let request =
-        request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::WithdrawApproval { space, id })
-            .await?;
+/// Withdraw the space's pending request `number`, which its agent no
+/// longer needs.
+pub(super) async fn withdraw(ctx: &Context, number: ItemNumber) -> Result<i32> {
+    let space = numbered(ctx, number).await?.space_id;
+    let method = ApprovalMethod::WithdrawApproval { space, number };
+    let request = request::<Box<ApprovalRequest>>(&ctx.paths, method).await?;
     ctx.emit(&outcome(&request), &request)?;
     Ok(0)
 }
@@ -367,7 +377,7 @@ pub(in crate::cli) fn about(request: &ApprovalRequest) -> String {
 fn outcome(request: &ApprovalRequest) -> String {
     format!(
         "Approval {} {}: {}",
-        request.id,
+        request.number,
         request.status,
         request.subject()
     )
@@ -393,11 +403,19 @@ fn describe(request: &ApprovalRequest) -> String {
     };
     format!(
         "{} [{}] {} in space {}{reason}",
-        request.id,
+        request.number,
         request.status,
         request.subject(),
-        request.space,
+        space_label(request),
     )
+}
+
+/// The space that made the request, by name, marked once removed.
+pub(in crate::cli) fn space_label(request: &ApprovalRequest) -> String {
+    match request.space_removed {
+        true => format!("{} (removed)", request.space),
+        false => request.space.clone(),
+    }
 }
 
 /// The lines below a request in a listing: a proposal's labels and

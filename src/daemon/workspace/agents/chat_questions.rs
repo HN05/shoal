@@ -99,7 +99,7 @@ impl Manager {
         &self,
         selector: &str,
         execution: Option<&str>,
-    ) -> Result<Vec<i64>> {
+    ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
         let turn = self.marked_turn(selector, execution).await?;
         self.close_chat_questions(selector, turn).await
     }

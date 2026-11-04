@@ -41,14 +41,14 @@ pub(in crate::cli::commands) async fn run(
             };
             // Clap requires a space with --resume.
             match (space.or(handed_over), resume) {
-                (Some(space), Some(id)) => questions::resume(&ctx, space, id, ask).await,
+                (Some(space), Some(item)) => questions::resume(&ctx, space, item, ask).await,
                 (space, _) => questions::ask(&ctx, space, ask, attach, wait).await,
             }
         }
         CoordinationCommand::Questions {
-            command: Some(QuestionsCommand::Withdraw { id, space }),
+            command: Some(QuestionsCommand::Withdraw { number }),
             ..
-        } => questions::withdraw(&ctx, space, id).await,
+        } => questions::withdraw(&ctx, number).await,
         CoordinationCommand::Questions {
             command: None,
             args,

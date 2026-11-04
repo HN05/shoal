@@ -6,6 +6,7 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     approvals::ApprovalRequest,
+    item_numbers::ItemNumber,
     scope::{Caller, Scoped, denied, inspect_owner},
     workspace::Manager,
 };
@@ -20,24 +21,31 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        ApprovalMethod::WithdrawApproval { space, id } => {
-            Body::ApprovalRequest(Box::new(manager.withdraw_approval(&space, id).await?))
+        ApprovalMethod::WithdrawApproval { space, number } => {
+            Body::ApprovalRequest(Box::new(manager.withdraw_approval(&space, number).await?))
         }
         ApprovalMethod::ListApprovals { space } => {
             Body::ApprovalRequests(manager.approval_requests(space.as_deref()).await?)
         }
-        ApprovalMethod::ShowApproval { id } => {
-            Body::ApprovalRequest(Box::new(show_approval(manager, caller, id).await?))
+        ApprovalMethod::ShowApproval { number } => {
+            Body::ApprovalRequest(Box::new(show_approval(manager, caller, number).await?))
         }
         ApprovalMethod::DecideApproval {
-            id,
+            number,
             approve,
             shown,
             details,
             env,
         } => Body::ApprovalRequest(Box::new(
             manager
-                .decide_approval_as(caller, id, approve, shown.map(|shown| *shown), details, env)
+                .decide_approval_as(
+                    caller,
+                    number,
+                    approve,
+                    shown.map(|shown| *shown),
+                    details,
+                    env,
+                )
                 .await?,
         )),
         ApprovalMethod::BranchPush { workspace } => Body::BranchPush(BranchPush {
@@ -49,9 +57,13 @@ pub(super) async fn handle(
         ApprovalMethod::FinishPush { key, failure } => {
             Body::ApprovalRequest(Box::new(manager.finish_approved_push(&key, failure).await?))
         }
-        ApprovalMethod::EscalateApproval { space, id, shown } => Body::ApprovalRequest(Box::new(
+        ApprovalMethod::EscalateApproval {
+            space,
+            number,
+            shown,
+        } => Body::ApprovalRequest(Box::new(
             manager
-                .escalate_approval(&space, id, shown.map(|shown| *shown))
+                .escalate_approval(&space, number, shown.map(|shown| *shown))
                 .await?,
         )),
     }))
@@ -61,12 +73,12 @@ impl Scoped for ApprovalMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             ApprovalMethod::ListApprovals { space } => Some(caller.own_by_default(space)),
-            ApprovalMethod::ShowApproval { id } => {
-                show_approval(manager, Some(caller), *id).await?;
+            ApprovalMethod::ShowApproval { number } => {
+                show_approval(manager, Some(caller), *number).await?;
                 None
             }
-            ApprovalMethod::DecideApproval { id, shown, .. } => {
-                shown.get_or_insert(Box::new(manager.routed_approval(caller, *id).await?));
+            ApprovalMethod::DecideApproval { number, shown, .. } => {
+                shown.get_or_insert(Box::new(manager.routed_approval(caller, *number).await?));
                 None
             }
             ApprovalMethod::EscalateApproval { space, .. } => Some(
@@ -91,9 +103,9 @@ impl Scoped for ApprovalMethod {
 async fn show_approval(
     manager: &Manager,
     caller: Option<&Caller>,
-    id: i64,
+    number: ItemNumber,
 ) -> Result<ApprovalRequest> {
-    let request = manager.show_approval(id).await?;
+    let request = manager.show_approval(number).await?;
     inspect_owner(manager, caller, &request.space_id, "approval requests").await?;
     Ok(request)
 }

@@ -11,7 +11,7 @@ use anyhow::{Context as _, Result, ensure};
 use clap::ValueEnum;
 
 use super::{inbox::Inbox, listing::ListFilter};
-use crate::client::output::inbox::Item;
+use crate::client::{item_numbers::ItemNumber, output::inbox::Item};
 use crate::{
     cli::{
         Command, agents,
@@ -207,13 +207,13 @@ impl View {
 enum Row {
     /// A question by its number, of a workspace or chat.
     Question {
-        id: i64,
+        number: ItemNumber,
         space: String,
     },
     /// A request by its number and when it was made, since a later request
     /// may reuse the number.
     Approval {
-        id: i64,
+        number: ItemNumber,
         created_at: u64,
         workspace: String,
     },
@@ -246,11 +246,11 @@ impl Row {
         let space = item.space_id().to_owned();
         match item {
             Item::Question { question } => Self::Question {
-                id: question.id,
+                number: question.number,
                 space,
             },
             Item::Approval { request } => Self::Approval {
-                id: request.id,
+                number: request.number,
                 created_at: request.created_at,
                 workspace: space,
             },
@@ -276,12 +276,12 @@ impl Row {
     /// last since it holds colons itself; a workspace row is its ID.
     fn id(&self) -> String {
         match self {
-            Self::Question { id, space } => format!("question:{space}:{id}"),
+            Self::Question { number, space } => format!("question:{space}:{number}"),
             Self::Approval {
-                id,
+                number,
                 created_at,
                 workspace,
-            } => format!("approval:{workspace}:{id}:{created_at}"),
+            } => format!("approval:{workspace}:{number}:{created_at}"),
             Self::NeedsInput(workspace) => format!("needs-input:{workspace}"),
             Self::Failed(workspace) => format!("failed:{workspace}"),
             Self::Ready { space, url } => {
@@ -321,14 +321,14 @@ impl Row {
         let number = || detail.parse().context("picker returned an invalid row");
         Ok(match kind {
             "question" => Self::Question {
-                id: number()?,
+                number: number()?,
                 space,
             },
             "approval" => {
-                let (id, created_at) = detail.split_once(':').unwrap_or((detail, ""));
+                let (number, created_at) = detail.split_once(':').unwrap_or((detail, ""));
                 let invalid = || anyhow::anyhow!("picker returned an invalid row");
                 Self::Approval {
-                    id: id.parse().map_err(|_| invalid())?,
+                    number: number.parse().map_err(|_| invalid())?,
                     created_at: created_at.parse().map_err(|_| invalid())?,
                     workspace: space,
                 }
@@ -648,16 +648,18 @@ async fn chat_command(ctx: &Context, key: Key, chat: String) -> Result<Command> 
 /// show the daemon's status for failing cleanup, or enter a workspace.
 async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     Ok(Choice::Run(Box::new(match row {
-        Row::Question { id, .. } => Command::Coordination(CoordinationCommand::Questions {
+        Row::Question { number, .. } => Command::Coordination(CoordinationCommand::Questions {
             command: None,
             args: QuestionsArgs {
-                id: Some(id),
+                number: Some(number),
                 ..Default::default()
             },
         }),
-        Row::Approval { id, created_at, .. } => {
+        Row::Approval {
+            number, created_at, ..
+        } => {
             return Ok(Choice::Done(
-                super::approvals::decide_listed(ctx, id, created_at).await?,
+                super::approvals::decide_listed(ctx, number, created_at).await?,
             ));
         }
         Row::NeedsInput(workspace) => Command::Sessions(SessionsCommand::Attach {

@@ -59,7 +59,7 @@ async fn scoped_merge_answers_with_its_approval_request() {
     assert!(
         notifications
             .iter()
-            .any(|n| n.message.contains(&format!("approval {}:", request.id))),
+            .any(|n| n.message.contains(&format!("approval {}:", request.number))),
         "{notifications:?}"
     );
 }
