@@ -405,7 +405,7 @@ impl Zellij {
             .act(session, None, || self.new_tab(session, shell))
             .await
             .context("open a Zellij tab")?;
-        let tab = printed_tab(&printed)?;
+        let tab = printed_tab(&printed, &before);
         let pane = self
             .new_pane(session, |pane| opened_tab(pane, tab, shell.label, &before))
             .await
@@ -911,21 +911,27 @@ fn parse_panes(listed: &str) -> Result<Vec<Pane>> {
 
 /// Whether `listed`, what `list-panes --json` printed, lists a pane. A
 /// session lists none before it lays out its first tab, and a busy one can
-/// list none, though every tab holds a pane or its layout's plugins. What is
-/// no JSON array counts, so that reading it reports it.
+/// list none, though every tab holds a pane or its layout's plugins. A
+/// number is the answer to another command, such as the tab `new-tab`
+/// opened: Zellij can hand a command the answer to one that returned
+/// before it. What is no JSON counts, so that reading it reports it.
 fn lists_panes(listed: &str) -> bool {
-    !listed.trim().is_empty()
-        && serde_json::from_str::<Vec<serde::de::IgnoredAny>>(listed)
-            .map_or(true, |panes| !panes.is_empty())
+    match serde_json::from_str::<serde_json::Value>(listed) {
+        Ok(serde_json::Value::Array(panes)) => !panes.is_empty(),
+        Ok(serde_json::Value::Number(_)) => false,
+        Ok(_) => true,
+        Err(_) => !listed.trim().is_empty(),
+    }
 }
 
-/// The tab `zellij action new-tab` printed; none when it printed nothing,
-/// as Zellij can under load once the tab is open.
-fn printed_tab(printed: &str) -> Result<Option<u64>> {
-    match printed.trim() {
-        "" => Ok(None),
-        tab => Ok(Some(tab.parse().context("invalid Zellij tab")?)),
-    }
+/// The tab `zellij action new-tab` printed, unless `before`, the session's
+/// panes before it, lists that tab: a server never reuses a tab's number.
+/// Under load Zellij can print nothing once the tab is open, or the answer
+/// to an earlier command, which it hands to the next one when that command
+/// returned before it.
+fn printed_tab(printed: &str, before: &[Pane]) -> Option<u64> {
+    let tab = printed.trim().parse().ok()?;
+    (!before.iter().any(|old| old.tab == tab)).then_some(tab)
 }
 
 /// Whether `pane` is the terminal a new tab opened: in `tab`, which Zellij
@@ -939,10 +945,12 @@ fn opened_tab(pane: &Pane, tab: Option<u64>, label: &str, before: &[Pane]) -> bo
 }
 
 /// Whether `pane` is the terminal a split of `beside` opened: `printed`,
-/// the pane Zellij printed, or else one `before` did not list in the tab of
-/// `beside`.
+/// the pane Zellij printed, unless `before` lists it, or else one `before`
+/// did not list in the tab of `beside`. Under load Zellij can print nothing
+/// once the pane is open, or the answer to an earlier command; see
+/// [`printed_tab`].
 fn opened_split(pane: &Pane, printed: &str, beside: &str, before: &[Pane]) -> bool {
-    if !printed.is_empty() {
+    if printed.starts_with("terminal_") && !before.iter().any(|old| old.id == printed) {
         return pane.id == printed;
     }
     let tab = before

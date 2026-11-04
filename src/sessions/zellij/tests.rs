@@ -114,9 +114,11 @@ fn a_pane_opened_without_an_answer_is_the_new_one_in_its_tab() {
     let other = pane("terminal_1", 1, "placed");
     let before = [users.clone(), other.clone()];
     let tab = pane("terminal_2", 2, "placed");
-    assert_eq!(printed_tab("2\n").unwrap(), Some(2));
-    assert_eq!(printed_tab("").unwrap(), None);
-    assert!(printed_tab("x").is_err());
+    assert_eq!(printed_tab("2\n", &before), Some(2));
+    assert_eq!(printed_tab("", &before), None);
+    // Another command's answer: a tab listed before, or no tab at all.
+    assert_eq!(printed_tab("1\n", &before), None);
+    assert_eq!(printed_tab("[]", &before), None);
     assert!(opened_tab(&tab, Some(2), "placed", &before));
     assert!(!opened_tab(&other, Some(2), "placed", &before));
     // Without the tab Zellij printed, the new pane in a tab of that name.
@@ -127,6 +129,9 @@ fn a_pane_opened_without_an_answer_is_the_new_one_in_its_tab() {
     let split = pane("terminal_3", 0, "Tab #1");
     assert!(opened_split(&split, "terminal_3", "terminal_0", &before));
     assert!(!opened_split(&tab, "terminal_3", "terminal_0", &before));
+    // Another command's answer: a pane listed before, or no pane at all.
+    assert!(opened_split(&split, "terminal_1", "terminal_0", &before));
+    assert!(opened_split(&split, "2", "terminal_0", &before));
     // Without the pane Zellij printed, the new pane in the split's tab.
     assert!(opened_split(&split, "", "terminal_0", &before));
     assert!(!opened_split(&users, "", "terminal_0", &before));
@@ -239,6 +244,8 @@ fn a_pane_listing_without_panes_is_no_answer() {
     assert!(lists_panes(
         r#"[{"id": 0, "is_plugin": false, "tab_id": 0}]"#
     ));
+    // The tab an earlier `new-tab` opened, which Zellij handed this listing.
+    assert!(!lists_panes("1\n"));
     assert!(lists_panes("not a listing"));
 }
 
