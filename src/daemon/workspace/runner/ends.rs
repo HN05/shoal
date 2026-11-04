@@ -16,6 +16,8 @@ use crate::{
     },
     forge::{ForgeRepo, ci::CiAction},
     model::QueuedJob,
+    process::identity::{self, Identity},
+    state::ExecutionState,
     state::{QueueKind, QueueState},
 };
 
@@ -69,7 +71,10 @@ impl Manager {
     pub(crate) async fn finish_ended_jobs(&self) -> Result<()> {
         for job in self.claimed_jobs().await? {
             let running = match &job.execution_id {
-                Some(execution) => self.execution_recorded(execution).await?,
+                Some(execution) => {
+                    self.job_execution_runs(&job.workspace_id, execution)
+                        .await?
+                }
                 None if self.runners.claiming(&job.id) => true,
                 None => self.adopt_job_execution(&job).await?,
             };
@@ -203,6 +208,35 @@ impl Manager {
             .act_on_run(&account, &run, CiAction::Cancel, false)
             .await?;
         Ok(())
+    }
+
+    /// Whether the execution `id` of a job in `workspace_id` may still run.
+    /// One whose wrapper has not reattached since a daemon restart counts as
+    /// ended, and is forgotten, once neither the wrapper nor the runner it
+    /// started is alive: a job's runner has no agent record that restart
+    /// recovery would settle.
+    async fn job_execution_runs(&self, workspace_id: &str, id: &str) -> Result<bool> {
+        let execution = self
+            .workspace_executions(workspace_id)
+            .await?
+            .into_iter()
+            .find(|execution| execution.id == id);
+        let Some(execution) = execution else {
+            return Ok(false);
+        };
+        if execution.state != ExecutionState::Unknown {
+            return Ok(true);
+        }
+        let alive = |identity: &Option<Identity>| {
+            identity
+                .as_ref()
+                .is_some_and(|identity| identity::alive(identity).unwrap_or(true))
+        };
+        if alive(&execution.wrapper) || alive(&execution.child) {
+            return Ok(true);
+        }
+        self.forget_execution(id).await?;
+        Ok(false)
     }
 
     /// Whether the daemon still records the execution `id`, running or

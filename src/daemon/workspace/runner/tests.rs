@@ -694,3 +694,37 @@ async fn the_sweep_keeps_the_directory_of_a_recorded_claim() {
     assert!(manager.job_directory(&claimed[0].id).join("token").exists());
     assert!(!stray.exists());
 }
+
+#[tokio::test]
+async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "unused", "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.claimed_jobs().await.unwrap();
+    LAUNCHED.lock().unwrap().remove(&claimed[0].workspace_id);
+    let execution = claimed[0].execution_id.clone().unwrap();
+    let mark = |wrapper: Option<String>| {
+        let execution = execution.clone();
+        manager.store.run(move |db| {
+            db.execute(
+                "UPDATE executions SET state='unknown',wrapper=?2 WHERE id=?1",
+                rusqlite::params![execution, wrapper],
+            )?;
+            Ok(())
+        })
+    };
+    // A wrapper still alive may reattach, so the job keeps running.
+    let alive = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    mark(Some(serde_json::to_string(&alive).unwrap()))
+        .await
+        .unwrap();
+    manager.finish_ended_jobs().await.unwrap();
+    assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);
+    // Once neither the wrapper nor the runner is alive, the job ends here.
+    mark(None).await.unwrap();
+    manager.finish_ended_jobs().await.unwrap();
+    assert!(manager.claimed_jobs().await.unwrap().is_empty());
+    assert!(manager.workspace(&claimed[0].workspace_id).await.is_err());
+}
