@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::{ErrorCode, Lifetime};
+use super::{CreationOptions, ErrorCode, Lifetime, PullHead};
 use crate::{
     client::{
         approvals::{ApprovalRequest, DecisionStatus},
@@ -33,16 +33,30 @@ pub enum OperationMethod {
     /// Interrupt operation `id`'s worker, as an interrupt of the command
     /// that ran its work did.
     CancelOperation { id: String },
-    /// Create a workspace in `repository` and start preparing it, as `shoal
-    /// add` does: refuse an agent that cannot run there or an issue that is
-    /// not open before anything is created, assign the issue, then run
-    /// setup, link `pr` and queue `agent`. Answers with
+    /// Open a workspace in `repository` where `start` says and start
+    /// preparing it, as `shoal add` does: refuse an agent that cannot run
+    /// there or an issue that is not open before anything is created, assign
+    /// the issue, then run setup, link `pr` and queue `agent`, with `env` as
+    /// [`Self::StartOperation`] takes it. Answers with
     /// [`super::Body::WorkspaceStarted`].
     StartWorkspace {
-        repository: String,
-        name: String,
+        repository: crate::client::repository::Selector,
+        #[serde(flatten)]
+        start: WorkspaceStart,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base: Option<String>,
+        /// Where the worktree of a workspace on a branch goes.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<std::path::PathBuf>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        git_profile: Option<String>,
+        /// The space opening the workspace, which it goes below; `None`
+        /// gives it to the user.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent: Option<String>,
+        /// Apply only when the workspace is new.
+        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
+        options: CreationOptions,
         /// An issue number or URL of the repository.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         issue: Option<String>,
@@ -50,6 +64,8 @@ pub enum OperationMethod {
         pr: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<QueuedLaunch>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        env: Option<BTreeMap<String, String>>,
     },
     /// Split a child from `workspace` and start preparing it, as `shoal
     /// split` does, with the checks of [`Self::StartWorkspace`].
@@ -58,10 +74,14 @@ pub enum OperationMethod {
         name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base: Option<String>,
+        #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
+        options: CreationOptions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         issue: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<QueuedLaunch>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        env: Option<BTreeMap<String, String>>,
     },
     /// The worker's report of a step of operation `id`, or of its end.
     ReportProgress { id: String, report: Report },
@@ -82,11 +102,27 @@ pub struct Started {
     pub id: String,
 }
 
-/// An operation preparing a new workspace, and the workspace as it began.
+/// Where a workspace [`OperationMethod::StartWorkspace`] opens starts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceStart {
+    /// A new branch of this name, from the request's `base`.
+    Name(String),
+    /// An existing branch, local or remote, reopening the workspace on it.
+    Branch(String),
+    /// PR `url`'s head, at a commit, reopening the workspace made for the
+    /// PR; it takes no base, path or Git profile.
+    PullHead { url: String, head: PullHead },
+}
+
+/// An operation preparing a workspace a request opened, and the workspace
+/// as it began: a new one, or with `reused` one it reopened.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartedWorkspace {
     pub operation: String,
     pub workspace: Box<Workspace>,
+    #[serde(default)]
+    pub reused: bool,
 }
 
 /// What the daemon hands an operation's worker on its standard input.

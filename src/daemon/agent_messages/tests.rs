@@ -256,7 +256,7 @@ async fn a_repository_message_reaches_its_running_agents_and_chats_below_the_sen
     let (temp, manager) = manager().await;
     let parent = workspace(&temp, &manager, "parent").await;
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let sibling = manager

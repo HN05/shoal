@@ -225,7 +225,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     for (token, workspace) in [("parent", &parent), ("child", &child)] {

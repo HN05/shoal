@@ -43,12 +43,17 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
         .await
         .unwrap();
     let middle = manager
-        .split_workspace(&root.name, "middle".into(), None)
+        .split_workspace(&root.name, "middle".into(), None, Default::default())
         .await
         .unwrap();
     // A base naming the parent's branch stacks the child on it too.
     let leaf = manager
-        .split_workspace(&middle.id, "leaf".into(), Some("middle".into()))
+        .split_workspace(
+            &middle.id,
+            "leaf".into(),
+            Some("middle".into()),
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_eq!(middle.parent, Some(space(&root)));
@@ -136,7 +141,7 @@ async fn a_child_that_cannot_go_retains_its_parent() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     manager
@@ -173,7 +178,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     manager
@@ -206,7 +211,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         assert_eq!(authorized.is_ok(), allowed, "{target}");
     }
     let grandchild = manager
-        .split_workspace(&child.id, "grandchild".into(), None)
+        .split_workspace(&child.id, "grandchild".into(), None, Default::default())
         .await
         .unwrap();
     let mut done = AssignmentMethod::MarkDone {
@@ -235,7 +240,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     manager
@@ -296,7 +301,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         .await
         .unwrap();
     let grandchild = manager
-        .split_workspace(&child.id, "grandchild".into(), None)
+        .split_workspace(&child.id, "grandchild".into(), None, Default::default())
         .await
         .unwrap();
     manager
@@ -348,11 +353,11 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let grandchild = manager
-        .split_workspace(&child.id, "grandchild".into(), None)
+        .split_workspace(&child.id, "grandchild".into(), None, Default::default())
         .await
         .unwrap();
     manager
@@ -454,7 +459,7 @@ async fn workspace_processes_list_their_subtree_with_their_own_workspace_first()
     create("sibling").await.unwrap();
     // The child sorts before its parent by name.
     manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let names = |workspaces: Vec<Workspace>| {
@@ -486,7 +491,7 @@ async fn children_never_keep_their_parent_and_go_with_it() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     manager
@@ -577,7 +582,7 @@ async fn a_parent_reserved_for_removal_refuses_splits() {
         .await
         .unwrap();
     let error = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap_err();
     assert!(
@@ -613,7 +618,7 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let chat = manager
@@ -714,11 +719,11 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let helper = manager
-        .split_workspace(&parent.id, "helper".into(), None)
+        .split_workspace(&parent.id, "helper".into(), None, Default::default())
         .await
         .unwrap();
     let user = || async {
@@ -793,7 +798,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     for workspace in [&parent, &child] {
@@ -885,7 +890,7 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     // Custom and Happy agents report no turn state; the daemon tracks them.
@@ -947,7 +952,7 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let started = manager
@@ -995,7 +1000,7 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let ask = |question: &str| Ask {
@@ -1066,7 +1071,7 @@ async fn a_launch_reopens_only_its_recorded_workspace() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let opened = manager.reopen_workspace(&child.id).await.unwrap();
@@ -1099,11 +1104,11 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .await
         .unwrap();
     let parent = manager
-        .split_workspace(&root.id, "parent".into(), None)
+        .split_workspace(&root.id, "parent".into(), None, Default::default())
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     for workspace in [&root, &parent, &child] {
@@ -1296,11 +1301,11 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
         .await
         .unwrap();
     let parent = manager
-        .split_workspace(&root.id, "parent".into(), None)
+        .split_workspace(&root.id, "parent".into(), None, Default::default())
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     for workspace in [&root, &parent, &child] {
@@ -1590,7 +1595,7 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&root.id, "child".into(), None)
+        .split_workspace(&root.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     manager
@@ -1698,7 +1703,7 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     for workspace in [&parent, &child] {
@@ -1847,7 +1852,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     for workspace in [&parent, &child] {
@@ -1978,7 +1983,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let other = manager
@@ -2104,7 +2109,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     for workspace in [&parent, &child] {
@@ -2245,7 +2250,7 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let check = manager
@@ -2257,7 +2262,7 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
     // Splits after the confirmation, directly or below a confirmed child,
     // keep the whole tree.
     let late = manager
-        .split_workspace(&child.id, "late".into(), None)
+        .split_workspace(&child.id, "late".into(), None, Default::default())
         .await
         .unwrap();
     let error = manager

@@ -96,7 +96,7 @@ pub(super) async fn handle(
             options,
         } => Body::Workspace(
             manager
-                .split_workspace_with(&workspace, name, base, options)
+                .split_workspace(&workspace, name, base, options)
                 .await?,
         ),
         WorkspaceMethod::CheckCreation {

@@ -27,19 +27,9 @@ const TAKEN_FIRST: &str = "(SELECT space_id,parent_id FROM space_parents
 
 impl Manager {
     /// Create a workspace on a new branch named `name` in `parent`'s
-    /// repository and record `parent` as its parent.
-    pub async fn split_workspace(
-        &self,
-        parent: &str,
-        name: String,
-        base: Option<String>,
-    ) -> Result<Workspace> {
-        self.split_workspace_with(parent, name, base, Default::default())
-            .await
-    }
-
-    /// [`Self::split_workspace`] leaving out what `options` say.
-    pub(crate) async fn split_workspace_with(
+    /// repository, leaving out what `options` say, and record `parent` as
+    /// its parent.
+    pub(crate) async fn split_workspace(
         &self,
         parent: &str,
         name: String,

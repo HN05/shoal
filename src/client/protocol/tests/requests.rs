@@ -241,6 +241,19 @@ fn every_request_keeps_its_json() {
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
 
+/// Where a started workspace starts sits beside the request's other fields,
+/// so an app's request for a new branch keeps its JSON.
+#[test]
+fn a_workspace_start_keeps_its_json() {
+    for wire in [
+        r#"{"start_workspace":{"repository":"app","branch":"origin/fix","path":"/work/fix","git_profile":"work"}}"#,
+        r#"{"start_workspace":{"repository":"app","pull_head":{"url":"https://example.com/pulls/7","head":{"number":7,"reference":"refs/pull/7/head","commit":"abc"}},"parent":"c1","options":{"skip_setup":true,"disposable":false},"pr":"7","env":{"PATH":"/bin"}}}"#,
+    ] {
+        let method: Method = serde_json::from_str(wire).unwrap();
+        assert_eq!(serde_json::to_string(&method).unwrap(), wire);
+    }
+}
+
 #[test]
 fn every_request_has_its_json_above() {
     let sampled: BTreeSet<String> = REQUESTS

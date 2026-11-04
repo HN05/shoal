@@ -811,7 +811,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
         let manager = manager.clone();
         async move {
             manager
-                .split_workspace(&parent, name.into(), None)
+                .split_workspace(&parent, name.into(), None, Default::default())
                 .await
                 .unwrap()
         }
@@ -915,7 +915,7 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     let (_root, manager, parent) = fixture().await;
     commit_file(&parent.path, "parent-work");
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     // Without cleanup the completion leaves them.
@@ -966,7 +966,7 @@ fn commit_file(path: &std::path::Path, name: &str) {
 async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cleanup() {
     let (_root, manager, parent) = fixture().await;
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let other = manager
@@ -1101,7 +1101,7 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
         .await
         .unwrap();
     let split = manager
-        .split_workspace(&root.id, "split".into(), None)
+        .split_workspace(&root.id, "split".into(), None, Default::default())
         .await
         .unwrap();
     manager

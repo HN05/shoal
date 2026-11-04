@@ -1151,7 +1151,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     // Without a limit the daemon still starts it rather than the caller.
@@ -1199,7 +1199,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     manager

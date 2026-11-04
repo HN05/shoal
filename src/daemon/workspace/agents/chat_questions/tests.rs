@@ -258,7 +258,7 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let execution = manager

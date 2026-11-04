@@ -515,7 +515,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
     let (temp, manager) = manager().await;
     let parent = workspace(&temp, &manager).await;
     let child = manager
-        .split_workspace(&parent.id, "audit".into(), None)
+        .split_workspace(&parent.id, "audit".into(), None, Default::default())
         .await
         .unwrap();
     let report = temp.path().join("report.md");
@@ -607,11 +607,11 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
     let (temp, manager) = manager().await;
     let top = workspace(&temp, &manager).await;
     let middle = manager
-        .split_workspace(&top.id, "middle".into(), None)
+        .split_workspace(&top.id, "middle".into(), None, Default::default())
         .await
         .unwrap();
     let bottom = manager
-        .split_workspace(&middle.id, "bottom".into(), None)
+        .split_workspace(&middle.id, "bottom".into(), None, Default::default())
         .await
         .unwrap();
     let report = temp.path().join("report.md");

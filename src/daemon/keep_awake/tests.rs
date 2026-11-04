@@ -100,7 +100,7 @@ async fn an_idle_agent_has_work_from_a_child_without_its_own_agent() {
     let (temp, manager) = manager().await;
     let parent = workspace(&manager, &temp).await;
     let child = manager
-        .split_workspace(&parent.name, "child".into(), None)
+        .split_workspace(&parent.name, "child".into(), None, Default::default())
         .await
         .unwrap();
     report(&manager, &parent, AgentState::Idle).await;

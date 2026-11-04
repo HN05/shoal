@@ -377,7 +377,7 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let shot = temp.path().join("layout.png");

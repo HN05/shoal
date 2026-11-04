@@ -22,7 +22,9 @@ use crate::{
     protocol::{
         ApprovalMethod, AssignmentMethod, Body, ErrorCode, HoldMethod, ItemMethod, OperationMethod,
         QuestionMethod, QueueMethod, RemoteError, RemovalMethod, RepositoryMethod, WorkspaceMethod,
-        operations::{Ended, Failure, OperationSpec, QueuedLaunch, Report, StartedWorkspace},
+        operations::{
+            Ended, Failure, OperationSpec, QueuedLaunch, Report, StartedWorkspace, WorkspaceStart,
+        },
     },
 };
 
@@ -309,20 +311,31 @@ async fn follow(app: &Connector, id: &str) -> Ended {
     .unwrap()
 }
 
+/// A request to start workspace `start` of the test repository from HEAD.
+fn start_workspace(daemon: &TestDaemon, start: WorkspaceStart) -> OperationMethod {
+    OperationMethod::StartWorkspace {
+        repository: daemon.repository.id.clone().into(),
+        start,
+        base: Some("HEAD".into()),
+        path: None,
+        git_profile: None,
+        parent: None,
+        options: Default::default(),
+        issue: None,
+        pr: None,
+        agent: None,
+        env: None,
+    }
+}
+
 #[tokio::test]
 async fn a_created_workspace_is_prepared_in_an_operation_the_app_follows() {
     let daemon = TestDaemon::start().await;
     let app = daemon.connector();
-    let create = OperationMethod::StartWorkspace {
-        repository: daemon.repository.id.clone(),
-        name: "api".into(),
-        base: Some("HEAD".into()),
-        issue: None,
-        pr: None,
-        agent: None,
-    };
+    let create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
     let started: StartedWorkspace = connection::request(&app, create).await.unwrap();
     assert_eq!(started.workspace.name, "api");
+    assert!(!started.reused);
     let worker = fake::take(&started.operation);
     let OperationSpec::Prepare { workspace, steps } = worker.order.spec.clone() else {
         panic!("expected a preparation: {:?}", worker.order);
@@ -346,19 +359,49 @@ async fn a_created_workspace_is_prepared_in_an_operation_the_app_follows() {
 }
 
 #[tokio::test]
+async fn an_existing_branch_reopens_its_workspace_without_its_post_setup_hook() {
+    let daemon = TestDaemon::start().await;
+    let app = daemon.connector();
+    let existing = daemon.workspace("api").await;
+    let mut open = start_workspace(&daemon, WorkspaceStart::Branch("api".into()));
+    if let OperationMethod::StartWorkspace { base, pr, .. } = &mut open {
+        *base = None;
+        *pr = Some("https://github.com/team/repo/pull/7".into());
+    }
+    let started: StartedWorkspace = connection::request(&app, open).await.unwrap();
+    assert!(started.reused);
+    assert_eq!(started.workspace.id, existing.id);
+    let worker = fake::take(&started.operation);
+    let OperationSpec::Prepare { steps, .. } = worker.order.spec.clone() else {
+        panic!("expected a preparation: {:?}", worker.order);
+    };
+    assert!(!steps.setup && !steps.post_setup);
+    assert_eq!(
+        steps.pr.as_deref(),
+        Some("https://github.com/team/repo/pull/7")
+    );
+    worker.exit(1);
+}
+
+#[tokio::test]
 async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     let daemon = TestDaemon::start().await;
     let app = daemon.connector();
-    let create = |issue: Option<&str>, agent: Option<&str>| OperationMethod::StartWorkspace {
-        repository: daemon.repository.id.clone(),
-        name: "api".into(),
-        base: Some("HEAD".into()),
-        issue: issue.map(Into::into),
-        pr: None,
-        agent: agent.map(|agent| QueuedLaunch {
-            agent: agent.into(),
-            prompt: None,
-        }),
+    let create = |issue: Option<&str>, agent: Option<&str>| {
+        let mut create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
+        if let OperationMethod::StartWorkspace {
+            issue: requested,
+            agent: queued,
+            ..
+        } = &mut create
+        {
+            *requested = issue.map(Into::into);
+            *queued = agent.map(|agent| QueuedLaunch {
+                agent: agent.into(),
+                prompt: None,
+            });
+        }
+        create
     };
     for refused in [
         create(None, Some("undefined")),
@@ -371,25 +414,58 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         );
     }
     assert_eq!(code(inspect(&app, "api").await), ErrorCode::NotFound);
-    // Workspace processes create only the workspaces they split.
+    // A workspace's agent starts workspaces below its own.
     let parent = daemon.workspace("parent").await;
     let agent = daemon.scoped(&parent).await;
-    assert_eq!(
-        code(connection::request::<StartedWorkspace>(&agent, create(None, None)).await),
-        ErrorCode::ScopeDenied
-    );
+    let started: StartedWorkspace = connection::request(&agent, create(None, None))
+        .await
+        .unwrap();
+    let below = started.workspace.parent.as_ref().map(|space| &space.id);
+    assert_eq!(below, Some(&parent.id));
+    fake::take(&started.operation).exit(1);
     let split = OperationMethod::StartSplit {
         workspace: "parent".into(),
         name: "child".into(),
         base: Some("HEAD".into()),
+        options: Default::default(),
         issue: None,
         agent: None,
+        env: None,
     };
     let started: StartedWorkspace = connection::request(&agent, split).await.unwrap();
     let worker = fake::take(&started.operation);
     assert!(
         worker.token.is_some(),
         "the worker acts with the caller's scope"
+    );
+    worker.exit(1);
+}
+
+#[tokio::test]
+async fn a_chats_agent_starts_workspaces_below_its_chat() {
+    let daemon = TestDaemon::start().await;
+    let chat = daemon
+        .manager
+        .start_chat(
+            daemon.repository.id.clone().into(),
+            "planner".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let token = daemon.manager.chat_scope(&chat.id).await.unwrap();
+    let agent = daemon.connector().scope(token);
+    let create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
+    let started: StartedWorkspace = connection::request(&agent, create).await.unwrap();
+    let parent = started.workspace.parent.as_ref().map(|parent| &parent.id);
+    assert_eq!(parent, Some(&chat.id));
+    let worker = fake::take(&started.operation);
+    assert!(
+        worker.token.is_some(),
+        "the worker acts with the chat's scope"
     );
     worker.exit(1);
 }

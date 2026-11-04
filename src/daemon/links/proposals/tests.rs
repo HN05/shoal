@@ -260,7 +260,7 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     for id in [&parent.id, &child.id] {

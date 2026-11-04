@@ -1220,11 +1220,11 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .await
         .unwrap();
     let middle = manager
-        .split_workspace(&top.id, "middle".into(), None)
+        .split_workspace(&top.id, "middle".into(), None, Default::default())
         .await
         .unwrap();
     let bottom = manager
-        .split_workspace(&middle.id, "bottom".into(), None)
+        .split_workspace(&middle.id, "bottom".into(), None, Default::default())
         .await
         .unwrap();
     let report = temp.path().join("report.md");
@@ -1271,7 +1271,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
 async fn a_clean_confirmation_naming_children_removes_clean_only() {
     let (_root, manager, workspace) = fixture().await;
     let child = manager
-        .split_workspace(&workspace.id, "child".into(), None)
+        .split_workspace(&workspace.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let check = manager

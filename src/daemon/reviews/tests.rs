@@ -718,7 +718,7 @@ async fn the_coordinating_agent_hears_one_line() {
     let manager = &fixture.manager;
     let parent = &fixture.workspace;
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     for workspace in [&parent.id, &child.id] {
@@ -754,7 +754,7 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
     let manager = &fixture.manager;
     let parent = &fixture.workspace;
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let parent_review = fixture.review().await;

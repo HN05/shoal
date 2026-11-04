@@ -57,7 +57,7 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
     let (temp, manager) = manager().await;
     let (chat, worker) = chat_and_worker(&temp, &manager).await;
     let helper = manager
-        .split_workspace(&worker.id, "helper".into(), None)
+        .split_workspace(&worker.id, "helper".into(), None, Default::default())
         .await
         .unwrap();
     // Without an agent of its own, the worker is the chat's or the user's

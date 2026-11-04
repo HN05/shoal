@@ -338,7 +338,7 @@ async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
         .await
         .unwrap();
     let split = manager
-        .split_workspace(&host.id, "split".into(), None)
+        .split_workspace(&host.id, "split".into(), None, Default::default())
         .await
         .unwrap();
     let (watching, _process) = chat_in(&manager, &split, "watching").await;

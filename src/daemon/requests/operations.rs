@@ -6,9 +6,12 @@ use tokio::net::UnixStream;
 
 use super::super::{
     answer::{Answer, OperationGuard},
-    operations::{Entry, starts::Preparing},
-    scope::{Caller, Scoped, denied},
-    workspace::Manager,
+    operations::{
+        Entry,
+        starts::{Opening, Preparing},
+    },
+    scope::{Caller, Scoped},
+    workspace::{Manager, NewWorkspace},
 };
 use crate::protocol::{Body, ErrorCode, OperationMethod, Response, operations::Started};
 
@@ -34,16 +37,37 @@ pub(super) async fn handle(
         }
         OperationMethod::StartWorkspace {
             repository,
-            name,
+            start,
             base,
+            path,
+            git_profile,
+            parent,
+            options,
             issue,
             pr,
             agent,
+            env,
         } => {
-            let preparing = Preparing { issue, pr, agent };
+            let opening = Opening {
+                start,
+                base,
+                new: NewWorkspace {
+                    git_profile: git_profile.as_deref(),
+                    path,
+                    options,
+                    ..Default::default()
+                },
+                parent,
+            };
+            let preparing = Preparing {
+                issue,
+                pr,
+                agent,
+                env,
+            };
             Body::WorkspaceStarted(
                 manager
-                    .start_workspace(repository, name, base, preparing, caller)
+                    .start_workspace(repository, opening, preparing, caller)
                     .await?,
             )
         }
@@ -51,17 +75,20 @@ pub(super) async fn handle(
             workspace,
             name,
             base,
+            options,
             issue,
             agent,
+            env,
         } => {
             let preparing = Preparing {
                 issue,
                 pr: None,
                 agent,
+                env,
             };
             Body::WorkspaceStarted(
                 manager
-                    .start_split(&workspace, name, base, preparing, caller)
+                    .start_split(&workspace, name, base, options, preparing, caller)
                     .await?,
             )
         }
@@ -83,8 +110,12 @@ impl Scoped for OperationMethod {
         Ok(match self {
             OperationMethod::StartOperation { spec, .. } => Some(spec.workspace_mut()),
             OperationMethod::StartSplit { workspace, .. } => Some(workspace),
-            // Workspace processes create only the workspaces they split.
-            OperationMethod::StartWorkspace { .. } => return Err(denied()),
+            // A scoped caller opens workspaces only below its own space,
+            // which must be in their repository.
+            OperationMethod::StartWorkspace { parent, .. } => {
+                *parent = Some(caller.space_id.clone());
+                None
+            }
             OperationMethod::FollowOperation { id, .. }
             | OperationMethod::CancelOperation { id }
             | OperationMethod::ReportProgress { id, .. } => {

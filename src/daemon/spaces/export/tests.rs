@@ -366,7 +366,7 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
         .await
         .unwrap();
     let split = manager
-        .split_workspace(&workspace.id, "split".into(), None)
+        .split_workspace(&workspace.id, "split".into(), None, Default::default())
         .await
         .unwrap();
     // The export checked and listed what its removal takes, then a chat

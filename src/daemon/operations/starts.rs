@@ -1,62 +1,79 @@
-//! Starting a new workspace's preparation in one request, as `shoal add`
-//! and `shoal split` do in several: the checks before anything is created,
+//! Opening a workspace and starting its preparation in one request, as
+//! `shoal add` and `shoal split` do: the checks before anything is created,
 //! the workspace and its issue, then the operation that prepares it.
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use crate::{
     agent::Agent,
     config::Effective,
-    daemon::{links::issue::OpenIssue, log, scope::Caller, workspace::Manager},
-    model::Workspace,
-    protocol::operations::{OperationSpec, Preparation, QueuedLaunch, StartedWorkspace},
+    daemon::{
+        links::issue::OpenIssue,
+        log,
+        scope::Caller,
+        workspace::{Manager, NewWorkspace},
+    },
+    model::{OpenedWorkspace, Workspace},
+    protocol::{
+        CreationOptions,
+        operations::{OperationSpec, Preparation, QueuedLaunch, StartedWorkspace, WorkspaceStart},
+    },
     removal::{InspectionPolicy, UnsavedWork},
+    repository::Selector,
     state::WorkspaceState,
 };
 
-/// What preparing a new workspace does once it exists.
+/// What a workspace [`Manager::start_workspace`] opens: where it starts,
+/// from what base, where and with what Git profile, below which space, and
+/// what it leaves out.
+pub(crate) struct Opening<'a> {
+    pub start: WorkspaceStart,
+    pub base: Option<String>,
+    pub new: NewWorkspace<'a>,
+    pub parent: Option<String>,
+}
+
+/// What preparing a new workspace does once it exists, in the caller's
+/// environment `env`.
 pub(crate) struct Preparing {
     /// An issue number or URL the workspace is assigned.
     pub issue: Option<String>,
     pub pr: Option<String>,
     pub agent: Option<QueuedLaunch>,
+    pub env: Option<BTreeMap<String, String>>,
 }
 
 impl Manager {
-    /// Create workspace `name` in `repository` from `base` and start
-    /// preparing it.
+    /// Open the workspace `opening` names in `repository`, a new one or
+    /// the one on its branch or PR head, and start preparing it.
     pub(crate) async fn start_workspace(
         self: &Arc<Self>,
-        repository: String,
-        name: String,
-        base: Option<String>,
+        repository: Selector,
+        opening: Opening<'_>,
         preparing: Preparing,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
+        let repo = self.repository(repository.clone()).await?;
         if let Some(agent) = &preparing.agent {
-            check_agent(agent, &self.repository_settings(&repository).await?)?;
+            check_agent(agent, &self.repository_settings(&repo.id).await?)?;
         }
         let issue = match &preparing.issue {
-            Some(input) => {
-                let checkout = self.repository(repository.as_str()).await?.path;
-                Some(self.read_open_issue(&checkout, input).await?)
-            }
+            Some(input) => Some(self.read_open_issue(&repo.path, input).await?),
             None => None,
         };
-        let workspace = self
-            .create_workspace_below(repository.into(), name, base, Default::default(), None)
-            .await?;
-        self.prepare_new(workspace, issue, preparing, caller).await
+        let opened = (self.open_for_start(repository, opening, caller.is_some())).await?;
+        self.prepare_new(opened, issue, preparing, caller).await
     }
 
-    /// Split child `name` from workspace `parent`, on `base`, and start
-    /// preparing it.
+    /// Split child `name` from workspace `parent`, on `base`, leaving out
+    /// what `options` say, and start preparing it.
     pub(crate) async fn start_split(
         self: &Arc<Self>,
         parent: &str,
         name: String,
         base: Option<String>,
+        options: CreationOptions,
         preparing: Preparing,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
@@ -68,17 +85,63 @@ impl Manager {
             Some(input) => Some(self.read_open_issue(&parent.path, input).await?),
             None => None,
         };
-        let child = self.split_workspace(&parent.id, name, base).await?;
-        self.prepare_new(child, issue, preparing, caller).await
+        let child = self
+            .split_workspace(&parent.id, name, base, options)
+            .await?;
+        let opened = OpenedWorkspace {
+            workspace: child,
+            reused: false,
+        };
+        self.prepare_new(opened, issue, preparing, caller).await
     }
 
-    /// Assign `issue` to the new `workspace`, then start preparing it: its
-    /// setup while it is preparing, linking the PR, its post-setup hook,
-    /// then queuing the agent. A workspace whose issue cannot be assigned is
-    /// removed, since nothing ran in it yet.
+    /// Create the workspace `opening` names in `repository` on a new
+    /// branch, or open the one on its existing branch or PR head. A
+    /// `confined` parent, whose own agent asks, takes over no workspace
+    /// outside its subtree.
+    async fn open_for_start(
+        &self,
+        repository: Selector,
+        Opening {
+            start,
+            base,
+            new,
+            parent,
+        }: Opening<'_>,
+        confined: bool,
+    ) -> Result<OpenedWorkspace> {
+        match start {
+            WorkspaceStart::Name(name) => {
+                let workspace = self
+                    .create_workspace_below(repository, name, base, new, parent)
+                    .await?;
+                Ok(OpenedWorkspace {
+                    workspace,
+                    reused: false,
+                })
+            }
+            WorkspaceStart::Branch(branch) => {
+                self.open_branch_below(repository, &branch, base, new, parent, confined)
+                    .await
+            }
+            WorkspaceStart::PullHead { url, head } => {
+                ensure!(
+                    base.is_none() && new.path.is_none() && new.git_profile.is_none(),
+                    "a workspace at a PR's head takes no base, path or Git profile"
+                );
+                self.open_pull_head(repository, url, head, parent, new.options, confined)
+                    .await
+            }
+        }
+    }
+
+    /// Assign `issue` to the `opened` workspace, then start preparing it:
+    /// its setup while it is preparing, linking the PR, the post-setup hook
+    /// of a new workspace, then queuing the agent. A new workspace whose
+    /// issue cannot be assigned is removed, since nothing ran in it yet.
     async fn prepare_new(
         self: &Arc<Self>,
-        workspace: Workspace,
+        OpenedWorkspace { workspace, reused }: OpenedWorkspace,
         issue: Option<OpenIssue>,
         preparing: Preparing,
         caller: Option<&Caller>,
@@ -86,12 +149,14 @@ impl Manager {
         if let Some(OpenIssue { url, title }) = issue
             && let Err(error) = self.set_issue(&workspace.id, &url, Some(title)).await
         {
-            self.discard_new(&workspace).await;
+            if !reused {
+                self.discard_new(&workspace).await;
+            }
             return Err(error);
         }
         let steps = Preparation {
             setup: workspace.state == WorkspaceState::Preparing,
-            post_setup: true,
+            post_setup: !reused,
             pr: preparing.pr,
             agent: preparing.agent,
         };
@@ -99,10 +164,11 @@ impl Manager {
             workspace: workspace.id.clone(),
             steps,
         };
-        let operation = self.start_operation(spec, None, caller).await?;
+        let operation = self.start_operation(spec, preparing.env, caller).await?;
         Ok(StartedWorkspace {
             operation,
             workspace: Box::new(self.workspace(&workspace.id).await?),
+            reused,
         })
     }
 

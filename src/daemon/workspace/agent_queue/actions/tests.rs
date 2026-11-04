@@ -32,7 +32,7 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     let launch = manager
@@ -244,7 +244,7 @@ async fn workspace_processes_cancel_and_move_back_only_entries_below_theirs() {
     let mut children = Vec::new();
     for name in ["one", "two"] {
         let child = manager
-            .split_workspace(&parent.id, name.into(), None)
+            .split_workspace(&parent.id, name.into(), None, Default::default())
             .await
             .unwrap();
         manager

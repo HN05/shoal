@@ -942,7 +942,7 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None)
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
         .await
         .unwrap();
     assert_ne!(parent.path.parent(), child.path.parent());
@@ -1008,7 +1008,7 @@ async fn split_across_directories(
             .await
     } else {
         manager
-            .split_workspace(&parent.id, "child".into(), None)
+            .split_workspace(&parent.id, "child".into(), None, Default::default())
             .await
     }
     .unwrap();

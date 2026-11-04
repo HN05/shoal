@@ -24691,7 +24691,10 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
     use shoal::client::{
         connection,
-        protocol::{OperationMethod, operations::StartedWorkspace},
+        protocol::{
+            OperationMethod,
+            operations::{StartedWorkspace, WorkspaceStart},
+        },
     };
     let runtime = tokio::runtime::Runtime::new().unwrap();
     for host in ["github.com", "forge.example"] {
@@ -24701,8 +24704,13 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
         let app = fixture.connector();
         let create = OperationMethod::StartWorkspace {
             repository: fixture.repo.to_str().unwrap().into(),
-            name: "closed-work".into(),
+            start: WorkspaceStart::Name("closed-work".into()),
             base: Some("HEAD".into()),
+            path: None,
+            git_profile: None,
+            parent: None,
+            options: Default::default(),
+            env: None,
             issue: Some("316".into()),
             pr: None,
             agent: None,
@@ -24729,7 +24737,7 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
         operations::{Followed, Following},
         protocol::{
             ErrorCode, OperationMethod,
-            operations::{Ended, Outcome, Progress, StartedWorkspace, Step},
+            operations::{Ended, Outcome, Progress, StartedWorkspace, Step, WorkspaceStart},
         },
         state::WorkspaceState,
     };
@@ -24753,8 +24761,13 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
     let start = |name: &str| {
         let create = OperationMethod::StartWorkspace {
             repository: fixture.repo.to_str().unwrap().into(),
-            name: name.into(),
+            start: WorkspaceStart::Name(name.into()),
             base: Some("HEAD".into()),
+            path: None,
+            git_profile: None,
+            parent: None,
+            options: Default::default(),
+            env: None,
             issue: None,
             pr: None,
             agent: None,
