@@ -6,11 +6,9 @@ use anyhow::{Result, ensure};
 
 use super::environment::configured_environment;
 use super::link_pull::link_or_warn;
-use super::queued_agent_request;
+use super::{check_queued_launch, queued_agent_request};
 use crate::{
-    agent::Agent,
     cli::{
-        agents,
         client::{self},
         commands::operations::{Failed, Reporter},
         context::Context,
@@ -54,7 +52,7 @@ pub(in crate::cli::commands) async fn prepare(
     }
     let agent = match steps.agent {
         Some(launch) => {
-            let entry = queue_agent(ctx, &workspace, launch, reporter).await?;
+            let entry = queue_agent(ctx, &workspace, *launch, reporter).await?;
             reporter.reached(Step::AgentQueued).await?;
             Some(entry)
         }
@@ -138,11 +136,10 @@ async fn queue_agent(
     launch: QueuedLaunch,
     reporter: &Reporter<'_>,
 ) -> Result<QueueEntry> {
-    let agent: Agent = launch.agent.parse()?;
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    agents::ensure_available(agent.name(), &settings)?;
-    let request = queued_agent_request(workspace, agent, launch.prompt)?;
+    check_queued_launch(&launch, &settings)?;
+    let request = queued_agent_request(workspace, launch)?;
     reporter.ensure_running()?;
     let admission = crate::client::queue::add(&ctx.paths, request).await?;
     admission

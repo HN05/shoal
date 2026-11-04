@@ -1,10 +1,10 @@
-//! Queuing an agent in an existing workspace in one request, as `shoal split
-//! --agent` queues a child's.
+//! Queuing an agent in an existing workspace in one request, as an app
+//! queues one in a ready workspace.
 use anyhow::{Context as _, Result};
 
 use crate::{
-    agent::Agent,
-    daemon::{operations::starts::check_agent, workspace::Manager},
+    cli::commands::{check_queued_launch, queued_agent_request},
+    daemon::workspace::Manager,
     model::QueueEntry,
     protocol::operations::QueuedLaunch,
 };
@@ -19,10 +19,13 @@ impl Manager {
         prompt: Option<String>,
     ) -> Result<QueueEntry> {
         let workspace = self.workspace(workspace).await?;
-        let launch = QueuedLaunch { agent, prompt };
-        check_agent(&launch, &self.workspace_settings(&workspace).await?)?;
-        let agent: Agent = launch.agent.parse()?;
-        let request = crate::cli::commands::queued_agent_request(&workspace, agent, launch.prompt)?;
+        let launch = QueuedLaunch {
+            agent,
+            prompt,
+            ..Default::default()
+        };
+        check_queued_launch(&launch, &self.workspace_settings(&workspace).await?)?;
+        let request = queued_agent_request(&workspace, launch)?;
         self.queue_add(request)
             .await?
             .entry

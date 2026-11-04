@@ -9,7 +9,7 @@ use crate::{
     },
     git,
     model::{PresentSpace, Repository},
-    protocol::ItemContext,
+    protocol::{ItemContext, operations::LaunchIssue},
     repository,
 };
 
@@ -259,6 +259,14 @@ impl Issue {
         }
         prompt.push_str("\n`shoal view` shows the issue with its comments and later edits.");
         prompt
+    }
+
+    /// The issue as a queued agent's launch names it.
+    pub fn launch_issue(&self) -> LaunchIssue {
+        LaunchIssue {
+            url: self.url.clone(),
+            title: self.title.clone(),
+        }
     }
 }
 

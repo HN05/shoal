@@ -31027,10 +31027,12 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         options: Default::default(),
         issue: None,
         pr: Some(url.into()),
-        agent: Some(shoal::client::protocol::operations::QueuedLaunch {
-            agent: "reviewer".into(),
-            prompt: None,
-        }),
+        agent: Some(Box::new(
+            shoal::client::protocol::operations::QueuedLaunch {
+                agent: "reviewer".into(),
+                ..Default::default()
+            },
+        )),
         env: None,
     };
     let refused =

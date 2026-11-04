@@ -1,5 +1,5 @@
 use super::{AddOptions, AddPlan};
-use crate::{model::Workspace, state::WorkspaceState};
+use crate::{model::Workspace, protocol::operations::QueuedLaunch, state::WorkspaceState};
 
 fn plan(args: &[&str]) -> AddPlan {
     let workspace = Workspace::new_record(
@@ -9,15 +9,12 @@ fn plan(args: &[&str]) -> AddPlan {
         Some("topic".into()),
         WorkspaceState::Ready,
     );
-    let agent = "claude".parse().expect("claude is a built-in agent");
-    AddPlan::agent_in(
-        &workspace,
-        agent,
-        Default::default(),
-        None,
-        args.iter().map(Into::into).collect(),
-        None,
-    )
+    let launch = QueuedLaunch {
+        agent: "claude".into(),
+        args: args.iter().map(|&arg| arg.into()).collect(),
+        ..Default::default()
+    };
+    AddPlan::agent_in(&workspace, launch).expect("claude is a built-in agent")
 }
 
 #[test]

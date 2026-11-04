@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{CreationOptions, ErrorCode, Lifetime, PullHead};
 use crate::{
+    agent::ModelChoice,
     client::{
         approvals::{ApprovalRequest, DecisionStatus},
         links::OpenOutcome,
@@ -63,7 +64,7 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pr: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        agent: Option<QueuedLaunch>,
+        agent: Option<Box<QueuedLaunch>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },
@@ -79,7 +80,7 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         issue: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        agent: Option<QueuedLaunch>,
+        agent: Option<Box<QueuedLaunch>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },
@@ -174,14 +175,40 @@ pub struct Preparation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<QueuedLaunch>,
+    pub agent: Option<Box<QueuedLaunch>>,
 }
 
-/// An agent to queue in a ready workspace, with its first message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// An agent to queue in a ready workspace, as `shoal split --agent` queues
+/// a child's.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QueuedLaunch {
     pub agent: String,
+    /// Its first message when no issue gives it one.
     pub prompt: Option<String>,
+    /// The model and effort requested over the configured ones.
+    #[serde(default, skip_serializing_if = "ModelChoice::is_empty")]
+    pub model: ModelChoice,
+    /// Arguments passed on to the agent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+    /// The session the agent starts from a fork of.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork: Option<String>,
+    /// The issue the agent works on, which prompts it instead of `prompt`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue: Option<LaunchIssue>,
+    /// The variables that place its start beside the caller's terminal;
+    /// without them it starts as one from no terminal does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<BTreeMap<String, String>>,
+}
+
+/// The issue a queued agent works on: its URL, which the start looks up
+/// for the prompt, and the title the queue shows.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LaunchIssue {
+    pub url: String,
+    pub title: String,
 }
 
 impl OperationSpec {

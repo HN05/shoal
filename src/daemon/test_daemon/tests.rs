@@ -432,9 +432,11 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         } = &mut create
         {
             *requested = issue.map(Into::into);
-            *queued = agent.map(|agent| QueuedLaunch {
-                agent: agent.into(),
-                prompt: None,
+            *queued = agent.map(|agent| {
+                Box::new(QueuedLaunch {
+                    agent: agent.into(),
+                    ..Default::default()
+                })
             });
         }
         create

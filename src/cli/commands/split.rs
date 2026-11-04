@@ -20,7 +20,8 @@ use crate::{
     daemon::refusal::{Reason, Refusal},
     model::{AgentSession, QueueEntry, SpaceRef, Workspace},
     protocol::{
-        CommitStart, ConfigTarget, CreationOptions, ItemContext, operations::StartedWorkspace,
+        CommitStart, ConfigTarget, CreationOptions, ItemContext,
+        operations::{QueuedLaunch, StartedWorkspace},
     },
     shell,
     state::{QueueState, WorkspaceState},
@@ -224,7 +225,15 @@ async fn start_agent(
     issue: Option<&Issue>,
     args: Vec<OsString>,
 ) -> Result<QueueEntry> {
-    let plan = AddPlan::agent_in(child, agent.clone(), model, issue, args, fork);
+    let launch = QueuedLaunch {
+        agent: agent.clone().into(),
+        model,
+        args: super::workspaces::launch_args(args)?,
+        fork,
+        issue: issue.map(Issue::launch_issue),
+        ..Default::default()
+    };
+    let plan = AddPlan::agent_in(child, launch)?;
     let title = issue.map(|issue| issue.title.clone());
     super::agent_queue::queue_in(ctx, &plan, child, String::from(agent), title).await
 }

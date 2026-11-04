@@ -5,15 +5,17 @@ use anyhow::Result;
 
 use super::{agent::ResolvedAddAgent, target::AddTarget};
 use crate::{
-    agent::{Agent, ModelChoice},
+    agent::Agent,
     cli::{
+        agents,
         commands::{issues, repositories},
         context::Context,
         terminal::PlaceName,
     },
+    config::Effective,
     env, git,
     model::{QueueRequest, Repository, Workspace},
-    protocol::{CreationOptions, ItemContext, PullHead},
+    protocol::{CreationOptions, ItemContext, PullHead, operations::QueuedLaunch},
 };
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
@@ -108,31 +110,49 @@ pub(super) async fn planned_workspace_name(
     Ok(crate::validate::derive_workspace_name(&branch))
 }
 
-/// The queue request of `agent`'s launch in `workspace` with `prompt` as its
-/// first message, which the agent queue starts detached in the default host.
+/// Refuse `launch` when it cannot run under `settings`: an agent that is
+/// off or missing, a fork it cannot start from, or a model its launch
+/// cannot pass on.
+pub(crate) fn check_queued_launch(launch: &QueuedLaunch, settings: &Effective) -> Result<()> {
+    let agent: Agent = launch.agent.parse()?;
+    agents::ensure_available(agent.name(), settings)?;
+    if launch.fork.is_some() {
+        agents::ensure_forks(settings, agent.name())?;
+    }
+    let model = agents::resolve_model(settings, agent.name(), launch.model.clone());
+    agents::check_model(settings, agent.name(), &model)
+}
+
+/// Agent arguments as a queued launch carries them, refusing one that is
+/// not UTF-8.
+pub(in crate::cli::commands) fn launch_args(args: Vec<OsString>) -> Result<Vec<String>> {
+    (args.into_iter())
+        .map(|arg| {
+            arg.into_string()
+                .map_err(|arg| anyhow::anyhow!("agent argument {arg:?} is not UTF-8"))
+        })
+        .collect()
+}
+
+/// The queue request of `launch` in `workspace`, which the agent queue
+/// starts detached, beside the caller's terminal when the launch names it
+/// or else in the default host.
 pub(crate) fn queued_agent_request(
     workspace: &Workspace,
-    agent: Agent,
-    prompt: Option<String>,
+    mut launch: QueuedLaunch,
 ) -> Result<QueueRequest> {
-    let plan = AddPlan {
-        prompt,
-        ..AddPlan::agent_in(
-            workspace,
-            agent.clone(),
-            Default::default(),
-            None,
-            Vec::new(),
-            None,
-        )
-    };
+    let env = (launch.env.take())
+        .unwrap_or_else(|| crate::cli::terminal::detached_start_environment(None));
+    let issue_title = launch.issue.as_ref().map(|issue| issue.title.clone());
+    let agent = launch.agent.clone();
+    let plan = AddPlan::agent_in(workspace, launch)?;
     Ok(QueueRequest {
         repository: workspace.repository_id.as_str().into(),
         name: workspace.name.clone(),
-        agent: agent.into(),
-        issue_title: None,
+        agent,
+        issue_title,
         plan: serde_json::to_string(&plan)?,
-        env: crate::cli::terminal::detached_start_environment(None),
+        env,
         now: false,
         workspace: Some(workspace.id.clone()),
         after: Vec::new(),
@@ -170,38 +190,41 @@ pub(in crate::cli) struct AddPlan {
 }
 
 impl AddPlan {
-    /// A launch of `agent` with the requested `model` in the existing
-    /// `workspace`, prompted with the issue at `issue` or with `args`, from a
-    /// fork of session `fork` when given. It runs detached, so it stays
+    /// `launch` in the existing `workspace`. It runs detached, so it stays
     /// tracked.
     pub(in crate::cli::commands) fn agent_in(
         workspace: &Workspace,
-        agent: Agent,
-        model: ModelChoice,
-        issue: Option<&issues::Issue>,
-        args: Vec<OsString>,
-        fork: Option<String>,
-    ) -> Self {
-        Self {
+        launch: QueuedLaunch,
+    ) -> Result<Self> {
+        let QueuedLaunch {
+            agent,
+            prompt,
+            model,
+            args,
+            fork,
+            issue,
+            env: _,
+        } = launch;
+        Ok(Self {
             repository: workspace.repository_id.as_str().into(),
             creation: Creation {
                 existing: workspace.branch.clone(),
                 ..Default::default()
             },
             place_name: None,
-            issue: issue.map(|issue| issue.url.clone()),
+            issue: issue.map(|issue| issue.url),
             agent: ResolvedAddAgent {
-                agent: Some(agent),
+                agent: Some(agent.parse()?),
                 tracked: true,
                 model,
             },
-            args,
-            prompt: None,
+            args: args.into_iter().map(OsString::from).collect(),
+            prompt,
             fork,
             queue_entry: None,
             chat: None,
             workspace: Some(workspace.id.clone()),
-        }
+        })
     }
 
     /// Whether the plan opens `workspace`'s branch in its repository without

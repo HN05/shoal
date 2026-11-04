@@ -61,7 +61,7 @@ mod view;
 mod work;
 pub(in crate::cli) mod workspaces;
 
-pub(crate) use workspaces::queued_agent_request;
+pub(crate) use workspaces::{check_queued_launch, queued_agent_request};
 mod worktree_hooks;
 
 #[cfg(test)]

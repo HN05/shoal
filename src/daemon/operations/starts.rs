@@ -6,8 +6,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use anyhow::{Result, ensure};
 
 use crate::{
-    agent::Agent,
-    config::Effective,
+    cli::commands::check_queued_launch,
     daemon::{
         links::issue::OpenIssue,
         log,
@@ -40,7 +39,7 @@ pub(crate) struct Preparing {
     /// An issue number or URL the workspace is assigned.
     pub issue: Option<String>,
     pub pr: Option<String>,
-    pub agent: Option<QueuedLaunch>,
+    pub agent: Option<Box<QueuedLaunch>>,
     pub env: Option<BTreeMap<String, String>>,
 }
 
@@ -60,7 +59,7 @@ impl Manager {
                 !matches!(opening.start, WorkspaceStart::PullHead { .. }),
                 "a PR's head opens in a workspace at a commit, which holds no agent of its own"
             );
-            check_agent(agent, &self.repository_settings(&repo.id).await?)?;
+            check_queued_launch(agent, &self.repository_settings(&repo.id).await?)?;
         }
         let issue = match &preparing.issue {
             Some(input) => Some(self.read_open_issue(&repo.path, input).await?),
@@ -83,7 +82,7 @@ impl Manager {
     ) -> Result<StartedWorkspace> {
         let parent = self.workspace(parent).await?;
         if let Some(agent) = &preparing.agent {
-            check_agent(agent, &self.workspace_settings(&parent).await?)?;
+            check_queued_launch(agent, &self.workspace_settings(&parent).await?)?;
         }
         let issue = match &preparing.issue {
             Some(input) => Some(self.read_open_issue(&parent.path, input).await?),
@@ -203,11 +202,4 @@ impl Manager {
             );
         }
     }
-}
-
-/// Refuse `agent` when it cannot run under `settings`, as `shoal add` does
-/// before anything is created.
-pub(crate) fn check_agent(agent: &QueuedLaunch, settings: &Effective) -> Result<()> {
-    let parsed: Agent = agent.agent.parse()?;
-    crate::cli::agents::ensure_available(parsed.name(), settings)
 }

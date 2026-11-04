@@ -26,7 +26,9 @@ use crate::{
     model::{QueueEntry, Workspace},
     protocol::{
         ConfigTarget,
-        operations::{OperationSpec, Preparation, Prepared, StartedWorkspace, WorkspaceStart},
+        operations::{
+            OperationSpec, Preparation, Prepared, QueuedLaunch, StartedWorkspace, WorkspaceStart,
+        },
     },
     shell,
     state::QueueState,
@@ -138,8 +140,16 @@ async fn queue_added_agent(
 ) -> Result<i32> {
     let chosen = agent.agent.context("the queued launch has no agent")?;
     let name = String::from(chosen.clone());
-    let mut plan = AddPlan::agent_in(workspace, chosen, agent.model, issue.as_ref(), args, fork);
-    plan.prompt = prompt.filter(|_| plan.issue.is_none());
+    let launch = QueuedLaunch {
+        agent: name.clone(),
+        prompt,
+        model: agent.model,
+        args: super::plan::launch_args(args)?,
+        fork,
+        issue: issue.as_ref().map(issues::Issue::launch_issue),
+        env: None,
+    };
+    let plan = AddPlan::agent_in(workspace, launch)?;
     let title = issue.map(|issue| issue.title);
     let entry = agent_queue::queue_in(ctx, &plan, workspace, name, title).await?;
     report_queued_in(ctx, workspace, &entry)
