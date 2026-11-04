@@ -79,7 +79,8 @@ async fn plan_moves(
 /// and add to `stopped` the executions each stop saved for `shoal resume`,
 /// by workspace, including any started since the plan or ended by a stop
 /// that failed. A CI job's workspace is waited for until the job, whose run
-/// the stop cancelled, ends and its workspace goes. An execution Shoal cannot prove ended stops once the user
+/// the stop cancelled, ends and its workspace goes, and stays out of
+/// `stopped`. An execution Shoal cannot prove ended stops once the user
 /// confirms it did, or when `confirmed`.
 async fn stop_running(
     ctx: &Context,
@@ -101,18 +102,23 @@ async fn stop_running(
                 super::super::stop::stop(ctx, workspace, confirmed, QueuedLaunches::Keep),
             )
             .await;
-        let saved = saved_executions(ctx, workspace)?;
-        stopped.insert(
-            workspace.clone(),
-            saved.difference(&saved_before).cloned().collect(),
-        );
-        if result?.cancelled_run.is_some() {
+        // A CI job's workspace goes with the job, leaving nothing to resume.
+        if let Ok(outcome) = &result
+            && outcome.cancelled_run.is_some()
+        {
             ctx.progress(
                 "Waiting for a cancelled CI job to end",
                 job_ended(ctx, workspace),
             )
             .await?;
+            continue;
         }
+        let saved = saved_executions(ctx, workspace)?;
+        stopped.insert(
+            workspace.clone(),
+            saved.difference(&saved_before).cloned().collect(),
+        );
+        result?;
     }
     Ok(())
 }

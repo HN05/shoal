@@ -155,7 +155,10 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
     // Moving the root cancels the job's run, and moves once its runner has
     // ended and its workspace is gone.
     let new_root = root.join("moved");
-    run(root, &["move", "root", new_root.to_str().unwrap(), "--yes"]);
+    let moved = run(root, &["move", "root", new_root.to_str().unwrap(), "--yes"]);
+    // The job's workspace leaves nothing to resume.
+    let warnings = String::from_utf8_lossy(&moved.stderr);
+    assert!(!warnings.contains("warning"), "{warnings}");
     assert!(
         server
             .received()
