@@ -116,7 +116,12 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
     );
 
     // The job runs the forge's runner in a workspace at its commit.
-    if support::wait::try_wait_for(|| calls.join("workspace").exists().then_some(())).is_none() {
+    // The stub writes its arguments first, and the ID line last.
+    let workspace_id = support::wait::try_wait_for(|| {
+        let written = fs::read_to_string(calls.join("workspace")).ok()?;
+        written.ends_with('\n').then(|| written.trim().to_owned())
+    });
+    let Some(workspace_id) = workspace_id else {
         let alerts = cli(root).args(["--json", "alerts"]).output().unwrap();
         let queue = cli(root).args(["--json", "queue"]).output().unwrap();
         eprintln!("queue: {}", String::from_utf8_lossy(&queue.stdout));
@@ -126,7 +131,7 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
             "the stub runner did not start; the forge saw {requests:?}; alerts: {}",
             String::from_utf8_lossy(&alerts.stdout)
         );
-    }
+    };
     let args = fs::read_to_string(calls.join("args")).unwrap();
     let args: Vec<&str> = args.lines().collect();
     assert!(
@@ -138,11 +143,10 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
             .any(|pair| pair == ["--uuid", "runner-uuid"]),
         "{args:?}"
     );
-    let workspace_id = fs::read_to_string(calls.join("workspace")).unwrap();
     let listed = workspaces(root);
     let job = listed
         .iter()
-        .find(|workspace| workspace["id"] == workspace_id.trim())
+        .find(|workspace| workspace["id"] == workspace_id.as_str())
         .unwrap_or_else(|| panic!("{listed:?}"));
     assert_eq!(job["name"], "ci-rust-4");
     assert_eq!(job["at"]["commit"], head.as_str());
@@ -161,7 +165,7 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
     assert!(
         workspaces(root)
             .iter()
-            .all(|workspace| workspace["id"] != workspace_id.trim())
+            .all(|workspace| workspace["id"] != workspace_id.as_str())
     );
 
     run(
