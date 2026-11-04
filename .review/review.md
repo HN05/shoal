@@ -402,6 +402,15 @@ instead of the PR delivery guidance below.
   A launch with dependencies queues without a limit and starts only once each
   is done at its current HEAD, removed or closed, on the branch of the done one
   that contains the others; `--now` never waits.
+- A registered repository's CI jobs wait in the same queue and admission while
+  `runner.enabled` is on: `machine.max_jobs` counts only jobs, and under
+  `dynamic` a job counts at its recent runs' peak CPU and memory and takes the
+  one staggered start an agent would. A job is claimed only once admitted, runs
+  `forgejo-runner one-job --handle` as a tracked execution in a disposable
+  workspace at its commit that starts from the seed, and ends only through the
+  forge: stopping it cancels its run there, protection leaves it running, and
+  its workspace goes once the execution ends. Forge-specific steps are
+  `Backend` operations; the daemon never matches on the forge kind.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. The machine-only `load` level sets the CPU and memory thresholds the
   file leaves out; explicit values win. Stop one connected tracked
