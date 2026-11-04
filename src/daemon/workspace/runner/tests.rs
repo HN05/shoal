@@ -12,7 +12,7 @@ use crate::{
     client::resources::ResourceRequest,
     daemon::{
         notifications::NotificationKind,
-        workspace::{ExecutionKind, Manager, StartedExecution},
+        workspace::{Ending, ExecutionKind, Manager, StartedExecution},
     },
     forge::{backends::ForgeKind, test_support::Server},
     model::{QueueEntry, Workspace},
@@ -519,41 +519,48 @@ async fn read<T: serde::de::DeserializeOwned>(
     .unwrap()
 }
 
+/// How the daemon can stop work as it exits, with the reason its stop gives.
+const ENDINGS: [(Ending, &str); 2] = [
+    (Ending::Stop, "the Shoal daemon stopped"),
+    // As a signal or a system shutdown stops it.
+    (Ending::Save, "the Shoal daemon is stopping"),
+];
+
 #[tokio::test]
-async fn daemon_stop_cancels_a_jobs_run_and_stops_its_runner() {
-    let fixture = daemon_stop_with_runner(job("h3", 7, 3)).await;
-    assert!(
-        fixture
-            .server
-            .received()
-            .iter()
-            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
-    );
+async fn the_daemon_exiting_cancels_a_jobs_run_and_stops_its_runner() {
+    for (ending, reason) in ENDINGS {
+        let fixture = daemon_exit_with_runner(job("h3", 7, 3), ending, reason).await;
+        assert!(
+            fixture.server.received().iter().any(|request| request.line
+                == "POST /api/v1/repos/team/repo/actions/runs/3/cancel"),
+            "{ending:?}"
+        );
+    }
 }
 
 #[tokio::test]
-async fn daemon_stop_stops_a_jobs_runner_when_the_forge_refuses_to_cancel_its_run() {
-    // The forge finds no run 1 to cancel.
-    let fixture = daemon_stop_with_runner(job("h1", 4, 1)).await;
-    let failures: Vec<_> = fixture
-        .manager
-        .notifications(true, 10)
-        .await
-        .unwrap()
-        .into_iter()
-        .filter(|notification| {
-            notification.kind == crate::daemon::notifications::NotificationKind::RunnerFailed
-        })
-        .map(|notification| notification.message)
-        .collect();
-    assert_eq!(failures.len(), 1, "{failures:?}");
-    assert!(failures[0].contains("could not cancel"), "{failures:?}");
+async fn the_daemon_exiting_stops_a_jobs_runner_when_the_forge_refuses_to_cancel_its_run() {
+    for (ending, reason) in ENDINGS {
+        // The forge finds no run 1 to cancel.
+        let fixture = daemon_exit_with_runner(job("h1", 4, 1), ending, reason).await;
+        let failures: Vec<_> = fixture
+            .manager
+            .notifications(true, 10)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|notification| notification.kind == NotificationKind::RunnerFailed)
+            .map(|notification| notification.message)
+            .collect();
+        assert_eq!(failures.len(), 1, "{ending:?}: {failures:?}");
+        assert!(failures[0].contains("could not cancel"), "{failures:?}");
+    }
 }
 
-/// Stop the daemon while `job` runs, connected as its wrapper runs it,
-/// checking the daemon stops the runner rather than waiting for it to see
-/// its run cancelled.
-async fn daemon_stop_with_runner(job: Value) -> Fixture {
+/// End the daemon's work with `ending` while `job` runs, connected as its
+/// wrapper runs it, checking the daemon stops the runner for `reason`
+/// rather than waiting for it to see its run cancelled.
+async fn daemon_exit_with_runner(job: Value, ending: Ending, reason: &str) -> Fixture {
     use tokio::{io::BufReader, net::UnixStream};
 
     use crate::{
@@ -623,17 +630,13 @@ async fn daemon_stop_with_runner(job: Value) -> Fixture {
 
     let ending = tokio::spawn({
         let manager = manager.clone();
-        async move {
-            manager
-                .end_work(crate::daemon::workspace::Ending::Stop)
-                .await
-        }
+        async move { manager.end_work(ending).await }
     });
     let control: Control = read(&mut connection).await;
     assert!(
         matches!(
             &control,
-            Control::Pause { reason: Some(reason), .. } if reason == "the Shoal daemon stopped"
+            Control::Pause { reason: Some(given), .. } if given == reason
         ),
         "{control:?}"
     );

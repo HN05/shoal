@@ -75,6 +75,8 @@ impl Manager {
         self.agent_queue.suspend(true).await;
         let (stopped, ()) = tokio::join!(
             self.stop_every_target(shutdown.moment(), |workspace| async move {
+                // A CI job's run ends on its forge, before its runner stops.
+                self.cancel_job_before_stopping(&workspace).await;
                 self.stop_keeping_restores(&workspace, shutdown.request())
                     .await
             }),
