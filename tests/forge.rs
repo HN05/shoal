@@ -630,7 +630,7 @@ fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
         .as_str()
         .unwrap()
         .to_owned();
-    let agent = app.scope(scope);
+    let agent = app.clone().scope(scope);
     let labels = runtime
         .block_on(connection::labels(&agent, workspace(), None))
         .unwrap();
@@ -668,6 +668,27 @@ fn apps_read_labels_reviewers_and_pr_views_through_the_daemon() {
     fixture.respond(responses);
     let shown = runtime
         .block_on(views::read(&agent, workspace(), pr_8(), false))
+        .unwrap();
+    let [Shown::Item(view)] = shown.as_slice() else {
+        panic!("expected one item view");
+    };
+    assert_eq!(view.check_logs.len(), 2, "{:?}", view.errors);
+    let runs = fs::read_to_string(fixture.root.path().join("token-runs")).unwrap();
+    assert_eq!(runs.lines().count(), 1, "{runs}");
+
+    // Without an agent token, the user's app reads the logs with the user's
+    // token it already fetched for the view.
+    fs::remove_file(fixture.root.path().join("token-runs")).unwrap();
+    let command = format!("token = {{ cmd = [{:?}] }}", script.to_str().unwrap());
+    let user_only = config.replace(
+        "token = \"usertoken\"\nagent_token = \"agenttoken\"",
+        &command,
+    );
+    assert_ne!(user_only, config);
+    fixture.write_config(&user_only);
+    fixture.ok(&["daemon", "reload"]);
+    let shown = runtime
+        .block_on(views::read(&app, workspace(), pr_8(), false))
         .unwrap();
     let [Shown::Item(view)] = shown.as_slice() else {
         panic!("expected one item view");

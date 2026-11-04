@@ -40,15 +40,11 @@ impl Manager {
         }
         let own = self.read_place_forge(&place).await?;
         let mut views = self.read_views(&own, &account, &items, comments).await;
-        // Logs are read as the agent account, once for every log.
-        let agent;
-        let logs_account = if scoped {
-            &account
-        } else {
-            agent = self.agent_account();
-            &agent
-        };
-        read_failed_logs(&own, logs_account, &mut views).await;
+        // Logs are read as the agent account, whose token is the reading
+        // one's for a scoped caller and the user's without one of its own.
+        let own_token = !scoped && self.config().machine.forges.has_agent_token(&own.host);
+        let agent = own_token.then(|| self.agent_account());
+        read_failed_logs(&own, agent.as_ref().unwrap_or(&account), &mut views).await;
         Ok(Viewed { items, views })
     }
 
