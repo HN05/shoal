@@ -126,7 +126,7 @@ impl Manager {
         if !approve || !matches!(request.target, Target::Hold(_)) {
             return Ok(None);
         }
-        let workspace = self.workspace(&request.workspace_id).await?;
+        let workspace = self.workspace(&request.space_id).await?;
         let guard = self
             .gates
             .resource_guard(&workspace.id, GuardMode::Shared)?;
@@ -260,7 +260,7 @@ pub(crate) fn place_approved(
         return Ok(());
     };
     let reason = Some(request.reason.as_str()).filter(|reason| !reason.is_empty());
-    insert(tx, &request.workspace_id, name, reason, HoldPlacer::Agent)
+    insert(tx, &request.space_id, name, reason, HoldPlacer::Agent)
 }
 
 /// Insert the hold unless the workspace already has one by that name.

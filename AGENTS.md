@@ -105,8 +105,7 @@ when behavior changes, distinguishing decisions from proposals.
   it, recursively; targets name one of them, and the agent's hooks report for
   its own. A chat's agent follows the workspace-agent rules below, without what
   needs a worktree; it opens workspaces only below its chat, in its repository,
-  renames its own chat, and opens issues only where `[permissions]` lets agents
-  open them directly. Enforce own-worktree resource access
+  and renames its own chat. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery other than splitting a child and removing one the user holds nothing below, and shared
   repository/service administration. For the workspaces below their own, scoped callers may hold them, queue
   agents and the restores of agents they or the workspaces below them stopped, which the daemon starts detached, cancel their queue
@@ -188,7 +187,7 @@ when behavior changes, distinguishing decisions from proposals.
   leases. Retries rerun hooks, and permit/lifecycle changes cannot overlap them
   in the same workspace. User scripts own underlying resource integrations.
 - Approvals are daemon-owned: scoped callers request and inspect their own;
-  only unscoped callers approve or deny, except that a request from a workspace
+  only unscoped callers approve or deny, except that a request from a space
   with an agent goes to the nearest space above it with an agent, of either
   kind. That space decides it or passes it up, the next such space above and
   the user at the top; a parent
@@ -206,7 +205,8 @@ when behavior changes, distinguishing decisions from proposals.
   `[permissions] issue_open`/`pr_open = "propose"` make a scoped `issue open` or
   `pr open` an approval request the user may edit, deny or mark as a duplicate;
   approval opens it through the normal open path, a PR only at its recorded
-  commit. Issue proposals belong to the repository and outlive the workspace.
+  commit. A chat proposes issues, without a branch or commit, but never PRs.
+  Issue proposals belong to the repository and outlive the space that made them.
   `[permissions] issue_other_repositories` (`"propose"` by default, `"direct"` or `"deny"`)
   does the same for a scoped issue in another repository, which is never linked.
 - Lifecycle states, resource scopes, approval targets and approval

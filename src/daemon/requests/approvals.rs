@@ -94,6 +94,6 @@ async fn show_approval(
     id: i64,
 ) -> Result<ApprovalRequest> {
     let request = manager.show_approval(id).await?;
-    inspect_owner(manager, caller, &request.workspace_id, "approval requests").await?;
+    inspect_owner(manager, caller, &request.space_id, "approval requests").await?;
     Ok(request)
 }

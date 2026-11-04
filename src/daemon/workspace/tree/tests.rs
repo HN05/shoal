@@ -1627,9 +1627,9 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
             .is_some_and(|message| message.message.contains("shoal approvals --escalate")),
         "{told:?}"
     );
-    // A malformed record of another workspace's history leaves the chat's
-    // requests readable.
-    let other = child.id.clone();
+    // A malformed record of another space's history, its own or one its
+    // repository owns, leaves the chat's requests readable.
+    let (other, repository) = (child.id.clone(), child.repository_id.clone());
     manager
         .store
         .run(move |db| {
@@ -1637,6 +1637,11 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
                 "INSERT INTO access_requests(id,workspace_id,target_key,name,record,active,number)
                     VALUES ('broken',?1,'secret/other','default','not json',0,99)",
                 [&other],
+            )?;
+            db.execute(
+                "INSERT INTO access_requests(id,repository_id,target_key,name,record,active,number)
+                    VALUES ('broken-issue',?1,'issue_open','issue','not json',1,98)",
+                [&repository],
             )?;
             Ok(())
         })
@@ -2049,7 +2054,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             manager.store.run(move |db| {
                 if approval_request {
                     db.execute(
-                        "UPDATE access_requests SET workspace_id=?1, record=json_set(record,'$.workspace_id',?1) WHERE number=?2",
+                        "UPDATE access_requests SET workspace_id=?1, record=json_set(record,'$.space_id',?1) WHERE number=?2",
                         rusqlite::params![replacement_owner, id],
                     )?;
                 } else {

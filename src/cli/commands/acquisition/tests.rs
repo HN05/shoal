@@ -3,7 +3,7 @@ use serde_json::{json, to_value};
 
 fn approval(status: DecisionStatus) -> Box<ApprovalRequest> {
     serde_json::from_value(json!({
-        "id": 1, "workspace_id": "workspace-id", "workspace": "worker",
+        "id": 1, "space_id": "workspace-id", "space": "worker",
         "target": "port/web", "name": "web", "reason": "serve preview",
         "specification": {"env": "PORT_WEB", "on_conflict": "suggest",
             "preferred": null, "range": [3000, 3100]},

@@ -44,7 +44,7 @@ impl Manager {
         let Specification::Merge(merge) = &request.specification else {
             bail!("approval request {} has no merge specification", request.id);
         };
-        let workspace = self.workspace(&request.workspace_id).await?;
+        let workspace = self.workspace(&request.space_id).await?;
         let head = git::status::local_branch_commit(&workspace.path, &merge.branch)
             .await
             .with_context(|| format!("could not check {} for approval", merge.branch))?;
@@ -70,10 +70,7 @@ impl Manager {
             request.id,
             request.subject()
         );
-        if let Err(error) = self
-            .queue_agent_message(&request.workspace_id, message)
-            .await
-        {
+        if let Err(error) = self.queue_agent_message(&request.space_id, message).await {
             log!("stale merge request message not queued: {error:#}");
         }
         Ok(())
