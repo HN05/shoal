@@ -6,7 +6,11 @@
 //! start, and either stays with the forge for other runners, as do the jobs
 //! of a repository whose runner was turned off. A job admitted as the system
 //! shuts down waits in the queue again.
-use std::{io::Write as _, os::unix::fs::OpenOptionsExt as _, path::PathBuf};
+use std::{
+    io::Write as _,
+    os::unix::fs::OpenOptionsExt as _,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, bail};
 use rusqlite::params;
@@ -18,7 +22,7 @@ use crate::{
     daemon::{allocation::Allocation, notifications::NotificationKind, workspace::Manager},
     forge::{
         ForgeRepo,
-        ci::runner::{JobLaunch, Trigger},
+        ci::runner::{Installation, JobCommand, JobLaunch, Trigger},
     },
     model::{QueueEntry, QueuedJob, Workspace},
     removal::InspectionPolicy,
@@ -175,13 +179,16 @@ impl Manager {
             return Ok(Claim::Suspended);
         }
         self.take_over_entry(&claim.entry.id).await?;
-        let argv = {
-            // The sweep of unclaimed directories waits while one is written.
+        let command = self.job_command(&claim, job).await?;
+        {
+            // The sweep of unclaimed directories waits while one is filled.
             let _files = self.runners.job_files().await;
-            self.write_job_files(&claim, job)?
-        };
+            prepare_job_files(claim.workspace, &command).await?;
+        }
         let log = self.job_directory(&claim.entry.id).join("job.log");
-        let execution = self.launch_job_command(claim.workspace, log, argv).await?;
+        let execution = self
+            .launch_job_command(claim.workspace, log, command)
+            .await?;
         self.record_job_execution(&claim.entry.id, execution)
             .await?;
         Ok(Claim::Started)
@@ -274,37 +281,27 @@ impl Manager {
             .await
     }
 
-    /// Write the runner's token and the configuration of `claim`'s job into
-    /// the job's directory, returning the command that runs it.
-    fn write_job_files(
-        &self,
-        claim: &Claimed<'_>,
-        job: &QueuedJob,
-    ) -> Result<Vec<std::ffi::OsString>> {
-        let directory = self.job_directory(&claim.entry.id);
-        std::fs::create_dir_all(&directory)
-            .with_context(|| format!("create {}", directory.display()))?;
-        let token_file = directory.join("token");
-        let config_file = directory.join("config.yaml");
-        std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&token_file)?
-            .write_all(claim.registration.runner.token.as_bytes())?;
+    /// The command that runs `claim`'s job, with its files in the job's
+    /// directory.
+    async fn job_command(&self, claim: &Claimed<'_>, job: &QueuedJob) -> Result<JobCommand> {
+        let program = self.runner_program(claim.forge)?;
         let labels = runner_labels(&claim.runner.labels);
-        let command = claim.forge.job_command(&JobLaunch {
-            runner: &claim.registration.runner,
-            token_file: &token_file,
-            config_file: &config_file,
-            work_dir: &directory,
+        let name = format!(
+            "shoal-{}-{}",
+            crate::process::machine::hostname(),
+            job.job.id
+        );
+        let launch = JobLaunch {
+            runner: claim.registration.runner.as_ref(),
+            program: &program,
+            name: &name,
+            work_dir: &self.job_directory(&claim.entry.id),
+            workspace: &claim.workspace.path,
             labels: &labels,
-            handle: &job.job.handle,
+            job: &job.job,
             env: &job_env(claim.workspace),
-        })?;
-        std::fs::write(&config_file, command.config)?;
-        Ok(command.argv)
+        };
+        claim.forge.job_command(&self.user_account(), &launch).await
     }
 
     /// The directory a claimed job's runner keeps its files in.
@@ -312,18 +309,30 @@ impl Manager {
         self.paths.state.join("runner").join(id)
     }
 
-    /// Run `argv` in `workspace` as a tracked execution that outlives the
+    /// Run `command` in `workspace` as a tracked execution that outlives the
     /// daemon, with its output in `log`, returning the execution's ID.
     #[cfg(not(test))]
     async fn launch_job_command(
         &self,
         workspace: &Workspace,
         log: PathBuf,
-        argv: Vec<std::ffi::OsString>,
+        command: JobCommand,
     ) -> Result<String> {
-        let launch =
-            crate::execution::launch_detached(&self.paths, workspace, log, argv, &[], &[], None)
-                .await?;
+        let env: Vec<(&str, String)> = command
+            .env
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.clone()))
+            .collect();
+        let launch = crate::execution::launch_detached(
+            &self.paths,
+            workspace,
+            log,
+            command.argv,
+            &[],
+            &env,
+            None,
+        )
+        .await?;
         Ok(launch.execution_id)
     }
 
@@ -333,9 +342,9 @@ impl Manager {
         &self,
         workspace: &Workspace,
         _log: PathBuf,
-        argv: Vec<std::ffi::OsString>,
+        command: JobCommand,
     ) -> Result<String> {
-        super::tests::launch(self, workspace, argv).await
+        super::tests::launch(self, workspace, command).await
     }
 
     /// Take `repository_id`'s jobs out of the queue, as once its runner is
@@ -400,6 +409,65 @@ impl Manager {
         .await?;
         Ok(())
     }
+}
+
+/// Put in place what `command` needs before it runs: its files, readable by
+/// the user alone, a copy of the runner's installation, and the links to the
+/// job's `workspace` where the runner looks for its working directory.
+async fn prepare_job_files(workspace: &Workspace, command: &JobCommand) -> Result<()> {
+    for (path, contents) in &command.files {
+        write_private(path, contents)?;
+    }
+    if let Some(installation) = &command.installation {
+        copy_installation(installation).await?;
+    }
+    for link in &command.workspace_links {
+        if let Some(parent) = link.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("create {}", parent.display()))?;
+        }
+        std::os::unix::fs::symlink(&workspace.path, link)
+            .with_context(|| format!("link {}", link.display()))?;
+    }
+    Ok(())
+}
+
+fn write_private(path: &Path, contents: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .and_then(|mut file| file.write_all(contents.as_bytes()))
+        .with_context(|| format!("write {}", path.display()))
+}
+
+/// Copy the entries of `installation`, cloned where the filesystem clones
+/// files and copied otherwise.
+async fn copy_installation(installation: &Installation) -> Result<()> {
+    std::fs::create_dir_all(&installation.destination)
+        .with_context(|| format!("create {}", installation.destination.display()))?;
+    for entry in &installation.entries {
+        let (source, destination) = (
+            installation.source.join(entry),
+            installation.destination.join(entry),
+        );
+        if crate::fsutil::clone_tree(&source, &destination)
+            .await
+            .is_err()
+        {
+            let mut copy = tokio::process::Command::new("cp");
+            copy.arg("-pPR").arg("--").arg(&source).arg(&destination);
+            crate::subprocess::output(copy)
+                .await
+                .with_context(|| format!("copy {}", source.display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// What the workflow's `env` context and every step of a job get besides

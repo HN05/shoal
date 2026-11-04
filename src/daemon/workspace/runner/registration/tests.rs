@@ -1,5 +1,4 @@
 use std::{
-    os::unix::fs::PermissionsExt as _,
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -38,14 +37,8 @@ fn forgejo() -> (Server, Arc<Mutex<Vec<String>>>) {
     (server, changes)
 }
 
-/// A directory holding an executable `forgejo-runner`.
 fn runner_program(root: &Path) -> std::ffi::OsString {
-    let bin = root.join("bin");
-    std::fs::create_dir(&bin).unwrap();
-    let program = bin.join("forgejo-runner");
-    std::fs::write(&program, "#!/bin/sh\n").unwrap();
-    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
-    bin.into_os_string()
+    crate::daemon::workspace::runner::tests::runner_program(root, "forgejo-runner")
 }
 
 fn settings(host: &str, enabled: bool) -> String {
@@ -89,8 +82,8 @@ async fn the_runner_follows_the_setting_and_goes_with_its_repository() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(registration.runner.uuid, "u");
-    assert_eq!(registration.runner.token, "t");
+    let runner = registration.runner.unwrap();
+    assert_eq!((runner.uuid.as_str(), runner.token.as_str()), ("u", "t"));
     let registrations = server
         .received()
         .into_iter()

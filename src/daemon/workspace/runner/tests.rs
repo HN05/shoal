@@ -14,7 +14,7 @@ use crate::{
         notifications::NotificationKind,
         workspace::{Ending, ExecutionKind, Manager, StartedExecution},
     },
-    forge::{backends::ForgeKind, test_support::Server},
+    forge::{backends::ForgeKind, ci::runner::JobCommand, test_support::Server},
     model::{QueueEntry, Workspace},
     state::{QueueKind, QueueState},
     test_support::{configure, git, manager, repository},
@@ -26,12 +26,13 @@ type Launched = (Vec<OsString>, StartedExecution);
 /// Each test launch, by workspace.
 static LAUNCHED: LazyLock<Mutex<HashMap<String, Launched>>> = LazyLock::new(Default::default);
 
-/// Record `argv` as run in `workspace` by an execution the test ends.
+/// Record `command` as run in `workspace` by an execution the test ends.
 pub(super) async fn launch(
     manager: &Manager,
     workspace: &Workspace,
-    argv: Vec<OsString>,
+    command: JobCommand,
 ) -> anyhow::Result<String> {
+    let argv = command.argv;
     let started = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await?;
@@ -94,6 +95,7 @@ async fn fixture(jobs: Vec<Value>, pull_head: &'static str, settings: &str) -> F
         (200, Vec::new(), body.to_string().into())
     });
     crate::forge::hosts::learn(&server.host, ForgeKind::Forgejo);
+    *manager.runners.path.lock().unwrap() = Some(runner_program(root.path(), "forgejo-runner"));
     let origin = format!("http://{}/team/repo", server.host);
     git(&path, &["remote", "add", "origin", &origin]);
     // The cached remote HEAD names the default branch without a fetch.
@@ -134,6 +136,16 @@ async fn fixture(jobs: Vec<Value>, pull_head: &'static str, settings: &str) -> F
         head,
         server,
     }
+}
+
+/// A directory holding an executable `program`.
+pub(super) fn runner_program(root: &std::path::Path, program: &str) -> OsString {
+    let bin = root.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let path = bin.join(program);
+    std::fs::write(&path, "#!/bin/sh\n").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    bin.into_os_string()
 }
 
 fn run(id: u64, event: &str, commit: &str, payload: Value) -> Value {
@@ -191,14 +203,14 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     let argv: Vec<_> = argv.iter().map(|arg| arg.to_str().unwrap()).collect();
     let directory = manager.job_directory(&claimed[0].id);
     let token = directory.join("token");
+    assert!(argv[0].ends_with("/bin/forgejo-runner"), "{argv:?}");
     assert_eq!(
-        argv[..5],
+        argv[1..5],
         [
-            "forgejo-runner",
             "--config",
             directory.join("config.yaml").to_str().unwrap(),
             "one-job",
-            "--url"
+            "--url",
         ]
     );
     assert!(

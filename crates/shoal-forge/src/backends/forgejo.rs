@@ -810,12 +810,13 @@ impl Backend for Forgejo {
         Ok(runner::PROGRAM)
     }
 
-    fn waiting_jobs_path(&self, labels: &[String]) -> Result<String> {
-        Ok(runner::waiting_jobs_path(labels))
-    }
-
-    fn waiting_job(&self, value: &Value) -> Result<Option<WaitingJob>> {
-        runner::waiting_job(value)
+    async fn waiting_jobs(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        labels: &[String],
+    ) -> Result<Vec<WaitingJob>> {
+        runner::waiting_jobs(repo, account, labels).await
     }
 
     /// Forgejo reads a run by its API ID here, not its number.
@@ -827,19 +828,26 @@ impl Backend for Forgejo {
         runner::job_run(repo, value)
     }
 
-    fn register_runner(&self, repo: &ForgeRepo, name: &str) -> Result<Request> {
-        Ok(runner::register(repo, name))
-    }
-
-    fn registered_runner(&self, value: &Value) -> Result<RegisteredRunner> {
-        runner::registered(value)
+    async fn register_runner(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        name: &str,
+    ) -> Result<Option<RegisteredRunner>> {
+        let value = repo.send(account, &runner::register(repo, name)).await?;
+        runner::registered(&value).map(Some)
     }
 
     fn delete_runner(&self, repo: &ForgeRepo, id: u64) -> Result<Request> {
         Ok(runner::delete(repo, id))
     }
 
-    fn job_command(&self, repo: &ForgeRepo, launch: &JobLaunch<'_>) -> Result<JobCommand> {
+    async fn job_command(
+        &self,
+        repo: &ForgeRepo,
+        _account: &Account,
+        launch: &JobLaunch<'_>,
+    ) -> Result<JobCommand> {
         runner::job_command(repo, launch)
     }
 

@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 129;
+pub(super) const SCHEMA_VERSION: i64 = 130;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -392,7 +392,23 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (127, include_str!("ci_jobs.sql"), None),
     (128, include_str!("space_numbers.sql"), None),
     (129, "", Some(super::item_numbers::number_items)),
+    (130, REPOSITORY_RUNNERS_OPTIONAL, None),
 ];
+
+/// A repository on a forge whose runners each take one job keeps no runner
+/// of its own: its row records only the forge repository it serves. Nothing
+/// references the table, so it is rebuilt.
+pub(super) const REPOSITORY_RUNNERS_OPTIONAL: &str = "CREATE TABLE runners_optional (
+    repository_id TEXT PRIMARY KEY REFERENCES repositories(id) ON DELETE CASCADE,
+    forge_repository TEXT NOT NULL,
+    forge_id INTEGER,
+    uuid TEXT,
+    token TEXT,
+    CHECK((forge_id IS NULL) = (uuid IS NULL) AND (uuid IS NULL) = (token IS NULL))
+);
+INSERT INTO runners_optional SELECT repository_id,forge_repository,forge_id,uuid,token FROM runners;
+DROP TABLE runners;
+ALTER TABLE runners_optional RENAME TO runners;";
 
 /// The workspace whose worktree a chat runs in instead of its repository's
 /// checkout. Removing the workspace removes its chats first, so nothing

@@ -3,7 +3,10 @@
 //! repository's runner, and the command of the forge's own runner that runs
 //! one job. Shoal decides which job runs when; the forge's runner runs its
 //! steps.
-use std::{ffi::OsString, path::Path};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -58,7 +61,8 @@ pub struct JobRun {
 }
 
 /// A runner the forge registered for the repository, with what it connects
-/// as.
+/// as. A forge whose runners each take one job registers none for the
+/// repository, only one per job.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RegisteredRunner {
     /// The ID that deletes it.
@@ -70,24 +74,50 @@ pub struct RegisteredRunner {
 /// What one job's run of the forge's runner needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JobLaunch<'a> {
-    pub runner: &'a RegisteredRunner,
-    /// A file holding the runner's token, so it stays off the command line.
-    pub token_file: &'a Path,
-    /// The file the command reads its configuration from.
-    pub config_file: &'a Path,
+    /// The repository's runner, on a forge that keeps one.
+    pub runner: Option<&'a RegisteredRunner>,
+    /// The runner's program, as found on `PATH`.
+    pub program: &'a Path,
+    /// The name a runner registered for this job alone takes.
+    pub name: &'a str,
     /// Where the runner keeps the job's own files.
     pub work_dir: &'a Path,
+    /// The job's workspace, at the job's commit.
+    pub workspace: &'a Path,
     pub labels: &'a [String],
-    pub handle: &'a str,
+    pub job: &'a WaitingJob,
     /// Variables every step and the workflow's `env` context get.
     pub env: &'a [(String, String)],
 }
 
-/// The command that runs one job, and the configuration it reads.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// The command that runs one job, and what it needs in place before it
+/// starts.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct JobCommand {
     pub argv: Vec<OsString>,
-    pub config: String,
+    /// Variables the command gets besides its workspace's, which may be
+    /// secret.
+    pub env: Vec<(String, String)>,
+    /// Files to write, readable by the user alone, such as the runner's
+    /// configuration and credentials.
+    pub files: Vec<(PathBuf, String)>,
+    /// The runner's installation, copied for a runner that writes its
+    /// credentials and work into its own directory.
+    pub installation: Option<Installation>,
+    /// Where the runner expects the job's working directory, made a link to
+    /// the job's workspace once the installation is in place.
+    pub workspace_links: Vec<PathBuf>,
+    /// The runner registered for this job alone, which ends with its job.
+    pub runner: Option<u64>,
+}
+
+/// The entries of a runner's installation to copy into a directory of the
+/// job's own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Installation {
+    pub source: PathBuf,
+    pub destination: PathBuf,
+    pub entries: Vec<OsString>,
 }
 
 impl ForgeRepo {
@@ -108,16 +138,7 @@ impl ForgeRepo {
         account: &Account,
         labels: &[String],
     ) -> Result<Vec<WaitingJob>> {
-        let path = self.kind.waiting_jobs_path(labels)?;
-        let read = Request::get(self.repo_endpoint(&path));
-        let listed = self.send(account, &read).await?;
-        let mut jobs = listed
-            .as_array()
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-            .iter()
-            .filter_map(|value| self.kind.waiting_job(value).transpose())
-            .collect::<Result<Vec<_>>>()?;
+        let mut jobs = self.kind.waiting_jobs(self, account, labels).await?;
         jobs.sort_by_key(|job| job.id);
         Ok(jobs)
     }
@@ -129,11 +150,14 @@ impl ForgeRepo {
         self.kind.job_run(self, &value)
     }
 
-    /// Register a runner named `name` for this repository alone.
-    pub async fn register_runner(&self, account: &Account, name: &str) -> Result<RegisteredRunner> {
-        let request = self.kind.register_runner(self, name)?;
-        let value = self.send(account, &request).await?;
-        self.kind.registered_runner(&value)
+    /// Register a runner named `name` for this repository alone, or, on a
+    /// forge that registers one per job, check that `account` may.
+    pub async fn register_runner(
+        &self,
+        account: &Account,
+        name: &str,
+    ) -> Result<Option<RegisteredRunner>> {
+        self.kind.register_runner(self, account, name).await
     }
 
     /// Delete the repository's runner `id`; one already gone counts as deleted.
@@ -144,9 +168,14 @@ impl ForgeRepo {
         Ok(())
     }
 
-    /// The command that claims and runs the job `launch` names.
-    pub fn job_command(&self, launch: &JobLaunch<'_>) -> Result<JobCommand> {
-        self.kind.job_command(self, launch)
+    /// The command that claims and runs the job `launch` names, registering
+    /// a runner for it alone where the forge's runners take one job each.
+    pub async fn job_command(
+        &self,
+        account: &Account,
+        launch: &JobLaunch<'_>,
+    ) -> Result<JobCommand> {
+        self.kind.job_command(self, account, launch).await
     }
 
     /// The web URL of the forge instance the repository is on.

@@ -29,21 +29,22 @@ fn the_job_search_lists_waiting_jobs_and_skips_others() {
         "handle": "h1", "id": 7, "run_id": 3, "name": "rust",
         "runs_on": ["shoal"], "status": "waiting",
     });
-    assert_eq!(
-        waiting_job(&waiting).unwrap(),
-        Some(WaitingJob {
-            handle: "h1".into(),
-            id: 7,
-            run: 3,
-            name: "rust".into(),
-            labels: vec!["shoal".into()],
-        })
-    );
+    assert_eq!(waiting_job(&waiting).unwrap(), Some(job()));
     let running =
         json!({"handle": "h2", "id": 8, "run_id": 3, "name": "rust", "status": "running"});
     assert_eq!(waiting_job(&running).unwrap(), None);
     let error = waiting_job(&json!({"id": 9, "run_id": 3, "name": "rust"})).unwrap_err();
     assert!(error.to_string().contains("handle"), "{error}");
+}
+
+fn job() -> WaitingJob {
+    WaitingJob {
+        handle: "h1".into(),
+        id: 7,
+        run: 3,
+        name: "rust".into(),
+        labels: vec!["shoal".into()],
+    }
 }
 
 #[test]
@@ -106,13 +107,15 @@ fn one_job_claims_the_handle_on_the_host_backend_with_its_files_in_the_work_dire
         token: "t".into(),
     };
     let labels = ["shoal".to_owned(), "shoal-macos-arm64".to_owned()];
+    let job = job();
     let launch = JobLaunch {
-        runner: &runner,
-        token_file: Path::new("/state/runner/token"),
-        config_file: Path::new("/work/config.yaml"),
+        runner: Some(&runner),
+        program: Path::new("/bin/forgejo-runner"),
+        name: "shoal-host-1",
         work_dir: Path::new("/work dir"),
+        workspace: Path::new("/work/ci rust"),
         labels: &labels,
-        handle: "h1",
+        job: &job,
         env: &[("SHOAL_WORKSPACE_PATH".into(), "/work/ci rust".into())],
     };
     let command = job_command(&repo(), &launch).unwrap();
@@ -124,16 +127,16 @@ fn one_job_claims_the_handle_on_the_host_backend_with_its_files_in_the_work_dire
     assert_eq!(
         argv,
         [
-            "forgejo-runner",
+            "/bin/forgejo-runner",
             "--config",
-            "/work/config.yaml",
+            "/work dir/config.yaml",
             "one-job",
             "--url",
             "https://forge.example",
             "--uuid",
             "u",
             "--token-url",
-            "file:/state/runner/token",
+            "file:/work dir/token",
             "--handle",
             "h1",
             "--label",
@@ -142,23 +145,26 @@ fn one_job_claims_the_handle_on_the_host_backend_with_its_files_in_the_work_dire
             "shoal-macos-arm64:host",
         ]
     );
-    assert!(
-        command
-            .config
-            .contains("workdir_parent: \"/work dir/host\""),
-        "{}",
-        command.config
+    let [(token_file, token), (config_file, config)] = &command.files[..] else {
+        panic!("{:?}", command.files);
+    };
+    assert_eq!(
+        (token_file.as_path(), token.as_str()),
+        (Path::new("/work dir/token"), "t")
     );
+    assert_eq!(config_file, Path::new("/work dir/config.yaml"));
     assert!(
-        command.config.contains("file: \"/work dir/.runner\""),
-        "{}",
-        command.config
+        config.contains("workdir_parent: \"/work dir/host\""),
+        "{config}"
     );
+    assert!(config.contains("file: \"/work dir/.runner\""), "{config}");
     assert!(
-        command
-            .config
-            .contains("  envs:\n    \"SHOAL_WORKSPACE_PATH\": \"/work/ci rust\"\nhost:"),
-        "{}",
-        command.config
+        config.contains("  envs:\n    \"SHOAL_WORKSPACE_PATH\": \"/work/ci rust\"\nhost:"),
+        "{config}"
+    );
+    assert_eq!(
+        (command.installation, command.runner),
+        (None, None),
+        "Forgejo's runner runs from where it is installed, as the repository's"
     );
 }

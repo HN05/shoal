@@ -40,7 +40,7 @@ async fn waiting_jobs_come_oldest_first_and_registration_round_trips() -> Result
     let handles: Vec<_> = jobs.iter().map(|job| job.handle.as_str()).collect();
     assert_eq!(handles, ["a", "b"]);
     let runner = forgejo.register_runner(&account, "shoal-host").await?;
-    assert_eq!(runner.uuid, "u");
+    assert_eq!(runner.map(|runner| runner.uuid).as_deref(), Some("u"));
     forgejo.delete_runner(&account, 5).await?;
     // A runner deleted on the forge already counts as deleted.
     forgejo.delete_runner(&account, 6).await?;

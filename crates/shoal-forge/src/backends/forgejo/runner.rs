@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use crate::{
     ForgeRepo,
+    account::Account,
     ci::runner::{
         JobCommand, JobLaunch, JobRun, RegisteredRunner, Trigger, WaitingJob, file_url,
         registration,
@@ -17,8 +18,25 @@ use crate::{
 /// The program that runs one job.
 pub(super) const PROGRAM: &str = "forgejo-runner";
 
+/// The jobs the job search lists as waiting for a runner with `labels`.
+pub(super) async fn waiting_jobs(
+    repo: &ForgeRepo,
+    account: &Account,
+    labels: &[String],
+) -> Result<Vec<WaitingJob>> {
+    let read = Request::get(repo.repo_endpoint(&waiting_jobs_path(labels)));
+    let listed = repo.send(account, &read).await?;
+    listed
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|value| waiting_job(value).transpose())
+        .collect()
+}
+
 /// The search for the jobs waiting for a runner with `labels`.
-pub(super) fn waiting_jobs_path(labels: &[String]) -> String {
+fn waiting_jobs_path(labels: &[String]) -> String {
     format!(
         "actions/runners/jobs?labels={}",
         encode(&labels.join(","), false)
@@ -26,7 +44,7 @@ pub(super) fn waiting_jobs_path(labels: &[String]) -> String {
 }
 
 /// A listed job, unless it no longer waits.
-pub(super) fn waiting_job(value: &Value) -> Result<Option<WaitingJob>> {
+fn waiting_job(value: &Value) -> Result<Option<WaitingJob>> {
     if value["status"]
         .as_str()
         .is_some_and(|status| status != "waiting")
@@ -113,6 +131,9 @@ pub(super) fn delete(repo: &ForgeRepo, id: u64) -> Request {
 /// launch's work directory and gives the job the launch's variables, which
 /// `runner.envs` puts in every step's environment and the `env` context.
 pub(super) fn job_command(repo: &ForgeRepo, launch: &JobLaunch<'_>) -> Result<JobCommand> {
+    let runner = launch
+        .runner
+        .context("Forgejo runs a job only on the repository's runner")?;
     let work = launch
         .work_dir
         .to_str()
@@ -129,24 +150,30 @@ pub(super) fn job_command(repo: &ForgeRepo, launch: &JobLaunch<'_>) -> Result<Jo
         quoted(format!("{work}/.runner")),
         quoted(format!("{work}/host")),
     );
+    let token_file = launch.work_dir.join("token");
+    let config_file = launch.work_dir.join("config.yaml");
     let mut argv: Vec<OsString> = vec![
-        PROGRAM.into(),
+        launch.program.into(),
         "--config".into(),
-        launch.config_file.into(),
+        config_file.clone().into(),
         "one-job".into(),
         "--url".into(),
         repo.instance_url().into(),
         "--uuid".into(),
-        launch.runner.uuid.clone().into(),
+        runner.uuid.clone().into(),
         "--token-url".into(),
-        file_url(launch.token_file)?,
+        file_url(&token_file)?,
         "--handle".into(),
-        launch.handle.into(),
+        launch.job.handle.clone().into(),
     ];
     for label in launch.labels {
         argv.extend(["--label".into(), format!("{label}:host").into()]);
     }
-    Ok(JobCommand { argv, config })
+    Ok(JobCommand {
+        argv,
+        files: vec![(token_file, runner.token.clone()), (config_file, config)],
+        ..JobCommand::default()
+    })
 }
 
 fn field(value: &Value, name: &str) -> Result<String> {

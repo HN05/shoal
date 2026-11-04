@@ -688,14 +688,13 @@ pub(crate) trait Backend {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
 
-    /// The path under the repository that lists the jobs waiting for a
-    /// runner with `labels`.
-    fn waiting_jobs_path(&self, _labels: &[String]) -> Result<String> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
-    }
-
-    /// A job the job search listed as `value`, unless it no longer waits.
-    fn waiting_job(&self, _value: &Value) -> Result<Option<WaitingJob>> {
+    /// The jobs waiting for a runner with `labels`.
+    async fn waiting_jobs(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _labels: &[String],
+    ) -> Result<Vec<WaitingJob>> {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
 
@@ -709,13 +708,14 @@ pub(crate) trait Backend {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
 
-    /// The request that registers a runner named `name` for the repository.
-    fn register_runner(&self, _repo: &ForgeRepo, _name: &str) -> Result<Request> {
-        Err(crate::capability::unsupported(self, Capability::RunJobs))
-    }
-
-    /// The runner a registration request's response `value` reports.
-    fn registered_runner(&self, _value: &Value) -> Result<RegisteredRunner> {
+    /// Register a runner named `name` for the repository, or, where the
+    /// forge registers one per job, check that `account` may.
+    async fn register_runner(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _name: &str,
+    ) -> Result<Option<RegisteredRunner>> {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
 
@@ -725,7 +725,12 @@ pub(crate) trait Backend {
     }
 
     /// The command that claims and runs the job `launch` names.
-    fn job_command(&self, _repo: &ForgeRepo, _launch: &JobLaunch<'_>) -> Result<JobCommand> {
+    async fn job_command(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _launch: &JobLaunch<'_>,
+    ) -> Result<JobCommand> {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
 
@@ -1476,12 +1481,13 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.runner_program())
     }
 
-    fn waiting_jobs_path(&self, labels: &[String]) -> Result<String> {
-        dispatch!(self, backend => backend.waiting_jobs_path(labels))
-    }
-
-    fn waiting_job(&self, value: &Value) -> Result<Option<WaitingJob>> {
-        dispatch!(self, backend => backend.waiting_job(value))
+    async fn waiting_jobs(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        labels: &[String],
+    ) -> Result<Vec<WaitingJob>> {
+        dispatch!(self, backend => backend.waiting_jobs(repo, account, labels).await)
     }
 
     fn job_run_path(&self, id: u64) -> Result<String> {
@@ -1492,20 +1498,26 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.job_run(repo, value))
     }
 
-    fn register_runner(&self, repo: &ForgeRepo, name: &str) -> Result<Request> {
-        dispatch!(self, backend => backend.register_runner(repo, name))
-    }
-
-    fn registered_runner(&self, value: &Value) -> Result<RegisteredRunner> {
-        dispatch!(self, backend => backend.registered_runner(value))
+    async fn register_runner(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        name: &str,
+    ) -> Result<Option<RegisteredRunner>> {
+        dispatch!(self, backend => backend.register_runner(repo, account, name).await)
     }
 
     fn delete_runner(&self, repo: &ForgeRepo, id: u64) -> Result<Request> {
         dispatch!(self, backend => backend.delete_runner(repo, id))
     }
 
-    fn job_command(&self, repo: &ForgeRepo, launch: &JobLaunch<'_>) -> Result<JobCommand> {
-        dispatch!(self, backend => backend.job_command(repo, launch))
+    async fn job_command(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        launch: &JobLaunch<'_>,
+    ) -> Result<JobCommand> {
+        dispatch!(self, backend => backend.job_command(repo, account, launch).await)
     }
 
     fn plain_log(&self, log: &str) -> String {

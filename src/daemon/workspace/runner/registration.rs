@@ -1,6 +1,10 @@
 //! The runner each repository registers on its forge: registered while
 //! `runner.enabled` is on for it, with the user's own login, and deleted on
-//! the forge once the setting is off or the repository is removed.
+//! the forge once the setting is off or the repository is removed. On a
+//! forge whose runners each take one job, registration only checks that the
+//! login may register them and keeps no runner.
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, params};
 
@@ -16,7 +20,8 @@ use crate::{
 pub(crate) struct Registration {
     /// The web URL of the forge repository it serves.
     pub forge_repository: String,
-    pub runner: RegisteredRunner,
+    /// The repository's runner, on a forge that keeps one.
+    pub runner: Option<RegisteredRunner>,
 }
 
 impl Manager {
@@ -94,13 +99,17 @@ impl Manager {
                         "SELECT forge_repository,forge_id,uuid,token FROM runners WHERE repository_id=?1",
                         [id],
                         |row| {
-                            Ok(Registration {
-                                forge_repository: row.get(0)?,
-                                runner: RegisteredRunner {
-                                    id: row.get::<_, i64>(1)? as u64,
+                            let runner = match row.get::<_, Option<i64>>(1)? {
+                                Some(id) => Some(RegisteredRunner {
+                                    id: id as u64,
                                     uuid: row.get(2)?,
                                     token: row.get(3)?,
-                                },
+                                }),
+                                None => None,
+                            };
+                            Ok(Registration {
+                                forge_repository: row.get(0)?,
+                                runner,
                             })
                         },
                     )
@@ -114,12 +123,18 @@ impl Manager {
     /// program is on the daemon's `PATH`.
     async fn runner_forge(&self, repository: &Repository, account: &Account) -> Result<ForgeRepo> {
         let forge = self.checkout_forge(repository).await?;
+        self.runner_program(&forge)?;
+        forge.require_runner(account).await?;
+        Ok(forge)
+    }
+
+    /// Where `forge`'s runner program is on the daemon's `PATH`, which each
+    /// job's command inherits.
+    pub(super) fn runner_program(&self, forge: &ForgeRepo) -> Result<PathBuf> {
         let program = forge.runner_program()?;
         let path = self.runners.search_path();
         crate::fsutil::find_executable(program.as_ref(), &path)
-            .with_context(|| format!("{program} is not on the daemon's PATH; install it"))?;
-        forge.require_runner(account).await?;
-        Ok(forge)
+            .with_context(|| format!("{program} is not on the daemon's PATH; install it"))
     }
 
     /// Register a runner for `repository` unless it is being removed, under
@@ -148,10 +163,12 @@ impl Manager {
             forge_repository: forge.repository_url(),
             runner: forge.register_runner(&account, &name).await?,
         };
-        let forge_id = registration.runner.id;
+        let forge_id = registration.runner.as_ref().map(|runner| runner.id);
         if let Err(error) = self.keep_registration(&repository.id, registration).await {
             // Unkept, the runner would stay on the forge with nothing to delete it.
-            let _ = forge.delete_runner(&account, forge_id).await;
+            if let Some(id) = forge_id {
+                let _ = forge.delete_runner(&account, id).await;
+            }
             return Err(error);
         }
         Ok(())
@@ -165,16 +182,16 @@ impl Manager {
         let id = repository_id.to_owned();
         self.store
             .run(move |db| {
-                let runner = &registration.runner;
+                let runner = registration.runner.as_ref();
                 db.execute(
                     "INSERT INTO runners(repository_id,forge_repository,forge_id,uuid,token)
                      VALUES (?1,?2,?3,?4,?5)",
                     params![
                         id,
                         registration.forge_repository,
-                        i64::try_from(runner.id)?,
-                        runner.uuid,
-                        runner.token
+                        runner.map(|runner| i64::try_from(runner.id)).transpose()?,
+                        runner.map(|runner| &runner.uuid),
+                        runner.map(|runner| &runner.token)
                     ],
                 )?;
                 Ok(())
@@ -189,10 +206,11 @@ impl Manager {
         repository: &Repository,
         registration: &Registration,
     ) -> Result<()> {
-        let forge = ForgeRepo::resolve(&registration.forge_repository, &self.forge_hosts()).await?;
-        forge
-            .delete_runner(&self.user_account(), registration.runner.id)
-            .await?;
+        if let Some(runner) = &registration.runner {
+            let forge =
+                ForgeRepo::resolve(&registration.forge_repository, &self.forge_hosts()).await?;
+            forge.delete_runner(&self.user_account(), runner.id).await?;
+        }
         let id = repository.id.clone();
         self.store
             .run(move |db| {
