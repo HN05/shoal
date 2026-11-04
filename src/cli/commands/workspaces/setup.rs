@@ -218,9 +218,17 @@ async fn settle_setup(
                     agent: None,
                 }))
             }
+            Err(error) if after_setup(ctx, workspace).await? => Err(error),
             Err(error) => handle_setup_failure(ctx, workspace, error).await,
         },
     }
+}
+
+/// Whether `workspace` is ready, so what failed came after its setup, such
+/// as queuing its agent, and leaves no setup to recover.
+async fn after_setup(ctx: &Context, workspace: &Workspace) -> Result<bool> {
+    let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
+    Ok(inspection.workspace.state == WorkspaceState::Ready)
 }
 
 /// Let an interactive user delete, ignore or keep the workspace whose setup

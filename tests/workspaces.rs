@@ -4910,6 +4910,41 @@ fn split_starts_the_childs_agent_from_a_fork_of_the_parents_session() {
     assert_eq!(args.last(), Some(&"Take the child part"), "{args:?}");
 }
 
+/// A child set up for an agent that its own configuration then refuses
+/// stays ready, and the refusal is reported as it is, not as a failed setup.
+#[test]
+fn split_reports_an_agent_refused_after_the_childs_setup() {
+    let fixture = Fixture::with_config(Some(
+        "[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    // Only the child's setup gives the agent a model it has no template for.
+    install_test_script(
+        fixture.repo.join("setup.sh"),
+        "#!/bin/sh\ncase \"$PWD\" in */child) printf \"[agent]\\ndefault = 'waiter'\\nmodel = 'big'\\n\" >> .shoal.toml ;; esac\n",
+    );
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
+    fixture.add("parent");
+    let output = fixture.run(&[
+        "split",
+        "child",
+        "--workspace",
+        "parent",
+        "--agent",
+        "waiter",
+    ]);
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot start waiter with a configured or requested model"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("setup failed"), "{stderr}");
+    let child = &fixture.ok(&["status", "child"])["workspace"];
+    assert_eq!(child["state"], "ready", "{child}");
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
+}
+
 #[test]
 fn split_rejects_an_invalid_branch_before_choosing_a_parent() {
     let fixture = Fixture::new();
