@@ -38,7 +38,7 @@ impl Manager {
             let registered = self.runner_registration(&repository.id).await?;
             let result = match (enabled, registered) {
                 (true, None) if self.runners.due(&repository.id) => {
-                    self.register_runner(&repository).await
+                    self.register_runner_unless_removed(&repository).await
                 }
                 (false, Some(registration)) => self.delete_runner(&repository, &registration).await,
                 _ => continue,
@@ -120,6 +120,22 @@ impl Manager {
             .with_context(|| format!("{program} is not on the daemon's PATH; install it"))?;
         forge.require_runner(&self.user_account()).await?;
         Ok(forge)
+    }
+
+    /// Register a runner for `repository` unless it is being removed, under
+    /// the registry gate removal holds, so removal, which deletes the
+    /// runner, never misses one registered meanwhile.
+    async fn register_runner_unless_removed(&self, repository: &Repository) -> Result<()> {
+        let _registry = self.gates.lock_registry().await;
+        if self.repository(repository.id.as_str()).await.is_err()
+            || self
+                .ensure_repository_available(&repository.id)
+                .await
+                .is_err()
+        {
+            return Ok(());
+        }
+        self.register_runner(repository).await
     }
 
     /// Register a runner for `repository` on its forge and keep it.
