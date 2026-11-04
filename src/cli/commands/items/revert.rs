@@ -7,7 +7,7 @@ use super::{
     content::read_content,
     open::{print_warnings, publish, report_proposed},
 };
-use crate::client::operations::{self, NewWorkspace};
+use crate::client::operations::{self, NewSplit, NewWorkspace};
 use crate::client::output::items::Revert;
 use crate::client::{forge_reads, items};
 use crate::{
@@ -144,15 +144,11 @@ async fn revert_workspace(
     let base = Some(format!("origin/{}", pr.base));
     let started = match from {
         Reverting::Workspace(workspace) if crate::env::is_scoped() => {
-            split::start_child(
-                ctx,
-                workspace.id.clone(),
-                name,
+            let start = NewSplit {
                 base,
-                None,
-                Default::default(),
-            )
-            .await?
+                ..NewSplit::new(workspace.id.clone(), name)
+            };
+            split::start_child(ctx, start).await?
         }
         Reverting::Workspace(workspace) => {
             let repository = workspace.repository_id.clone();

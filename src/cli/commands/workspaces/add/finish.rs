@@ -264,6 +264,7 @@ async fn finish_add_workspace(
     let Some(SetUp {
         mut workspace,
         post_setup,
+        ..
     }) = follow_setup(ctx, started).await?
     else {
         return Ok(None);

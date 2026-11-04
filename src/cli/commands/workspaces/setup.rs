@@ -14,8 +14,10 @@ use crate::{
     },
     client::recovery::ReconcileOptions,
     env, execution, git,
-    model::Workspace,
-    protocol::operations::{Failure, OperationSpec, Preparation, Prepared, StartedWorkspace},
+    model::{QueueEntry, Workspace},
+    protocol::operations::{
+        Failure, OperationSpec, Preparation, Prepared, QueuedLaunch, StartedWorkspace,
+    },
     removal::UnsavedWork,
     state::WorkspaceState,
 };
@@ -114,23 +116,48 @@ pub(in crate::cli::commands) async fn run_post_setup(
 }
 
 /// A workspace setup made ready, and how what follows setup in the same
-/// operation went: its post-setup hook, when the operation runs it.
+/// operation went: its post-setup hook, when the operation runs it, and the
+/// agent it queued.
 pub(in crate::cli::commands) struct SetUp {
     pub workspace: Workspace,
     /// `None` when the user ignored setup's failure, so nothing that
     /// follows setup ran.
     pub post_setup: Option<Result<()>>,
+    pub agent: Option<QueueEntry>,
 }
 
 impl SetUp {
     /// The workspace once its post-setup hook succeeded, running it now
     /// when it did not run with setup.
     pub(in crate::cli::commands) async fn finish(self, ctx: &Context) -> Result<Workspace> {
+        let prepared = self.finish_queuing(ctx, None).await?;
+        Ok(*prepared.workspace)
+    }
+
+    /// The prepared workspace once its post-setup hook succeeded, running
+    /// it now, then queuing `agent`, when they did not run with setup.
+    pub(in crate::cli::commands) async fn finish_queuing(
+        self,
+        ctx: &Context,
+        agent: Option<Box<QueuedLaunch>>,
+    ) -> Result<Prepared> {
         match self.post_setup {
-            Some(result) => result?,
-            None => run_post_setup(ctx, &self.workspace).await?,
+            Some(result) => result.map(|()| Prepared {
+                workspace: Box::new(self.workspace),
+                agent: self.agent,
+            }),
+            None => {
+                let spec = OperationSpec::Prepare {
+                    workspace: self.workspace.id,
+                    steps: Preparation {
+                        post_setup: true,
+                        agent,
+                        ..Default::default()
+                    },
+                };
+                operations::run::<Prepared>(ctx, spec).await
+            }
         }
-        Ok(self.workspace)
     }
 }
 
@@ -177,6 +204,7 @@ async fn settle_setup(
         Ok(prepared) => Ok(Some(SetUp {
             workspace: *prepared.workspace,
             post_setup: Some(Ok(())),
+            agent: prepared.agent,
         })),
         Err(error) => match error.downcast::<execution::SetupVerificationFailure>() {
             Ok(failure) => {
@@ -187,6 +215,7 @@ async fn settle_setup(
                 Ok(Some(SetUp {
                     workspace: workspace.workspace,
                     post_setup: Some(Err(error)),
+                    agent: None,
                 }))
             }
             Err(error) => handle_setup_failure(ctx, workspace, error).await,
@@ -228,6 +257,7 @@ async fn handle_setup_failure(
     Ok(Some(SetUp {
         workspace: inspection.workspace,
         post_setup: None,
+        agent: None,
     }))
 }
 

@@ -11,7 +11,8 @@ use crate::client::{
     protocol::{
         Body, CreationOptions, OperationMethod, Responses,
         operations::{
-            Ended, OperationEvent, OperationSpec, Report, Started, StartedWorkspace, WorkspaceStart,
+            Ended, OperationEvent, OperationSpec, QueuedLaunch, Report, Started, StartedWorkspace,
+            WorkspaceStart,
         },
     },
     repository::Selector,
@@ -153,24 +154,57 @@ pub async fn start_workspace(
     connection::request(daemon, method).await
 }
 
-/// Split a child of `workspace` on a new branch `name` from `base`, linking
-/// the issue `issue` names by URL, and start preparing it with `env`.
+/// A child workspace for the daemon to split and prepare in an operation.
+pub struct NewSplit {
+    /// The workspace it is split from.
+    pub workspace: String,
+    /// Its new branch.
+    pub name: String,
+    /// The branch its branch starts from.
+    pub base: Option<String>,
+    pub options: CreationOptions,
+    /// The issue to link, by URL.
+    pub issue: Option<String>,
+    /// The agent its preparation queues.
+    pub agent: Option<Box<QueuedLaunch>>,
+}
+
+impl NewSplit {
+    /// A child of `workspace` on a new branch `name`, with defaults for
+    /// everything else.
+    pub fn new(workspace: String, name: String) -> Self {
+        Self {
+            workspace,
+            name,
+            base: None,
+            options: CreationOptions::default(),
+            issue: None,
+            agent: None,
+        }
+    }
+}
+
+/// Split `split` and start preparing it with `env`.
 pub async fn start_split(
     daemon: &impl Daemon,
-    workspace: String,
-    name: String,
-    base: Option<String>,
-    options: CreationOptions,
-    issue: Option<String>,
+    split: NewSplit,
     env: BTreeMap<String, String>,
 ) -> Result<StartedWorkspace> {
+    let NewSplit {
+        workspace,
+        name,
+        base,
+        options,
+        issue,
+        agent,
+    } = split;
     let method = OperationMethod::StartSplit {
         workspace,
         name,
         base,
         options,
         issue,
-        agent: None,
+        agent,
         env: Some(env),
     };
     connection::request(daemon, method).await
