@@ -26731,10 +26731,14 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
     );
     assert!(prompt.contains("Stops its agent"), "{prompt}");
 
-    let removed = fixture.ok(&["rm", "planning", "--yes"]);
-    assert_eq!(removed["chat"]["id"], chat.as_str(), "{removed}");
+    // Naming the resident chat too removes it once, with the chat above it.
+    let removed = fixture.ok(&["rm", "planning", "reading", "--yes"]);
+    assert_eq!(removed["failed"], serde_json::json!([]), "{removed}");
+    let chats = removed["chats"].as_array().unwrap();
+    assert_eq!(chats.len(), 1, "{removed}");
+    assert_eq!(chats[0]["chat"]["id"], chat.as_str(), "{removed}");
     assert_eq!(
-        removed["children"],
+        chats[0]["children"],
         serde_json::json!(["reading", "below", "opened"])
     );
     assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));

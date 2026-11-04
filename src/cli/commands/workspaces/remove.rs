@@ -114,7 +114,7 @@ async fn remove_one(ctx: &Context, check: RemovalCheck) -> Result<i32> {
 }
 
 /// Remove each of the `chats`, then each checked workspace, going on after
-/// one fails. One that a removal before it took as its child is not removed
+/// one fails. One that a removal before it took with its own is not removed
 /// again.
 async fn remove_each(
     ctx: &Context,
@@ -125,6 +125,9 @@ async fn remove_each(
     let mut removed_chats = ui::Report::new("remove");
     let mut taken = Vec::new();
     for chat in chats {
+        if taken.contains(&chat.name) {
+            continue;
+        }
         match chats::remove(ctx, chat, spaces).await {
             Ok(removed) => {
                 let message = chats::message(&format!("Removed {}", chat.name), &removed);
