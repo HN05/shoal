@@ -854,6 +854,27 @@ async fn workspace(root: &std::path::Path, manager: &Manager) -> (Repository, Wo
     (repo, workspace)
 }
 
+/// A chat runs the diff itself in the path the diff base names, so the base
+/// names only the workspace's own worktree.
+#[tokio::test]
+async fn the_diff_base_names_only_the_workspaces_own_worktree() {
+    let (temp, manager) = manager().await;
+    let (repo, workspace) = workspace(temp.path(), &manager).await;
+    let base = manager.diff_base(&workspace.name).await.unwrap();
+    assert_eq!(base.path, workspace.path);
+    // A clone at its path has the same history, so only the ownership check
+    // tells it apart.
+    std::fs::rename(&workspace.path, temp.path().join("moved")).unwrap();
+    let clone = [repo.path.as_os_str(), workspace.path.as_os_str()].map(|p| p.to_str().unwrap());
+    crate::test_support::git(temp.path(), &["clone", "-q", clone[0], clone[1]]);
+    crate::test_support::git(&workspace.path, &["checkout", "-q", "-b", "worker"]);
+    let error = manager.diff_base(&workspace.name).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("different repository"),
+        "{error:#}"
+    );
+}
+
 #[tokio::test]
 async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
     use crate::{

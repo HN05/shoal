@@ -972,6 +972,8 @@ pub struct PortCatalog {
 pub struct DiffBase {
     pub workspace_id: String,
     pub commit: String,
+    /// The worktree, verified as the workspace's.
+    pub path: PathBuf,
 }
 
 /// Whether a workspace's committed HEAD merges cleanly into a target.

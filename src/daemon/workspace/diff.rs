@@ -9,6 +9,9 @@ impl Manager {
     /// recorded base ref, falling back to a plain merge base.
     pub async fn diff_base(&self, selector: &str) -> Result<DiffBase> {
         let workspace = self.workspace(selector).await?;
+        // Git reads the recorded path only while the workspace's own
+        // worktree is there, not a checkout that replaced it.
+        self.verify_worktree(&workspace).await?;
         let reference = workspace.base_ref.as_deref().or_else(|| {
             // Workspaces from before base tracking used the main-branch workflow.
             workspace.base_commit.is_none().then_some("refs/heads/main")
@@ -36,6 +39,7 @@ impl Manager {
         Ok(DiffBase {
             workspace_id: workspace.id,
             commit,
+            path: workspace.path,
         })
     }
 }
