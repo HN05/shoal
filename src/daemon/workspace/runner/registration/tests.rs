@@ -121,6 +121,44 @@ async fn the_runner_follows_the_setting_and_goes_with_its_repository() {
 }
 
 #[tokio::test]
+async fn registration_fetches_a_token_from_a_command_once() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (server, changes) = forgejo();
+    git(
+        &path,
+        &[
+            "remote",
+            "add",
+            "origin",
+            &format!("http://{}/team/repo", server.host),
+        ],
+    );
+    *manager.runners.path.lock().unwrap() = Some(runner_program(root.path()));
+    let fetches = root.path().join("fetches");
+    let command = format!("echo >> '{}'; echo user", fetches.display());
+    configure(
+        &manager,
+        &format!(
+            "[machine.forges.\"{}\"]\ntype = \"forgejo\"\ntoken = {{ cmd = [\"sh\", \"-c\", {command:?}] }}\n[runner]\nenabled = true\n",
+            server.host
+        ),
+    )
+    .await;
+    manager.reconcile_runners().await.unwrap();
+    assert!(runner_notifications(&manager).await.is_empty());
+    assert_eq!(changes.lock().unwrap().len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(&fetches).unwrap().lines().count(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn a_missing_runner_program_registers_nothing_and_tells_the_user_once() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");

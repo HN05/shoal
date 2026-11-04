@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension, params};
 use crate::daemon::workspace::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
-    forge::{ForgeRepo, ci::runner::RegisteredRunner},
+    forge::{ForgeRepo, account::Account, ci::runner::RegisteredRunner},
     model::Repository,
 };
 
@@ -110,15 +110,15 @@ impl Manager {
     }
 
     /// The forge of `repository`'s checkout, refused unless this machine
-    /// can run its jobs: the forge supports it and its runner program is on
-    /// the daemon's `PATH`.
-    pub(crate) async fn runner_forge(&self, repository: &Repository) -> Result<ForgeRepo> {
+    /// can run its jobs as `account`: the forge supports it and its runner
+    /// program is on the daemon's `PATH`.
+    async fn runner_forge(&self, repository: &Repository, account: &Account) -> Result<ForgeRepo> {
         let forge = self.checkout_forge(repository).await?;
         let program = forge.runner_program()?;
         let path = self.runners.search_path();
         crate::fsutil::find_executable(program.as_ref(), &path)
             .with_context(|| format!("{program} is not on the daemon's PATH; install it"))?;
-        forge.require_runner(&self.user_account()).await?;
+        forge.require_runner(account).await?;
         Ok(forge)
     }
 
@@ -140,8 +140,9 @@ impl Manager {
 
     /// Register a runner for `repository` on its forge and keep it.
     async fn register_runner(&self, repository: &Repository) -> Result<()> {
-        let forge = self.runner_forge(repository).await?;
+        // One account, so a token from a command is fetched once.
         let account = self.user_account();
+        let forge = self.runner_forge(repository, &account).await?;
         let name = format!("shoal-{}", crate::process::machine::hostname());
         let registration = Registration {
             forge_repository: forge.repository_url(),
