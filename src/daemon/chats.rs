@@ -366,6 +366,23 @@ impl Manager {
             .await
     }
 
+    /// The workspace in whose worktree the space `id` runs, when it is a
+    /// chat there.
+    pub(crate) async fn chat_home(&self, id: &str) -> Result<Option<String>> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                Ok(
+                    (db.query_row("SELECT workspace_id FROM chats WHERE id=?1", [id], |row| {
+                        row.get(0)
+                    }))
+                    .optional()?
+                    .flatten(),
+                )
+            })
+            .await
+    }
+
     /// Whether a chat runs in the worktree of the workspace `id`.
     pub(crate) async fn chat_runs_in(&self, id: &str) -> Result<bool> {
         let id = id.to_owned();

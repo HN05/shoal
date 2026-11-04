@@ -116,8 +116,9 @@ instead of the PR delivery guidance below.
 - Scope: tracked executions, externally launched processes with exported
   environments and every chat's agent carry a scope token; only the user's own
   terminal is unscoped. Flag a chat process granted what a workspace process is
-  refused, other than opening workspaces below its chat in its repository and
-  renaming its own chat. Scoped callers get access to their own worktree and the
+  refused, other than opening workspaces below its chat in its repository,
+  renaming its own chat, and reading the workspace whose worktree it runs in
+  with requests that only read state. Scoped callers get access to their own worktree and the
   spaces below it, recursively, only (CLI refusals also follow ancestry
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.

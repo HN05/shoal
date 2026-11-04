@@ -45,14 +45,19 @@ impl Manager {
     }
 
     /// The spaces `target` finds among those `caller` may see: the ones
-    /// below its space, or every space for an unscoped caller.
+    /// below its space and the workspace a chat runs in, or every space for
+    /// an unscoped caller.
     pub(in crate::daemon) async fn find_visible_spaces(
         &self,
         target: &SpaceTarget,
         caller: Option<&Caller>,
     ) -> Result<Vec<PresentSpace>> {
         let within = match caller {
-            Some(caller) => Some(self.subtree(&caller.space_id).await?),
+            Some(caller) => {
+                let mut within = self.subtree(&caller.space_id).await?;
+                within.extend(self.chat_home(&caller.space_id).await?);
+                Some(within)
+            }
             None => None,
         };
         self.find_spaces(target, within).await

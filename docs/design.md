@@ -1916,10 +1916,12 @@ debug, audit or review that workspace's live work, committed and uncommitted,
 with the commands that read a branch, rather than reading another worktree by
 path. A workspace has one editing agent, its own: a chat in it reads and does
 not edit, which its instructions say and nothing enforces until modes decide
-what an agent may do. It stays a chat, unscoped, with its own identity,
+what an agent may do. It stays a chat, with its own identity, scope,
 temporary directory and messages, and is not the workspace's child, since a
 child's questions and approvals go to its parent's agent while the user attends
-a chat; so Shoal commands it runs never act as the workspace's agent. Its
+a chat; so Shoal commands it runs never act as the workspace's agent. Its scope
+reads the workspace as well as the chat and the spaces below it, and refuses
+any request that changes the workspace. Its
 record names the workspace, so a restore runs it there again, commands that
 take the workspace from the directory act on it, and those that act on chats
 keep acting on the chat. A running chat in a workspace is use, so no unattended

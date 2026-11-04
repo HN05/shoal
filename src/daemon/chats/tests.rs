@@ -855,6 +855,63 @@ async fn workspace(root: &std::path::Path, manager: &Manager) -> (Repository, Wo
 }
 
 #[tokio::test]
+async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
+    use crate::{
+        daemon::scope::{Caller, authorize},
+        protocol::{Operation, WorkspaceMethod},
+    };
+    let (temp, manager) = manager().await;
+    let (repo, workspace) = workspace(temp.path(), &manager).await;
+    let other = manager
+        .create_workspace(&repo.id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat_in_workspace(
+            &workspace.name,
+            "worker-chat".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let caller = Caller {
+        space_id: chat.id.clone(),
+        execution: None,
+    };
+    manager.executions.issue_scope("chat".into(), caller).await;
+    let listed = manager.visible_workspaces(Some(&chat.id)).await.unwrap();
+    let names: Vec<_> = listed.into_iter().map(|listed| listed.name).collect();
+    assert_eq!(names, ["worker"]);
+
+    let status = |space: &str| {
+        Operation::from(WorkspaceMethod::SpaceStatus {
+            space: space.into(),
+        })
+    };
+    let diff = Operation::from(WorkspaceMethod::DiffBase {
+        workspace: workspace.name.clone(),
+    });
+    for mut read in [status(&workspace.name), diff] {
+        authorize(&manager, Some("chat"), &mut read).await.unwrap();
+    }
+    let mut change = Operation::from(WorkspaceMethod::SetBaseWorkspace {
+        workspace: workspace.name.clone(),
+        base: None,
+    });
+    let error = authorize(&manager, Some("chat"), &mut change)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("only reads"), "{error:#}");
+    let error = authorize(&manager, Some("chat"), &mut status(&other.name))
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("own space"), "{error:#}");
+}
+
+#[tokio::test]
 async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_there() {
     let (temp, manager) = manager().await;
     let (repo, workspace) = workspace(temp.path(), &manager).await;

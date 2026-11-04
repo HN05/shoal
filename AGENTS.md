@@ -108,7 +108,8 @@ when behavior changes, distinguishing decisions from proposals.
   its own. A chat's agent follows the workspace-agent rules below, without what
   needs a worktree; it opens workspaces only below its chat, in its repository,
   renames its own chat, and opens issues only where `[permissions]` lets agents
-  open them directly. Enforce own-worktree resource access
+  open them directly. A chat in a workspace's worktree also reads that
+  workspace, with requests that only read state, and changes nothing there. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery other than splitting a child and removing one the user holds nothing below, and shared
   repository/service administration. For the workspaces below their own, scoped callers may hold them, queue
   agents and the restores of agents they or the workspaces below them stopped, which the daemon starts detached, cancel their queue

@@ -154,7 +154,8 @@ debug, audit or review its live work beside the workspace's own agent, which
 stays its only editing agent: the chat changes nothing there. In such a chat,
 `shoal diff`, `shoal conflicts`, `shoal status` and `shoal branch base` act on
 the workspace, while the commands that act on chats act on the chat; pass
-`--space <name>` for the workspace's issue, PRs and CI runs. Removing the
+`--space <name>` to read the workspace's issue, PRs and CI runs. The chat's
+scope reads the workspace and refuses changes to it. Removing the
 workspace removes the chat.
 
 To ask the user something in a chat, run `shoal questions ask --in-chat`, then

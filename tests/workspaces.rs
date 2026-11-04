@@ -26463,7 +26463,7 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
 fn install_recording_agent(fixture: &Fixture, agent: &str) {
     install_test_script(
         fixture.root.path().join("bin").join(agent),
-        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\necho \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\necho \"$SHOAL_OUTPUT\" > \"$HOME/chat-output\"\necho \"$SHOAL_WORKSPACE_ID$SHOAL_WORKSPACE\" > \"$HOME/chat-workspace\"\n",
+        "#!/bin/sh\npwd > \"$HOME/chat-cwd\"\nprintf '%s\\0' \"$@\" > \"$HOME/chat-args\"\necho \"${ZMX_SESSION:-none}\" >> \"$HOME/chat-sessions\"\necho \"$SHOAL_CHAT\" > \"$HOME/chat-id\"\necho \"$SHOAL_SCOPE_TOKEN\" > \"$HOME/chat-scope\"\necho \"$SHOAL_OUTPUT\" > \"$HOME/chat-output\"\necho \"$SHOAL_WORKSPACE_ID$SHOAL_WORKSPACE\" > \"$HOME/chat-workspace\"\n",
     );
 }
 
@@ -27231,12 +27231,15 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     let id = chat["id"].as_str().unwrap();
     assert_eq!(fs::read_to_string(home.join("chat-id")).unwrap().trim(), id);
 
-    // Workspace commands the chat runs act on the workspace.
+    // Workspace commands the chat runs act on the workspace, which its
+    // scope reads but does not change.
+    let scope = fs::read_to_string(home.join("chat-scope")).unwrap();
     let in_chat = |args: &[&str]| {
         fixture
             .command()
             .current_dir(&worktree)
             .env("SHOAL_CHAT", id)
+            .env("SHOAL_SCOPE_TOKEN", scope.trim())
             .arg("--json")
             .args(args)
             .output()
@@ -27247,6 +27250,10 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     let status: Value = serde_json::from_slice(&status.stdout).unwrap();
     assert_eq!(status["workspace"]["name"], "worker", "{status}");
     assert!(in_chat(&["conflicts"]).status.success());
+    let change = in_chat(&["branch", "base", "clear"]);
+    assert!(!change.status.success(), "{change:?}");
+    let refusal = String::from_utf8_lossy(&change.stdout) + String::from_utf8_lossy(&change.stderr);
+    assert!(refusal.contains("only reads"), "{refusal}");
     // A chat in a workspace takes its repository from it.
     let both = fixture.run(&[
         "chat",

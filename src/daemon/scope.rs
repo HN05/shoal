@@ -26,8 +26,9 @@ pub struct ScopedExecution {
 }
 
 /// Resolve `token` and confine `method` to the caller's own space, a
-/// workspace or a chat, and the spaces below it. Optional space filters
-/// default to the caller's own; other targets must name one of them.
+/// workspace or a chat, and the spaces below it; a chat in a workspace's
+/// worktree also reads that workspace, without changing it. Optional space
+/// filters default to the caller's own; other targets must name one of them.
 pub(crate) async fn authorize(
     manager: &Manager,
     token: Option<&str>,
@@ -40,12 +41,20 @@ pub(crate) async fn authorize(
         .caller(token)
         .await?
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
+    let reads_only = method.reads_only();
     if let Some(target) = method.scope(manager, &caller).await? {
         let id = manager.present_space(target).await?.id().to_owned();
-        ensure!(
-            manager.within_subtree(&caller.space_id, &id).await?,
-            "workspace processes can only access their own space and those below it"
-        );
+        if !manager.within_subtree(&caller.space_id, &id).await? {
+            let home = manager.chat_home(&caller.space_id).await?;
+            ensure!(
+                home.as_deref() == Some(id.as_str()),
+                "workspace processes can only access their own space and those below it"
+            );
+            ensure!(
+                reads_only,
+                "a chat only reads the workspace it runs in; ask the user, or the workspace's agent, to change it"
+            );
+        }
         *target = id;
     }
     Ok(Some(caller))
@@ -57,6 +66,12 @@ pub(crate) trait Scoped {
     /// it, returning the space the request targets, which must be the
     /// caller's own or one below it.
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>>;
+
+    /// Whether the request only reads state, which a chat may do in the
+    /// workspace it runs in.
+    fn reads_only(&self) -> bool {
+        false
+    }
 }
 
 impl Scoped for Operation {
@@ -88,6 +103,10 @@ impl Scoped for Operation {
             Operation::Simulator(method) => method.scope(manager, caller).await,
             Operation::Subscription(method) => method.scope(manager, caller).await,
         }
+    }
+
+    fn reads_only(&self) -> bool {
+        Operation::reads_only(self)
     }
 }
 
