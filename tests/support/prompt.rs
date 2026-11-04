@@ -50,7 +50,10 @@ pub fn answer(command: &mut Command, answer: &str, options: AnswerOptions) -> (O
         })
         .spawn()
         .unwrap();
-    master.write_all(answer.as_bytes()).unwrap();
+    // A command that exits before reading the answer may take the terminal
+    // with it: macOS revokes a session leader's controlling terminal on exit,
+    // and the write then fails with EIO. Its output still shows what happened.
+    let written = master.write_all(answer.as_bytes());
     let mut transcript = Vec::new();
     let status = crate::support::wait::try_wait_for(|| {
         let _ = master.read_to_end(&mut transcript);
@@ -61,7 +64,7 @@ pub fn answer(command: &mut Command, answer: &str, options: AnswerOptions) -> (O
             let _ = child.kill();
             let _ = child.wait();
         }
-        panic!("hung: {transcript:?}");
+        panic!("hung after writing the answer ({written:?}): {transcript:?}");
     });
     // Keep the slave open while draining: macOS can discard unread data on close.
     let _ = master.read_to_end(&mut transcript);
