@@ -823,8 +823,8 @@ impl Manager {
         Ok(limits)
     }
 
-    /// Whether a CI job without earlier runs could start now beside the
-    /// agents and jobs in use; the forge's waiting jobs are read only then.
+    /// Whether some CI job could start now beside the agents and jobs in
+    /// use; the forge's waiting jobs are read only then.
     pub(crate) async fn job_could_start(&self) -> Result<bool> {
         let any_runner = self
             .store
@@ -837,14 +837,7 @@ impl Manager {
         let jobs = self.job_activities().await?;
         let limits = self.agent_limits(Vec::new(), &slots, &jobs).await?;
         let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
-        let probe = [Waiting {
-            id: String::new(),
-            repository: String::new(),
-            work: Work::Job {
-                cost: capacity::JobCost::UNKNOWN,
-            },
-        }];
-        Ok(!admit(&occupied, &probe, &limits, false).is_empty())
+        Ok(room_for_a_job(&occupied, &limits))
     }
 
     /// The machine's load with the slots `activities` use.
@@ -1370,6 +1363,23 @@ impl Manager {
             crate::daemon::log!("agent queue: {error:#}");
         }
     }
+}
+
+/// Whether `limits` admit some job beside the `occupied` slots: one under
+/// any fixed limit, and under dynamic admission one that needs no more than
+/// whatever room is left, since a waiting job's cost may be that small.
+pub(crate) fn room_for_a_job(occupied: &[String], limits: &Limits) -> bool {
+    let probe = [Waiting {
+        id: String::new(),
+        repository: String::new(),
+        work: Work::Job {
+            cost: capacity::JobCost {
+                cores: 0.0,
+                memory: None,
+            },
+        },
+    }];
+    !admit(occupied, &probe, limits, false).is_empty()
 }
 
 /// Place the waiting entry `id` at `place` within `tx`.

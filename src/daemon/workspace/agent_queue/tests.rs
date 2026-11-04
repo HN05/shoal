@@ -116,6 +116,41 @@ fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
 }
 
 #[test]
+fn the_forge_is_read_while_any_room_is_left_for_a_job() {
+    let room = |percent| Limits {
+        jobs: JobLimits {
+            room: Some(capacity::Room::Free {
+                percent,
+                parallelism: 16,
+                memory: None,
+            }),
+            ..JobLimits::default()
+        },
+        ..Limits::default()
+    };
+    // Less room than two cores still fits a job whose runs used less.
+    assert!(room_for_a_job(&[], &room(5.0)));
+    assert!(!room_for_a_job(&[], &room(0.0)));
+    let none = Limits {
+        jobs: JobLimits {
+            room: Some(capacity::Room::None),
+            ..JobLimits::default()
+        },
+        ..Limits::default()
+    };
+    assert!(!room_for_a_job(&[], &none));
+    let full = Limits {
+        jobs: JobLimits {
+            running: 2,
+            fixed: Some(2),
+            room: None,
+        },
+        ..Limits::default()
+    };
+    assert!(!room_for_a_job(&[], &full));
+}
+
+#[test]
 fn restores_take_back_their_own_slot_under_fixed_limits() {
     // Restores are named r…; each one's stopped agent holds a slot in `occupied`.
     let queue = waiting(&[("a1", "a"), ("ra", "a"), ("b1", "b")]);
