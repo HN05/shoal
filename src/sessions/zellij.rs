@@ -738,7 +738,9 @@ impl<T> Reply<T> {
 /// `running` says the server no longer runs. Zellij counts a session only
 /// when its server answers a probe in time, so it can report a busy one as
 /// missing, and a running session can list no pane: Shoal asks again while
-/// the server still runs.
+/// the server still runs. It checks before waiting, so a session that ended
+/// is reported at once, and again after, so a session restarted meanwhile
+/// is not asked under the IDs of the one it replaced.
 async fn asked_while_running<T, Asked, Running>(
     mut ask: impl FnMut() -> Asked,
     mut running: impl FnMut() -> Running,
@@ -755,6 +757,9 @@ where
             return Ok(None);
         }
         tokio::time::sleep(UNANSWERED_RETRY).await;
+        if !running().await? {
+            return Ok(None);
+        }
     }
     bail!("the running session does not answer")
 }

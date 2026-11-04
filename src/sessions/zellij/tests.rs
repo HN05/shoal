@@ -273,6 +273,22 @@ async fn a_session_reported_missing_is_asked_again_while_its_server_runs() {
     assert_eq!(busy, Err("the running session does not answer".to_owned()));
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_session_restarted_while_shoal_waits_is_not_asked_again() {
+    let mut asked = 0;
+    let mut checks = vec![true, false].into_iter();
+    let restarted = asked_while_running(
+        || {
+            asked += 1;
+            std::future::ready(Ok(Reply::<&str>::Unanswered))
+        },
+        || std::future::ready(Ok(checks.next().unwrap_or(true))),
+    )
+    .await;
+    assert_eq!(restarted.ok(), Some(None));
+    assert_eq!(asked, 1);
+}
+
 /// What a command that exited with `code`, printing `stdout` and `stderr`,
 /// leaves.
 fn exited(code: i32, stdout: &str, stderr: &str) -> std::process::Output {
