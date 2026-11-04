@@ -133,7 +133,8 @@ def verify_release_commit(sha, version):
         raise ValueError("requested version is not merged into main")
 
 
-def publish(version, dry_run, merged_commit=None):
+def publish(version, dry_run, merged_commit=None, validated_tree=None):
+    """Tag and release *version*, validating it unless *validated_tree* is its tree."""
     parts(version)
     if git("status", "--porcelain"):
         raise ValueError("commit or stash changes before publishing a release")
@@ -148,7 +149,8 @@ def publish(version, dry_run, merged_commit=None):
     if dry_run:
         print(f"Would publish {tag} at {sha}")
         return
-    validate()
+    if git("rev-parse", f"{sha}^{{tree}}") != validated_tree:
+        validate()
     if not existing:
         run("git", "tag", "-a", tag, sha, "-m", f"Shoal {version}")
     run("git", "push", "origin", f"refs/tags/{tag}")
@@ -197,13 +199,13 @@ def merged_release(pr, repository, number):
     return version, sha
 
 
-def publish_merged(pr, repository, number):
+def publish_merged(pr, repository, number, validated_tree):
     version, sha = merged_release(pr, repository, number)
     # The merge API may create a new commit on main that was not in the
     # workflow's initial clone. Fetch it before checking out the server result.
     run("git", "fetch", "origin", "+refs/heads/main:refs/remotes/origin/main", "--tags")
     run("git", "checkout", "--detach", sha)
-    publish(version, False, merged_commit=sha)
+    publish(version, False, merged_commit=sha, validated_tree=validated_tree)
 
 
 def resume(version):
@@ -244,8 +246,11 @@ def release_all(requested):
         return
     repository = os.environ["RELEASE_REPOSITORY"]
     number = prepare(requested, False, automated=True)["number"]
+    # Prepare validated this tree; publishing validates again only when the
+    # merge changed it, as when main moved on meanwhile.
+    validated_tree = git("rev-parse", "HEAD^{tree}")
     merged = merge_release_pr(repository, number)
-    publish_merged(merged, repository, number)
+    publish_merged(merged, repository, number, validated_tree)
 
 
 def main():

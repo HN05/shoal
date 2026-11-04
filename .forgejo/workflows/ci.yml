@@ -4,7 +4,9 @@
 # A PR whose only `area/` label is `area/docs` runs no checks: the gate job
 # reads the labels and the rust job's check steps skip themselves without
 # touching /ci-target, which still reports a status for the required check.
-# Pushes to main and dispatches always run everything.
+# Pushes to main and dispatches always run everything, except that a release
+# PR (`release/v*`) and its version commit on main run no checks: release.py
+# validates that tree itself.
 #
 # A draft PR (Forgejo's draft state is a `WIP:` or `[WIP]` title prefix) runs
 # no checks, and pushing to it starts none. Taking it out of draft is a title
@@ -99,10 +101,13 @@ jobs:
     name: gate (docs-only PRs skip the checks)
     needs: undraft
     # The undraft job runs only for edits; a failed one leaves its output empty
-    # and the checks run.
+    # and the checks run. Release PRs and their version commits on main skip
+    # the checks (see the top of the file).
     if: >-
       !cancelled() && !github.event.pull_request.draft &&
-      needs.undraft.outputs.run != 'false'
+      needs.undraft.outputs.run != 'false' &&
+      !startsWith(github.head_ref, 'release/v') &&
+      !startsWith(github.event.head_commit.message, 'chore: prepare release v')
     runs-on: docker
     container:
       # Same local image as the rust job; it carries curl and jq.

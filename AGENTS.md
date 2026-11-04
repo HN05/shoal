@@ -307,7 +307,8 @@ daemons and commands, but not processes that outlive it.
 `.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
 `rust` job (the required check) runs `cargo fmt --check`, clippy, `cargo test`
 and the Python release-script tests; a PR whose only `area/` label is
-`area/docs` skips them. A draft PR runs no checks; taking it out of draft
+`area/docs` skips them, as do the release workflow's PR and version commit,
+which `scripts/release.py` validates itself. A draft PR runs no checks; taking it out of draft
 (removing the `WIP:` title prefix, as `shoal ready` does) starts one run.
 Jobs use the image built from
 `.forgejo/ci-image/Containerfile` (`git.henriknordvik.com/hn05/ci-shoal:<rust

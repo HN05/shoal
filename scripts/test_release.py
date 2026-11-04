@@ -56,12 +56,14 @@ class ReleaseTests(unittest.TestCase):
         with patch.dict(release.os.environ, {"RELEASE_REPOSITORY": "HN05/shoal"}), \
                 patch.object(release, "versions", return_value="0.1.0"), \
                 patch.object(release, "prepare", return_value={"number": 7}) as prepare, \
+                patch.object(release, "git", return_value="t" * 40) as git, \
                 patch.object(release, "merge_release_pr", return_value={"merged": True}) as merge, \
                 patch.object(release, "publish_merged") as publish:
             release.release_all(None)
             prepare.assert_called_once_with(None, False, automated=True)
+            git.assert_called_once_with("rev-parse", "HEAD^{tree}")
             merge.assert_called_once_with("HN05/shoal", 7)
-            publish.assert_called_once_with({"merged": True}, "HN05/shoal", 7)
+            publish.assert_called_once_with({"merged": True}, "HN05/shoal", 7, "t" * 40)
             merge.side_effect = ValueError("merge blocked")
             publish.reset_mock()
             with self.assertRaises(ValueError):
@@ -135,13 +137,37 @@ class ReleaseTests(unittest.TestCase):
         with patch.object(release, "merged_release", return_value=("0.2.0", sha)), \
                 patch.object(release, "run") as run, \
                 patch.object(release, "publish") as publish:
-            release.publish_merged({}, "HN05/shoal", 7)
+            release.publish_merged({}, "HN05/shoal", 7, "t" * 40)
         run.assert_has_calls([
             call("git", "fetch", "origin",
                  "+refs/heads/main:refs/remotes/origin/main", "--tags"),
             call("git", "checkout", "--detach", sha),
         ])
-        publish.assert_called_once_with("0.2.0", False, merged_commit=sha)
+        publish.assert_called_once_with("0.2.0", False, merged_commit=sha, validated_tree="t" * 40)
+
+    def test_publish_validates_only_a_tree_not_yet_validated(self):
+        sha = "a" * 40
+
+        def git(*args):
+            responses = {
+                ("status", "--porcelain"): "",
+                ("merge-base", "--is-ancestor", sha, "origin/main"): "",
+                ("rev-parse", "HEAD"): sha,
+                ("show", sha + ":Cargo.toml"): self.manifest.replace("0.1.0", "0.2.0"),
+                ("show", sha + ":Cargo.lock"): self.lock.replace("0.1.0", "0.2.0"),
+                ("tag", "--list", "v0.2.0"): "",
+                ("rev-parse", sha + "^{tree}"): "t" * 40,
+            }
+            return responses[args]
+
+        for validated_tree, validations in (("t" * 40, 0), ("u" * 40, 1), (None, 1)):
+            with self.subTest(validated_tree=validated_tree), \
+                    patch.object(release, "git", side_effect=git), \
+                    patch.object(release, "run"), \
+                    patch.object(release, "create_release"), \
+                    patch.object(release, "validate") as validate:
+                release.publish("0.2.0", False, merged_commit=sha, validated_tree=validated_tree)
+            self.assertEqual(validate.call_count, validations)
 
     def test_resume_refuses_a_dirty_checkout_before_fetching(self):
         with patch.object(release, "git", return_value="dirty"), \
