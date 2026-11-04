@@ -11,7 +11,7 @@ use crate::{
     daemon::workspace::Manager,
     forge::{
         ForgeRepo,
-        ci::runner::{answer_took_run, took_run},
+        ci::runner::{JobRun, TookRun, answer_took_run, took_run},
     },
     model::QueuedJob,
 };
@@ -26,8 +26,8 @@ impl Manager {
                 continue;
             };
             let directory = self.job_directory(&job.id);
-            let run = match took_run(&directory) {
-                Ok(Some(run)) => run,
+            let took = match took_run(&directory) {
+                Ok(Some(took)) => took,
                 Ok(None) => continue,
                 Err(error) => {
                     crate::daemon::log!("runner: {}: {error:#}", job.job.job.name);
@@ -35,7 +35,7 @@ impl Manager {
                 }
             };
             let answer = self
-                .follow_taken_job(&job, runner, run)
+                .follow_taken_job(&job, runner, took)
                 .await
                 .map_err(|error| format!("Shoal could not move the job's workspace: {error:#}"));
             if let Err(reason) = &answer {
@@ -48,17 +48,13 @@ impl Manager {
         Ok(())
     }
 
-    /// Record that `runner`, registered for `job` alone, took a job of
-    /// `run`, move the job's workspace to the commit of `run`, and then name
-    /// the job it took.
-    async fn follow_taken_job(&self, job: &ClaimedJob, runner: u64, run: u64) -> Result<()> {
+    /// Record that `runner`, registered for `job` alone, took a job of the
+    /// run `took` names, move the job's workspace to that run's commit when
+    /// its hook holds the job back for it, and then name the job it took.
+    async fn follow_taken_job(&self, job: &ClaimedJob, runner: u64, took: TookRun) -> Result<()> {
         let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
-        let taken_run = if run == job.job.job.run {
-            job.job.run.clone()
-        } else {
-            forge.job_run(&account, run).await?
-        };
+        let taken_run = self.taken_run(&forge, job, took.run).await?;
         let linked = self
             .run_workspace(&forge, &job.repository_id, &taken_run)
             .await?;
@@ -70,15 +66,19 @@ impl Manager {
         // Recorded first, so stopping the job cancels the run it belongs
         // to whatever fails next.
         self.record_taken_job(&job.id, &record).await?;
-        self.move_job_workspace(
-            &job.workspace_id,
-            &record.run.commit,
-            record.run.reference.as_deref(),
-        )
-        .await?;
+        // A job its hook let go on runs its steps already, in a checkout
+        // they may change.
+        if took.awaits {
+            self.move_job_workspace(
+                &job.workspace_id,
+                &record.run.commit,
+                record.run.reference.as_deref(),
+            )
+            .await?;
+        }
         // Only the run decides the commit; a job the forge does not name
         // keeps the claimed one's name.
-        match forge.runner_job(&account, run, runner).await {
+        match forge.runner_job(&account, took.run, runner).await {
             Ok(Some(taken)) => {
                 record.job = taken;
                 self.record_taken_job(&job.id, &record).await?;
@@ -87,6 +87,31 @@ impl Manager {
             Err(error) => crate::daemon::log!("runner: {}: {error:#}", job.job.job.name),
         }
         Ok(())
+    }
+
+    /// The run with API ID `run` that the runner of `job` took a job of. One
+    /// that cannot be read is still recorded by its URL, so stopping the job
+    /// cancels it.
+    async fn taken_run(&self, forge: &ForgeRepo, job: &ClaimedJob, run: u64) -> Result<JobRun> {
+        if run == job.job.job.run {
+            return Ok(job.job.run.clone());
+        }
+        let error = match forge.job_run(&self.user_account(), run).await {
+            Ok(taken) => return Ok(taken),
+            Err(error) => error,
+        };
+        // A forge whose runner takes another run's job serves a run's page
+        // under its API ID.
+        let (_, url) = forge.run(&run.to_string())?;
+        let record = QueuedJob {
+            run: JobRun {
+                url,
+                ..job.job.run.clone()
+            },
+            ..job.job.clone()
+        };
+        self.record_taken_job(&job.id, &record).await?;
+        Err(error)
     }
 
     async fn record_taken_job(&self, id: &str, job: &QueuedJob) -> Result<()> {

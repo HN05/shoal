@@ -204,14 +204,27 @@ impl ForgeRepo {
 /// job than the one claimed names the run of the job it took, as it starts
 /// it, before its first step.
 const TOOK_RUN: &str = "took-run";
+/// The file a runner's hook writes, before it reports the run, when it holds
+/// the job back for the daemon; a job it let go on runs its steps already.
+const AWAITS: &str = "awaits";
 /// The file the daemon writes once the job's workspace is at the commit of
 /// the run the runner took, and the one that says why it cannot be.
 const PREPARED: &str = "prepared";
 const REFUSED: &str = "refused";
 
-/// The run the runner of the job with `work_dir` reported taking a job of,
-/// unless it has not started one or was answered.
-pub fn took_run(work_dir: &Path) -> Result<Option<u64>> {
+/// What the runner of a job reported taking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TookRun {
+    /// The run the job it took belongs to.
+    pub run: u64,
+    /// Whether its hook holds the job back until the daemon answers, which
+    /// it does for a job of another run than the claimed one.
+    pub awaits: bool,
+}
+
+/// What the runner of the job with `work_dir` reported taking, unless it
+/// has not started a job or was answered.
+pub fn took_run(work_dir: &Path) -> Result<Option<TookRun>> {
     if [PREPARED, REFUSED]
         .iter()
         .any(|answer| work_dir.join(answer).exists())
@@ -227,7 +240,10 @@ pub fn took_run(work_dir: &Path) -> Result<Option<u64>> {
         .trim()
         .parse()
         .with_context(|| format!("the runner took a job of an unknown run: {reported}"))?;
-    Ok(Some(run))
+    Ok(Some(TookRun {
+        run,
+        awaits: work_dir.join(AWAITS).exists(),
+    }))
 }
 
 /// Whether the runner of the job with `work_dir` reported taking a job.
@@ -255,9 +271,15 @@ pub fn answer_took_run(work_dir: &Path, answer: Result<(), String>) -> Result<()
 /// not answer within ten minutes.
 pub(crate) fn took_run_hook(work_dir: &Path, run: u64, before: &str) -> Result<String> {
     let quoted = |name: &str| shell_quote(&work_dir.join(name));
-    let (took, prepared, refused) = (quoted(TOOK_RUN)?, quoted(PREPARED)?, quoted(REFUSED)?);
+    let (took, awaits, prepared, refused) = (
+        quoted(TOOK_RUN)?,
+        quoted(AWAITS)?,
+        quoted(PREPARED)?,
+        quoted(REFUSED)?,
+    );
     Ok(format!(
         "#!/bin/sh\n{before}\
+[ \"$GITHUB_RUN_ID\" = {run} ] || : > {awaits} || exit 1\n\
 printf '%s\\n' \"$GITHUB_RUN_ID\" > {took}.partial && mv {took}.partial {took} || exit 1\n\
 [ \"$GITHUB_RUN_ID\" = {run} ] && exit 0\n\
 echo \"Shoal moves this job's workspace to the commit of run $GITHUB_RUN_ID\"\n\

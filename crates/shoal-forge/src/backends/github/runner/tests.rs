@@ -5,7 +5,7 @@ use serde_json::json;
 use super::*;
 use crate::{
     backends::ForgeKind,
-    ci::runner::{answer_took_run, took_run},
+    ci::runner::{TookRun, answer_took_run, took_run},
     test_support::{Server, agent_on, repo_on},
 };
 
@@ -229,12 +229,17 @@ fn the_hook_goes_on_with_the_claimed_run_and_waits_for_the_daemon_with_another()
     let (went_on, variables) = run_hook(&work, &script, "1");
     assert!(went_on);
     assert_eq!(variables, "SHOAL_WORKSPACE_PATH=/w/it's\n");
-    assert_eq!(took_run(&work).unwrap(), Some(1));
+    let went_on = TookRun {
+        run: 1,
+        awaits: false,
+    };
+    assert_eq!(took_run(&work).unwrap(), Some(went_on));
 
     answer_took_run(&work, Err("the commit is gone".into())).unwrap();
     assert_eq!(took_run(&work).unwrap(), None, "an answered report is done");
     let (went_on, _) = run_hook(&work, &script, "2");
     assert!(!went_on, "a refusal fails the job");
+    assert!(work.join("awaits").exists(), "a job of another run waits");
 
     std::fs::remove_file(work.join("refused")).unwrap();
     answer_took_run(&work, Ok(())).unwrap();

@@ -6,13 +6,18 @@ use crate::{
     test_support::git,
 };
 
-/// Claim GitHub's job 11 of run 1 and report its runner took a job of `run`,
-/// returning the claim and the job's directory.
+/// Claim GitHub's job 11 of run 1 and report, as its runner's hook does,
+/// that the runner took a job of `run`, returning the claim and the job's
+/// directory.
 async fn report(manager: &Manager, run: u64) -> (ClaimedJob, std::path::PathBuf) {
     admit_and_claim(manager).await;
     let job = manager.claimed_jobs().await.unwrap().remove(0);
     launched(&job.workspace_id);
     let directory = manager.job_directory(&job.id);
+    // The hook holds a job of another run than the claimed one back.
+    if run != 1 {
+        std::fs::write(directory.join("awaits"), "").unwrap();
+    }
     std::fs::write(directory.join("took-run"), format!("{run}\n")).unwrap();
     (job, directory)
 }
@@ -77,10 +82,32 @@ async fn a_workspace_that_cannot_move_fails_the_job() {
     manager.follow_taken_jobs().await.unwrap();
     let refused = std::fs::read_to_string(directory.join("refused")).unwrap();
     assert!(refused.starts_with("Shoal could not move"), "{refused}");
+    // Run 3 cannot be read, and stopping the job still cancels it.
+    let claimed = manager.claimed_jobs().await.unwrap().remove(0);
+    assert!(claimed.job.run.url.ends_with("/actions/runs/3"));
     let workspace = manager.workspace(&job.workspace_id).await.unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.head
+    );
+}
+
+#[tokio::test]
+async fn a_job_of_the_claimed_run_keeps_the_checkout_its_steps_made() {
+    let fixture = github_fixture().await;
+    let manager = &fixture.manager;
+    fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
+    let (job, directory) = report(manager, 1).await;
+    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    git(
+        &workspace.path,
+        &["checkout", "-q", "--detach", &fixture.topic],
+    );
+    manager.follow_taken_jobs().await.unwrap();
+    assert!(directory.join("prepared").exists());
+    assert_eq!(
+        git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
+        fixture.topic
     );
 }
 
