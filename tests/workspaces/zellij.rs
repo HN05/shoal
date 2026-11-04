@@ -5,7 +5,10 @@
 //! everything from the user's sessions.
 use std::{
     os::{fd::AsRawFd as _, unix::process::CommandExt as _},
-    sync::{Arc, PoisonError},
+    sync::{
+        Arc, PoisonError,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use super::*;
@@ -20,6 +23,9 @@ struct ZellijServer {
     client: Child,
     /// The end of what the client's terminal showed.
     screen: Arc<Mutex<Vec<u8>>>,
+    /// Whether the client drew its session, which later output can push out
+    /// of `screen`.
+    drawn: Arc<AtomicBool>,
 }
 
 /// How much of the client's terminal output a failure reports.
@@ -60,6 +66,7 @@ impl ZellijServer {
             sockets,
             client: Command::new("true").spawn().unwrap(),
             screen: Arc::default(),
+            drawn: Arc::default(),
         };
         // The session's environment is every pane's: the fixture's tools,
         // and a plain shell.
@@ -89,15 +96,11 @@ impl ZellijServer {
                     "the client exited: {status}; it showed:\n{}",
                     self.client_screen()
                 );
-                self.screen
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .clear();
                 self.client = self.attach("caller");
             }
             self.clients("caller")
                 .is_some_and(|clients| clients.len() == 1)
-                && self.client_screen().contains("(caller)")
+                && self.drawn.load(Ordering::Relaxed)
         });
     }
 
@@ -113,8 +116,9 @@ impl ZellijServer {
     }
 
     /// A client attached to `session` on a terminal of its own, whose
-    /// output a thread drains into `screen`.
-    fn attach(&self, session: &str) -> Child {
+    /// output a thread drains into `screen`, noting in `drawn` when it draws
+    /// the session.
+    fn attach(&mut self, session: &str) -> Child {
         let (master, slave) = pty::open();
         let size = libc::winsize {
             ws_row: 40,
@@ -145,18 +149,16 @@ impl ZellijServer {
         }
         let client = attach.spawn().unwrap();
         let screen = Arc::clone(&self.screen);
+        self.drawn = Arc::default();
+        let drawn = Arc::clone(&self.drawn);
+        let title = format!("({session})");
         thread::spawn(move || {
             let mut master = master;
             let mut buffer = [0; 4096];
             loop {
                 match std::io::Read::read(&mut master, &mut buffer) {
                     Ok(0) => break,
-                    Ok(count) => {
-                        let mut screen = screen.lock().unwrap_or_else(PoisonError::into_inner);
-                        screen.extend_from_slice(&buffer[..count]);
-                        let excess = screen.len().saturating_sub(SCREEN_TAIL);
-                        screen.drain(..excess);
-                    }
+                    Ok(count) => keep_output(&screen, &drawn, &title, &buffer[..count]),
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(20));
                     }
@@ -352,6 +354,18 @@ impl Drop for ZellijServer {
 fn reported_missing(output: &std::process::Output) -> bool {
     let error = String::from_utf8_lossy(&output.stderr);
     error.contains("There is no active session") || error.contains("' not found")
+}
+
+/// Add `output` to the end of `screen`, the client's, noting in `drawn`
+/// once it shows `title`, before older output makes room for it.
+fn keep_output(screen: &Mutex<Vec<u8>>, drawn: &AtomicBool, title: &str, output: &[u8]) {
+    let mut screen = screen.lock().unwrap_or_else(PoisonError::into_inner);
+    screen.extend_from_slice(output);
+    if without_escapes(&String::from_utf8_lossy(&screen)).contains(title) {
+        drawn.store(true, Ordering::Relaxed);
+    }
+    let excess = screen.len().saturating_sub(SCREEN_TAIL);
+    screen.drain(..excess);
 }
 
 /// `text` without its terminal escape sequences.
