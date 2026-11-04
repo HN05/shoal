@@ -4244,6 +4244,8 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
     forge_origin(&fixture);
     let bin = fixture.root.path().join("issue-bin");
     install_api_curl(&bin);
+    // The daemon reads the issue too, as it assigns it.
+    install_api_curl(&fixture.root.path().join("bin"));
     script_api(
         fixture.root.path(),
         "repos/team/project/issues/12",
@@ -14580,7 +14582,14 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
 fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     let fixture = Fixture::new();
     fixture.add("existing");
-    commit_resource_config(&fixture.repo, "setup.command = 'missing-script'\n");
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        "#!/bin/sh\nprintf hook > hook-ran\n",
+    );
+    commit_resource_config(
+        &fixture.repo,
+        "setup.command = 'missing-script'\nhooks.post_setup = 'post-setup.sh'\n",
+    );
     let bin = fixture.root.path().join("bin");
     install_test_script(
         bin.join("codex"),
@@ -14614,6 +14623,8 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         .as_str()
         .unwrap()
         .to_owned();
+    // Preparation goes on past the ignored failure, hook first.
+    assert!(Path::new(&ignored_path).join("hook-ran").exists());
     assert!(Path::new(&ignored_path).join("agent-started").exists());
     let (deleted, transcript) = fixture.interactive(
         &["add", fixture.repo.to_str().unwrap(), "deleted"],
@@ -15467,6 +15478,8 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
     let fixture = Fixture::with_config(Some("[agents.codex]\ndefault_mode = 'app'\n"));
     let bin = fixture.root.path().join("issue-bin");
     install_api_curl(&bin);
+    // The daemon reads the issue too, as it assigns it.
+    install_api_curl(&fixture.root.path().join("bin"));
     for tool in ["codex", "claude"] {
         let script = bin.join(tool);
         install_test_script_with_mode(
@@ -15610,6 +15623,8 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
     fixture.add_github_origin();
     let bin = fixture.root.path().join("issue-bin");
     install_api_curl(&bin);
+    // The daemon reads the issue too, as it assigns it.
+    install_api_curl(&fixture.root.path().join("bin"));
     for tool in ["codex", "claude"] {
         let script = bin.join(tool);
         install_test_script_with_mode(

@@ -15,17 +15,20 @@ use crate::{
         agents,
         client::{self, request},
         commands::{
-            agent_queue, issues,
-            workspaces::{link_pull, run_post_setup, setup_workspace},
+            agent_queue, issues, operations,
+            workspaces::{SetUp, follow_setup},
         },
         context::Context,
         output::{Palette, Style},
         terminal,
     },
-    model::{OpenedWorkspace, QueueEntry, Workspace},
-    protocol::{ConfigTarget, ItemMethod, WorkspaceMethod},
+    model::{QueueEntry, Workspace},
+    protocol::{
+        ConfigTarget, OperationMethod,
+        operations::{OperationSpec, Preparation, Prepared, StartedWorkspace, WorkspaceStart},
+    },
     shell,
-    state::{QueueState, WorkspaceState},
+    state::QueueState,
 };
 
 pub(in crate::cli) async fn execute_add(ctx: &Context, plan: AddPlan) -> Result<i32> {
@@ -76,17 +79,16 @@ pub(super) async fn add_planned(
         workspace,
     } = plan;
     let pr = creation.pr.clone();
-    let opened = match workspace {
-        Some(workspace) => {
-            request::<OpenedWorkspace>(&ctx.paths, WorkspaceMethod::ReopenWorkspace { workspace })
-                .await?
-        }
-        None => open_add_workspace(ctx, &target, creation, chat).await?,
+    let start = AddStart {
+        creation,
+        chat,
+        workspace,
     };
+    let started = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
     if let Some(entry) = &queue_entry {
-        agent_queue::attach(ctx, entry, &opened.workspace).await?;
+        agent_queue::attach(ctx, entry, &started.workspace).await?;
     }
-    let (branch, title) = (opened.workspace.branch_or_name(), &opened.workspace.title);
+    let (branch, title) = (started.workspace.branch_or_name(), &started.workspace.title);
     let label = match (place_name, &issue, title) {
         (Some(name), _, title) => name.render(branch, title.as_deref()),
         (None, _, Some(title)) => title.clone(),
@@ -98,23 +100,12 @@ pub(super) async fn add_planned(
     // chat's session, stays its own.
     let queued = queued && agent_name.is_some();
     if !queued {
-        terminal::host_workspace(ctx, &opened.workspace, agent_name.is_some(), &label).await?;
+        terminal::host_workspace(ctx, &started.workspace, agent_name.is_some(), &label).await?;
     }
-    if let Some(issue) = &issue {
-        request::<()>(
-            &ctx.paths,
-            ItemMethod::SetIssue {
-                space: opened.workspace.id.clone(),
-                url: issue.url.clone(),
-                title: Some(issue.title.clone()),
-            },
-        )
-        .await?;
-    }
-    let name = opened.workspace.name.clone();
+    let name = started.workspace.name.clone();
     let own_prompt = prompt.clone();
     let prompt = issue.as_ref().map(issues::Issue::prompt).or(prompt);
-    let Some(workspace) = finish_add_workspace(ctx, opened, pr, &agent, prompt.is_some()).await?
+    let Some(workspace) = finish_add_workspace(ctx, started, pr, &agent, prompt.is_some()).await?
     else {
         if let Some(entry) = &queue_entry {
             let error = anyhow::anyhow!(
@@ -195,13 +186,26 @@ async fn enters_added(
     ))
 }
 
-/// Open the planned workspace for `chat`, or for the user without one.
-async fn open_add_workspace(
-    ctx: &Context,
-    target: &AddTarget,
+/// What the planned workspace opens: the recorded `workspace` a launch
+/// goes to, or else what `creation` makes for `chat`, or for the user
+/// without one.
+struct AddStart {
     creation: Creation,
     chat: Option<String>,
-) -> Result<OpenedWorkspace> {
+    workspace: Option<String>,
+}
+
+/// Open the planned workspace, assigned `issue`, and start preparing it.
+async fn start_add_workspace(
+    ctx: &Context,
+    target: &AddTarget,
+    AddStart {
+        creation,
+        chat,
+        workspace,
+    }: AddStart,
+    issue: Option<&issues::Issue>,
+) -> Result<StartedWorkspace> {
     let Creation {
         path,
         branch,
@@ -212,79 +216,59 @@ async fn open_add_workspace(
         options,
         pull_head,
     } = creation;
-    let repository = target.selector.clone();
-    if let Some(head) = pull_head {
-        let url = pr.context("a PR head needs its PR")?;
-        let method = WorkspaceMethod::OpenPullHead {
-            repository,
-            url,
+    let start = match (workspace, pull_head, existing) {
+        (Some(workspace), _, _) => WorkspaceStart::Workspace(workspace),
+        (None, Some(head), _) => WorkspaceStart::PullHead {
+            url: pr.clone().context("a PR head needs its PR")?,
             head,
-            parent: chat,
-            options,
-        };
-        return request(&ctx.paths, method).await;
-    }
-    if let Some(branch) = existing {
-        request::<OpenedWorkspace>(
-            &ctx.paths,
-            WorkspaceMethod::OpenBranch {
-                path,
-                repository,
-                branch,
-                git_profile,
-                base,
-                parent: chat,
-                options,
-            },
-        )
-        .await
-    } else {
-        let name = branch.context("a branch name is required")?;
-        let workspace = request::<Workspace>(
-            &ctx.paths,
-            WorkspaceMethod::CreateWorkspace {
-                path,
-                repository,
-                name,
-                base,
-                git_profile,
-                parent: chat,
-                options,
-            },
-        )
-        .await?;
-        Ok(OpenedWorkspace {
-            workspace,
-            reused: false,
-        })
-    }
+        },
+        (None, None, Some(branch)) => WorkspaceStart::Branch(branch),
+        (None, None, None) => WorkspaceStart::Name(branch.context("a branch name is required")?),
+    };
+    let method = OperationMethod::StartWorkspace {
+        repository: target.selector.clone(),
+        start,
+        base,
+        path,
+        git_profile,
+        parent: chat,
+        options,
+        issue: issue.map(|issue| issue.url.clone()),
+        pr,
+        agent: None,
+        env: Some(crate::env::without_secrets()),
+    };
+    request(&ctx.paths, method).await
 }
 
-/// Set up an opened workspace and link its PR, which needs a ready workspace,
-/// before reporting it and entering it unless `agent`, given an issue prompt
-/// when `prompted`, takes the terminal.
+/// Follow the preparation of the started workspace, which sets it up and
+/// links its PR, before reporting it and entering it unless `agent`, given
+/// an issue prompt when `prompted`, takes the terminal.
 async fn finish_add_workspace(
     ctx: &Context,
-    opened: OpenedWorkspace,
+    started: StartedWorkspace,
     pr: Option<String>,
     agent: &ResolvedAddAgent,
     prompted: bool,
 ) -> Result<Option<Workspace>> {
-    let OpenedWorkspace {
+    let reused = started.reused;
+    let Some(SetUp {
         mut workspace,
-        reused,
-    } = opened;
-    // The hook runs with setup, so it goes on when this process goes.
-    let mut post_setup = None;
-    if workspace.state == WorkspaceState::Preparing {
-        let Some(set_up) = setup_workspace(ctx, &workspace, !reused).await? else {
-            return Ok(None);
-        };
-        (workspace, post_setup) = (set_up.workspace, set_up.post_setup);
-    }
-    if let Some(url) = pr {
-        workspace = link_pull(ctx, workspace, url).await?;
-    }
+        post_setup,
+    }) = follow_setup(ctx, started).await?
+    else {
+        return Ok(None);
+    };
+    // The post-setup hook may change how the agent launches, so the shell's
+    // destination waits for it; a failed hook starts no agent.
+    let post_setup = match post_setup {
+        Some(result) => result,
+        None => {
+            let result;
+            (workspace, result) = prepare_after_setup(ctx, workspace, reused, pr).await?;
+            result
+        }
+    };
     ctx.emit(
         &format!(
             "{} {} {}",
@@ -294,17 +278,32 @@ async fn finish_add_workspace(
         ),
         &workspace,
     )?;
-    // The post-setup hook may change how the agent launches, so the shell's
-    // destination waits for it; a failed hook starts no agent.
-    let post_setup = match post_setup {
-        Some(result) => result,
-        None if reused => Ok(()),
-        None => run_post_setup(ctx, &workspace).await,
-    };
     let starts = post_setup.is_ok().then_some(agent);
     if enters_added(ctx, &workspace, starts, prompted).await? {
         shell::navigate(&workspace.path, ctx.json)?;
     }
     post_setup?;
     Ok(Some(workspace))
+}
+
+/// Run what preparation leaves after setup once the user ignored its
+/// failure: linking `pr`, then the post-setup hook unless the workspace was
+/// `reused`. Returns the workspace with its PR and how the hook went.
+async fn prepare_after_setup(
+    ctx: &Context,
+    workspace: Workspace,
+    reused: bool,
+    pr: Option<String>,
+) -> Result<(Workspace, Result<()>)> {
+    let spec = OperationSpec::Prepare {
+        workspace: workspace.id.clone(),
+        steps: Preparation {
+            post_setup: !reused,
+            pr,
+            ..Default::default()
+        },
+    };
+    let prepared = operations::run::<Prepared>(ctx, spec).await;
+    let workspace = client::inspect(&ctx.paths, workspace.id).await?.workspace;
+    Ok((workspace, prepared.map(drop)))
 }

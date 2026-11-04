@@ -58,12 +58,12 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         ),
         (
             vec!["add", "test", "new"],
-            vec!["create_workspace"],
+            vec!["start_workspace"],
             "creation reached",
         ),
         (
             vec!["add", "test", "new", "--agent", "codex"],
-            vec!["layered_config test", "queue_add", "create_workspace"],
+            vec!["layered_config test", "queue_add", "start_workspace"],
             "creation reached",
         ),
         // A contribution refuses a missing agent before it forks or clones.

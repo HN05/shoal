@@ -37,7 +37,7 @@ pub(super) use remove::remove;
 pub(super) use rename::rename;
 pub(super) use run::{edit, exec};
 pub(super) use setup::{
-    copy_ignored_worker, follow_setup, run_post_setup, setup, setup_workspace, skip_setup,
+    SetUp, copy_ignored_worker, follow_setup, run_post_setup, setup, setup_workspace, skip_setup,
 };
 pub(super) use status::status;
 pub(super) use title::{request_title, title};
