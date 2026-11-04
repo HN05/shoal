@@ -3,19 +3,27 @@
 //! commands never inherit the runner's Zellij variables, and a socket
 //! directory of the test's own, short enough for Zellij's socket paths, keeps
 //! everything from the user's sessions.
-use std::os::{fd::AsRawFd as _, unix::process::CommandExt as _};
+use std::{
+    os::{fd::AsRawFd as _, unix::process::CommandExt as _},
+    sync::{Arc, PoisonError},
+};
 
 use super::*;
 
 /// The user's session, `caller`, in a socket directory of the test's own,
 /// with a client on a terminal of its own showing it, since Zellij drops tabs
 /// opened in a session no client shows; every session there ends with the
-/// test.
+/// test. A test that fails reports what Zellij showed of the session.
 struct ZellijServer {
     root: PathBuf,
     sockets: TempDir,
     client: Child,
+    /// The end of what the client's terminal showed.
+    screen: Arc<Mutex<Vec<u8>>>,
 }
+
+/// How much of the client's terminal output a failure reports.
+const SCREEN_TAIL: usize = 4096;
 
 /// The pane the user's session started with, a shell the user opened.
 const USERS: &str = "terminal_0";
@@ -51,6 +59,7 @@ impl ZellijServer {
             root,
             sockets,
             client: Command::new("true").spawn().unwrap(),
+            screen: Arc::default(),
         };
         // The session's environment is every pane's: the fixture's tools,
         // and a plain shell.
@@ -88,7 +97,8 @@ impl ZellijServer {
         command
     }
 
-    /// A client attached to `session` on a terminal of its own.
+    /// A client attached to `session` on a terminal of its own, whose
+    /// output a thread drains into `screen`.
     fn attach(&self, session: &str) -> Child {
         let (master, slave) = pty::open();
         let size = libc::winsize {
@@ -119,13 +129,19 @@ impl ZellijServer {
             });
         }
         let client = attach.spawn().unwrap();
+        let screen = Arc::clone(&self.screen);
         thread::spawn(move || {
             let mut master = master;
             let mut buffer = [0; 4096];
             loop {
                 match std::io::Read::read(&mut master, &mut buffer) {
                     Ok(0) => break,
-                    Ok(_) => {}
+                    Ok(count) => {
+                        let mut screen = screen.lock().unwrap_or_else(PoisonError::into_inner);
+                        screen.extend_from_slice(&buffer[..count]);
+                        let excess = screen.len().saturating_sub(SCREEN_TAIL);
+                        screen.drain(..excess);
+                    }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(20));
                     }
@@ -261,10 +277,47 @@ impl ZellijServer {
         let output = write.output().unwrap();
         assert!(output.status.success(), "{output:?}");
     }
+
+    /// What Zellij shows of the user's session: its client, its panes, the
+    /// sessions and Zellij's log.
+    fn report(&mut self) -> String {
+        let list_panes = self
+            .zellij()
+            .args(["--session", "caller", "action", "list-panes", "--all"])
+            .output();
+        let list_sessions = self
+            .zellij()
+            .args(["list-sessions", "--no-formatting"])
+            .output();
+        format!(
+            "client: {}\nclient screen:\n{}\nlist-panes: {list_panes:?}\nlist-sessions: {list_sessions:?}\nzellij log:\n{}",
+            self.client_state(),
+            self.client_screen(),
+            zellij_log(),
+        )
+    }
+
+    /// Whether the client still runs, or how it exited.
+    fn client_state(&mut self) -> String {
+        match self.client.try_wait() {
+            Ok(Some(status)) => format!("exited: {status}"),
+            Ok(None) => "running".to_owned(),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    /// The text at the end of what the client's terminal showed.
+    fn client_screen(&self) -> String {
+        let screen = self.screen.lock().unwrap_or_else(PoisonError::into_inner);
+        without_escapes(&String::from_utf8_lossy(&screen))
+    }
 }
 
 impl Drop for ZellijServer {
     fn drop(&mut self) {
+        if thread::panicking() {
+            eprintln!("{}", self.report());
+        }
         let _ = self.client.kill();
         let _ = self.client.wait();
         let _ = self.zellij().args(["kill-all-sessions", "--yes"]).output();
@@ -276,6 +329,41 @@ impl Drop for ZellijServer {
 fn reported_missing(output: &std::process::Output) -> bool {
     let error = String::from_utf8_lossy(&output.stderr);
     error.contains("There is no active session") || error.contains("' not found")
+}
+
+/// `text` without its terminal escape sequences.
+fn without_escapes(text: &str) -> String {
+    let mut plain = String::new();
+    let mut chars = text.chars();
+    while let Some(char) = chars.next() {
+        if char != '\x1b' {
+            plain.push(char);
+            continue;
+        }
+        for char in chars.by_ref() {
+            if char.is_ascii_alphabetic() || char == '\x07' {
+                break;
+            }
+        }
+    }
+    plain
+}
+
+/// The end of Zellij's log, which every session of this user writes.
+fn zellij_log() -> String {
+    // SAFETY: getuid has no preconditions.
+    let uid = unsafe { libc::getuid() };
+    let file = format!("zellij-{uid}/zellij-log/zellij.log");
+    [PathBuf::from("/tmp"), std::env::temp_dir()]
+        .iter()
+        .find_map(|dir| fs::read_to_string(dir.join(&file)).ok())
+        .map_or_else(
+            || "none".to_owned(),
+            |log| {
+                let lines: Vec<_> = log.lines().collect();
+                lines[lines.len().saturating_sub(60)..].join("\n")
+            },
+        )
 }
 
 /// The names of `workspace`'s sessions, as `shoal status` lists them.
