@@ -73,17 +73,32 @@ impl ZellijServer {
             .unwrap();
         assert!(output.status.success(), "{output:?}");
         server.client = server.attach("caller");
-        // Under load Zellij can tell a client attaching that the session is
-        // missing, and the client exits: another one attaches instead.
-        wait_until("a client to show the user's session", || {
-            if server.client.try_wait().unwrap().is_some() {
-                server.client = server.attach("caller");
-            }
-            server
-                .clients("caller")
-                .is_some_and(|clients| clients.len() == 1)
-        });
+        server.show();
         Some(server)
+    }
+
+    /// Wait until the client shows the user's session, which Shoal opens
+    /// tabs in only while a client shows it: Zellij lists the client, and
+    /// the client drew the session. Under load Zellij can list a client
+    /// that then exits, telling it the session is missing: another one
+    /// attaches instead.
+    fn show(&mut self) {
+        wait_until("a client to show the user's session", || {
+            if let Some(status) = self.client.try_wait().unwrap() {
+                eprintln!(
+                    "the client exited: {status}; it showed:\n{}",
+                    self.client_screen()
+                );
+                self.screen
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .clear();
+                self.client = self.attach("caller");
+            }
+            self.clients("caller")
+                .is_some_and(|clients| clients.len() == 1)
+                && self.client_screen().contains("(caller)")
+        });
     }
 
     /// `command` reaching the test's sessions.
@@ -399,8 +414,10 @@ fn wait_for_agent(fixture: &Fixture, workspace: &str) {
     });
 }
 
-/// Add `workspace` with the agent from the user's pane.
-fn add_inside(fixture: &Fixture, zellij: &ZellijServer, workspace: &str) {
+/// Add `workspace` with the agent from the user's pane, while a client
+/// shows it.
+fn add_inside(fixture: &Fixture, zellij: &mut ZellijServer, workspace: &str) {
+    zellij.show();
     let repo = fixture.repo.to_str().unwrap();
     let (output, transcript) = fixture.interactive_command(
         zellij.inside(
@@ -423,8 +440,14 @@ fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
     let Some(mut zellij) = ZellijServer::start(&fixture) else {
         return;
     };
-    add_inside(&fixture, &zellij, "placed");
-    assert!(zellij.tabs().contains(&"placed".to_owned()));
+    add_inside(&fixture, &mut zellij, "placed");
+    // Where no client shows the user's session, Shoal opens one of its own.
+    let status = fixture.ok(&["status", "placed"]);
+    assert_eq!(status["places"][0]["group"], "caller", "{status}");
+    // A listing can still miss the tab Shoal saw open.
+    wait_until("the tab Shoal opened to show", || {
+        zellij.tabs().contains(&"placed".to_owned())
+    });
     assert_eq!(sessions(&fixture, "placed"), ["placed"]);
 
     // An agent in the user's own pane is recorded where it runs, but the
@@ -448,11 +471,11 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
     let fixture = Fixture::with_config(Some(&format!(
         "machine.max_agents = 'none'\n[terminal.zellij]\nenabled = true\nplacement = 'split'\n{AGENT}"
     )));
-    let Some(zellij) = ZellijServer::start(&fixture) else {
+    let Some(mut zellij) = ZellijServer::start(&fixture) else {
         return;
     };
     let tabs = zellij.tabs();
-    add_inside(&fixture, &zellij, "placed");
+    add_inside(&fixture, &mut zellij, "placed");
     // The split leaves the user's tab its name.
     assert_eq!(zellij.tabs(), tabs);
     // A listing can still miss the pane Shoal saw open.
