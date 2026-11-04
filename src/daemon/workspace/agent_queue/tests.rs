@@ -621,6 +621,48 @@ async fn each_agent_execution_uses_its_own_slot() {
 }
 
 #[tokio::test]
+async fn a_ci_jobs_runner_awaiting_reattachment_holds_no_agent_slot() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = manager
+        .create_workspace(&repo.id, "ci-rust-4".into(), None, None, None)
+        .await
+        .unwrap();
+    let (id, repository) = (workspace.id.clone(), repo.id.clone());
+    let job = serde_json::json!({
+        "job": {"handle": "h1", "id": 4, "run": 1, "name": "rust", "labels": ["shoal"]},
+        "run": {"url": "https://forge.example/team/repo/actions/runs/1", "commit": "abc", "trigger": "other"},
+    })
+    .to_string();
+    // A job's runner awaits reattachment after a daemon restart.
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO ci_jobs(id,repository_id,workspace_id,execution_id,job,started_at)
+                 VALUES ('job',?1,?2,'runner',?3,1)",
+                params![repository, id, job],
+            )?;
+            db.execute(
+                "INSERT INTO executions(id,workspace_id,state) VALUES ('runner',?1,?2)",
+                params![id, ExecutionState::Unknown],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .occupied_slots(&HashSet::new())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(add(&manager, &repo, "agent").await.start);
+}
+
+#[tokio::test]
 async fn dynamic_admission_staggers_starts() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

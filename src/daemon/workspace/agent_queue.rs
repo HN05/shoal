@@ -376,7 +376,8 @@ fn record_waiting_restore(db: &rusqlite::Connection, restore: &WaitingRestore) -
 struct PersistedSlots {
     /// Each workspace that is not done, by ID, with its repository ID.
     open: HashMap<String, String>,
-    /// Executions whose state is unknown: agents that may still run.
+    /// Executions whose state is unknown, other than CI jobs' runners:
+    /// agents that may still run.
     unknown: Vec<UnknownExecution>,
     /// Queue entries that are starting.
     starting: Vec<StartingEntry>,
@@ -409,7 +410,10 @@ fn persisted_slots(db: &rusqlite::Connection) -> Result<PersistedSlots> {
         .query_map([], |row| Ok((row.get("id")?, row.get("repository_id")?)))?
         .collect::<rusqlite::Result<_>>()?;
     let unknown = db
-        .prepare("SELECT id,workspace_id FROM executions WHERE state=?1")?
+        .prepare(
+            "SELECT id,workspace_id FROM executions e WHERE state=?1
+             AND NOT EXISTS (SELECT 1 FROM ci_jobs j WHERE j.workspace_id=e.workspace_id)",
+        )?
         .query_map([ExecutionState::Unknown], |row| {
             Ok(UnknownExecution {
                 id: row.get("id")?,
