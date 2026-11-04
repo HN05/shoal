@@ -806,8 +806,6 @@ impl Backend for Forgejo {
         Ok(self.plain_log(&actions::job_log(repo, account, &endpoint).await?))
     }
 
-    /// Forgejo reruns failed jobs one by one; one run accepts several job
-    /// reruns in a row, also while it runs again.
     fn runner_program(&self) -> Result<&'static str> {
         Ok(runner::PROGRAM)
     }
@@ -845,6 +843,8 @@ impl Backend for Forgejo {
         runner::job_command(repo, launch)
     }
 
+    /// Forgejo reruns failed jobs one by one; one run accepts several job
+    /// reruns in a row, also while it runs again.
     fn run_operation(&self, run: &Run, action: CiAction, failed: bool) -> Result<RunOperation> {
         let id = run.id;
         Ok(match (action, failed) {
