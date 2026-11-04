@@ -241,7 +241,8 @@ impl Manager {
     }
 
     /// Move the workspace `id` of a job, before the job's first step, to
-    /// `commit`, fetched from `origin` under `reference` when given.
+    /// `commit`, fetched from `origin` under `reference` when given. The
+    /// lifecycle reservation excludes removal meanwhile.
     pub(crate) async fn move_job_workspace(
         &self,
         id: &str,
@@ -250,9 +251,31 @@ impl Manager {
     ) -> Result<()> {
         let workspace = self.workspace(id).await?;
         let (repo, _guard) = self.lock_repository(&workspace.repository_id).await?;
-        fetch_job_commit(&repo, commit, reference).await?;
+        let reserved = self
+            .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)
+            .await?;
+        let result = self
+            .move_reserved_job_workspace(&repo, &workspace, commit, reference)
+            .await;
+        self.set_state(&workspace.id, reserved, workspace.error.clone())
+            .await?;
+        result
+    }
+
+    /// Move the reserved job `workspace`, once its worktree is proven its
+    /// own, to `commit`.
+    async fn move_reserved_job_workspace(
+        &self,
+        repo: &Repository,
+        workspace: &Workspace,
+        commit: &str,
+        reference: Option<&str>,
+    ) -> Result<()> {
+        self.verify_worktree(workspace).await?;
+        fetch_job_commit(repo, commit, reference).await?;
         git::detached::move_to(&workspace.path, commit).await?;
-        self.record_starting_commit(id, commit.to_owned()).await
+        self.record_starting_commit(&workspace.id, commit.to_owned())
+            .await
     }
 
     /// Record `commit` as where the workspace `id` started, which is also
