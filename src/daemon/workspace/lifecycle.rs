@@ -1039,7 +1039,7 @@ impl Manager {
             // Its reviews go with its record.
             self.stop_workspace_review(&workspace.id).await;
             // A CI job ends through its forge, before its runner is stopped.
-            self.cancel_job_before_removal(&workspace.id).await;
+            self.cancel_job_before_stopping(&workspace.id).await;
             let present = off_runtime::try_exists(&workspace.path).await?;
             let post_remove = if present {
                 self.ensure_no_pending_rename(&workspace.id).await?;

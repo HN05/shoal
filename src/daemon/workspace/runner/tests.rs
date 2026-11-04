@@ -521,6 +521,39 @@ async fn read<T: serde::de::DeserializeOwned>(
 
 #[tokio::test]
 async fn daemon_stop_cancels_a_jobs_run_and_stops_its_runner() {
+    let fixture = daemon_stop_with_runner(job("h3", 7, 3)).await;
+    assert!(
+        fixture
+            .server
+            .received()
+            .iter()
+            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
+    );
+}
+
+#[tokio::test]
+async fn daemon_stop_stops_a_jobs_runner_when_the_forge_refuses_to_cancel_its_run() {
+    // The forge finds no run 1 to cancel.
+    let fixture = daemon_stop_with_runner(job("h1", 4, 1)).await;
+    let failures: Vec<_> = fixture
+        .manager
+        .notifications(true, 10)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|notification| {
+            notification.kind == crate::daemon::notifications::NotificationKind::RunnerFailed
+        })
+        .map(|notification| notification.message)
+        .collect();
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(failures[0].contains("could not cancel"), "{failures:?}");
+}
+
+/// Stop the daemon while `job` runs, connected as its wrapper runs it,
+/// checking the daemon stops the runner rather than waiting for it to see
+/// its run cancelled.
+async fn daemon_stop_with_runner(job: Value) -> Fixture {
     use tokio::{io::BufReader, net::UnixStream};
 
     use crate::{
@@ -528,7 +561,7 @@ async fn daemon_stop_cancels_a_jobs_run_and_stops_its_runner() {
         protocol::{self, Body, Control, ExecutionEvent, Response},
     };
 
-    let fixture = fixture(vec![job("h3", 7, 3)], "unused", "").await;
+    let fixture = fixture(vec![job], "unused", "").await;
     let manager = &fixture.manager;
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
@@ -564,7 +597,21 @@ async fn daemon_stop_cancels_a_jobs_run_and_stops_its_runner() {
     ));
     let mut connection = BufReader::new(client);
     let response: Response = read(&mut connection).await;
-    assert!(matches!(response.body, Body::Execution(_)));
+    let Body::Execution(plan) = response.body else {
+        panic!("execution was not registered: {:?}", response.body);
+    };
+    let claimed = workspace.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE ci_jobs SET execution_id=?1 WHERE workspace_id=?2",
+                [plan.id, claimed],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
     let event = ExecutionEvent::Started {
         child: None,
         group_id: wrapper.pid,
@@ -582,7 +629,6 @@ async fn daemon_stop_cancels_a_jobs_run_and_stops_its_runner() {
                 .await
         }
     });
-    // The runner does not outlive the daemon waiting to see the cancellation.
     let control: Control = read(&mut connection).await;
     assert!(
         matches!(
@@ -591,19 +637,13 @@ async fn daemon_stop_cancels_a_jobs_run_and_stops_its_runner() {
         ),
         "{control:?}"
     );
-    assert!(
-        fixture
-            .server
-            .received()
-            .iter()
-            .any(|request| request.line == "POST /api/v1/repos/team/repo/actions/runs/3/cancel")
-    );
     let event = ExecutionEvent::Finished { exit_code: 143 };
     protocol::write(connection.get_mut(), &event).await.unwrap();
     let control: Control = read(&mut connection).await;
     assert!(matches!(control, Control::Finished { .. }), "{control:?}");
     executing.await.unwrap().unwrap();
     ending.await.unwrap();
+    fixture
 }
 
 #[tokio::test]

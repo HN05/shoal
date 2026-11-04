@@ -61,21 +61,18 @@ impl Manager {
         let _shutdown_stop = self.shutdown_stopped.lock().await;
         tokio::join!(
             self.stop_every_target("before the Shoal daemon stopped", |workspace| async move {
-                let stopped = self
-                    .stop_workspace_manually(&workspace, false, None, QueuedLaunches::Keep)
-                    .await?;
-                // A CI job's runner ends once it sees its run cancelled, after
-                // the daemon has gone; stop it now, as removal does.
-                if stopped.cancelled_run.is_some() {
-                    self.stop_workspace(
-                        &workspace,
-                        StopRequest {
-                            reason: "the Shoal daemon stopped".into(),
-                            save: Save::Everything,
-                        },
-                    )
-                    .await?;
+                // A CI job's runner would end once it saw its run cancelled,
+                // after the daemon has gone; stop it now, as removal does,
+                // also when the forge refused the cancellation.
+                if self.cancel_job_before_stopping(&workspace).await {
+                    let request = StopRequest {
+                        reason: "the Shoal daemon stopped".into(),
+                        save: Save::Everything,
+                    };
+                    return self.stop_workspace(&workspace, request).await;
                 }
+                self.stop_workspace_manually(&workspace, false, None, QueuedLaunches::Keep)
+                    .await?;
                 Ok(())
             }),
             self.save_chats(ChatRestore::Resume)

@@ -159,11 +159,12 @@ impl Manager {
     }
 
     /// Cancel on the forge the run of a job still running in the workspace
-    /// `workspace_id` before its removal stops it; a forge that refuses is
-    /// told to the user, and the run times out there.
-    pub(crate) async fn cancel_job_before_removal(&self, workspace_id: &str) {
+    /// `workspace_id` before the daemon stops its runner, returning whether
+    /// the workspace holds a job; a forge that refuses is told to the user,
+    /// and the run times out there.
+    pub(crate) async fn cancel_job_before_stopping(&self, workspace_id: &str) -> bool {
         let Ok(Some(job)) = self.workspace_claim(workspace_id).await else {
-            return;
+            return false;
         };
         // The runner may run before its claim records its execution, so
         // any execution of the workspace counts.
@@ -172,19 +173,20 @@ impl Manager {
             None => self.workspace_has_executions(workspace_id).await,
         };
         if !running.unwrap_or(true) {
-            return;
+            return true;
         }
         if let Err(error) = self.cancel_job_run(&job).await {
             self.notify(
                 None,
                 NotificationKind::RunnerFailed,
                 format!(
-                    "Removing the workspace of CI job {} could not cancel {} on the forge, where it times out: {error:#}",
+                    "Stopping CI job {} could not cancel {} on the forge, where it times out: {error:#}",
                     job.job.job.name, job.job.run.url
                 ),
             )
             .await;
         }
+        true
     }
 
     /// The job claimed in the workspace `workspace_id`, if any.
