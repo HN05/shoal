@@ -65,6 +65,14 @@ impl Forges {
             .collect()
     }
 
+    /// Whether the agent account has a token of its own for `host`, rather
+    /// than signing in with the user's.
+    pub fn has_agent_token(&self, host: &str) -> bool {
+        self.0
+            .iter()
+            .any(|(name, forge)| name.eq_ignore_ascii_case(host) && forge.agent_token.is_some())
+    }
+
     /// The logins of `whose` tokens, each fetched when a request first
     /// needs it.
     pub fn logins(&self, whose: Whose) -> Logins {

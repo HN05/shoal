@@ -1,13 +1,17 @@
 //! The records subscriptions carry: repositories, workspaces with their
 //! agents, the issues, PRs and CI runs they link with their forge state,
-//! open questions, pending approval requests, messages and notifications,
-//! each named by a [`RecordKey`].
+//! the sessions each space's agents reported, open questions, pending
+//! approval requests, messages and notifications, each named by a
+//! [`RecordKey`].
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    client::{approvals::ApprovalRequest, notifications::Notification, questions::Question},
+    client::{
+        approvals::ApprovalRequest, notifications::Notification, questions::Question,
+        transcripts::ReportedSession,
+    },
     forge::items::link::LinkKind,
     model::{Relation, Repository, Workspace},
     state::states,
@@ -22,6 +26,8 @@ states!(
         Workspaces => "workspaces",
         /// The issues, PRs and CI runs workspaces link, with their forge state.
         Links => "links",
+        /// The sessions each workspace's and chat's agents reported.
+        Sessions => "sessions",
         /// Open questions.
         Questions => "questions",
         /// Pending approval requests.
@@ -40,6 +46,7 @@ states!(
         Repository => "repository",
         Workspace => "workspace",
         Link => "link",
+        Sessions => "sessions",
         Question => "question",
         Approval => "approval",
         Message => "message",
@@ -62,6 +69,7 @@ pub enum Record {
     Repository(Repository),
     Workspace(Box<WorkspaceRecord>),
     Link(Box<Link>),
+    Sessions(ReportedSessions),
     Question(Question),
     Approval(Box<ApprovalRequest>),
     Message(Message),
@@ -74,6 +82,7 @@ impl Record {
             Self::Repository(record) => (RecordKind::Repository, record.id.clone()),
             Self::Workspace(record) => (RecordKind::Workspace, record.workspace.id.clone()),
             Self::Link(record) => (RecordKind::Link, record.id.clone()),
+            Self::Sessions(record) => (RecordKind::Sessions, record.space_id.clone()),
             Self::Question(record) => (RecordKind::Question, record.id.to_string()),
             Self::Approval(record) => (RecordKind::Approval, record.key.clone()),
             Self::Message(record) => (RecordKind::Message, record.id.clone()),
@@ -148,6 +157,14 @@ pub struct Link {
     /// What the daemon could not read when it last looked, such as CI
     /// checks; what it covers may be older than the rest.
     pub lookup_errors: Vec<LookupError>,
+}
+
+/// The sessions a workspace's or chat's agents reported, whose files
+/// [`crate::client::transcripts`] finds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportedSessions {
+    pub space_id: String,
+    pub sessions: Vec<ReportedSession>,
 }
 
 /// One CI check of a PR.

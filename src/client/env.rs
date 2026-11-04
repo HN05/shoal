@@ -128,16 +128,27 @@ pub fn validate_configured_name(table: &str, name: &str) -> Result<()> {
 /// The configured Claude Code directory, if any, of a process whose
 /// environment adds `configured` to this one's; a relative override is an error.
 pub fn claude_config_dir_with(configured: &BTreeMap<String, OsString>) -> Result<Option<PathBuf>> {
-    absolute_dir(
-        CLAUDE_CONFIG_DIR,
-        configured_var(configured, CLAUDE_CONFIG_DIR),
-    )
+    claude_config_dir_from(|name| configured_var(configured, name))
+}
+
+/// The configured Claude Code directory, if any, of a process whose
+/// variables `variable` reads; a relative override is an error.
+pub fn claude_config_dir_from(
+    variable: impl Fn(&str) -> Option<OsString>,
+) -> Result<Option<PathBuf>> {
+    absolute_dir(CLAUDE_CONFIG_DIR, variable(CLAUDE_CONFIG_DIR))
 }
 
 /// The configured Codex directory, if any, of a process whose environment
 /// adds `configured` to this one's; a relative override is an error.
 pub fn codex_home_with(configured: &BTreeMap<String, OsString>) -> Result<Option<PathBuf>> {
-    absolute_dir(CODEX_HOME, configured_var(configured, CODEX_HOME))
+    codex_home_from(|name| configured_var(configured, name))
+}
+
+/// The configured Codex directory, if any, of a process whose variables
+/// `variable` reads; a relative override is an error.
+pub fn codex_home_from(variable: impl Fn(&str) -> Option<OsString>) -> Result<Option<PathBuf>> {
+    absolute_dir(CODEX_HOME, variable(CODEX_HOME))
 }
 
 /// Variable `name` as `configured` sets it for a launch, else as this

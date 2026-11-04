@@ -336,6 +336,32 @@ pub async fn forge_api(
     serde_json::from_str(&pieces.concat()).context("the daemon sent invalid JSON")
 }
 
+/// The labels of `context`'s repository, or of the one `repository` names.
+pub async fn labels(
+    daemon: &impl Daemon,
+    context: crate::protocol::ItemContext,
+    repository: Option<String>,
+) -> Result<Vec<crate::forge::conventions::labels::Label>> {
+    pages(
+        daemon,
+        ItemMethod::Labels {
+            context,
+            repository,
+        },
+    )
+    .await
+}
+
+/// Who the PR `item` names in `context`'s repository, or the space's linked
+/// PR, can ask for a review.
+pub async fn reviewers(
+    daemon: &impl Daemon,
+    context: crate::protocol::ItemContext,
+    item: Option<String>,
+) -> Result<Vec<crate::forge::review::reviewers::Reviewer>> {
+    pages(daemon, ItemMethod::Reviewers { context, item }).await
+}
+
 /// What a review request returns, a review or a listing of them,
 /// reassembled from the pieces of JSON the daemon sends it in.
 pub async fn reviews<T: serde::de::DeserializeOwned>(

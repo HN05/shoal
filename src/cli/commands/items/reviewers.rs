@@ -1,26 +1,17 @@
 //! `shoal pr reviewers`: who a PR can ask for a review, named as
 //! `shoal pr edit --add-reviewer` takes them.
-use anyhow::{Result, bail};
+use anyhow::Result;
 
-use super::select_prs;
+use super::item_context;
 use crate::{
-    cli::{args::changes::ItemSelector, context::Context},
-    forge::{ForgeRepo, review::reviewers::Reviewer},
+    cli::{args::changes::ItemSelector, client, context::Context},
+    forge::review::reviewers::Reviewer,
 };
 
 pub(super) async fn reviewers(ctx: &Context, selector: &ItemSelector) -> Result<i32> {
-    let selected = select_prs(ctx, selector).await?;
-    let [item] = selected.items.as_slice() else {
-        bail!("several PRs are linked; pass a number or URL");
-    };
-    let forge = ForgeRepo::resolve_pull_url(&item.url, &ctx.forge_hosts()?).await?;
-    let (number, _) = forge.pull(&item.url)?;
-    let reviewers = ctx
-        .progress(
-            "Reading reviewers",
-            forge.reviewers(&ctx.forge_account()?, number),
-        )
-        .await?;
+    let context = item_context(ctx, selector).await?;
+    let read = client::reviewers(&ctx.paths, context, selector.item.clone());
+    let reviewers = ctx.progress("Reading reviewers", read).await?;
     ctx.show(&reviewers, |reviewers| render(reviewers))?;
     Ok(0)
 }

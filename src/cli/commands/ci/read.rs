@@ -9,11 +9,10 @@ use crate::{
         commands::{items::select_space_item_context, view as items_view},
         context::Context,
     },
+    client::views,
     forge::ci::{
-        JobState,
-        checks::CheckLog,
         run_action::{Run, validate_run_reference},
-        run_view::{JobRef, RunFilter, RunJob, RunView, validate_filter},
+        run_view::{JobRef, RunFilter, RunView, validate_filter},
     },
     protocol::{CiMethod, ItemContext},
 };
@@ -35,27 +34,15 @@ pub(in crate::cli::commands) async fn view(
     }
     let context = context.as_ref();
     if let Some(job) = job {
-        let log = job_log(ctx, context, &run, job).await?;
+        let log = views::job_log(&ctx.paths, context, &run, job).await?;
         ctx.show(&log, items_view::render_log)?;
         return Ok(0);
     }
     let view = ctx
-        .progress("Reading run", read_view(ctx, context, &run))
+        .progress("Reading run", views::read_run(&ctx.paths, context, &run))
         .await?;
     ctx.show(&view, render_run)?;
     Ok(0)
-}
-
-/// The run `run` names with its jobs and the log tails of its failed jobs,
-/// read in `context`, or without one by the run's URL.
-pub(in crate::cli::commands) async fn read_view(
-    ctx: &Context,
-    context: Option<&ItemContext>,
-    run: &str,
-) -> Result<RunView> {
-    let mut view = read_run(ctx, context, run).await?;
-    read_failed_logs(ctx, context, run, &mut view).await;
-    Ok(view)
 }
 
 /// Open the run in the browser, by its URL the forge reports.
@@ -63,73 +50,6 @@ async fn open(ctx: &Context, context: Option<ItemContext>, run: String) -> Resul
     items_view::may_open_browser(ctx)?;
     let run: Run = client::request(&ctx.paths, CiMethod::ViewCiRun { context, run }).await?;
     items_view::open_urls(ctx, vec![run.url])
-}
-
-/// The run with its jobs, which arrive in pages of their own.
-async fn read_run(ctx: &Context, context: Option<&ItemContext>, run: &str) -> Result<RunView> {
-    let (context, input) = (context.cloned(), run.to_owned());
-    let run = client::request(
-        &ctx.paths,
-        CiMethod::ViewCiRun {
-            context: context.clone(),
-            run: input.clone(),
-        },
-    )
-    .await?;
-    let jobs = client::pages::<RunJob>(
-        &ctx.paths,
-        CiMethod::CiRunJobs {
-            context,
-            run: input,
-        },
-    )
-    .await?;
-    Ok(RunView {
-        run,
-        jobs,
-        logs: Vec::new(),
-        errors: Vec::new(),
-    })
-}
-
-/// Add the logs of the run's failed jobs, recording those it cannot read.
-async fn read_failed_logs(
-    ctx: &Context,
-    context: Option<&ItemContext>,
-    run: &str,
-    view: &mut RunView,
-) {
-    let failed = view
-        .jobs
-        .iter()
-        .filter(|job| job.state == JobState::Failed)
-        .map(|job| (job.id, job.name.clone()))
-        .collect::<Vec<_>>();
-    for (id, name) in failed {
-        match job_log(ctx, context, run, JobRef::Id(id)).await {
-            Ok(log) => view.logs.push(log),
-            Err(error) => view
-                .errors
-                .push(format!("{name}: log unavailable: {error:#}")),
-        }
-    }
-}
-
-async fn job_log(
-    ctx: &Context,
-    context: Option<&ItemContext>,
-    run: &str,
-    job: JobRef,
-) -> Result<CheckLog> {
-    client::request(
-        &ctx.paths,
-        CiMethod::CiRunJobLog {
-            context: context.cloned(),
-            run: run.into(),
-            job,
-        },
-    )
-    .await
 }
 
 /// The newest runs `filter` selects, or those on the head of the PR `pr`.

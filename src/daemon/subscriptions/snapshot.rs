@@ -7,8 +7,8 @@ use anyhow::Result;
 use super::agents;
 use crate::{
     client::subscriptions::records::{
-        Check, Link, LookupError, Message, MessageRecipient, Record, RecordKey, Topic,
-        WorkspaceRecord,
+        Check, Link, LookupError, Message, MessageRecipient, Record, RecordKey, ReportedSessions,
+        Topic, WorkspaceRecord,
     },
     daemon::{
         agent_messages::AgentMessage,
@@ -19,7 +19,7 @@ use crate::{
         workspace::Manager,
     },
     forge::{items::link::LinkKind, updates::Snapshot},
-    model::{Relation, Workspace},
+    model::{Chat, PresentSpace, Relation, Workspace},
 };
 
 /// Records by key, each with its JSON, which tells a changed one apart.
@@ -63,8 +63,18 @@ pub(super) async fn take(
     if topics.has(Topic::Links) {
         found.extend(links(manager, &visible.workspaces).await?);
     }
+    let chats = if topics.has(Topic::Sessions)
+        || topics.has(Topic::Questions)
+        || topics.has(Topic::Approvals)
+    {
+        manager.visible_chats(caller).await?
+    } else {
+        Vec::new()
+    };
+    if topics.has(Topic::Sessions) {
+        found.extend(sessions(manager, &visible.workspaces, &chats).await?);
+    }
     if topics.has(Topic::Questions) || topics.has(Topic::Approvals) {
-        let chats = manager.visible_chats(caller).await?;
         let chats: HashSet<&str> = chats.iter().map(|chat| chat.id.as_str()).collect();
         if topics.has(Topic::Questions) {
             found.extend(questions(manager, &visible, &chats).await?);
@@ -101,7 +111,8 @@ struct Visible {
 impl Visible {
     async fn load(manager: &Manager, caller: Option<&Caller>, topics: &Topics) -> Result<Self> {
         let root = caller.map(|caller| caller.space_id.as_str());
-        if topics.has(Topic::Workspaces) || topics.has(Topic::Links) {
+        if topics.has(Topic::Workspaces) || topics.has(Topic::Links) || topics.has(Topic::Sessions)
+        {
             let workspaces = manager.list_workspaces_within(root).await?;
             let names = workspaces
                 .iter()
@@ -230,6 +241,24 @@ fn lookup_errors(observed: &Snapshot) -> Vec<LookupError> {
             message: message.into(),
         })
         .collect()
+}
+
+/// The sessions the agents of each of `workspaces` and `chats` reported.
+async fn sessions(
+    manager: &Manager,
+    workspaces: &[Workspace],
+    chats: &[Chat],
+) -> Result<Vec<Record>> {
+    let spaces = (workspaces.iter().cloned().map(PresentSpace::Workspace))
+        .chain(chats.iter().cloned().map(PresentSpace::Chat));
+    let mut records = Vec::new();
+    for space in spaces {
+        records.push(Record::Sessions(ReportedSessions {
+            space_id: space.id().to_owned(),
+            sessions: manager.reported_sessions(&space).await?,
+        }));
+    }
+    Ok(records)
 }
 
 /// The open questions of the visible workspaces and `chats`.

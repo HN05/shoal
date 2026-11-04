@@ -86,7 +86,7 @@ shoal-proxy = { workspace = true, optional = true }
 shoal-subprocess.workspace = true
 socket2 = { version = "0.6", optional = true }
 tempfile = { workspace = true, optional = true }
-tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "sync", "time"] }
+tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "sync", "time"] }
 toml = "1.1.6"
 toml_edit = "0.25"
 uuid = { workspace = true, features = ["serde"] }

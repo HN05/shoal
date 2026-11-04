@@ -1744,10 +1744,12 @@ reacting reads first and changes only a reaction not already as asked, since
 forges differ in whether adding one twice fails. A comment edit changes only
 a comment the acting login wrote, checked against the item's discussion before
 anything is sent, since an account with admin rights could otherwise rewrite
-someone else's words. Listing issues and PRs also
-runs in the daemon, so a scoped caller's search goes out as the agent account
-and anyone else's as the user's own logins, in another repository too, since
-checking for a duplicate before filing there is only a read; it uses each forge's own search and
+someone else's words. Listing issues and PRs, and
+reading items' views, a PR's possible reviewers and a repository's labels, also
+run in the daemon, so apps read them without choosing a login or a host's forge
+themselves: a scoped caller reads as the agent account and anyone else as the
+user's own logins, in another repository too, since checking for a duplicate
+before filing there is only a read. A search uses each forge's own search and
 reads pages only until the limit is met. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
 command models. The daemon
@@ -2332,9 +2334,10 @@ Issue linking and unlinking are own-workspace operations; associations are idemp
 and replacing one requires unlinking it first. Unlinking preserves recorded completion.
 Issue associations suppress idle cleanup, not merged cleanup.
 Item views let agents read issues and PRs without knowing the forge. The daemon
-selects linked or explicit items; the CLI looks them up with the user's forge
-login, because discussion can exceed a protocol frame: the forge's API with
-the host's token, or anonymously without one. Views automatically include the logs of
+selects linked or explicit items, gives a bare number the kind of the linked
+item or else the forge's, and reads them through the forge's API with the
+account a read uses, or anonymously without a token, sending a view whose
+discussion exceeds a protocol frame in pieces. Views automatically include the logs of
 failed CI jobs where the forge serves them, fetched by the daemon with the
 workspace's agent account and returned as bounded tails with the job's URL, so
 scoped callers never need forge credentials. Successful and pending checks omit
@@ -2433,9 +2436,11 @@ Exporting every workspace of a repository checks each one before removing any, s
 one that cannot leave refuses the set while all stay; a failure once removals
 begin leaves the exported ones moved and the rest in place, each reported.
 Agent conversations are the agent tools' private files, which Shoal never
-reads or changes. An export copies each reported session's files unread, found
-by ID where the agent's integration says its tool keeps them, under the
-daemon's environment or one its agents ran with, and an import puts them at the
+reads or changes. Shoal tells clients where they are without reading them: the
+daemon reports the sessions a space's agents reported, and `shoal::client`
+finds each one's files by ID where its tool keeps them, under the client's
+environment or one the repository's agents ran with, as an export does. An
+export copies each reported session's files unread, and an import puts them at the
 same path under the importing agent's session directory, replacing a file there
 only with one that continues it, as a session that went away and came back does,
 and leaving that to the installed Shoal in a development build; a session whose

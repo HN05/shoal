@@ -565,15 +565,18 @@ shoal = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<release tag>
 `shoal::client` holds every request the CLI makes, with its reply's types;
 `connection` sends them to the daemon a `Connector` names, and `subscriptions`
 follows repositories, workspaces with their agents, linked issues, PRs and CI
-runs, open questions, pending approval requests, messages and notifications as
-they change, subscribing again after a daemon restart. `operations` follows work
+runs, the sessions each space's agents reported, open questions, pending
+approval requests, messages and notifications as they change, subscribing again
+after a daemon restart. `operations` follows work
 the daemon runs for a request, such as the setup and post-setup hook of a
 workspace `StartWorkspace` creates: its steps and its processes' output lines as
 they come, then its result or a typed failure such as `setup_failed` or
 `hook_failed`. It also holds the logic
 the CLI applies on its side: which workspaces a command would act on, list
-status labels, the AI tools Shoal can launch, and reading and validating
-configuration, and in `output` the types every command prints with `--json`.
+status labels, the AI tools Shoal can launch, where a space's agent sessions
+keep their files on this machine, reading and validating configuration, and in
+`views` what `shoal view` reads; `output` holds the types every command prints
+with `--json`.
 Without a scope token the caller is the user; with one, it is
 that workspace's agent, under the rules of its `shoal` commands. The library
 speaks only its own release's protocol: a daemon of another release refuses
@@ -784,6 +787,7 @@ own stdin, stdout, stderr, and exit code.
 `shoal status [target]` summarizes one space, a workspace or a [chat](#chats),
 running or stopped, which the target names, else the current one: its state, a
 workspace's changes since its fork point and what it holds, its agent sessions,
+each session its agents reported with the path of its transcript on this machine,
 whether its linked issue is open or closed,
 and each watched PR as the forge reports it now: open, merged or closed, merge
 conflicts, each CI check's result, the CI runs on an open PR's head that
@@ -810,7 +814,15 @@ workspace it runs in, as `shoal work --chats`, the inbox and the menu do with
 `in <workspace>`. `--json`
 returns the same data, with `kind` (`workspace` or `chat`) and the space's
 record in `workspace` or `chat`, PRs in `prs`, the issue in `issue_status` and sessions
-in `sessions`, or a failed `zmx list` in `sessions_error`. Workspace records from `work --json` and `status --json` include
+in `sessions`, or a failed `zmx list` in `sessions_error`. `transcripts` lists every
+session the space's agents reported, with `agent`, `session`, the `execution` a
+workspace's agent ran as, whether the agent runs it now in `current`, its
+transcript in `path` and all its files, the transcript included, in `files`,
+which Shoal finds where the agent's tool keeps them and never reads. A session
+whose files are not on this machine, or of an agent whose tool Shoal does not
+know, has no `path` and no files, and one whose files could not be looked for
+says why in `error`; sessions the agents' hooks never reported, such as those
+before a `/clear`, are not listed. Workspace records from `work --json` and `status --json` include
 the assigned issue in `links.issue`, assigned PR URLs in `links.prs`, and items
 recorded as opened or related in `links.opened` and `links.related`, each with
 `kind`, `url` and `title` when known; an acknowledgement without a PR URL leaves
@@ -3427,7 +3439,9 @@ except its author, by the `name` that `--add-reviewer` takes, with the forge's
 `display_name` and whether it is a `team`. Users are GitHub's assignable
 users, Forgejo's review candidates, GitLab's project members and the members
 of a Bitbucket workspace, named by account ID; teams are those with access to
-an organization's repository on GitHub and Forgejo.
+an organization's repository on GitHub and Forgejo. Processes inside a
+workspace and a chat's agent read them as the [agent account](#agent-accounts),
+anyone else with your own logins.
 `open`, `edit` and `comment` also take repeated `--attach FILE` or
 `--attach 'FILE#ALT TEXT'`: a non-empty file of at most 10 MiB for an image and
 100 MiB otherwise, checked before anything is sent; the forge decides which types
@@ -3727,7 +3741,9 @@ as the forge reports them, including a group's or organization's labels, with
 each one's description, and `exclusive` for a label that allows no other of its
 scope: Forgejo's exclusive labels and GitLab's `key::value` labels. Reading a
 Forgejo organization's labels needs a token with the `read:organization`
-scope; Bitbucket has no labels.
+scope; Bitbucket has no labels. Processes inside a workspace and a chat's agent
+read them as the [agent account](#agent-accounts), anyone else with your own
+logins.
 
 `[pr] required_labels` and `[issue] required_labels` name entries that every new
 item's labels must each start with, so `area/` takes any area label. `pr open`
@@ -4006,7 +4022,9 @@ review whose inline comments could not be read keeps its body; the command exits
 of items with failed logs in `check_logs`, and runs with `kind` `ci`, or a check
 log object with `--check`;
 `reactions` on an item or comment lists each reaction's `content`, `count`, and
-whether your login `reacted`. Reactions use GitHub's names (`+1`, `-1`,
+whether the login that read it `reacted`: the daemon reads issues and PRs as the
+[agent account](#agent-accounts) for processes inside a workspace and a chat's
+agent, which read only from their space, and with your own logins otherwise. Reactions use GitHub's names (`+1`, `-1`,
 `laugh`, `hooray`, `confused`, `heart`, `rocket`, `eyes`); a GitLab emoji
 without one keeps its GitLab name.
 `--web` opens the selected items in the browser instead, with `open` on macOS

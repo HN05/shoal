@@ -150,6 +150,7 @@ fn render_activity(view: &StatusView, palette: Palette) {
         render_processes(worktree, palette);
     }
     render_sessions(view, palette);
+    render_transcripts(view, palette);
     if let Some(worktree) = view.status.space.worktree() {
         render_agent(worktree);
     }
@@ -162,6 +163,25 @@ fn render_sessions(view: &StatusView, palette: Palette) {
         outln!("  {}", session.label());
     }
     if let Some(error) = &view.sessions_error {
+        outln!("  {}", palette.paint(Style::Warning, error));
+    }
+}
+
+/// Each session the space's agents reported, with its transcript's path or
+/// why it has none here.
+fn render_transcripts(view: &StatusView, palette: Palette) {
+    outln!("Transcripts:   {}", view.transcripts.len());
+    for transcript in &view.transcripts {
+        let session = &transcript.session;
+        let running = if session.current { "  running" } else { "" };
+        let path = match (&transcript.path, &transcript.error) {
+            (Some(path), _) => path.display().to_string(),
+            (None, Some(error)) => palette.paint(Style::Warning, error),
+            (None, None) => "not found".to_owned(),
+        };
+        outln!("  {}  {}{running}  {path}", session.agent, session.session);
+    }
+    if let Some(error) = &view.transcripts_error {
         outln!("  {}", palette.paint(Style::Warning, error));
     }
 }

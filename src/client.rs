@@ -37,7 +37,9 @@ pub mod sim;
 pub mod state;
 pub mod subscriptions;
 pub mod time;
+pub mod transcripts;
 pub mod transfer;
 pub mod validate;
+pub mod views;
 
 pub use shoal_forge as forge;

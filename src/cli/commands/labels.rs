@@ -5,21 +5,20 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        args::repository::RepositoryArgs, commands::capabilities::repository_forge,
+        args::repository::RepositoryArgs, client, commands::items::select_repo_context,
         context::Context,
     },
     forge::conventions::labels::Label,
 };
 
 pub(super) async fn labels(ctx: &Context, repository: RepositoryArgs) -> Result<i32> {
-    let forge = repository_forge(ctx, repository).await?;
+    let (context, named) = select_repo_context(ctx, repository.repo).await?;
     let labels = ctx
-        .progress("Reading labels", forge.labels(&ctx.forge_account()?))
+        .progress("Reading labels", client::labels(&ctx.paths, context, named))
         .await?;
     ctx.show(&labels, |labels| render(labels))?;
     Ok(0)
 }
-
 /// One line per label: its name, description, and whether it excludes the
 /// other labels of its scope.
 fn render(labels: &[Label]) {

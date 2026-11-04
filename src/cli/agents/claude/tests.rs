@@ -158,6 +158,7 @@ fn proxied_settings_send_api_requests_to_the_proxy() {
     let environment = AgentEnvironment {
         home: home.path(),
         configured: &Default::default(),
+        inherited: |_| None,
     };
     let routing = super::super::Routing {
         url: "http://127.0.0.1:4000",

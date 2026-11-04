@@ -4,6 +4,7 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
+    client::transcripts::Environments,
     config::Effective,
     daemon::workspace::Manager,
     model::{Chat, PresentSpace, Repository, SpaceKind, Workspace},
@@ -228,10 +229,10 @@ impl Manager {
                 ));
                 Vec::new()
             });
-        let home = self.paths.home.clone();
+        let environments = Environments::new(&self.paths.home, &environments);
         let sessions = manifest.sessions.clone().unwrap_or_default();
         let found = tokio::task::spawn_blocking(move || {
-            crate::cli::agents::session_sources(&settings, &home, &environments, &sessions)
+            crate::transfer::session_sources(&settings, &environments, &sessions)
         })
         .await;
         match found {
