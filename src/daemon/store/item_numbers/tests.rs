@@ -30,6 +30,19 @@ fn notifications_name_the_number_each_form_gave() {
         .as_deref(),
         Some("withdrew question 3.2 (no answer needed): Which?")
     );
+    // A replacement that ends in the old number is not rewritten again.
+    assert_eq!(
+        renumbered(
+            "withdrew question 1 (no answer needed): Which?",
+            QUESTION_FORMS,
+            |old| Some(ItemNumber {
+                space: 1,
+                item: u32::try_from(old).ok()?
+            })
+        )
+        .as_deref(),
+        Some("withdrew question 1.1 (no answer needed): Which?")
+    );
     // A number nothing maps is left as it was told.
     assert_eq!(
         renumbered("approval 7: hold the workspace", APPROVAL_FORMS, number),

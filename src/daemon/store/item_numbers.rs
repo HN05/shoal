@@ -221,27 +221,34 @@ fn renumbered(
         digits.parse::<i64>().ok()
     })?;
     let new = new(old)?;
-    let mut rewritten = message.to_owned();
-    for form in forms {
-        rewritten = replace_number(&rewritten, &format!("{form}{old}"), &format!("{form}{new}"));
-    }
-    Some(rewritten)
+    let replacements: Vec<_> = forms
+        .iter()
+        .map(|form| (format!("{form}{old}"), format!("{form}{new}")))
+        .collect();
+    Some(replace_numbers(message, &replacements))
 }
 
-/// `text` with each `from` that no further digit follows replaced by `to`.
-fn replace_number(text: &str, from: &str, to: &str) -> String {
+/// `text` with each `from` that no further digit follows replaced by its
+/// `to`, in one pass, so a replacement is never rewritten again.
+fn replace_numbers(text: &str, replacements: &[(String, String)]) -> String {
     let mut result = String::new();
     let mut rest = text;
-    while let Some(index) = rest.find(from) {
-        let after = &rest[index + from.len()..];
-        result.push_str(&rest[..index]);
-        match after.starts_with(|c: char| c.is_ascii_digit()) {
-            true => result.push_str(from),
-            false => result.push_str(to),
+    while let Some(first) = rest.chars().next() {
+        let found = replacements.iter().find(|(from, _)| {
+            rest.strip_prefix(from.as_str())
+                .is_some_and(|after| !after.starts_with(|c: char| c.is_ascii_digit()))
+        });
+        match found {
+            Some((from, to)) => {
+                result.push_str(to);
+                rest = &rest[from.len()..];
+            }
+            None => {
+                result.push(first);
+                rest = &rest[first.len_utf8()..];
+            }
         }
-        rest = after;
     }
-    result.push_str(rest);
     result
 }
 
