@@ -20,7 +20,8 @@ use crate::{
     daemon::refusal::{Reason, Refusal},
     model::{AgentSession, QueueEntry, SpaceRef, Workspace},
     protocol::{
-        AgentMethod, CommitStart, ConfigTarget, CreationOptions, ItemMethod, WorkspaceMethod,
+        AgentMethod, CommitStart, ConfigTarget, CreationOptions, OperationMethod, WorkspaceMethod,
+        operations::StartedWorkspace,
     },
     shell,
     state::{QueueState, WorkspaceState},
@@ -72,8 +73,8 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
         (None, Some(issue)) => issue.branch_name(),
         (None, None) => anyhow::bail!("name the child's branch or pass --issue"),
     };
-    let child = create_child(ctx, parent, name, split.base, issue.as_ref(), split.options).await?;
-    let Some(child) = prepare(ctx, child).await? else {
+    let child = start_child(ctx, parent, name, split.base, issue.as_ref(), split.options).await?;
+    let Some(child) = follow_preparation(ctx, child).await? else {
         return Ok(1);
     };
     let agent = match agent {
@@ -179,37 +180,26 @@ async fn parent_session(ctx: &Context, parent: &str) -> Result<AgentSession> {
     request(&ctx.paths, method).await
 }
 
-/// Record the child of `parent` on a new branch named `name`, assigned `issue`.
-pub(super) async fn create_child(
+/// Split the child of `parent` on a new branch named `name`, assigned
+/// `issue`, and start preparing it.
+pub(super) async fn start_child(
     ctx: &Context,
     parent: String,
     name: String,
     base: Option<String>,
     issue: Option<&Issue>,
     options: CreationOptions,
-) -> Result<Workspace> {
-    let child: Workspace = request(
-        &ctx.paths,
-        WorkspaceMethod::SplitWorkspace {
-            workspace: parent,
-            name,
-            base,
-            options,
-        },
-    )
-    .await?;
-    if let Some(issue) = issue {
-        request::<()>(
-            &ctx.paths,
-            ItemMethod::SetIssue {
-                space: child.id.clone(),
-                url: issue.url.clone(),
-                title: Some(issue.title.clone()),
-            },
-        )
-        .await?;
-    }
-    Ok(child)
+) -> Result<StartedWorkspace> {
+    let method = OperationMethod::StartSplit {
+        workspace: parent,
+        name,
+        base,
+        options,
+        issue: issue.map(|issue| issue.url.clone()),
+        agent: None,
+        env: Some(crate::env::without_secrets()),
+    };
+    request(&ctx.paths, method).await
 }
 
 /// Run the child's setup and post-setup hook; `None` when setup failed.
@@ -219,6 +209,18 @@ pub(super) async fn prepare(ctx: &Context, child: Workspace) -> Result<Option<Wo
         return Ok(Some(child));
     }
     match super::workspaces::setup_workspace(ctx, &child, true).await? {
+        Some(set_up) => set_up.finish(ctx).await.map(Some),
+        None => Ok(None),
+    }
+}
+
+/// Follow the preparation the daemon started for a workspace a request
+/// opened to its end; `None` when setup failed.
+pub(super) async fn follow_preparation(
+    ctx: &Context,
+    started: StartedWorkspace,
+) -> Result<Option<Workspace>> {
+    match super::workspaces::follow_setup(ctx, started).await? {
         Some(set_up) => set_up.finish(ctx).await.map(Some),
         None => Ok(None),
     }

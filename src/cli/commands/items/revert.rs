@@ -28,7 +28,10 @@ use crate::{
     },
     git::revert::{self as git_revert, Merge, Merged, Reverted},
     model::{Chat, PresentSpace, Repository, Workspace},
-    protocol::{AssignmentMethod, ItemMethod, RemovalMethod, WorkspaceMethod},
+    protocol::{
+        AssignmentMethod, ItemMethod, OperationMethod, RemovalMethod, WorkspaceMethod,
+        operations::{StartedWorkspace, WorkspaceStart},
+    },
     removal::{RemovalResult, UnsavedWork},
     repository::Selector,
 };
@@ -151,9 +154,9 @@ async fn revert_workspace(
     let pr = merged.item.pr.as_ref().context("only PRs revert")?;
     let name = format!("revert-{}", merged.item.number);
     let base = Some(format!("origin/{}", pr.base));
-    let created = match from {
+    let started = match from {
         Reverting::Workspace(workspace) if crate::env::is_scoped() => {
-            split::create_child(
+            split::start_child(
                 ctx,
                 workspace.id.clone(),
                 name,
@@ -165,32 +168,37 @@ async fn revert_workspace(
         }
         Reverting::Workspace(workspace) => {
             let repository = workspace.repository_id.clone();
-            create_workspace(ctx, repository, name, base, None).await?
+            start_workspace(ctx, repository, name, base, None).await?
         }
         Reverting::Chat { chat, .. } => {
             let repository = chat.repository_id.clone();
-            create_workspace(ctx, repository, name, base, Some(chat.id.clone())).await?
+            start_workspace(ctx, repository, name, base, Some(chat.id.clone())).await?
         }
     };
-    split::prepare(ctx, created).await
+    split::follow_preparation(ctx, started).await
 }
 
-/// A new workspace `name` of `repository` on `base`, opened by `chat`, if any.
-async fn create_workspace(
+/// Start a new workspace `name` of `repository` on `base`, opened by
+/// `chat`, if any.
+async fn start_workspace(
     ctx: &Context,
     repository: String,
     name: String,
     base: Option<String>,
     chat: Option<String>,
-) -> Result<Workspace> {
-    let method = WorkspaceMethod::CreateWorkspace {
-        path: None,
+) -> Result<StartedWorkspace> {
+    let method = OperationMethod::StartWorkspace {
         repository: Selector::Value(repository),
-        name,
+        start: WorkspaceStart::Name(name),
         base,
+        path: None,
         git_profile: None,
         parent: chat,
         options: Default::default(),
+        issue: None,
+        pr: None,
+        agent: None,
+        env: Some(crate::env::without_secrets()),
     };
     request(&ctx.paths, method).await
 }

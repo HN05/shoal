@@ -37,8 +37,8 @@ pub(super) async fn create(ctx: &Context) -> Result<i32> {
     let workspaces = client::workspaces(&ctx.paths).await?;
     let parent = enclosing(&workspaces, &input.cwd)?.id.clone();
     let child =
-        super::split::create_child(ctx, parent, input.name, None, None, Default::default()).await?;
-    let Some(child) = super::split::prepare(ctx, child).await? else {
+        super::split::start_child(ctx, parent, input.name, None, None, Default::default()).await?;
+    let Some(child) = super::split::follow_preparation(ctx, child).await? else {
         return Ok(1);
     };
     outln!("{}", child.path.display());

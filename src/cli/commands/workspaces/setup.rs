@@ -17,7 +17,7 @@ use crate::{
     model::Workspace,
     protocol::{
         RemovalMethod,
-        operations::{Failure, OperationSpec, Preparation, Prepared},
+        operations::{Failure, OperationSpec, Preparation, Prepared, StartedWorkspace},
     },
     removal::{RemovalResult, UnsavedWork},
     state::WorkspaceState,
@@ -116,11 +116,12 @@ pub(in crate::cli::commands) async fn run_post_setup(
     Ok(())
 }
 
-/// A workspace setup made ready, and how its post-setup hook went when it
-/// ran in the same operation.
+/// A workspace setup made ready, and how what follows setup in the same
+/// operation went: its post-setup hook, when the operation runs it.
 pub(in crate::cli::commands) struct SetUp {
     pub workspace: Workspace,
-    /// `None` when the hook did not run with setup.
+    /// `None` when the user ignored setup's failure, so nothing that
+    /// follows setup ran.
     pub post_setup: Option<Result<()>>,
 }
 
@@ -154,10 +155,31 @@ pub(in crate::cli::commands) async fn setup_workspace(
             ..Default::default()
         },
     };
-    match operations::run::<Prepared>(ctx, spec).await {
+    let prepared = operations::run::<Prepared>(ctx, spec).await;
+    settle_setup(ctx, workspace, prepared).await
+}
+
+/// Follow the preparation the daemon started for the workspace a request
+/// opened, and settle it as [`setup_workspace`] does.
+pub(in crate::cli::commands) async fn follow_setup(
+    ctx: &Context,
+    started: StartedWorkspace,
+) -> Result<Option<SetUp>> {
+    let prepared = operations::follow_started::<Prepared>(ctx, started.operation).await;
+    settle_setup(ctx, &started.workspace, prepared).await
+}
+
+/// The workspace a preparation left, once an interactive user decided what
+/// to do with a failed setup.
+async fn settle_setup(
+    ctx: &Context,
+    workspace: &Workspace,
+    prepared: Result<Prepared>,
+) -> Result<Option<SetUp>> {
+    match prepared {
         Ok(prepared) => Ok(Some(SetUp {
             workspace: *prepared.workspace,
-            post_setup: post_setup.then_some(Ok(())),
+            post_setup: Some(Ok(())),
         })),
         Err(error) => match error.downcast::<execution::SetupVerificationFailure>() {
             Ok(failure) => {
