@@ -9,6 +9,9 @@ use anyhow::Result;
 use super::AgentMessage;
 use crate::{daemon::workspace::Manager, model::Workspace};
 
+mod clock;
+pub(crate) use clock::SettleClock;
+
 /// A run is held at most this many settle windows after its first message,
 /// so a steady stream still arrives.
 const MAX_WINDOWS: i64 = 6;
@@ -35,7 +38,7 @@ impl Manager {
         if messages.is_empty() {
             return Ok(None);
         }
-        let now = i64::try_from(crate::time::unix_seconds())?;
+        let now = self.settle_clock.unix_seconds()?;
         let settle = self.settle_seconds(workspace).await;
         Ok(held_until(messages, settle, now).map(|until| Duration::from_secs(until.abs_diff(now))))
     }
@@ -48,7 +51,7 @@ impl Manager {
         mut messages: Vec<AgentMessage>,
     ) -> Result<Vec<AgentMessage>> {
         while let Some(hold) = self.message_hold(workspace, &messages).await? {
-            tokio::time::sleep(hold).await;
+            self.settle_clock.sleep(hold).await;
             messages = self.agent_messages(&workspace.id).await?;
         }
         Ok(messages)

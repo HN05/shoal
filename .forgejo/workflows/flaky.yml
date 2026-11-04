@@ -78,5 +78,5 @@ jobs:
           case "$REPORT_RC" in
             0) ;;
             1) echo "::error::a test failed on unchanged code; the issue lists it"; exit 1 ;;
-            *) echo "::error::a round produced no test results; see the step above"; exit 1 ;;
+            *) echo "::error::a round failed without a failing test to account for it; see the step above"; exit 1 ;;
           esac

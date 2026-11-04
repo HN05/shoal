@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::{commit, git, install_test_script, manager, repository};
+use crate::test_support::{commit, git, install_test_script, manager, native_cloning, repository};
 use std::path::PathBuf;
 
 fn modified(path: &Path) -> std::time::SystemTime {
@@ -13,6 +13,20 @@ async fn configure(manager: &Manager, text: &str) {
 
 const NO_PRESSURE: &str =
     "[machine.overload.memory]\nenabled = false\n[machine.overload.disk]\nenabled = false\n";
+
+/// Without native cloning a seed build fails at its clone and is reported,
+/// never copied.
+async fn assert_clone_refused(manager: &Manager, layout: &Layout) {
+    assert!(Snapshot::open(layout).unwrap().is_none());
+    let notifications = manager.notifications(true, 10).await.unwrap();
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.kind == NotificationKind::SeedFailed
+                && notification.message.contains(" failed: clone ")
+        }),
+        "{notifications:?}"
+    );
+}
 
 #[tokio::test]
 async fn new_workspaces_start_from_the_default_branch_build() {
@@ -47,17 +61,10 @@ async fn new_workspaces_start_from_the_default_branch_build() {
         .join(".caches/shared/go");
     assert!(cache.join("seed").exists());
     let layout = Layout::of(&repo).unwrap();
-    let Some(snapshot) = Snapshot::open(&layout).unwrap() else {
-        // Without copy-on-write cloning the seed is reported, never copied.
-        let notifications = manager.notifications(true, 10).await.unwrap();
-        assert!(
-            notifications
-                .iter()
-                .any(|notification| notification.kind == NotificationKind::SeedFailed),
-            "{notifications:?}"
-        );
-        return;
-    };
+    if !native_cloning(layout.root()) {
+        return assert_clone_refused(&manager, &layout).await;
+    }
+    let snapshot = Snapshot::open(&layout).unwrap().unwrap();
     let built = git(&checkout, &["rev-parse", "main"]);
     assert_eq!(snapshot.commit, built.trim());
 
@@ -197,14 +204,8 @@ async fn a_preset_builds_and_keeps_its_tool_outputs() {
     assert!(log.starts_with("$ cargo build --all-targets\n"), "{log}");
     let built = layout.worktree().join("target/debug/libseeded.rlib");
     assert!(built.is_file(), "{log}");
-    // Without copy-on-write cloning the seed is never copied.
-    let probe = layout.root().join("probe");
-    fs::write(&probe, "x").unwrap();
-    let cloning = crate::fsutil::clone_tree(&probe, &layout.root().join("probe-clone"))
-        .await
-        .is_ok();
-    if !cloning {
-        return;
+    if !native_cloning(layout.root()) {
+        return assert_clone_refused(&manager, &layout).await;
     }
     assert!(Snapshot::open(&layout).unwrap().is_some(), "{log}");
     let workspace = manager
@@ -278,9 +279,10 @@ async fn a_removed_seed_is_neither_applied_nor_kept() {
     .await;
     manager.refresh_seeds().await;
     let layout = Layout::of(&repo).unwrap();
-    if Snapshot::open(&layout).unwrap().is_none() {
-        return; // No copy-on-write cloning here; covered above.
+    if !native_cloning(layout.root()) {
+        return assert_clone_refused(&manager, &layout).await;
     }
+    assert!(Snapshot::open(&layout).unwrap().is_some());
     // Outputs built under other settings are not applied.
     fs::write(
         checkout.join(".shoal.toml"),

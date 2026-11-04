@@ -746,7 +746,7 @@ impl Manager {
     ) -> Result<ApprovalRequest> {
         match caller {
             Some(caller) => {
-                self.decide_routed_approval(&caller.workspace_id, id, approve, shown, details)
+                self.decide_routed_approval(&caller.space_id, id, approve, shown, details)
                     .await
             }
             None => self.decide_approval(id, approve, shown, details, env).await,

@@ -221,7 +221,11 @@ async fn selected_workspace<'a>(
 pub(in crate::cli) fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>> {
     let current = ui::current_directory()?;
     let context = WorkspaceContext::from_directory(workspaces, current.as_deref());
-    Ok(context.resolve(None, crate::env::is_scoped(), ScopeOrder::AfterDirectory))
+    Ok(context.resolve(
+        None,
+        crate::env::workspace_scoped(),
+        ScopeOrder::AfterDirectory,
+    ))
 }
 
 async fn defines(ctx: &Context, workspace: &str, name: &str) -> Result<bool> {

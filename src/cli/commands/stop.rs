@@ -232,13 +232,19 @@ async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<Stri
     Ok(found)
 }
 
-/// Refuse a stop in a workspace process that `selected` includes its own
-/// workspace in. The daemon refuses each workspace not below the caller's,
-/// which needs the scope token; refusing its own here, before any stops,
-/// keeps the stop from taking the workspaces below it alone.
+/// Refuse a stop in a scoped process, a workspace's or a chat's agent, that
+/// `selected` includes its own workspace in. The daemon refuses each
+/// workspace not below the caller's space, which needs the scope token;
+/// refusing its own here, before any stops, keeps the stop from taking the
+/// workspaces below it alone.
 pub(super) async fn ensure_below(ctx: &Context, selected: &[String]) -> Result<()> {
-    const REFUSAL: &str = "workspace processes stop only the workspaces below theirs; finish their own with shoal done";
-    let own = std::env::var(crate::env::WORKSPACE_ID).context(REFUSAL)?;
+    const REFUSAL: &str =
+        "scoped processes stop only the workspaces below theirs; finish their own with shoal done";
+    let own = std::env::var(crate::env::WORKSPACE_ID)
+        .ok()
+        .filter(|own| !own.is_empty())
+        .or_else(crate::env::in_chat)
+        .context(REFUSAL)?;
     ensure!(crate::env::is_scoped(), "{REFUSAL}");
     for selector in selected {
         let id = client::inspect(&ctx.paths, selector.clone())

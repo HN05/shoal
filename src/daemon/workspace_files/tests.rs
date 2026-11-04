@@ -70,7 +70,7 @@ async fn files_from_outside_any_agent_are_the_users() {
     assert_eq!(manager.attacher(None, None).await, Attacher::User);
     // A workspace terminal or a command, scoped without an agent.
     let terminal = Caller {
-        workspace_id: workspace.id.clone(),
+        space_id: workspace.id.clone(),
         execution: None,
     };
     assert_eq!(
@@ -574,7 +574,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
             .issue_scope(
                 token.into(),
                 Caller {
-                    workspace_id: workspace.id.clone(),
+                    space_id: workspace.id.clone(),
                     execution: None,
                 },
             )
@@ -641,7 +641,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
         .issue_scope(
             "top".into(),
             Caller {
-                workspace_id: top.id.clone(),
+                space_id: top.id.clone(),
                 execution: None,
             },
         )
@@ -1106,7 +1106,9 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
 
 /// Return a current state database to version 87, before Shoal recorded
 /// attached files, undoing the later migrations that cannot run twice.
-const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_created;
+const BEFORE_ATTACHED_FILES: &str = "DROP INDEX chats_scope_token;
+    ALTER TABLE chats DROP COLUMN scope_token;
+    DROP TRIGGER workspace_created;
     CREATE TRIGGER workspace_created AFTER INSERT ON workspaces BEGIN SELECT 1; END;
     DROP TRIGGER space_parent_set;
     DROP TRIGGER space_parent_changed;
@@ -1223,7 +1225,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         .issue_scope(
             "worker".into(),
             Caller {
-                workspace_id: workspace.id.clone(),
+                space_id: workspace.id.clone(),
                 execution: None,
             },
         )
@@ -1307,7 +1309,7 @@ async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
     // Workspace scope comes first, as for a command a chat's agent runs
     // in a workspace.
     let terminal = Caller {
-        workspace_id: workspace.id.clone(),
+        space_id: workspace.id.clone(),
         execution: None,
     };
     assert_eq!(

@@ -93,8 +93,13 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
     if !crate::env::inherits_scope(&ctx.paths.state) {
         return Ok(true);
     }
-    let owner = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
-    let owner = client::inspect(&ctx.paths, owner).await?.workspace.id;
+    let owner = match crate::env::in_chat() {
+        Some(chat) => chat,
+        None => {
+            let owner = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
+            client::inspect(&ctx.paths, owner).await?.workspace.id
+        }
+    };
     Ok(request.decider.as_deref() == Some(owner.as_str()))
 }
 

@@ -428,9 +428,7 @@ impl Inbox {
     }
 
     async fn current(ctx: &Context, fallback: Fallback) -> Result<Self> {
-        if !crate::env::is_scoped()
-            && let Some(chat) = crate::env::chat()
-        {
+        if let Some(chat) = crate::env::in_chat() {
             return Ok(Self {
                 space: chat,
                 kind: "chat",

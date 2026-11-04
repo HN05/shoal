@@ -144,8 +144,9 @@ impl Manager {
     }
 
     /// Who a request from `caller` attaches files as: the agent it comes
-    /// from, else the running chat `sender_chat` whose agent sends it
-    /// outside any workspace scope, else the user.
+    /// from, the chat whose agent's scope it carries, else the running chat
+    /// `sender_chat` whose agent, started before chats carried scope, sends
+    /// it unscoped, else the user.
     pub(crate) async fn attacher(
         &self,
         caller: Option<&Caller>,
@@ -154,6 +155,9 @@ impl Manager {
         let Some(caller) = caller else {
             return self.chat_attacher(sender_chat).await;
         };
+        if self.caller_is_chat(caller).await.unwrap_or_default() {
+            return self.chat_attacher(Some(&caller.space_id)).await;
+        }
         let Some(agent) = self.caller_agent(caller).await else {
             return Attacher::User;
         };

@@ -21,10 +21,10 @@ use self::{
         AddSettings, check_chosen_model, choose_add_agent, choose_for_picked_issue,
         resolve_add_agent,
     },
-    finish::execute_add_with_target,
+    finish::{add_planned, execute_add_with_target},
     handoff::start_beside,
     plan::{check_add_creation, plan_addition},
-    queue::{admit, after_dependencies, failing_entry},
+    queue::{admit, after_dependencies, ensure_queues_at_once, failing_entry},
     source::{load_add_issue, pick_add_source, select_add_creation},
     target::resolve_add_target,
 };
@@ -92,6 +92,14 @@ pub(in crate::cli::commands) async fn add(
         options.after.is_empty() || plan.agent_name().is_some(),
         "--after queues an agent; name one with --agent"
     );
+    // A scoped caller's agent is queued once its workspace exists.
+    if crate::env::is_scoped() {
+        let queued = plan.agent_name().is_some();
+        if queued {
+            ensure_queues_at_once(ctx, &target, issue.as_ref(), &options, after).await?;
+        }
+        return add_planned(ctx, plan, target, issue, queued).await;
+    }
     if let Some(queued) = admit(
         ctx,
         &target,

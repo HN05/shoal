@@ -20,8 +20,8 @@ pub(in crate::cli::commands) async fn rename(
     chat: Option<String>,
     name: String,
 ) -> Result<i32> {
-    super::ensure_unscoped(ctx)?;
-    // Refuse an invalid name before a picker asks for the chat.
+    // Refuse an invalid name before a picker asks for the chat; the daemon
+    // lets a chat's agent rename only its own chat.
     crate::validate::name("chat", &name)?;
     let chat = select(ctx, chat).await?;
     let renamed = request::<RenamedChat>(&ctx.paths, ChatMethod::RenameChat { chat, name }).await?;

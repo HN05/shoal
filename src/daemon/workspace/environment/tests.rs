@@ -35,7 +35,7 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
     );
     assert!(!first.contains_key(env::EXECUTION_ID));
     let caller = manager.caller(token).await.unwrap().unwrap();
-    assert_eq!(caller.workspace_id, workspace.id);
+    assert_eq!(caller.space_id, workspace.id);
     assert!(caller.execution.is_none());
     for mut method in [
         Operation::from(WorkspaceMethod::WorkspaceEnv {

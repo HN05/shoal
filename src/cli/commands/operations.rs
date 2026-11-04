@@ -4,18 +4,16 @@
 //! errors the command handled before.
 mod worker;
 
-use anyhow::{Context as _, Result};
-use tokio::{
-    io::AsyncBufReadExt,
-    signal::unix::{SignalKind, signal},
-};
+use anyhow::Result;
+use tokio::signal::unix::{SignalKind, signal};
 
 use crate::{
     cli::{client, context::Context},
+    client::operations::{Followed, Following},
     daemon::approvals::Undecided,
     execution::SetupVerificationFailure,
     protocol::{
-        Body, OperationMethod, RemoteError, Response,
+        OperationMethod, RemoteError,
         operations::{Ended, Failure, OperationSpec, Outcome, Progress, Started, Stream},
     },
 };
@@ -73,20 +71,11 @@ where
 async fn follow(ctx: &Context, id: String) -> Result<Outcome> {
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut terminate = signal(SignalKind::terminate())?;
-    let method = OperationMethod::FollowOperation {
-        id: id.clone(),
-        after: 0,
-    };
-    let (mut stream, body) = client::open_buffered(&ctx.paths, method).await?;
-    <()>::try_from(body)?;
+    let mut following = Following::open(&ctx.paths, id.clone(), 0).await?;
     let mut cancelled = false;
-    // Kept across signals, which can arrive partway through a frame.
-    let mut frame = Vec::new();
     loop {
-        tokio::select! {
-            read = stream.read_until(b'\n', &mut frame) => {
-                read?;
-            }
+        let followed = tokio::select! {
+            followed = following.next() => followed?,
             _ = interrupt.recv() => {
                 cancelled = cancel(ctx, &id, cancelled).await?;
                 continue;
@@ -95,25 +84,13 @@ async fn follow(ctx: &Context, id: String) -> Result<Outcome> {
                 cancelled = cancel(ctx, &id, cancelled).await?;
                 continue;
             }
-        }
-        let response = response(std::mem::take(&mut frame))?;
-        match response.body.into_result()? {
-            Body::OperationEvent(event) => show(ctx, event.progress),
-            Body::OperationEnded(Ended::Succeeded(outcome)) => return Ok(*outcome),
-            Body::OperationEnded(Ended::Failed(failure)) => return Err(error(failure)),
-            body => return Err(body.unexpected("OperationEvent")),
+        };
+        match followed {
+            Followed::Event(event) => show(ctx, event.progress),
+            Followed::Ended(Ended::Succeeded(outcome)) => return Ok(*outcome),
+            Followed::Ended(Ended::Failed(failure)) => return Err(error(failure)),
         }
     }
-}
-
-/// The response a frame holds; one without its line ending means the daemon
-/// went away.
-fn response(frame: Vec<u8>) -> Result<Response> {
-    anyhow::ensure!(
-        frame.last() == Some(&b'\n'),
-        "lost the daemon while following the operation, which continues"
-    );
-    serde_json::from_slice(&frame).context("invalid protocol message")
 }
 
 /// Cancel operation `id`, or, once `cancelled`, stop following it.

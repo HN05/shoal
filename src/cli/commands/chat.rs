@@ -404,10 +404,12 @@ pub(super) async fn launch(
         [resumed, args].concat(),
     )?;
     terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
+    let token = client::chat_scope(&ctx.paths, &chat).await?;
     run_here(
         ctx,
         home.path(),
         &chat,
+        &token,
         &command,
         &settings.launch(agent.name()).environment_with(&resolved),
     )
@@ -700,6 +702,7 @@ fn run_here(
     ctx: &Context,
     path: &Path,
     chat: &Chat,
+    token: &str,
     command: &[OsString],
     profile: &crate::ai::Environment,
 ) -> Result<i32> {
@@ -713,7 +716,7 @@ fn run_here(
     process
         .args(args)
         .current_dir(path)
-        .envs(crate::env::chat_environment(chat, &ctx.paths));
+        .envs(crate::env::chat_environment(chat, token, &ctx.paths));
     profile.apply(&mut process, &ctx.paths.home);
     let error = process.exec();
     Err(error).with_context(|| format!("run {}", program.to_string_lossy()))

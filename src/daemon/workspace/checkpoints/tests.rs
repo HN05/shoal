@@ -338,7 +338,7 @@ async fn restore_refuses_what_it_would_lose_or_disturb() {
         .unwrap();
     assert!(refused(None).await.contains("execution agent runs"));
     let own = Caller {
-        workspace_id: f.workspace.id.clone(),
+        space_id: f.workspace.id.clone(),
         execution: Some(crate::daemon::scope::ScopedExecution {
             id: "agent".into(),
             kind: crate::daemon::workspace::ExecutionKind::Command,

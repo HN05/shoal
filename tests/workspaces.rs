@@ -164,6 +164,19 @@ impl Fixture {
         support::daemon_client::protocol(self.root.path())
     }
 
+    /// The daemon as an app reaches it through `shoal::client`, as the user.
+    fn connector(&self) -> shoal::client::connection::Connector {
+        let state = self.root.path().join("state");
+        shoal::client::connection::Connector {
+            paths: shoal::client::paths::Paths {
+                home: self.root.path().into(),
+                socket: state.join("daemon.sock"),
+                state,
+            },
+            scope: None,
+        }
+    }
+
     fn raw_request(&self, protocol: u64, id: u64, method: Value) -> Value {
         support::daemon_client::exchange(
             self.root.path(),
@@ -6746,7 +6759,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr)
-            .contains("workspace processes stop only the workspaces below theirs")
+            .contains("scoped processes stop only the workspaces below theirs")
     );
 }
 
@@ -13452,8 +13465,7 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
             .unwrap();
         assert!(!output.status.success());
         assert!(
-            String::from_utf8_lossy(&output.stderr)
-                .contains("their own workspace and those split from it")
+            String::from_utf8_lossy(&output.stderr).contains("their own space and those below it")
         );
     }
     // Without a Codex on PATH, the shortcut fails instead of reaching the
@@ -16778,10 +16790,7 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
         "other",
     ]);
     assert!(!denied.status.success());
-    assert!(
-        String::from_utf8_lossy(&denied.stderr)
-            .contains("their own workspace and those split from it")
-    );
+    assert!(String::from_utf8_lossy(&denied.stderr).contains("their own space and those below it"));
     fixture.restart();
     // Completion being disabled does not disable activity waits.
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -24607,8 +24616,7 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 #[test]
 fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
     use shoal::client::{
-        connection::{self, Connector},
-        paths::Paths,
+        connection,
         protocol::{OperationMethod, operations::StartedWorkspace},
     };
     let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -24616,15 +24624,7 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
         let fixture = issue_fixture(host);
         write_issue_state(&fixture, "Closed");
         let before = fixture.ok(&["work"]);
-        let state = fixture.root.path().join("state");
-        let app = Connector {
-            paths: Paths {
-                home: fixture.root.path().into(),
-                socket: state.join("daemon.sock"),
-                state,
-            },
-            scope: None,
-        };
+        let app = fixture.connector();
         let create = OperationMethod::StartWorkspace {
             repository: fixture.repo.to_str().unwrap().into(),
             name: "closed-work".into(),
@@ -24642,6 +24642,119 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
             "{host}: {error:#}"
         );
         assert_eq!(fixture.ok(&["work"]), before);
+    }
+}
+
+/// An app creates workspaces through `shoal::client` and follows their
+/// preparation in the daemon's worker: setup's output as setup writes it,
+/// the post-setup hook, then the ready workspace, or the typed failure of
+/// setup or the hook.
+#[test]
+fn an_app_follows_the_setup_of_a_workspace_it_creates() {
+    use shoal::client::{
+        operations::{Followed, Following},
+        protocol::{
+            ErrorCode, OperationMethod,
+            operations::{Ended, Outcome, Progress, StartedWorkspace, Step},
+        },
+        state::WorkspaceState,
+    };
+    let fixture = Fixture::new();
+    // Setup waits for `go`, which the app writes only once it has read the
+    // first line, so that line arrived while setup ran.
+    install_test_script(
+        fixture.repo.join("setup.sh"),
+        "#!/bin/sh\necho setting up\ncase \"$PWD\" in *setup-fails) exit 3 ;; esac\ni=0\nwhile [ ! -e go ]; do i=$((i+1)); [ $i -lt 600 ] || exit 4; sleep 0.1; done\necho set up\n",
+    );
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        "#!/bin/sh\necho post-setup ran\ncase \"$PWD\" in *hook-fails) exit 5 ;; esac\n",
+    );
+    commit_resource_config(
+        &fixture.repo,
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n",
+    );
+    let app = fixture.connector();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let start = |name: &str| {
+        let create = OperationMethod::StartWorkspace {
+            repository: fixture.repo.to_str().unwrap().into(),
+            name: name.into(),
+            base: Some("HEAD".into()),
+            issue: None,
+            pr: None,
+            agent: None,
+        };
+        runtime
+            .block_on(shoal::client::connection::request::<StartedWorkspace>(
+                &app, create,
+            ))
+            .unwrap()
+    };
+    let follow = |started: &StartedWorkspace| {
+        let go = started.workspace.path.join("go");
+        runtime.block_on(async {
+            let mut following = Following::open(&app, started.operation.clone(), 0)
+                .await
+                .unwrap();
+            let mut events = Vec::new();
+            loop {
+                match following.next().await.unwrap() {
+                    Followed::Event(event) => {
+                        if matches!(&event.progress, Progress::Output { line, .. } if line == "setting up")
+                        {
+                            fs::write(&go, "").unwrap();
+                        }
+                        events.push(event.progress);
+                    }
+                    Followed::Ended(ended) => return (events, ended),
+                }
+            }
+        })
+    };
+    let lines = |events: &[Progress]| -> Vec<String> {
+        events
+            .iter()
+            .filter_map(|progress| match progress {
+                Progress::Output { line, .. } => Some(line.clone()),
+                Progress::Step { .. } => None,
+            })
+            .collect()
+    };
+
+    let (events, ended) = follow(&start("api"));
+    let Ended::Succeeded(outcome) = ended else {
+        panic!("expected the prepared workspace: {ended:?} after {events:?}");
+    };
+    let Outcome::Prepared(prepared) = *outcome else {
+        panic!("expected the prepared workspace: {outcome:?}");
+    };
+    assert_eq!(prepared.workspace.state, WorkspaceState::Ready);
+    let steps: Vec<Step> = events
+        .iter()
+        .filter_map(|progress| match progress {
+            Progress::Step { step } => Some(*step),
+            Progress::Output { .. } => None,
+        })
+        .collect();
+    assert_eq!(
+        steps,
+        [Step::SetupStarted, Step::Ready, Step::PostSetupStarted]
+    );
+    let lines = lines(&events);
+    for line in ["setting up", "set up", "post-setup ran"] {
+        assert!(lines.iter().any(|shown| shown == line), "{line}: {lines:?}");
+    }
+
+    for (name, code) in [
+        ("setup-fails", ErrorCode::SetupFailed),
+        ("hook-fails", ErrorCode::HookFailed),
+    ] {
+        let (events, ended) = follow(&start(name));
+        let Ended::Failed(failure) = ended else {
+            panic!("{name}: expected a failure: {ended:?} after {events:?}");
+        };
+        assert_eq!(failure.code(), code, "{name}: {failure:?}");
     }
 }
 
@@ -26612,14 +26725,12 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         serde_json::from_str(&fs::read_to_string(home.join("chat-add")).unwrap()).unwrap();
     assert_eq!(added["parent"]["id"], *chat, "{added}");
     assert_eq!(added["parent"]["kind"], "chat", "{added}");
-    let changed = journal(&fixture)
+    // Its creation names the chat as its parent.
+    let created = journal(&fixture)
         .into_iter()
-        .find(|event| event["kind"] == "parent_changed")
+        .find(|event| event["kind"] == "created" && event["name"] == added["name"])
         .unwrap();
-    assert_eq!(
-        (&changed["name"], &changed["parent"]["id"]),
-        (&added["name"], chat)
-    );
+    assert_eq!(created["parent"]["id"], *chat, "{created}");
 
     // While it runs, `work` lists the chat with its workspaces under it, and
     // the zmx session it runs in.
@@ -26836,24 +26947,43 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
 fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
     let fixture = Fixture::new();
     let home = fixture.root.path();
-    // The chat's agent opens a workspace, whose agent then reports.
+    // The chat's agent opens a workspace, whose agent then reports. The
+    // chat's own scope does not reach that agent's reports.
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker\n\"$shoal\" alerts send --space chat-worker 'Tests pass'\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker 2> \"$HOME/chat-report\"\ntouch \"$HOME/worker-opened\"\nwhile [ ! -e \"$HOME/worker-reported\" ]; do sleep 0.1; done\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
-    let (output, transcript) = fixture.terminal_command(
-        fixture
-            .command()
-            .current_dir(&fixture.repo)
-            .env("ZMX_SESSION", "outer")
-            .args(["chat", "--agent", "claude"]),
-        "\n",
-        true,
-    );
+    let (output, transcript) = std::thread::scope(|scope| {
+        let chat = scope.spawn(|| {
+            fixture.terminal_command(
+                fixture
+                    .command()
+                    .current_dir(&fixture.repo)
+                    .env("ZMX_SESSION", "outer")
+                    .args(["chat", "--agent", "claude"]),
+                "\n",
+                true,
+            )
+        });
+        wait_until("worker opened", || home.join("worker-opened").exists());
+        // The worker's agent reports, as its own scope would.
+        fixture.ok(&[
+            "internal",
+            "agent-state",
+            "working",
+            "--space",
+            "chat-worker",
+        ]);
+        fixture.ok(&["alerts", "send", "--space", "chat-worker", "Tests pass"]);
+        fs::write(home.join("worker-reported"), "").unwrap();
+        chat.join().unwrap()
+    });
     assert!(output.status.success(), "{output:?}\n{transcript}");
+    let refused = fs::read_to_string(home.join("chat-report")).unwrap();
+    assert!(refused.contains("only for their own"), "{refused}");
     let hook: Value =
         serde_json::from_str(&fs::read_to_string(home.join("chat-hook")).unwrap()).unwrap();
     assert_eq!(
@@ -26866,6 +26996,139 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
         ""
     );
     assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
+}
+
+#[test]
+fn a_chats_agent_is_scoped_to_the_chat_and_the_spaces_below_it() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    fixture.add("outside");
+    // Each command's exit status, then what it printed to stderr.
+    install_test_script(
+        home.join("bin/claude"),
+        format!(
+            r#"#!/bin/sh
+shoal='{}'
+run() {{ name=$1; shift; "$shoal" "$@" </dev/null >/dev/null 2>"$HOME/$name.err"; echo $? > "$HOME/$name"; }}
+run add add "$PWD" below
+run stop stop --interrupt below
+run rename chat rename renamed
+run alerts alerts
+run repo repo add "$HOME"
+run outside messages send --space outside hello
+run takeover add "$PWD" --existing outside
+run remove rm below --yes
+"#,
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    );
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("ZMX_SESSION", "outer")
+            .args(["chat", "--agent", "claude", "--name", "planning"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let status = |name: &str| {
+        let code = fs::read_to_string(home.join(name)).unwrap();
+        let error = fs::read_to_string(home.join(format!("{name}.err"))).unwrap();
+        (code.trim().to_owned(), error)
+    };
+    // It opens, stops and removes the workspaces below it and renames itself.
+    for allowed in ["add", "stop", "rename", "remove"] {
+        let (code, error) = status(allowed);
+        assert_eq!(code, "0", "{allowed}: {error}");
+    }
+    // It is refused what a workspace's agent is, and what lies outside it.
+    for refused in ["alerts", "repo", "outside", "takeover"] {
+        let (code, error) = status(refused);
+        assert_ne!(code, "0", "{refused}: {error}");
+    }
+    assert!(status("outside").1.contains("own space and those below it"));
+    assert!(status("takeover").1.contains("outside is outside the chat"));
+    let chats = fixture.ok(&["work", "--chats"]);
+    assert_eq!(chats[0]["name"], "renamed", "{chats}");
+    let names: Vec<_> = (fixture.ok(&["work"]).as_array().unwrap().iter())
+        .map(|workspace| workspace["name"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(names, ["outside"]);
+    assert!(fixture.ok(&["status", "outside"])["workspace"]["parent"].is_null());
+}
+
+/// A chat's agent adds a workspace with an agent, which the daemon starts
+/// there with the workspace's own scope once the workspace exists.
+#[test]
+fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
+    let fixture = Fixture::with_config(Some("[machine.overload.disk]\nenabled = false\n"));
+    let home = fixture.root.path();
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    install_test_script(
+        home.join("bin/claude"),
+        format!(
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" worker --agent codex -- 'Take the part' > \"$HOME/add.json\" 2> \"$HOME/add.err\"\n\"$shoal\" add \"$PWD\" later --agent codex --after worker 2> \"$HOME/later.err\"\necho $? > \"$HOME/later\"\n\"$shoal\" add \"$PWD\" now --agent codex --now 2> \"$HOME/now.err\"\necho $? > \"$HOME/now\"\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    );
+    install_test_script(
+        home.join("bin/codex"),
+        "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$@\" > \"$HOME/worker.tmp\"\nmv \"$HOME/worker.tmp\" \"$HOME/worker\"\n",
+    );
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("ZMX_SESSION", "outer")
+            .args(["chat", "--agent", "claude", "--name", "planning"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    // It reports the workspace, then the agent queued there.
+    let added = fs::read_to_string(home.join("add.json")).unwrap();
+    let error = fs::read_to_string(home.join("add.err")).unwrap();
+    let reports: Vec<Value> = (added.lines())
+        .map(|line| serde_json::from_str(line).unwrap_or_else(|_| panic!("{added}\n{error}")))
+        .collect();
+    assert_eq!(reports.len(), 2, "{added}");
+    assert_eq!(reports[0]["name"], "worker", "{added}");
+    assert_eq!(reports[1]["agent"], "codex", "{added}");
+    let worker = fixture.ok(&["status", "worker"]);
+    assert_eq!(
+        worker["workspace"]["parent"]["name"], "planning",
+        "{worker}"
+    );
+    let started = home.join("worker");
+    wait_until("the worker's agent start", || started.exists());
+    let started = fs::read_to_string(&started).unwrap();
+    let lines: Vec<_> = started.lines().collect();
+    assert_eq!(lines[0], worker["workspace"]["path"], "{started}");
+    assert_eq!(lines.last(), Some(&"Take the part"), "{started}");
+    // An agent that would wait for other work, whose branch a workspace
+    // created later builds on, or start at once, ignoring the queue, is
+    // refused before its workspace exists.
+    for (name, refusal) in [
+        (
+            "later",
+            "cannot wait for other work; add it once worker is complete",
+        ),
+        ("now", "leave out --now and --focus"),
+    ] {
+        assert_eq!(fs::read_to_string(home.join(name)).unwrap().trim(), "1");
+        let error = fs::read_to_string(home.join(format!("{name}.err"))).unwrap();
+        assert!(error.contains(refusal), "{error}");
+        assert!(!fixture.run(&["status", name]).status.success());
+    }
+    // The chat's own session is not relabelled as the worker's.
+    let id = worker["workspace"]["id"].as_str().unwrap();
+    let relabelled = zmx_calls(&fixture).into_iter().find(|call| {
+        call.first().is_some_and(|command| command == "set")
+            && call.get(1).is_some_and(|session| session == "outer")
+            && call.iter().any(|arg| arg.contains(id))
+    });
+    assert_eq!(relabelled, None);
 }
 
 #[test]

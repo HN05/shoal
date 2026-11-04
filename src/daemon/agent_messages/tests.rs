@@ -192,7 +192,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
         .issue_scope(
             "scope".into(),
             Caller {
-                workspace_id: workspace.id.clone(),
+                space_id: workspace.id.clone(),
                 execution: None,
             },
         )
@@ -345,7 +345,7 @@ async fn a_repository_message_reaches_its_running_agents_and_chats_below_the_sen
         .issue_scope(
             "scope".into(),
             Caller {
-                workspace_id: parent.id.clone(),
+                space_id: parent.id.clone(),
                 execution: None,
             },
         )

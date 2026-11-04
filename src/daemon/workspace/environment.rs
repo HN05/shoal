@@ -20,13 +20,15 @@ impl Manager {
         let token = token.to_owned();
         self.store
             .run(move |db| {
+                // A workspace's exported environment, or a chat's agent.
                 Ok(db
                     .query_row(
-                        "SELECT workspace_id FROM workspace_scopes WHERE token=?1",
+                        "SELECT workspace_id FROM workspace_scopes WHERE token=?1
+                            UNION ALL SELECT id FROM chats WHERE scope_token=?1",
                         [token],
                         |row| {
                             Ok(Caller {
-                                workspace_id: row.get(0)?,
+                                space_id: row.get(0)?,
                                 execution: None,
                             })
                         },

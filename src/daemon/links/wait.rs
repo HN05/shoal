@@ -384,14 +384,14 @@ impl Manager {
             {
                 return Ok(());
             }
-            let recheck = hold.map_or(POLL_INTERVAL, |hold| hold.min(POLL_INTERVAL));
             // Closed channels only disable their wake; the poll interval
             // still rechecks.
             tokio::select! {
                 Ok(()) = messages.changed() => {}
                 Ok(()) = queued.changed() => {}
                 Ok(()) = changed.changed() => {}
-                () = tokio::time::sleep(recheck) => {}
+                () = self.settle_clock.wait_out(hold) => {}
+                () = tokio::time::sleep(POLL_INTERVAL) => {}
             }
         }
     }

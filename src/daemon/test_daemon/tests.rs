@@ -4,6 +4,7 @@ use crate::{
     client::{
         approvals::ApprovalRequest,
         connection::{self, Connector},
+        operations::{Followed, Following},
         questions::Question,
         removal::{RemovalCheck, RemovalResult, UnsavedWork},
     },
@@ -26,13 +27,6 @@ use crate::{
 };
 
 use super::{HANG, TestDaemon};
-
-/// The next response on `stream`.
-async fn protocol_read(
-    stream: &mut tokio::io::BufReader<tokio::net::UnixStream>,
-) -> crate::protocol::Response {
-    crate::protocol::read_response(stream).await.unwrap()
-}
 
 /// The code `result` failed with.
 fn code<T: std::fmt::Debug>(result: anyhow::Result<T>) -> ErrorCode {
@@ -303,16 +297,10 @@ async fn an_app_queues_an_agent_once_it_can_run() {
 
 /// Follow operation `id` from its start to its end.
 async fn follow(app: &Connector, id: &str) -> Ended {
-    let method = OperationMethod::FollowOperation {
-        id: id.into(),
-        after: 0,
-    };
-    let (mut stream, body) = connection::open_buffered(app, method).await.unwrap();
-    body.into_result().unwrap();
+    let mut following = Following::open(app, id.into(), 0).await.unwrap();
     tokio::time::timeout(HANG, async {
         loop {
-            let response = protocol_read(&mut stream).await;
-            if let Body::OperationEnded(ended) = response.body.into_result().unwrap() {
+            if let Followed::Ended(ended) = following.next().await.unwrap() {
                 return ended;
             }
         }
@@ -424,23 +412,19 @@ async fn following_ends_once_the_followers_scope_token_is_revoked() {
     let mut worker = fake::take(&started.id);
     let token = daemon.scope_token(&own).await;
     let agent = daemon.connector().scope(token.clone());
-    let method = OperationMethod::FollowOperation {
-        id: started.id.clone(),
-        after: 0,
-    };
-    let (mut stream, body) = connection::open_buffered(&agent, method).await.unwrap();
-    body.into_result().unwrap();
+    let mut following = Following::open(&agent, started.id.clone(), 0)
+        .await
+        .unwrap();
     worker.stdout("one").await;
-    let first = protocol_read(&mut stream).await;
-    assert!(matches!(first.body, Body::OperationEvent(_)), "{first:?}");
+    let first = following.next().await.unwrap();
+    assert!(matches!(first, Followed::Event(_)), "{first:?}");
     daemon
         .manager
         .revoke_workspace_environment(&own.id, token)
         .await
         .unwrap();
     worker.stdout("two").await;
-    let ended = protocol_read(&mut stream).await;
-    let error = ended.body.into_result().unwrap_err();
+    let error = following.next().await.unwrap_err();
     assert_eq!(
         error.downcast_ref::<RemoteError>().unwrap().code,
         ErrorCode::ScopeDenied

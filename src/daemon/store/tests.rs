@@ -397,6 +397,9 @@ fn historical_database(version: i64) -> Result<Connection> {
         db.execute_batch(include_str!("space_parents.sql"))?;
     }
     if version >= 122 {
+        db.execute_batch(include_str!("chat_scopes.sql"))?;
+    }
+    if version >= 123 {
         db.execute_batch(CHAT_WORKSPACES)?;
     }
     db.pragma_update(None, "user_version", version)?;

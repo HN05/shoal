@@ -220,7 +220,7 @@ impl Executions {
         self.scopes
             .lock()
             .await
-            .retain(|_, caller| caller.workspace_id != workspace_id);
+            .retain(|_, caller| caller.space_id != workspace_id);
     }
 
     /// The scope tokens issued, for tests that pause registration.
@@ -286,7 +286,7 @@ impl Connections<'_> {
                         kind,
                         agent,
                     }),
-                    workspace_id: workspace_id.to_owned(),
+                    space_id: workspace_id.to_owned(),
                 },
             )
             .await;

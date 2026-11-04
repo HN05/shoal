@@ -474,7 +474,8 @@ async fn hand_to_session(
     log: &Path,
     prepared: Box<dyn Prepared>,
 ) -> Result<(Chat, Box<dyn Prepared>)> {
-    let spawned = spawn_session(ctx, app, directory, chat, log, prepared.as_ref());
+    let token = client::chat_scope(&ctx.paths, chat).await?;
+    let spawned = spawn_session(ctx, app, directory, (chat, &token), log, prepared.as_ref());
     let handed_over = match spawned {
         Ok(session) => hand_over(ctx, chat, session).await,
         Err(error) => Err(error),
@@ -544,7 +545,7 @@ fn spawn_session(
     ctx: &Context,
     app: &dyn App,
     directory: &Path,
-    chat: &Chat,
+    (chat, token): (&Chat, &str),
     log: &Path,
     prepared: &dyn Prepared,
 ) -> Result<Child> {
@@ -560,7 +561,7 @@ fn spawn_session(
     session
         .args(&command[1..])
         .current_dir(directory)
-        .envs(crate::env::chat_environment(chat, &ctx.paths))
+        .envs(crate::env::chat_environment(chat, token, &ctx.paths))
         .stdin(Stdio::null())
         .stdout(output.try_clone()?)
         .stderr(output);

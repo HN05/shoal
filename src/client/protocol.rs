@@ -52,7 +52,7 @@ mod workspaces;
 pub use agents::{AgentMethod, TurnEnd, WokenTurn};
 pub use approvals::ApprovalMethod;
 pub use assignments::AssignmentMethod;
-pub use chats::ChatMethod;
+pub use chats::{ChatMethod, ScopeToken};
 pub use ci::CiMethod;
 pub use daemon::{DaemonMethod, Exit, ExitRequest};
 pub use demos::DemoMethod;
@@ -580,6 +580,7 @@ response_bodies! {
     Chats(Vec<crate::model::Chat>),
     RemovedChat(crate::client::output::chat::RemovedChat),
     ChatName(String),
+    ScopeToken(ScopeToken),
     Branches(Vec<crate::model::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),
     Inspection(Inspection),

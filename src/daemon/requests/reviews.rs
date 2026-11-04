@@ -39,7 +39,7 @@ pub(super) async fn handle(
             model,
         } => pieces(manager.queue_review(&workspace, target, agent, model).await),
         ReviewMethod::CancelReview { workspace, id } => {
-            let by = caller.map(|caller| caller.workspace_id.clone());
+            let by = caller.map(|caller| caller.space_id.clone());
             pieces(manager.cancel_review(workspace.as_deref(), id, by).await)
         }
         ReviewMethod::ListReviews {
