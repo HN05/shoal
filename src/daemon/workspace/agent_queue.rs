@@ -135,7 +135,9 @@ pub(crate) fn admit(
 ) -> Vec<String> {
     let mut total = occupied.len();
     let mut starts = limits.starts;
-    // Whether measured load admitted an agent or a job: one start a pass.
+    // Whether an agent or a job was admitted this pass, by measured load or
+    // a fixed limit: measured load admits nothing beside it, since the
+    // sample predates it.
     let mut started = false;
     let mut used: HashMap<&str, usize> = HashMap::new();
     for repository in occupied {
@@ -148,15 +150,17 @@ pub(crate) fn admit(
             if limits.jobs.fixed.is_some_and(|limit| jobs >= limit) {
                 continue;
             }
-            if let Some(room) = limits.jobs.room {
-                // `starts` counts what fits an agent's load, which says
-                // nothing of a job's; the room does.
-                if started || !room.fits(cost) {
-                    continue;
-                }
-                started = true;
-                starts = starts.map(|_| 0);
+            // `starts` counts what fits an agent's load, which says nothing
+            // of a job's; the room does.
+            if limits
+                .jobs
+                .room
+                .is_some_and(|room| started || !room.fits(cost))
+            {
+                continue;
             }
+            started = true;
+            starts = starts.map(|_| 0);
             jobs += 1;
             admitted.push(entry.id.clone());
             continue;
@@ -195,7 +199,7 @@ pub(crate) fn admit(
         }
         *used += 1 - own;
         total += 1 - own;
-        started |= starts.is_some();
+        started = true;
         starts = starts.map(|starts| starts - 1);
         // Each healthy interval restarts one stopped agent or one-shot run.
         recovered &= own == 0 && entry.work != Work::OneShot { after_stop: true };

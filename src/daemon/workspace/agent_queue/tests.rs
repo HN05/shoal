@@ -116,6 +116,54 @@ fn jobs_count_only_against_their_own_limits_and_share_the_dynamic_start() {
 }
 
 #[test]
+fn measured_load_admits_nothing_beside_a_start_under_a_fixed_limit() {
+    let job = Waiting {
+        id: "j1".into(),
+        repository: "a".into(),
+        work: Work::Job {
+            cost: capacity::JobCost {
+                cores: 1.0,
+                memory: None,
+            },
+        },
+    };
+    let agent = waiting(&[("a1", "a")]).remove(0);
+    let room = Some(capacity::Room::Free {
+        percent: 50.0,
+        parallelism: 16,
+        memory: None,
+    });
+    // Fixed agents and dynamic jobs: an admitted agent holds a job back, and
+    // a fixed agent behind a job ignores load as always.
+    let dynamic_jobs = Limits {
+        jobs: JobLimits {
+            room,
+            ..JobLimits::default()
+        },
+        ..limits(Some(5), &[])
+    };
+    let agent_first = [agent.clone(), job.clone()];
+    assert_eq!(admit(&[], &agent_first, &dynamic_jobs, false), ["a1"]);
+    let job_first = [job.clone(), agent.clone()];
+    assert_eq!(admit(&[], &job_first, &dynamic_jobs, false), ["j1", "a1"]);
+    // Dynamic agents and fixed jobs: an admitted job holds an agent back,
+    // and a fixed job behind an agent ignores load.
+    let dynamic_agents = Limits {
+        starts: Some(1),
+        jobs: JobLimits {
+            fixed: Some(2),
+            ..JobLimits::default()
+        },
+        ..Limits::default()
+    };
+    assert_eq!(admit(&[], &job_first, &dynamic_agents, false), ["j1"]);
+    assert_eq!(
+        admit(&[], &agent_first, &dynamic_agents, false),
+        ["a1", "j1"]
+    );
+}
+
+#[test]
 fn the_forge_is_read_while_any_room_is_left_for_a_job() {
     let room = |percent| Limits {
         jobs: JobLimits {
