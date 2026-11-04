@@ -156,20 +156,28 @@ pub(super) async fn run(manager: Arc<Manager>) {
 async fn pass(manager: &Arc<Manager>) -> anyhow::Result<()> {
     manager.sample_job_usage().await?;
     manager.finish_ended_jobs().await?;
-    for entry in manager.admitted_jobs().await? {
-        if manager.runners.begin_claim(&entry.id) {
-            let manager = manager.clone();
-            let operation = manager.gates.owned_operation().await;
-            tokio::spawn(async move {
-                let _operation = operation;
-                manager.claim_job(&entry).await;
-                manager.runners.end_claim(&entry.id);
-                manager.agent_queue.wake();
-            });
-        }
-    }
+    claim_admitted_jobs(manager).await?;
     if manager.job_could_start().await? {
         manager.refresh_waiting_jobs().await?;
+    }
+    Ok(())
+}
+
+/// Claim each admitted job no claim runs for yet, each in a task of its own
+/// that a daemon update waits for, and wake admission once it ends.
+async fn claim_admitted_jobs(manager: &Arc<Manager>) -> anyhow::Result<()> {
+    for entry in manager.admitted_jobs().await? {
+        if !manager.runners.begin_claim(&entry.id) {
+            continue;
+        }
+        let manager = manager.clone();
+        let operation = manager.gates.owned_operation().await;
+        tokio::spawn(async move {
+            let _operation = operation;
+            manager.claim_job(&entry).await;
+            manager.runners.end_claim(&entry.id);
+            manager.agent_queue.wake();
+        });
     }
     Ok(())
 }
