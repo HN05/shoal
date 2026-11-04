@@ -6,12 +6,12 @@ use tokio::time::Instant;
 
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         commands::messages,
         context::Context,
     },
     forge::items::link::Selection,
-    protocol::{AgentMethod, Body, ItemMethod},
+    protocol::{Body, ItemMethod},
 };
 
 pub(in crate::cli::commands) async fn watch_items(
@@ -51,18 +51,16 @@ pub(in crate::cli::commands) async fn watch_items(
     if updates.updates.is_empty() && updates.messages.is_empty() {
         return Ok(0);
     }
-    request::<()>(
+    let deliveries = (updates.updates.iter())
+        .map(|update| update.delivery.clone())
+        .collect();
+    let messages = updates.messages.iter().map(|message| message.id).collect();
+    crate::client::agent_messages::acknowledge(
         &ctx.paths,
-        AgentMethod::AcknowledgePrUpdates {
-            space: workspace,
-            deliveries: updates
-                .updates
-                .iter()
-                .map(|update| update.delivery.clone())
-                .collect(),
-            messages: updates.messages.iter().map(|message| message.id).collect(),
-            leftovers: Vec::new(),
-        },
+        workspace,
+        deliveries,
+        messages,
+        Vec::new(),
     )
     .await?;
     Ok(0)

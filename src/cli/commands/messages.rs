@@ -8,19 +8,21 @@ use std::{
 
 use anyhow::{Context as _, Result, bail};
 
-use crate::client::output::messages::Reached;
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         installed::{Executable, arguments, replace_option, with_flag, without_option},
         output::{Palette, Style},
         terminal,
         ui::{self, Fallback},
     },
-    client::{agent_messages::AgentMessage, files::NewFile, links::Updates},
+    client::{
+        agent_messages::{self, AgentMessage},
+        files::NewFile,
+        links::Updates,
+    },
     forge::items::attach::Attachment,
-    protocol::AgentMethod,
     repository::Selector,
 };
 
@@ -57,16 +59,7 @@ async fn send_to_space(
     attachments: Vec<NewFile>,
 ) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    request::<()>(
-        &ctx.paths,
-        AgentMethod::SendAgentMessage {
-            space,
-            message,
-            attachments,
-            sender_chat: crate::env::chat(),
-        },
-    )
-    .await?;
+    agent_messages::send(&ctx.paths, space, message, attachments, crate::env::chat()).await?;
     ctx.emit("Message queued.", ())?;
     Ok(0)
 }
@@ -77,14 +70,14 @@ async fn send_to_repository(
     message: String,
     attachments: Vec<NewFile>,
 ) -> Result<i32> {
-    let reached: Reached = request(
+    let repository = chosen_repository(ctx, repository).await?;
+    let sender_chat = crate::env::chat();
+    let reached = agent_messages::send_to_repository(
         &ctx.paths,
-        AgentMethod::SendRepositoryAgentMessage {
-            repository: chosen_repository(ctx, repository).await?,
-            message,
-            attachments,
-            sender_chat: crate::env::chat(),
-        },
+        repository,
+        message,
+        attachments,
+        sender_chat,
     )
     .await?;
     ctx.show(&reached, |reached| {
@@ -441,23 +434,18 @@ impl Inbox {
     }
 
     async fn messages(&self, ctx: &Context) -> Result<Vec<AgentMessage>> {
-        let space = self.space.clone();
-        request(&ctx.paths, AgentMethod::AgentMessages { space }).await
+        agent_messages::undelivered(&ctx.paths, self.space.clone()).await
     }
 
     /// Undelivered messages and queued item updates, without waiting.
     async fn updates(&self, ctx: &Context) -> Result<Updates> {
-        let space = self.space.clone();
-        request(&ctx.paths, AgentMethod::AgentUpdates { space }).await
+        agent_messages::updates(&ctx.paths, self.space.clone()).await
     }
 
     /// The next messages or item updates, waiting for them; `restarted` says
     /// the daemon restarted before this wait began.
     async fn next(&self, ctx: &Context, restarted: bool) -> Result<Updates> {
-        let method = || AgentMethod::WaitAgentUpdates {
-            space: self.space.clone(),
-        };
-        Updates::try_from(client::await_reply(&ctx.paths, method, restarted).await?)
+        agent_messages::await_updates(&ctx.paths, &self.space, restarted).await
     }
 
     /// What an agent hook tells the agent about `updates`.
@@ -487,11 +475,8 @@ impl Inbox {
         if messages.is_empty() {
             return Ok(());
         }
-        let method = AgentMethod::MarkAgentMessagesDelivered {
-            space: self.space.clone(),
-            ids: messages.iter().map(|message| message.id).collect(),
-        };
-        request::<()>(&ctx.paths, method).await
+        let ids = messages.iter().map(|message| message.id).collect();
+        agent_messages::mark_delivered(&ctx.paths, self.space.clone(), ids).await
     }
 }
 
@@ -569,16 +554,9 @@ pub(super) fn hook_output(input: &str, context: &str) -> String {
 
 /// Shown once: the messages and updates a hook printed do not come back.
 async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Result<()> {
-    request::<()>(
-        &ctx.paths,
-        AgentMethod::AcknowledgePrUpdates {
-            space: workspace,
-            deliveries: deliveries(updates),
-            messages: updates.messages.iter().map(|message| message.id).collect(),
-            leftovers: leftover_pids(updates),
-        },
-    )
-    .await
+    let messages = updates.messages.iter().map(|message| message.id).collect();
+    let (deliveries, leftovers) = (deliveries(updates), leftover_pids(updates));
+    agent_messages::acknowledge(&ctx.paths, workspace, deliveries, messages, leftovers).await
 }
 
 /// The deliveries of the item updates `updates` tells about.

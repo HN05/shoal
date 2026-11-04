@@ -3,6 +3,7 @@
 
 pub mod agent;
 pub mod agent_messages;
+pub mod agents;
 pub mod ai;
 pub mod approvals;
 pub mod availability;

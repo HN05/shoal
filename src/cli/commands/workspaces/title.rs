@@ -11,7 +11,7 @@ use crate::{
         ui::{self, Fallback},
     },
     model::Workspace,
-    protocol::{AgentMethod, WorkspaceMethod},
+    protocol::WorkspaceMethod,
 };
 
 /// What `shoal work rename --request` asks the workspace's agent.
@@ -64,16 +64,9 @@ pub(in crate::cli::commands) async fn request_title(
         "{name} has no running agent to ask; set its title with shoal work rename {name} <TITLE>",
         name = workspace.name
     );
-    request::<()>(
-        &ctx.paths,
-        AgentMethod::SendAgentMessage {
-            space: workspace.id,
-            message: TITLE_REQUEST.into(),
-            attachments: Vec::new(),
-            sender_chat: None,
-        },
-    )
-    .await?;
+    let message = TITLE_REQUEST.into();
+    crate::client::agent_messages::send(&ctx.paths, workspace.id, message, Vec::new(), None)
+        .await?;
     ctx.emit("Asked the workspace's agent to choose its title.", ())?;
     Ok(0)
 }

@@ -3,13 +3,12 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         commands::sessions,
         context::Context,
         terminal, ui,
     },
     model::RenamedChat,
-    protocol::AgentMethod,
 };
 
 /// What `shoal chat rename --request` asks the chat's agent.
@@ -40,13 +39,8 @@ pub(in crate::cli::commands) async fn request_name(
 ) -> Result<i32> {
     super::ensure_scope_token(ctx)?;
     let chat = select(ctx, chat).await?;
-    let method = AgentMethod::SendAgentMessage {
-        space: chat,
-        message: NAME_REQUEST.into(),
-        attachments: Vec::new(),
-        sender_chat: None,
-    };
-    request::<()>(&ctx.paths, method).await?;
+    crate::client::agent_messages::send(&ctx.paths, chat, NAME_REQUEST.into(), Vec::new(), None)
+        .await?;
     ctx.emit("Asked the chat's agent to choose its name.", ())?;
     Ok(0)
 }

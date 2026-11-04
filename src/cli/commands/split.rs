@@ -20,8 +20,8 @@ use crate::{
     daemon::refusal::{Reason, Refusal},
     model::{AgentSession, QueueEntry, SpaceRef, Workspace},
     protocol::{
-        AgentMethod, CommitStart, ConfigTarget, CreationOptions, ItemContext, OperationMethod,
-        WorkspaceMethod, operations::StartedWorkspace,
+        CommitStart, ConfigTarget, CreationOptions, ItemContext, OperationMethod, WorkspaceMethod,
+        operations::StartedWorkspace,
     },
     shell,
     state::{QueueState, WorkspaceState},
@@ -174,10 +174,7 @@ async fn child_agent(
 
 /// The session of the agent in `parent` that a fork starts from.
 async fn parent_session(ctx: &Context, parent: &str) -> Result<AgentSession> {
-    let method = AgentMethod::AgentSession {
-        workspace: parent.to_owned(),
-    };
-    request(&ctx.paths, method).await
+    crate::client::agents::session(&ctx.paths, parent.to_owned()).await
 }
 
 /// Split the child of `parent` on a new branch named `name`, assigned

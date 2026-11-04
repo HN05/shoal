@@ -10,13 +10,13 @@ use crate::client::output::agents::{Agent, Continued, Interrupted};
 use crate::{
     cli::{
         agents,
-        client::{self, request},
+        client::{self},
         context::Context,
         terminal, ui,
     },
     config::Effective,
-    model::{AgentStatus, RunningAgent, Workspace},
-    protocol::{AgentMethod, ConfigTarget},
+    model::{RunningAgent, Workspace},
+    protocol::ConfigTarget,
     sessions::Origin,
     state::AgentState,
 };
@@ -79,14 +79,8 @@ async fn running_turns(ctx: &Context, selected: Vec<String>) -> Result<Vec<Inter
 async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()> {
     let target = &interruption.target;
     terminal::send_keys(&target.place, interruption.key).await?;
-    request::<AgentStatus>(
-        &ctx.paths,
-        AgentMethod::InterruptTurn {
-            workspace: target.workspace_id.clone(),
-            execution: target.execution.clone(),
-        },
-    )
-    .await?;
+    let (workspace, execution) = (target.workspace_id.clone(), target.execution.clone());
+    crate::client::agents::interrupt_turn(&ctx.paths, workspace, execution).await?;
     Ok(())
 }
 
@@ -153,13 +147,7 @@ pub(super) async fn agents_of(
     selector: String,
 ) -> Result<(Workspace, Vec<RunningAgent>)> {
     let workspace = client::inspect(&ctx.paths, selector).await?.workspace;
-    let agents = request(
-        &ctx.paths,
-        AgentMethod::WorkspaceAgents {
-            workspace: workspace.id.clone(),
-        },
-    )
-    .await?;
+    let agents = crate::client::agents::running(&ctx.paths, workspace.id.clone()).await?;
     Ok((workspace, agents))
 }
 

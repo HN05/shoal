@@ -7,7 +7,6 @@ use crate::client::output::workspaces::InChat;
 use crate::{
     cli::{
         args::coordination::QuestionsArgs,
-        client::request,
         commands::messages::hanging_indent,
         context::Context,
         installed::{Executable, arguments, replace_option, without_option},
@@ -16,7 +15,6 @@ use crate::{
     },
     client::item_numbers::ItemNumber,
     client::questions::{self, Ask, Question},
-    protocol::AgentMethod,
 };
 
 pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {
@@ -103,14 +101,7 @@ async fn print_answer(ctx: &Context, space: String, question: &Question) -> Resu
     let Some(id) = question.message_id else {
         return Ok(());
     };
-    request::<()>(
-        &ctx.paths,
-        AgentMethod::MarkAgentMessagesDelivered {
-            space,
-            ids: vec![id],
-        },
-    )
-    .await
+    crate::client::agent_messages::mark_delivered(&ctx.paths, space, vec![id]).await
 }
 
 /// The question a wait follows: its number within its space and what it

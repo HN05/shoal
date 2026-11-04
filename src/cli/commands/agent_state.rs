@@ -11,13 +11,13 @@ use anyhow::Result;
 use crate::{
     ai::IntegrationKind,
     cli::{
-        client::request,
         context::Context,
         ui::{self, Fallback},
     },
+    client::agents,
     execution::recovery,
     model::AgentStatus,
-    protocol::{AgentMethod, TurnEnd, WokenTurn},
+    protocol::TurnEnd,
     state::{AgentState, TurnFailure},
 };
 
@@ -46,16 +46,8 @@ async fn report_state(
         final_message: event.as_ref().and_then(final_message),
         ..turn_end(ctx, integration)
     });
-    let status: AgentStatus = request(
-        &ctx.paths,
-        AgentMethod::SetAgentState {
-            workspace: space,
-            state,
-            session: event.as_ref().and_then(session_of),
-            turn_end,
-        },
-    )
-    .await?;
+    let session = event.as_ref().and_then(session_of);
+    let status = agents::set_state(&ctx.paths, space, state, session, turn_end).await?;
     emit(ctx, status)
 }
 
@@ -63,9 +55,7 @@ async fn report_state(
 /// hook of its own reports starting. Whether the turn starts: a stop of the
 /// agent that came first leaves the update for its restore.
 pub(super) async fn start_woken_turn(ctx: &Context, space: String) -> Result<bool> {
-    let method = AgentMethod::StartWokenTurn { workspace: space };
-    let turn: WokenTurn = request(&ctx.paths, method).await?;
-    Ok(turn.starts)
+    agents::start_woken_turn(&ctx.paths, space).await
 }
 
 /// Report the turn that the hook event of an agent with `integration`
@@ -90,17 +80,10 @@ async fn report_turn_failure(
     let event = hook_event().unwrap_or_default();
     let failure =
         crate::cli::agents::turn_failure(integration, &event).unwrap_or(TurnFailure::Other);
-    let status: AgentStatus = request(
-        &ctx.paths,
-        AgentMethod::ReportTurnFailure {
-            workspace: space,
-            failure,
-            session: session_of(&event),
-            execution: None,
-            turn_end: turn_end(ctx, integration),
-        },
-    )
-    .await?;
+    let turn_end = turn_end(ctx, integration);
+    let status =
+        agents::report_turn_failure(&ctx.paths, space, failure, session_of(&event), turn_end)
+            .await?;
     emit(ctx, status)
 }
 
@@ -117,11 +100,7 @@ async fn tell_failure(ctx: &Context, reported: &Result<i32>) {
     else {
         return;
     };
-    let failure = AgentMethod::ReportStateFailure {
-        workspace,
-        error: format!("{error:#}"),
-    };
-    let _ = request::<()>(&ctx.paths, failure).await;
+    let _ = agents::report_state_failure(&ctx.paths, workspace, format!("{error:#}")).await;
 }
 
 /// What the hook of an agent with `integration` reports when its turn
