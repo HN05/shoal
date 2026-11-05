@@ -36,6 +36,7 @@ pub mod questions;
 pub mod queue;
 pub mod recovery;
 pub mod removal;
+pub mod repositories;
 pub mod repository;
 pub mod resources;
 pub mod reviews;

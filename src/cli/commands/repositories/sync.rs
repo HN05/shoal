@@ -3,20 +3,17 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         ui,
     },
     model::SyncedRepository,
-    protocol::RepositoryMethod,
     repository,
 };
 
 pub(super) async fn sync(ctx: &Context, repository: Option<String>) -> Result<i32> {
     let repository = sync_target(ctx, repository).await?;
-    let synced =
-        request::<SyncedRepository>(&ctx.paths, RepositoryMethod::SyncRepository { repository })
-            .await?;
+    let synced = crate::client::repositories::sync(&ctx.paths, repository).await?;
     ctx.show(&synced, render)?;
     Ok(0)
 }

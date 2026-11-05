@@ -5,12 +5,11 @@ use super::selection::chosen;
 use crate::{
     cli::{
         agents,
-        client::{self, request},
+        client::{self},
         context::Context,
         ui,
     },
     model::{Repository, RepositoryRemoval},
-    protocol::RepositoryMethod,
     repository,
 };
 
@@ -28,10 +27,7 @@ pub(super) async fn remove(
     let result = ctx
         .progress(
             "Removing repository",
-            request::<RepositoryRemoval>(
-                &ctx.paths,
-                RepositoryMethod::RemoveRepository { repository },
-            ),
+            crate::client::repositories::remove(&ctx.paths, repository),
         )
         .await?;
     cleanup_trust(ctx, &cleanup_repository, &result).await;

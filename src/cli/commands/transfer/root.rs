@@ -11,7 +11,7 @@ use anyhow::{Result, ensure};
 use crate::{
     cli::{
         agents,
-        client::{self, request},
+        client::{self},
         context::Context,
         output::{Palette, Style},
         ui,
@@ -19,7 +19,7 @@ use crate::{
     config::{Config, edit::Change},
     execution::recovery::Saved,
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
-    protocol::{QueuedLaunches, RepositoryMethod},
+    protocol::QueuedLaunches,
     repository,
 };
 
@@ -67,10 +67,7 @@ async fn plan_moves(
 ) -> Result<RepositoryMoves> {
     ctx.progress(
         "Checking repositories",
-        request::<RepositoryMoves>(
-            &ctx.paths,
-            RepositoryMethod::PlanRepositoryMoves { root, regular_dir },
-        ),
+        crate::client::repositories::plan_moves(&ctx.paths, root, regular_dir),
     )
     .await
 }
@@ -159,10 +156,7 @@ fn saved_executions(ctx: &Context, workspace: &str) -> Result<BTreeSet<String>> 
 async fn move_repositories(ctx: &Context, regular_dir: bool) -> Result<Vec<MovedRepository>> {
     ctx.progress(
         "Moving repositories",
-        request::<Vec<MovedRepository>>(
-            &ctx.paths,
-            RepositoryMethod::MoveRepositories { regular_dir },
-        ),
+        crate::client::repositories::move_all(&ctx.paths, regular_dir),
     )
     .await
 }

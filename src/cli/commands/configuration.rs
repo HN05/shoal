@@ -50,14 +50,8 @@ pub(super) async fn edit(
         let repository = crate::cli::ui::repository_selector(repository)?;
         // The daemon edits the file, holding off moves and removal; it reads
         // the file on each request, so nothing reloads.
-        let edit = crate::cli::client::request::<crate::model::LocalConfigEdit>(
-            &ctx.paths,
-            crate::protocol::RepositoryMethod::EditLocalConfig {
-                repository,
-                changes,
-            },
-        )
-        .await?;
+        let edit =
+            crate::client::repositories::edit_local_config(&ctx.paths, repository, changes).await?;
         ctx.emit(&format!("Updated {}", edit.config.display()), &edit)?;
         return Ok(0);
     }

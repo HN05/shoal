@@ -4,14 +4,14 @@ use anyhow::{Result, ensure};
 use super::{plan::Creation, target::AddTarget};
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         commands::{issues, links},
         context::Context,
         ui,
     },
     forge::items::{link::ItemKind, list::Search},
-    git::{self, existing_branch::Branch},
-    protocol::{ItemContext, RepositoryMethod},
+    git::{self},
+    protocol::ItemContext,
     state::WorkspaceState,
 };
 
@@ -172,13 +172,8 @@ async fn issue_creation(
 }
 
 async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
-    let branches = request::<Vec<Branch>>(
-        &ctx.paths,
-        RepositoryMethod::ListBranches {
-            repository: target.selector.clone(),
-        },
-    )
-    .await?;
+    let branches =
+        crate::client::repositories::branches(&ctx.paths, target.selector.clone()).await?;
     let workspaces = client::workspaces(&ctx.paths).await?;
     let repo = target.repository(ctx).await?;
     let entries = branches

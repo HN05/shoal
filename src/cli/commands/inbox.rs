@@ -22,8 +22,8 @@ use crate::{
         approvals::{ApprovalRequest, DecisionStatus},
         questions::{self, Question},
     },
-    model::{Chat, CheckoutSync, ReviewMark, SpaceLinks, UntrackedWorktree, Workspace},
-    protocol::{RepositoryMethod, WorkspaceMethod},
+    model::{Chat, ReviewMark, SpaceLinks, UntrackedWorktree, Workspace},
+    protocol::WorkspaceMethod,
     state::WorkspaceState,
 };
 
@@ -113,8 +113,7 @@ impl Inbox {
                 let error = status.and_then(|status| status.cleanup_error);
                 items.extend(error.map(|error| Item::Cleanup { error }));
             }
-            let failing =
-                client::pages::<CheckoutSync>(&ctx.paths, RepositoryMethod::FailingSyncs).await?;
+            let failing = crate::client::repositories::failing_syncs(&ctx.paths).await?;
             items.extend(
                 failing
                     .into_iter()

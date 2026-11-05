@@ -6,13 +6,12 @@ use anyhow::Result;
 use super::selection::absolute;
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         output::Palette,
         ui,
     },
     model::Repository,
-    protocol::RepositoryMethod,
     repository,
 };
 
@@ -43,10 +42,7 @@ async fn register(
 ) -> Result<Repository> {
     ctx.progress(
         "Registering repository",
-        request::<Repository>(
-            &ctx.paths,
-            RepositoryMethod::RegisterRepository { source, name, path },
-        ),
+        crate::client::repositories::register(&ctx.paths, source, name, path),
     )
     .await
 }

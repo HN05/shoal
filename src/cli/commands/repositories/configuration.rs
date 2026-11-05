@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use anyhow::{Context as _, Result};
 
 use super::selection::chosen;
+use crate::cli::context::Context;
 use crate::client::output::repositories::LocalConfig;
-use crate::{cli::client::request, cli::context::Context, protocol::RepositoryMethod};
 
 pub(super) async fn show(ctx: &Context, repository: Option<String>) -> Result<i32> {
     let repository = chosen(ctx, repository).await?;
@@ -23,7 +23,7 @@ pub(in crate::cli::commands) async fn local_config_path(
     ctx: &Context,
     repository: crate::repository::Selector,
 ) -> Result<PathBuf> {
-    request::<PathBuf>(&ctx.paths, RepositoryMethod::LocalConfigPath { repository }).await
+    crate::client::repositories::local_config_path(&ctx.paths, repository).await
 }
 
 fn render(config: &LocalConfig) {

@@ -4,13 +4,11 @@ use anyhow::Result;
 use super::selection::chosen;
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         output::Palette,
         ui,
     },
-    model::Repository,
-    protocol::RepositoryMethod,
     repository,
 };
 
@@ -21,11 +19,7 @@ pub(super) async fn rename(
 ) -> Result<i32> {
     let repository = chosen(ctx, repository).await?;
     let name = new_name(ctx, &repository, name).await?;
-    let repo = request::<Repository>(
-        &ctx.paths,
-        RepositoryMethod::RenameRepository { repository, name },
-    )
-    .await?;
+    let repo = crate::client::repositories::rename(&ctx.paths, repository, name).await?;
     ctx.emit(
         &format!(
             "Renamed {}",

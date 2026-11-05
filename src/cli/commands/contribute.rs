@@ -9,15 +9,11 @@ use super::{
 };
 use crate::{
     agent::Agent,
-    cli::{
-        agents, args::create::ContributeArgs, client::request, context::Context, output::Palette,
-        ui,
-    },
+    cli::{agents, args::create::ContributeArgs, context::Context, output::Palette, ui},
     config::{Config, repo::ConfigLayers},
     forge::items::link::Link,
     git,
     model::Repository,
-    protocol::RepositoryMethod,
 };
 
 /// Register the repository a repository URL, or an issue, PR or branch link
@@ -82,10 +78,7 @@ async fn register(ctx: &Context, source: String) -> Result<Repository> {
     let repo = ctx
         .progress(
             "Registering contribution",
-            request::<Repository>(
-                &ctx.paths,
-                RepositoryMethod::RegisterContribution { source, name: None },
-            ),
+            crate::client::repositories::register_contribution(&ctx.paths, source),
         )
         .await?;
     let label = ui::repository_label(&repo, Palette::stderr(ctx.json));

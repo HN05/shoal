@@ -35,7 +35,7 @@ use crate::{
     fsutil,
     model::{Chat, ChatHome, LinkedItem, Relation, RemovedWorkspace, Repository, Workspace},
     paths::Paths,
-    protocol::{ConfigTarget, RepositoryMethod},
+    protocol::ConfigTarget,
     tools::Tool,
 };
 
@@ -1303,31 +1303,22 @@ async fn agent_environments(
     ctx: &Context,
     repository: &Repository,
 ) -> Option<Vec<BTreeMap<String, String>>> {
-    client::pages(
-        &ctx.paths,
-        RepositoryMethod::AgentEnvironments {
-            repository_id: repository.id.clone(),
-        },
-    )
-    .await
-    .inspect_err(|error| {
-        eprintln!(
-            "warning: could not clean trust entries where [env] put agent configs: {error:#}"
-        );
-    })
-    .ok()
+    crate::client::repositories::agent_environments(&ctx.paths, repository.id.clone())
+        .await
+        .inspect_err(|error| {
+            eprintln!(
+                "warning: could not clean trust entries where [env] put agent configs: {error:#}"
+            );
+        })
+        .ok()
 }
 
 /// Have the daemon forget the removed repository's agent configs once their
 /// trust entries are clean. Failure only warns.
 async fn forget_agent_environments(ctx: &Context, repository: &Repository) {
-    let forgotten = client::call(
-        &ctx.paths,
-        RepositoryMethod::ForgetAgentEnvironments {
-            repository_id: repository.id.clone(),
-        },
-    )
-    .await;
+    let forgotten =
+        crate::client::repositories::forget_agent_environments(&ctx.paths, repository.id.clone())
+            .await;
     if let Err(error) = forgotten {
         eprintln!("warning: the daemon keeps the removed repository's agent configs: {error:#}");
     }
