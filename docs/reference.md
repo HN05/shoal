@@ -2703,8 +2703,10 @@ merge = "propose"        # Default: "propose"; "direct" merges at once
 `shoal unmerge [workspace]` undoes the workspace's latest `shoal merge` into the
 default branch while that merge is unpushed. It works for fast-forwards and merge
 commits alike, and the branch and its commits stay as they are; when cleanup deleted
-the branch, `unmerge` creates it again at the commit that merged. Afterwards the
-branch's commits no longer count as merged, so cleanup keeps the workspace.
+the branch, `unmerge` creates it again at the commit that merged. A workspace
+cleanup removed comes back first with `shoal work restore <workspace>`, which
+`unmerge` names when it refuses. Afterwards the branch's commits no longer count
+as merged, so cleanup keeps the workspace.
 
 When the default branch is still at the merge's result, Shoal moves it back to the
 commit it was at before the merge. When commits came after the merge, Shoal

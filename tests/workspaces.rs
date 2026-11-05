@@ -17641,6 +17641,21 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
         String::from_utf8_lossy(&again.stderr).contains("no local merge of worker"),
         "{again:?}"
     );
+
+    // A workspace cleanup removed comes back before its merge is undone.
+    fixture.ok(&["merge", "--no-push", "worker"]);
+    fixture.ok(&["rm", "worker", "--yes"]);
+    let removed = fixture.run(&["unmerge", "worker"]);
+    assert!(!removed.status.success());
+    assert!(
+        String::from_utf8_lossy(&removed.stderr)
+            .contains("restore it with shoal work restore worker"),
+        "{removed:?}"
+    );
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), head);
+    fixture.ok(&["work", "restore", "worker"]);
+    fixture.ok(&["unmerge", "worker"]);
+    assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
 }
 
 #[test]

@@ -196,7 +196,11 @@ impl Manager {
         env: Option<BTreeMap<String, String>>,
         caller: Option<&Caller>,
     ) -> Result<String> {
-        let workspace = self.workspace(spec.workspace_mut()).await?.id;
+        let workspace = match spec {
+            OperationSpec::Unmerge { .. } => self.unmerge_workspace(spec.workspace_mut()).await?,
+            _ => self.workspace(spec.workspace_mut()).await?,
+        }
+        .id;
         *spec.workspace_mut() = workspace.clone();
         let token = caller.map(|caller| self.operations.issue(caller));
         let (id, entry) = self.operations.register(workspace.clone());

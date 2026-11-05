@@ -126,6 +126,35 @@ async fn the_latest_merge_moves_main_back_whether_it_fast_forwarded_or_not() {
 }
 
 #[tokio::test]
+async fn a_removed_workspace_is_restored_before_its_merge_is_undone() {
+    let f = Fixture::new().await;
+    let worker = f.add("worker", "feature").await;
+    let (before, head) = (f.main(), rev(&worker.path, "HEAD"));
+    f.merge("worker").await;
+    f.manager
+        .remove_workspace(
+            &worker.id,
+            crate::removal::UnsavedWork::All,
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    let error = f.manager.unmerge_workspace("worker").await.unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("restore it with shoal work restore worker"),
+        "{error:#}"
+    );
+    assert_ne!(f.main(), before);
+
+    f.manager.restore_workspace("worker").await.unwrap();
+    f.unmerge("worker").await.unwrap();
+    assert_eq!(f.main(), before);
+    assert_eq!(rev(&f.repo, "worker"), head);
+}
+
+#[tokio::test]
 async fn an_older_merge_is_taken_out_by_replaying_later_merges() {
     let f = Fixture::new().await;
     let first = f.add("first", "first").await;

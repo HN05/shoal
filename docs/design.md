@@ -848,6 +848,9 @@ merged commits back through a later merge, drop a later merge commit's own
 changes, or does not apply cleanly, and an undo that would overwrite ignored files
 in the default checkout; Shoal makes
 no revert commits. It recreates a branch cleanup deleted, so the commits stay on one.
+Since it runs in the workspace's tracked execution, a workspace cleanup removed is
+restored with `shoal work restore` first; records follow the branch, not the
+workspace's ID, so the restored workspace's merge stays undoable.
 After cancellation, the wrapper rolls back incomplete merges after stopping the
 process group, preserving completed merges and reporting unsafe recovery failures;
 an interrupted replay is aborted.

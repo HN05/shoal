@@ -4,6 +4,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail, ensure};
+use rusqlite::OptionalExtension;
 
 use super::{clean_checkout, local_commit, records::RecordedMerge, tracking_ref};
 use crate::{
@@ -13,10 +14,30 @@ use crate::{
         default_branch::DefaultBranchLookup,
         unmerge::{first_parent_chain, holds_commits_of, merge_has_own_changes, merged_parents},
     },
-    model::{Repository, UnmergePlan},
+    model::{Repository, UnmergePlan, Workspace},
 };
 
 impl Manager {
+    /// The workspace `selector` names for an unmerge, which runs in it: one
+    /// cleanup removed has to be restored first.
+    pub(crate) async fn unmerge_workspace(&self, selector: &str) -> Result<Workspace> {
+        let error = match self.workspace(selector).await {
+            Ok(workspace) => return Ok(workspace),
+            Err(error) => error,
+        };
+        let selector = selector.to_owned();
+        match self
+            .store
+            .run(move |db| removed_name(db, &selector))
+            .await?
+        {
+            Some(name) => bail!(
+                "workspace {name} was removed; restore it with shoal work restore {name}, then unmerge it"
+            ),
+            None => Err(error),
+        }
+    }
+
     /// Plan undoing the latest merge of the workspace `selector` names while
     /// the caller holds the repository Git gate. The gate must stay held
     /// until the tracked execution completes.
@@ -75,6 +96,17 @@ async fn ensure_ignored_files_kept(
         collisions.join(", ")
     );
     Ok(())
+}
+
+/// The name of the removed workspace `selector` names by name or ID.
+fn removed_name(db: &rusqlite::Connection, selector: &str) -> Result<Option<String>> {
+    Ok(db
+        .query_row(
+            "SELECT name FROM removed_workspaces WHERE name=?1 OR workspace_id=?1",
+            [selector],
+            |row| row.get(0),
+        )
+        .optional()?)
 }
 
 /// The latest of the `held` merges of `branch`, and the merges after it.
