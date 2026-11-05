@@ -1,14 +1,18 @@
 //! Packages of spaces `shoal move` carries between machines: what one holds.
 use std::path::PathBuf;
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{
+        connection::{Daemon, request},
         executions::{LastSession, StoppedAgent},
-        removal::RemovalResult,
+        removal::{RemovalResult, UnsavedWork},
+        repository::Selector,
     },
-    model::RemovedWorkspace,
+    model::{RemovedWorkspace, RestoredWorkspace},
+    protocol::RemovalMethod,
 };
 
 /// What a package holds besides its session files and bundle.
@@ -123,4 +127,41 @@ pub struct ExportedSpace {
     /// What the package left out, such as session files it could not read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
+}
+
+/// End `space`, deleting only the `unsaved` work the caller saw, and
+/// package it into `file`.
+pub async fn export(
+    daemon: &impl Daemon,
+    space: String,
+    unsaved: UnsavedWork,
+    file: PathBuf,
+) -> Result<ExportedSpace> {
+    request(
+        daemon,
+        RemovalMethod::ExportSpace {
+            space,
+            unsaved,
+            file,
+        },
+    )
+    .await
+}
+
+/// Record the packaged `workspace` of `repository` as removed and open it
+/// again, fetching its commits from `bundle`, which needs `prerequisite`.
+pub async fn import(
+    daemon: &impl Daemon,
+    repository: Selector,
+    bundle: Option<PathBuf>,
+    prerequisite: Option<String>,
+    workspace: RemovedWorkspace,
+) -> Result<Box<RestoredWorkspace>> {
+    let method = RemovalMethod::ImportWorkspace {
+        repository,
+        bundle,
+        prerequisite,
+        workspace: Box::new(workspace),
+    };
+    request(daemon, method).await
 }

@@ -9,14 +9,12 @@ use crate::client::output::resume::{Queued, Reopened};
 use crate::client::recovery;
 use crate::{
     cli::{
-        client::{self, request},
         context::Context,
         output::{Palette, Style},
         terminal,
         ui::{self, Fallback},
     },
     model::{Checkpoint, CheckpointCause, RemovedWorkspace, RestoredCheckpoint, RestoredWorkspace},
-    protocol::RemovalMethod,
     shell,
     state::WorkspaceState,
     time::local_seconds,
@@ -79,8 +77,7 @@ pub(super) async fn run(
 /// Reopen the removed workspace the user picks, or list the removed
 /// workspaces when there is no terminal or none to pick.
 async fn choose_removed(ctx: &Context) -> Result<i32> {
-    let removed =
-        client::pages::<RemovedWorkspace>(&ctx.paths, RemovalMethod::RemovedWorkspaces).await?;
+    let removed = crate::client::removal::removed(&ctx.paths).await?;
     if removed.is_empty() || !ctx.interactive() {
         ctx.show(&removed, |removed| print_removed(removed))?;
         return Ok(0);
@@ -151,10 +148,7 @@ async fn reopen(ctx: &Context, workspace: String) -> Result<i32> {
     let restored = ctx
         .progress(
             "Restoring workspace",
-            request::<Box<RestoredWorkspace>>(
-                &ctx.paths,
-                RemovalMethod::RestoreWorkspace { workspace },
-            ),
+            crate::client::removal::restore(&ctx.paths, workspace),
         )
         .await?;
     finish_reopen(ctx, *restored, "Restored", false).await

@@ -1,8 +1,16 @@
 //! What removing a workspace would discard, whether the caller lets it, and
 //! what the removal did.
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::model::Workspace;
+use crate::{
+    client::{
+        cleanup::{ManualCleanup, Selection},
+        connection::{Daemon, pages, request},
+    },
+    model::{RemovedWorkspace, RestoredWorkspace, Workspace},
+    protocol::RemovalMethod,
+};
 
 #[cfg(test)]
 mod tests;
@@ -278,4 +286,51 @@ fn describe_unsaved(files: bool, detached_commits: u64) -> Vec<String> {
         ));
     }
     work
+}
+
+/// What removing `workspace` would discard, with its changes when
+/// `include_changes`.
+pub async fn check(
+    daemon: &impl Daemon,
+    workspace: String,
+    include_changes: bool,
+) -> Result<RemovalCheck> {
+    let method = RemovalMethod::CheckRemoval {
+        workspace,
+        include_changes,
+    };
+    request(daemon, method).await
+}
+
+/// Remove `workspace`, deleting only the `unsaved` work the caller saw.
+pub async fn remove(
+    daemon: &impl Daemon,
+    workspace: String,
+    unsaved: UnsavedWork,
+) -> Result<RemovalResult> {
+    request(
+        daemon,
+        RemovalMethod::RemoveWorkspace { workspace, unsaved },
+    )
+    .await
+}
+
+/// Remove what `selection` selects that nothing keeps, or with `dry_run`
+/// only list it.
+pub async fn clean_up(
+    daemon: &impl Daemon,
+    dry_run: bool,
+    selection: Selection,
+) -> Result<ManualCleanup> {
+    request(daemon, RemovalMethod::Cleanup { dry_run, selection }).await
+}
+
+/// The removed workspaces whose records allow restoring them.
+pub async fn removed(daemon: &impl Daemon) -> Result<Vec<RemovedWorkspace>> {
+    pages(daemon, RemovalMethod::RemovedWorkspaces).await
+}
+
+/// Open the removed `workspace` again from its record.
+pub async fn restore(daemon: &impl Daemon, workspace: String) -> Result<Box<RestoredWorkspace>> {
+    request(daemon, RemovalMethod::RestoreWorkspace { workspace }).await
 }

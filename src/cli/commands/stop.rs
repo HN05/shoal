@@ -12,7 +12,7 @@ use crate::client::output::agents::{
 use crate::{
     cli::{
         args::SpaceTargets,
-        client::{self, request},
+        client::{self},
         commands::agent_queue,
         context::Context,
         output::Style,
@@ -21,7 +21,7 @@ use crate::{
     client::processes::{Selection, Stopped},
     execution::recovery,
     model::{SpaceKind, StoppedWorkspace, Workspace},
-    protocol::{ErrorCode, QueuedLaunches, RemoteError, RemovalMethod},
+    protocol::{ErrorCode, QueuedLaunches, RemoteError},
 };
 
 pub(super) async fn run(
@@ -152,15 +152,9 @@ async fn ensure_spaces(ctx: &Context, selectors: &[String]) -> Result<()> {
 /// Stop the untracked processes of `space` that `selection` takes, other
 /// than this one and the processes that started it.
 async fn stop_untracked(ctx: &Context, space: &str, selection: Selection) -> Result<Stopped> {
-    request(
-        &ctx.paths,
-        RemovalMethod::StopProcesses {
-            space: space.to_owned(),
-            selection,
-            requester: Some(std::process::id()),
-        },
-    )
-    .await
+    let requester = Some(std::process::id());
+    crate::client::stopping::stop_processes(&ctx.paths, space.to_owned(), selection, requester)
+        .await
 }
 
 /// What a stop of `selection` reports for `stopped`.
@@ -212,13 +206,11 @@ pub(super) async fn stop(
     launches: QueuedLaunches,
 ) -> Result<StoppedWorkspace> {
     let request_stop = |acknowledge_unproven| {
-        request::<StoppedWorkspace>(
+        crate::client::stopping::stop_workspace(
             &ctx.paths,
-            RemovalMethod::StopWorkspace {
-                workspace: workspace.to_owned(),
-                acknowledge_unproven,
-                launches,
-            },
+            workspace.to_owned(),
+            acknowledge_unproven,
+            launches,
         )
     };
     let error = match request_stop(yes).await {
@@ -296,10 +288,7 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
                 continue;
             }
         };
-        let check = RemovalMethod::CheckStop {
-            workspace: workspace.id.clone(),
-        };
-        match request::<()>(&ctx.paths, check).await {
+        match crate::client::stopping::check(&ctx.paths, workspace.id.clone()).await {
             Ok(()) => workspaces.push(workspace),
             Err(error) => refusals.push(format!("{}: {error:#}", workspace.name)),
         }
@@ -318,7 +307,7 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
 /// launch can move between the queue and its agent.
 async fn stop_all(ctx: &Context) -> Result<i32> {
     let report = ui::Report::new("stop");
-    let running = request::<Vec<Workspace>>(&ctx.paths, RemovalMethod::StopTargets).await?;
+    let running = crate::client::stopping::targets(&ctx.paths).await?;
     if running.is_empty() {
         ctx.emit(
             "No running agents or commands",
@@ -346,13 +335,11 @@ async fn stop_each(
     acknowledge_unproven: bool,
 ) -> Result<i32> {
     let results = join_all(workspaces.iter().map(|workspace| async {
-        let stopped = request::<StoppedWorkspace>(
+        let stopped = crate::client::stopping::stop_workspace(
             &ctx.paths,
-            RemovalMethod::StopWorkspace {
-                workspace: workspace.id.clone(),
-                acknowledge_unproven,
-                launches: QueuedLaunches::Cancel,
-            },
+            workspace.id.clone(),
+            acknowledge_unproven,
+            QueuedLaunches::Cancel,
         )
         .await?;
         let other = match stopped.cancelled_run {

@@ -17,13 +17,12 @@ use crate::client::output::{
 use crate::{
     cli::{
         agents::{self, SessionHome},
-        client::{self, request},
+        client::{self},
         context::Context,
         output::{Palette, Style},
         ui,
     },
     model::RestoredWorkspace,
-    protocol::RemovalMethod,
     transfer::{
         Import, ImportedSessionFile, Manifest, PackagedChat, PackagedWorkspace, Sessions, Space,
     },
@@ -144,10 +143,7 @@ impl Package {
             anyhow::bail!("the package holds a chat, not a workspace");
         };
         let restored = ctx
-            .progress(
-                "Importing workspace",
-                request::<Box<RestoredWorkspace>>(&ctx.paths, self.import_method(packaged)),
-            )
+            .progress("Importing workspace", self.import(ctx, packaged))
             .await
             .map(|restored| *restored);
         // A workspace recorded but not opened keeps its sessions for `shoal
@@ -160,14 +156,20 @@ impl Package {
         restored
     }
 
-    /// The request that records `packaged` as removed and opens it again.
-    fn import_method(&self, packaged: &PackagedWorkspace) -> RemovalMethod {
-        RemovalMethod::ImportWorkspace {
-            repository: self.repository.clone(),
-            bundle: self.bundle.as_ref().map(|bundle| bundle.path().to_owned()),
-            prerequisite: packaged.prerequisite.clone(),
-            workspace: Box::new(packaged.workspace_with(self.sessions.clone())),
-        }
+    /// Record `packaged` as removed and open it again.
+    async fn import(
+        &self,
+        ctx: &Context,
+        packaged: &PackagedWorkspace,
+    ) -> Result<Box<RestoredWorkspace>> {
+        crate::client::transfer::import(
+            &ctx.paths,
+            self.repository.clone(),
+            self.bundle.as_ref().map(|bundle| bundle.path().to_owned()),
+            packaged.prerequisite.clone(),
+            packaged.workspace_with(self.sessions.clone()),
+        )
+        .await
     }
 
     /// Put the packaged chat's session files in place, then start the chat

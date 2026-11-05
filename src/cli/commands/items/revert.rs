@@ -30,10 +30,10 @@ use crate::{
     git::revert::{self as git_revert, Merge, Merged, Reverted},
     model::{Chat, PresentSpace, Workspace},
     protocol::{
-        ItemContext, RemovalMethod, WorkspaceMethod,
+        ItemContext, WorkspaceMethod,
         operations::{StartedWorkspace, WorkspaceStart},
     },
-    removal::{RemovalResult, UnsavedWork},
+    removal::UnsavedWork,
     repository::Selector,
 };
 
@@ -225,11 +225,9 @@ async fn revert_merge(
 }
 
 async fn remove(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    let method = RemovalMethod::RemoveWorkspace {
-        workspace: workspace.id.clone(),
-        unsaved: UnsavedWork::All,
-    };
-    request::<RemovalResult>(&ctx.paths, method).await.map(drop)
+    crate::client::removal::remove(&ctx.paths, workspace.id.clone(), UnsavedWork::All)
+        .await
+        .map(drop)
 }
 
 /// Record the revert workspace's assignment as done, so cleanup removes it

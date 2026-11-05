@@ -5,14 +5,12 @@ use anyhow::{Result, ensure};
 use crate::{
     cli::{
         args::lifecycle::{CleanupArgs, CleanupKind},
-        client::request,
         context::Context,
         output::{Palette, Style},
         ui,
     },
     client::cleanup::{Emptying, ManualCleanup, Pick, Selection},
     model::KeptBranch,
-    protocol::RemovalMethod,
 };
 
 use super::branches;
@@ -62,7 +60,7 @@ fn selection(args: &CleanupArgs, spaces: Pick, caches: Pick) -> Selection {
 async fn clean(ctx: &Context, dry_run: bool, selection: Selection) -> Result<ManualCleanup> {
     ctx.progress(
         "Cleaning up",
-        request::<ManualCleanup>(&ctx.paths, RemovalMethod::Cleanup { dry_run, selection }),
+        crate::client::removal::clean_up(&ctx.paths, dry_run, selection),
     )
     .await
 }

@@ -44,6 +44,7 @@ pub mod secrets;
 pub mod sessions;
 pub mod sim;
 pub mod state;
+pub mod stopping;
 pub mod subscriptions;
 pub mod time;
 pub mod transcripts;

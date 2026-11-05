@@ -10,12 +10,11 @@ use anyhow::{Context as _, Result, bail, ensure};
 use crate::client::output::transfer::{Exported, Exports};
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         ui::{self, Fallback},
     },
     model::{Chat, PresentSpace},
-    protocol::RemovalMethod,
     removal::{RemovalCheck, UnsavedWork},
     transfer::ExportedSpace,
 };
@@ -199,12 +198,13 @@ impl Output {
 
 /// Export the removed workspace `selector` names, which needs no removal.
 async fn export_removed(ctx: &Context, selector: &str, output: &Output) -> Result<ExportedSpace> {
-    let method = RemovalMethod::ExportSpace {
-        space: selector.to_owned(),
-        unsaved: UnsavedWork::default(),
-        file: output.file(),
-    };
-    let exported = request::<ExportedSpace>(&ctx.paths, method).await?;
+    let exported = crate::client::transfer::export(
+        &ctx.paths,
+        selector.to_owned(),
+        UnsavedWork::default(),
+        output.file(),
+    )
+    .await?;
     warn(&exported);
     Ok(exported)
 }
@@ -227,25 +227,20 @@ async fn export_space(
 async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Result<ExportedSpace> {
     let exported = match check {
         Checked::Workspace(check) => {
-            let method = RemovalMethod::ExportSpace {
-                space: check.workspace.id.clone(),
-                unsaved: UnsavedWork::confirming(check),
-                file: output.file(),
-            };
-            super::super::workspaces::leaving(
-                ctx,
-                &check.workspace,
-                request::<ExportedSpace>(&ctx.paths, method),
-            )
-            .await?
+            let space = check.workspace.id.clone();
+            let unsaved = UnsavedWork::confirming(check);
+            let exported =
+                crate::client::transfer::export(&ctx.paths, space, unsaved, output.file());
+            super::super::workspaces::leaving(ctx, &check.workspace, exported).await?
         }
         Checked::Chat(chat) => {
-            let method = RemovalMethod::ExportSpace {
-                space: chat.id.clone(),
-                unsaved: UnsavedWork::default(),
-                file: output.file(),
-            };
-            request::<ExportedSpace>(&ctx.paths, method).await?
+            crate::client::transfer::export(
+                &ctx.paths,
+                chat.id.clone(),
+                UnsavedWork::default(),
+                output.file(),
+            )
+            .await?
         }
     };
     if let Some(error) = exported
@@ -346,14 +341,7 @@ async fn check_workspace_export(
     workspace: &str,
     output: &Output,
 ) -> Result<RemovalCheck> {
-    let check = request::<RemovalCheck>(
-        &ctx.paths,
-        RemovalMethod::CheckRemoval {
-            workspace: workspace.to_owned(),
-            include_changes: true,
-        },
-    )
-    .await?;
+    let check = crate::client::removal::check(&ctx.paths, workspace.to_owned(), true).await?;
     // Its removal keeps no record, which the package is built from.
     ensure!(
         !check.workspace.disposable,

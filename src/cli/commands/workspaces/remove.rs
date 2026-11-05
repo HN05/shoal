@@ -5,14 +5,13 @@ use super::removal::{ensure_batch_removable, leaving};
 use crate::client::output::workspaces::{Removals, Removed};
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         commands::{agent_queue, chat::removal as chats},
         context::Context,
         output::Style,
         ui,
     },
     model::{Chat, PresentSpace, SpaceKind, SpaceRef, Spaces},
-    protocol::RemovalMethod,
     removal::{RemovalCheck, RemovalResult, UnsavedWork},
 };
 
@@ -74,11 +73,9 @@ async fn check_removals(
     let mut refusals = Vec::new();
     let several = workspaces.len() > 1;
     for workspace in workspaces {
-        let method = RemovalMethod::CheckRemoval {
-            workspace: workspace.clone(),
-            include_changes: ctx.interactive() && !yes,
-        };
-        let checked = request::<RemovalCheck>(&ctx.paths, method).await;
+        let include_changes = ctx.interactive() && !yes;
+        let checked =
+            crate::client::removal::check(&ctx.paths, workspace.clone(), include_changes).await;
         if !several {
             checks.push(checked?);
             continue;
@@ -166,14 +163,11 @@ async fn remove_each(
 /// Remove the workspace `check` inspected, deleting only the unsaved work it
 /// saw: more appearing meanwhile makes the daemon refuse.
 async fn remove_checked(ctx: &Context, check: &RemovalCheck) -> Result<RemovalResult> {
-    let method = RemovalMethod::RemoveWorkspace {
-        workspace: check.workspace.id.clone(),
-        unsaved: UnsavedWork::confirming(check),
-    };
+    let unsaved = UnsavedWork::confirming(check);
     let result = leaving(
         ctx,
         &check.workspace,
-        request::<RemovalResult>(&ctx.paths, method),
+        crate::client::removal::remove(&ctx.paths, check.workspace.id.clone(), unsaved),
     )
     .await?;
     if let Some(error) = &result.hook_error {

@@ -6,7 +6,7 @@ use anyhow::{Result, ensure};
 use super::recovery::{issues, reconcile};
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         commands::operations,
         context::Context,
         output::{Palette, Style},
@@ -15,11 +15,8 @@ use crate::{
     client::recovery::ReconcileOptions,
     env, execution, git,
     model::Workspace,
-    protocol::{
-        RemovalMethod,
-        operations::{Failure, OperationSpec, Preparation, Prepared, StartedWorkspace},
-    },
-    removal::{RemovalResult, UnsavedWork},
+    protocol::operations::{Failure, OperationSpec, Preparation, Prepared, StartedWorkspace},
+    removal::UnsavedWork,
     state::WorkspaceState,
 };
 
@@ -279,14 +276,7 @@ async fn delete_failed_workspace(ctx: &Context, workspace: &Workspace) -> Result
         "--yes",
     )?;
     if confirmed {
-        request::<RemovalResult>(
-            &ctx.paths,
-            RemovalMethod::RemoveWorkspace {
-                workspace: workspace.id.clone(),
-                unsaved: UnsavedWork::All,
-            },
-        )
-        .await?;
+        crate::client::removal::remove(&ctx.paths, workspace.id.clone(), UnsavedWork::All).await?;
         eprintln!("Deleted workspace {}", workspace.name);
     }
     Ok(())

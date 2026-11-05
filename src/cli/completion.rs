@@ -29,7 +29,7 @@ use crate::{
     env,
     model::{Chat, Workspace},
     paths::Paths,
-    protocol::{ConfigTarget, RemovalMethod, WorkspaceMethod},
+    protocol::{ConfigTarget, WorkspaceMethod},
 };
 
 /// What was already typed on the command line when completion was requested.
@@ -423,11 +423,7 @@ impl Typed {
             ));
         }
         if matches!(target, Target::RestorableWorkspaces) {
-            let removed = client::pages::<crate::model::RemovedWorkspace>(
-                &paths,
-                RemovalMethod::RemovedWorkspaces,
-            )
-            .await?;
+            let removed = crate::client::removal::removed(&paths).await?;
             let existing = client::workspaces(&paths).await?;
             return Ok(removed
                 .into_iter()
