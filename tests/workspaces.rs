@@ -23407,7 +23407,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     wait_until("recorded merge lookup failure", || {
         fixture.ok(&["status", "lower"])["pr_cleanup"]["error"]
             .as_str()
-            .is_some_and(|error| error.contains("could not check"))
+            .is_some_and(|error| error.contains("could not check whether"))
     });
     assert!(fixture.ok(&["alerts"]).as_array().unwrap().is_empty());
     // A merge that left out the base's HEAD keeps the stack, since rebasing
@@ -23418,7 +23418,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     wait_until("recorded unmerged base HEAD", || {
         fixture.ok(&["status", "lower"])["pr_cleanup"]["error"]
             .as_str()
-            .is_some_and(|error| error.contains("HEAD"))
+            .is_some_and(|error| error.contains("do not contain the base workspace's HEAD"))
     });
     assert_eq!(
         fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
@@ -23433,7 +23433,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     wait_until("reported restack failure", || {
         fixture.ok(&["status", "lower"])["pr_cleanup"]["error"]
             .as_str()
-            .is_some_and(|error| error.contains("stacked on it"))
+            .is_some_and(|error| error.contains("has no head or base branch"))
     });
     assert_eq!(
         fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
