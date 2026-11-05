@@ -76,6 +76,10 @@ const FORGEJO_HOST: &str = "machine.forges.\"forge.example\".type = \"forgejo\"\
 /// each running agent's workspace whenever the runner is short of disk space,
 /// memory or CPU. The daemon's unit tests cover the warnings.
 const NO_OVERLOAD_WARNINGS: &str = "machine.overload.warning.enabled = false\n";
+/// Global config without memory overload protection, which stops a running
+/// agent as soon as the machine running the tests reports critical memory
+/// pressure. The daemon's unit tests cover the protection.
+const NO_MEMORY_OVERLOAD: &str = "machine.overload.memory.enabled = false\n";
 /// A long-running command whose environment stays readable once launchd adopts
 /// it. macOS hides an orphaned `sleep`'s environment, which fails concurrent
 /// tests' setup verification.
@@ -106,7 +110,7 @@ impl Fixture {
         fs::write(
             root.path().join(".config/shoal/config.toml"),
             format!(
-                "{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}{NO_OVERLOAD_WARNINGS}{}",
+                "{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}{NO_OVERLOAD_WARNINGS}{NO_MEMORY_OVERLOAD}{}",
                 config.unwrap_or_default()
             ),
         )
@@ -1171,8 +1175,10 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
 }
 
 /// Agent limits under which a queued restore starts at once, whatever the
-/// load on the machine running the tests.
-const UNLIMITED_AGENTS: &str = "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n";
+/// load on the machine running the tests, with the fixture's
+/// [`NO_MEMORY_OVERLOAD`].
+const UNLIMITED_AGENTS: &str =
+    "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n";
 
 #[test]
 fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds() {
@@ -4915,7 +4921,7 @@ fn split_starts_the_childs_agent_from_a_fork_of_the_parents_session() {
 #[test]
 fn split_reports_an_agent_refused_after_the_childs_setup() {
     let fixture = Fixture::with_config(Some(
-        "[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n",
+        "[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     // Only the child's setup gives the agent a model it has no template for.
@@ -6389,7 +6395,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
 #[test]
 fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
+        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -6456,7 +6462,7 @@ fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
 #[test]
 fn stopping_a_workspace_stops_the_workspaces_below_it() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
+        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
