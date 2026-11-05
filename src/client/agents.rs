@@ -3,10 +3,12 @@
 use anyhow::Result;
 
 use crate::{
-    client::connection::{Daemon, request},
+    client::{
+        connection::{Daemon, request},
+        sessions::Origin,
+    },
     model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
     protocol::{AgentMethod, ExecutionMethod, TurnEnd, WokenTurn},
-    sessions::Origin,
     state::{AgentState, TurnFailure},
 };
 
