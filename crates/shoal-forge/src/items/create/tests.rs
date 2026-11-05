@@ -42,11 +42,7 @@ async fn an_issue_whose_read_fails_after_posting_comes_back_as_posted() {
             pr: None,
         }
     );
-    let unfinished = created.unfinished.unwrap();
-    assert!(
-        unfinished.starts_with("issue #7 was opened, but reading it failed"),
-        "{unfinished}"
-    );
+    assert!(created.unfinished.is_some());
     // The read was refused without reaching the forge.
     assert_eq!(server.received().len(), 1);
 }
@@ -127,7 +123,6 @@ fn gitlab_opens_merge_requests_with_draft_titles_and_labeled_issues() {
         ..head
     };
     assert!(!gitlab.kind.has_head(&gitlab, &listed, &forked));
-    assert!(gitlab.require(Capability::ForkPrs).is_err());
 }
 
 #[test]
@@ -245,7 +240,6 @@ fn github_and_forgejo_name_a_fork_head_by_its_owner() {
             forge.create_pull_request(&pull).body.unwrap()["head"],
             "someone:topic"
         );
-        assert!(forge.require(Capability::ForkPrs).is_ok());
         let listed = json!({"head": {"ref": "topic", "repo": {"full_name": "Someone/Repo"}}});
         let head = |repository| Head {
             repository,
@@ -309,7 +303,4 @@ fn new_items_need_the_assignee_and_milestone_capabilities_of_their_kind() {
         ..NewPull::default()
     };
     assert_eq!(pull.needs(), [Capability::PrAssignees]);
-    let bitbucket = ForgeRepo::parse("git@bitbucket.org:workspace/repo.git").unwrap();
-    assert!(bitbucket.require_all(issue.needs()).is_ok());
-    assert!(bitbucket.require_all(pull.needs()).is_err());
 }

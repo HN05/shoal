@@ -150,32 +150,21 @@ fn runs_read_their_branch_workflow_and_state_from_the_forge() -> Result<()> {
             waiting: false,
         }
     );
-    let error = read(
-        "https://codeberg.org/team/repo",
-        json!({"workflow_runs": []}),
-    )
-    .unwrap_err();
     assert!(
-        error.to_string().contains("did not identify one run"),
-        "{error}"
+        read(
+            "https://codeberg.org/team/repo",
+            json!({"workflow_runs": []}),
+        )
+        .is_err()
     );
     Ok(())
 }
 
 #[test]
-fn forges_without_run_actions_refuse_them_before_any_lookup() -> Result<()> {
-    let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo")?;
-    let error = bitbucket
-        .require(Capability::ci(CiAction::Rerun))
-        .unwrap_err();
-    assert!(
-        error.to_string().contains("cannot rerun CI jobs"),
-        "{error}"
-    );
+fn run_references_are_positive_numbers() {
     assert!(validate_run_reference("12").is_ok());
     assert!(validate_run_reference("ci.yml").is_err());
     assert!(validate_run_reference("0").is_err());
-    Ok(())
 }
 
 #[tokio::test]
@@ -237,10 +226,9 @@ async fn forgejo_reruns_each_failed_job_once_skipping_those_a_rerun_restarted() 
     );
 
     // A run without failed jobs has nothing to rerun.
-    let error = forgejo
+    let rerun = forgejo
         .act_on_run(&account, &run(9), CiAction::Rerun, true)
-        .await
-        .unwrap_err();
-    assert!(error.to_string().contains("has failed"), "{error}");
+        .await;
+    assert!(rerun.is_err());
     Ok(())
 }

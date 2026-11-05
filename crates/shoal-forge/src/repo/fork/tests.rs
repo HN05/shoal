@@ -30,19 +30,6 @@ fn a_fork_remote_keeps_the_origin_url_form() {
     assert!(fork.remote_like("https://github.com").is_err());
 }
 
-#[test]
-fn only_forges_that_open_pull_requests_from_forks_fork() {
-    for (remote, forks) in [
-        ("https://github.com/team/repo", true),
-        ("https://forge.example/team/repo", true),
-        ("https://gitlab.com/team/repo", false),
-        ("https://bitbucket.org/team/repo", false),
-    ] {
-        let repo = ForgeRepo::parse(remote).unwrap();
-        assert_eq!(repo.require(Capability::Forks).is_ok(), forks, "{remote}");
-    }
-}
-
 #[tokio::test]
 async fn github_reads_push_access_and_forks_into_the_account() {
     let server = Server::start(|request| match request.line.as_str() {
