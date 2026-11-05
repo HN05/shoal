@@ -117,7 +117,7 @@ pub(super) async fn add_planned(
         pr,
         agent: launch.clone(),
     };
-    let finished = finish_add_workspace(ctx, started, rest, &agent, subject.is_some()).await?;
+    let finished = finish_add_workspace(ctx, started, rest, &agent).await?;
     let Some(Prepared {
         workspace,
         agent: entry,
@@ -188,18 +188,17 @@ fn report_queued_in(ctx: &Context, workspace: &Workspace, entry: &QueueEntry) ->
 
 /// Whether the caller's shell enters the added `workspace`, where `agent`
 /// starts unless `None`. An agent that runs in a session this terminal
-/// attaches to, given an issue prompt when `prompted`, leaves it where it
-/// was, as detaching returns to that shell rather than to the workspace.
+/// attaches to leaves it where it was, as detaching returns to that shell
+/// rather than to the workspace.
 async fn enters_added(
     ctx: &Context,
     workspace: &Workspace,
     agent: Option<&ResolvedAddAgent>,
-    prompted: bool,
 ) -> Result<bool> {
     if !terminal::follows_caller(ctx) {
         return Ok(false);
     }
-    let Some((agent, chosen)) = agent.and_then(|agent| Some((agent, agent.agent.as_ref()?))) else {
+    let Some(chosen) = agent.and_then(|agent| agent.agent.as_ref()) else {
         return Ok(true);
     };
     let settings = crate::client::workspaces::settings(
@@ -207,12 +206,7 @@ async fn enters_added(
         ConfigTarget::Workspace(workspace.id.clone()),
     )
     .await?;
-    Ok(!agents::runs_in_session(
-        chosen,
-        &settings,
-        prompted,
-        agent.tracked,
-    ))
+    Ok(!agents::runs_in_session(chosen, &settings))
 }
 
 /// What the planned workspace opens: the recorded `workspace` a launch
@@ -281,13 +275,12 @@ struct AfterSetup {
 
 /// Follow the preparation of the started workspace, which sets it up, links
 /// its PR and queues its agent, before reporting it and entering it unless
-/// `agent`, given an issue prompt when `prompted`, takes the terminal.
+/// `agent` takes the terminal.
 async fn finish_add_workspace(
     ctx: &Context,
     started: StartedWorkspace,
     rest: AfterSetup,
     agent: &ResolvedAddAgent,
-    prompted: bool,
 ) -> Result<Option<Prepared>> {
     let reused = started.reused;
     let Some(SetUp {
@@ -321,7 +314,7 @@ async fn finish_add_workspace(
         workspace,
     )?;
     let starts = post_setup.is_ok().then_some(agent);
-    if enters_added(ctx, workspace, starts, prompted).await? {
+    if enters_added(ctx, workspace, starts).await? {
         shell::navigate(&workspace.path, ctx.json)?;
     }
     post_setup?;

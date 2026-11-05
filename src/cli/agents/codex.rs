@@ -7,9 +7,7 @@ use anyhow::Result;
 use serde_json::Value;
 
 use super::{
-    AgentEnvironment, AgentSpace, Integration, Wake,
-    desktop::{self, App},
-    hooks,
+    AgentEnvironment, AgentSpace, Integration, Wake, hooks,
     trust::{CODEX, TrustFile},
 };
 use crate::{ai::IntegrationKind, state::AgentState};
@@ -62,10 +60,6 @@ impl Integration for Codex {
     /// Ctrl-C, which quits Codex only when pressed again.
     fn interrupt_key(&self) -> Option<&'static str> {
         Some("\x03")
-    }
-
-    fn app(&self) -> Option<&'static App> {
-        Some(&desktop::CODEX_APP)
     }
 }
 

@@ -149,13 +149,12 @@ pub(in crate::cli) async fn open(
 
 /// Hand `workspace` to desktop `app` with `args`, untracked, trusting it
 /// first in the app's trust file, when it has one.
-pub(super) async fn hand_off(
+async fn hand_off(
     ctx: &Context,
     workspace: &Workspace,
     app: &App,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    ensure_opens(app, &args)?;
     ensure!(workspace.path.is_dir(), "workspace directory is missing");
     let args = (app.args)(&workspace.path, args);
     if let Some(trust) = app.trust {

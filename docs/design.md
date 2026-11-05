@@ -17,8 +17,8 @@ Caller-specific integration stays outside the daemon core: Superlogical owns ter
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
 browsers, schedule work beyond the agent queue, which also admits registered
 repositories' CI jobs, or store conversations. Agent shortcuts
-(`claude`, `codex`, `happy`, `t3`) are thin launchers around the generic execution
-path; CLI launcher argument arrays are configurable defaults; session and desktop
+(`shoal <agent>`, `happy`) and `shoal open` are thin launchers around the generic
+execution path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Shoal does not switch the user's or
 daemon's login. `[secrets]` names
 user commands that fetch values in the CLI, for an agent's environment at launch
@@ -1591,8 +1591,8 @@ launches and Claude and Codex app handoffs do so too. The user config is the one
 reads: a tracked agent's follows the workspace's `[env]`, while the app and chats
 run with Shoal's environment. Agent guidance and templates become native
 CLI instructions or a first-message prefix for Happy Codex; desktop handoffs carry no instructions.
-Claude's and Codex's default modes are config values read at launch; `--cli` and `--app`
-override them. The Claude app opens through the `claude://` link that `claude --desktop`
+Agents always start as CLI agents; only `shoal open --app` hands a workspace to
+a desktop app. The Claude app opens through the `claude://` link that `claude --desktop`
 opens, since that command refuses a CLI signed in through an API token or gateway.
 Successful repository removal drops those trust fields for the removed workspace
 directory and worktrees, in Shoal's user config and in each one its workspaces'

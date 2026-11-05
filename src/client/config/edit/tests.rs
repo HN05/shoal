@@ -15,14 +15,9 @@ fn edits_dotted_and_quoted_keys_without_losing_comments() {
 
 #[test]
 fn handles_inline_tables_and_refuses_to_traverse_scalars() {
-    let result = edit(
-        "codex = { default_mode = 'app' }\n",
-        "codex.default_mode",
-        Some("cli"),
-    )
-    .unwrap();
+    let result = edit("codex = { model = 'fast' }\n", "codex.model", Some("slow")).unwrap();
     let parsed: toml::Value = toml::from_str(&result).unwrap();
-    assert_eq!(parsed["codex"]["default_mode"].as_str(), Some("cli"));
+    assert_eq!(parsed["codex"]["model"].as_str(), Some("slow"));
     assert!(edit("agent.default = 'codex'", "agent.default.mode", Some("app")).is_err());
     assert!(edit("", "missing", None).is_err());
     assert!(edit("", "x..y", Some("1")).is_err());

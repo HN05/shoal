@@ -28,10 +28,10 @@ post_resource_acquire = 'acquire'\npre_resource_release = 'release'\npost_setup 
 [cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[cleanup.done]\nenabled = false\n[idle_stop]\nenabled = true\n\
 [pr]\ndraft = true\nrequired_labels = ['area/']\nundraft_on_ready = false\ndraft_on_unready = true\n\
 [issue]\nrequired_labels = ['type/']\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n[review]\npost = false\nagent = 'codex'\nfallback_agent = 'claude'\nrequire_for_pr = true\nrequire_for_ready = true\n[messages]\nsettle_seconds = 2\n[merge]\nenabled = false\nconfirm = false\npush = true\n[conflicts]\nsensitive = ['version']\n\
-[permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'direct'\nmerge = 'direct'\npush = 'propose'\napi_writes = 'direct'\n[runner]\nenabled = true\nlabels = ['rust']\npermit = 'builds'\n[agents.reviewer]\ncommand = ['reviewer', '{prompt}']\nresume_command = ['reviewer', '--resume']\ndefault_mode = 'app'\n\
+[permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'direct'\nmerge = 'direct'\npush = 'propose'\napi_writes = 'direct'\n[runner]\nenabled = true\nlabels = ['rust']\npermit = 'builds'\n[agents.reviewer]\ncommand = ['reviewer', '{prompt}']\nresume_command = ['reviewer', '--resume']\n\
 base = 'claude'\ninstructions = ['--system', '{instructions}']\nresume = ['--resume', '{session}']\nresume_latest = ['--continue']\n\
 fork = ['--fork', '{session}']\nadd_dir = ['--dir', '{directory}']\nreview = ['-p', '{prompt}', '{schema}']\nenv = { MODE = 'review' }\nenv_remove = ['TOKEN']\nretry = true\n\
-prompt_cache_minutes = 5\nmodel = 'opus'\neffort = 'high'\nmodel_args = ['--model', '{model}']\neffort_args = ['--effort', '{effort}']\n[agents.claude]\ndefault_mode = 'app'\n[agents.codex]\ndefault_mode = 'app'\n";
+prompt_cache_minutes = 5\nmodel = 'opus'\neffort = 'high'\nmodel_args = ['--model', '{model}']\neffort_args = ['--effort', '{effort}']\n[agents.claude]\nretry = false\n[agents.codex]\nretry = false\n";
 
 fn json<T: Serialize>(value: &T) -> Value {
     serde_json::to_value(value).unwrap()
@@ -463,7 +463,7 @@ fn reported_provenance_names_the_layer_whose_value_is_in_effect() {
         ("", "", ""),
         // Explicit defaults win their layer; omitted values fall through.
         (
-            "[cleanup.auto]\nenabled = true\n[agents.codex]\ndefault_mode = 'cli'\n",
+            "[cleanup.auto]\nenabled = true\n[agents.codex]\nretry = false\n",
             "[cleanup.auto]\nidle_minutes = 5\n",
             "",
         ),
@@ -523,10 +523,7 @@ fn reported_provenance_names_the_layer_whose_value_is_in_effect() {
         entry("cleanup.auto.idle_minutes").layer,
         Layer::WorktreeFile
     );
-    assert_eq!(
-        entry("agents.codex.default_mode").layer,
-        Layer::BuiltInDefault
-    );
+    assert_eq!(entry("cleanup.pr.enabled").layer, Layer::BuiltInDefault);
 }
 
 #[test]

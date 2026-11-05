@@ -76,7 +76,7 @@ shoal repo add /path/to/project --name my-project
 shoal repo setup my-project   # Have an agent write and commit its .shoal.toml
 shoal repo setup my-project --local  # Or save the config outside Git
 shoal start my-project fix-login
-shoal codex fix-login --cli
+shoal codex fix-login
 ```
 
 Use `shoal start my-project` to pick a new or existing branch, an open issue or an open PR, or pass it explicitly:

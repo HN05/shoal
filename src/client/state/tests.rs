@@ -38,7 +38,6 @@ where
 #[test]
 fn migrated_enums_preserve_spellings() {
     use crate::{
-        agent::AgentMode,
         config::repo::ConflictPolicy,
         daemon::{
             approvals::{DecisionStatus, Lifetime},
@@ -78,7 +77,6 @@ fn migrated_enums_preserve_spellings() {
         (DirectoryState::Moved, "moved"),
         (DirectoryState::Unverified, "unverified"),
     ]);
-    assert_spellings(&[(AgentMode::Cli, "cli"), (AgentMode::App, "app")]);
     assert_spellings(&[
         (ExecutionKind::Command, "command"),
         (ExecutionKind::Merge, "merge"),

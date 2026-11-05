@@ -682,8 +682,7 @@ shoal open fix-login --app claude        # Claude desktop app (macOS)
 shoal open fix-login --app codex         # Codex desktop app
 shoal open --app t3                      # Running T3 Code desktop app; current workspace or picker
 shoal claude fix-login -- --help
-shoal codex                              # Current workspace or picker; default mode
-shoal codex fix-login --cli -- --help
+shoal codex                              # Current workspace or picker
 shoal happy codex fix-login              # Detached Happy session for the Happy app
 shoal status fix-login                   # Activity, changes, held resources, issue and PR state
 shoal status planning                    # A chat's agent, sessions, issue and PR state
@@ -1470,9 +1469,9 @@ effort = "xhigh" # For the default agent only, over [agents.claude] effort
 
 `model` and `effort` beside `[agent] default` apply to launches of the agent it
 names, over the tool's own. `--model` and `--effort` on `shoal start`,
-`contribute`, `review run`, `repo setup`, `shoal claude`
-and `shoal codex` override both for that launch. The tool receives the values through
-`model_args` and `effort_args`, which name `{model}` and `{effort}`: Claude Code
+`contribute`, `review run` and `repo setup` override both for that launch. The
+tool receives the values through `model_args` and `effort_args`, which name
+`{model}` and `{effort}`: Claude Code
 gets `--model` and `--effort`, with `CLAUDE_CODE_EFFORT_LEVEL` set to the same
 effort, since the variable otherwise overrides the flag; Codex gets `-m` and `-c
 model_reasoning_effort="<effort>"`. A launch with a value its tool has no
@@ -1484,8 +1483,7 @@ with the values it started with, which its execution in `shoal status --json`
 and its recovery records show; a `resume_command` gets them before its `--`.
 One whose tool no longer has the templates for them is not restored until it
 does. A desktop app takes
-neither: `--app` refuses them, and a launch `default_mode = "app"` hands to an
-app warns that it opens with the app's own.
+neither.
 `env` sets and `env_remove` removes variables for the tool's tracked agents and
 chats, after `[env]`, the agent account and secrets; a value starting with `~/`
 names a path under the home directory. Any AI tool, built-in ones included,
@@ -1651,20 +1649,6 @@ renamed while the agent runs keeps its old name in the entry until the agent's
 next launch. `shoal run <name>` for a `[commands]`
 shortcut remains a plain command invocation without agent prompts or exit
 notifications, expanding `{prompt}` to an empty string.
-
-`shoal claude`, `shoal codex` and their launch profiles without `--cli`/`--app`
-use the launched agent's own `agents.<name>.default_mode` from the workspace's
-repository config or
-`~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`), read at
-launch without a daemon restart:
-
-```toml
-[agents.claude]
-default_mode = "cli" # Or "app"
-
-[agents.codex]
-default_mode = "cli" # Or "app"
-```
 
 `shoal open --app codex|t3` runs `codex app <path>` or `t3 app <path>` with any
 `--` arguments and preserves the launcher's output and exit code. `--app claude`

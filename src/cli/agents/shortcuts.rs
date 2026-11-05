@@ -1,55 +1,12 @@
-//! The shortcut subcommands, such as `shoal codex` and `shoal t3`, which
-//! start one agent or desktop app in a workspace, and whether each can.
+//! `shoal happy`, which starts a Happy session in a workspace, and whether
+//! it can.
 use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
 
-use super::{LaunchOptions, desktop::App};
 #[cfg(feature = "happy")]
 use crate::happy::Agent;
-use crate::{
-    agent::{AgentMode, ModelChoice},
-    ai::IntegrationKind,
-    cli::context::Context,
-    config::named_commands::Commands,
-};
-
-/// `shoal claude` and `shoal codex`, which run the agent of integration
-/// `kind` or open its desktop app: `--cli` or `--app` overrides its
-/// `default_mode`.
-pub(in crate::cli) async fn with_app(
-    ctx: &Context,
-    kind: IntegrationKind,
-    mode: Option<AgentMode>,
-    workspace: Option<String>,
-    model: ModelChoice,
-    args: Vec<OsString>,
-) -> Result<i32> {
-    let integration = super::integration(kind);
-    // Explicit desktop handoffs read no settings, so no prompt template.
-    if let Some(app) = integration.app().filter(|_| mode == Some(AgentMode::App)) {
-        return super::desktop::open(ctx, workspace, app, args).await;
-    }
-    let options = LaunchOptions {
-        tracked: mode == Some(AgentMode::Cli),
-        model: super::ModelRequest::Override(model),
-        ..Default::default()
-    };
-    let agent = kind.as_str().parse()?;
-    super::launch::shortcut(ctx, agent, workspace, None, args, options).await
-}
-
-/// Whether `shoal <name>` can start: the CLI as a tracked agent, or the
-/// desktop `app` its `--app` opens.
-fn with_app_available(name: &str, app: &App, installed: &Installed) -> bool {
-    installed.agent(name) || app_available(app, installed)
-}
-
-/// Whether the desktop shortcut that opens `app` can start: it starts no
-/// tracked agent, so it needs only the app.
-fn app_available(app: &App, installed: &Installed) -> bool {
-    app.available(installed.search_path)
-}
+use crate::{cli::context::Context, config::named_commands::Commands};
 
 /// `shoal happy <agent>`.
 #[cfg(feature = "happy")]
@@ -95,21 +52,9 @@ impl Installed<'_> {
 }
 
 /// Each shortcut subcommand with whether it can start anything, so
-/// completion offers only those that can. A tracked agent's shortcut needs
-/// the agent; a desktop shortcut needs only the app.
+/// completion offers only those that can.
 pub(in crate::cli) fn shortcuts(installed: &Installed) -> Vec<(&'static str, bool)> {
-    vec![
-        (
-            "claude",
-            with_app_available("claude", &super::desktop::CLAUDE, installed),
-        ),
-        (
-            "codex",
-            with_app_available("codex", &super::desktop::CODEX_APP, installed),
-        ),
-        ("happy", !happy_agents(installed).is_empty()),
-        ("t3", app_available(&super::desktop::T3, installed)),
-    ]
+    vec![("happy", !happy_agents(installed).is_empty())]
 }
 
 /// The agents `shoal happy <agent>` can start.

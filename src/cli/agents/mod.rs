@@ -26,7 +26,7 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    agent::{Agent, AgentMode, ModelChoice},
+    agent::{Agent, ModelChoice},
     ai::IntegrationKind,
     cli::{commands::configured, context::Context, terminal, ui},
     client::transcripts::Environments,
@@ -45,7 +45,6 @@ pub(in crate::cli) use launch::input;
 pub(in crate::cli) use sessions::{Existing, SessionHome, install_session_files};
 #[cfg(feature = "happy")]
 pub(super) use shortcuts::happy;
-pub(super) use shortcuts::with_app;
 pub(in crate::cli) use shortcuts::{Installed, happy_agents, shortcuts};
 
 /// What an agent needs beyond its configured command and described
@@ -150,12 +149,6 @@ pub(in crate::cli) trait Integration: Sync {
     fn detached(&self) -> Option<&dyn detached::App> {
         None
     }
-
-    /// The desktop app `default_mode = "app"` and `--app` hand the agent's
-    /// workspace launches to.
-    fn app(&self) -> Option<&'static desktop::App> {
-        None
-    }
 }
 
 /// How an idle agent wakes for an update, which decides whether updates are
@@ -172,17 +165,6 @@ pub(in crate::cli) enum Wake {
     Prompt,
 }
 
-/// What config sets for an integration, from the section of its own it may
-/// have.
-#[derive(Clone, Copy, Default)]
-pub(in crate::cli) struct Options {
-    /// Why config turns the integration off, if it does; pickers and
-    /// completion leave its agents out.
-    pub off: Option<&'static str>,
-    /// The desktop app config hands the agent's launches to.
-    pub app: Option<&'static desktop::App>,
-}
-
 /// An agent without an integration: its configuration says everything.
 struct Configured;
 
@@ -196,25 +178,13 @@ fn integration(kind: IntegrationKind) -> &'static dyn Integration {
     }
 }
 
-/// What `settings` set for agent `name`, which runs with the integration of
-/// `kind`, from its own `[agents.<name>]`: `default_mode = "app"` hands
-/// launches to the integration's desktop app.
-fn tool_options(name: &str, kind: IntegrationKind, settings: &Effective) -> Options {
-    let mode = settings.agents.get(name).map(|agent| agent.default_mode);
-    Options {
-        app: integration(kind)
-            .app()
-            .filter(|_| mode == Some(AgentMode::App)),
-        ..Options::default()
-    }
-}
-
 /// An agent an integration adds besides the AI tools, with the integration
-/// that runs it and the options `settings` give that integration.
+/// that runs it and why `settings` turn that integration off, if they do;
+/// pickers and completion leave the agents of one that is off out.
 struct Added {
     name: &'static str,
     integration: &'static dyn Integration,
-    options: fn(&Effective) -> Options,
+    off: fn(&Effective) -> Option<&'static str>,
 }
 
 /// Agents integrations add, built only with each integration's Cargo
@@ -224,12 +194,12 @@ const ADDED: &[Added] = &[
     Added {
         name: "happy-claude",
         integration: &happy::CLAUDE,
-        options: |settings| happy::options(&settings.terminal.happy),
+        off: |settings| happy::off(&settings.terminal.happy),
     },
     Added {
         name: "happy-codex",
         integration: &happy::CODEX,
-        options: |settings| happy::options(&settings.terminal.happy),
+        off: |settings| happy::off(&settings.terminal.happy),
     },
 ];
 #[cfg(not(feature = "happy"))]
@@ -256,19 +226,13 @@ fn agent_integration(settings: &Effective, name: &str) -> &'static dyn Integrati
     }
 }
 
-/// What `settings` set for the integration agent `name` runs with.
-fn agent_options(settings: &Effective, name: &str) -> Options {
+/// Why `settings` turn off the integration agent `name` runs with, if they
+/// do.
+fn agent_off(settings: &Effective, name: &str) -> Option<&'static str> {
     match (settings.integration(name), added(name)) {
-        (IntegrationKind::None, Some(added)) => (added.options)(settings),
-        (kind, _) => tool_options(name, kind, settings),
+        (IntegrationKind::None, Some(added)) => (added.off)(settings),
+        _ => None,
     }
-}
-
-/// The desktop app a launch with `options` opens: config hands launches to
-/// it, the app cannot take a first message, so a `prompted` launch stays
-/// in the terminal, and a `tracked` launch is never handed to an app.
-fn opens_app(options: Options, prompted: bool, tracked: bool) -> Option<&'static desktop::App> {
-    options.app.filter(|_| !prompted && !tracked)
 }
 
 /// One launch of an agent in a ready workspace; settings are never cached
@@ -404,9 +368,6 @@ fn linked_issue(place: templates::Place<'_>) -> Option<templates::IssueFields> {
 /// How a launch relates to the agents around it.
 #[derive(Default)]
 pub(in crate::cli) struct LaunchOptions {
-    /// Whether the agent must run tracked, never handed to a desktop app, as
-    /// a detached start must.
-    pub tracked: bool,
     /// As [`Launch::replaces`].
     pub replaces: Vec<PathBuf>,
     /// The session the agent starts from a fork of, which stays unchanged.
@@ -432,16 +393,10 @@ impl Default for ModelRequest {
 
 /// Whether a launch of `agent` under `settings` runs in a session this
 /// terminal attaches to, rather than in place or the agent's own way.
-pub(in crate::cli) fn runs_in_session(
-    agent: &Agent,
-    settings: &Effective,
-    prompted: bool,
-    tracked: bool,
-) -> bool {
-    let name = agent.name();
-    let opens_app = opens_app(agent_options(settings, name), prompted, tracked);
-    opens_app.is_none()
-        && agent_integration(settings, name).detached().is_none()
+pub(in crate::cli) fn runs_in_session(agent: &Agent, settings: &Effective) -> bool {
+    agent_integration(settings, agent.name())
+        .detached()
+        .is_none()
         && terminal::keeps_agents_in_sessions(settings)
 }
 
@@ -473,11 +428,6 @@ pub(super) async fn launch_agent(
         system: instructions,
         first_message: prompt,
     } = opening.brief(&settings, place)?;
-    let app = opens_app(
-        agent_options(&settings, agent.name()),
-        prompt.is_some(),
-        options.tracked,
-    );
     let model = match options.model {
         ModelRequest::Override(requested) => resolve_model(&settings, agent.name(), requested),
         ModelRequest::Kept(model) => model,
@@ -495,31 +445,15 @@ pub(super) async fn launch_agent(
         replaces: options.replaces,
     };
     let replaces = launch.replaces.clone();
-    let code = match (app, integration.detached()) {
-        (Some(app), _) => {
-            warn_app_model(app, &launch.model);
-            desktop::hand_off(ctx, &launch.workspace, app, launch.args).await?
-        }
-        (None, Some(detached)) => detached::start(ctx, integration, detached, launch).await?,
-        (None, None) => return launch::tracked(ctx, integration, launch).await,
+    let Some(detached) = integration.detached() else {
+        return launch::tracked(ctx, integration, launch).await;
     };
+    let code = detached::start(ctx, integration, detached, launch).await?;
     // A launch of its own returns once its agent has started.
     for record in &replaces {
         crate::execution::recovery::consume(record)?;
     }
     Ok(code)
-}
-
-/// Say that desktop `app` opens with its own model and effort, when the
-/// launch it takes over would have run with `model`.
-fn warn_app_model(app: &desktop::App, model: &ModelChoice) {
-    if !model.is_empty() {
-        eprintln!(
-            "warning: {} opens with its own model and effort; Shoal cannot pass the \
-             configured ones to it",
-            app.name
-        );
-    }
 }
 
 /// The arguments that run agent `name` with `model`, refusing an agent
@@ -780,8 +714,7 @@ pub(in crate::cli) fn names(settings: &Effective) -> Vec<String> {
         ADDED
             .iter()
             .filter(|added| {
-                !names.iter().any(|known| known == added.name)
-                    && (added.options)(settings).off.is_none()
+                !names.iter().any(|known| known == added.name) && (added.off)(settings).is_none()
             })
             .map(|added| added.name.to_owned())
             .collect::<Vec<_>>(),
@@ -831,7 +764,7 @@ pub(in crate::cli) fn ensure_reviewer_available(name: &str, settings: &Effective
 
 /// Refuse an agent that cannot run under `settings` before anything starts.
 pub(crate) fn ensure_available(name: &str, settings: &Effective) -> Result<()> {
-    if let Some(reason) = agent_options(settings, name).off {
+    if let Some(reason) = agent_off(settings, name) {
         anyhow::bail!("cannot start {name}: {reason}");
     }
     launch_proxy(settings, name)?;

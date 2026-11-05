@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::{agent::AgentMode, config::options::Options};
+use crate::config::options::Options;
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
@@ -16,9 +16,6 @@ pub struct AgentToolConfig {
     pub command: Option<Vec<String>>,
     /// Restores a session; it must not repeat the initial prompt.
     pub resume_command: Option<Vec<String>>,
-    /// What `shoal <name>` does without `--cli` or `--app`.
-    #[option(default = AgentMode::default())]
-    pub default_mode: Option<AgentMode>,
     /// The AI tool this one is a launch profile of: it inherits that tool's
     /// integration, launcher and arguments, each replaced by its own.
     pub base: Option<String>,

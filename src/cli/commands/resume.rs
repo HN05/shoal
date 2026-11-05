@@ -525,9 +525,7 @@ async fn start_told(
     let launch: crate::agent::Agent = agent
         .parse()
         .with_context(|| format!("cannot start agent {agent} of {}", workspace.name))?;
-    // The prompt keeps it out of desktop apps, which cannot take one.
     let options = crate::cli::agents::LaunchOptions {
-        tracked: true,
         replaces: records,
         fork,
         model: crate::cli::agents::ModelRequest::Kept(session.model.clone()),

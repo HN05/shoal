@@ -10,7 +10,7 @@ use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
 
 use super::{
-    Integration, Options,
+    Integration,
     detached::{App, Delivered, Prepared, Session},
     trust::TrustFile,
 };
@@ -96,14 +96,11 @@ impl App for Happy {
     }
 }
 
-/// What Happy's section sets: `terminal.happy.enabled` turns Happy sessions on.
-pub(super) fn options(config: &config::Happy) -> Options {
-    Options {
-        off: (!config.enabled).then_some(
-            "Happy sessions are off; set terminal.happy.enabled = true in the repository or global config",
-        ),
-        ..Options::default()
-    }
+/// Why Happy sessions are off: `terminal.happy.enabled` turns them on.
+pub(super) fn off(config: &config::Happy) -> Option<&'static str> {
+    (!config.enabled).then_some(
+        "Happy sessions are off; set terminal.happy.enabled = true in the repository or global config",
+    )
 }
 
 /// A Happy session ready to start.

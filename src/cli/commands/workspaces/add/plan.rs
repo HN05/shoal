@@ -231,7 +231,6 @@ impl AddPlan {
             issue: issue.map(|issue| issue.url),
             agent: ResolvedAddAgent {
                 agent: Some(agent.parse()?),
-                tracked: true,
                 model,
             },
             args: args.into_iter().map(OsString::from).collect(),

@@ -17,38 +17,15 @@ pub(in crate::cli::commands) enum AgentLaunch {
     IssueDefault(Option<Agent>),
 }
 
+/// The agent of a plan, which queued entries store; entries queued before
+/// every launch ran tracked also carry `tracked` or `codex_mode`, which are
+/// ignored.
 #[derive(serde::Serialize, serde::Deserialize)]
-#[serde(from = "StoredAddAgent")]
 pub(super) struct ResolvedAddAgent {
     pub(super) agent: Option<Agent>,
-    /// Whether the agent runs tracked, never handed to a desktop app.
-    pub(super) tracked: bool,
     /// The model and effort requested over the configured ones.
+    #[serde(default)]
     pub(super) model: ModelChoice,
-}
-
-/// A plan's agent as queued entries store it, including plans queued before
-/// `tracked`, which recorded Codex's mode instead.
-#[derive(serde::Deserialize)]
-struct StoredAddAgent {
-    agent: Option<Agent>,
-    #[serde(default)]
-    tracked: bool,
-    #[serde(default)]
-    codex_mode: Option<crate::agent::AgentMode>,
-    #[serde(default)]
-    model: ModelChoice,
-}
-
-/// Codex's CLI meant a tracked launch.
-impl From<StoredAddAgent> for ResolvedAddAgent {
-    fn from(stored: StoredAddAgent) -> Self {
-        Self {
-            agent: stored.agent,
-            tracked: stored.tracked || stored.codex_mode == Some(crate::agent::AgentMode::Cli),
-            model: stored.model,
-        }
-    }
 }
 
 /// The repository's effective settings, loaded on first use.
@@ -186,11 +163,7 @@ pub(super) async fn resolve_add_agent(
             "--model and --effort need an agent; name one with --agent"
         ),
     }
-    Ok(ResolvedAddAgent {
-        agent,
-        tracked: false,
-        model,
-    })
+    Ok(ResolvedAddAgent { agent, model })
 }
 
 impl ResolvedAddAgent {
@@ -208,7 +181,6 @@ impl ResolvedAddAgent {
             return terminal::open_shell(ctx, &workspace.path).await;
         };
         let options = agents::LaunchOptions {
-            tracked: self.tracked,
             fork,
             model: agents::ModelRequest::Override(self.model),
             ..Default::default()

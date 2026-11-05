@@ -6,9 +6,7 @@ use std::{ffi::OsString, path::Path};
 use serde_json::{Value, json};
 
 use super::{
-    AgentEnvironment, AgentSpace, AgentWorkspace, Integration, Wake,
-    desktop::{self, App},
-    hooks,
+    AgentEnvironment, AgentSpace, AgentWorkspace, Integration, Wake, hooks,
     trust::{CLAUDE_CODE, TrustFile},
 };
 use crate::{
@@ -84,10 +82,6 @@ impl Integration for Claude {
 
     fn trust_file(&self) -> Option<&'static TrustFile> {
         Some(&CLAUDE_CODE)
-    }
-
-    fn app(&self) -> Option<&'static App> {
-        Some(&desktop::CLAUDE)
     }
 
     /// `StopFailure` names Claude Code's error kind; a gateway such as a

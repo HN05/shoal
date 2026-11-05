@@ -153,13 +153,9 @@ dirs = ["/tmp"]
 # Each AI tool's launch settings, merged option by option with a repository's.
 [agents.claude]
 command = ["claude"]
-# `shoal claude` without --cli/--app: "cli" or "app" (the Claude app, macOS only).
-default_mode = "cli"
 
 [agents.codex]
 command = ["codex", "{args}"]
-# `shoal codex` without --cli/--app: "cli" or "app".
-default_mode = "cli"
 # The model and reasoning effort its agents run with; --model and --effort
 # override them for one launch. Without them the tool uses its own defaults.
 # model = "gpt-5.5"

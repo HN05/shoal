@@ -4904,16 +4904,7 @@ exit 7
     }
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
-    for (name, agent, mode) in [
-        ("add-codex", "codex", "cli"),
-        ("add-claude", "claude", "cli"),
-        ("add-app", "codex", "app"),
-    ] {
-        fs::write(
-            config_dir.join("config.toml"),
-            format!("[agents.codex]\ndefault_mode = '{mode}'\n"),
-        )
-        .unwrap();
+    for (name, agent) in [("add-codex", "codex"), ("add-claude", "claude")] {
         let output = fixture
             .command()
             .args([
@@ -4936,20 +4927,13 @@ exit 7
         assert_eq!(output.status.code(), Some(7), "{output:?}");
         let during: Value = serde_json::from_slice(&fs::read(&inspection).unwrap()).unwrap();
         assert_eq!(during["workspace"]["name"], name);
-        assert_eq!(
-            during["executions"].as_array().unwrap().len(),
-            usize::from(mode == "cli")
-        );
+        assert_eq!(during["executions"].as_array().unwrap().len(), 1);
         let after = fixture.ok(&["status", name]);
         assert_eq!(after["executions"], serde_json::json!([]));
         let path = after["workspace"]["path"].as_str().unwrap();
         assert!(Path::new(path).join("tracked").exists());
         assert_eq!(fs::read_to_string(&directive).unwrap(), format!("{path}\n"));
-        let args = if mode == "app" {
-            format!("\napp\n{path}\nliteral spaces; $(false)\n")
-        } else {
-            format!("{name}\nliteral spaces; $(false)\n")
-        };
+        let args = format!("{name}\nliteral spaces; $(false)\n");
         assert!(
             strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n').ends_with(
                 &format!("{}\n{args}", fs::canonicalize(path).unwrap().display())
@@ -5021,97 +5005,6 @@ exit 7
 }
 
 #[test]
-fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
-    let fixture = Fixture::new();
-    let workspace = fixture.add("default-mode");
-    let path = workspace["path"].as_str().unwrap();
-    let bin = fixture.root.path().join("codex-bin");
-    let stub = bin.join("codex");
-    install_test_script_with_mode(
-        &stub,
-        "#!/bin/sh\nprintf '%s\\n' \"$SHOAL_WORKSPACE\" \"$@\"\nexit 7\n",
-        0o700,
-    );
-
-    let config_dir = fixture.root.path().join(".config/shoal");
-    fs::create_dir_all(&config_dir).unwrap();
-    for config in ["", "[agents.codex]\ndefault_mode = 'app'\n"] {
-        // Change the default while the daemon remains running.
-        fs::write(config_dir.join("config.toml"), config).unwrap();
-        for mode in [None, Some("--cli"), Some("--app")] {
-            let mut command = fixture.command();
-            command.current_dir(path).arg("codex");
-            if let Some(mode) = mode {
-                command.args([mode, "default-mode"]);
-            }
-            let output = command
-                .args(["--", "literal spaces; $(false)"])
-                .env("PATH", fixture.restricted_path(&bin))
-                .output()
-                .unwrap();
-            assert_eq!(
-                output.status.code(),
-                Some(7),
-                "{}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-            let app = mode == Some("--app") || (mode.is_none() && !config.is_empty());
-            let stdout = String::from_utf8(output.stdout).unwrap();
-            if app {
-                assert_eq!(stdout, format!("\napp\n{path}\nliteral spaces; $(false)\n"));
-            } else {
-                let stdout = strip_shoal_arguments(&stdout, '\n');
-                let lines: Vec<_> = stdout.lines().collect();
-                assert_eq!(lines[1..], ["literal spaces; $(false)"]);
-                assert_eq!(lines[0], "default-mode");
-            }
-            assert_eq!(
-                fixture.ok(&["status", "default-mode"])["executions"],
-                serde_json::json!([])
-            );
-        }
-    }
-    // The worktree's own config wins over the global default, also at launch.
-    fs::write(config_dir.join("config.toml"), "").unwrap();
-    fs::write(
-        Path::new(path).join(".shoal.toml"),
-        "[agents.codex]\ndefault_mode = 'app'\n",
-    )
-    .unwrap();
-    let output = fixture
-        .command()
-        .current_dir(path)
-        .args(["codex", "--", "repo-default"])
-        .env("PATH", fixture.restricted_path(&bin))
-        .output()
-        .unwrap();
-    assert_eq!(
-        String::from_utf8(output.stdout).unwrap(),
-        format!("\napp\n{path}\nrepo-default\n")
-    );
-    // An explicit desktop handoff does not load the rules of terminal launches.
-    fs::create_dir_all(config_dir.join("rules")).unwrap();
-    fs::write(config_dir.join("rules/worker.md"), [0xff]).unwrap();
-    for mode in ["--app", "--cli"] {
-        let output = fixture
-            .command()
-            .args(["codex", mode, "default-mode", "--", "desktop prompt"])
-            .env("PATH", fixture.restricted_path(&bin))
-            .output()
-            .unwrap();
-        if mode == "--app" {
-            assert_eq!(output.status.code(), Some(7), "{output:?}");
-            assert_eq!(
-                String::from_utf8(output.stdout).unwrap(),
-                format!("\napp\n{path}\ndesktop prompt\n")
-            );
-        } else {
-            assert!(!output.status.success());
-        }
-    }
-}
-
-#[test]
 fn claude_app_opens_a_new_session_link_for_the_workspace() {
     let fixture = Fixture::new();
     let workspace = fixture.add("claude-app");
@@ -5162,13 +5055,9 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             "#!/bin/sh\nprintf '%s\\n' \"$SHOAL_WORKSPACE\" \"$@\"\n",
             0o700,
         );
-        let mut command = fixture.command();
-        command.arg(agent);
-        if agent == "codex" {
-            command.arg("--cli");
-        }
-        let output = command
-            .args(["shortcut", "--", "--version", "hello with spaces"])
+        let output = fixture
+            .command()
+            .args([agent, "shortcut", "--", "--version", "hello with spaces"])
             .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap();
@@ -5236,13 +5125,9 @@ fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prom
         ("codex", vec!["--add-dir", directory, "user prompt"]),
         ("pi", vec!["user prompt"]),
     ] {
-        let mut command = fixture.command();
-        command.arg(agent);
-        if agent == "codex" {
-            command.arg("--cli");
-        }
-        let output = command
-            .args(["directories", "--", "user prompt"])
+        let output = fixture
+            .command()
+            .args([agent, "directories", "--", "user prompt"])
             .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap();
@@ -5302,17 +5187,34 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
         args.windows(expected.len())
             .any(|window| window == expected)
     };
+    let repo = fixture.repo.to_str().unwrap();
     // Flags override the tool's configuration, and Claude's effort variable
     // follows its flag.
     let claude = arguments(launch(&[
-        "claude", "models", "--model", "opus", "--effort", "high",
+        "start",
+        repo,
+        "models-claude",
+        "--agent",
+        "claude",
+        "--model",
+        "opus",
+        "--effort",
+        "high",
     ]));
     assert!(
         contains(&claude, &["--model", "opus", "--effort", "high"]),
         "{claude:?}"
     );
     assert!(claude.contains(&"effort=high".to_owned()), "{claude:?}");
-    let codex = arguments(launch(&["codex", "models", "--cli", "--effort", "medium"]));
+    let codex = arguments(launch(&[
+        "start",
+        repo,
+        "models-codex",
+        "--agent",
+        "codex",
+        "--effort",
+        "medium",
+    ]));
     assert!(
         contains(
             &codex,
@@ -5324,7 +5226,6 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
     let output = launch(&["pi", "models"]);
     assert!(!output.status.success(), "{output:?}");
     // An addition refuses it before creating anything.
-    let repo = fixture.repo.to_str().unwrap();
     let output = launch(&[
         "start",
         repo,
@@ -5396,13 +5297,9 @@ fn worker_rules_resolve_per_launch_and_reach_native_instruction_options() {
             format!("global instructions instructions\n\n{expected}")
         };
         for agent in ["codex", "claude"] {
-            let mut command = fixture.command();
-            command.arg(agent);
-            if agent == "codex" {
-                command.arg("--cli");
-            }
-            let output = command
-                .args(["instructions", "--", "user prompt"])
+            let output = fixture
+                .command()
+                .args([agent, "instructions", "--", "user prompt"])
                 .env("PATH", fixture.restricted_path(&bin))
                 .output()
                 .unwrap();
@@ -13737,13 +13634,6 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         bin.join("codex"),
         "#!/bin/sh\nprintf agent > agent-started\n",
     );
-    let config = fixture.root.path().join(".config/shoal");
-    fs::create_dir_all(&config).unwrap();
-    fs::write(
-        config.join("config.toml"),
-        "[agents.codex]\ndefault_mode = 'app'\n",
-    )
-    .unwrap();
     let (ignored, transcript) = fixture.interactive(
         &[
             "start",
@@ -14529,7 +14419,12 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
         "#!/bin/sh\ncat \"${CODEX_HOME:-$HOME/.codex}/config.toml\"\n",
     );
     let config = home.join(".codex/config.toml");
-    for mode in [None, Some("--cli"), Some("--app")] {
+    // The tracked agent in the current workspace, the named one, and the app.
+    for args in [
+        &["codex"][..],
+        &["codex", "trusted"],
+        &["open", "--app", "codex", "trusted"],
+    ] {
         for overridden in [false, true] {
             let config_dir = home.join("custom-codex");
             let target = if overridden {
@@ -14538,10 +14433,8 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
                 config.clone()
             };
             let mut command = fixture.command();
-            command.arg("codex");
-            if let Some(mode) = mode {
-                command.args([mode, "trusted"]);
-            } else {
+            command.args(args);
+            if args.len() == 1 {
                 command.current_dir(&path);
             }
             if overridden {
@@ -14577,14 +14470,14 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
 
     // Malformed settings remain untouched and only produce a warning.
     fs::write(&config, "projects = []\n").unwrap();
-    let output = fixture.run(&["codex", "trusted", "--cli"]);
+    let output = fixture.run(&["codex", "trusted"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fs::read_to_string(config).unwrap(), "projects = []\n");
 }
 
 #[test]
 fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
-    let fixture = Fixture::with_config(Some("[agents.codex]\ndefault_mode = 'app'\n"));
+    let fixture = Fixture::new();
     let bin = fixture.root.path().join("issue-bin");
     // The daemon reads the issue through the scripted curl.
     install_api_curl(&fixture.root.path().join("bin"));
@@ -18290,14 +18183,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
             path.display()
         )
     );
-    let output = fixture.run(&[
-        "codex",
-        "configured-agent",
-        "--cli",
-        "--",
-        "--model",
-        "example",
-    ]);
+    let output = fixture.run(&["codex", "configured-agent", "--", "--model", "example"]);
     assert!(output.status.success());
     assert_eq!(
         strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n'),
@@ -27409,83 +27295,6 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         fs::read_to_string(&directive).unwrap().trim(),
         workspace["workspace"]["path"].as_str().unwrap()
     );
-}
-
-#[test]
-fn terminal_add_handing_codex_to_its_app_enters_the_workspace() {
-    let fixture = Fixture::with_config(Some("[agents.codex]\ndefault_mode = 'app'\n"));
-    let home = fixture.root.path();
-    install_test_script(
-        home.join("bin/codex"),
-        "#!/bin/sh\necho \"$@\" >> \"$HOME/codex-runs\"\n",
-    );
-    let directive = home.join("shell-directive");
-    let (output, transcript) = fixture.terminal_command(
-        fixture
-            .command()
-            .env("SHOAL_SHELL_DIRECTIVE", &directive)
-            .args([
-                "start",
-                fixture.repo.to_str().unwrap(),
-                "app",
-                "--agent",
-                "codex",
-                "--focus",
-            ]),
-        "",
-        true,
-    );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
-    let workspace = fixture.ok(&["status", "app"]);
-    let path = workspace["workspace"]["path"].as_str().unwrap();
-    assert_eq!(
-        fs::read_to_string(home.join("codex-runs")).unwrap(),
-        format!("app {path}\n")
-    );
-    // The app opens without a zmx session to attach.
-    assert!(
-        !zmx_calls(&fixture).iter().any(|call| call[0] == "attach"),
-        "{transcript}"
-    );
-    assert_eq!(fs::read_to_string(&directive).unwrap().trim(), path);
-}
-
-#[test]
-fn terminal_add_decides_where_the_shell_goes_after_the_post_setup_hook() {
-    let fixture = Fixture::new();
-    let home = fixture.root.path();
-    install_test_script(home.join("bin/codex"), "#!/bin/sh\nexit 0\n");
-    // The hook turns the app handoff the repository asks for into a CLI launch.
-    install_test_script(
-        fixture.repo.join("post-setup.sh"),
-        "#!/bin/sh\nprintf \"[agents.codex]\\ndefault_mode = 'cli'\\n\" > .shoal.toml\n",
-    );
-    commit_resource_config(
-        &fixture.repo,
-        "hooks.post_setup = 'post-setup.sh'\n[agents.codex]\ndefault_mode = 'app'\n",
-    );
-    let directive = home.join("shell-directive");
-    let (output, transcript) = fixture.terminal_command(
-        fixture
-            .command()
-            .env("SHOAL_SHELL_DIRECTIVE", &directive)
-            .args([
-                "start",
-                fixture.repo.to_str().unwrap(),
-                "switched",
-                "--agent",
-                "codex",
-                "--focus",
-            ]),
-        "",
-        true,
-    );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
-    let attach = zmx_calls(&fixture)
-        .into_iter()
-        .rfind(|call| call[0] == "attach");
-    assert_eq!(attach.unwrap()[3], "switched", "{transcript}");
-    assert!(!directive.exists(), "{transcript}");
 }
 
 #[test]

@@ -13,16 +13,6 @@ impl Config {
 }
 
 #[test]
-fn agent_modes_reject_invalid_settings() {
-    for section in ["claude", "codex"] {
-        for setting in ["default_mode = 'desktop'", "defaut_mode = 'app'"] {
-            let text = format!("[agents.{section}]\n{setting}");
-            assert!(Config::from_toml(&text).is_err());
-        }
-    }
-}
-
-#[test]
 fn global_git_profile_selections_must_name_defined_profiles() {
     let paths = Paths::for_test("/home/test");
     let profiles = "[machine.git_profiles.agent]\nuser.email = 'agent@example.invalid'\n";
@@ -66,14 +56,6 @@ fn template_states_the_defaults_and_its_examples_are_valid() {
     // The template writes the built-in defaults out explicitly.
     let written_effective = written.effective(&RepoConfig::default()).unwrap();
     let default_effective = defaults.effective(&RepoConfig::default()).unwrap();
-    assert_eq!(
-        written
-            .repository
-            .agents
-            .get("codex")
-            .and_then(|agent| agent.default_mode),
-        Some(default_effective.agents["codex"].default_mode)
-    );
     assert_eq!(
         written.repository.cleanup.auto.enabled,
         Some(default_effective.cleanup.auto.enabled)
@@ -280,25 +262,19 @@ fn repository_values_win_over_global_cleanup_policy() {
 
 #[test]
 fn agent_defaults_come_from_the_repository_before_the_global_config() {
-    use crate::agent::AgentMode;
-
-    let global =
-        Config::from_toml("agent.default = 'claude'\n[agents.codex]\ndefault_mode = 'app'\n")
-            .unwrap();
+    let global = Config::from_toml("agent.default = 'claude'\n").unwrap();
     let repo = repo::parse("agent.default = 'codex'\n").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert_eq!(
         effective.agent.default,
         "codex".parse::<crate::agent::Agent>().ok()
     );
-    assert_eq!(effective.agents["codex"].default_mode, AgentMode::App);
-    let repo = repo::parse("[agents.codex]\ndefault_mode = 'cli'\n").unwrap();
+    let repo = repo::parse("").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert_eq!(
         effective.agent.default,
         "claude".parse::<crate::agent::Agent>().ok()
     );
-    assert_eq!(effective.agents["codex"].default_mode, AgentMode::Cli);
     let effective = Config::default().effective(&repo).unwrap();
     assert_eq!(effective.agent.default, None);
 }

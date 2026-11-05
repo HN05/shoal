@@ -212,9 +212,6 @@ impl Command {
             Command::Run {
                 name: None, args, ..
             } if !args.is_empty() => "run".into(),
-            Command::Agents(AgentsCommand::Claude { .. }) => "claude".into(),
-            Command::Agents(AgentsCommand::Codex { .. }) => "codex".into(),
-            Command::Agents(AgentsCommand::T3 { .. }) => "t3".into(),
             #[cfg(feature = "happy")]
             Command::Agents(AgentsCommand::Happy { .. }) => "happy".into(),
             Command::Run {

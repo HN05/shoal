@@ -61,9 +61,9 @@ source "$1"
 COMP_TYPE=9
 COMP_WORDS=(shoal co); COMP_CWORD=1; COMP_LINE='shoal co'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
-COMP_WORDS=(shoal codex --c); COMP_CWORD=2; COMP_LINE='shoal codex --c'; COMP_POINT=${#COMP_LINE}
+COMP_WORDS=(shoal open --a); COMP_CWORD=2; COMP_LINE='shoal open --a'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
-COMP_WORDS=(shoal codex --a); COMP_CWORD=2; COMP_LINE='shoal codex --a'; COMP_POINT=${#COMP_LINE}
+COMP_WORDS=(shoal open --app t); COMP_CWORD=3; COMP_LINE='shoal open --app t'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
 COMP_WORDS=(shoal resume --di); COMP_CWORD=2; COMP_LINE='shoal resume --di'; COMP_POINT=${#COMP_LINE}
 _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORDS[COMP_CWORD-1]}"; printf '%s\n' "${COMPREPLY[@]}"
@@ -75,7 +75,7 @@ _clap_complete_shoal "${COMP_WORDS[0]}" "${COMP_WORDS[COMP_CWORD]}" "${COMP_WORD
         String::from_utf8_lossy(&output.stderr)
     );
     let output = String::from_utf8(output.stdout).unwrap();
-    for expected in ["codex", "--cli", "--app", "--discard"] {
+    for expected in ["codex", "--app", "t3", "--discard"] {
         assert!(
             output.lines().any(|line| line == expected),
             "missing {expected}: {output}"
@@ -135,7 +135,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "repo", "r"], "rm"),
         (vec!["shoal", "run", "rev"], "review"),
         (vec!["shoal", "messages", "send", "hello", "--a"], "--all"),
-        (vec!["shoal", "codex", "--a"], "--app"),
+        (vec!["shoal", "open", "--a"], "--app"),
         (vec!["shoal", "start", "--agent", "co"], "codex"),
         (vec!["shoal", "dro"], "droid"),
         (
@@ -176,7 +176,6 @@ fn agents_without_installed_executables_are_not_completed() {
         (vec!["shoal", "dr"], &[], &["droid"]),
         // Plain configured commands are not agents.
         (vec!["shoal", "start", "--agent", "r"], &[], &["review"]),
-        (vec!["shoal", "codex", "--a"], &[], &["--app"]),
         (
             vec!["shoal", "start", "--agent", "c"],
             &["claude", "claude-direct"],
