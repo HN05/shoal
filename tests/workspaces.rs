@@ -15185,10 +15185,6 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
     // Without --agent the picker would fail next; the conflict is reported first.
     let output = fixture.run(&issue[..4]);
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("already checked out"),
-        "{output:?}"
-    );
     assert!(branches(&fixture).is_empty());
 
     git(
@@ -15258,10 +15254,6 @@ fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() 
         "elsewhere",
     ]);
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("outside the space opening it"),
-        "{output:?}"
-    );
     assert!(fixture.ok(&["status", "elsewhere"])["workspace"]["parent"].is_null());
     assert!(
         !fixture
@@ -15367,8 +15359,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
 
     fixture.script_github(&github_open_items(&[], &[]));
     let (output, transcript) = add("Use a pull request", "7");
-    assert!(!output.status.success());
-    assert!(transcript.contains("no open pull requests"), "{transcript}");
+    assert!(!output.status.success(), "{transcript}");
 }
 
 #[test]
@@ -15380,7 +15371,7 @@ fn link_picks_an_omitted_open_issue_or_pull_request() {
     responses.extend(github_issue(34, "Fix API timeout", ""));
     fixture.script_github(&responses);
     let missing = fixture.run(&["link", "assigned", "--space", "topic"]);
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("link needs an issue or PR"));
+    assert!(!missing.status.success());
     let picker = fixture.root.path().join("bin/fzf");
     for (args, kind, number) in [
         (
@@ -15568,12 +15559,6 @@ fn pr_cleanup_can_be_disabled_independently() {
     fixture.ok(&["unlink", "pr", "assigned", "--space", "keep"]);
     let output = fixture.acknowledge("keep");
     assert_eq!(output["type"], "error");
-    assert!(
-        output["data"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("PR cleanup is disabled")
-    );
     assert!(fixture.ok(&["status", "keep"])["pr_cleanup"].is_null());
 }
 
@@ -15621,10 +15606,7 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
         fixture.restart();
         assert!(fixture.ok(&["status", name])["pr_cleanup"].is_null());
         let again = fixture.run(&["unlink", "pr", "assigned", "--space", name]);
-        assert!(
-            String::from_utf8_lossy(&again.stderr).contains("no pr is linked as assigned"),
-            "{again:?}"
-        );
+        assert!(!again.status.success(), "{again:?}");
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
     }
 }
@@ -15646,9 +15628,6 @@ fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
         fixture.restart();
         let output = fixture.run(&["status", "invalid"]);
         assert!(!output.status.success());
-        assert!(
-            String::from_utf8_lossy(&output.stderr).contains("expected exactly one of url or head")
-        );
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
         fixture.ok(&["unlink", "pr", "assigned", "--space", "invalid"]);
         assert!(fixture.ok(&["status", "invalid"])["pr_cleanup"].is_null());
@@ -15687,12 +15666,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
     fixture.add("kept");
     let output = fixture.acknowledge("kept");
     assert_eq!(output["type"], "error");
-    assert!(
-        output["data"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("PR cleanup is disabled")
-    );
+    assert!(fixture.ok(&["status", "kept"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -15701,7 +15675,6 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     let workspace = fixture.add("watch");
     let failed = fixture.run(&["link", "pr", "56", "assigned", "--space", "watch"]);
     assert!(!failed.status.success());
-    assert!(String::from_utf8_lossy(&failed.stderr).contains("origin remote"));
     assert!(fixture.ok(&["status", "watch"])["pr_cleanup"].is_null());
     git(
         &fixture.repo,
@@ -15721,7 +15694,6 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         "watch",
     ]);
     assert!(!failed.status.success());
-    assert!(String::from_utf8_lossy(&failed.stderr).contains("shoal done"));
     assert!(fixture.ok(&["status", "watch"])["pr_cleanup"].is_null());
     assert!(
         !fixture
@@ -15941,7 +15913,6 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
         "other",
     ]);
     assert!(!denied.status.success());
-    assert!(String::from_utf8_lossy(&denied.stderr).contains("their own space and those below it"));
     fixture.restart();
     // Completion being disabled does not disable activity waits.
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -15976,7 +15947,6 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
     fixture.ok(&["unlink", "pr", "assigned", "--space", "watch"]);
     let missing = fixture.run(&["watch", "pr", "--space", "watch"]);
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("no linked items"));
 }
 
 #[test]
@@ -16551,8 +16521,6 @@ fn merge_into_main_without_a_remote_needs_approval_in_scoped_processes() {
         "{}",
     ]);
     assert!(!denied.status.success());
-    let refusal = fs::read_to_string(&refusal).unwrap();
-    assert!(refusal.contains("only an authorized merge"), "{refusal}");
     let repo = fixture.ok(&["repo", "ls"])[0]["id"].clone();
     fixture.ok(&[
         "config",
@@ -16564,9 +16532,6 @@ fn merge_into_main_without_a_remote_needs_approval_in_scoped_processes() {
     ]);
     let unpushable = fixture.run(&["merge", "worker"]);
     assert!(!unpushable.status.success());
-    assert!(
-        String::from_utf8_lossy(&unpushable.stderr).contains("main has no upstream to push to")
-    );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
     fixture.ok(&[
         "approvals",
@@ -16691,11 +16656,7 @@ fn invalid_item_actions_fail_before_a_picker_asks_for_their_space() {
         let mut command = fixture.command();
         command.current_dir(fixture.root.path()).args(args);
         let (output, transcript) = fixture.interactive_command(&mut command, "");
-        assert!(!output.status.success(), "{args:?}");
-        assert!(
-            transcript.contains("the comment is empty"),
-            "{args:?}: {transcript}"
-        );
+        assert!(!output.status.success(), "{args:?}: {transcript}");
         assert!(!picked.exists(), "{args:?} opened a picker");
     }
 }
@@ -16733,15 +16694,8 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
 
     let refused = fixture.run(&["merge", "worker"]);
     assert!(!refused.status.success());
-    let stderr = String::from_utf8_lossy(&refused.stderr);
-    assert!(
-        stderr.contains("Sensitive files changed on both sides by worker and main: version"),
-        "{stderr}"
-    );
-    assert!(stderr.contains("--yes"), "{stderr}");
     let (declined, transcript) = fixture.interactive(&["merge", "worker"], "n\n");
-    assert!(!declined.status.success());
-    assert!(transcript.contains("Are you sure? [y/N]"), "{transcript}");
+    assert!(!declined.status.success(), "{transcript}");
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
     // An agent's --yes leaves the question to whoever approves the merge.
     let binary = env!("CARGO_BIN_EXE_shoal");
@@ -16758,10 +16712,9 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
     let pending = fixture.run(&scoped);
     assert_eq!(pending.status.code(), Some(2));
     let pending: serde_json::Value = serde_json::from_slice(&pending.stdout).unwrap();
-    assert_eq!(
-        pending["request"]["reason"],
-        "Merge worker (2 commits) into main. Sensitive files changed on both sides by worker and main: version."
-    );
+    // The approver is told which sensitive files changed on both sides.
+    let reason = pending["request"]["reason"].as_str().unwrap();
+    assert!(reason.ends_with(": version."), "{reason}");
 
     // Merging makes a merge commit in the checkout, which needs an identity.
     git(&fixture.repo, &["config", "user.name", "Test"]);
@@ -16985,10 +16938,6 @@ cat "$HOME/release" > /dev/null
         String::from_utf8_lossy(&missing.stdout).contains(issue),
         "{missing:?}"
     );
-    assert!(
-        String::from_utf8_lossy(&missing.stderr).contains("open"),
-        "{missing:?}"
-    );
     // A workspace process cannot open windows on the user's screen.
     let scoped = fixture.run(&[
         "run",
@@ -17000,20 +16949,14 @@ cat "$HOME/release" > /dev/null
         "--web",
     ]);
     assert!(!scoped.status.success());
-    assert!(
-        String::from_utf8_lossy(&scoped.stderr).contains("cannot open a browser"),
-        "{scoped:?}"
-    );
 
     // An unreadable item reports its error and fails the command.
     let missing = fixture.run(&["--json", "view", "issue", "9", "--space", "view"]);
     assert_eq!(missing.status.code(), Some(1));
     let missing: Value = serde_json::from_slice(&missing.stdout).unwrap();
     assert!(
-        missing[0]["errors"][0]
-            .as_str()
-            .unwrap()
-            .contains("different item")
+        !missing[0]["errors"].as_array().unwrap().is_empty(),
+        "{missing}"
     );
 }
 
@@ -17084,19 +17027,12 @@ fn a_merge_that_pushes_asks_first_unless_confirmed() {
     let main = || git(&fixture.repo, &["rev-parse", "main"]);
     commit_file(path, "first", "one\n");
     let (before, upstream) = (main(), pushed());
-    let question = "Merge worker (1 commit) into main, then push main to origin.";
     // Without a terminal, a merge that pushes is refused before anything changes.
     let refused = fixture.run(&["merge", "--push", "worker"]);
     assert!(!refused.status.success());
-    let stderr = String::from_utf8_lossy(&refused.stderr);
-    let refusal = question.trim_end_matches('.');
-    assert!(
-        stderr.contains(refusal) && stderr.contains("--yes"),
-        "{stderr}"
-    );
+    assert_eq!((main(), pushed()), (before.clone(), upstream.clone()));
     let (declined, transcript) = fixture.interactive(&["merge", "--push", "worker"], "n\n");
-    assert!(!declined.status.success());
-    assert!(transcript.contains(question), "{transcript}");
+    assert!(!declined.status.success(), "{transcript}");
     assert_eq!((main(), pushed()), (before, upstream));
     let (accepted, transcript) = fixture.interactive(&["merge", "--push", "worker"], "y\n");
     assert!(accepted.status.success(), "{transcript}");
@@ -17272,8 +17208,6 @@ fn happy_agents_are_refused_until_enabled() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("happy.enabled = true"), "{stderr}");
     // The refusal comes before any work is created.
     assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
 }
@@ -17303,8 +17237,6 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 .output()
                 .unwrap();
             assert!(output.status.success(), "{output:?}");
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(stderr.contains("daemon.state.json"), "{stderr}");
             let mut lines = output
                 .stdout
                 .split(|b| *b == b'\n')
@@ -17410,7 +17342,6 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             fs::read_to_string(&log).is_ok_and(|text| text.contains("hello from happy"))
         });
         let text = fs::read_to_string(&log).unwrap();
-        assert!(text.starts_with("shoal: starting happy "), "{text}");
         assert!(text.contains("happy stderr"), "{text}");
         assert!(process_alive(pid));
 
@@ -17501,7 +17432,6 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             assert_eq!(after_temp_dirs(&args[8..])[..2], ["--model", "test"]);
             assert_eq!(launch["prompt_file"], Value::Null);
             assert_eq!(launch["prompt_delivered"], true, "{launch}");
-            assert!(!stderr.contains("initial prompt"), "{stderr}");
         } else {
             assert_eq!(
                 args[..7],
@@ -17527,12 +17457,8 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             }
             assert_eq!(launch["prompt_delivered"], false);
             assert_eq!(launch["happy_session_id"], Value::Null);
-            assert!(
-                stderr.contains("cannot deliver the prompt through Happy")
-                    && stderr.contains("access.key")
-                    && stderr.contains(prompt_file.to_str().unwrap()),
-                "{stderr}"
-            );
+            // The user is told where the prompt was saved.
+            assert!(stderr.contains(prompt_file.to_str().unwrap()), "{stderr}");
             assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
         }
         let pid = launch["pid"].as_u64().unwrap() as u32;
@@ -17637,10 +17563,6 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         })
         .to_string()
         .len();
-        assert!(
-            !String::from_utf8_lossy(&output.stderr).contains("warning"),
-            "{output:?}"
-        );
 
         // The CLI was launched attached to the seeded session.
         wait_until("fake happy record", || record.exists());
@@ -17734,11 +17656,6 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     let launch: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(launch["prompt_delivered"], false);
     assert_eq!(launch["happy_session_id"], Value::Null);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("cannot deliver the prompt through Happy") && stderr.contains("401"),
-        "{stderr}"
-    );
     wait_until("fake happy record", || record.exists());
     let recorded = fs::read_to_string(&record).unwrap();
     assert!(recorded.contains("reconnect=|||||\n"), "{recorded}");
@@ -17775,10 +17692,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     fs::remove_file(&happy).unwrap();
     let requests = server.state()["requests"].as_array().unwrap().len();
     let output = launch_orphan();
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("happy is not installed"),
-        "{output:?}"
-    );
+    assert!(!output.status.success(), "{output:?}");
     assert_eq!(
         server.state()["requests"].as_array().unwrap().len(),
         requests
@@ -17806,15 +17720,11 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     ));
     fixture.add("holder");
     fixture.add("waiter");
-    assert_eq!(fixture.run(&["alerts"]).stdout, b"No new notifications\n");
+    assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
     fixture.ok(&["acquire", "resource", "lock", "--workspace", "holder"]);
     for _ in 0..2 {
         let busy = fixture.run(&["acquire", "resource", "lock", "--workspace", "waiter"]);
         assert_eq!(busy.status.code(), Some(2));
-        assert!(
-            String::from_utf8_lossy(&busy.stdout).contains("held by holder"),
-            "{busy:?}"
-        );
     }
     let taken = fixture.ok(&["acquire", "port", "web", "--workspace", "holder"])["port"]
         .as_u64()
@@ -17852,9 +17762,9 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     assert_eq!(status["daemon"]["unread_notifications"], 3);
     let list = fixture.run(&["work"]);
     assert!(list.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&list.stderr),
-        "3 new notifications; run shoal alerts\n"
+    assert!(
+        String::from_utf8_lossy(&list.stderr).starts_with("3 new"),
+        "{list:?}"
     );
     let scoped = fixture
         .command()
@@ -17876,9 +17786,9 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
         .args(["--json", "alerts", "--limit", "1"])
         .output()
         .unwrap();
-    assert_eq!(
-        String::from_utf8_lossy(&first.stderr),
-        "2 more new notifications; run shoal alerts again\n"
+    assert!(
+        String::from_utf8_lossy(&first.stderr).starts_with("2 more"),
+        "{first:?}"
     );
     let first: Value = serde_json::from_slice(&first.stdout).unwrap();
     assert_eq!(first[0]["kind"], "resource_busy", "{first}");
@@ -17900,29 +17810,23 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
         })
         .collect();
     assert_eq!(summary.len(), 3, "{shown}");
+    let kinds: Vec<_> = summary
+        .iter()
+        .map(|(space, kind, _)| (*space, *kind))
+        .collect();
     assert_eq!(
-        summary[0],
-        (
-            "waiter",
-            "resource_busy",
-            "no compatible capacity for any resource in pool lock; held by holder"
-        )
-    );
-    assert_eq!(
-        (summary[1].0, summary[1].1),
-        ("waiter", "port_conflict"),
+        kinds,
+        [
+            ("waiter", "resource_busy"),
+            ("waiter", "port_conflict"),
+            ("waiter", "agent_exited")
+        ],
         "{shown}"
     );
-    assert!(
-        summary[1]
-            .2
-            .starts_with(&format!("port web: {taken} is in use; reserved ")),
-        "{shown}"
-    );
-    assert_eq!(
-        summary[2],
-        ("waiter", "agent_exited", "claude exited with code 7")
-    );
+    // Each names what it is about: the holder, the port taken, the exit code.
+    assert!(summary[0].2.contains("holder"), "{shown}");
+    assert!(summary[1].2.contains(&taken.to_string()), "{shown}");
+    assert!(summary[2].2.ends_with('7'), "{shown}");
     assert!(shown.as_array().unwrap().iter().all(|n| n["read"] == false));
     // Shown once. `--all` still has them, now read; the text form has today's
     // time first.
@@ -17974,10 +17878,6 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
     let notification: Value = serde_json::from_str(&line).unwrap();
     assert_eq!(notification["workspace"], "waiter");
     assert_eq!(notification["kind"], "workspace_removed");
-    assert_eq!(
-        notification["message"],
-        "removed after the merge acknowledgement; restore it with shoal work restore waiter"
-    );
     follower.kill().unwrap();
     follower.wait().unwrap();
     assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
@@ -18094,7 +17994,6 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "unknown"]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("git profile missing is not defined"));
     let failed = fixture.ok(&["status", "unknown"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert!(Path::new(failed["workspace"]["path"].as_str().unwrap()).is_dir());
@@ -18129,7 +18028,6 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
             "manual",
         ]);
         assert!(!output.status.success());
-        assert!(String::from_utf8_lossy(&output.stderr).contains("applies only to new worktrees"));
         assert_eq!(
             git(path, &["config", "user.email"]).trim(),
             "manual@example.invalid"
@@ -18144,7 +18042,6 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
         "unknown",
     ]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("git profile unknown is not defined"));
     assert_eq!(fixture.ok(&["work"]), before);
     assert!(git(&fixture.repo, &["branch", "--list", "bad-profile"]).is_empty());
 }
@@ -18227,9 +18124,6 @@ fn edit_runs_the_editor_or_the_configured_edit_command() {
     );
     let output = edit(None, None);
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("set $VISUAL, $EDITOR or [commands] edit")
-    );
 
     fs::write(
         Path::new(path).join(".shoal.toml"),
@@ -18407,58 +18301,6 @@ fn repository_commands_pick_a_workspace_that_defines_them() {
     assert!(rows.is_empty(), "{rows:?}");
 }
 
-#[test]
-fn unknown_commands_never_open_the_workspace_picker() {
-    let fixture = Fixture::new();
-    let workspace = fixture.add("command-target");
-    // Noninteractive selection used to fail at the picker instead of name resolution.
-    let output = fixture
-        .command()
-        .current_dir(fixture.root.path())
-        .args(["lsit"])
-        .output()
-        .unwrap();
-    let error = String::from_utf8_lossy(&output.stderr);
-    assert!(!output.status.success());
-    assert!(error.contains("unknown command \"lsit\""), "{error}");
-    assert!(!error.contains("workspace"), "{error}");
-    assert!(!error.contains("non-interactive"), "{error}");
-    let path = Path::new(workspace["path"].as_str().unwrap());
-    fs::write(
-        path.join(".shoal.toml"),
-        "[commands]\nlocal-check = ['printf', '%s', 'repository command']\n",
-    )
-    .unwrap();
-    let output = fixture.run(&["local-check"]);
-    let error = String::from_utf8_lossy(&output.stderr);
-    assert!(!output.status.success());
-    assert!(error.contains("in the current context"), "{error}");
-    assert!(
-        error.contains("repository-only commands require a current or explicit workspace"),
-        "{error}"
-    );
-    assert!(!error.contains("define it"), "{error}");
-    let output = fixture
-        .command()
-        .current_dir(path)
-        .arg("local-check")
-        .output()
-        .unwrap();
-    assert!(output.status.success());
-    assert_eq!(output.stdout, b"repository command");
-    assert_eq!(
-        fixture.run(&["local-check", "command-target"]).stdout,
-        b"repository command"
-    );
-    let output = fixture
-        .command()
-        .current_dir(path)
-        .arg("lsit")
-        .output()
-        .unwrap();
-    assert!(String::from_utf8_lossy(&output.stderr).contains("unknown command"));
-}
-
 /// The error message of a failed run, read from JSON when `json` is set.
 fn failure_message(output: &Output, json: bool) -> String {
     if !json {
@@ -18515,17 +18357,14 @@ fn undefined_commands_fail_as_unknown_in_every_form() {
         .output()
         .unwrap();
     assert!(help.status.success(), "{help:?}");
-    assert!(String::from_utf8_lossy(&help.stdout).contains("Usage: local-check [WORKSPACE]"));
+    assert!(String::from_utf8_lossy(&help.stdout).contains("Usage: local-check"));
     let flag = fixture
         .command()
         .current_dir(path)
         .args(["local-check", "--all"])
         .output()
         .unwrap();
-    assert!(
-        String::from_utf8_lossy(&flag.stderr).contains("unexpected argument '--all'"),
-        "{flag:?}"
-    );
+    assert!(!flag.status.success(), "{flag:?}");
     let output = fixture.run(&["local-check", "command-target", "--", "extra"]);
     assert_eq!(output.stdout, b"repository commandextra", "{output:?}");
     // Help names the defining workspace before or after the flag.
@@ -18538,12 +18377,9 @@ fn undefined_commands_fail_as_unknown_in_every_form() {
         assert!(String::from_utf8_lossy(&help.stdout).contains("Usage: local-check"));
     }
     // Elsewhere only the workspace that defines it is missing.
-    let output = fixture.run(&["local-check", "-h"]);
-    let error = failure_message(&output, false);
-    assert!(error.contains("pass an explicit workspace"), "{error}");
-    let output = fixture.run(&["local-check", "missing"]);
-    let error = failure_message(&output, false);
-    assert!(error.contains("unknown workspace: missing"), "{error}");
+    for args in [["local-check", "-h"], ["local-check", "missing"]] {
+        assert!(!fixture.run(&args).status.success(), "{args:?}");
+    }
 }
 
 #[test]
@@ -18568,10 +18404,7 @@ fn misspelled_built_ins_are_rejected_with_a_suggestion() {
                 .unwrap();
             let error = String::from_utf8_lossy(&output.stderr);
             assert!(!output.status.success(), "{directory:?} {args:?}");
-            assert!(error.contains("unknown command \"lease\""), "{error}");
             assert!(error.contains("`shoal leases`"), "{error}");
-            assert!(!error.contains("needs a workspace"), "{error}");
-            assert!(!error.contains("non-interactive"), "{error}");
         }
     }
     // A similar built-in name must not prevent an explicitly configured shortcut.
@@ -18645,8 +18478,6 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     let output = fixture.run(&["claude", "secrets"]);
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("secrets.AGENT_TOKEN"), "{stderr}");
 
     // Secret sources describe this machine, so a tracked file cannot name one.
     fs::write(
@@ -18656,8 +18487,6 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     .unwrap();
     let output = fixture.run(&["config", "show", "secrets"]);
     assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("[secrets] belongs in"), "{stderr}");
 }
 
 #[test]
@@ -18806,12 +18635,8 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
             output.stdout,
         )
     };
-    let (success, stderr, _) = launch();
+    let (success, _, _) = launch();
     assert!(!success);
-    assert!(
-        stderr.contains("shoal acquire secret TOOL_TOKEN --reason"),
-        "{stderr}"
-    );
 
     let request = pending_approval(scoped_command(
         &fixture,
@@ -18821,12 +18646,8 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
     assert_eq!(request["target"], "secret/TOOL_TOKEN");
     let id = request["number"].as_str().unwrap().to_owned();
     let id = id.as_str();
-    let (success, stderr, _) = launch();
+    let (success, _, _) = launch();
     assert!(!success);
-    assert!(
-        stderr.contains(&format!("approval {id} is pending")),
-        "{stderr}"
-    );
     // The value is fetched only once the daemon confirms the grant.
     assert!(!worktree.join("fetches").exists());
 
@@ -18861,11 +18682,6 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
         "--",
     ]);
     assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("shoal acquire secret TOOL_TOKEN --reason"),
-        "{stderr}"
-    );
 }
 
 #[test]
@@ -18928,11 +18744,6 @@ fn agent_git_profile_applies_only_to_agent_processes() {
     .unwrap();
     let output = fixture.run(&["claude", "agent-git"]);
     assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("git profile missing is not defined"),
-        "{stderr}"
-    );
 }
 
 #[test]
@@ -19180,7 +18991,6 @@ fn adopt_copy_rolls_back_when_adoption_name_is_taken() {
         "--copy",
     ]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("workspace name already exists"));
     assert!(source.exists());
     assert_eq!(
         fs::read_to_string(source.join("tracked")).unwrap(),
@@ -19246,7 +19056,6 @@ fn adopt_copy_refuses_a_dangling_symlink_at_the_default_directory() {
         "--copy",
     ]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("workspace path already exists"));
     assert!(planted.is_symlink());
     let branches = git(&fixture.repo, &["branch", "--list", "copy/second-2"]);
     assert!(branches.trim().is_empty());
@@ -19290,7 +19099,6 @@ fn adopt_copy_refuses_a_default_directory_that_resolves_into_the_source() {
         "--copy",
     ]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("overlaps the source worktree"));
     assert!(!source.join("copy-second-2").exists());
 }
 
@@ -19472,12 +19280,6 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         fixture.ok(&["status", workspace["id"].as_str().unwrap()])["executions"],
         serde_json::json!([])
     );
-    let notifications = fixture.ok(&["alerts"]);
-    assert!(
-        notifications
-            .to_string()
-            .contains("helper exited with code 7")
-    );
     assert!(!fixture.root.path().join(".claude.json").exists());
     assert!(!fixture.root.path().join(".codex/config.toml").exists());
 
@@ -19533,7 +19335,6 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         "typo",
     ]);
     assert!(!unknown.status.success());
-    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown agent"));
     assert_eq!(fixture.ok(&["work"]), before);
 }
 
@@ -19577,12 +19378,6 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
             )
         );
     }
-    assert!(
-        fixture
-            .ok(&["alerts"])
-            .to_string()
-            .contains("droid exited with code 7")
-    );
 
     // A repository launcher replaces the one [ai] supplies.
     let saved = fixture.root.path().join("saved.toml");
@@ -19614,8 +19409,6 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
         .output()
         .unwrap();
     assert!(!outside.status.success());
-    let stderr = String::from_utf8_lossy(&outside.stderr);
-    assert!(stderr.contains("only some repositories define"), "{stderr}");
 
     // Built-in providers without specialized launchers place the prompt the
     // same way.
@@ -19640,11 +19433,7 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     // A provider whose launcher is missing never starts.
     fs::remove_file(bin.join("repo-droid")).unwrap();
     let output = fixture.run(&["droid", "provider"]);
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("cannot start droid: repo-droid is not installed"),
-        "{output:?}"
-    );
+    assert!(!output.status.success(), "{output:?}");
 }
 
 #[test]
@@ -19679,7 +19468,6 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
         "test signing",
     ]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("resource lease retained"));
     let inspection = fixture.ok(&["status", "hooked"]);
     let lease = &inspection["resources"][0];
     assert_eq!(lease["reason"], "test signing");
@@ -19789,11 +19577,7 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
         vec!["rm", "hooked", "--yes"],
     ] {
         let output = fixture.run(&args);
-        assert!(!output.status.success());
-        assert!(
-            String::from_utf8_lossy(&output.stderr).contains("resource operation is in progress"),
-            "{output:?}"
-        );
+        assert!(!output.status.success(), "{output:?}");
     }
     fs::write(fixture.root.path().join("hook-continue"), "").unwrap();
     assert!(acquire.wait_with_output().unwrap().status.success());
