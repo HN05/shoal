@@ -26,8 +26,7 @@ fn web_demos_print_their_url_and_over_ssh_how_to_forward_it() {
     let over_ssh = instructions(Preset::Web, &web, Some("10.0.0.2 52000 10.0.0.1 22")).unwrap();
     assert_eq!(over_ssh[0], "http://localhost:49200");
     assert!(
-        over_ssh[1].contains("ssh -L 49200:localhost:49200 ")
-            && over_ssh[1].ends_with("@10.0.0.1"),
+        over_ssh[1].contains("ssh -L 49200:localhost:49200 ") && over_ssh[1].ends_with("@10.0.0.1"),
         "{}",
         over_ssh[1]
     );

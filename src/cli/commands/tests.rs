@@ -146,26 +146,15 @@ fn bare_repo_opens_the_repository_menu() {
 }
 
 #[test]
-fn watch_waits_without_a_default_timeout() {
-    let cli = <Cli as clap::Parser>::try_parse_from(["shoal", "watch"]).unwrap();
-    let Command::Items(ItemsCommand::Watch { timeout, .. }) = cli.command.unwrap() else {
-        panic!("expected watch command");
+fn watch_refuses_a_timeout_its_client_deadline_would_expire() {
+    let parse = |timeout: &str| {
+        <Cli as clap::Parser>::try_parse_from(["shoal", "watch", "--timeout", timeout])
     };
-    assert_eq!(timeout, None);
-
-    let cli = <Cli as clap::Parser>::try_parse_from(["shoal", "watch", "--timeout", "60"]).unwrap();
-    let Command::Items(ItemsCommand::Watch { timeout, .. }) = cli.command.unwrap() else {
-        panic!("expected watch command");
-    };
-    assert_eq!(timeout, Some(60));
-
+    assert!(parse("60").is_ok());
     // The client's own deadline would otherwise turn an invalid timeout into
     // an expired wait.
     for invalid in ["0", "3601"] {
-        assert!(
-            <Cli as clap::Parser>::try_parse_from(["shoal", "watch", "--timeout", invalid])
-                .is_err()
-        );
+        assert!(parse(invalid).is_err(), "{invalid}");
     }
 }
 

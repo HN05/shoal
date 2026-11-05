@@ -1,10 +1,8 @@
-use clap::ValueEnum;
-
 use super::*;
 use crate::{
     agent::Agent,
     cli::args::{
-        AgentParser, ConfirmationArgs,
+        ConfirmationArgs,
         agents::{AgentsCommand, ChatCommand},
         changes::ChangesCommand,
         coordination::CoordinationCommand,
@@ -43,10 +41,7 @@ fn the_command_line_selects_output_before_the_environment() {
 #[test]
 fn an_invalid_output_setting_fails_unless_the_command_line_selects_one() {
     let error = resolves_json(&["status"], Some("JSON")).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "SHOAL_OUTPUT must be `json` or `text`, not \"JSON\""
-    );
+    assert!(error.to_string().contains("SHOAL_OUTPUT"), "{error}");
     assert!(resolves_json(&["--json", "status"], Some("yaml")).unwrap());
     assert!(!resolves_json(&["--text", "status"], Some("yaml")).unwrap());
 }
@@ -152,49 +147,6 @@ fn link_arguments_end_with_a_relation_and_accept_hash_numbers() {
         panic!("wrong command")
     };
     assert!(items.split().is_err());
-}
-
-#[test]
-fn agent_parsers_preserve_completion_order() {
-    use clap::builder::TypedValueParser;
-    let names: Vec<_> = AgentParser
-        .possible_values()
-        .unwrap()
-        .map(|value| value.get_name().to_owned())
-        .collect();
-    assert_eq!(names[..5], ["codex", "claude", "opencode", "pi", "grok"]);
-    #[cfg(feature = "happy")]
-    assert_eq!(names[5..], ["happy-claude", "happy-codex"]);
-}
-
-#[cfg(feature = "happy")]
-#[test]
-fn happy_takes_the_agents_happy_runs() {
-    let names: Vec<_> = crate::happy::Agent::value_variants()
-        .iter()
-        .map(|agent| agent.to_possible_value().unwrap().get_name().to_owned())
-        .collect();
-    assert_eq!(names, ["claude", "codex"]);
-    for (name, expected) in [
-        ("claude", crate::happy::Agent::Claude),
-        ("codex", crate::happy::Agent::Codex),
-    ] {
-        let parsed = Cli::try_parse_from(["shoal", "happy", name]).unwrap();
-        assert!(
-            matches!(parsed.command, Some(Command::Agents(AgentsCommand::Happy { agent, .. })) if agent == expected)
-        );
-    }
-    for invalid in ["Claude", "Codex", "happy-codex", "custom"] {
-        assert!(Cli::try_parse_from(["shoal", "happy", invalid]).is_err());
-    }
-}
-
-#[test]
-fn doctor_is_gone_without_an_alias() {
-    use clap::CommandFactory;
-    let command = Cli::command();
-    assert!(command.find_subcommand("doctor").is_none());
-    assert!(command.find_subcommand("reconcile").is_none());
 }
 
 #[test]

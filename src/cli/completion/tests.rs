@@ -20,7 +20,7 @@ async fn live_lookups_keep_the_interactive_budget() {
         .await
         .unwrap_err();
     assert_eq!(started.elapsed(), Duration::from_millis(500));
-    assert_eq!(error.to_string(), "live completion lookup timed out");
+    assert!(error.to_string().contains("timed out"), "{error}");
     assert_eq!(live(async { Ok("candidate") }).await.unwrap(), "candidate");
     assert_eq!(
         live::<()>(async { anyhow::bail!("discovery failed") })

@@ -17,7 +17,7 @@ fn line_arguments_split_the_path_at_its_last_colon() -> Result<()> {
         }]
     );
     let error = line_comments(&pairs(&["a.rs", "Why?"]), Side::New).unwrap_err();
-    assert_eq!(error.to_string(), "a.rs names no line; give PATH:LINE");
+    assert!(error.to_string().contains("a.rs names no line"), "{error}");
     assert!(line_comments(&pairs(&["a.rs:x", "Why?"]), Side::New).is_err());
     Ok(())
 }

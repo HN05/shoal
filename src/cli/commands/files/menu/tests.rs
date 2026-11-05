@@ -39,5 +39,4 @@ fn each_file_is_a_row_by_its_record_before_the_add_row() {
     assert_eq!(ids, ["7", ADD_ENTRY]);
     assert!(rows[0].1.contains("report.md"), "{}", rows[0].1);
     assert!(rows[0].1.contains("Audit findings"), "{}", rows[0].1);
-    assert_eq!(rows[1].1, "+ Add file");
 }

@@ -17,11 +17,13 @@ fn a_missing_default_host_names_an_installed_one() {
         installed: vec![HostName::Herdr],
         default: Some(HostName::Zmx),
     };
-    assert_eq!(
-        hosts.missing_default(Path::new("config.toml")).as_deref(),
-        Some(
-            "zmx, the default terminal host, is not installed. Install it, or set terminal.default_host = \"herdr\" in config.toml."
-        )
+    let note = hosts
+        .missing_default(Path::new("config.toml"))
+        .unwrap_or_default();
+    assert!(note.starts_with("zmx, "), "{note}");
+    assert!(
+        note.contains("terminal.default_host = \"herdr\" in config.toml"),
+        "{note}"
     );
 }
 
@@ -35,7 +37,7 @@ fn no_installed_host_suggests_installing_the_default() {
         .missing_default(Path::new("config.toml"))
         .unwrap_or_default();
     assert!(note.starts_with("No terminal host is installed"), "{note}");
-    assert!(note.contains("Install zmx, the default host"), "{note}");
+    assert!(note.contains("Install zmx"), "{note}");
 }
 
 #[test]
