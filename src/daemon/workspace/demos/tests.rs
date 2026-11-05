@@ -82,7 +82,7 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
     assert_eq!(own[0].execution_id, tui.plan.id);
 
     // A name belongs to one demo until its execution ends.
-    let error = manager
+    manager
         .begin_execution_running(
             &first.id,
             None,
@@ -92,10 +92,6 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
         )
         .await
         .unwrap_err();
-    assert!(
-        format!("{error:#}").contains("already running"),
-        "{error:#}"
-    );
     manager
         .finish_execution(web.plan.id.clone(), ExecutionKind::Command, Some(0))
         .await

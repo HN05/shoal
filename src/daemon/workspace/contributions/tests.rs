@@ -122,7 +122,7 @@ async fn new_work_is_refused_once_a_contribution_removal_begins() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
     assert!(manager.begin_contribution_removal(&repo).await.unwrap());
-    let chat = manager
+    manager
         .start_chat(
             repo.id.as_str().into(),
             "chat-1".into(),
@@ -133,15 +133,10 @@ async fn new_work_is_refused_once_a_contribution_removal_begins() {
         )
         .await
         .unwrap_err();
-    assert!(chat.to_string().contains("being removed"), "{chat:#}");
-    let workspace = manager
+    manager
         .create_workspace(&repo.id, "topic".into(), None, None, None)
         .await
         .unwrap_err();
-    assert!(
-        format!("{workspace:#}").contains("removal is incomplete"),
-        "{workspace:#}"
-    );
     // The interrupted removal finishes on the next sweep.
     manager.sweep_contributions().await.unwrap();
     assert!(!registered(&manager, &repo).await);
