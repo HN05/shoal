@@ -330,3 +330,15 @@ fn cache_names_are_lowercase_identifiers() {
         assert!(validate_caches(&configured(&[name])).is_err(), "{name:?}");
     }
 }
+
+#[test]
+fn the_default_mode_starts_only_in_a_workspace() {
+    let error = parse("[modes.worker]\nkind = 'chat'\n")
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.starts_with("modes.worker.kind must be workspace"),
+        "{error}"
+    );
+    parse("[modes.worker]\nkind = 'workspace'\n[modes.talk]\nkind = 'chat'\n").unwrap();
+}

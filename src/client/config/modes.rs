@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -92,15 +92,29 @@ pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
     ])
 }
 
-/// The mode and rule names one layer writes, which name their files.
+/// The mode and rule names one layer writes, which name their files, and
+/// the kind of the default mode, which always starts in a workspace.
 pub fn validate(config: &RepoConfig) -> Result<()> {
     for name in config.modes.keys() {
         crate::validate::name("mode", name)?;
     }
+    let default_kind = config.modes.get(DEFAULT).and_then(|mode| mode.kind);
+    ensure!(
+        default_kind.is_none_or(|kind| kind == SpaceKind::Workspace),
+        "modes.{DEFAULT}.kind must be workspace: shoal start without --mode starts a \
+         workspace; define another mode for chats"
+    );
     for name in config.rules.keys() {
         crate::validate::name("rule", name)?;
     }
     Ok(())
+}
+
+/// The mode `name` of `modes`, refused when no config defines it.
+pub fn get<'a>(modes: &'a BTreeMap<String, Mode>, name: &str) -> Result<&'a Mode> {
+    modes
+        .get(name)
+        .with_context(|| format!("no mode {name}; [modes.{name}] in config defines one"))
 }
 
 /// Refuse a mode that names a rule no layer defines, once they combine.

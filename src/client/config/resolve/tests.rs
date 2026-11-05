@@ -8,7 +8,7 @@ use serde_json::Value;
 const FULL: &str = "\
 git_profile = 'work'\n\
 [agent]\ndefault = 'claude'\nmodel = 'sonnet'\neffort = 'low'\nmax_running = 2\ndirs = ['/tmp', '~/cache']\ngit_profile = 'agent'\n\
-[modes.worker]\nkind = 'chat'\nrules = ['chat']\ninstructions = 'work'\n[modes.chat]\nkind = 'workspace'\nrules = ['worker']\ninstructions = 'talk'\n\
+[modes.worker]\nkind = 'workspace'\nrules = ['chat']\ninstructions = 'work'\n[modes.chat]\nkind = 'workspace'\nrules = ['worker']\ninstructions = 'talk'\n\
 [modes.plan]\nkind = 'workspace'\nrules = ['review']\ninstructions = 'plan'\n[rules.worker]\ntext = 'agent'\n[rules.chat]\ntext = 'chat'\n[rules.review]\ntext = 'review'\n\
 [terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
 [terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\

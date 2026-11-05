@@ -165,10 +165,7 @@ pub fn brief(
     place: Place<'_>,
     subject: Option<&Subject>,
 ) -> Result<Brief> {
-    let resolved = settings
-        .modes
-        .get(mode)
-        .with_context(|| format!("no mode {mode}; [modes.{mode}] in config defines one"))?;
+    let resolved = modes::get(&settings.modes, mode)?;
     let mut system = Vec::new();
     if let Place::Workspace { .. } = place {
         system.push(AGENT_GUIDANCE.trim_end().to_owned());
