@@ -40,8 +40,8 @@ impl Manager {
         Ok(())
     }
 
-    /// Confine a copy `caller` starts to its own workspace and those below
-    /// it, live ones only, naming the copied one by ID from then on.
+    /// Confine a copy `caller` starts to the workspaces its scope reaches,
+    /// live ones only, naming the copied one by ID from then on.
     pub(in crate::daemon) async fn copy_within(
         &self,
         caller: &Caller,
@@ -51,7 +51,7 @@ impl Manager {
             "workspace processes copy only existing workspaces; ask the user to start from a removed workspace's checkpoint",
         )?;
         ensure!(
-            self.within_subtree(&caller.space_id, &workspace.id).await?,
+            self.reaches(caller, &workspace.id).await?,
             "workspace processes copy only their own workspace and those below it"
         );
         source.workspace = workspace.id;
@@ -92,22 +92,18 @@ impl Manager {
         Ok(space.repository_id().map(str::to_owned))
     }
 
-    /// The spaces `target` finds among those `caller` may see: the ones
-    /// below its space and the workspace a chat runs in, or every space for
+    /// The spaces `target` finds among those `caller` may see: the ones its
+    /// scope reaches and the workspace a chat runs in, or every space for
     /// an unscoped caller.
     pub(in crate::daemon) async fn find_visible_spaces(
         &self,
         target: &SpaceTarget,
         caller: Option<&Caller>,
     ) -> Result<Vec<PresentSpace>> {
-        let within = match caller {
-            Some(caller) => {
-                let mut within = self.subtree(&caller.space_id).await?;
-                within.extend(self.chat_home(&caller.space_id).await?);
-                Some(within)
-            }
-            None => None,
-        };
+        let mut within = self.reached_spaces(caller).await?;
+        if let (Some(within), Some(caller)) = (&mut within, caller) {
+            within.extend(self.chat_home(&caller.space_id).await?);
+        }
         self.find_spaces(target, within).await
     }
 
@@ -215,32 +211,34 @@ impl Manager {
         Ok(request)
     }
 
-    /// The chats `caller` may see: those of its own space's subtree, or all
-    /// of them for an unscoped caller.
+    /// The chats `caller` may see: those its scope reaches, or all of them
+    /// for an unscoped caller.
     pub(in crate::daemon) async fn visible_chats(
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<Chat>> {
         let mut chats = self.chats().await?;
-        if let Some(caller) = caller {
-            let subtree = self.subtree(&caller.space_id).await?;
-            chats.retain(|chat| subtree.contains(&chat.id));
+        if let Some(reached) = self.reached_spaces(caller).await? {
+            chats.retain(|chat| reached.contains(&chat.id));
         }
         Ok(chats)
     }
 
-    /// The agent queue `caller` may see: the entries for the workspaces
-    /// below its own, where it may queue agents.
+    /// The agent queue `caller` may see: the entries for the workspaces its
+    /// scope reaches but its own, where it may queue agents.
     pub(in crate::daemon) async fn visible_queue(
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<QueueEntry>> {
         let mut entries = self.queue_entries().await?;
         if let Some(caller) = caller {
-            let subtree = self.subtree(&caller.space_id).await?;
+            let reached = self.reached_spaces(Some(caller)).await?;
             entries.retain(|entry| {
                 entry.workspace().is_some_and(|workspace| {
-                    workspace != caller.space_id && subtree.iter().any(|id| id == workspace)
+                    workspace != caller.space_id
+                        && reached
+                            .as_ref()
+                            .is_none_or(|reached| reached.iter().any(|id| id == workspace))
                 })
             });
         }
@@ -262,9 +260,9 @@ impl Manager {
     }
 
     /// Question `number` for the caller to answer, which must be one of a
-    /// workspace below its own. The answer binds to the question returned,
-    /// `shown` when given, and refuses it once a later question reuses its
-    /// number.
+    /// space its scope reaches other than its own. The answer binds to the
+    /// question returned, `shown` when given, and refuses it once a later
+    /// question reuses its number.
     pub(in crate::daemon) async fn answerable_question(
         &self,
         caller: &Caller,
@@ -279,7 +277,7 @@ impl Manager {
         ensure!(
             question.number == number
                 && question.space_id != *owner
-                && self.within_subtree(owner, &question.space_id).await?,
+                && self.reaches(caller, &question.space_id).await?,
             "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal questions ask"
         );
         Ok(question)

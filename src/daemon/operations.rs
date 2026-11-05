@@ -247,8 +247,7 @@ impl Manager {
         })?;
         if let Some(caller) = caller {
             ensure!(
-                self.within_subtree(&caller.space_id, &entry.workspace)
-                    .await?,
+                self.reaches(caller, &entry.workspace).await?,
                 "workspace processes can only follow operations of their own space and those below it"
             );
         }

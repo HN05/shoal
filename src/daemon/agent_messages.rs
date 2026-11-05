@@ -224,7 +224,9 @@ impl Manager {
     /// [`Self::send_space_message`] to every workspace with a running agent
     /// and each running chat but the sending chat `sender_chat`, of
     /// `repository` when it names one, or only to the workspaces below
-    /// `below`, the sender's own workspace; the spaces it reached. Identical unread messages collapse, so sending
+    /// `below`, the sender's own workspace; the spaces it reached. A chat
+    /// without a repository, which keeps no attached files, gets no message
+    /// with `attachments`. Identical unread messages collapse, so sending
     /// again after a failure does not repeat it to recipients that have not
     /// read it yet.
     pub async fn send_all_message(
@@ -236,7 +238,10 @@ impl Manager {
         below: Option<&str>,
         sender_chat: Option<&str>,
     ) -> Result<Reached> {
-        let (workspaces, chats) = self.recipients(repository, below, sender_chat).await?;
+        let files = !attachments.is_empty();
+        let (workspaces, chats) = self
+            .recipients(repository, below, sender_chat, files)
+            .await?;
         for workspace in &workspaces {
             self.send_agent_message(
                 &workspace.id,
@@ -264,12 +269,13 @@ impl Manager {
     /// The workspaces with a running agent, by name, except those being
     /// removed, and the running chats but `sender_chat`, of `repository`
     /// when it names one; only the workspaces below `below` when it names
-    /// one.
+    /// one. With `files`, only the chats that keep attached files.
     async fn recipients(
         &self,
         repository: Option<&Selector>,
         below: Option<&str>,
         sender_chat: Option<&str>,
+        files: bool,
     ) -> Result<(Vec<Workspace>, Vec<Chat>)> {
         let repository = match repository {
             Some(repository) => Some(self.repository(repository.clone()).await?.id),
@@ -304,6 +310,7 @@ impl Manager {
         };
         chats.retain(|chat| {
             in_repository(chat.repository_id.as_ref())
+                && (!files || chat.repository_id.is_some())
                 && chat.restore.is_none()
                 && sender_chat.is_none_or(|sender| sender != chat.id && sender != chat.name)
         });

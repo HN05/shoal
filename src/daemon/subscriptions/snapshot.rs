@@ -97,8 +97,8 @@ pub(super) async fn take(
     Ok(records)
 }
 
-/// The workspaces a caller may read: every workspace, or a scoped caller's
-/// own and those split from it, loaded only as far as the topics need.
+/// The workspaces a caller may read: every workspace, or those a scoped
+/// caller's scope reaches, loaded only as far as the topics need.
 #[derive(Default)]
 struct Visible {
     /// Each workspace with its details, for the topics that show them.
@@ -110,7 +110,8 @@ struct Visible {
 
 impl Visible {
     async fn load(manager: &Manager, caller: Option<&Caller>, topics: &Topics) -> Result<Self> {
-        let root = caller.map(|caller| caller.space_id.as_str());
+        let root = manager.reach_root(caller).await?;
+        let root = root.as_deref();
         if topics.has(Topic::Workspaces) || topics.has(Topic::Links) || topics.has(Topic::Sessions)
         {
             let workspaces = manager.list_workspaces_within(root).await?;

@@ -131,11 +131,13 @@ instead of the PR delivery guidance below.
   terminal is unscoped. Flag a chat process granted what a workspace process is
   refused, other than renaming its own chat and reading the workspace whose
   worktree it runs in with requests that only read state, and a scoped caller
-  creating a space anywhere but below its own, in its repository and the
-  worktrees of its tree, or taking over one outside its tree; a place must drop
-  the marks of the space that opened it.
+  creating a space anywhere but below its own, in its repository (any, for a
+  chat without one) and the worktrees of its tree, or taking over one outside
+  its tree; a place must drop the marks of the space that opened it.
   Scoped callers get access to their own worktree and the
-  spaces below it, recursively, only (CLI refusals also follow ancestry
+  spaces below it, recursively, only, and a chat without a repository to every
+  space, through the one operation that names a scope's reach; flag a check
+  that confines a caller another way (CLI refusals also follow ancestry
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
   Workspace allocation other than a child of their own space, removal other than of a space below their own

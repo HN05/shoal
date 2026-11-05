@@ -115,7 +115,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   lasting as long as the chat; only the user's own terminal is unscoped. CLI
   refusals also follow process ancestry for the same state directory, so a
   cleared token does not unscope. A scope covers its space and the spaces below
-  it, recursively; targets name one of them, and the agent's hooks report for
+  it, recursively, and a chat without a repository's every space, through one
+  operation every check takes; targets name one of them, and the agent's hooks report for
   its own. A chat's agent follows the workspace-agent rules below, without what
   needs a worktree; it renames its own chat. A chat in a workspace's worktree
   also reads that workspace, with requests that only read state, and changes
