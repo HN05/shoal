@@ -127,8 +127,8 @@ pub async fn select_spaces(
             Resolution::Workspace(id) => vec![id],
             Resolution::Picker(workspaces) => {
                 let chats = match stopped_chats {
-                    true => client::recorded_chats(&ctx.paths).await?,
-                    false => client::chats(&ctx.paths).await?,
+                    true => crate::client::chats::recorded(&ctx.paths).await?,
+                    false => crate::client::chats::list(&ctx.paths).await?,
                 };
                 require_argument(ctx, "spaces", SPACE)?;
                 let entries = space_entries(ctx, workspaces, &chats).await;
@@ -423,7 +423,7 @@ pub async fn select_other_space(
     let space = match resolve_workspace(ctx, explicit, fallback).await? {
         Resolution::Workspace(id) => id,
         Resolution::Picker(workspaces) => {
-            let chats = client::chats(&ctx.paths).await?;
+            let chats = crate::client::chats::list(&ctx.paths).await?;
             pick_space(ctx, workspaces, &chats, SPACE).await?
         }
     };
@@ -449,7 +449,7 @@ pub async fn select_space_filter(ctx: &Context, scope: WorkspaceScope) -> Result
     match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
         Resolution::Workspace(id) => Ok(Some(id)),
         Resolution::Picker(workspaces) => {
-            let chats = client::chats(&ctx.paths).await?;
+            let chats = crate::client::chats::list(&ctx.paths).await?;
             pick_space_or_all(ctx, workspaces, &chats).await
         }
     }

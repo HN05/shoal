@@ -497,7 +497,7 @@ impl Typed {
                 })
                 .collect();
             candidates.extend(stopped_chat_candidates(
-                client::recorded_chats(&paths).await?,
+                crate::client::chats::recorded(&paths).await?,
             ));
             return Ok(candidates);
         }
@@ -573,7 +573,7 @@ async fn live<T>(lookup: impl Future<Output = Result<T>>) -> Result<T> {
 
 /// Every chat, by name, a stopped one described as such.
 async fn chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
-    Ok(client::recorded_chats(paths)
+    Ok(crate::client::chats::recorded(paths)
         .await?
         .into_iter()
         .map(|chat| {
@@ -628,7 +628,7 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
 
 /// The running chats with an agent session, by name.
 async fn session_chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
-    let chats = client::chats(paths).await?;
+    let chats = crate::client::chats::list(paths).await?;
     let places = super::commands::sessions::chat_places(&chats);
     let attachable = terminal::session_owners(&places);
     Ok(chats

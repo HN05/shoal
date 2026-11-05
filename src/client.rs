@@ -8,6 +8,7 @@ pub mod ai;
 pub mod approvals;
 pub mod assignments;
 pub mod availability;
+pub mod chats;
 pub mod ci;
 pub mod cleanup;
 pub mod config;

@@ -75,7 +75,7 @@ pub(super) async fn start(
     }
     .await;
     handoff::report(&started);
-    client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
 }
 
 /// Start a chat in the worktree of the workspace `workspace` names, else
@@ -104,7 +104,7 @@ pub(super) async fn start_in_workspace(
     }
     .await;
     handoff::report(&started);
-    client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
 }
 
 /// Refuse `parent`, the space a chat in `repo`, in the worktree of
@@ -120,7 +120,7 @@ async fn check_parent(
         return Ok(());
     };
     let workspace = workspace.map(|workspace| workspace.id.clone());
-    client::check_chat_parent(
+    crate::client::chats::check_parent(
         &ctx.paths,
         repo.id.clone().into(),
         workspace,
@@ -281,7 +281,7 @@ impl Options {
     /// A restored chat keeps its own.
     pub async fn check_name(&self, ctx: &Context) -> Result<()> {
         match (&self.name, &self.restore) {
-            (Some(name), None) => client::check_chat_name(&ctx.paths, name).await,
+            (Some(name), None) => crate::client::chats::check_name(&ctx.paths, name).await,
             _ => Ok(()),
         }
     }
@@ -462,9 +462,11 @@ pub(super) async fn launch(
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
     let topic = match &restore {
-        Some(chat) if topic.linked_issue.is_none() => {
-            with_saved_issue(topic, &client::recorded_chats(&ctx.paths).await?, chat)
-        }
+        Some(chat) if topic.linked_issue.is_none() => with_saved_issue(
+            topic,
+            &crate::client::chats::recorded(&ctx.paths).await?,
+            chat,
+        ),
         _ => topic,
     };
     let asks_name = topic.asks_name && requested.is_none();
@@ -548,13 +550,13 @@ pub(super) async fn launch(
         return Ok(Started::Exited(0));
     }
     agents::trust_chat(ctx, &settings, agent.name(), &repo, home).await;
-    let new = client::NewChat {
+    let new = crate::client::chats::NewChat {
         name: &name,
         agent: agent.name(),
         mode: &topic.mode,
         parent: parent.as_deref(),
     };
-    let chat = client::record_chat(
+    let chat = crate::client::chats::record(
         &ctx.paths,
         home,
         new,
@@ -587,7 +589,7 @@ pub(super) async fn launch(
         [resumed, args].concat(),
     )?;
     terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
-    let token = client::chat_scope(&ctx.paths, &chat).await?;
+    let token = crate::client::chats::scope(&ctx.paths, &chat).await?;
     handoff::report(&Ok(()));
     run_here(
         ctx,
@@ -633,7 +635,7 @@ fn resumed_args(
 async fn initial_name(ctx: &Context, topic: &Topic, requested: Option<String>) -> Result<String> {
     match requested {
         Some(name) => Ok(name),
-        None => client::free_chat_name(&ctx.paths, topic.name.clone()).await,
+        None => crate::client::chats::free_name(&ctx.paths, topic.name.clone()).await,
     }
 }
 
@@ -641,7 +643,7 @@ async fn initial_name(ctx: &Context, topic: &Topic, requested: Option<String>) -
 async fn ask_name(ctx: &Context, default: &str) -> Result<String> {
     loop {
         let name = ui::input_with_default(ctx, "Chat name", default)?;
-        match client::check_chat_name(&ctx.paths, &name).await {
+        match crate::client::chats::check_name(&ctx.paths, &name).await {
             Ok(()) => return Ok(name),
             Err(error) => eprintln!("{error:#}"),
         }
@@ -668,7 +670,7 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
 
 /// The running and stopped chats `filter` keeps.
 pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<Chat>> {
-    let mut chats = client::recorded_chats(&ctx.paths).await?;
+    let mut chats = crate::client::chats::recorded(&ctx.paths).await?;
     chats.retain(|chat| filter.keeps_chat(chat));
     Ok(chats)
 }

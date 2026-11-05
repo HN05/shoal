@@ -16,10 +16,10 @@ use tokio::{
 
 use crate::{
     client::{paths::Paths, processes::Identity},
-    model::{Chat, ChatHome, Inspection, PresentSpace, RenamedChat, Repository, Spaces, Workspace},
+    model::{Inspection, PresentSpace, Repository, Spaces, Workspace},
     protocol::{
-        self, Body, ChatMethod, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method,
-        RepositoryMethod, Request, Response, WorkspaceMethod, timing,
+        self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method, RepositoryMethod, Request,
+        Response, WorkspaceMethod, timing,
     },
 };
 
@@ -350,209 +350,17 @@ pub async fn workspaces(daemon: &impl Daemon) -> Result<Vec<Workspace>> {
     request(daemon, WorkspaceMethod::ListWorkspaces).await
 }
 
-/// What a new chat is recorded as: its name, its agent, the mode the agent
-/// starts in and the space it goes below.
-#[derive(Clone, Copy)]
-pub struct NewChat<'a> {
-    pub name: &'a str,
-    pub agent: &'a str,
-    pub mode: &'a str,
-    /// The space it goes below; a scoped caller's daemon puts it below the
-    /// caller's own space without one.
-    pub parent: Option<&'a str>,
-}
-
-/// Record the `chat` whose agent replaces this process at `home`, running
-/// at `origin` in a terminal host when it runs in one, or when `hands_over`
-/// runs in a session this process starts and [`move_chat`] names.
-pub async fn start_chat(
-    daemon: &impl Daemon,
-    home: ChatHome<'_>,
-    chat: NewChat<'_>,
-    origin: Option<crate::client::sessions::Origin>,
-    hands_over: bool,
-) -> Result<Chat> {
-    request(
-        daemon,
-        ChatMethod::StartChat {
-            repository: home.repository_id().to_owned().into(),
-            workspace: home.workspace().map(|workspace| workspace.id.clone()),
-            name: chat.name.to_owned(),
-            agent: chat.agent.to_owned(),
-            mode: Some(chat.mode.to_owned()),
-            pid: std::process::id(),
-            origin,
-            hands_over,
-            parent: chat.parent.map(str::to_owned),
-        },
-    )
-    .await
-}
-
-/// Refuse a name a new chat could not take now.
-pub async fn check_chat_name(daemon: &impl Daemon, name: &str) -> Result<()> {
-    request::<()>(
-        daemon,
-        ChatMethod::CheckChatName {
-            name: name.to_owned(),
-        },
-    )
-    .await
-}
-
-/// Refuse `parent`, a space a new chat in `repository`, in the worktree of
-/// `workspace` when given, could not go below.
-pub async fn check_chat_parent(
-    daemon: &impl Daemon,
-    repository: crate::client::repository::Selector,
-    workspace: Option<String>,
-    parent: String,
-) -> Result<()> {
-    let method = ChatMethod::CheckChatParent {
-        repository,
-        workspace,
-        parent: Some(parent),
-    };
-    request::<()>(daemon, method).await
-}
-
-/// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could take now.
-pub async fn free_chat_name(daemon: &impl Daemon, name: String) -> Result<String> {
-    request(daemon, ChatMethod::FreeChatName { name }).await
-}
-
-/// The scope token `chat`'s agent carries.
-pub async fn chat_scope(daemon: &impl Daemon, chat: &Chat) -> Result<String> {
-    let chat = chat.id.clone();
-    let scope: crate::protocol::ScopeToken =
-        request(daemon, ChatMethod::ChatScope { chat }).await?;
-    Ok(scope.token)
-}
-
-/// Hand `chat` to process `pid`, whose agent now runs it.
-pub async fn move_chat(daemon: &impl Daemon, chat: &Chat, pid: u32) -> Result<Chat> {
-    request(
-        daemon,
-        ChatMethod::MoveChat {
-            chat: chat.id.clone(),
-            pid,
-        },
-    )
-    .await
-}
-
-/// Rename `chat` to `name`.
-pub async fn rename_chat(daemon: &impl Daemon, chat: String, name: String) -> Result<RenamedChat> {
-    request(daemon, ChatMethod::RenameChat { chat, name }).await
-}
-
-/// Running chats; listing them ends those whose agent exited.
-pub async fn chats(daemon: &impl Daemon) -> Result<Vec<Chat>> {
-    let mut chats = recorded_chats(daemon).await?;
-    chats.retain(|chat| chat.restore.is_none());
-    Ok(chats)
-}
-
 /// The workspace or chat `selector` names, by ID or name.
 pub async fn present_space(daemon: &impl Daemon, selector: &str) -> Result<Option<PresentSpace>> {
     Ok(spaces(daemon).await?.find(selector))
-}
-
-/// Running and stopped chats.
-pub async fn recorded_chats(daemon: &impl Daemon) -> Result<Vec<Chat>> {
-    request(daemon, ChatMethod::ListChats).await
 }
 
 /// The workspaces and chats, running or stopped, visible to this caller.
 pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
     Ok(Spaces {
         workspaces: workspaces(daemon).await?,
-        chats: recorded_chats(daemon).await?,
+        chats: crate::client::chats::recorded(daemon).await?,
     })
-}
-
-/// [`start_chat`], or for a start that `restores` a stopped chat, by ID,
-/// [`restore_chat`], which keeps the chat's own name, agent and mode.
-pub async fn record_chat(
-    daemon: &impl Daemon,
-    home: ChatHome<'_>,
-    chat: NewChat<'_>,
-    origin: Option<crate::client::sessions::Origin>,
-    hands_over: bool,
-    restores: Option<&str>,
-) -> Result<Chat> {
-    match restores {
-        Some(restored) => restore_chat(daemon, restored, origin, hands_over).await,
-        None => start_chat(daemon, home, chat, origin, hands_over).await,
-    }
-}
-
-/// Run the stopped chat `chat`, by ID, again in this process, as
-/// [`start_chat`] records a new chat.
-pub async fn restore_chat(
-    daemon: &impl Daemon,
-    chat: &str,
-    origin: Option<crate::client::sessions::Origin>,
-    hands_over: bool,
-) -> Result<Chat> {
-    request(
-        daemon,
-        ChatMethod::RestoreChat {
-            chat: chat.to_owned(),
-            pid: std::process::id(),
-            origin,
-            hands_over,
-        },
-    )
-    .await
-}
-
-/// Report that this process could not restore the stopped chat `chat`, which
-/// waits for `shoal resume` again if this process had taken it over.
-pub async fn save_chat(daemon: &impl Daemon, chat: &str, error: &anyhow::Error) -> Result<()> {
-    request::<()>(
-        daemon,
-        ChatMethod::SaveChat {
-            chat: chat.to_owned(),
-            pid: std::process::id(),
-            error: format!("{error:#}"),
-        },
-    )
-    .await
-}
-
-/// `ran`, a start in this process, after reporting its failure when it
-/// `restores` a stopped chat: the chat waits for `shoal resume` again, if this
-/// process had taken it over, and the user learns why.
-pub async fn keep_failed_restore<T>(
-    daemon: &impl Daemon,
-    restores: Option<&str>,
-    ran: Result<T>,
-) -> Result<T> {
-    if let (Err(failure), Some(chat)) = (&ran, restores)
-        && let Err(error) = save_chat(daemon, chat, failure).await
-    {
-        eprintln!("warning: the chat could not wait for shoal resume again: {error:#}");
-    }
-    ran
-}
-
-/// Remove the chat `chat`, by ID or name, stopping its agent: first the
-/// spaces below it, of which `children`, when given, are the IDs the caller
-/// saw and the only ones it takes.
-pub async fn remove_chat(
-    daemon: &impl Daemon,
-    chat: &str,
-    children: Option<Vec<String>>,
-) -> Result<crate::client::output::chat::RemovedChat> {
-    request(
-        daemon,
-        ChatMethod::RemoveChat {
-            chat: chat.to_owned(),
-            children,
-        },
-    )
-    .await
 }
 
 pub async fn repositories(daemon: &impl Daemon) -> Result<Vec<Repository>> {

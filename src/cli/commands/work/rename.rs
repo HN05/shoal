@@ -41,7 +41,7 @@ pub(super) async fn request(ctx: &Context, space: Option<String>) -> Result<i32>
 /// space: a chat's ID, or else the workspace.
 async fn chosen_chat(ctx: &Context, space: Option<String>) -> Result<Result<String, String>> {
     if space.is_none() && ui::current_chat(&None).is_none() {
-        let chats = client::chats(&ctx.paths).await?;
+        let chats = crate::client::chats::list(&ctx.paths).await?;
         if let Some(chat) = super::super::sessions::checkout_chat(ctx, &chats).await? {
             return Ok(Ok(chat.id));
         }

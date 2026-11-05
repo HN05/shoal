@@ -74,7 +74,7 @@ impl Inbox {
         workspaces.retain(|w| filter.keeps_workspace(w, stopped.contains(&w.id)));
         // Scoped processes see the chats of their own tree. A stopped chat
         // keeps its open questions.
-        let mut chats = client::recorded_chats(&ctx.paths).await?;
+        let mut chats = crate::client::chats::recorded(&ctx.paths).await?;
         chats.retain(|chat| filter.keeps_chat(chat));
         let questions = questions::list(&ctx.paths, None).await?.questions;
         let requests = crate::client::approvals::list(&ctx.paths, None).await?;

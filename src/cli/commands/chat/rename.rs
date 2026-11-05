@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::{
-    cli::{client, context::Context, terminal},
+    cli::{context::Context, terminal},
     model::RenamedChat,
 };
 
@@ -18,7 +18,7 @@ pub(in crate::cli::commands) async fn rename(
     name: String,
 ) -> Result<i32> {
     crate::validate::name("chat", &name)?;
-    let renamed = client::rename_chat(&ctx.paths, chat, name).await?;
+    let renamed = crate::client::chats::rename(&ctx.paths, chat, name).await?;
     relabel(ctx, &renamed).await;
     ctx.show(&renamed.chat, |chat| {
         outln!("Renamed chat to {}", chat.name)

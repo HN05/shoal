@@ -57,9 +57,11 @@ async fn discard(ctx: &Context, chat: &Chat, spaces: &Spaces) -> Result<Chat> {
         below.join(", "),
         chat.name
     );
-    Ok(client::remove_chat(&ctx.paths, &chat.id, Some(Vec::new()))
-        .await?
-        .chat)
+    Ok(
+        crate::client::chats::remove(&ctx.paths, &chat.id, Some(Vec::new()))
+            .await?
+            .chat,
+    )
 }
 
 /// Restore each of the stopped `chats` in the background, returning those it
@@ -110,7 +112,7 @@ fn restored(chat: &Chat, started: Started) -> RestoredChat {
 /// the user through the daemon, as one in the place it opens does.
 async fn restore(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Started> {
     let started = start_saved(ctx, chat, place).await;
-    client::keep_failed_restore(&ctx.paths, Some(&chat.id), started).await
+    crate::client::chats::keep_failed_restore(&ctx.paths, Some(&chat.id), started).await
 }
 
 /// [`restore`] without the report of its failure.

@@ -145,7 +145,7 @@ async fn running_space(ctx: &Context, selector: &str) -> Result<Option<String>> 
     {
         return Ok(listed.running.then(|| listed.name.clone()));
     }
-    Ok(client::chats(&ctx.paths)
+    Ok(crate::client::chats::list(&ctx.paths)
         .await?
         .into_iter()
         .find(|chat| chat.id == selector || chat.name == selector)

@@ -452,7 +452,7 @@ pub(super) async fn repository_spaces(
         .into_iter()
         .filter(|workspace| workspace.repository_id == repo.id)
         .map(PresentSpace::Workspace);
-    let chats = client::chats(&ctx.paths)
+    let chats = crate::client::chats::list(&ctx.paths)
         .await?
         .into_iter()
         .filter(|chat| chat.repository_id == repo.id)

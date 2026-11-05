@@ -68,7 +68,7 @@ impl Target {
     /// current workspace, else the current checkout's only running chat,
     /// else a picker of the workspaces and chats with sessions.
     async fn resolve(ctx: &Context, name: Option<String>) -> Result<Self> {
-        let chats = client::chats(&ctx.paths).await?;
+        let chats = crate::client::chats::list(&ctx.paths).await?;
         if name.as_deref() == Some(recent::PREVIOUS) {
             let id = recent::previous_space(ctx, &chats).await?;
             return Self::space(ctx, chats, id).await;

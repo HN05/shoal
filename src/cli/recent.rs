@@ -163,7 +163,7 @@ pub async fn record_chat_attach(ctx: &Context, selector: &str) {
     if !keeps_history(ctx) {
         return;
     }
-    let Ok(chats) = client::chats(&ctx.paths).await else {
+    let Ok(chats) = crate::client::chats::list(&ctx.paths).await else {
         return;
     };
     let named = |chat: &&Chat| chat.id == selector || chat.name == selector;

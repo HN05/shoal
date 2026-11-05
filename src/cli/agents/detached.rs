@@ -15,7 +15,7 @@ use super::{ChatLaunch, Integration, Launch};
 use crate::client::output::agents::{Delivery, DetachedChat, DetachedSession};
 use crate::{
     agent::ModelChoice,
-    cli::{client, context::Context},
+    cli::context::Context,
     config::{Effective, templates},
     execution::{self, DetachedLaunch},
     model::{Chat, Repository, Workspace},
@@ -389,14 +389,15 @@ pub(super) async fn start_chat(
     }
     // This process holds the chat until the session runs, which is not in
     // this terminal.
-    let new = client::NewChat {
+    let new = crate::client::chats::NewChat {
         name: chat_name,
         agent: name,
         mode,
         parent: parent.as_deref(),
     };
     let record =
-        client::record_chat(&ctx.paths, home, new, None, true, restores.as_deref()).await?;
+        crate::client::chats::record(&ctx.paths, home, new, None, true, restores.as_deref())
+            .await?;
     super::link_chat(ctx, &record, links).await;
     let (prompt, args) = chat_input(app, &ctx.paths.home, &record, chat);
     let args = [model_args, args].concat();
@@ -463,7 +464,7 @@ async fn hand_to_session(
     log: &Path,
     prepared: Box<dyn Prepared>,
 ) -> Result<(Chat, Box<dyn Prepared>)> {
-    let token = client::chat_scope(&ctx.paths, chat).await?;
+    let token = crate::client::chats::scope(&ctx.paths, chat).await?;
     let spawned = spawn_session(ctx, app, directory, (chat, &token), log, prepared.as_ref());
     let handed_over = match spawned {
         Ok(session) => hand_over(ctx, chat, session).await,
@@ -512,7 +513,7 @@ fn report_chat(
 /// Hand `chat` to `session`'s process, stopping the session when the daemon
 /// cannot record it, since the chat would end with this process.
 async fn hand_over(ctx: &Context, chat: &Chat, session: Child) -> Result<Chat> {
-    let moved = client::move_chat(&ctx.paths, chat, session.id()).await;
+    let moved = crate::client::chats::move_to(&ctx.paths, chat, session.id()).await;
     if moved.is_err() {
         stop_session(session);
     }

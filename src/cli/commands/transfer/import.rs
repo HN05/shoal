@@ -210,7 +210,7 @@ impl Package {
         Ok(chat::Options {
             agent: Some(packaged.agent.parse()?),
             place,
-            name: Some(client::free_chat_name(&ctx.paths, packaged.name.clone()).await?),
+            name: Some(crate::client::chats::free_name(&ctx.paths, packaged.name.clone()).await?),
             model: Default::default(),
             args: Vec::new(),
             session,

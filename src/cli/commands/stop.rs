@@ -135,7 +135,7 @@ pub(super) async fn processes(
 /// Refuse `selectors` before any stops when one names neither a running
 /// chat nor a workspace that stopping accepts.
 async fn ensure_spaces(ctx: &Context, selectors: &[String]) -> Result<()> {
-    let chats = client::chats(&ctx.paths).await?;
+    let chats = crate::client::chats::list(&ctx.paths).await?;
     let workspaces: Vec<String> = selectors
         .iter()
         .filter(|selector| {

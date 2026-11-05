@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::{
-    cli::{client, context::Context},
+    cli::context::Context,
     client::output::chat::RemovedChat,
     model::{Chat, Spaces},
 };
@@ -37,7 +37,7 @@ pub(in crate::cli::commands) async fn remove(
     let children = (spaces.taken_with(&chat.id).into_iter())
         .map(|space| space.id)
         .collect();
-    client::remove_chat(&ctx.paths, &chat.id, Some(children)).await
+    crate::client::chats::remove(&ctx.paths, &chat.id, Some(children)).await
 }
 
 /// `removed`, such as `Chat removed`, with the spaces below it the removal
