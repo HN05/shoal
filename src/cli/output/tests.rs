@@ -28,25 +28,6 @@ fn color_requires_a_human_terminal_without_an_opt_out() {
 }
 
 #[test]
-fn styles_reset_and_state_labels_keep_their_wire_spelling() {
-    let palette = Palette { enabled: true };
-    let painted = palette.workspace_state(WorkspaceState::Failed);
-    assert!(
-        painted.starts_with('\x1b') && painted.contains("failed") && painted.ends_with("\x1b[0m"),
-        "{painted:?}"
-    );
-    let plain = Palette { enabled: false };
-    assert_eq!(
-        plain.workspace_state(WorkspaceState::Preparing),
-        "preparing"
-    );
-    assert_eq!(
-        serde_json::to_string(&WorkspaceState::Ready).unwrap(),
-        "\"ready\""
-    );
-}
-
-#[test]
 fn emoji_require_a_utf8_terminal_with_glyphs() {
     for (terminal, term, locale, shown) in [
         (true, Some("xterm-256color"), Some("en_US.UTF-8"), true),

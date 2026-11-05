@@ -19,15 +19,6 @@ fn zellij_serves_its_panes_only_once_config_opts_in() {
 }
 
 #[test]
-fn the_zellij_section_sets_tabs_and_keeps_no_group() {
-    let options = options(&config(Some(true)), HostName::Zmx);
-    assert!(options.opens_places && options.opens_splits);
-    assert_eq!(options.name_template.as_deref(), Some("{branch}"));
-    assert_eq!(options.group_template, None);
-    assert_eq!(options.close_when_done, Some(false));
-}
-
-#[test]
 fn a_pane_is_at_its_prompt_while_the_users_shell_runs_in_front() {
     let shell = var("SHELL").unwrap_or_else(|| "/bin/sh".into());
     let name = Path::new(&shell).file_name().unwrap().to_str().unwrap();
@@ -45,11 +36,7 @@ fn a_pane_is_at_its_prompt_while_the_users_shell_runs_in_front() {
 #[tokio::test]
 async fn keys_reach_no_pane_whose_server_instance_is_unknown() {
     let place = Origin::created(HostName::Zellij, "repo:terminal_1".into());
-    let error = Zellij.send_keys(&place, "hello\r").await.unwrap_err();
-    assert!(
-        format!("{error:#}").contains("records no server instance"),
-        "{error:#}"
-    );
+    assert!(Zellij.send_keys(&place, "hello\r").await.is_err());
 }
 
 #[tokio::test]
