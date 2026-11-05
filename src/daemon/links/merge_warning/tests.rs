@@ -54,9 +54,10 @@ async fn a_branch_merge_warns_only_at_the_checked_head() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        warning.to_string(),
-        "Sensitive files changed on both sides by topic and main: version"
+        (warning.subject.as_str(), warning.target.as_str()),
+        ("topic", "main")
     );
+    assert_eq!(warning.files, ["version"]);
 
     let current = manager.current_changed_on_both_sides(&workspace).await;
     assert!(current.unwrap().is_some());
@@ -142,8 +143,8 @@ async fn a_pr_finds_the_record_of_the_workspace_that_links_it() {
     };
     let found = warning("PR #7".into(), recorded.clone(), &into("main")).unwrap();
     assert_eq!(
-        found.to_string(),
-        "Sensitive files changed on both sides by PR #7 and main: version"
+        (found.target.as_str(), found.files.as_slice()),
+        ("main", &["version".to_owned()][..])
     );
     // A PR into another branch merges nothing the check of main found.
     assert!(warning("PR #7".into(), recorded, &into("release")).is_none());

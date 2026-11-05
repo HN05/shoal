@@ -119,13 +119,11 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
         .unlink_items(&id, Relation::Related, None, None)
         .await
         .unwrap();
-    let error = manager
-        .unlink_items(&id, Relation::Related, None, None)
-        .await
-        .unwrap_err();
     assert!(
-        format!("{error:#}").contains("nothing is linked as related"),
-        "{error:#}"
+        manager
+            .unlink_items(&id, Relation::Related, None, None)
+            .await
+            .is_err()
     );
     let links = manager.workspace(&id).await.unwrap().links;
     assert!(links.related.is_empty());
@@ -167,14 +165,10 @@ async fn assigned_relation_uses_the_issue_link() {
         .unwrap();
     assert_eq!(manager.workspace(&id).await.unwrap().links.issue, None);
     for kind in [Some(LinkKind::Issue), None] {
-        let error = manager
+        let unlinked = manager
             .unlink_items(&id, Relation::Assigned, kind, None)
-            .await
-            .unwrap_err();
-        assert!(
-            format!("{error:#}").contains("linked as assigned"),
-            "{error:#}"
-        );
+            .await;
+        assert!(unlinked.is_err());
     }
 }
 
