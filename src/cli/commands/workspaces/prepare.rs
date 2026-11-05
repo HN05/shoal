@@ -1,7 +1,6 @@
 //! Preparing a workspace inside an operation's worker: its tracked setup,
 //! failing as the operation reports it, then linking its PR, then its
 //! post-setup hook, failing in turn, then queuing its agent.
-use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
 
@@ -12,7 +11,7 @@ use crate::{
     agent::Agent,
     cli::{
         agents,
-        client::{self, request},
+        client::{self},
         commands::operations::{Failed, Reporter},
         context::Context,
     },
@@ -20,7 +19,7 @@ use crate::{
     hooks::{self, Hook, HookKind},
     model::{QueueEntry, Workspace},
     protocol::{
-        ConfigTarget, WorkspaceMethod,
+        ConfigTarget,
         operations::{Failure, Preparation, Prepared, QueuedLaunch, Step},
     },
     state::WorkspaceState,
@@ -94,14 +93,9 @@ async fn run_post_setup_hook(
     workspace: &Workspace,
     reporter: &Reporter<'_>,
 ) -> Result<()> {
-    let command = request::<Option<PathBuf>>(
-        &ctx.paths,
-        WorkspaceMethod::WorkspaceHook {
-            workspace: workspace.id.clone(),
-            kind: HookKind::PostSetup,
-        },
-    )
-    .await?;
+    let command =
+        crate::client::workspaces::hook(&ctx.paths, workspace.id.clone(), HookKind::PostSetup)
+            .await?;
     if let Some(command) = command {
         let configured_env = configured_environment(ctx, workspace).await?;
         hooks::run_until(

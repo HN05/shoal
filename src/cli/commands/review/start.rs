@@ -19,9 +19,7 @@ use crate::{
     },
     git,
     model::{Chat, Repository, Workspace},
-    protocol::{
-        ConfigTarget, CreationOptions, ItemContext, WorkspaceMethod, operations::WorkspaceStart,
-    },
+    protocol::{ConfigTarget, CreationOptions, ItemContext, operations::WorkspaceStart},
     reviews::ReviewTarget,
 };
 
@@ -343,14 +341,9 @@ async fn update_to_head(
     head: &str,
 ) -> Result<()> {
     let tracking = fetch_pull_branch(repo, "head", head).await?;
-    let updated: bool = client::request(
-        &ctx.paths,
-        WorkspaceMethod::FastForwardWorkspace {
-            workspace: workspace.id.clone(),
-            branch: head.to_owned(),
-        },
-    )
-    .await?;
+    let updated =
+        crate::client::workspaces::fast_forward(&ctx.paths, workspace.id.clone(), head.to_owned())
+            .await?;
     if updated {
         eprintln!("Updated workspace {} to {tracking}", workspace.name);
     }

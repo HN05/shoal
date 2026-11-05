@@ -29,7 +29,7 @@ use crate::{
     env,
     model::{Chat, Workspace},
     paths::Paths,
-    protocol::{ConfigTarget, WorkspaceMethod},
+    protocol::ConfigTarget,
 };
 
 /// What was already typed on the command line when completion was requested.
@@ -357,16 +357,11 @@ impl Typed {
                     // workspace is incomplete or unknown.
                     .or_else(|| context.resolve(None, false, ScopeOrder::AfterDirectory))
                     .context("no current workspace")?;
-                client::request::<Box<ConfigLayers>>(
-                    &paths,
-                    WorkspaceMethod::LayeredConfig {
-                        target: ConfigTarget::Workspace(workspace.id.clone()),
-                    },
-                )
-                .await
+                let target = ConfigTarget::Workspace(workspace.id.clone());
+                crate::client::workspaces::config_layers(&paths, target).await
             }));
             if let Ok(found) = layer {
-                layers = *found;
+                layers = found;
             }
         }
         layered_settings(&global, &layers)

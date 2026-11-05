@@ -5,13 +5,10 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{
-        client::request,
         context::Context,
         ui::{self, Fallback},
     },
     execution, git,
-    model::{ConflictCheck, DiffBase},
-    protocol::WorkspaceMethod,
 };
 
 pub(in crate::cli::commands) async fn diff(
@@ -19,7 +16,7 @@ pub(in crate::cli::commands) async fn diff(
     workspace: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let base = request::<DiffBase>(&ctx.paths, WorkspaceMethod::DiffBase { workspace }).await?;
+    let base = crate::client::workspaces::diff_base(&ctx.paths, workspace).await?;
     let command = git::diff_command(&base.commit);
     if crate::env::in_chat().is_some() {
         return diff_untracked(&base.path, &command);
@@ -46,9 +43,7 @@ pub(in crate::cli::commands) async fn conflicts(
     target: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let check =
-        request::<ConflictCheck>(&ctx.paths, WorkspaceMethod::Conflicts { workspace, target })
-            .await?;
+    let check = crate::client::workspaces::conflicts(&ctx.paths, workspace, target).await?;
     ctx.show(&check, |check| {
         if check.clean() {
             outln!("No conflicts with {}", check.target);

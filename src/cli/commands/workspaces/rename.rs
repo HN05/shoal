@@ -1,14 +1,9 @@
 //! Renaming a workspace's branch.
 use anyhow::Result;
 
-use crate::{
-    cli::{
-        client::request,
-        context::Context,
-        ui::{self, Fallback},
-    },
-    model::Workspace,
-    protocol::WorkspaceMethod,
+use crate::cli::{
+    context::Context,
+    ui::{self, Fallback},
 };
 
 pub(in crate::cli::commands) async fn rename(
@@ -17,11 +12,7 @@ pub(in crate::cli::commands) async fn rename(
     branch: String,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let renamed = request::<Workspace>(
-        &ctx.paths,
-        WorkspaceMethod::RenameWorkspace { workspace, branch },
-    )
-    .await?;
+    let renamed = crate::client::workspaces::rename(&ctx.paths, workspace, branch).await?;
     ctx.show(&renamed, |workspace| {
         outln!(
             "Renamed workspace to {} ({})",

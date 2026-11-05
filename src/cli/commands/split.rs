@@ -11,7 +11,7 @@ use crate::{
     agent::{Agent, ModelChoice},
     cli::{
         agents,
-        client::{self, request},
+        client::{self},
         context::Context,
         output::{Palette, Style},
         terminal,
@@ -20,8 +20,7 @@ use crate::{
     daemon::refusal::{Reason, Refusal},
     model::{AgentSession, QueueEntry, SpaceRef, Workspace},
     protocol::{
-        CommitStart, ConfigTarget, CreationOptions, ItemContext, WorkspaceMethod,
-        operations::StartedWorkspace,
+        CommitStart, ConfigTarget, CreationOptions, ItemContext, operations::StartedWorkspace,
     },
     shell,
     state::{QueueState, WorkspaceState},
@@ -95,13 +94,12 @@ pub(super) async fn at_commit(
     options: CreationOptions,
 ) -> Result<i32> {
     let (repository, parent) = commit_owner(ctx, workspace).await?;
-    let method = WorkspaceMethod::CreateCommitWorkspace {
-        repository,
-        parent: parent.or_else(|| ui::current_chat(&None)),
-        start: CommitStart::Revision(base),
-        options,
-    };
-    let Some(child) = prepare(ctx, request(&ctx.paths, method).await?).await? else {
+    let parent = parent.or_else(|| ui::current_chat(&None));
+    let start = CommitStart::Revision(base);
+    let created =
+        crate::client::workspaces::create_at_commit(&ctx.paths, repository, parent, start, options)
+            .await?;
+    let Some(child) = prepare(ctx, created).await? else {
         return Ok(1);
     };
     report(ctx, &child, None)?;

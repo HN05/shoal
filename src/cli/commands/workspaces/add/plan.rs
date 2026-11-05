@@ -7,14 +7,13 @@ use super::{agent::ResolvedAddAgent, target::AddTarget};
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
-        client::request,
         commands::{issues, repositories},
         context::Context,
         terminal::PlaceName,
     },
     env, git,
     model::{QueueRequest, Repository, Workspace},
-    protocol::{CreationOptions, ItemContext, PullHead, WorkspaceMethod},
+    protocol::{CreationOptions, ItemContext, PullHead},
 };
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
@@ -270,20 +269,17 @@ pub(super) async fn check_add_creation(
     if !ctx.interactive() && chat.is_none() {
         return Ok(());
     }
-    request::<()>(
-        &ctx.paths,
-        WorkspaceMethod::CheckCreation {
-            repository: target.selector.clone(),
-            branch: creation.branch.clone(),
-            existing: creation.existing.clone(),
-            base: creation.base.clone(),
-            git_profile: creation.git_profile.clone(),
-            path: creation.path.clone(),
-            parent: chat,
-            options: creation.options,
-        },
-    )
-    .await
+    let planned = crate::client::workspaces::PlannedWorkspace {
+        repository: target.selector.clone(),
+        branch: creation.branch.clone(),
+        existing: creation.existing.clone(),
+        base: creation.base.clone(),
+        git_profile: creation.git_profile.clone(),
+        path: creation.path.clone(),
+        parent: chat,
+        options: creation.options,
+    };
+    crate::client::workspaces::check_creation(&ctx.paths, planned).await
 }
 
 #[cfg(test)]

@@ -17,7 +17,7 @@ use crate::{
     },
     demos::{self, Demo, Launch, Preset, Progress, Running},
     model::Workspace,
-    protocol::{ConfigTarget, WorkspaceMethod},
+    protocol::ConfigTarget,
     sessions::Origin,
 };
 
@@ -451,14 +451,8 @@ pub(in crate::cli) async fn open_running(ctx: &Context, demo: &Running) -> Resul
 /// Run the demo's `open` command in its workspace with the demo's variables,
 /// once the worktree is verified to be the recorded one.
 async fn run_opener(ctx: &Context, demo: &Running, open: &[String]) -> Result<()> {
-    let workspace: Workspace = client::request(
-        &ctx.paths,
-        WorkspaceMethod::VerifyWorkspace {
-            workspace: demo.workspace_id.clone(),
-            on_branch: false,
-        },
-    )
-    .await?;
+    let workspace =
+        crate::client::workspaces::verify(&ctx.paths, demo.workspace_id.clone(), false).await?;
     let mut command = tokio::process::Command::new(&open[0]);
     command
         .args(&open[1..])

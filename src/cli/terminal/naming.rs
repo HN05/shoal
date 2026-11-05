@@ -18,7 +18,7 @@ use crate::{
         context::Context,
     },
     model::{Chat, OwnedPlace, Repository, Workspace},
-    protocol::{ConfigTarget, ItemContext, WorkspaceMethod},
+    protocol::{ConfigTarget, ItemContext},
     sessions::Origin,
 };
 
@@ -162,13 +162,7 @@ pub(super) async fn workspace_label(
 /// title changed. Only a host this process runs under reaches its places,
 /// and only those on its own server; a place that is gone is skipped.
 pub(in crate::cli) async fn relabel_places(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    let places: Vec<OwnedPlace> = client::request(
-        &ctx.paths,
-        WorkspaceMethod::WorkspacePlaces {
-            workspace: workspace.id.clone(),
-        },
-    )
-    .await?;
+    let places = crate::client::workspaces::places(&ctx.paths, workspace.id.clone()).await?;
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     for configured in Configured::all(&settings).filter(|host| host.options.enabled) {

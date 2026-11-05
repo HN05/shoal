@@ -2,16 +2,11 @@
 //! asking its agent to.
 use anyhow::{Result, ensure};
 
-use crate::{
-    cli::{
-        client::request,
-        commands::turns,
-        context::Context,
-        terminal,
-        ui::{self, Fallback},
-    },
-    model::Workspace,
-    protocol::WorkspaceMethod,
+use crate::cli::{
+    commands::turns,
+    context::Context,
+    terminal,
+    ui::{self, Fallback},
 };
 
 /// What `shoal work rename --request` asks the workspace's agent.
@@ -25,14 +20,7 @@ pub(in crate::cli::commands) async fn title(
     // Refuse an invalid title before a picker asks for the workspace.
     crate::validate::title(title.trim())?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let titled = request::<Workspace>(
-        &ctx.paths,
-        WorkspaceMethod::SetWorkspaceTitle {
-            workspace,
-            title: Some(title),
-        },
-    )
-    .await?;
+    let titled = crate::client::workspaces::set_title(&ctx.paths, workspace, title).await?;
     // The title is recorded; a place left with its old label only warns.
     if let Err(error) = terminal::relabel_places(ctx, &titled).await {
         eprintln!(

@@ -7,14 +7,14 @@ use self::render::render_status;
 use crate::client::{output::status::StatusView, transcripts};
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         terminal::{self, Recorded},
         ui,
     },
     forge::{IssueInput, items::link::Selection},
-    model::{PresentSpace, SpaceDetail, SpaceStatus, SpaceTarget},
-    protocol::{ConfigTarget, WorkspaceMethod},
+    model::{SpaceDetail, SpaceTarget},
+    protocol::ConfigTarget,
 };
 
 pub(in crate::cli::commands) async fn status(
@@ -28,8 +28,7 @@ pub(in crate::cli::commands) async fn status(
         ctx.show(&status, |status| render_status(status, ctx.json))?;
         return Ok(0);
     };
-    let method = WorkspaceMethod::FindSpaces { target };
-    let spaces = request::<Vec<PresentSpace>>(&ctx.paths, method).await?;
+    let spaces = crate::client::workspaces::find_spaces(&ctx.paths, target).await?;
     let mut statuses = Vec::new();
     for space in spaces {
         statuses.push(status_view(ctx, space.id().to_owned()).await?);
@@ -48,8 +47,7 @@ pub(in crate::cli::commands) async fn status(
 /// The status of `space`, with the sessions its terminal hosts keep and
 /// where its agents' transcripts are.
 async fn status_view(ctx: &Context, space: String) -> Result<StatusView> {
-    let status =
-        *request::<Box<SpaceStatus>>(&ctx.paths, WorkspaceMethod::SpaceStatus { space }).await?;
+    let status = crate::client::workspaces::status(&ctx.paths, space).await?;
     let (sessions, sessions_error) = listed(sessions(ctx, &status.space).await);
     let id = status.space.id().to_owned();
     let (transcripts, transcripts_error) =

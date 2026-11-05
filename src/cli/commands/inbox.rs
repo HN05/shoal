@@ -22,8 +22,7 @@ use crate::{
         approvals::{ApprovalRequest, DecisionStatus},
         questions::{self, Question},
     },
-    model::{Chat, ReviewMark, SpaceLinks, UntrackedWorktree, Workspace},
-    protocol::WorkspaceMethod,
+    model::{Chat, ReviewMark, SpaceLinks, Workspace},
     state::WorkspaceState,
 };
 
@@ -99,9 +98,7 @@ impl Inbox {
         // Workspace processes see their own tree, which no untracked worktree
         // or daemon-wide failure is in.
         if !crate::env::is_scoped() {
-            let untracked =
-                client::pages::<UntrackedWorktree>(&ctx.paths, WorkspaceMethod::UntrackedWorktrees)
-                    .await?;
+            let untracked = crate::client::workspaces::untracked_worktrees(&ctx.paths).await?;
             items.extend(
                 untracked
                     .into_iter()

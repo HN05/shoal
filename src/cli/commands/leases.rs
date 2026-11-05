@@ -21,8 +21,7 @@ use crate::{
         leases,
         resources::{LockMode, ResourceKind, ResourceRequest},
     },
-    model::{Inspection, PortRequest},
-    protocol::WorkspaceMethod,
+    model::PortRequest,
     sim::SimRequest,
 };
 
@@ -187,13 +186,7 @@ async fn select_held(
         }
         _ => {}
     }
-    let inspection = client::request::<Inspection>(
-        &ctx.paths,
-        WorkspaceMethod::InspectWorkspace {
-            workspace: workspace.to_owned(),
-        },
-    )
-    .await?;
+    let inspection = client::inspect(&ctx.paths, workspace.to_owned()).await?;
     let ports = inspection
         .ports
         .into_iter()

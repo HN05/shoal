@@ -9,10 +9,10 @@ use crate::{
         ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    config::{Config, edit::Change, options::Entry, repo::ConfigLayers, resolve::Stack},
+    config::{Config, edit::Change, options::Entry, resolve::Stack},
     env,
     paths::Paths,
-    protocol::{ConfigTarget, WorkspaceMethod},
+    protocol::ConfigTarget,
 };
 
 /// The reference bundled with this release, readable without network access.
@@ -161,9 +161,7 @@ async fn target(ctx: &Context, explicit: Option<String>) -> Result<ConfigTarget>
 /// Every option with its winning layer, and warnings for retired settings:
 /// the daemon's repository layers under the global file read now.
 async fn report(paths: &Paths, target: ConfigTarget) -> Result<(Vec<Entry>, Vec<String>)> {
-    let layers =
-        client::request::<Box<ConfigLayers>>(paths, WorkspaceMethod::LayeredConfig { target })
-            .await?;
+    let layers = crate::client::workspaces::config_layers(paths, target).await?;
     let stack = Stack::new(&Config::load_with_templates(paths)?, &layers);
     Ok((stack.report()?, stack.warnings().to_vec()))
 }

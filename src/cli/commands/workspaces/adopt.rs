@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result, ensure};
 use super::recovery::{issues, reconcile};
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         commands::repositories,
         context::Context,
         output::{Palette, Style},
@@ -15,7 +15,6 @@ use crate::{
     client::recovery::{DirectoryState, ReconcileOptions},
     git,
     model::Workspace,
-    protocol::WorkspaceMethod,
     repository, shell,
 };
 
@@ -34,15 +33,7 @@ pub(in crate::cli::commands) async fn adopt(
         Some(repository) => ui::repository_selector(repository)?,
         None => worktree_repository(ctx, &path).await?.into(),
     };
-    let workspace = request::<Workspace>(
-        &ctx.paths,
-        WorkspaceMethod::AdoptWorkspace {
-            repository,
-            path,
-            copy,
-        },
-    )
-    .await?;
+    let workspace = crate::client::workspaces::adopt(&ctx.paths, repository, path, copy).await?;
     ctx.emit(
         &format!(
             "{} {} {} (normal cleanup applies)",

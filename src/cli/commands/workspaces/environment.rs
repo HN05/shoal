@@ -6,13 +6,13 @@ use anyhow::{Context as _, Result};
 use crate::client::output::workspaces::Revoked;
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         output::Style,
         ui::{self, Fallback},
     },
     model::Workspace,
-    protocol::{ConfigTarget, WorkspaceMethod},
+    protocol::ConfigTarget,
     repository,
 };
 
@@ -23,22 +23,14 @@ pub(in crate::cli::commands) async fn environment(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     if let Some(token) = revoke {
-        request::<()>(
-            &ctx.paths,
-            WorkspaceMethod::RevokeWorkspaceEnv { workspace, token },
-        )
-        .await?;
+        crate::client::workspaces::revoke_environment(&ctx.paths, workspace, token).await?;
         ctx.emit_styled(
             Style::Success,
             "Workspace environment revoked",
             Revoked { revoked: true },
         )?;
     } else {
-        let values = request::<std::collections::BTreeMap<String, String>>(
-            &ctx.paths,
-            WorkspaceMethod::WorkspaceEnv { workspace },
-        )
-        .await?;
+        let values = crate::client::workspaces::environment(&ctx.paths, workspace).await?;
         let values = crate::env::export_configured(values, std::env::var_os("PATH"))?;
         ctx.show(&values, |values| {
             for (name, value) in values {

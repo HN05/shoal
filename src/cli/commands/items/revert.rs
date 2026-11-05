@@ -13,7 +13,7 @@ use crate::client::{forge_reads, items};
 use crate::{
     cli::{
         args::changes::{RevertArgs, RevertedPr},
-        client::{self, request},
+        client::{self},
         commands::split,
         context::Context,
         ui,
@@ -30,7 +30,7 @@ use crate::{
     git::revert::{self as git_revert, Merge, Merged, Reverted},
     model::{Chat, PresentSpace, Workspace},
     protocol::{
-        ItemContext, WorkspaceMethod,
+        ItemContext,
         operations::{StartedWorkspace, WorkspaceStart},
     },
     removal::UnsavedWork,
@@ -89,13 +89,8 @@ impl Reverting {
         match client::present_space(&ctx.paths, &space).await? {
             Some(PresentSpace::Chat(chat)) => Ok(Self::Chat(chat)),
             _ => {
-                let method = WorkspaceMethod::VerifyWorkspace {
-                    workspace: space,
-                    on_branch: false,
-                };
-                Ok(Self::Workspace(Box::new(
-                    request(&ctx.paths, method).await?,
-                )))
+                let workspace = crate::client::workspaces::verify(&ctx.paths, space, false).await?;
+                Ok(Self::Workspace(Box::new(workspace)))
             }
         }
     }
@@ -198,14 +193,8 @@ async fn revert_merge(
     merged: &MergedPull,
     message: &str,
 ) -> Result<()> {
-    let workspace: Workspace = request(
-        &ctx.paths,
-        WorkspaceMethod::VerifyWorkspace {
-            workspace: workspace.id.clone(),
-            on_branch: true,
-        },
-    )
-    .await?;
+    let workspace =
+        crate::client::workspaces::verify(&ctx.paths, workspace.id.clone(), true).await?;
     let path = &workspace.path;
     let facts = Merged {
         merge_commit: &merged.merge_commit,

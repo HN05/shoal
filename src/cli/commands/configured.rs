@@ -13,7 +13,7 @@ use crate::cli::args::Invocation;
 use crate::client::output::configured::{BareName, CommandDefinition};
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         recent,
         ui::{self, Fallback},
@@ -26,9 +26,9 @@ use crate::{
         resolve::Stack,
     },
     execution,
-    model::{DiffBase, Workspace},
+    model::Workspace,
     paths::Paths,
-    protocol::{ConfigTarget, WorkspaceMethod},
+    protocol::ConfigTarget,
 };
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
@@ -95,13 +95,7 @@ async fn current_layers(ctx: &Context) -> Result<ConfigLayers> {
 }
 
 async fn workspace_layers(ctx: &Context, workspace: String) -> Result<ConfigLayers> {
-    Ok(*request::<Box<ConfigLayers>>(
-        &ctx.paths,
-        WorkspaceMethod::LayeredConfig {
-            target: ConfigTarget::Workspace(workspace),
-        },
-    )
-    .await?)
+    crate::client::workspaces::config_layers(&ctx.paths, ConfigTarget::Workspace(workspace)).await
 }
 
 /// The name `shoal <name>` runs.
@@ -334,13 +328,7 @@ async fn diff_base(
     if !named_commands::uses_diff_base(argv) {
         return Ok(None);
     }
-    let base = request::<DiffBase>(
-        paths,
-        WorkspaceMethod::DiffBase {
-            workspace: workspace.id.clone(),
-        },
-    )
-    .await?;
+    let base = crate::client::workspaces::diff_base(paths, workspace.id.clone()).await?;
     Ok(Some(base.commit))
 }
 

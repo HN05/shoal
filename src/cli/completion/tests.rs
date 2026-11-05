@@ -4,7 +4,8 @@ use crate::{
     config::repo::ConfigLayers,
     model::{Chat, OwnedPlace, RunningAgent},
     protocol::{
-        self, Body, ChatMethod, ConfigTarget, ExecutionMethod, Method, Operation, Request, Response,
+        self, Body, ChatMethod, ConfigTarget, ExecutionMethod, Method, Operation, Request,
+        Response, WorkspaceMethod,
     },
     sessions::{HostName, Origin},
     state::WorkspaceState,

@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         commands::{
             approvals,
             operations::{self, Reporter},
@@ -17,10 +17,10 @@ use crate::{
     client::approvals::Undecided,
     env,
     execution::{self, MergeResult},
-    model::{MergeConfirmation, MergeOptions, MergePlan, MergePreview, MergedBranch},
+    model::{MergeConfirmation, MergeOptions, MergePlan, MergedBranch},
     paths::Paths,
     protocol::{
-        ConfigTarget, WorkspaceMethod,
+        ConfigTarget,
         operations::{OperationSpec, Step},
     },
 };
@@ -71,11 +71,8 @@ async fn confirm_merge(
     push: bool,
     pushing: bool,
 ) -> Result<Option<MergeConfirmation>> {
-    let method = WorkspaceMethod::PreviewMerge {
-        workspace: workspace.to_owned(),
-        push,
-    };
-    let preview: MergePreview = request(&ctx.paths, method).await?;
+    let preview =
+        crate::client::workspaces::preview_merge(&ctx.paths, workspace.to_owned(), push).await?;
     if !pushing && preview.warning.is_none() {
         return Ok(None);
     }

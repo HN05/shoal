@@ -16,7 +16,6 @@ use tokio::{
 
 use crate::{
     client::{paths::Paths, processes::Identity},
-    config::repo::ConfigLayers,
     model::{Chat, ChatHome, Inspection, PresentSpace, RenamedChat, Repository, Spaces, Workspace},
     protocol::{
         self, Body, ChatMethod, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method,
@@ -333,8 +332,7 @@ pub async fn configuration(
     daemon: &impl Daemon,
     target: crate::protocol::ConfigTarget,
 ) -> Result<(crate::config::Config, crate::config::Effective)> {
-    let layers =
-        request::<Box<ConfigLayers>>(daemon, WorkspaceMethod::LayeredConfig { target }).await?;
+    let layers = crate::client::workspaces::config_layers(daemon, target).await?;
     let config = crate::config::Config::load_with_templates(daemon.paths())?;
     let settings = config.resolve(&layers)?;
     Ok((config, settings))

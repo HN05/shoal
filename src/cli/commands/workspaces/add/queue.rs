@@ -9,13 +9,12 @@ use super::{
 };
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         commands::{agent_queue, issues},
         context::Context,
     },
     forge::IssueInput,
     model::Dependency,
-    protocol::WorkspaceMethod,
 };
 
 /// The work `--after` names, refused before any prompt when the repository
@@ -38,12 +37,10 @@ pub(super) async fn after_dependencies(
             IssueInput::Invalid => Dependency::Work(input.clone()),
         });
     }
-    request::<()>(
+    crate::client::workspaces::check_dependencies(
         &ctx.paths,
-        WorkspaceMethod::CheckDependencies {
-            repository: target.selector.clone(),
-            after: dependencies.clone(),
-        },
+        target.selector.clone(),
+        dependencies.clone(),
     )
     .await?;
     Ok(dependencies)

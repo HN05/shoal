@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 pub(crate) use crate::client::availability::*;
 use crate::{
-    cli::{client, terminal},
+    cli::terminal,
     model::{RunningAgent, Workspace},
     paths::Paths,
     sessions::Origin,
@@ -109,10 +109,9 @@ pub async fn load(need: Need, paths: &Paths, workspaces: &[Workspace]) -> Availa
 /// of an agent Shoal stopped to restore later.
 async fn session_workspaces(paths: &Paths) -> HashSet<String> {
     let agents = crate::client::agents::all(paths).await.unwrap_or_default();
-    let owned: Vec<crate::model::OwnedPlace> =
-        client::request(paths, crate::protocol::WorkspaceMethod::OwnedPlaces)
-            .await
-            .unwrap_or_default();
+    let owned = crate::client::workspaces::owned_places(paths)
+        .await
+        .unwrap_or_default();
     let places = agent_places(&agents);
     let mut owners = terminal::session_owners(&places.connected);
     // Each host lists its sessions once for the owners still in question.
@@ -174,13 +173,8 @@ async fn workspace_settings<'a>(
         if settings.contains_key(workspace) {
             continue;
         }
-        let layers = client::request::<Box<crate::config::repo::ConfigLayers>>(
-            paths,
-            crate::protocol::WorkspaceMethod::LayeredConfig {
-                target: crate::protocol::ConfigTarget::Workspace(workspace.to_owned()),
-            },
-        )
-        .await;
+        let target = crate::protocol::ConfigTarget::Workspace(workspace.to_owned());
+        let layers = crate::client::workspaces::config_layers(paths, target).await;
         if let Ok(resolved) = layers.and_then(|layers| config.resolve(&layers)) {
             settings.insert(workspace.to_owned(), resolved);
         }

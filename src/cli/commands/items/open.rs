@@ -6,7 +6,6 @@ use super::{content::read_content, context::select_open_context};
 use crate::{
     cli::{
         args::changes::OpenPullArgs,
-        client,
         commands::operations::{self, Failed, Reporter},
         context::Context,
         ui,
@@ -21,10 +20,7 @@ use crate::{
     },
     git,
     model::Workspace,
-    protocol::{
-        WorkspaceMethod,
-        operations::{Failure, OperationSpec, Step},
-    },
+    protocol::operations::{Failure, OperationSpec, Step},
 };
 
 pub(super) async fn open_pr(
@@ -75,14 +71,7 @@ pub(in crate::cli::commands) async fn push_and_open(
     options: PullOptions,
     reporter: &Reporter<'_>,
 ) -> Result<OpenOutcome> {
-    let workspace: Workspace = client::request(
-        &ctx.paths,
-        WorkspaceMethod::VerifyWorkspace {
-            workspace,
-            on_branch: true,
-        },
-    )
-    .await?;
+    let workspace = crate::client::workspaces::verify(&ctx.paths, workspace, true).await?;
     workspace.require_branch("shoal pr open")?;
     crate::client::reviews::check_pr_gate(&ctx.paths, workspace.id.clone()).await?;
     let held = crate::client::approvals::push_held(&ctx.paths, workspace.id.clone()).await?;
