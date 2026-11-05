@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use super::{
     proposals::OpenOutcome,
     space::LinkSpace,
-    wait::{OwnChange, receiving, record_received_change},
+    wait::{OwnChange, record_received_change},
 };
 use crate::{
     config::{repo::Opening, resolve::Effective},
@@ -80,10 +80,8 @@ impl Manager {
             self.agent_account()
         };
         // Held from before the change, so a poll that observes it records
-        // it after the cursors of the space and of those below it whose
-        // activity it receives know it as its own.
-        let children = self.delegated_spaces(space.id()).await?;
-        let _gate = self.gates.lock_prs(receiving(space.id(), &children)).await;
+        // it after the cursors that take it as the space's own know it.
+        let _gate = self.lock_change_gates(space.id(), &[]).await?;
         let target = Target { kind, number, url };
         let item = self
             .apply_own(space.id(), &forge, &account, target, &action)
@@ -142,7 +140,8 @@ impl Manager {
 
     /// Move the space's open PRs at `urls` into or out of draft as its
     /// agent account, leaving those already in that state unchanged. The
-    /// caller holds the space's PR gate.
+    /// caller holds the gates [`Manager::lock_change_gates`] takes for the
+    /// space.
     pub(crate) async fn set_draft(
         &self,
         space: &LinkSpace,
@@ -201,8 +200,8 @@ impl Manager {
     }
 
     /// Apply `action` and record it as the workspace's own change, as well as
-    /// a comment it posted before failing. The caller holds the workspace's
-    /// PR gate.
+    /// a comment it posted before failing. The caller holds the gates
+    /// [`Manager::lock_change_gates`] takes for the workspace.
     pub(super) async fn apply_own(
         &self,
         id: &str,

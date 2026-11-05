@@ -85,7 +85,9 @@ impl Manager {
         if let space @ LinkSpace::Chat { .. } = self.link_space(selector).await? {
             return self.mark_chat_ready(&space, selection).await;
         }
-        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
+        let id = self.workspace(selector).await?.id;
+        let _guard = self.lock_change_gates(&id, &[]).await?;
+        let workspace = self.workspace(&id).await?;
         workspace.require_branch("shoal ready")?;
         let settings = self.workspace_settings(&workspace).await?;
         let command = HookKind::PostReady
@@ -144,7 +146,7 @@ impl Manager {
         let LinkSpace::Chat { chat, checkout } = space else {
             bail!("only a chat is marked this way");
         };
-        let _guard = self.gates.lock_prs([space.id()]).await;
+        let _guard = self.lock_change_gates(space.id(), &[]).await?;
         let settings = self.space_settings(space).await?;
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(&checkout.path, &selection).await?);
@@ -273,7 +275,7 @@ impl Manager {
         draft: Option<bool>,
     ) -> Result<Vec<ReviewMark>> {
         let id = self.link_space(selector).await?.id().to_owned();
-        let _guard = self.gates.lock_prs([&id]).await;
+        let _guard = self.lock_change_gates(&id, &[]).await?;
         let space = self.link_space(&id).await?;
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(space.origin_path(), &selection).await?);

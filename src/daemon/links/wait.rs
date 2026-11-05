@@ -1200,10 +1200,7 @@ fn workspace_branch(db: &rusqlite::Connection, id: &str) -> Result<Option<String
 
 /// The IDs of space `id` and of `children`, whose activity its agent
 /// receives: the PR gates a delivery to that agent holds.
-pub(super) fn receiving<'a>(
-    id: &'a str,
-    children: &'a [SpaceRef],
-) -> impl Iterator<Item = &'a str> {
+fn receiving<'a>(id: &'a str, children: &'a [SpaceRef]) -> impl Iterator<Item = &'a str> {
     children.iter().map(|child| child.id.as_str()).chain([id])
 }
 

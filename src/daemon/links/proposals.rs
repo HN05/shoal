@@ -229,11 +229,9 @@ impl Manager {
         // A proposal this one duplicates takes its finding, so its gate is
         // held too.
         let duplicated = self.duplicated_proposal(&decision).await?;
-        let changed = duplicated.iter().map(|original| &original.space_id);
-        let _gate = self
-            .gates
-            .lock_prs(changed.chain([&request.space_id]))
-            .await;
+        let changed = duplicated.iter().map(|original| original.space_id.as_str());
+        let changed = changed.collect::<Vec<_>>();
+        let _gate = self.lock_change_gates(&request.space_id, &changed).await?;
         let request = self.pending_proposal(request).await?;
         if let Some(workspace) = routed_to {
             ensure!(
