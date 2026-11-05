@@ -1053,6 +1053,32 @@ pub(crate) fn with_proxy_args(settings: &Effective, name: &str, command: &mut Ve
     insert_options(command, integration(kind).proxy_args());
 }
 
+/// The arguments that give agent `name`, restored in `workspace`, the
+/// system text of `mode` again, which a restored session started without;
+/// none for an agent that takes it only in its first message, which its
+/// session already has. A mode no config defines anymore gives none, with a
+/// warning, so a restore never waits on config.
+pub(crate) fn restored_instruction_args(
+    settings: &Effective,
+    name: &str,
+    workspace: &Workspace,
+    mode: &str,
+) -> Vec<OsString> {
+    let place = templates::Place::Workspace {
+        workspace,
+        delivery: launch::delivery(agent_integration(settings, name), settings),
+    };
+    match templates::brief(settings, mode, place, None) {
+        Ok(brief) => (settings.launch(name).arguments)
+            .instruction_args(&brief.system)
+            .unwrap_or_default(),
+        Err(error) => {
+            eprintln!("warning: the restored agent is not told its rules: {error:#}");
+            Vec::new()
+        }
+    }
+}
+
 /// Add `options` to `command`, a configured command: before a `--`, after
 /// which arguments are the agent's prompt, else at the end.
 pub(crate) fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>) {

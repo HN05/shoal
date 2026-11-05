@@ -2173,7 +2173,8 @@ its agent started in, carried with the agent's name and model through every
 restore, so a restored or moved agent is told its own mode's rules again. Rules are named and shared, since several modes need the
 same guidance, while instructions say how to do one mode's job. Rules go
 through the agent CLI's system channel so they hold for the whole session,
-across restores and compaction; instructions follow the subject once, in the
+across compaction, and a restore passes them again, since a resumed CLI
+starts without the arguments that carried them; instructions follow the subject once, in the
 first message, so a restore never repeats a task the session already has. The
 subject, an issue or the prompt given, is worded the same in every mode, so modes
 differ only in what they add. Modes and rules are named sections whose options

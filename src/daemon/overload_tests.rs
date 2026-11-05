@@ -201,9 +201,19 @@ async fn built_in_restore_child() {
                         .iter()
                         .flat_map(|directory| tool.launch.arguments.add_dir_args(directory)),
                 );
+        // The restored session is told its mode's rules again, after its
+        // resume arguments.
+        let target = crate::protocol::ConfigTarget::Workspace(workspace.id.clone());
+        let settings = crate::cli::client::settings(&manager.paths, target)
+            .await
+            .unwrap();
+        let rules =
+            crate::cli::agents::restored_instruction_args(&settings, agent, &workspace, "worker");
+        assert!(!rules.is_empty());
         let expected: Vec<std::ffi::OsString> = restore
             .iter()
             .map(std::ffi::OsString::from)
+            .chain(rules)
             .chain(launch_args)
             .collect();
         let (prompt, arguments) = recovery.command.split_last().unwrap();
@@ -234,6 +244,27 @@ async fn built_in_restore_child() {
         let restore = restore.iter().map(std::ffi::OsString::from);
         assert!(recovery.command.starts_with(&restore.collect::<Vec<_>>()));
     }
+    // An agent restored in a mode of its repository's own is told that
+    // mode's rules again, but not the instructions its first message had.
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[agents.codex]\ncommand = ['codex-fixture', '{args}']\n\
+         [agents.claude]\ncommand = ['claude-fixture', '{args}']\n\
+         [modes.triage]\nrules = ['triage']\ninstructions = 'Label it.'\n\
+         [rules.triage]\ntext = 'Triage {branch}'\n",
+    )
+    .unwrap();
+    let triage = crate::execution::recovery::Restored {
+        mode: "triage",
+        ..restored("claude", Some("s1"))
+    };
+    let recovery = Recovery::resolve(&manager.paths, &workspace, triage, None, None)
+        .await
+        .unwrap();
+    let told =
+        |text: &str| (recovery.command.iter()).any(|arg| arg.to_string_lossy().contains(text));
+    assert!(told("\n\nTriage load"), "{:?}", recovery.command);
+    assert!(!told("Label it."), "{:?}", recovery.command);
     // A restore keeps the model and effort the agent ran with.
     let model = crate::agent::ModelChoice {
         model: Some("m1".into()),

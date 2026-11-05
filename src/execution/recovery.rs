@@ -116,11 +116,15 @@ struct RestoreCommand<'a> {
     workspace: &'a Workspace,
     prompt: &'a std::ffi::OsStr,
     model_args: Vec<OsString>,
+    /// The arguments that give the agent its mode's rules again, which only
+    /// its built-in resume arguments carry.
+    instruction_args: Vec<OsString>,
 }
 
 impl RestoreCommand<'_> {
     /// The agent's configured `argv` restore command, with its model, effort
-    /// and proxy arguments, and whether it carries the prompt.
+    /// and proxy arguments, and whether it carries the prompt. It is the
+    /// user's own, so Shoal adds no rules to it.
     async fn configured(self, argv: &[String]) -> Result<(Vec<OsString>, bool)> {
         let mut command = configured::expand_with_fields(
             self.paths,
@@ -137,10 +141,11 @@ impl RestoreCommand<'_> {
         Ok((command, argv.iter().any(|arg| arg.contains("{prompt}"))))
     }
 
-    /// The agent's launcher with `resume_args`, its model, effort and
+    /// The agent's launcher with `resume_args`, its model, effort, rules and
     /// workspace arguments, and the prompt.
     async fn resumed(self, mut args: Vec<OsString>) -> Result<Vec<OsString>> {
         args.extend(self.model_args);
+        args.extend(self.instruction_args);
         args.extend(
             crate::cli::agents::workspace_args(
                 self.paths,
@@ -252,6 +257,12 @@ impl Recovery {
             // A restore runs with what the agent ran with, or not at all, so
             // the record stays for once its templates take the values again.
             model_args: crate::cli::agents::model_args(&settings, &name, restored.model)?,
+            instruction_args: crate::cli::agents::restored_instruction_args(
+                &settings,
+                &name,
+                workspace,
+                restored.mode,
+            ),
         };
         let (command, handoff_delivered) = match (configured, resume_args) {
             (Some(argv), _) => restore.configured(argv).await?,

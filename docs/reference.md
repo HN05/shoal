@@ -2134,7 +2134,9 @@ ends a lease grant.
 
 A mode decides what an agent is told and the kind of space it starts in.
 `[modes.<name>]` sets `kind`, `workspace` or `chat`; `rules`, the named rules
-the agent's system text carries, in order; and `instructions`, sent once after
+the agent's system text carries, in order, which a workspace agent restored
+with its built-in resume arguments receives again (a configured
+`resume_command` is the user's own and gets none); and `instructions`, sent once after
 the agent's subject in its first message and never again on a restore.
 `[rules.<name>]` sets a rule's `text`, which any mode can list. Shoal ships
 these modes:
