@@ -368,6 +368,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
                 agent: "claude".into(),
                 session: None,
                 moved: false,
+                copied: None,
                 origin: None,
                 stopped_by,
                 stop: None,

@@ -419,6 +419,7 @@ async fn a_last_session_queues_and_takes_a_slot_once_admitted() {
             agent: "claude".into(),
             session: None,
             moved: false,
+            copied: None,
             origin: None,
             stopped_by: None,
             stop: None,

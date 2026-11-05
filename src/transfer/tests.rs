@@ -478,6 +478,7 @@ fn manifest_with_sessions() -> Manifest {
         agent: "codex".into(),
         session: Some("s2".into()),
         moved: false,
+        copied: None,
         origin: Some(
             serde_json::from_value(serde_json::json!({"host": "herdr", "place": "tab"})).unwrap(),
         ),

@@ -9,7 +9,7 @@ use crate::{
     cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, terminal, ui},
     client::recovery::ReconcileOptions,
     execution::recovery::{
-        LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,
+        Copied, LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,
         consume, saved_at,
     },
     model::{Chat, Inspection, QueueEntry, Workspace},
@@ -424,6 +424,18 @@ async fn restore(
 ) -> Result<i32> {
     let handoff = handoff(&commands);
     let mut records = vec![path];
+    if let Some(copied) = session.copied {
+        records.extend(commands.into_iter().map(|command| command.path));
+        return start_copied(
+            ctx,
+            workspace,
+            &session,
+            copied,
+            handoff.as_deref(),
+            records,
+        )
+        .await;
+    }
     if session.moved {
         records.extend(commands.into_iter().map(|command| command.path));
         return start_moved(ctx, workspace, &session, handoff.as_deref(), records).await;
@@ -460,21 +472,69 @@ async fn start_moved(
     handoff: Option<&str>,
     records: Vec<PathBuf>,
 ) -> Result<i32> {
+    eprintln!(
+        "shoal: starting a new {} session in the moved workspace",
+        session.agent
+    );
+    let message = crate::execution::recovery::moved_prompt(handoff);
+    start_told(ctx, workspace, session, None, message, records).await
+}
+
+/// Start the agent of `session` in a workspace copied from another: from a
+/// fork of the session it reported there, which stays the original's, or as
+/// a new agent when it reported none or cannot start from a fork, telling it
+/// the workspace is a copy; it consumes `records` once it has started.
+async fn start_copied(
+    ctx: &Context,
+    workspace: &Workspace,
+    session: &LastSession,
+    copied: Copied,
+    handoff: Option<&str>,
+    records: Vec<PathBuf>,
+) -> Result<i32> {
+    let agent = &session.agent;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
+    let fork = session
+        .session
+        .clone()
+        .filter(|_| crate::cli::agents::ensure_forks(&settings, agent).is_ok());
+    match fork {
+        Some(_) => eprintln!("shoal: starting {agent} from a fork of its session in the copy"),
+        None => eprintln!("shoal: starting a new {agent} session in the copy"),
+    }
+    let message = crate::execution::recovery::copied_prompt(copied, fork.is_some(), handoff);
+    start_told(ctx, workspace, session, fork, message, records).await
+}
+
+/// Start the agent of `session` as a new agent is started, from a fork of
+/// `fork` when given, with the model and effort it ran with, told `message`;
+/// it consumes `records` once it has started.
+async fn start_told(
+    ctx: &Context,
+    workspace: &Workspace,
+    session: &LastSession,
+    fork: Option<String>,
+    message: String,
+    records: Vec<PathBuf>,
+) -> Result<i32> {
     let agent = &session.agent;
     let launch: crate::agent::Agent = agent
         .parse()
-        .with_context(|| format!("cannot start agent {agent} of the moved workspace"))?;
-    eprintln!("shoal: starting a new {agent} session in the moved workspace");
+        .with_context(|| format!("cannot start agent {agent} of {}", workspace.name))?;
     // The prompt keeps it out of desktop apps, which cannot take one.
     let options = crate::cli::agents::LaunchOptions {
         tracked: true,
         replaces: records,
+        fork,
         model: crate::cli::agents::ModelRequest::Kept(session.model.clone()),
-        ..Default::default()
     };
     let opening = crate::cli::agents::Opening::Told {
         mode: session.mode.clone(),
-        message: crate::execution::recovery::moved_prompt(handoff),
+        message,
     };
     crate::cli::agents::launch_agent(ctx, launch, workspace.clone(), opening, vec![], options).await
 }

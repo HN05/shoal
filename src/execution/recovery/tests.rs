@@ -306,6 +306,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
             agent: "claude".into(),
             session: Some("stopped".into()),
             moved: false,
+            copied: None,
             origin: Some(herdr_pane("w1:p2")),
             stopped_by: None,
             stop: Some(Stop {
@@ -375,4 +376,42 @@ fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
         resumed_prompt(Some(&Stop::default()), None),
         resumed_prompt(None, None)
     );
+}
+
+#[test]
+fn copied_records_keep_their_mark_where_they_move() {
+    let record: Record = serde_json::from_str(r#"{"agent":"claude","session":"s1"}"#).unwrap();
+    assert_eq!(record.copied, None);
+    let copied = Record {
+        copied: Some(Copied {
+            earlier_files: true,
+        }),
+        ..record
+    };
+    let saved: Record = serde_json::from_str(&serde_json::to_string(&copied).unwrap()).unwrap();
+    assert_eq!(saved, copied);
+    let moved = copied.moved();
+    assert_eq!(moved.session, None);
+    assert_eq!(moved.copied, saved.copied);
+}
+
+#[test]
+fn copied_agents_are_told_the_workspace_is_a_copy() {
+    let forked = copied_prompt(Copied::default(), true, Some("handoff"));
+    assert!(forked.contains("copied this workspace"), "{forked}");
+    assert!(forked.contains("a fork of its agent's"), "{forked}");
+    assert!(!forked.contains("earlier checkpoint"), "{forked}");
+    assert!(forked.ends_with("\n\nhandoff"), "{forked}");
+    let earlier = copied_prompt(
+        Copied {
+            earlier_files: true,
+        },
+        false,
+        None,
+    );
+    assert!(
+        earlier.contains("session is not available here"),
+        "{earlier}"
+    );
+    assert!(earlier.contains("earlier checkpoint"), "{earlier}");
 }

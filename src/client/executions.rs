@@ -105,6 +105,10 @@ pub struct Record {
     /// as from another machine, so the agent starts a new one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub moved: bool,
+    /// The workspace is a copy of another, so the agent starts from a fork
+    /// of `session`, which stays the original's, or anew without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copied: Option<Copied>,
     /// What the agent was doing when it stopped, as its hooks last reported
     /// it. Unknown for agents without hooks and for records saved before
     /// turns were kept.
@@ -116,6 +120,16 @@ pub struct Record {
     /// The mode the agent started in, which its restore keeps.
     #[serde(default = "default_mode")]
     pub mode: String,
+}
+
+/// How an agent of a copied workspace starts: from a fork of the session
+/// it reported in the original, or anew.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Copied {
+    /// The workspace's files come from a checkpoint older than the session,
+    /// so the conversation describes work they do not contain.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub earlier_files: bool,
 }
 
 /// The mode of an agent recorded before modes existed.
@@ -160,6 +174,9 @@ pub struct LastSession {
     /// The workspace moved where the session is not available.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub moved: bool,
+    /// As [`Record::copied`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copied: Option<Copied>,
     /// Where the agent ran, as its terminal host records it, so `shoal
     /// resume` can restore it there; unknown for one that exited on its own.
     #[serde(

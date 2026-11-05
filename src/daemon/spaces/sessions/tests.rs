@@ -76,6 +76,7 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
             agent: "claude".into(),
             session: Some(session.into()),
             moved: false,
+            copied: None,
             origin: None,
             stopped_by: None,
             stop: None,

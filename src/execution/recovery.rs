@@ -13,7 +13,7 @@ mod claim;
 pub(crate) use claim::{RecoveryClaim, claim, discard_saved};
 
 pub(crate) use crate::client::executions::{
-    LastSession, Record, Stage, Stop, StoppedAgent, earlier_place, unnamed_execution,
+    Copied, LastSession, Record, Stage, Stop, StoppedAgent, earlier_place, unnamed_execution,
 };
 use crate::{
     agent::ModelChoice,
@@ -99,6 +99,29 @@ pub(crate) fn moved_prompt(handoff: Option<&str>) -> String {
     let mut prompt = String::from(
         "Shoal moved this workspace, and your earlier session is not available here. Continue working on the unfinished assignment: read its linked issue and PRs, its commits and its uncommitted changes to see where it stands.",
     );
+    if let Some(handoff) = handoff {
+        prompt.push_str("\n\n");
+        prompt.push_str(handoff);
+    }
+    prompt
+}
+
+/// What an agent of a workspace copied from another is told, from a fork
+/// of its session there when `forked`, followed by `handoff`; `copied` says
+/// whether the files are older than the conversation.
+pub(crate) fn copied_prompt(copied: Copied, forked: bool, handoff: Option<&str>) -> String {
+    let mut prompt = String::from(
+        "Shoal copied this workspace from another onto a branch of its own; the original keeps running with its branch and PRs.",
+    );
+    prompt.push_str(if forked {
+        " This conversation is a fork of its agent's, which continues there separately."
+    } else {
+        " Its agent's session is not available here."
+    });
+    if copied.earlier_files {
+        prompt.push_str(" The files come from an earlier checkpoint than the conversation, which describes work they do not contain: check them before you act on what you remember.");
+    }
+    prompt.push_str(" Continue working on the unfinished assignment: read its linked issue, its commits and its uncommitted changes to see where it stands.");
     if let Some(handoff) = handoff {
         prompt.push_str("\n\n");
         prompt.push_str(handoff);
@@ -393,6 +416,7 @@ impl Record {
             waiting: None,
             session: None,
             moved: false,
+            copied: None,
             turn: None,
             model: agent.model.clone(),
             mode: agent.mode.clone(),
@@ -408,6 +432,7 @@ impl Record {
             agent: self.agent,
             session: self.session,
             moved: self.moved,
+            copied: self.copied,
             origin: self.origin,
             stopped_by: None,
             stop: Some(stop),
@@ -786,6 +811,7 @@ impl LastSession {
             agent: agent.name.replace(' ', "-"),
             session: reported_session(paths, workspace_id, id),
             moved: false,
+            copied: None,
             origin: None,
             stopped_by: None,
             stop: None,
