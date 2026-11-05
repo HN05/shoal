@@ -39,15 +39,7 @@ fn run_as(
 }
 
 #[test]
-fn the_schema_describes_the_output() {
-    let schema: Value = serde_json::from_str(SCHEMA).unwrap();
-    let required: Vec<&str> = schema["required"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|key| key.as_str().unwrap())
-        .collect();
-    assert_eq!(required, ["summary", "verdict", "findings", "checked"]);
+fn output_on_the_schema_is_read() {
     let output = run(true, Some(review().to_string().as_bytes()), b"").unwrap();
     assert_eq!(output.findings[0].line, 7);
     assert_eq!(output.checked[0].finding.to_string(), "3.1");

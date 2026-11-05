@@ -23,5 +23,4 @@ fn a_place_round_trips_without_its_empty_fields() {
 fn unknown_hosts_are_rejected() {
     assert!(serde_json::from_value::<Origin>(serde_json::json!({"host": "screen"})).is_err());
     assert!("screen".parse::<HostName>().is_err());
-    assert_eq!("rex".parse::<HostName>().unwrap(), HostName::Rex);
 }

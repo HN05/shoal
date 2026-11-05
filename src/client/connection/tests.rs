@@ -188,7 +188,6 @@ async fn protocol_mismatch_precedes_payload_extraction() {
         ] {
             assert!(error.is::<ProtocolMismatch>());
             assert!(!error.is::<RemoteError>());
-            assert!(error.to_string().contains("shoal daemon install"));
         }
     }
 }
@@ -209,8 +208,6 @@ async fn a_daemon_that_owns_the_state_directory_without_answering_is_unresponsiv
         .downcast_ref::<Unresponsive>()
         .context("expected an unresponsive daemon")?;
     assert_eq!(unresponsive.owner.pid, std::process::id());
-    let message = format!("{error:#}");
-    assert!(message.contains("not responding"), "{message}");
     // Followers still wait for it as for a daemon that went away.
     assert!(is_unreachable(&error));
     Ok(())

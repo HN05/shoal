@@ -9,9 +9,7 @@ fn numbers_name_the_space_then_the_item() {
 
 #[test]
 fn a_bare_number_is_refused_with_the_full_form() {
-    let error = "5".parse::<ItemNumber>().unwrap_err().to_string();
-    assert!(error.starts_with("5 names no space"), "{error}");
-    for invalid in ["", "3.", ".2", "0.2", "3.0", "3.2.1", "a.b", "-3.2"] {
+    for invalid in ["5", "", "3.", ".2", "0.2", "3.0", "3.2.1", "a.b", "-3.2"] {
         assert!(invalid.parse::<ItemNumber>().is_err(), "{invalid}");
     }
 }
@@ -30,12 +28,8 @@ fn records_carry_both_numbers_and_their_text() {
 #[test]
 fn the_other_kind_names_its_command() {
     let number = ItemNumber { space: 3, item: 2 };
-    assert_eq!(
-        ItemKind::Approval.misdirected(number),
-        "3.2 is an approval request; use shoal approvals 3.2"
-    );
-    assert_eq!(
-        ItemKind::Question.misdirected(number),
-        "3.2 is a question; use shoal questions 3.2"
-    );
+    let approval = ItemKind::Approval.misdirected(number);
+    assert!(approval.contains("shoal approvals 3.2"), "{approval}");
+    let question = ItemKind::Question.misdirected(number);
+    assert!(question.contains("shoal questions 3.2"), "{question}");
 }

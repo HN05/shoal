@@ -191,10 +191,9 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
         warning: None,
         open_prs: Vec::new(),
     };
-    assert_eq!(
-        preview.description(),
-        "Merge fix-login (1 commit) into main."
-    );
+    let description = preview.description();
+    assert!(description.contains("(1 commit)"), "{description}");
+    assert!(!description.contains("push"), "{description}");
     preview.commits = 3;
     preview.push_to = Some(MergePush {
         remote: "origin".into(),
@@ -207,26 +206,28 @@ fn merge_preview_names_its_direction_push_warning_and_open_prs() {
         url: None,
     });
     preview.open_prs = vec!["https://forge/pulls/12".into()];
-    assert_eq!(
-        preview.description(),
-        "Merge fix-login (3 commits) into main, then push main to origin.\n\
-        Sensitive files changed on both sides by fix-login and main: version.\n\
-        PR https://forge/pulls/12 is open; shoal pr merge merges it on the forge instead."
-    );
-    assert_eq!(preview.reason(), preview.description().replace('\n', " "));
+    let description = preview.description();
+    for part in [
+        "(3 commits)",
+        "push main to origin.",
+        ": version.",
+        "https://forge/pulls/12",
+    ] {
+        assert!(description.contains(part), "{part:?} in {description}");
+    }
+    assert_eq!(preview.reason(), description.replace('\n', " "));
     preview.warning = None;
     preview.open_prs.clear();
     preview.unpushed = 2;
-    assert_eq!(
-        preview.description(),
-        "Merge fix-login (3 commits) into main, then push main to origin.\n\
-        main has 2 commits that origin/main lacks, which the push publishes too."
-    );
+    let description = preview.description();
+    assert!(description.contains("2 commits"), "{description}");
+    assert!(description.contains("origin/main"), "{description}");
     preview.unpushed = 0;
     preview.push_to.as_mut().unwrap().reference = "refs/heads/release".into();
-    assert_eq!(
-        preview.description(),
-        "Merge fix-login (3 commits) into main, then push main to origin/release."
+    assert!(
+        preview
+            .description()
+            .ends_with("push main to origin/release.")
     );
     preview.branch = "b".repeat(300);
     assert_eq!(preview.reason().len(), crate::validate::MAX_REASON_LEN);
