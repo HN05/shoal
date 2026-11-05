@@ -2165,7 +2165,10 @@ ends a lease grant.
 ### Modes and rules
 
 A mode decides what an agent is told and the kind of space it starts in.
-`[modes.<name>]` sets `kind`, `workspace` or `chat`; `rules`, the named rules
+`[modes.<name>]` sets `kind`, `workspace` or `chat`; `repository`, `true` by
+default, where `false` starts a [chat without a repository](#master-session)
+and is refused with any other kind or in a repository's config, since no
+repository's config applies to such a chat; `rules`, the named rules
 the agent's system text carries, in order, which a workspace agent restored
 with its built-in resume arguments receives again (a configured
 `resume_command` is the user's own and gets none); and `instructions`, sent once after
@@ -2178,6 +2181,7 @@ these modes:
 | `worker` | workspace | `worker` | [implement the subject](../src/client/config/modes/worker.md) |
 | `chat` | chat | `chat` | none |
 | `plan` | chat | `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
+| `orchestrate` | chat without a repository | `chat`, [`orchestrate`](../src/client/config/rules/orchestrate.md) | none |
 
 `shoal start` starts every new agent, in the mode `--mode` names, `worker` by
 default, and in the kind of space the mode names unless `--chat`, `--in` or

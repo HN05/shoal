@@ -2233,7 +2233,8 @@ reported layer is the one whose value is in use; the daemon resolves a workspace
 once per request and every use site reads them rather than layering on its own.
 Every agent starts with `shoal start`, in a mode: a named entry that lists the
 rules its system text carries, holds the instructions its first message ends
-with, and says which kind of space it starts in, so one command replaces a
+with, and says which kind of space it starts in and whether the space belongs
+to a repository, only a chat ever belonging to none, so one command replaces a
 command per kind of start. The default mode, `worker`, always starts in a
 workspace, so a plain `start` needs nothing from the daemon before it resolves
 its repository, as adding a workspace never did; another mode's kind is read

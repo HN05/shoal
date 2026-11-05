@@ -8,8 +8,10 @@ use serde_json::Value;
 const FULL: &str = "\
 git_profile = 'work'\n\
 [agent]\ndefault = 'claude'\nmodel = 'sonnet'\neffort = 'low'\nmax_running = 2\ndirs = ['/tmp', '~/cache']\ngit_profile = 'agent'\n\
-[modes.worker]\nkind = 'workspace'\nrules = ['chat']\ninstructions = 'work'\n[modes.chat]\nkind = 'workspace'\nrules = ['worker']\ninstructions = 'talk'\n\
-[modes.plan]\nkind = 'workspace'\nrules = ['review']\ninstructions = 'plan'\n[rules.worker]\ntext = 'agent'\n[rules.chat]\ntext = 'chat'\n[rules.review]\ntext = 'review'\n\
+[modes.worker]\nkind = 'workspace'\nrepository = true\nrules = ['chat']\ninstructions = 'work'\n[modes.chat]\nkind = 'workspace'\nrepository = true\nrules = ['worker']\ninstructions = 'talk'\n\
+[modes.plan]\nkind = 'workspace'\nrepository = true\nrules = ['review']\ninstructions = 'plan'\n\
+[modes.orchestrate]\nkind = 'chat'\nrepository = false\nrules = ['orchestrate']\ninstructions = 'manage'\n\
+[rules.worker]\ntext = 'agent'\n[rules.chat]\ntext = 'chat'\n[rules.review]\ntext = 'review'\n[rules.orchestrate]\ntext = 'orchestrate'\n\
 [terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
 [terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\
 [terminal.rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
@@ -97,6 +99,27 @@ fn a_mode_naming_an_undefined_rule_is_refused() {
         crate::model::SpaceKind::Workspace
     );
     assert_eq!(settings.modes["plan"].rules, ["chat"]);
+}
+
+#[test]
+fn only_a_chat_mode_may_have_no_repository() {
+    let settings = stack("", "", "").resolve().unwrap();
+    let orchestrate = &settings.modes[modes::ORCHESTRATE];
+    assert!(!orchestrate.repository);
+    assert_eq!(orchestrate.kind, crate::model::SpaceKind::Chat);
+    modes::check(&settings.modes, &settings.rules).unwrap();
+    for (config, refused) in [
+        ("[modes.setup]\nkind = 'chat'\nrepository = false\n", false),
+        (
+            "[modes.setup]\nkind = 'workspace'\nrepository = false\n",
+            true,
+        ),
+        ("[modes.orchestrate]\nkind = 'workspace'\n", true),
+    ] {
+        let settings = stack(config, "", "").resolve();
+        let checked = settings.and_then(|settings| modes::check(&settings.modes, &settings.rules));
+        assert_eq!(checked.is_err(), refused, "{config}");
+    }
 }
 
 #[test]
@@ -431,7 +454,9 @@ fn herdr_tab_names_resolve_and_report_the_winning_layer() {
 
 #[test]
 fn every_option_survives_layering_in_both_directions() {
-    let full = parse(FULL).unwrap();
+    // Read as a layer, not a repository's file, which refuses a mode's
+    // `repository` that the global layer takes.
+    let full: RepoConfig = toml::from_str(FULL).unwrap();
     assert_eq!(json(&full.clone().over(RepoConfig::default())), json(&full));
     assert_eq!(json(&RepoConfig::default().over(full.clone())), json(&full));
     // The same values reported from any single layer name that layer.
