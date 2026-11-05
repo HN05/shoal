@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 use tokio::sync::oneshot;
 
-use super::{Agent, Manager, Restart, Restarts};
+use super::{Agent, Manager, Restarts};
 use crate::{
     daemon::workspace::agent_queue::Start,
     model::{RunningAgent, Workspace},
@@ -38,19 +38,23 @@ pub(crate) struct Handover {
 pub(crate) type Renewals = HashMap<String, Renewal>;
 
 impl Agent {
-    /// The restart a new wrapper continues, which the agent hands over as
-    /// its execution ends.
-    pub(crate) fn hand_over(&mut self) -> Option<Renewal> {
-        let continues = (self.restarts.current.as_ref()).is_some_and(Restart::in_new_wrapper);
-        continues.then(|| {
-            Renewal::Starting(Handover {
-                name: self.name.clone(),
-                workspace_id: self.workspace_id.clone(),
-                restarts: std::mem::take(&mut self.restarts),
-                entry: None,
-            })
-        })
+    /// Hand its restart in progress, resumed, over to a new wrapper with
+    /// the outcomes of those that ended.
+    pub(super) fn hand_over(&mut self) -> Option<Renewal> {
+        self.restarts.current.as_mut()?.resume();
+        Some(Renewal::Starting(Handover {
+            name: self.name.clone(),
+            workspace_id: self.workspace_id.clone(),
+            restarts: std::mem::take(&mut self.restarts),
+            entry: None,
+        }))
     }
+}
+
+/// Whether a restart left the agent that ran as `id` to a new wrapper that
+/// has not registered it yet.
+pub(super) fn starting(renewals: &Renewals, id: &str) -> bool {
+    matches!(renewals.get(id), Some(Renewal::Starting(_)))
 }
 
 impl Handover {

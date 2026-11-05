@@ -553,6 +553,9 @@ async fn hand_over(
     let mut stop = execution.stop.clone();
     stop.wait_for(|stopping| *stopping).await.unwrap();
     manager.hand_over_restart(id).await.unwrap();
+    // A stop sees the restart before the execution's record goes, so no
+    // moment shows it neither.
+    assert!(manager.renewing_workspaces().await.contains(&workspace.id));
     let complete = manager
         .finish_execution(id.to_owned(), ExecutionKind::Command, Some(0))
         .await

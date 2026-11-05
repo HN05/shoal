@@ -78,11 +78,6 @@ impl Restart {
         self.resumed
     }
 
-    /// Whether a new wrapper starts the stopped agent again.
-    pub(super) fn in_new_wrapper(&self) -> bool {
-        self.resumed && !self.in_place
-    }
-
     fn pending(&self) -> PendingRestart {
         PendingRestart {
             run: self.run.clone(),

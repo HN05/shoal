@@ -381,14 +381,9 @@ impl Connections<'_> {
             .remove(id);
         let agent = executions
             .with_restarts(|agents, renewals| {
-                let Some(mut agent) = agents.remove(id) else {
-                    return false;
-                };
-                if let Some(renewal) = agent.hand_over() {
-                    renewals.insert(id.to_owned(), renewal);
-                }
+                let agent = agents.remove(id).is_some();
                 forget_ended_renewals(renewals, agents);
-                true
+                agent
             })
             .await;
         executions.stop_requests.lock().await.remove(id);

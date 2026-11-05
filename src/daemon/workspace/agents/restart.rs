@@ -29,6 +29,8 @@ impl Manager {
             .with_restarts(|agents, renewals| {
                 let mut listed: Vec<RunningAgent> = executions
                     .into_iter()
+                    // Listed below as the restart left it.
+                    .filter(|execution| !renewal::starting(renewals, &execution.id))
                     .filter_map(|execution| {
                         let agent = agents.get(&execution.id);
                         if agent.is_none() && connections.is_connected(&execution.id) {
@@ -52,15 +54,7 @@ impl Manager {
                         })
                     })
                     .collect();
-                let handed_over = renewal::handed_over(renewals);
-                let handed_over: Vec<RunningAgent> = handed_over
-                    .filter(|agent| {
-                        listed
-                            .iter()
-                            .all(|listed| listed.execution != agent.execution)
-                    })
-                    .collect();
-                listed.extend(handed_over);
+                listed.extend(renewal::handed_over(renewals));
                 listed
             })
             .await)
@@ -254,29 +248,25 @@ impl Manager {
     }
 
     /// Leave the restart of `id`, whose agent's processes stopped, to a new
-    /// wrapper, which starts the agent once this one finished.
+    /// wrapper, which starts the agent once this one finished. The restart
+    /// is kept apart from the agent from now on, while the execution is
+    /// still recorded, so something always shows the agent to a stop.
     pub(crate) async fn hand_over_restart(&self, id: &str) -> Result<()> {
         self.executions
-            .with_agent(id, |agent| {
-                agent.restarts.current.as_mut().map(Restart::resume)
+            .with_restarts(|agents, renewals| {
+                let renewal = agents.get_mut(id).and_then(Agent::hand_over);
+                let renewal = renewal.context("the restart was cancelled")?;
+                renewals.insert(id.to_owned(), renewal);
+                Ok(())
             })
             .await
-            .flatten()
-            .context("the restart was cancelled")
     }
 
     /// Whether a new wrapper starts the agent of `id` again for its restart.
     pub(crate) async fn restart_continues_elsewhere(&self, id: &str) -> bool {
         self.executions
-            .with_agent(id, |agent| {
-                agent
-                    .restarts
-                    .current
-                    .as_ref()
-                    .is_some_and(Restart::in_new_wrapper)
-            })
+            .with_restarts(|_, renewals| renewal::starting(renewals, id))
             .await
-            .unwrap_or(false)
     }
 
     /// The wrapper of `id` started its child: once a restart resumed the
@@ -285,11 +275,9 @@ impl Manager {
         self.answer_restart(id, Restart::resumed, Ok(())).await;
     }
 
-    /// The restart of `id` ends without the agent running again, unless a
-    /// new wrapper continues it.
+    /// The restart of `id` ends without the agent running again.
     pub(crate) async fn fail_restart(&self, id: &str, reason: String) {
-        let ends = |restart: &Restart| !restart.in_new_wrapper();
-        self.answer_restart(id, ends, Err(reason)).await;
+        self.answer_restart(id, |_| true, Err(reason)).await;
     }
 
     /// The restart of `id` waits for the stopped agent's processes to exit
