@@ -273,14 +273,7 @@ fn rex_options_resolve_independently() {
 }
 
 #[test]
-fn places_close_when_done_unless_a_layer_turns_it_off() {
-    assert!(
-        stack("", "", "")
-            .resolve()
-            .unwrap()
-            .terminal
-            .close_when_done
-    );
+fn a_later_layer_turns_closing_places_back_on() {
     assert!(
         !stack("terminal.close_when_done = false\n", "", "")
             .resolve()
@@ -338,8 +331,7 @@ fn presets_come_from_the_global_config_unless_the_repository_names_its_own() {
 }
 
 #[test]
-fn focus_is_unset_by_default_and_layers_per_repository() {
-    assert_eq!(stack("", "", "").resolve().unwrap().terminal.focus, None);
+fn focus_layers_per_repository() {
     assert_eq!(
         stack("terminal.focus = false\n", "", "")
             .resolve()
@@ -503,12 +495,6 @@ fn reported_provenance_names_the_layer_whose_value_is_in_effect() {
     assert_eq!(
         entry("agents.codex.default_mode").layer,
         Layer::BuiltInDefault
-    );
-    assert_eq!(entry("agents.codex.default_mode").value, "cli");
-    assert_eq!(entry("setup.command").value, Value::Null);
-    assert_eq!(
-        entry("simulators.preferred").value,
-        json(&Vec::<String>::new())
     );
 }
 

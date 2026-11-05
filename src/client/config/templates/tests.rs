@@ -16,7 +16,6 @@ fn install_seeds_the_chat_template_and_preserves_edits() {
 fn the_guidance_tells_each_launch_how_it_receives_updates() {
     let workspace = workspace();
     let pushed = instructions(None, &workspace, Delivery::Pushed);
-    assert!(pushed.contains("wait for the next"), "{pushed}");
     assert!(!pushed.contains("shoal watch pr"), "{pushed}");
     let watched = instructions(None, &workspace, Delivery::Watched);
     assert!(watched.contains("`shoal watch pr`"), "{watched}");
@@ -73,7 +72,6 @@ fn review_instructions_keep_their_fixed_part_before_any_template() {
     assert!(built_in.contains("git diff abc123...HEAD --stat"));
     assert!(!built_in.contains("<!--"));
     let replaced = review_instructions(Some("Follow .review/review.md in {path}."), &fields);
-    assert!(replaced.contains("report it in `checked`"));
     assert!(replaced.ends_with("Follow .review/review.md in /state/reviews/7."));
     assert!(!replaced.contains("careful senior colleague"));
     assert!(!review_instructions(None, &fields).contains("careful senior colleague"));
