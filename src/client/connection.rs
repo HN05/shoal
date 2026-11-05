@@ -400,6 +400,16 @@ pub async fn check_chat_name(daemon: &impl Daemon, name: &str) -> Result<()> {
     .await
 }
 
+/// Refuse `parent`, a space a new chat in `repository` could not go below.
+pub async fn check_chat_parent(
+    daemon: &impl Daemon,
+    repository: crate::client::repository::Selector,
+    parent: String,
+) -> Result<()> {
+    let parent = Some(parent);
+    request::<()>(daemon, ChatMethod::CheckChatParent { repository, parent }).await
+}
+
 /// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could take now.
 pub async fn free_chat_name(daemon: &impl Daemon, name: String) -> Result<String> {
     request(daemon, ChatMethod::FreeChatName { name }).await

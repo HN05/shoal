@@ -497,6 +497,32 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
 }
 
 #[tokio::test]
+async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts() {
+    let daemon = TestDaemon::start().await;
+    let app = daemon.connector();
+    let parent = daemon.workspace("parent").await;
+    let root = tempfile::tempdir().unwrap();
+    let other = crate::test_support::repository(root.path(), "other");
+    let other = daemon
+        .manager
+        .register_repository(other.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let check = |repository: &Repository| crate::protocol::ChatMethod::CheckChatParent {
+        repository: repository.id.clone().into(),
+        parent: Some(parent.id.clone()),
+    };
+    connection::request::<()>(&app, check(&daemon.repository))
+        .await
+        .unwrap();
+    assert!(
+        connection::request::<()>(&app, check(&other))
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
 async fn a_chats_agent_starts_workspaces_below_its_chat() {
     let daemon = TestDaemon::start().await;
     let chat = daemon

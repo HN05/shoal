@@ -62,6 +62,10 @@ pub(super) async fn handle(
             manager.check_chat_name(name).await?;
             Body::Ok
         }
+        ChatMethod::CheckChatParent { repository, parent } => {
+            (manager.ensure_parent_repository(&repository, parent.as_deref())).await?;
+            Body::Ok
+        }
         ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),
         ChatMethod::ChatScope { chat } => Body::ScopeToken(crate::protocol::ScopeToken {
             token: manager.chat_scope(&chat).await?,
@@ -87,6 +91,11 @@ impl Scoped for ChatMethod {
             } => {
                 manager.parent_below(caller, parent).await?;
                 workspace.as_mut()
+            }
+            // Its check takes the parent as its start would.
+            ChatMethod::CheckChatParent { parent, .. } => {
+                manager.parent_below(caller, parent).await?;
+                None
             }
             ChatMethod::MoveChat { chat, .. }
             | ChatMethod::SaveChat { chat, .. }

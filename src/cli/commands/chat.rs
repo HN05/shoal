@@ -436,6 +436,11 @@ pub(super) async fn launch(
     } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
+    // A parent the chat cannot go below is refused before anything is asked
+    // or opened, as its registration would.
+    if let Some(parent) = &parent {
+        client::check_chat_parent(&ctx.paths, repo.id.clone().into(), parent.clone()).await?;
+    }
     let topic = match &restore {
         Some(chat) if topic.linked_issue.is_none() => {
             with_saved_issue(topic, &client::recorded_chats(&ctx.paths).await?, chat)

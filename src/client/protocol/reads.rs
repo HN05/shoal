@@ -17,7 +17,11 @@ impl Operation {
                 | Self::Approval(
                     ApprovalMethod::ListApprovals { .. } | ApprovalMethod::ShowApproval { .. }
                 )
-                | Self::Chat(ChatMethod::CheckChatName { .. } | ChatMethod::FreeChatName { .. })
+                | Self::Chat(
+                    ChatMethod::CheckChatName { .. }
+                        | ChatMethod::CheckChatParent { .. }
+                        | ChatMethod::FreeChatName { .. }
+                )
                 | Self::Ci(
                     CiMethod::CheckLog { .. }
                         | CiMethod::ViewCiRun { .. }
