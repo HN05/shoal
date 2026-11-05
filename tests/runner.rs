@@ -20,7 +20,7 @@ use support::{cli, install_test_script, wait::wait_until};
 
 /// A Forgejo whose `team/repo` holds job `h1` waiting in run 1, a push to
 /// `main` at `head`, and registers runner 5; cancelling the run creates
-/// `finish`, which ends the recording runner.
+/// `finish`, which ends the recording runner, and the job waits no longer.
 fn forgejo(head: String, finish: std::path::PathBuf) -> Server {
     Server::start(move |request| {
         let line = request.line.as_str();
@@ -45,6 +45,11 @@ fn forgejo(head: String, finish: std::path::PathBuf) -> Server {
                 return (204, Vec::new(), Vec::new());
             }
             "GET /api/v1/repos/team/repo/actions/runs/1" => run,
+            line if line.starts_with("GET /api/v1/repos/team/repo/actions/runners/jobs?")
+                && finish.exists() =>
+            {
+                json!([])
+            }
             line if line.starts_with("GET /api/v1/repos/team/repo/actions/runners/jobs?") => {
                 json!([
                     {"handle": "h1", "id": 4, "run_id": 1, "name": "rust", "runs_on": ["shoal"], "status": "waiting"},
@@ -143,11 +148,14 @@ fn the_runner_runs_a_waiting_job_in_its_own_workspace_and_deletes_itself_when_tu
             .any(|pair| pair == ["--uuid", "runner-uuid"]),
         "{args:?}"
     );
-    let listed = workspaces(root);
-    let job = listed
-        .iter()
-        .find(|workspace| workspace["id"] == workspace_id.as_str())
-        .unwrap_or_else(|| panic!("{listed:?}"));
+    // The move stops what the daemon records running, which the stub's
+    // file does not prove.
+    let job = support::wait::wait_for("the job's runner to be recorded", || {
+        workspaces(root)
+            .into_iter()
+            .find(|workspace| workspace["id"] == workspace_id.as_str())
+            .filter(|workspace| workspace["running"] == true)
+    });
     assert_eq!(job["name"], "ci-rust-4");
     assert_eq!(job["at"]["commit"], head.as_str());
     assert_eq!(job["job"]["job"]["handle"], "h1");
