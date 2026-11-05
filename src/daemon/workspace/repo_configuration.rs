@@ -114,7 +114,7 @@ impl Manager {
     }
 
     async fn workspace_layers(&self, workspace: &Workspace) -> Result<ConfigLayers> {
-        let file = load_worktree_file(&workspace.path).await?;
+        let file = self.worktree_file(&workspace.path).await?;
         self.config_layers(&workspace.repository_id, file).await
     }
 
@@ -124,16 +124,26 @@ impl Manager {
         let (repository_id, worktree_file) = match target {
             ConfigTarget::Workspace(selector) => {
                 let workspace = self.workspace(&selector).await?;
-                let file = load_worktree_file(&workspace.path).await?;
+                let file = self.worktree_file(&workspace.path).await?;
                 (workspace.repository_id, file)
             }
             ConfigTarget::Repository(selector) => {
                 let repo = self.repository(&selector).await?;
-                let file = load_worktree_file(&repo.path).await?;
+                let file = self.worktree_file(&repo.path).await?;
                 (repo.id, file)
             }
         };
         self.config_layers(&repository_id, worktree_file).await
+    }
+
+    /// The config file and template files of the checkout or worktree at
+    /// `path`, read under [`Manager::check_access`], since reading them waits
+    /// on any privacy prompt for its volume.
+    async fn worktree_file(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<(RepoConfig, config::templates::Files)> {
+        self.check_access(path, load_worktree_file(path)).await
     }
 
     /// The local config file in the repository directory `directory`, unless

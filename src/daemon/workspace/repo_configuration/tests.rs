@@ -94,3 +94,40 @@ async fn an_unrecorded_worktree_where_the_local_config_belongs_is_never_local_co
     assert!(!directory.join("config.toml").exists());
     manager.repository_settings(&repo.id).await.unwrap();
 }
+
+#[tokio::test]
+async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_them() {
+    let (root, manager) = test_support::manager().await;
+    let checkout = test_support::repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    // Reading this file fails with a parse error, so the stall error shows
+    // the read never ran.
+    std::fs::write(workspace.path.join(".shoal.toml"), "not toml [").unwrap();
+    manager.file_access.stall_rechecking(&workspace.path);
+
+    let target = crate::protocol::ConfigTarget::Workspace(workspace.id.clone());
+    let error = format!("{:#}", manager.config_layers_for(target).await.unwrap_err());
+    let directory = workspace.path.parent().unwrap().display().to_string();
+    assert!(
+        error.starts_with(&format!("file access in {directory} stalled")),
+        "{error}"
+    );
+    assert!(
+        error.contains("a macOS privacy prompt may be waiting for an answer"),
+        "{error}"
+    );
+    let settings = manager.workspace_settings(&workspace).await.unwrap_err();
+    assert!(format!("{settings:#}").contains("stalled"), "{settings:#}");
+
+    manager.file_access.recover_at(&workspace.path);
+    let target = crate::protocol::ConfigTarget::Workspace(workspace.id.clone());
+    let error = format!("{:#}", manager.config_layers_for(target).await.unwrap_err());
+    assert!(error.contains("TOML parse error"), "{error}");
+}

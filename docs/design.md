@@ -479,8 +479,10 @@ it exists, can wait too, and no time limit interrupts a read waiting in the
 kernel, so requests and sweeps read worktree files on the blocking pool, where
 a read holds no runtime thread and a check's time limit ends the wait for it.
 The startup audit, its recheck, the sweep's branch observation and cleanup
-checks, and the Git reads of `shoal status` check a worktree within 30 seconds,
-a status reporting what it could not read; one that runs out or is interrupted
+checks, the Git reads of `shoal status`, and the reads of a checkout's or
+worktree's config file, which every command that resolves its settings, such
+as `shoal attach`, waits on, check a worktree within 30 seconds, a status
+reporting what it could not read; one that runs out or is interrupted
 records the directory holding the worktree as stalled, which the daemon reports
 once as an alert and in `daemon status` until a check there finishes. The
 directory comes from the path alone, since reading the filesystem could stall
