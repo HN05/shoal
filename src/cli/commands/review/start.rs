@@ -20,10 +20,9 @@ use crate::{
     git,
     model::{Chat, Repository, Workspace},
     protocol::{
-        ConfigTarget, CreationOptions, ItemContext, ReviewMethod, WorkspaceMethod,
-        operations::WorkspaceStart,
+        ConfigTarget, CreationOptions, ItemContext, WorkspaceMethod, operations::WorkspaceStart,
     },
-    reviews::{Review, ReviewTarget},
+    reviews::ReviewTarget,
 };
 
 /// The configured command a manual review runs.
@@ -469,16 +468,7 @@ async fn queue(
     // Refused here, before the daemon queues a review it could not run.
     super::super::chat::check_model(settings, &agent, &model)?;
     crate::cli::agents::ensure_reviewer_available(agent.name(), settings)?;
-    let review: Review = client::reviews(
-        &ctx.paths,
-        ReviewMethod::RunReview {
-            workspace,
-            target,
-            agent: Some(agent),
-            model,
-        },
-    )
-    .await?;
+    let review = crate::client::reviews::run(&ctx.paths, workspace, target, agent, model).await?;
     let message = format!(
         "Review {id} of {} is queued for {}; its findings arrive as a message. Wait for it with \
          shoal watch review {id}.",

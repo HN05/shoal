@@ -4,11 +4,11 @@ use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
 
+use crate::client::reviews;
 use crate::{
-    cli::{client, context::Context},
+    cli::context::Context,
     model::Chat,
-    protocol::ReviewMethod,
-    reviews::{FindingId, Outcome, Review},
+    reviews::{FindingId, Outcome},
 };
 
 /// Cancel review `id`, else the space's queued or running one: a chat's is
@@ -18,8 +18,7 @@ pub(super) async fn cancel(ctx: &Context, id: Option<i64>, space: Option<String>
         Some(id) => (None, Some(id)),
         None => cancelled(ctx, space).await?,
     };
-    let review: Review =
-        client::reviews(&ctx.paths, ReviewMethod::CancelReview { workspace, id }).await?;
+    let review = reviews::cancel(&ctx.paths, workspace, id).await?;
     ctx.emit(&format!("Review {} cancelled.", review.id), &review)?;
     Ok(0)
 }
@@ -56,15 +55,7 @@ pub(super) async fn reply(
         }
         (None, None) => anyhow::bail!("give the reply as text or with --body-file"),
     };
-    let review: Review = client::reviews(
-        &ctx.paths,
-        ReviewMethod::ReplyToFinding {
-            workspace: None,
-            finding,
-            body,
-        },
-    )
-    .await?;
+    let review = reviews::reply(&ctx.paths, finding, body).await?;
     ctx.emit(&format!("Replied to finding {finding}."), &review)?;
     Ok(0)
 }
@@ -79,15 +70,7 @@ pub(super) async fn resolve(
         Some(_) => format!("Resolved finding {finding}."),
         None => format!("Reopened finding {finding}."),
     };
-    let review: Review = client::reviews(
-        &ctx.paths,
-        ReviewMethod::ResolveFinding {
-            workspace: None,
-            finding,
-            outcome,
-        },
-    )
-    .await?;
+    let review = reviews::resolve(&ctx.paths, finding, outcome).await?;
     ctx.emit(&message, &review)?;
     Ok(0)
 }

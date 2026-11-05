@@ -22,7 +22,7 @@ use crate::{
     git,
     model::Workspace,
     protocol::{
-        ItemMethod, ReviewMethod, WorkspaceMethod,
+        ItemMethod, WorkspaceMethod,
         operations::{Failure, OperationSpec, Step},
     },
 };
@@ -84,10 +84,7 @@ pub(in crate::cli::commands) async fn push_and_open(
     )
     .await?;
     workspace.require_branch("shoal pr open")?;
-    let gate = ReviewMethod::CheckPrGate {
-        workspace: workspace.id.clone(),
-    };
-    client::request::<()>(&ctx.paths, gate).await?;
+    crate::client::reviews::check_pr_gate(&ctx.paths, workspace.id.clone()).await?;
     let held = crate::client::approvals::push_held(&ctx.paths, workspace.id.clone()).await?;
     if !held {
         reporter.step(Step::PushStarted).await?;

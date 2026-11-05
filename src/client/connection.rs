@@ -322,17 +322,6 @@ where
     }
 }
 
-/// What a review request returns, a review or a listing of them,
-/// reassembled from the pieces of JSON the daemon sends it in.
-pub async fn reviews<T: serde::de::DeserializeOwned>(
-    daemon: &impl Daemon,
-    method: crate::protocol::ReviewMethod,
-) -> Result<T> {
-    let pieces = pages::<crate::protocol::ReviewPiece>(daemon, method).await?;
-    let json: String = pieces.into_iter().map(|piece| piece.0).collect();
-    serde_json::from_str(&json).context("the daemon sent an invalid review")
-}
-
 /// The settings that apply to `target` after every layer. The global config
 /// is read now, so launch defaults follow it without a daemon restart.
 pub async fn settings(

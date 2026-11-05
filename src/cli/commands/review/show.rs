@@ -2,15 +2,14 @@
 //! latest review `shoal view` adds after a workspace's linked items.
 use anyhow::Result;
 
+use crate::client::reviews;
 use crate::{
     cli::{
-        client,
         context::Context,
         installed::{Executable, arguments},
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    protocol::ReviewMethod,
     reviews::{Finding, Posted, Review, ReviewState, ReviewTarget, Severity},
 };
 
@@ -39,14 +38,7 @@ pub(in crate::cli::commands) async fn list(
         Some(repository) => Some(ui::repository_selector(repository)?),
         None => None,
     };
-    let reviews: Vec<Review> = client::reviews(
-        &ctx.paths,
-        ReviewMethod::ListReviews {
-            workspace,
-            repository,
-        },
-    )
-    .await?;
+    let reviews = reviews::list(&ctx.paths, workspace, repository).await?;
     ctx.show(&reviews, |reviews| render_list(reviews, ctx.json))?;
     Ok(0)
 }
@@ -59,8 +51,7 @@ pub(in crate::cli::commands) async fn view(
     workspace: Option<String>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
-    let review: Review =
-        client::reviews(&ctx.paths, ReviewMethod::ShowReview { workspace, id }).await?;
+    let review = reviews::show(&ctx.paths, workspace, id).await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
 }
@@ -76,19 +67,10 @@ pub(in crate::cli::commands) async fn watch(
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
     let executable = Executable::current();
-    let method = || ReviewMethod::AwaitReview {
-        workspace: workspace.clone(),
-        id,
-    };
-    let id = match client::await_reply(&ctx.paths, method, false).await {
-        Ok(body) => i64::try_from(body)?,
-        Err(error) => return Err(executable.resume_or(error, arguments)),
-    };
-    let method = ReviewMethod::ShowReview {
-        workspace: None,
-        id: Some(id),
-    };
-    let review: Review = client::reviews(&ctx.paths, method).await?;
+    let id = reviews::await_ended(&ctx.paths, workspace, id)
+        .await
+        .map_err(|error| executable.resume_or(error, arguments))?;
+    let review = reviews::show(&ctx.paths, None, Some(id)).await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
 }
@@ -96,11 +78,9 @@ pub(in crate::cli::commands) async fn watch(
 /// The workspace's newest review for `shoal view`, if it has one; a lookup
 /// that fails leaves it out.
 pub(in crate::cli::commands) async fn latest(ctx: &Context, workspace: &str) -> Option<Review> {
-    let method = ReviewMethod::ShowReview {
-        workspace: Some(workspace.to_owned()),
-        id: None,
-    };
-    client::reviews(&ctx.paths, method).await.ok()
+    reviews::show(&ctx.paths, Some(workspace.to_owned()), None)
+        .await
+        .ok()
 }
 
 /// The workspace a request without a review ID names.

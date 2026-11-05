@@ -10,7 +10,6 @@ use crate::{
         ui::{self, Fallback},
     },
     model::{Chat, PresentSpace},
-    protocol::ReviewMethod,
     reviews::{Review, ReviewTarget},
 };
 
@@ -94,14 +93,8 @@ async fn chat(ctx: &Context, space: Option<&str>) -> Result<Option<Chat>> {
 /// A chat's reviews: those of its linked PRs, which run in the workspaces
 /// that own their head branches, newest first.
 async fn chat_reviews(ctx: &Context, chat: &Chat) -> Result<Vec<Review>> {
-    let reviews: Vec<Review> = client::reviews(
-        &ctx.paths,
-        ReviewMethod::ListReviews {
-            workspace: None,
-            repository: Some(chat.repository_id.clone().into()),
-        },
-    )
-    .await?;
+    let repository = Some(chat.repository_id.clone().into());
+    let reviews = crate::client::reviews::list(&ctx.paths, None, repository).await?;
     Ok(reviews
         .into_iter()
         .filter(|review| match &review.target {
