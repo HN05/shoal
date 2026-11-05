@@ -335,6 +335,9 @@ pub async fn configuration(
     let layers = crate::client::workspaces::config_layers(daemon, target).await?;
     let config = crate::config::Config::load_with_templates(daemon.paths())?;
     let settings = config.resolve(&layers)?;
+    // With every layer's mode and rule files read, a launch refuses a mode
+    // naming a rule none defines before it creates anything.
+    crate::config::modes::check(&settings.modes, &settings.rules)?;
     Ok((config, settings))
 }
 
