@@ -1,5 +1,6 @@
-//! The restarts of one agent: the one in progress, which answers each
-//! request for it, and how each that ended did, by the run that asked for it.
+//! The restarts of one agent, a workspace's or a chat's: the one in
+//! progress, which answers each request for it, and how each that ended
+//! did, by the run that asked for it.
 use std::collections::HashMap;
 
 use anyhow::{Result, anyhow};
@@ -50,7 +51,7 @@ impl Restart {
 
     /// Answer one more request, of `run`: at once while the restart waits
     /// for the agent's processes, otherwise once it ends.
-    pub(super) fn answer(
+    pub(crate) fn answer(
         &mut self,
         run: Option<String>,
     ) -> oneshot::Receiver<Result<Option<Origin>>> {
@@ -110,12 +111,12 @@ pub(crate) struct Restarts {
 
 impl Restarts {
     /// The restart in progress, as `shoal restart` reads it.
-    pub(super) fn pending(&self) -> Option<PendingRestart> {
+    pub(crate) fn pending(&self) -> Option<PendingRestart> {
         self.current.as_ref().map(Restart::pending)
     }
 
     /// Where a restart of `run` started the agent again, if it did already.
-    pub(super) fn restarted_for(&self, run: &Option<String>) -> Option<Option<Origin>> {
+    pub(crate) fn restarted_for(&self, run: &Option<String>) -> Option<Option<Origin>> {
         run.as_ref()?;
         self.ended.get(run)?.clone().ok()
     }
@@ -124,7 +125,7 @@ impl Restarts {
     /// or, once that ended, how it did, which also counts for `run`. A
     /// restart whose run a daemon before this one forgot matches whichever
     /// is in progress; `name` names the agent.
-    pub(super) fn join(
+    pub(crate) fn join(
         &mut self,
         name: &str,
         of_run: &Option<String>,
@@ -143,8 +144,21 @@ impl Restarts {
         }
     }
 
+    /// End the restart in progress with `outcome` if `ends` says it ended,
+    /// answering each request for it.
+    pub(crate) fn finish_if(&mut self, ends: impl FnOnce(&Restart) -> bool, outcome: &Outcome) {
+        let Some(restart) = self.current.take_if(|restart| ends(restart)) else {
+            return;
+        };
+        self.end(&restart, outcome);
+        for done in restart.answers {
+            // The request may have gone with its client.
+            let _ = done.send(outcome.clone().map_err(|reason| anyhow!(reason)));
+        }
+    }
+
     /// Record `outcome` for every run `restart` restarted the agent for.
-    pub(super) fn end(&mut self, restart: &Restart, outcome: &Outcome) {
+    fn end(&mut self, restart: &Restart, outcome: &Outcome) {
         for run in restart.runs() {
             self.ended.insert(run, outcome.clone());
         }
@@ -165,7 +179,7 @@ impl Restarts {
     }
 
     /// The runs a restart started the agent again for.
-    pub(super) fn restarted_by(&self) -> Vec<String> {
+    pub(crate) fn restarted_by(&self) -> Vec<String> {
         let mut runs: Vec<String> = self
             .ended
             .iter()
@@ -178,7 +192,7 @@ impl Restarts {
 }
 
 /// How the restart `answer` answers ended.
-pub(super) async fn restarted(
+pub(crate) async fn restarted(
     answer: oneshot::Receiver<Result<Option<Origin>>>,
 ) -> Result<Option<Origin>> {
     answer

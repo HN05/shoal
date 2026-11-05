@@ -16,8 +16,8 @@ mod renewal;
 mod state;
 use renewal::Renewal;
 pub(crate) use renewal::{Renewals, forget_ended as forget_ended_renewals};
-use state::{Outcome, restarted};
-pub(crate) use state::{Restart, Restarts};
+use state::Outcome;
+pub(crate) use state::{Restart, Restarts, restarted};
 
 impl Manager {
     /// Every connected agent, every execution whose wrapper is gone, which
@@ -352,19 +352,9 @@ impl Manager {
         ends: impl FnOnce(&Restart) -> bool,
         outcome: Outcome,
     ) {
-        let restart = self
-            .executions
-            .with_agent(id, |agent| {
-                let restart = agent.restarts.current.take_if(|restart| ends(restart))?;
-                agent.restarts.end(&restart, &outcome);
-                Some(restart)
-            })
-            .await
-            .flatten();
-        for done in restart.into_iter().flat_map(|restart| restart.answers) {
-            // The request may have gone with its client.
-            let _ = done.send(outcome.clone().map_err(|reason| anyhow!(reason)));
-        }
+        self.executions
+            .with_agent(id, |agent| agent.restarts.finish_if(ends, &outcome))
+            .await;
     }
 }
 
