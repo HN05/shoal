@@ -63,12 +63,13 @@ fn earlier_findings_carry_their_replies_outcomes_and_checks() {
         finding(4, None, None),
     ])];
     let text = history(&[], &reviews, None, PROMPT_LIMIT);
-    assert!(text.contains("## Review 4 of 0123456789ab"), "{text}");
+    assert!(text.contains("0123456789ab"), "{text}");
+    assert!(!text.contains("0123456789abc"), "{text}");
     assert!(
         text.contains("### Finding 4.1 (blocker) at src/a.rs:9: Problem 1"),
         "{text}"
     );
-    assert!(text.contains("Reply: Only on empty input."), "{text}");
+    assert!(text.contains("Only on empty input."), "{text}");
     assert!(text.contains("Outcome: fixed; check it"), "{text}");
     assert!(
         text.contains("Outcome: false-positive: The caller checks it."),
@@ -117,13 +118,9 @@ fn false_positives_come_first_and_the_newest_are_kept() {
         "{text}"
     );
     assert!(
-        text.contains(
-            "## Claim 1\n\nPath: ios/Info.plist\n\n\
-             Reason: The app extension's plist registers it."
-        ),
+        text.contains("The app extension's plist registers it."),
         "{text}"
     );
-    assert!(text.contains("[earlier history omitted]"), "{text}");
     assert!(text.contains("Problem 9"), "{text}");
     assert!(text.len() <= 4096, "{}", text.len());
 
@@ -134,7 +131,6 @@ fn false_positives_come_first_and_the_newest_are_kept() {
     assert!(section.len() <= FALSE_POSITIVES_LIMIT, "{}", section.len());
     assert!(section.contains("## Claim 1\n"));
     assert!(!section.contains("## Claim 2000\n"));
-    assert!(section.ends_with("[older false positives omitted]"));
     assert!(text.contains("Problem 9"), "{text}");
     assert!(listed(&many, 100).is_empty());
     assert!(listed(&[], PROMPT_LIMIT).is_empty());

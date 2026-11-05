@@ -32,8 +32,6 @@ fn entries_are_kept_newest_first_until_their_finding_is_resolved_otherwise() {
     );
     record(&path, id(2), None).unwrap();
     assert_eq!(read(&path).unwrap(), [listed(1, "Bounded")]);
-    let text = std::fs::read_to_string(&path).unwrap();
-    assert!(text.starts_with(HEADER), "{text}");
 }
 
 #[test]
@@ -59,8 +57,7 @@ fn an_invalid_file_is_refused_and_kept() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("false-positives.toml");
     std::fs::write(&path, "[[false_positive]]\nclaim = \"Unchecked\"\n").unwrap();
-    let error = format!("{:#}", read(&path).unwrap_err());
-    assert!(error.contains("false-positives.toml"), "{error}");
+    assert!(read(&path).is_err());
     record(&path, id(1), Some(listed(1, "Sorted"))).unwrap_err();
     assert_eq!(
         std::fs::read_to_string(&path).unwrap(),

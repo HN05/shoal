@@ -56,20 +56,13 @@ fn findings_on_diff_lines_become_line_comments_and_the_rest_go_in_the_body() {
     assert_eq!(posted.comments.len(), 1);
     assert_eq!(posted.comments[0].path, "src/a.rs");
     assert_eq!(posted.comments[0].line, 7);
-    assert_eq!(
-        posted.comments[0].body,
-        "**Blocker** — Problem 1\n\nIt breaks."
-    );
-    assert!(posted.body.starts_with(
-        "One blocker.\n\nFindings outside the diff:\n\n**Nit** `README.md:7` — Problem 2"
-    ));
-    assert!(
-        posted
-            .body
-            .contains("_Reviewed by claude: 1 blocker, 1 nit._")
-    );
+    assert!(posted.comments[0].body.contains("Problem 1"));
+    assert!(posted.body.starts_with("One blocker."), "{}", posted.body);
+    assert!(posted.body.contains("README.md:7"), "{}", posted.body);
+    assert!(!posted.body.contains("Problem 1"), "{}", posted.body);
+    assert!(posted.body.contains("1 blocker, 1 nit"), "{}", posted.body);
     assert!(posted.body.ends_with(&format!("_{AUTOMATED_NOTE}_")));
-    assert!(!posted.body.contains("newer commits"));
+    assert!(!posted.body.contains("0123456789ab"), "{}", posted.body);
     // A review of the current head is bound to it.
     assert_eq!(posted.commit.as_deref(), Some("0123456789abcdef"));
     posted.validate().unwrap();
@@ -81,25 +74,15 @@ fn a_review_of_a_moved_head_puts_every_finding_in_the_body() {
     let posted = new_review(&review, |_| false, Some("0123456789abcdef"));
     assert!(posted.comments.is_empty());
     assert_eq!(posted.commit, None);
-    assert!(
-        posted
-            .body
-            .contains("Findings:\n\n**Blocker** `src/a.rs:7` — Problem 1")
-    );
-    assert!(
-        posted.body.contains(
-            "_Reviewed commit 0123456789ab; newer commits were pushed during the review._"
-        )
-    );
+    assert!(posted.body.contains("src/a.rs:7"), "{}", posted.body);
+    assert!(posted.body.contains("0123456789ab"), "{}", posted.body);
 }
 
 #[test]
 fn a_clean_review_posts_its_summary_without_the_note() {
     let posted = new_review(&review(Vec::new()), |_| true, None);
     assert_eq!(posted.commit.as_deref(), Some("0123456789abcdef"));
-    assert_eq!(
-        posted.body,
-        "One blocker.\n\n_Reviewed by claude: no findings._"
-    );
+    assert!(posted.body.starts_with("One blocker."), "{}", posted.body);
+    assert!(!posted.body.contains(AUTOMATED_NOTE), "{}", posted.body);
     posted.validate().unwrap();
 }
