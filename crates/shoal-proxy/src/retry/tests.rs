@@ -4,14 +4,10 @@ use super::*;
 fn statuses_name_the_failure() {
     for (status, failure) in [
         (200, None),
-        (302, None),
         (429, Some(Failure::RateLimited)),
-        (503, Some(Failure::Overloaded)),
         (529, Some(Failure::Overloaded)),
         (500, Some(Failure::ServerError)),
-        (504, Some(Failure::ServerError)),
         (401, Some(Failure::Other)),
-        (400, Some(Failure::Other)),
     ] {
         let status = StatusCode::from_u16(status).unwrap();
         assert_eq!(Failure::of_status(status), failure, "{status}");

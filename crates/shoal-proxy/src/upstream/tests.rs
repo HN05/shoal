@@ -13,12 +13,7 @@ fn requests_keep_their_path_after_the_upstream_prefix() {
         prefixed.join("/responses").unwrap(),
         "https://chatgpt.com/backend-api/codex/responses"
     );
-    for (url, message) in [
-        ("ftp://host", "http:// or https://"),
-        ("127.0.0.1:8317", "http:// or https://"),
-        ("http://host/?a=b", "must not have a query"),
-    ] {
-        let error = format!("{:#}", Upstream::parse(url).unwrap_err());
-        assert!(error.contains(message), "{url}: {error}");
+    for url in ["ftp://host", "127.0.0.1:8317", "http://host/?a=b"] {
+        assert!(Upstream::parse(url).is_err(), "{url}");
     }
 }

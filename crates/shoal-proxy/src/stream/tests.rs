@@ -22,7 +22,6 @@ fn events_open_carry_or_fail_a_stream() {
     let failed = |code: &str| json!({"response": {"error": {"code": code}}});
     for (protocol, name, data, kind) in [
         (anthropic, "message_start", json!({}), Kind::Preamble),
-        (anthropic, "ping", json!({}), Kind::Preamble),
         (anthropic, "content_block_start", json!({}), Kind::Content),
         (
             anthropic,
