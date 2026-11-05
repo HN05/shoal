@@ -84,7 +84,9 @@ personal style preferences and speculative safeguards are not findings.
 
 Evaluate whether tests verify observable behavior with isolated fixtures and
 deterministic synchronization. Report tests that depend on runner speed, assert
-wall-clock durations or race short real timeouts, as `CLAUDE.md` forbids. Check
+wall-clock durations or race short real timeouts, and tests that cannot catch
+a behavior regression, such as assertions on prose the code spells out as a
+literal, as `AGENTS.md` forbids. Check
 that CI runs the checks `AGENTS.md` describes, reuses the prebuilt CI image and
 shared target directory, and skips code checks only for docs-only PRs.
 

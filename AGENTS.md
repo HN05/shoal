@@ -283,6 +283,15 @@ build refuses the user's state directory unless `SHOAL_DEV_USER_FILES=1`. Code t
 changes user-level files outside the state directory checks
 `build::changes_user_files`, so debug builds leave them to the installed Shoal.
 
+A test exists to catch a behavior regression. Assert what the code computes or
+decides: the values it puts into text, which outcome or refusal it chooses, the
+state it leaves. Never assert prose the code spells out as a literal, such as a
+prompt's, help text's or message's wording, beyond the fragment that tells one
+outcome from another; never restate a constant, default or lookup table, test
+what a derive, the language or a dependency guarantees, or repeat a path
+another test covers. Persisted and protocol representations are behavior and
+keep their tests.
+
 A test must not depend on runner speed. Never assert that work finishes within
 a wall-clock duration or race it against a short real timeout. Assert the outcome
 and the applied limit, drive time with a paused Tokio clock, or wait on an explicit

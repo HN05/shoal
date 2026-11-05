@@ -612,6 +612,10 @@ configured command for another agent, plus proven child
   Check timing against AGENTS.md's validation rule: tests must not depend on
   runner speed, and a wait must observe the awaited event itself, not a proxy
   that can hold first.
+  Flag tests that cannot catch a behavior regression, as AGENTS.md's rule
+  defines them: assertions on prose the code spells out as a literal beyond the
+  fragment that tells outcomes apart, restated constants, defaults or tables,
+  guarantees of a derive, the language or a dependency, and repeated paths.
 - Documentation: usage lives in README.md, behavior in docs/reference.md,
   decisions in docs/design.md, contributor rules in AGENTS.md. The skills under
   `skills/` say only how to work with Shoal; flag any rule there about
