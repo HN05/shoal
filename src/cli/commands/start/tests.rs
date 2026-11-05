@@ -39,3 +39,47 @@ fn a_start_refuses_flags_its_kind_of_space_cannot_use() {
         "{error}"
     );
 }
+
+#[test]
+fn a_chat_takes_a_positional_issue_as_its_issue() {
+    let target = |positional: &str, repository: Option<&str>, issue: Option<Option<&str>>| {
+        chat_target(
+            Some(positional.to_owned()),
+            repository.map(str::to_owned),
+            issue.map(|issue| issue.map(str::to_owned)),
+        )
+    };
+    let url = "https://forge.example/team/repo/issues/37";
+    assert_eq!(
+        target("37", Some("repo"), None).unwrap(),
+        (Some("repo".into()), Some(Some("37".into())))
+    );
+    assert_eq!(
+        target(url, None, None).unwrap(),
+        (None, Some(Some(url.into())))
+    );
+    assert_eq!(
+        target("repo", None, Some(None)).unwrap(),
+        (Some("repo".into()), Some(None))
+    );
+    for (positional, repository, issue, refusal) in [
+        ("37", None, Some(Some("38")), "name the issue once"),
+        (
+            "repo",
+            Some("other"),
+            None,
+            "cannot be combined with --repo",
+        ),
+        (
+            "https://forge.example/team/repo/pulls/4",
+            None,
+            None,
+            "a chat starts on an issue",
+        ),
+    ] {
+        let error = target(positional, repository, issue)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(refusal), "{positional}: {error}");
+    }
+}

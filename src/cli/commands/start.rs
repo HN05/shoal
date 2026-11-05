@@ -17,6 +17,10 @@ use crate::{
         ui::{self, Fallback},
     },
     config::{Effective, modes},
+    forge::{
+        IssueInput,
+        items::link::{Link, LinkTarget},
+    },
     model::{AgentSession, SpaceKind},
     protocol::ConfigTarget,
 };
@@ -228,17 +232,54 @@ async fn in_chat(ctx: &Context, args: StartArgs, mode: String) -> Result<i32> {
         handoff: args.handoff,
         parent: args.parent,
     };
-    let subject = chat::Subject {
-        mode,
-        issue: args.issue,
-    };
+    let (repository, issue) = chat_target(args.repository, args.repository_override, args.issue)?;
+    let subject = chat::Subject { mode, issue };
     match args.in_workspace {
         Some(workspace) => chat::start_in_workspace(ctx, workspace, subject, options).await,
-        None => {
-            let repository = args.repository_override.or(args.repository);
-            chat::start(ctx, repository, subject, options).await
-        }
+        None => chat::start(ctx, repository, subject, options).await,
     }
+}
+
+/// The repository and issue a chat starts on, from the positional argument,
+/// `--repo` and `--issue`: a positional issue number or URL is the issue, as
+/// it is for a workspace, and a positional repository is the repository. A
+/// PR or branch link, or two of the same, is refused.
+fn chat_target(
+    positional: Option<String>,
+    repository: Option<String>,
+    issue: Option<Option<String>>,
+) -> Result<(Option<String>, Option<Option<String>>)> {
+    let Some(positional) = positional else {
+        return Ok((repository, issue));
+    };
+    let names_issue = match IssueInput::parse(&positional) {
+        IssueInput::Number => true,
+        IssueInput::Url => match Link::parse(&positional) {
+            Ok(link) => {
+                ensure!(
+                    matches!(link.target, LinkTarget::Issue),
+                    "a chat starts on an issue, not a PR or branch link; pass --worktree for a \
+                     workspace"
+                );
+                true
+            }
+            // A repository's own URL.
+            Err(_) => false,
+        },
+        _ => false,
+    };
+    if names_issue {
+        ensure!(
+            issue.is_none(),
+            "name the issue once, positionally or with --issue"
+        );
+        return Ok((repository, Some(Some(positional))));
+    }
+    ensure!(
+        repository.is_none(),
+        "a positional repository cannot be combined with --repo"
+    );
+    Ok((Some(positional), issue))
 }
 
 #[cfg(test)]
