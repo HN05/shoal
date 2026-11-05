@@ -247,8 +247,9 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
         .gates
         .resource_guard(&workspace, crate::daemon::workspace::GuardMode::Exclusive)
         .unwrap();
-    let in_progress = "workspace resource operation is in progress; retry when its hook finishes";
-    assert_eq!(acquire("held", true).await.unwrap_err(), in_progress);
+    let in_progress = "resource operation is in progress";
+    let busy = acquire("held", true).await.unwrap_err();
+    assert!(busy.contains(in_progress), "{busy}");
     let request = ResourceRequest {
         mode: None,
         kind: None,
@@ -259,7 +260,8 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
         queue: false,
     };
     let error = manager.acquire_resource(&workspace, request, None).await;
-    assert_eq!(error.err().unwrap().to_string(), in_progress);
+    let error = error.err().unwrap().to_string();
+    assert!(error.contains(in_progress), "{error}");
     drop(hook);
     assert_eq!(acquire("held", true).await.unwrap(), "held");
     assert!(

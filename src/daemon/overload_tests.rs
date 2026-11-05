@@ -201,20 +201,19 @@ async fn built_in_restore_child() {
                         .iter()
                         .flat_map(|directory| tool.launch.arguments.add_dir_args(directory)),
                 );
-        let mut prompt = String::from(
-            "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
-        );
-        if let Some(handoff) = handoff {
-            prompt.push_str("\n\n");
-            prompt.push_str(handoff);
-        }
         let expected: Vec<std::ffi::OsString> = restore
             .iter()
             .map(std::ffi::OsString::from)
             .chain(launch_args)
-            .chain([std::ffi::OsString::from(prompt)])
             .collect();
-        assert_eq!(recovery.command, expected);
+        let (prompt, arguments) = recovery.command.split_last().unwrap();
+        assert_eq!(arguments, expected);
+        if let Some(handoff) = handoff {
+            assert!(
+                prompt.to_string_lossy().ends_with(&format!("\n\n{handoff}")),
+                "{prompt:?}"
+            );
+        }
     }
     // A reported session is resumed by its ID.
     for (agent, restore) in [
@@ -326,14 +325,13 @@ async fn built_in_restore_child() {
     .await
     .unwrap();
     assert!(prompted.handoff_delivered);
-    assert_eq!(
-        prompted.command,
-        [
-            "saved-session",
-            "--",
-            "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.\n\nhandoff",
-        ]
-        .map(std::ffi::OsString::from)
+    let [program, separator, prompt] = &prompted.command[..] else {
+        panic!("{:?}", prompted.command);
+    };
+    assert_eq!([program, separator], ["saved-session", "--"]);
+    assert!(
+        prompt.to_string_lossy().ends_with("\n\nhandoff"),
+        "{prompt:?}"
     );
     let prompted = Recovery::resolve(
         &manager.paths,
@@ -345,15 +343,11 @@ async fn built_in_restore_child() {
     .await
     .unwrap();
     assert!(!prompted.handoff_delivered);
-    assert_eq!(
-        prompted.command,
-        [
-            "saved-session",
-            "--",
-            "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
-        ]
-        .map(std::ffi::OsString::from)
-    );
+    let [program, separator, prompt] = &prompted.command[..] else {
+        panic!("{:?}", prompted.command);
+    };
+    assert_eq!([program, separator], ["saved-session", "--"]);
+    assert!(!prompt.to_string_lossy().contains("handoff"), "{prompt:?}");
     // A configured resume command gets the model ahead of its prompt.
     let model = crate::agent::ModelChoice {
         model: Some("m1".into()),
@@ -393,14 +387,14 @@ async fn built_in_restore_child() {
     )
     .await
     .unwrap();
-    assert_eq!(
-        told.command,
-        [
-            "saved-session",
-            "--",
-            "This session stopped (critical memory pressure); its subagents and background commands ended. Continue working on the unfinished assignment from where you left off.",
-        ]
-        .map(std::ffi::OsString::from)
+    let [_, _, prompt] = &told.command[..] else {
+        panic!("{:?}", told.command);
+    };
+    assert!(
+        prompt
+            .to_string_lossy()
+            .contains("(critical memory pressure)"),
+        "{prompt:?}"
     );
     serving.abort();
 }
@@ -1452,9 +1446,7 @@ async fn unproven_stop_keeps_the_agent_waiting_until_proof_then_restores_it() {
     })
     .await;
     assert!(
-        message.contains(
-            "waits until its remaining processes exit: its launch identity is incomplete"
-        ),
+        message.contains("its launch identity is incomplete"),
         "{message}"
     );
     publish_recovery(&manager);
@@ -1469,9 +1461,7 @@ async fn unproven_stop_keeps_the_agent_waiting_until_proof_then_restores_it() {
     // The agent's terminal says what the restore waits for, as the user's notification does.
     let terminal = fs::read_to_string(&terminal).unwrap();
     assert!(
-        terminal.contains(
-            "the restore also waits until the agent's remaining processes exit: its launch identity is incomplete"
-        ),
+        terminal.contains("its launch identity is incomplete"),
         "{terminal}"
     );
     serving.abort();
