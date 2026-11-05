@@ -39,18 +39,8 @@ pub struct WorkspaceScope {
     pub all: bool,
 }
 
-// The workspaces of a command that acts on several.
-#[derive(Debug, Default, Args)]
-pub struct WorkspaceTargets {
-    #[arg(value_name = "WORKSPACE")]
-    pub workspace: Vec<String>,
-    /// All workspaces.
-    #[arg(long, conflicts_with = "workspace")]
-    pub all: bool,
-}
-
-// The spaces of `shoal stop`: workspaces, and running chats for the modes
-// that stop untracked processes.
+// The spaces of a command that acts on several: workspaces, and chats where
+// it acts on them.
 #[derive(Debug, Default, Args)]
 pub struct SpaceTargets {
     #[arg(value_name = "SPACE")]

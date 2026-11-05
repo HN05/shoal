@@ -14,6 +14,10 @@ fn workspace(name: &str) -> Workspace {
     )
 }
 
+fn spaces<const N: usize>(workspaces: [Workspace; N]) -> Vec<PresentSpace> {
+    workspaces.map(PresentSpace::Workspace).into()
+}
+
 fn running(workspace: &Workspace, agent: Option<&str>, restorable: bool) -> RunningAgent {
     RunningAgent {
         execution: format!("{}-execution", workspace.name),
@@ -40,7 +44,7 @@ fn reporting(workspace: &Workspace, state: Option<AgentState>) -> RunningAgent {
 fn restarted(plan: &Plan) -> Vec<&str> {
     plan.restarts
         .iter()
-        .map(|restart| restart.workspace.name.as_str())
+        .map(|restart| restart.space.name())
         .collect()
 }
 
@@ -64,11 +68,11 @@ fn idle_agents_restart_first_and_waiting_or_silent_ones_count_as_working() {
         reporting(&idle, Some(AgentState::Idle)),
     ];
     let selection = Selection {
-        workspaces: vec![working, waiting, silent, idle],
+        spaces: spaces([working, waiting, silent, idle]),
         agents,
         named: false,
     };
-    let plan = selection.plan(None);
+    let plan = selection.plan(None, false);
     assert_eq!(restarted(&plan), ["idle", "working", "waiting", "silent"]);
     assert!(plan.skipped.is_empty());
 }
@@ -87,10 +91,10 @@ fn an_agent_name_selects_its_agents_and_unrestorable_ones_are_skipped() {
             running(&custom, Some("claude"), false),
             running(&gone, None, false),
         ],
-        workspaces: vec![claude, codex, custom, gone, commands],
+        spaces: spaces([claude, codex, custom, gone, commands]),
         named: false,
     };
-    let plan = selection.plan(Some("claude"));
+    let plan = selection.plan(Some("claude"), false);
     assert_eq!(restarted(&plan), ["claude"]);
     assert_eq!(skipped(&plan), ["custom", "gone"]);
 }
@@ -100,10 +104,10 @@ fn a_named_workspace_without_the_agent_is_reported() {
     let codex = workspace("codex");
     let selection = Selection {
         agents: vec![running(&codex, Some("codex"), true)],
-        workspaces: vec![codex],
+        spaces: spaces([codex]),
         named: true,
     };
-    let plan = selection.plan(Some("claude"));
+    let plan = selection.plan(Some("claude"), false);
     assert!(plan.restarts.is_empty());
     assert_eq!(skipped(&plan), ["codex"]);
 }
@@ -128,10 +132,10 @@ fn only_an_agents_own_report_makes_it_idle() {
     };
     let selection = Selection {
         agents: vec![working, idle],
-        workspaces: vec![shared_state],
+        spaces: spaces([shared_state]),
         named: false,
     };
-    let plan = selection.plan(None);
+    let plan = selection.plan(None, false);
     let order: Vec<_> = plan
         .restarts
         .iter()
@@ -168,10 +172,10 @@ fn a_rerun_continues_the_interrupted_run_and_skips_what_it_restarted() {
             restarted_in(&earlier, None, None),
             restarted_in(&other, Some("older"), None),
         ],
-        workspaces: vec![pending, again, earlier, other],
+        spaces: spaces([pending, again, earlier, other]),
         named: false,
     };
-    let plan = selection.plan(None);
+    let plan = selection.plan(None, false);
     assert_eq!(plan.run, "interrupted");
     // The restart in progress comes first, ready although its turn was
     // working, since its agent is already stopped.
@@ -193,10 +197,10 @@ fn without_restarts_in_progress_a_run_restarts_every_agent_under_a_new_name() {
     let recent = workspace("recent");
     let selection = Selection {
         agents: vec![restarted_in(&recent, Some("earlier"), None)],
-        workspaces: vec![recent],
+        spaces: spaces([recent]),
         named: false,
     };
-    let plan = selection.plan(None);
+    let plan = selection.plan(None, false);
     assert_eq!(restarted(&plan), ["recent"]);
     assert_ne!(plan.run, "earlier");
 }
@@ -215,10 +219,69 @@ fn a_rerun_skips_what_any_run_of_a_pending_restart_restarted() {
     };
     let selection = Selection {
         agents: vec![joined, restarted_in(&done, Some("a"), None)],
-        workspaces: vec![pending, done],
+        spaces: spaces([pending, done]),
         named: false,
     };
-    let plan = selection.plan(None);
+    let plan = selection.plan(None, false);
     assert_eq!(restarted(&plan), ["pending"]);
     assert_eq!(skipped(&plan), ["done"]);
+}
+
+/// The chat `name`, whose ID is its name.
+fn chat(name: &str) -> PresentSpace {
+    PresentSpace::Chat(
+        serde_json::from_value(serde_json::json!({
+            "id": name,
+            "repository_id": "repository",
+            "name": name,
+            "agent": "claude",
+            "pid": 1,
+            "started_at": 0,
+        }))
+        .unwrap(),
+    )
+}
+
+/// The agent of the chat `name`, which reported a session when `restorable`.
+fn chat_agent(name: &str, restorable: bool) -> RunningAgent {
+    RunningAgent {
+        execution: name.into(),
+        workspace_id: name.into(),
+        agent: Some("claude".into()),
+        restorable,
+        state: None,
+        interrupted: false,
+        origin: None,
+        restarted_by: Vec::new(),
+        restart: None,
+        stopped: None,
+        restarted_from: Vec::new(),
+    }
+}
+
+#[test]
+fn chats_restart_beside_workspace_agents_but_never_in_place() {
+    let api = workspace("api");
+    let agents = vec![
+        reporting(&api, Some(AgentState::Idle)),
+        chat_agent("talk", true),
+        chat_agent("quiet", false),
+    ];
+    let selection = || Selection {
+        spaces: vec![
+            PresentSpace::Workspace(api.clone()),
+            chat("talk"),
+            chat("quiet"),
+        ],
+        agents: agents.clone(),
+        named: false,
+    };
+
+    let plan = selection().plan(None, false);
+    assert_eq!(restarted(&plan), ["api", "talk"]);
+    assert_eq!(skipped(&plan), ["quiet"]);
+
+    let plan = selection().plan(None, true);
+    assert_eq!(restarted(&plan), ["api"]);
+    assert_eq!(skipped(&plan), ["talk", "quiet"]);
 }

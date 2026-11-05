@@ -1,5 +1,6 @@
 //! Restarting agents, each in a new wrapper or in place, together or one at
-//! a time, so each runs its agent's current binary.
+//! a time, so each runs its agent's current binary. A chat's agent restarts
+//! in a new place, as `shoal resume` restores a chat.
 use std::time::Duration;
 
 use futures_util::{StreamExt, stream::FuturesUnordered};
@@ -10,10 +11,10 @@ use tokio::time::{Instant, sleep, sleep_until};
 use crate::client::output::agents::Restarted;
 use crate::{
     agent::Agent,
-    cli::{args::WorkspaceTargets, context::Context},
+    cli::{args::SpaceTargets, context::Context},
     client::{agents, executions::STAGGER},
     execution::recovery,
-    model::RunningAgent,
+    model::{PresentSpace, RunningAgent, Workspace},
     protocol::{ErrorCode, RemoteError},
     sessions::Origin,
 };
@@ -22,7 +23,7 @@ mod plan;
 mod progress;
 
 pub(super) use plan::skip_reason;
-use plan::{Restart, Selection, Skipped};
+use plan::{Restart, Selection, Skipped, running_agents, space_skip_reason};
 use progress::Progress;
 
 /// How many agents restart at once, each holding one of the daemon's
@@ -45,7 +46,7 @@ pub(super) struct Options {
 
 pub(super) async fn run(
     ctx: &Context,
-    targets: WorkspaceTargets,
+    targets: SpaceTargets,
     agent: Option<Agent>,
     options: Options,
 ) -> Result<i32> {
@@ -55,7 +56,7 @@ pub(super) async fn run(
         "restart agents outside scoped executions"
     );
     let selection = Selection::load(ctx, targets).await?;
-    let plan = selection.plan(agent.as_ref().map(Agent::name));
+    let plan = selection.plan(agent.as_ref().map(Agent::name), options.in_place);
     if plan.restarts.is_empty() && plan.skipped.is_empty() {
         let message = match &agent {
             Some(agent) => format!("No running {agent} agents"),
@@ -89,7 +90,7 @@ pub(super) async fn run(
     };
     if interrupted {
         // The daemon goes on with the restarts it was asked for.
-        let agents = list_agents(ctx).await?;
+        let agents = running_agents(ctx).await?;
         return progress.interrupted(ctx, &agents, agent.as_ref().map(Agent::name));
     }
     progress.finish(ctx)
@@ -113,17 +114,36 @@ impl Restart {
     /// Restart the agent, in place when `in_place`, or join its restart, as
     /// part of `run`, returning the place it runs in now.
     async fn run(&self, ctx: &Context, run: &str, in_place: bool) -> Result<Option<Origin>> {
-        let execution = self.agent.execution.clone();
         let run = Some(run.to_owned());
+        match &self.space {
+            // The daemon names how to restore a chat whose restart failed.
+            PresentSpace::Chat(chat) => {
+                agents::restart_chat(&ctx.paths, chat.id.clone(), self.joins.clone(), run).await
+            }
+            PresentSpace::Workspace(workspace) => {
+                self.restart_agent(ctx, workspace, run, in_place).await
+            }
+        }
+    }
+
+    /// [`Self::run`] for the agent of `workspace`, naming how to restore it
+    /// when its restart failed.
+    async fn restart_agent(
+        &self,
+        ctx: &Context,
+        workspace: &Workspace,
+        run: Option<String>,
+        in_place: bool,
+    ) -> Result<Option<Origin>> {
+        let execution = self.agent.execution.clone();
         let joins = self.joins.clone();
         let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place).await;
         restarted.map_err(|error| {
             // A restart that waits still restores the agent itself.
-            match recovery::pending(&ctx.paths, &self.workspace.id) {
-                Ok(true) if waits(&error).is_none() => anyhow::anyhow!(
-                    "{error:#}; restore it with shoal resume {}",
-                    self.workspace.name
-                ),
+            match recovery::pending(&ctx.paths, &workspace.id) {
+                Ok(true) if waits(&error).is_none() => {
+                    anyhow::anyhow!("{error:#}; restore it with shoal resume {}", workspace.name)
+                }
                 _ => error,
             }
         })
@@ -185,7 +205,7 @@ async fn restart_together(
     let mut told = false;
     loop {
         if wait {
-            for gone in refresh(&mut waiting, &list_agents(ctx).await?, run) {
+            for gone in refresh(&mut waiting, &running_agents(ctx).await?, run) {
                 progress.skip(ctx, gone);
             }
         }
@@ -216,7 +236,7 @@ fn tell_waiting(ctx: &Context, restarts: &[Restart]) -> bool {
     let names: Vec<_> = restarts
         .iter()
         .filter(|restart| !restart.ready())
-        .map(|restart| restart.workspace.name.as_str())
+        .map(|restart| restart.space.name())
         .collect();
     if !names.is_empty() && !ctx.json {
         eprintln!("Waiting for the turns of {} to end", names.join(", "));
@@ -236,7 +256,7 @@ async fn next_idle(
 ) -> Result<Option<Restart>> {
     let mut told = false;
     loop {
-        for gone in refresh(restarts, &list_agents(ctx).await?, run) {
+        for gone in refresh(restarts, &running_agents(ctx).await?, run) {
             progress.skip(ctx, gone);
         }
         if restarts.is_empty() {
@@ -250,10 +270,6 @@ async fn next_idle(
         }
         sleep(POLL_INTERVAL).await;
     }
-}
-
-async fn list_agents(ctx: &Context) -> Result<Vec<RunningAgent>> {
-    agents::all(&ctx.paths).await
 }
 
 /// Take each agent's turn state and restart from `running`, where a
@@ -271,7 +287,7 @@ fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent], run: &str) -> 
             continue;
         };
         let restarted = restart.joins.is_none() && current.restarted_by.iter().any(|by| by == run);
-        match skip_reason(&restart.workspace, current) {
+        match space_skip_reason(&restart.space, current) {
             Some(reason) => ended.push(restart.skipped(reason)),
             None if restarted => {
                 ended.push(restart.skipped("another command of this run restarted it already"));

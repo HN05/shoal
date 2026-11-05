@@ -69,6 +69,58 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
     wait_zmx_sessions_ended(fixture.root.path());
 }
 
+/// A chat restarts as `shoal resume` restores it: the daemon saves its
+/// session and stops its agent, then restores it in a zmx session, where the
+/// agent continues the session.
+#[test]
+fn restart_restores_a_chat_in_a_new_place() {
+    let fixture = Fixture::with_config(Some(
+        "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n",
+    ));
+    let home = fixture.root.path().to_owned();
+    fs::write(
+        fixture.repo.join("chat-agent.sh"),
+        format!(
+            "printf '%s\\n' \"$@\" > \"$HOME/chat-args\"\n\
+             printf '{{\"session_id\":\"chat-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n\
+             case \" $* \" in *' --resume '*) touch \"$HOME/chat-restored\";; *) touch \"$HOME/chat-started\";; esac\n\
+             trap 'exit 0' TERM\n\
+             while :; do sleep 1; done\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    install_test_script(home.join("bin").join("zmx"), terminal_zmx());
+    std::thread::scope(|scope| {
+        let chat = scope.spawn(|| {
+            fixture.interactive_command(
+                fixture.command().current_dir(&fixture.repo).args([
+                    "start", "--chat", "--here", "--agent", "claude", "--name", "talk",
+                ]),
+                "",
+            )
+        });
+        wait_until("chat started", || home.join("chat-started").exists());
+
+        let restarted = fixture.ok(&["restart", "talk"]);
+        assert_eq!(
+            restarted["restarted"],
+            serde_json::json!([{"workspace": "talk", "agent": "claude"}]),
+            "{restarted}"
+        );
+        // The first agent ended, and the restored one continues its session.
+        let (output, transcript) = chat.join().unwrap();
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+    });
+    wait_until("chat restored", || home.join("chat-restored").exists());
+    let args = fs::read_to_string(home.join("chat-args")).unwrap();
+    assert!(args.contains("--resume\nchat-session\n"), "{args}");
+    let chats = fixture.ok(&["work", "--chats"]);
+    assert_eq!(chats[0]["restore"], Value::Null, "{chats}");
+    fixture.ok(&["rm", "talk", "--yes"]);
+    wait_zmx_sessions_ended(&home);
+}
+
 /// The first wrapper of the workspace `renewed`, which the daemon stops when
 /// the test ends, so a test that fails first leaves nothing running.
 struct Running<'a> {

@@ -39,7 +39,7 @@ impl Progress {
                 .iter()
                 .map(|restart| {
                     let execution = restart.agent.execution.clone();
-                    (execution, restart.workspace.name.clone())
+                    (execution, restart.space.name().to_owned())
                 })
                 .collect(),
         }
@@ -70,7 +70,7 @@ impl Progress {
         result: Result<Option<Origin>>,
     ) {
         let position = self.next();
-        let name = &restart.workspace.name;
+        let name = restart.space.name();
         match result {
             Ok(place) => self.report.done(
                 ctx,
@@ -81,7 +81,7 @@ impl Progress {
                     place.as_ref(),
                 ),
                 RestartedAgent {
-                    workspace: name.clone(),
+                    workspace: name.to_owned(),
                     agent: restart.agent.agent.clone(),
                     place,
                 },

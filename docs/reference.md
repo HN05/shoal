@@ -394,7 +394,7 @@ together, reporting each failure without keeping the others from it. A workspace
 process interrupts and continues only the agents of the workspaces below its
 own.
 
-`shoal restart [workspace...]` restarts running agents in new wrappers: it
+`shoal restart [space...]` restarts running agents in new wrappers: it
 stops the agent, its wrapper finishes and its terminal closes, and the agent
 queue starts the saved session again at once with the continuation prompt in a
 new place, where it ran when that place is free, as `shoal resume --now` does;
@@ -407,8 +407,12 @@ start the agent again in the same terminal, as an automatic restore does; a
 wrapper whose Shoal binary an upgrade replaced continues from the installed one
 in the same process, and wrappers of 0.13.0 and earlier keep their binary until
 the agent is stopped and resumed. Either way the restore command finds the
-agent through `PATH` again, so an updated agent binary runs. `--all` selects every
-workspace and `--agent <name>` only agents of that name. Agents restart
+agent through `PATH` again, so an updated agent binary runs. A chat's agent
+restarts as `shoal resume <chat>` restores a stopped chat: Shoal saves the chat's
+session, stops its agent and restores it in a background place, where
+`shoal attach` reaches it. A restart skips a chat whose agent reported no
+session, and with `--in-place` every chat. `--all` selects every workspace and chat, and
+`--agent <name>` only agents of that name. Agents restart
 together; `--sequential` restarts one at a time, idle ones first, each once the
 previous one runs again and at least 10 seconds after it started. With
 `--wait`, each restarts only once its own turn ends, where a permission prompt or
@@ -418,8 +422,8 @@ restarting continues the run that asked for it: it reports on that restart,
 even with `--wait`, and skips the agents that run restarted already. A
 restarted agent keeps its agent slot, and commands keep running. Agents without
 a command to resume their session and executions whose wrapper is gone are
-skipped, for `shoal stop` and `shoal resume`. An agent that does not start again,
-as when no terminal host can open its new place, stays stopped for
+skipped, for `shoal stop` and `shoal resume`. An agent or chat that does not start
+again, as when no terminal host can open its new place, stays stopped for
 `shoal resume`, and the exit status is 1. One whose stopped
 processes do not exit is reported as pending with their PIDs and the command that
 ends them, which also sets the exit status to 1, and restarts once they exit

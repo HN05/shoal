@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     cli::context::Context,
-    model::Workspace,
+    model::{PresentSpace, Workspace},
     paths::Paths,
     sessions::{HostName, Origin},
     state::WorkspaceState,
@@ -29,7 +29,7 @@ fn restart(name: &str) -> Restart {
             stopped: None,
             restarted_from: Vec::new(),
         },
-        workspace,
+        space: PresentSpace::Workspace(workspace),
         joins: None,
     }
 }

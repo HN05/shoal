@@ -5,7 +5,7 @@ use clap::Subcommand;
 
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, SpaceTargets, WorkspaceTargets},
+    cli::args::{AgentParser, SpaceTargets},
     model::QueuePlace,
     sessions::HostName,
 };
@@ -54,10 +54,11 @@ pub enum SessionsCommand {
     /// Restart running agents in new terminals, resuming their sessions.
     ///
     /// Agents restart together and run the agent's current binary; commands
-    /// keep running.
+    /// keep running. A chat restarts in a background place, as shoal resume
+    /// restores it.
     Restart {
         #[command(flatten)]
-        targets: WorkspaceTargets,
+        targets: SpaceTargets,
         /// Restart only agents of this name, such as claude.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,

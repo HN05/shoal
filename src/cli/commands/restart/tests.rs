@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    model::{PendingRestart, Workspace},
+    model::{PendingRestart, PresentSpace, Workspace},
     state::{AgentState, WorkspaceState},
 };
 
@@ -30,7 +30,7 @@ fn a_joined_restart_stays_joined_once_it_ends() {
         restarted_from: Vec::new(),
     };
     let mut restarts = vec![Restart {
-        workspace,
+        space: PresentSpace::Workspace(workspace),
         agent: agent.clone(),
         joins: agent.restart.clone(),
     }];
@@ -75,7 +75,7 @@ fn an_agent_another_command_of_the_run_restarted_is_skipped() {
         restarted_from: Vec::new(),
     };
     let mut restarts = vec![Restart {
-        workspace,
+        space: PresentSpace::Workspace(workspace),
         agent: agent.clone(),
         joins: None,
     }];

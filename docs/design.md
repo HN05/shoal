@@ -248,7 +248,14 @@ follows the agent to the execution the new wrapper registers, which answers
 it once the agent starts with the place that execution registered, so the run
 can name where the agent runs now. `--in-place` restarts through the same wrapper,
 which keeps the agent in its terminal: the daemon resumes the agent once its
-processes are proven stopped, outside the agent queue. A restart outlives the requests that asked for it; a request for an
+processes are proven stopped, outside the agent queue. A chat has no wrapper,
+so it restarts as `shoal resume` restores it: the daemon saves its session and
+stops its agent as a save before a daemon stop does, then runs `shoal resume`
+for it detached, as for a chat saved to come back on its own, and the restart
+ends with that restore. The daemon keeps a chat's restarts in the state an
+agent's uses and lists the turn state the chat records, so joining, continuing
+a run and `--wait` work for chats as for agents; `--in-place` skips chats, which have
+no wrapper to keep. A restart outlives the requests that asked for it; a request for an
 agent already restarting joins that restart and is answered as the first one
 is. Each `shoal restart` run names itself in its requests, and the daemon
 lists each pending restart with the run that asked for it and each agent with
