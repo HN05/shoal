@@ -2,21 +2,21 @@
 //! one run or on the checks or runs on a PR's head.
 use anyhow::Result;
 
+use crate::client::ci;
 use crate::{
     cli::{
         args::ci::{RunArgs, Subject, Target},
-        client,
         commands::items::select_space_item_context,
         context::Context,
     },
     forge::ci::{
-        CiActed, CiAction,
+        CiAction,
         approval::RunsApproved,
         run::{StartedRun, validate_run},
-        run_action::{RunActed, validate_run_reference},
+        run_action::validate_run_reference,
         workflow::is_workflow_url,
     },
-    protocol::{CiMethod, ItemContext},
+    protocol::ItemContext,
 };
 
 pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
@@ -25,16 +25,8 @@ pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
     let workflow = args.workflow.as_deref();
     let context = super::input_context(ctx, args.space, args.repo.name, workflow).await?;
     let follow = follow_hint(context.as_ref(), workflow.is_some_and(is_workflow_url));
-    let started: StartedRun = client::request(
-        &ctx.paths,
-        CiMethod::StartCiRun {
-            context,
-            workflow: args.workflow,
-            branch: args.branch,
-            inputs: args.inputs.into_iter().collect(),
-        },
-    )
-    .await?;
+    let inputs = args.inputs.into_iter().collect();
+    let started = ci::start(&ctx.paths, context, args.workflow, args.branch, inputs).await?;
     for warning in &started.warnings {
         eprintln!("{warning}");
     }
@@ -74,15 +66,7 @@ pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
         validate_run_reference(run)?;
     }
     let context = subject_context(ctx, &subject).await?;
-    let approved: RunsApproved = client::request(
-        &ctx.paths,
-        CiMethod::ApproveCiRuns {
-            context,
-            run: subject.run,
-            pr: subject.pr,
-        },
-    )
-    .await?;
+    let approved = ci::approve(&ctx.paths, context, subject.run, subject.pr).await?;
     ctx.emit(&approved_text(&approved), &approved)?;
     Ok(0)
 }
@@ -117,16 +101,7 @@ async fn act_on_run(
     action: CiAction,
     failed: bool,
 ) -> Result<i32> {
-    let acted: RunActed = client::request(
-        &ctx.paths,
-        CiMethod::CiRunAction {
-            context,
-            run,
-            action,
-            failed,
-        },
-    )
-    .await?;
+    let acted = ci::act_on_run(&ctx.paths, context, run, action, failed).await?;
     ctx.emit(&format!("{}: {}", outcome(action), acted.url), &acted)?;
     Ok(0)
 }
@@ -140,16 +115,7 @@ async fn act_on_checks(
     action: CiAction,
     checks: Vec<String>,
 ) -> Result<i32> {
-    let acted: CiActed = client::request(
-        &ctx.paths,
-        CiMethod::CiAction {
-            context,
-            item,
-            action,
-            checks,
-        },
-    )
-    .await?;
+    let acted = ci::act_on_checks(&ctx.paths, context, item, action, checks).await?;
     ctx.emit(
         &format!(
             "{} for {}: {}",

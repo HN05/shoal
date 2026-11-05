@@ -5,7 +5,6 @@ use anyhow::{Context as _, Result};
 use crate::{
     cli::{
         args::items::ItemArgs,
-        client,
         commands::{items::select_space_item_context, view as items_view},
         context::Context,
     },
@@ -14,7 +13,7 @@ use crate::{
         run_action::{Run, validate_run_reference},
         run_view::{JobRef, RunFilter, RunView, validate_filter},
     },
-    protocol::{CiMethod, ItemContext},
+    protocol::ItemContext,
 };
 
 /// Show the run `items` selects after `ci` with the log tails of its failed
@@ -48,7 +47,7 @@ pub(in crate::cli::commands) async fn view(
 /// Open the run in the browser, by its URL the forge reports.
 async fn open(ctx: &Context, context: Option<ItemContext>, run: String) -> Result<i32> {
     items_view::may_open_browser(ctx)?;
-    let run: Run = client::request(&ctx.paths, CiMethod::ViewCiRun { context, run }).await?;
+    let run = crate::client::ci::run(&ctx.paths, context, run).await?;
     items_view::open_urls(ctx, vec![run.url])
 }
 
@@ -62,12 +61,7 @@ pub(super) async fn list(
 ) -> Result<i32> {
     validate_filter(&filter)?;
     let context = select_space_item_context(ctx, space, repo, pr.as_deref()).await?;
-    let method = CiMethod::ListCiRuns {
-        context,
-        pr,
-        filter,
-    };
-    let runs = client::pages::<Run>(&ctx.paths, method).await?;
+    let runs = crate::client::ci::runs(&ctx.paths, context, pr, filter).await?;
     ctx.show(&runs, render_runs)?;
     Ok(0)
 }

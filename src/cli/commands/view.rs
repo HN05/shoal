@@ -18,7 +18,7 @@ use crate::{
         items::{link::Selection, reaction::Reaction},
         review::view::{AutoMerge, Details, ItemView, PrDetails, Review},
     },
-    protocol::{CiMethod, ItemContext},
+    protocol::ItemContext,
 };
 
 /// Show or open what `args` selects: one CI run as `ci` reads it, otherwise
@@ -154,14 +154,7 @@ async fn show_log(
     let log: CheckLog = ctx
         .progress(
             "Reading check log",
-            client::request(
-                &ctx.paths,
-                CiMethod::CheckLog {
-                    context,
-                    selection,
-                    check,
-                },
-            ),
+            crate::client::ci::check_log(&ctx.paths, context, selection, check),
         )
         .await?;
     ctx.show(&log, render_log)?;
