@@ -184,3 +184,21 @@ async fn stopping_a_job_before_its_report_is_followed_cancels_the_reported_run()
     assert!(cancelled.unwrap().ends_with("/actions/runs/2"));
     assert_eq!(fixture.state.lock().unwrap().cancelled, ["2"]);
 }
+
+#[tokio::test]
+async fn a_stop_holding_the_claim_from_before_the_follow_cancels_the_reported_run() {
+    let fixture = github_fixture().await;
+    let manager = &fixture.manager;
+    {
+        let mut state = fixture.state.lock().unwrap();
+        state.queued = vec![github_job(11, 1)];
+        state.taken.insert(2, taken(21, 2, "rust"));
+    }
+    let (stale, _) = report(manager, 2).await;
+    // The follow records run 2 and answers while the stop holds the claim
+    // it read before.
+    manager.follow_taken_jobs().await.unwrap();
+    let cancelled = manager.cancel_job_run(&stale).await.unwrap();
+    assert!(cancelled.ends_with("/actions/runs/2"));
+    assert_eq!(fixture.state.lock().unwrap().cancelled, ["2"]);
+}

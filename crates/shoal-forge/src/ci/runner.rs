@@ -240,6 +240,12 @@ pub fn took_run(work_dir: &Path) -> Result<Option<TookRun>> {
     {
         return Ok(None);
     }
+    reported_run(work_dir)
+}
+
+/// What the runner of the job with `work_dir` reported taking, answered or
+/// not, unless it has not started a job.
+pub fn reported_run(work_dir: &Path) -> Result<Option<TookRun>> {
     let reported = match std::fs::read_to_string(work_dir.join(TOOK_RUN)) {
         Ok(reported) => reported,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),

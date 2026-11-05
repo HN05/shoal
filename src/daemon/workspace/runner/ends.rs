@@ -210,7 +210,7 @@ impl Manager {
     /// Cancel `job`'s run on the forge its URL names, or the run its
     /// runner reported taking a job of, also once its runner is gone,
     /// returning the cancelled run's URL.
-    async fn cancel_job_run(&self, job: &ClaimedJob) -> Result<String> {
+    pub(super) async fn cancel_job_run(&self, job: &ClaimedJob) -> Result<String> {
         let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
         let url = self.reported_run_url(&forge, job);

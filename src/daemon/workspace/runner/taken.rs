@@ -11,7 +11,7 @@ use crate::{
     daemon::workspace::Manager,
     forge::{
         ForgeRepo,
-        ci::runner::{JobRun, TookRun, WaitingJob, answer_took_run, took_run},
+        ci::runner::{JobRun, TookRun, WaitingJob, answer_took_run, reported_run, took_run},
     },
     model::QueuedJob,
 };
@@ -117,11 +117,11 @@ impl Manager {
         Err(error)
     }
 
-    /// The web URL of the run `job`'s runner took a job of: the claim's,
-    /// unless the runner reported another run the daemon has not followed
-    /// yet.
+    /// The web URL of the run `job`'s runner took a job of: the one it
+    /// reported, which a claim read before the daemon followed the report
+    /// does not name yet, else the claim's.
     pub(super) fn reported_run_url(&self, forge: &ForgeRepo, job: &ClaimedJob) -> String {
-        match took_run(&self.job_directory(&job.id)) {
+        match reported_run(&self.job_directory(&job.id)) {
             Ok(Some(took)) if took.run != job.job.job.run => forge
                 .run(&took.run.to_string())
                 .map(|(_, url)| url)
