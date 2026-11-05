@@ -140,15 +140,16 @@ pub enum MessagesCommand {
         attach: Vec<String>,
         /// Space, a workspace or chat, to send to; defaults to the current
         /// chat or workspace, or a picker.
-        #[arg(long, conflicts_with = "all")]
+        #[arg(long, conflicts_with_all = ["all", "repository"])]
         space: Option<String>,
         /// Send to every running agent of the workspaces and chats, such as
         /// to tell them the network works again.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "repository")]
         all: bool,
-        /// Reach only this repository's spaces with --all, such as to have
-        /// them rebase onto a fix on its default branch.
-        #[arg(long = "repo", requires = "all")]
+        /// Send to every running agent of this repository's workspaces and
+        /// chats, such as to have them rebase onto a fix on its default
+        /// branch.
+        #[arg(long = "repo")]
         repository: Option<String>,
     },
 }
