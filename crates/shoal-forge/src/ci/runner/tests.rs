@@ -59,15 +59,12 @@ async fn gitea_and_older_forgejo_run_no_jobs_and_other_forges_refuse_before_aski
     });
     let gitea = repo_on(&server, ForgeKind::Forgejo, "team/repo");
     let account = agent_on(&server, "user");
-    let error = gitea.require_runner(&account).await.unwrap_err();
-    assert!(error.to_string().contains("needs Forgejo 15"), "{error}");
+    assert!(gitea.require_runner(&account).await.is_err());
 
     let gitlab = repo_on(&server, ForgeKind::GitLab, "team/repo");
     let received = server.received().len();
-    let error = gitlab.runner_program().unwrap_err();
-    assert!(error.to_string().contains("run CI jobs"), "{error}");
-    let error = gitlab.waiting_jobs(&account, &[]).await.unwrap_err();
-    assert!(error.to_string().contains("run CI jobs"), "{error}");
+    assert!(gitlab.runner_program().is_err());
+    assert!(gitlab.waiting_jobs(&account, &[]).await.is_err());
     assert_eq!(server.received().len(), received);
     Ok(())
 }

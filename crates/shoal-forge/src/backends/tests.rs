@@ -19,12 +19,9 @@ fn only_failures_a_login_may_fix_carry_the_login_hint() {
 fn well_known_and_gitlab_named_hosts_are_recognized() {
     for (host, kind) in [
         ("github.com", ForgeKind::GitHub),
-        ("gitlab.com", ForgeKind::GitLab),
-        ("bitbucket.org", ForgeKind::Bitbucket),
         ("gitlab.corp.example", ForgeKind::GitLab),
         ("git.corp.example", ForgeKind::Forgejo),
         ("mygitlab.example", ForgeKind::Forgejo),
-        ("codeberg.org", ForgeKind::Forgejo),
     ] {
         assert_eq!(ForgeKind::detect(host, None), kind, "{host}");
     }

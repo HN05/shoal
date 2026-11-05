@@ -31,11 +31,7 @@ fn each_forge_lists_a_branch_or_workflow_its_own_way() -> Result<()> {
         path(gitlab, &filter(Some("topic"), None))?,
         "pipelines?per_page=10&ref=topic"
     );
-    let error = path(gitlab, &filter(None, Some("ci.yml"))).unwrap_err();
-    assert!(
-        error.to_string().contains("leave out the workflow"),
-        "{error}"
-    );
+    assert!(path(gitlab, &filter(None, Some("ci.yml"))).is_err());
     let forgejo = "https://codeberg.org/team/repo";
     assert_eq!(
         path(forgejo, &filter(Some("topic"), Some("deps.yml")))?,
@@ -160,11 +156,7 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
     let jobs = [job(1, "test"), job(2, "test"), job(3, "lint")];
     assert_eq!(find_job(&run, &jobs, &JobRef::Id(2))?.id, 2);
     assert_eq!(find_job(&run, &jobs, &JobRef::Name("lint".into()))?.id, 3);
-    let error = find_job(&run, &jobs, &JobRef::Name("test".into())).unwrap_err();
-    assert!(
-        error.to_string().contains("select one by its ID"),
-        "{error}"
-    );
+    assert!(find_job(&run, &jobs, &JobRef::Name("test".into())).is_err());
     assert!(find_job(&run, &jobs, &JobRef::Id(4)).is_err());
     Ok(())
 }

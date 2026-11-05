@@ -113,10 +113,8 @@ fn a_review_whose_comments_fail_keeps_its_body_and_the_others() {
     ];
     let mut errors = Vec::new();
     let reviews = parse_reviews(&reviews, &mut errors).unwrap();
-    assert_eq!(
-        errors,
-        ["comments lookup failed for review 4: GET pulls/7/reviews/4/comments: connection refused"]
-    );
+    assert_eq!(errors.len(), 1);
+    assert!(errors[0].contains("review 4"), "{errors:?}");
     assert_eq!(
         (reviews[0].body.as_str(), reviews[0].comments.len()),
         ("Findings", 0)

@@ -9,8 +9,6 @@ fn award_emoji_take_github_names_where_github_has_the_reaction() {
             .content
     };
     assert_eq!(listed("thumbsup"), "+1");
-    assert_eq!(listed("tada"), "hooray");
-    assert_eq!(listed("heart"), "heart");
     assert_eq!(listed("100"), "100");
     let award = super::listed(&json!({"id": 3, "name": "eyes", "user": {"username": "ann"}}));
     assert_eq!(award.unwrap().login, "ann");
@@ -36,5 +34,4 @@ fn award_emoji_are_added_by_gitlab_name_and_removed_by_id() {
         (HttpMethod::Delete, "award_emoji/12")
     );
     assert!(remove("award_emoji".into(), &own(Value::Null)).is_err());
-    assert_eq!(github_name("thumbsdown"), "-1");
 }

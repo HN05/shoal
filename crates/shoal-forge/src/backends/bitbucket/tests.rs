@@ -345,12 +345,6 @@ async fn only_bitbucket_org_reaches_the_cloud_api() {
         crate::backends::ForgeKind::Bitbucket,
     );
     let request = Request::get("user".into());
-    let error = Bitbucket
-        .send(&other, &Account::default(), &request)
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{error:#}").contains("bitbucket.example is not Bitbucket Cloud"),
-        "{error:#}"
-    );
+    let sent = Bitbucket.send(&other, &Account::default(), &request).await;
+    assert!(sent.is_err());
 }

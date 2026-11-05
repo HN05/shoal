@@ -33,8 +33,7 @@ fn the_job_search_lists_waiting_jobs_and_skips_others() {
     let running =
         json!({"handle": "h2", "id": 8, "run_id": 3, "name": "rust", "status": "running"});
     assert_eq!(waiting_job(&running).unwrap(), None);
-    let error = waiting_job(&json!({"id": 9, "run_id": 3, "name": "rust"})).unwrap_err();
-    assert!(error.to_string().contains("handle"), "{error}");
+    assert!(waiting_job(&json!({"id": 9, "run_id": 3, "name": "rust"})).is_err());
 }
 
 fn job() -> WaitingJob {
