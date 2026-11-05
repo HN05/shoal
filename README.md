@@ -450,13 +450,17 @@ shared caches nothing is using, with why it keeps the other spaces. On a termina
 it opens a picker, where Tab selects several, and removes what you pick.
 `shoal cleanup spaces`, `branches` or `caches` acts on one kind, and `shoal status`
 shows why it keeps one workspace.
-Every workspace removal, except a disposable workspace's, can be undone for 30 days: `shoal work restore` picks a removed workspace,
-and `shoal work restore <workspace>` opens one again with its uncommitted files and links;
-`shoal resume` then continues the agents the removal stopped. Removal keeps the
-workspace's HEAD and unsaved files in a checkpoint, as `shoal work checkpoint` does and
-Shoal does when an agent exits or is stopped; `shoal work restore <workspace> <number>`
-returns an existing workspace to one of them. `shoal move export <workspace> -o <file>`
-removes a workspace and writes that checkpoint and record to a file, and `shoal
+Removal keeps the workspace's HEAD and unsaved files in a checkpoint, except a
+disposable workspace's, as `shoal work checkpoint` does and Shoal does when an
+agent exits or is stopped. Until the checkpoint expires, after 30 days by default,
+`shoal work restore` picks a removed workspace, and `shoal work restore <workspace>`
+opens one again with its links and the unsaved files the checkpoint kept;
+`shoal resume` then continues the agents the removal stopped. A checkpoint keeps
+HEAD only when the unsaved files are too large or include a nested repository or
+changed submodule; see [Checkpoints and restore](docs/reference.md#checkpoints-and-restore).
+`shoal work restore <workspace> <number>` returns an existing workspace to one of
+its checkpoints. `shoal move export <workspace> -o <file>`
+removes a workspace and writes its removal checkpoint and record to a file, and `shoal
 move import <file>` opens it on another machine or the same one, where `shoal resume`
 continues its agents' sessions from the transcripts the file carries;
 `--new-sessions` starts them over. A chat moves the same way: the export ends it,
