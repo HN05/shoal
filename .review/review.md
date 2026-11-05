@@ -23,6 +23,13 @@ instead of the PR delivery guidance below.
   connection and client-side logic; the CLI sends each daemon request through
   a named client operation and never builds one itself. The module builds
   without the `cli` feature.
+- Forge requests, and logic that reads forge data without the daemon's state,
+  such as check states, item snapshots, item URLs and run IDs, live in
+  `crates/shoal-forge`, never in `src/daemon` or `src/cli`; scope, approvals,
+  identity choice and workspace records stay in the daemon. Flag a match on
+  the forge kind outside a `Backend` implementation, and a match that picks
+  `issue`, `pull` or `run` by an item's kind outside `ForgeRepo`'s one
+  operation for it.
 - The minimum Rust version follows current stable; keep the manifest and CI
   toolchain aligned and validate with locked dependencies.
 - Treat function abstraction as a blocking correctness check. Require every
