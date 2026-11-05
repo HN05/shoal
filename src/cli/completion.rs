@@ -195,10 +195,13 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
     let need = typed
         .need
         .unwrap_or_else(|| Need::of_command(&path.iter().map(String::as_str).collect::<Vec<_>>()));
-    // A workspace or space argument beside `--all` offers it first among the
-    // names, so the flag itself is not listed again after them.
+    // A positional workspace or space argument beside `--all` offers it first
+    // among the names, so the flag itself is not listed again after them. A
+    // `--space` option never completes where a flag is typed, so `--all`
+    // stays listed beside it.
+    let positional = |id: &str| command.get_positionals().any(|arg| arg.get_id() == id);
     let has = |id: &str| command.get_arguments().any(|arg| arg.get_id() == id);
-    let offer_all = (has("workspace") || has("space")) && has("all");
+    let offer_all = (positional("workspace") || positional("space")) && has("all");
     command
         .mut_args(|arg| {
             let arg = own_first(arg);

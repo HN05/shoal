@@ -127,6 +127,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     for (words, expected) in [
         (vec!["shoal", "repo", "r"], "rm"),
         (vec!["shoal", "run", "rev"], "review"),
+        (vec!["shoal", "messages", "send", "hello", "--a"], "--all"),
         (vec!["shoal", "codex", "--a"], "--app"),
         (vec!["shoal", "add", "--agent", "co"], "codex"),
         (vec!["shoal", "dro"], "droid"),
