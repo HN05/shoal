@@ -2,6 +2,7 @@ use tokio::net::UnixListener;
 
 use super::*;
 use crate::protocol::{self, Body, Request, Response};
+use anyhow::Result;
 
 /// A hang guard, not the behavior under test.
 async fn bounded<T>(future: impl Future<Output = T>) -> T {

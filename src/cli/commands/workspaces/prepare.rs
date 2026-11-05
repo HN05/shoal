@@ -18,9 +18,9 @@ use crate::{
     },
     execution,
     hooks::{self, Hook, HookKind},
-    model::{QueueAdmission, QueueEntry, Workspace},
+    model::{QueueEntry, Workspace},
     protocol::{
-        ConfigTarget, QueueMethod, WorkspaceMethod,
+        ConfigTarget, WorkspaceMethod,
         operations::{Failure, Preparation, Prepared, QueuedLaunch, Step},
     },
     state::WorkspaceState,
@@ -150,8 +150,7 @@ async fn queue_agent(
     agents::ensure_available(agent.name(), &settings)?;
     let request = queued_agent_request(workspace, agent, launch.prompt)?;
     reporter.ensure_running()?;
-    let admission: QueueAdmission =
-        client::request(&ctx.paths, QueueMethod::QueueAdd { request }).await?;
+    let admission = crate::client::queue::add(&ctx.paths, request).await?;
     admission
         .entry
         .ok_or_else(|| anyhow::anyhow!("the daemon queued the agent without an entry"))

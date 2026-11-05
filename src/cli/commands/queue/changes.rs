@@ -3,12 +3,8 @@
 use anyhow::{Result, ensure};
 
 use super::selection;
-use crate::{
-    cli::{client::request, context::Context},
-    model::{MovedEntry, QueueEntry, QueuePlace},
-    protocol::QueueMethod,
-    state::QueueKind,
-};
+use crate::client::queue;
+use crate::{cli::context::Context, model::QueuePlace, state::QueueKind};
 
 /// `shoal queue start`: start the entry now, regardless of the limits.
 pub(super) async fn start(ctx: &Context, entry: Option<String>) -> Result<i32> {
@@ -18,7 +14,7 @@ pub(super) async fn start(ctx: &Context, entry: Option<String>) -> Result<i32> {
         "start queued agents outside scoped executions"
     );
     let entry = selection::selected(ctx, entry, "Start> ").await?;
-    let entry: QueueEntry = request(&ctx.paths, QueueMethod::QueueStart { entry }).await?;
+    let entry = queue::start(&ctx.paths, entry).await?;
     ctx.emit(
         &format!("Starting {} from the agent queue", entry.name),
         &entry,
@@ -30,7 +26,7 @@ pub(super) async fn start(ctx: &Context, entry: Option<String>) -> Result<i32> {
 pub(super) async fn cancel(ctx: &Context, entry: Option<String>) -> Result<i32> {
     require_scope_token(ctx)?;
     let entry = selection::selected(ctx, entry, "Cancel> ").await?;
-    let entry: QueueEntry = request(&ctx.paths, QueueMethod::QueueRemove { entry }).await?;
+    let entry = queue::remove(&ctx.paths, entry).await?;
     let message = match entry.kind {
         QueueKind::Launch => format!("Removed {} from the agent queue", entry.name),
         QueueKind::Restore => format!(
@@ -59,7 +55,7 @@ pub(super) async fn move_entry(
         Some(place) => place,
         None => selection::pick_place(ctx, &entry).await?,
     };
-    let moved: MovedEntry = request(&ctx.paths, QueueMethod::QueueMove { entry, place }).await?;
+    let moved = queue::move_entry(&ctx.paths, entry, place).await?;
     let place = ordinal(moved.entry.position.unwrap_or_default());
     let message = if moved.stopped {
         format!(

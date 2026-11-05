@@ -31,6 +31,7 @@ pub mod processes;
 pub(crate) mod profile;
 pub mod protocol;
 pub mod questions;
+pub mod queue;
 pub mod recovery;
 pub mod removal;
 pub mod repository;

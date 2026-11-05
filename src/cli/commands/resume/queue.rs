@@ -11,7 +11,6 @@ use crate::{
     cli::{client, context::Context, terminal, ui},
     execution::recovery::Saved,
     model::{QueueEntry, Workspace},
-    protocol::QueueMethod,
 };
 
 /// Queue the restore of every agent and last session `stopped` saves, and
@@ -83,13 +82,12 @@ fn summary(count: usize) -> String {
 async fn queue(ctx: &Context, workspace: &Workspace, execution: &str) -> Result<QueueEntry> {
     let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
     reconcile_stale_execution(ctx, &inspection, Some(execution)).await?;
-    client::request(
+    let (workspace, execution) = (workspace.id.clone(), execution.to_owned());
+    crate::client::queue::restore(
         &ctx.paths,
-        QueueMethod::QueueRestore {
-            workspace: workspace.id.clone(),
-            execution: execution.to_owned(),
-            env: terminal::start_environment(),
-        },
+        workspace,
+        execution,
+        terminal::start_environment(),
     )
     .await
 }

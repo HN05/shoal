@@ -1,26 +1,20 @@
 //! `shoal add` launches under `max_agents`: admission, the queued start
 //! workers, and the hold that keeps a starting launch's slot.
-use std::time::Duration;
 
 use anyhow::Result;
-use tokio::{io::AsyncReadExt as _, sync::oneshot};
 
 use super::{listing::ListFilter, workspaces::AddPlan};
+use crate::client::queue;
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
         output::Palette,
         terminal, ui,
     },
-    model::{Dependency, QueueAdmission, QueueEntry, QueueRequest, QueuedPlan, Workspace},
-    paths::Paths,
-    protocol::QueueMethod,
+    model::{Dependency, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     state::{QueueKind, QueueState},
 };
-
-/// Reconnect a hold this soon after the daemon restarts.
-const HOLD_RETRY: Duration = Duration::from_secs(1);
 
 pub(super) enum Admission {
     /// Start now; the entry, when one tracks the slot, and the branch of a
@@ -56,8 +50,7 @@ pub(super) async fn admit(ctx: &Context, plan: &AddPlan, launch: Launch) -> Resu
         workspace: None,
         after: launch.after,
     };
-    let admission =
-        client::request::<QueueAdmission>(&ctx.paths, QueueMethod::QueueAdd { request }).await?;
+    let admission = queue::add(&ctx.paths, request).await?;
     Ok(match (admission.start, admission.entry) {
         (true, entry) => Admission::Start {
             base: entry.as_ref().and_then(|entry| entry.base.clone()),
@@ -114,8 +107,7 @@ pub(super) async fn queue_in(
         workspace: Some(workspace.id.clone()),
         after: Vec::new(),
     };
-    let admission =
-        client::request::<QueueAdmission>(&ctx.paths, QueueMethod::QueueAdd { request }).await?;
+    let admission = queue::add(&ctx.paths, request).await?;
     admission
         .entry
         .ok_or_else(|| anyhow::anyhow!("the daemon queued the agent without an entry"))
@@ -123,86 +115,22 @@ pub(super) async fn queue_in(
 
 /// Record the workspace a starting entry opened.
 pub(super) async fn attach(ctx: &Context, entry: &str, workspace: &Workspace) -> Result<()> {
-    request::<()>(
-        &ctx.paths,
-        QueueMethod::QueueAttach {
-            entry: entry.to_owned(),
-            workspace: workspace.id.clone(),
-        },
-    )
-    .await
+    queue::attach(&ctx.paths, entry.to_owned(), workspace.id.clone()).await
 }
 
 /// Free a starting entry's slot after its launch failed; the daemon notifies
 /// the user with `error`.
 pub(super) async fn fail(ctx: &Context, entry: &str, error: &anyhow::Error) {
-    let failed = request::<()>(
-        &ctx.paths,
-        QueueMethod::QueueFail {
-            entry: entry.to_owned(),
-            error: format!("{error:#}"),
-        },
-    )
-    .await;
+    let failed = queue::fail(&ctx.paths, entry.to_owned(), format!("{error:#}")).await;
     if let Err(error) = failed {
         eprintln!("warning: cannot release the agent queue slot: {error:#}");
     }
 }
 
-/// Keeps a starting entry's slot while this process runs, until its agent
-/// registers. It reconnects after a daemon restart.
-pub(super) struct Hold(tokio::task::JoinHandle<()>);
-
-impl Hold {
-    /// Returns once the daemon holds the slot, ends the entry or cannot be
-    /// reached. A daemon at its connection limit closes the hold unanswered,
-    /// so preparation waits instead of outliving the reservation.
-    pub async fn start(paths: &Paths, entry: &str) -> Self {
-        let (settled, held) = oneshot::channel();
-        let hold = Self(tokio::spawn(keep(paths.clone(), entry.to_owned(), settled)));
-        let _ = held.await;
-        hold
-    }
-}
-
-async fn keep(paths: Paths, entry: String, settled: oneshot::Sender<()>) {
-    let mut settled = Some(settled);
-    loop {
-        let method = QueueMethod::QueueHold {
-            entry: entry.clone(),
-        };
-        let opened = client::open(&paths, method).await;
-        if !matches!(&opened, Err(error) if client::stream_closed(error))
-            && let Some(settled) = settled.take()
-        {
-            let _ = settled.send(());
-        }
-        if let Ok((mut stream, body)) = opened {
-            // A refusal means the agent took the slot over or the entry ended.
-            if body.into_result().is_err() {
-                return;
-            }
-            let mut closed = [0u8; 1];
-            let _ = stream.read(&mut closed).await;
-        }
-        tokio::time::sleep(HOLD_RETRY).await;
-    }
-}
-
-impl Drop for Hold {
-    fn drop(&mut self) {
-        self.0.abort();
-    }
-}
+pub(super) use crate::client::queue::Hold;
 
 async fn plan(ctx: &Context, entry: &str) -> Result<(QueuedPlan, AddPlan)> {
-    let queued = request::<QueuedPlan>(
-        &ctx.paths,
-        QueueMethod::QueuedPlan {
-            entry: entry.to_owned(),
-        },
-    )
-    .await?;
+    let queued = queue::plan(&ctx.paths, entry.to_owned()).await?;
     let mut plan: AddPlan = serde_json::from_str(&queued.plan)?;
     plan.queue_entry = Some(entry.to_owned());
     Ok((queued, plan))
@@ -249,7 +177,7 @@ async fn start_launch(ctx: &Context, entry: &str) -> Result<()> {
 }
 
 pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {
-    request(&ctx.paths, QueueMethod::ListQueue).await
+    queue::entries(&ctx.paths).await
 }
 
 /// The entries `shoal work` and `shoal queue` show under `filter`.
@@ -313,19 +241,10 @@ async fn remove_waiting(
             entry.id
         );
     }
-    let entry = request::<QueueEntry>(
-        &ctx.paths,
-        QueueMethod::QueueRemove {
-            entry: selector.to_owned(),
-        },
-    )
-    .await?;
+    let entry = queue::remove(&ctx.paths, selector.to_owned()).await?;
     ctx.emit(
         &format!("Removed {} from the agent queue", entry.name),
         &entry,
     )?;
     Ok(Some(0))
 }
-
-#[cfg(test)]
-mod tests;
