@@ -27612,9 +27612,13 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     // The watcher has the daemon close the session Shoal recorded creating.
     let watched = || fs::read_to_string(home.join("zmx-calls")).unwrap_or_default();
-    wait_until("the session's end", || {
-        watched().lines().any(|call| call == r#"["kill", "kept"]"#)
+    let ended = try_wait_for(|| {
+        watched()
+            .lines()
+            .any(|call| call == r#"["kill", "kept"]"#)
+            .then_some(())
     });
+    assert!(ended.is_some(), "{}\n{transcript}", watched());
     assert!(
         fixture.ok(&["status", "kept"])["workspace"]["done"]
             .as_bool()
@@ -27642,9 +27646,14 @@ fn a_detached_session_stays_open_without_close_when_done() {
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
+    let sent = calls
+        .iter()
+        .find(|call| call.starts_with(&["send".into(), "open".into()]));
     assert!(
-        calls[4][2].ends_with(" internal add --host zmx && exit; exec \"$SHELL\" -l\r"),
-        "{calls:?}"
+        sent.and_then(|call| call.get(2)).is_some_and(|text| {
+            text.ends_with(" internal add --host zmx && exit; exec \"$SHELL\" -l\r")
+        }),
+        "{calls:?}\n{transcript}"
     );
     assert!(!fixture.root.path().join("zmx-watch-calls").exists());
 }
