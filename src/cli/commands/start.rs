@@ -32,10 +32,52 @@ pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
     if let Some(parent) = &args.parent {
         args.parent = Some(space_id(ctx, parent).await?);
     }
-    match kind(ctx, &args, &mode).await? {
+    let kind = kind(ctx, &args, &mode).await?;
+    ensure_fits(&args, kind, &mode)?;
+    match kind {
         SpaceKind::Workspace => in_workspace(ctx, args, mode).await,
         SpaceKind::Chat => in_chat(ctx, args, mode).await,
     }
+}
+
+/// Refuse the flags `args` sets that the kind of space `mode` starts in
+/// cannot use, before anything is asked or created.
+fn ensure_fits(args: &StartArgs, kind: SpaceKind, mode: &str) -> Result<()> {
+    let (unfit, hint) = match kind {
+        SpaceKind::Chat => (workspace_flags(args), "pass --worktree for a workspace"),
+        SpaceKind::Workspace => (
+            args.name
+                .is_some()
+                .then_some("--name")
+                .into_iter()
+                .collect(),
+            "pass --chat for a chat",
+        ),
+    };
+    let Some(flag) = unfit.first() else {
+        return Ok(());
+    };
+    anyhow::bail!("{flag} does not apply to a {kind}, which mode {mode} starts in; {hint}")
+}
+
+/// The flags `args` sets that only a workspace takes.
+fn workspace_flags(args: &StartArgs) -> Vec<&'static str> {
+    [
+        ("<branch>", args.branch.is_some()),
+        ("--existing", args.existing.is_some()),
+        ("--path", args.path.is_some()),
+        ("--base", args.base.is_some()),
+        ("--git-profile", args.git_profile.is_some()),
+        ("--fork", args.fork),
+        ("--focus", args.focus),
+        ("--now", args.now),
+        ("--after", !args.after.is_empty()),
+        ("--skip-setup", args.creation.skip_setup),
+        ("--disposable", args.creation.disposable),
+    ]
+    .into_iter()
+    .filter_map(|(flag, set)| set.then_some(flag))
+    .collect()
 }
 
 /// The ID of the space `selector` names, by ID, name or number.
@@ -114,12 +156,8 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: String) -> Result<i3
     };
     let (parent, agent, fork) = match args.fork {
         true => {
-            let (parent, session) = forked(ctx, args.parent).await?;
-            let agent = match args.agent {
-                Some(agent) => agent,
-                None => session.agent.parse::<Agent>()?,
-            };
-            (Some(parent), Some(agent), Some(session.session))
+            let (parent, agent, session) = forked(ctx, args.parent, args.agent).await?;
+            (Some(parent), Some(agent), Some(session))
         }
         false => (args.parent, args.agent, None),
     };
@@ -152,20 +190,33 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: String) -> Result<i3
 }
 
 /// The workspace whose agent `--fork` forks, `parent` or else the current
-/// one, with the agent's session.
-async fn forked(ctx: &Context, parent: Option<String>) -> Result<(String, AgentSession)> {
+/// one, the agent that starts from the fork, `agent` or else that one, and
+/// the session it forks. An agent that cannot start from a fork is refused
+/// before anything is created.
+async fn forked(
+    ctx: &Context,
+    parent: Option<String>,
+    agent: Option<Agent>,
+) -> Result<(String, Agent, String)> {
     let parent = ui::select_workspace(ctx, parent, Fallback::CurrentDirectory).await?;
-    let session = crate::client::agents::session(&ctx.paths, parent.clone()).await?;
-    Ok((parent, session))
+    let AgentSession {
+        agent: running,
+        session,
+        ..
+    } = crate::client::agents::session(&ctx.paths, parent.clone()).await?;
+    let agent = match agent {
+        Some(agent) => agent,
+        None => running.parse()?,
+    };
+    let target = ConfigTarget::Workspace(parent.clone());
+    let settings = client::settings(&ctx.paths, target).await?;
+    crate::cli::agents::ensure_forks(&settings, agent.name())?;
+    Ok((parent, agent, session))
 }
 
 /// Start the agent in a chat in a repository's checkout, or with `--in` in
 /// a workspace's worktree.
 async fn in_chat(ctx: &Context, args: StartArgs, mode: String) -> Result<i32> {
-    ensure!(
-        args.after.is_empty() && !args.now,
-        "--after and --now queue agents of workspaces, and a chat starts at once"
-    );
     let options = chat::Options {
         agent: args.agent,
         place: chat::ChatPlace::here(args.here),
@@ -189,3 +240,6 @@ async fn in_chat(ctx: &Context, args: StartArgs, mode: String) -> Result<i32> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

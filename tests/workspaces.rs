@@ -4458,6 +4458,7 @@ fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
         format!(
             "if [ \"$1\" = --resume ]; then printf '%s\\0' \"$@\" > \"$HOME/forked.tmp\"; mv \"$HOME/forked.tmp\" \"$HOME/forked\"; exit 0; fi\n\
              printf '{{\"session_id\":\"parent-session\"}}' | '{shoal}' internal agent-state idle >/dev/null || exit 3\n\
+             '{shoal}' --json start \"$(cat \"$HOME/repo-path\")\" refused --fork --agent pi 2> \"$HOME/refused.err\"\n\
              '{shoal}' --json start \"$(cat \"$HOME/repo-path\")\" child --fork -- 'Take the child part' > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n",
             shoal = env!("CARGO_BIN_EXE_shoal"),
         ),
@@ -4487,6 +4488,12 @@ fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
             )
         });
     assert_eq!(queued["agent"], "claude", "{queued}");
+    // An agent that cannot start from a fork is refused before its
+    // workspace is created.
+    let refused = fs::read_to_string(home.join("refused.err")).unwrap();
+    assert!(refused.contains("cannot fork a session of pi"), "{refused}");
+    let names = fixture.ok(&["work"]).to_string();
+    assert!(!names.contains("\"refused\""), "{names}");
     let forked = home.join("forked");
     wait_until("the forked agent start", || forked.exists());
     let args = fs::read_to_string(&forked).unwrap();
