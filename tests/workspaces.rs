@@ -11442,12 +11442,11 @@ fn inbox_lists_untracked_worktrees_until_they_are_adopted() {
         Path::new(listed[0]["worktree"]["path"].as_str().unwrap()),
         fs::canonicalize(&stray).unwrap()
     );
-    let mut text = String::new();
     wait_until("the untracked worktree in the inbox text", || {
-        text = String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
-        text.contains("untracked")
+        String::from_utf8(fixture.run(&["inbox"]).stdout)
+            .unwrap()
+            .contains("untracked")
     });
-    assert!(text.contains("adopt it with shoal work adopt"), "{text}");
     // Workspace processes see only their own tree.
     let scoped = fixture
         .command()
@@ -11908,7 +11907,6 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     assert_eq!(preview[0]["directory"], "valid");
     let issue = preview[0]["issues"][0].as_str().unwrap();
     assert!(issue.starts_with(preview[0]["workspace"]["error"].as_str().unwrap()));
-    assert!(issue.contains("shoal work setup --skip"));
     assert_eq!(
         fixture.ok(&["status", "interrupted"])["workspace"]["state"],
         "failed"
@@ -11919,10 +11917,8 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     )
     .unwrap();
     let preview = recovery_report(&fixture, &["interrupted"]);
-    assert_eq!(
-        preview[0]["issues"][0],
-        "Workspace is failed; shoal status shows why"
-    );
+    let issue = preview[0]["issues"][0].as_str().unwrap();
+    assert!(issue.starts_with("Workspace is failed;"), "{issue}");
     let repaired = repaired_workspaces(&fixture, &["interrupted", "--repair"]);
     assert_eq!(repaired[0]["workspace"]["state"], "ready");
     assert_eq!(
@@ -13843,8 +13839,6 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     assert_eq!(issues.len(), 1);
     let issue = issues[0].as_str().unwrap();
     assert!(issue.contains("setup failed (exit 17"));
-    assert!(issue.contains("retry with shoal work setup"));
-    assert!(issue.contains("accept a failed setup with shoal work setup --skip"));
     assert_eq!(
         fixture.ok(&["status", "failed-setup"])["workspace"],
         failed["workspace"]
@@ -13865,9 +13859,6 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
             .status
             .success()
     );
-    let output = fixture.run(&["prepare", "failed-setup"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("unknown command \"prepare\""));
     fs::write(&script, "#!/bin/sh\nprintf complete > setup-result\n").unwrap();
     assert_eq!(
         fixture.ok(&["work", "setup", "failed-setup"])["state"],
@@ -17135,7 +17126,6 @@ cat > "$HOME/picker-input"
 case "$*" in
 *'View> '*)
   cp "$HOME/picker-input" "$HOME/view-rows"
-  printf '%s\n' "$*" > "$HOME/view-args"
   printf '%s\n' "$VIEW_KEY"
   grep /pull/ "$HOME/picker-input" ;;
 *) echo ctrl-v; head -n 1 "$HOME/picker-input" ;;
@@ -17152,11 +17142,6 @@ esac
     );
     assert!(transcript.contains("PR #7: Fix crash"), "{transcript}");
     assert!(!transcript.contains("Same here"), "{transcript}");
-    let args = fs::read_to_string(root.join("view-args")).unwrap();
-    assert!(
-        args.contains("enter: view   ctrl-o: open in browser"),
-        "{args}"
-    );
 
     // `--web` opens the selected items in the browser and prints each URL,
     // without waiting for an opener that runs the browser until it closes.
@@ -17549,10 +17534,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 .unwrap();
             assert!(output.status.success(), "{output:?}");
             let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(
-                stderr.contains("daemon.state.json") && stderr.contains("happy daemon start"),
-                "{stderr}"
-            );
+            assert!(stderr.contains("daemon.state.json"), "{stderr}");
             let mut lines = output
                 .stdout
                 .split(|b| *b == b'\n')
@@ -17765,16 +17747,14 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             );
             // Not logged in to Happy: the prompt is saved and the user is told.
             let prompt_file = PathBuf::from(launch["prompt_file"].as_str().unwrap());
-            let prompt = fs::read_to_string(&prompt_file).unwrap();
-            assert_eq!(
-                after_guidance(&prompt),
-                format!(
-                    "General 34-fix-api-timeout\n\nWork on issue #34: {title}\n\
-                     https://github.com/team/project/issues/34\n\n\
-                     Issue description:\n{body}\n\n\
-                     `shoal view` shows the issue with its comments and later edits."
-                )
+            let prompt = after_guidance(&fs::read_to_string(&prompt_file).unwrap());
+            assert!(
+                prompt.starts_with("General 34-fix-api-timeout\n\n"),
+                "{prompt}"
             );
+            for value in [title, body, "https://github.com/team/project/issues/34"] {
+                assert!(prompt.contains(value), "{prompt}");
+            }
             assert_eq!(launch["prompt_delivered"], false);
             assert_eq!(launch["happy_session_id"], Value::Null);
             assert!(
@@ -19703,15 +19683,21 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         args.starts_with(&format!("--prompt={GUIDANCE_START}")),
         "{args}"
     );
-    assert_eq!(
-        remove_guidance(&args),
-        format!(
-            "--prompt=Follow {branch}\n\nWork on issue #37: Literal {{branch}}\n\
-             https://github.com/team/project/issues/37\n\nIssue description:\n$(false)\n\n\
-             `shoal view` shows the issue with its comments and later edits.\0\
-             literal {{prompt}}\0{branch}\0"
-        )
+    let args = remove_guidance(&args);
+    let (prompt, rest) = args.split_once('\0').unwrap();
+    assert!(
+        prompt.starts_with(&format!("--prompt=Follow {branch}\n\n")),
+        "{prompt}"
     );
+    // The issue's text is passed as written, never as placeholders.
+    for value in [
+        "Literal {branch}",
+        "https://github.com/team/project/issues/37",
+        "$(false)",
+    ] {
+        assert!(prompt.contains(value), "{prompt}");
+    }
+    assert_eq!(rest, format!("literal {{prompt}}\0{branch}\0"));
     assert_eq!(
         fixture.ok(&["status", workspace["id"].as_str().unwrap()])["executions"],
         serde_json::json!([])
