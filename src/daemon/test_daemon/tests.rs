@@ -508,18 +508,20 @@ async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts()
         .register_repository(other.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let check = |repository: &Repository| crate::protocol::ChatMethod::CheckChatParent {
-        repository: repository.id.clone().into(),
-        parent: Some(parent.id.clone()),
+    let check = |repository: &Repository, workspace: Option<&str>, parent: &str| {
+        crate::protocol::ChatMethod::CheckChatParent {
+            repository: repository.id.clone().into(),
+            workspace: workspace.map(str::to_owned),
+            parent: Some(parent.to_owned()),
+        }
     };
-    connection::request::<()>(&app, check(&daemon.repository))
+    let refused = |method| async { connection::request::<()>(&app, method).await.is_err() };
+    connection::request::<()>(&app, check(&daemon.repository, None, &parent.id))
         .await
         .unwrap();
-    assert!(
-        connection::request::<()>(&app, check(&other))
-            .await
-            .is_err()
-    );
+    assert!(refused(check(&other, None, &parent.id)).await);
+    // Nor does a chat go below the workspace it runs in.
+    assert!(refused(check(&daemon.repository, Some(&parent.id), &parent.id)).await);
 }
 
 #[tokio::test]

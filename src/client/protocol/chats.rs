@@ -73,9 +73,12 @@ pub enum ChatMethod {
     CheckChatName {
         name: String,
     },
-    /// Refuse a `parent` a new chat in `repository` could not go below.
+    /// Refuse a `parent` a new chat in `repository`, in the worktree of
+    /// `workspace` when given, could not go below.
     CheckChatParent {
         repository: crate::client::repository::Selector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace: Option<String>,
         /// As [`Self::StartChat`]'s parent.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<String>,

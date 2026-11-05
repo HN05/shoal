@@ -117,6 +117,27 @@ impl Manager {
         self.record_new_chat(repository, workspace, new).await
     }
 
+    /// Refuse a named `parent` that is `workspace`, whose worktree the chat
+    /// runs in: the chat is not the workspace's child, whose questions would
+    /// go to the workspace's agent while the user attends the chat.
+    pub(crate) async fn ensure_parent_not_host(
+        &self,
+        workspace: Option<&str>,
+        parent: Option<&str>,
+    ) -> Result<()> {
+        let (Some(workspace), Some(parent)) = (workspace, parent) else {
+            return Ok(());
+        };
+        let host = self.workspace(workspace).await?;
+        let parent = self.present_space(parent).await?;
+        ensure!(
+            parent.id() != host.id,
+            "a chat in the worktree of {} cannot go below it; name another --parent",
+            host.name
+        );
+        Ok(())
+    }
+
     /// The workspace `selector` names, once a chat may run in it: it is
     /// ready and its worktree is there and verified to be its own.
     pub(crate) async fn chat_workspace(&self, selector: &str) -> Result<Workspace> {

@@ -38,6 +38,9 @@ pub(super) async fn handle(
                 parent,
             };
             let workspace = workspace.as_deref();
+            if caller.is_none() {
+                (manager.ensure_parent_not_host(workspace, new.parent.as_deref())).await?;
+            }
             Body::Chat(manager.start_new_chat(repository, workspace, new).await?)
         }
         ChatMethod::RestoreChat {
@@ -62,7 +65,14 @@ pub(super) async fn handle(
             manager.check_chat_name(name).await?;
             Body::Ok
         }
-        ChatMethod::CheckChatParent { repository, parent } => {
+        ChatMethod::CheckChatParent {
+            repository,
+            workspace,
+            parent,
+        } => {
+            if caller.is_none() {
+                (manager.ensure_parent_not_host(workspace.as_deref(), parent.as_deref())).await?;
+            }
             (manager.ensure_parent_repository(&repository, parent.as_deref())).await?;
             Body::Ok
         }
@@ -86,14 +96,20 @@ impl Scoped for ChatMethod {
             // A scoped caller starts chats only in its own tree, below its
             // own space unless it names one below it, in a worktree of its
             // tree, and hands each to the session it starts, with its scope.
+            // A named parent is never the workspace the chat runs in; one
+            // it leaves out is its own space, wherever the chat runs.
             ChatMethod::StartChat {
                 parent, workspace, ..
             } => {
+                (manager.ensure_parent_not_host(workspace.as_deref(), parent.as_deref())).await?;
                 manager.parent_below(caller, parent).await?;
                 workspace.as_mut()
             }
             // Its check takes the parent as its start would.
-            ChatMethod::CheckChatParent { parent, .. } => {
+            ChatMethod::CheckChatParent {
+                parent, workspace, ..
+            } => {
+                (manager.ensure_parent_not_host(workspace.as_deref(), parent.as_deref())).await?;
                 manager.parent_below(caller, parent).await?;
                 None
             }

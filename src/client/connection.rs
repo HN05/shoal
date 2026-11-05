@@ -400,14 +400,20 @@ pub async fn check_chat_name(daemon: &impl Daemon, name: &str) -> Result<()> {
     .await
 }
 
-/// Refuse `parent`, a space a new chat in `repository` could not go below.
+/// Refuse `parent`, a space a new chat in `repository`, in the worktree of
+/// `workspace` when given, could not go below.
 pub async fn check_chat_parent(
     daemon: &impl Daemon,
     repository: crate::client::repository::Selector,
+    workspace: Option<String>,
     parent: String,
 ) -> Result<()> {
-    let parent = Some(parent);
-    request::<()>(daemon, ChatMethod::CheckChatParent { repository, parent }).await
+    let method = ChatMethod::CheckChatParent {
+        repository,
+        workspace,
+        parent: Some(parent),
+    };
+    request::<()>(daemon, method).await
 }
 
 /// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could take now.

@@ -114,7 +114,7 @@ const REQUESTS: &[&str] = &[
     r#"{"remove_chat":{"chat":"app-chat"}}"#,
     r#"{"rename_chat":{"chat":"app-chat","name":"topic"}}"#,
     r#"{"check_chat_name":{"name":"app-chat"}}"#,
-    r#"{"check_chat_parent":{"repository":"app","parent":"7"}}"#,
+    r#"{"check_chat_parent":{"repository":"app","workspace":"fix","parent":"7"}}"#,
     r#"{"free_chat_name":{"name":"app-chat"}}"#,
     r#"{"chat_scope":{"chat":"chat-id"}}"#,
     // The agent queue.

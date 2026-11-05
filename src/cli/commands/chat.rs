@@ -64,7 +64,7 @@ pub(super) async fn start(
             Some(input) => issue::repository(ctx, input.as_deref(), repository).await?,
             None => chosen(ctx, repository).await?,
         };
-        check_parent(ctx, &repo, options.parent.as_deref()).await?;
+        check_parent(ctx, &repo, None, options.parent.as_deref()).await?;
         let settings = settings(ctx, &repo).await?;
         let topic = Topic {
             linked_issue: subject.linked_issue.clone(),
@@ -92,8 +92,8 @@ pub(super) async fn start_in_workspace(
         options.check_name(ctx).await?;
         let workspace = chosen_workspace(ctx, workspace).await?;
         let repo = workspace_repository(ctx, &workspace).await?;
-        ensure_not_below_host(options.parent.as_deref(), &workspace)?;
-        check_parent(ctx, &repo, options.parent.as_deref()).await?;
+        let parent = options.parent.as_deref();
+        check_parent(ctx, &repo, Some(&workspace), parent).await?;
         let settings = settings(ctx, &repo).await?;
         let topic = Topic {
             linked_issue: subject.linked_issue.clone(),
@@ -107,27 +107,26 @@ pub(super) async fn start_in_workspace(
     client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
 }
 
-/// Refuse a named `parent` that is `workspace`, whose worktree the chat runs
-/// in: the chat is not the workspace's child, whose questions would go to the
-/// workspace's agent while the user attends the chat.
-fn ensure_not_below_host(parent: Option<&str>, workspace: &Workspace) -> Result<()> {
-    ensure!(
-        parent != Some(workspace.id.as_str()),
-        "a chat in the worktree of {} cannot go below it; name another --parent",
-        workspace.name
-    );
-    Ok(())
-}
-
-/// Refuse `parent`, the space a chat in `repo` would go below, as its
-/// registration would, before a picker or prompt asks for the rest.
-async fn check_parent(ctx: &Context, repo: &Repository, parent: Option<&str>) -> Result<()> {
-    match parent {
-        Some(parent) => {
-            client::check_chat_parent(&ctx.paths, repo.id.clone().into(), parent.to_owned()).await
-        }
-        None => Ok(()),
-    }
+/// Refuse `parent`, the space a chat in `repo`, in the worktree of
+/// `workspace` when given, would go below, as its registration would, before
+/// a picker or prompt asks for the rest.
+async fn check_parent(
+    ctx: &Context,
+    repo: &Repository,
+    workspace: Option<&Workspace>,
+    parent: Option<&str>,
+) -> Result<()> {
+    let Some(parent) = parent else {
+        return Ok(());
+    };
+    let workspace = workspace.map(|workspace| workspace.id.clone());
+    client::check_chat_parent(
+        &ctx.paths,
+        repo.id.clone().into(),
+        workspace,
+        parent.to_owned(),
+    )
+    .await
 }
 
 /// `topic` in `repo` started on the issue `subject` names, if any. The mode
