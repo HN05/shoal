@@ -210,7 +210,9 @@ async fn built_in_restore_child() {
         assert_eq!(arguments, expected);
         if let Some(handoff) = handoff {
             assert!(
-                prompt.to_string_lossy().ends_with(&format!("\n\n{handoff}")),
+                prompt
+                    .to_string_lossy()
+                    .ends_with(&format!("\n\n{handoff}")),
                 "{prompt:?}"
             );
         }

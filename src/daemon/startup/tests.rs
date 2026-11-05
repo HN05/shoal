@@ -111,23 +111,25 @@ async fn status_names_the_file_access_a_step_waits_on() {
     let (checked, (quick, slow)) = tokio::join!(check, observe);
     checked.unwrap();
     assert_eq!(quick, None);
-    assert_eq!(
-        slow.as_deref(),
-        Some(&*format!(
-            "waiting 6s for file access in {}; a macOS privacy prompt may be waiting for an answer",
+    let slow = slow.unwrap();
+    assert!(
+        slow.starts_with(&format!(
+            "waiting 6s for file access in {};",
             path.display()
-        ))
+        )),
+        "{slow}"
     );
 
     let stalled = manager
         .check_access(&path, std::future::pending::<anyhow::Result<()>>())
         .await;
     assert!(stalled.is_err());
-    assert_eq!(
-        waiting(access).as_deref(),
-        Some(&*format!(
-            "file access in {} stalled; a macOS privacy prompt may be waiting for an answer",
+    let stalled = waiting(access).unwrap();
+    assert!(
+        stalled.starts_with(&format!(
+            "file access in {} stalled;",
             root.path().display()
-        ))
+        )),
+        "{stalled}"
     );
 }

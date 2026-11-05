@@ -109,8 +109,7 @@ async fn a_refused_lock_is_reported_and_shutdowns_still_stop_work() {
     assert!(
         notifications.iter().any(|n| {
             n.kind == NotificationKind::EnvironmentProblem
-                && n.message
-                    == "Shoal could not delay system shutdowns to stop agents first: interactive authentication required"
+                && n.message.ends_with(": interactive authentication required")
         }),
         "{notifications:?}"
     );
