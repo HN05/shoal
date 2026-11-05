@@ -162,23 +162,8 @@ impl Manager {
         if IssueInput::parse(input) != IssueInput::Url {
             return Ok(None);
         }
-        let (forge, url) = match kind {
-            link::LinkKind::Issue => {
-                let forge = self.issue_url_forge(input).await?;
-                let (_, url) = forge.issue(input)?;
-                (forge, url)
-            }
-            link::LinkKind::Pr => {
-                let forge = self.pull_forge(input).await?;
-                let (_, url) = forge.pull(input)?;
-                (forge, url)
-            }
-            link::LinkKind::Ci => {
-                let forge = self.run_url_forge(input).await?;
-                let (_, url) = forge.run(input)?;
-                (forge, url)
-            }
-        };
+        let forge = self.item_url_forge(kind, input).await?;
+        let (_, url) = forge.item(kind, input)?;
         Ok(Some((forge, SelectedItem { url, kind })))
     }
 }

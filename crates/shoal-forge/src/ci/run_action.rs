@@ -165,7 +165,7 @@ impl ForgeRepo {
 
 /// The repository URL of a run's web URL, and the forge whose runs alone use
 /// its route.
-fn run_repository(url: &str) -> Result<(&str, Option<ForgeKind>)> {
+pub(crate) fn run_repository(url: &str) -> Result<(&str, Option<ForgeKind>)> {
     RUN_ROUTES
         .iter()
         .find_map(|&(marker, forge)| Some((url.rsplit_once(marker)?.0, forge)))

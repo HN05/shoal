@@ -277,8 +277,7 @@ impl Manager {
 
 async fn issue_closed(hosts: &ForgeHosts<'_>, account: &Account, url: &str) -> Result<bool> {
     let forge = ForgeRepo::resolve_issue_url(url, hosts).await?;
-    let (number, _) = forge.issue(url)?;
-    forge.issue_closed(account, number).await
+    forge.issue_url_closed(account, url).await
 }
 
 /// Each dependency of the waiting launches with its entry, in queue order.

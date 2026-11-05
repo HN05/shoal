@@ -203,10 +203,7 @@ pub(super) async fn item_repository(
         None if let Some(input) =
             input.filter(|input| IssueInput::parse(input) == IssueInput::Url) =>
         {
-            let forge = match kind {
-                ItemKind::Pr => ForgeRepo::from_pull_url(input)?,
-                ItemKind::Issue => ForgeRepo::from_issue_url(input)?,
-            };
+            let forge = ForgeRepo::from_item_url(kind.into(), input)?;
             registered_remote(ctx, &mut repos, forge, retry)
                 .await?
                 .into()

@@ -479,10 +479,7 @@ impl Manager {
             .url
             .clone()
             .context("the proposal has no opened item")?;
-        let (number, _) = match kind {
-            ItemKind::Issue => forge.issue(&url)?,
-            ItemKind::Pr => forge.pull(&url)?,
-        };
+        let (number, _) = forge.item(kind.into(), &url)?;
         let follow_up = request.follow_up().cloned().unwrap_or_default();
         let item = forge
             .finish_item(account, kind, number, &follow_up)

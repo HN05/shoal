@@ -74,11 +74,7 @@ impl Manager {
             Some(kind) => kind,
             None => forge.item_kind(account, input.parse()?).await?.into(),
         };
-        let (_, url) = match kind {
-            LinkKind::Issue => forge.issue(input)?,
-            LinkKind::Pr => forge.pull(input)?,
-            LinkKind::Ci => forge.run(input)?,
-        };
+        let (_, url) = forge.item(kind, input)?;
         Ok(SelectedItem { url, kind })
     }
 

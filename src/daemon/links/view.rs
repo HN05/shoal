@@ -121,10 +121,9 @@ impl Manager {
     /// The repository the item at `url` is in: `own`, or the other one its
     /// URL names.
     async fn item_forge(&self, own: &ForgeRepo, kind: ItemKind, url: &str) -> Result<ForgeRepo> {
-        match kind {
-            ItemKind::Issue if own.issue(url).is_err() => self.issue_url_forge(url).await,
-            ItemKind::Pr if own.pull(url).is_err() => self.pull_forge(url).await,
-            _ => Ok(own.clone()),
+        if own.item(kind.into(), url).is_ok() {
+            return Ok(own.clone());
         }
+        self.item_url_forge(kind.into(), url).await
     }
 }

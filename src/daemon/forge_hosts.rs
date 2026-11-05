@@ -13,6 +13,7 @@ use crate::{
         ForgeRepo,
         backends::ForgeKind,
         hosts::{self, HostType, HostTypes},
+        items::link::LinkKind,
     },
 };
 
@@ -66,9 +67,9 @@ impl Manager {
         ForgeRepo::resolve_run_url(url, &self.forge_hosts()).await
     }
 
-    /// The forge an issue URL's repository is on.
-    pub(crate) async fn issue_url_forge(&self, url: &str) -> Result<ForgeRepo> {
-        ForgeRepo::resolve_issue_url(url, &self.forge_hosts()).await
+    /// The forge the `kind` item URL's repository is on.
+    pub(crate) async fn item_url_forge(&self, kind: LinkKind, url: &str) -> Result<ForgeRepo> {
+        ForgeRepo::resolve_item_url(kind, url, &self.forge_hosts()).await
     }
 
     /// The forge `host` serves and what decided it, asking it over

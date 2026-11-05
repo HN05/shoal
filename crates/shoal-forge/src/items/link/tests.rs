@@ -146,3 +146,28 @@ fn run_links_select_runs_by_url_or_after_ci() {
         "a run URL is not a PR"
     );
 }
+
+#[test]
+fn an_item_url_names_its_repository_and_number_by_its_kind() -> Result<()> {
+    for (kind, url) in [
+        (LinkKind::Issue, "https://codeberg.org/team/repo/issues/3"),
+        (LinkKind::Pr, "https://codeberg.org/team/repo/pulls/12"),
+        (
+            LinkKind::Ci,
+            "https://codeberg.org/team/repo/actions/runs/2765",
+        ),
+    ] {
+        let repository = ForgeRepo::from_item_url(kind, url)?;
+        assert_eq!(
+            repository.repository_url(),
+            "https://codeberg.org/team/repo"
+        );
+        assert_eq!(repository.item(kind, url)?.1, url, "{kind}");
+    }
+    let own = ForgeRepo::parse("https://codeberg.org/team/repo")?;
+    assert_eq!(own.item(LinkKind::Pr, "12")?.0, 12);
+    let pull = "https://codeberg.org/team/repo/pulls/12";
+    assert!(ForgeRepo::from_item_url(LinkKind::Issue, pull).is_err());
+    assert!(own.item(LinkKind::Ci, pull).is_err());
+    Ok(())
+}

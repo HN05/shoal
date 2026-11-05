@@ -3,7 +3,10 @@
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::{ForgeRepo, IssueInput, backends::ForgeKind};
+use crate::{
+    ForgeRepo, ISSUE_ROUTES, IssueInput, PULL_ROUTES, backends::ForgeKind,
+    ci::run_action::run_repository, hosts::HostTypes, repo::locator::ItemRoute,
+};
 
 crate::state::states!(ItemKind {
     Issue => "issue",
@@ -147,24 +150,49 @@ impl Selection {
 
 /// The repository and number of an issue, PR or CI run URL.
 pub fn item(kind: LinkKind, url: &str) -> Result<(ForgeRepo, u64)> {
-    let (repository, (number, _)) = match kind {
-        LinkKind::Pr => {
-            let repository = ForgeRepo::from_pull_url(url)?;
-            let item = repository.pull(url)?;
-            (repository, item)
-        }
-        LinkKind::Issue => {
-            let repository = ForgeRepo::from_issue_url(url)?;
-            let item = repository.issue(url)?;
-            (repository, item)
-        }
-        LinkKind::Ci => {
-            let repository = ForgeRepo::from_run_url(url)?;
-            let item = repository.run(url)?;
-            (repository, item)
-        }
-    };
+    let repository = ForgeRepo::from_item_url(kind, url)?;
+    let (number, _) = repository.item(kind, url)?;
     Ok((repository, number))
+}
+
+impl ForgeRepo {
+    /// The number and canonical URL of the `kind` item `input`, its number
+    /// or URL, names.
+    pub fn item(&self, kind: LinkKind, input: &str) -> Result<(u64, String)> {
+        match kind {
+            LinkKind::Issue => self.issue(input),
+            LinkKind::Pr => self.pull(input),
+            LinkKind::Ci => self.run(input),
+        }
+    }
+
+    /// The repository a `kind` item URL belongs to.
+    pub fn from_item_url(kind: LinkKind, url: &str) -> Result<Self> {
+        let (repository, forge) = item_repository(kind, url)?;
+        Self::parse_linked(repository, forge)
+    }
+
+    /// The repository a `kind` item URL belongs to, on the forge `hosts`
+    /// says its host serves.
+    pub async fn resolve_item_url(
+        kind: LinkKind,
+        url: &str,
+        hosts: &impl HostTypes,
+    ) -> Result<Self> {
+        Self::resolve(item_repository(kind, url)?.0, hosts).await
+    }
+}
+
+/// The repository URL of a `kind` item URL, and the forge whose items alone
+/// use its route.
+fn item_repository(kind: LinkKind, url: &str) -> Result<(&str, Option<ForgeKind>)> {
+    let routes = match kind {
+        LinkKind::Issue => ISSUE_ROUTES,
+        LinkKind::Pr => PULL_ROUTES,
+        LinkKind::Ci => return run_repository(url),
+    };
+    let (repository, route) = ItemRoute::discover(url, routes)?;
+    Ok((repository, route.forge()))
 }
 
 pub struct Link {

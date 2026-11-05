@@ -118,8 +118,7 @@ async fn issue_status(
     let closed = async {
         let remote = pr::origin(remote, "issue lookup needs an origin remote")?;
         let forge = ForgeRepo::resolve(remote, hosts).await?;
-        let (number, _) = forge.issue(url)?;
-        forge.issue_closed(account, number).await
+        forge.issue_url_closed(account, url).await
     }
     .await;
     Some(match closed {

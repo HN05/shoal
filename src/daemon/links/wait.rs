@@ -677,22 +677,8 @@ impl Manager {
         kind: LinkKind,
         branch: Option<&str>,
     ) -> Result<Snapshot> {
-        match kind {
-            LinkKind::Issue => {
-                let forge = self.issue_url_forge(url).await?;
-                let (number, _) = forge.issue(url)?;
-                forge.issue_activity(account, number).await
-            }
-            LinkKind::Pr => {
-                let forge = self.pull_forge(url).await?;
-                let (number, _) = forge.pull(url)?;
-                forge.activity(account, number, branch).await
-            }
-            LinkKind::Ci => {
-                let forge = self.run_url_forge(url).await?;
-                forge.run_activity(account, url).await
-            }
-        }
+        let forge = self.item_url_forge(kind, url).await?;
+        forge.item_activity(account, kind, url, branch).await
     }
 
     /// Poll linked items for integrations, with their own baseline, and queue
@@ -927,14 +913,12 @@ impl Manager {
             .context("item lookup needs an origin remote")?;
         let forge = self.forge(&remote).await?;
         let kind = selection.kind.context("explicit items need a kind")?;
-        let (_, url) = match kind {
-            LinkKind::Pr => forge.pull(input)?,
-            LinkKind::Issue => forge.issue(input)?,
-            // A run's URL may name another repository.
-            LinkKind::Ci => (self.named_run_forge(input).await?)
-                .unwrap_or(forge)
-                .run(input)?,
+        // A run's URL may name another repository.
+        let named = match kind {
+            LinkKind::Ci => self.named_run_forge(input).await?,
+            LinkKind::Issue | LinkKind::Pr => None,
         };
+        let (_, url) = named.unwrap_or(forge).item(kind, input)?;
         Ok(Some((url, kind)))
     }
 

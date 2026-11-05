@@ -26,7 +26,9 @@ impl ForgeRepo {
         })
     }
 
-    pub async fn issue_closed(&self, account: &Account, number: u64) -> Result<bool> {
+    /// Whether the issue at `url`, in this repository, is closed.
+    pub async fn issue_url_closed(&self, account: &Account, url: &str) -> Result<bool> {
+        let (number, _) = self.issue(url)?;
         Ok(self.issue_state(account, number).await? == ItemState::Closed)
     }
 

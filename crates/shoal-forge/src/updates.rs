@@ -9,7 +9,10 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Backend, rest::RestCheck},
-    items::item::{Current, ItemState},
+    items::{
+        item::{Current, ItemState},
+        link::LinkKind,
+    },
     review::status::CheckResult,
     transport::limits::{RateLimited, rate_limited},
 };
@@ -519,6 +522,23 @@ pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
 }
 
 impl ForgeRepo {
+    /// The activity of the `kind` item at `url`, a PR only while its head
+    /// is `branch` when one is given.
+    pub async fn item_activity(
+        &self,
+        account: &Account,
+        kind: LinkKind,
+        url: &str,
+        branch: Option<&str>,
+    ) -> Result<Snapshot> {
+        let (number, _) = self.item(kind, url)?;
+        match kind {
+            LinkKind::Issue => self.issue_activity(account, number).await,
+            LinkKind::Pr => self.activity(account, number, branch).await,
+            LinkKind::Ci => self.run_activity(account, url).await,
+        }
+    }
+
     pub async fn issue_activity(&self, account: &Account, number: u64) -> Result<Snapshot> {
         self.kind
             .issue_activity(self, account, number)

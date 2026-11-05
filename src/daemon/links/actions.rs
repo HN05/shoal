@@ -70,10 +70,7 @@ impl Manager {
             Some(input) => input,
             None => self.linked_item(space.id(), kind).await?,
         };
-        let (number, url) = match kind {
-            ItemKind::Issue => forge.issue(&input)?,
-            ItemKind::Pr => forge.pull(&input)?,
-        };
+        let (number, url) = forge.item(kind.into(), &input)?;
         let account = if users_decision(&action) {
             self.user_account()
         } else {
@@ -111,10 +108,7 @@ impl Manager {
     ) -> Result<Item> {
         let checkout = self.repository(selector).await?;
         let forge = self.checkout_forge(&checkout).await?;
-        let (number, url) = match kind {
-            ItemKind::Issue => forge.issue(input)?,
-            ItemKind::Pr => forge.pull(input)?,
-        };
+        let (number, url) = forge.item(kind.into(), input)?;
         let account = if users_decision(&action) {
             self.user_account()
         } else {
@@ -593,11 +587,7 @@ fn record_opened(
 /// or a failed read.
 async fn marked_item(forge: &ForgeRepo, account: &Account, mark: &ReviewMark) -> Option<Item> {
     let (kind, url) = (mark.kind?, mark.url.as_deref()?);
-    let (number, _) = match kind {
-        ItemKind::Issue => forge.issue(url),
-        ItemKind::Pr => forge.pull(url),
-    }
-    .ok()?;
+    let (number, _) = forge.item(kind.into(), url).ok()?;
     Some(forge.read(account, kind, number).await.ok()?.item)
 }
 

@@ -254,18 +254,16 @@ impl Manager {
     /// The canonical URL of an issue or PR of the space's repository, or of
     /// a CI run of any.
     async fn item_url(&self, space: &LinkSpace, kind: LinkKind, input: &str) -> Result<String> {
-        let checkout = space.origin_path();
-        Ok(match kind {
-            LinkKind::Issue => self.issue_forge(checkout, input).await?.2,
-            LinkKind::Pr => self.pr_forge(checkout, input).await?.2,
-            LinkKind::Ci => {
-                let forge = match self.named_run_forge(input).await? {
-                    Some(forge) => forge,
-                    None => self.space_forge(space).await?,
-                };
-                forge.run(input)?.1
-            }
-        })
+        // A run's URL may name another repository.
+        let named = match kind {
+            LinkKind::Ci => self.named_run_forge(input).await?,
+            LinkKind::Issue | LinkKind::Pr => None,
+        };
+        let forge = match named {
+            Some(forge) => forge,
+            None => self.space_forge(space).await?,
+        };
+        Ok(forge.item(kind, input)?.1)
     }
 }
 
