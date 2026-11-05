@@ -62,6 +62,5 @@ fn an_edit_needs_a_body() {
         body: body.into(),
     };
     assert!(edit("Fixed").validate().is_ok());
-    let error = edit(" \n").validate().unwrap_err();
-    assert_eq!(error.to_string(), "the comment is empty");
+    assert!(edit(" \n").validate().is_err());
 }

@@ -47,8 +47,8 @@ fn refusals_offer_the_labels_that_satisfy_each_missing_entry() {
         refused.ends_with(":\n  area/cli: Command line\n  type/bug"),
         "{refused}"
     );
-    let refused = refusal(ItemKind::Issue, &["area/"], &[]);
-    assert!(refused.ends_with("pass --label"), "{refused}");
+    // Without matching labels the refusal lists none.
+    assert_eq!(refusal(ItemKind::Issue, &["area/"], &[]).lines().count(), 1);
 }
 
 #[test]

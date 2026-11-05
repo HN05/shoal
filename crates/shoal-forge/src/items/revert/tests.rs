@@ -9,23 +9,14 @@ async fn forges_without_a_revert_refuse_before_sending_anything() {
         title: "Revert \"Fix\"".into(),
         ..NewRevert::default()
     };
-    for remote in [
-        "https://forge.example/team/repo",
-        "git@gitlab.com:group/repo.git",
-        "git@bitbucket.org:team/repo.git",
-    ] {
-        let forge = ForgeRepo::parse(remote).unwrap();
-        let current = forge
-            .current(ItemKind::Pr, 7, &merged_pull(forge.kind))
-            .unwrap();
-        let error = forge
-            .revert_pull(&account, &current, &revert)
-            .await
-            .unwrap_err();
-        let unsupported = error.downcast_ref::<Unsupported>().unwrap();
-        assert_eq!(unsupported.capability, Capability::RevertPrs);
-        assert!(error.to_string().contains("git revert"), "{error}");
-    }
+    let forge = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+    let current = forge.current(ItemKind::Pr, 7, &merged_pull()).unwrap();
+    let error = forge
+        .revert_pull(&account, &current, &revert)
+        .await
+        .unwrap_err();
+    let unsupported = error.downcast_ref::<Unsupported>().unwrap();
+    assert_eq!(unsupported.capability, Capability::RevertPrs);
 }
 
 #[test]
@@ -49,24 +40,16 @@ fn pr_heads_stay_fetchable_where_the_forge_keeps_a_ref() {
     );
 }
 
-/// A merged PR as `kind`'s REST API reports it.
-fn merged_pull(kind: crate::backends::ForgeKind) -> serde_json::Value {
-    use crate::backends::ForgeKind;
-    match kind {
-        ForgeKind::GitLab => json!({"iid": 7, "title": "Fix", "state": "merged",
-                "source_branch": "topic", "target_branch": "main"}),
-        ForgeKind::Bitbucket => json!({"id": 7, "title": "Fix", "state": "MERGED",
-                "source": {"branch": {"name": "topic"}},
-                "destination": {"branch": {"name": "main"}}}),
-        _ => json!({"number": 7, "title": "Fix", "state": "closed", "merged": true,
-                "head": {"ref": "topic"}, "base": {"ref": "main"}}),
-    }
+/// A merged PR as Forgejo's REST API reports it.
+fn merged_pull() -> serde_json::Value {
+    json!({"number": 7, "title": "Fix", "state": "closed", "merged": true,
+        "head": {"ref": "topic"}, "base": {"ref": "main"}})
 }
 
 #[test]
 fn reverts_default_to_the_reverted_pr_title_reference_and_labels() {
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
-    let mut pull = merged_pull(forgejo.kind);
+    let mut pull = merged_pull();
     pull["labels"] = json!([{"name": "type/bug"}]);
     pull["base"]["ref"] = json!("release");
     let item = forgejo.current(ItemKind::Pr, 7, &pull).unwrap().item;

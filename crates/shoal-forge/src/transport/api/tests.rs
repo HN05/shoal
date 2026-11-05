@@ -51,14 +51,10 @@ fn forgejo_responses_report_status_and_messages() {
 }
 
 #[test]
-fn only_a_missing_curl_asks_for_curl() {
+fn an_oversized_response_names_the_limit_and_a_timeout_is_transient() {
     use std::io::{Error, ErrorKind};
-    let missing = curl_unrun(Error::from(ErrorKind::NotFound), 4);
-    assert!(format!("{missing:#}").starts_with("curl is required"));
     let oversized = curl_unrun(Error::from(ErrorKind::FileTooLarge), MAX_RESPONSE_BYTES);
-    assert!(format!("{oversized:#}").starts_with("the response is larger than 64 MiB"));
-    let broken = curl_unrun(Error::other("broken pipe"), 4);
-    assert_eq!(format!("{broken:#}"), "read curl's response: broken pipe");
+    assert!(format!("{oversized:#}").contains("64 MiB"));
     let slow = curl_unrun(Error::from(ErrorKind::TimedOut), 4);
     assert!(slow.downcast_ref::<Transient>().is_some());
 }

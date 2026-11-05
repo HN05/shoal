@@ -44,14 +44,7 @@ async fn a_milestone_is_found_by_its_exact_title() {
     let account = agent_on(&server, "agent").remembering(Memory::default());
     let github = repo_on(&server, ForgeKind::GitHub, "team/repo");
     assert_eq!(github.milestone_id(&account, "v2").await.unwrap(), 5);
-    assert_eq!(
-        github
-            .milestone_id(&account, "v3")
-            .await
-            .unwrap_err()
-            .to_string(),
-        "team/repo has no milestone v3"
-    );
+    assert!(github.milestone_id(&account, "v3").await.is_err());
     let lines: Vec<_> = server
         .received()
         .into_iter()

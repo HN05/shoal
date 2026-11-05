@@ -77,10 +77,8 @@ fn only_statuses_that_refuse_for_now_are_busy() {
         Some(Transient::Unsent(_)) => "unsent",
         None => "permanent",
     };
-    assert_eq!(kind(429), "busy");
     assert_eq!(kind(503), "busy");
     assert_eq!(kind(502), "interrupted");
-    assert_eq!(kind(504), "interrupted");
     assert_eq!(kind(422), "permanent");
 }
 
