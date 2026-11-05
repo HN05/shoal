@@ -53,6 +53,7 @@ impl Manager {
         let forges = &self.config().machine.forges;
         Account::user(forges.logins(Whose::User))
             .remembering(self.forge_memories.of(&user_identity(forges)))
+            .naming_missing(Whose::User.missing())
     }
 
     /// The agent account of the current configuration.
@@ -74,6 +75,7 @@ impl Manager {
         };
         Account::agent(forges.logins(Whose::Agent), forges.logins(Whose::User))
             .remembering(self.forge_memories.of(&identity))
+            .naming_missing(Whose::Agent.missing())
     }
 
     /// The forge of the workspace's `origin`.

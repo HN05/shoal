@@ -1766,7 +1766,9 @@ password manager, and is fetched at most once per operation and never stored;
 an `{ env }` token reads the environment of the process sending the request,
 which for the daemon is the service's. The agent account has its own
 `agent_token` per host; without one it uses the user's token, as the agent
-itself would.
+itself would. A change to a host with no token for the account is refused
+before it is sent, naming the setting and the reload the daemon needs, since
+a forge answers an unsigned change only with a bare 401.
 The forge is selected from the remote's host without requiring configuration:
 well-known hosts by name, and any other by asking it once through each forge's
 version or metadata endpoint with the user's token for that host, since a name

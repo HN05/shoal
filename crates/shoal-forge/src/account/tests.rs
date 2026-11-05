@@ -100,3 +100,21 @@ async fn each_forge_signs_in_with_its_own_scheme_from_one_fetch() {
     assert!(header(forgejo).contains("token abc"));
     assert_eq!(fetches.load(Ordering::SeqCst), 1);
 }
+
+#[test]
+fn changes_without_a_login_name_the_missing_token() {
+    let fetches = Arc::new(AtomicUsize::new(0));
+    let user = logins(&[("user.example", "user-u")], &fetches);
+    let account = Account::agent(Logins::default(), user)
+        .naming_missing(Box::new(|host| format!("set a token for {host}")));
+    // The user's login stands in for the agent's own.
+    account.require_login(&repo("user.example")).unwrap();
+    let refused = account.require_login(&repo("none.example")).unwrap_err();
+    assert_eq!(refused.to_string(), "set a token for none.example");
+    let unnamed = Account::default().require_login(&repo("none.example"));
+    assert_eq!(
+        unnamed.unwrap_err().to_string(),
+        "no token for none.example"
+    );
+    assert_eq!(fetches.load(Ordering::SeqCst), 0);
+}

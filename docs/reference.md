@@ -2060,10 +2060,12 @@ user.
 for agents' Git commands. It defaults to unset, follows repository/global
 precedence and appears in `config show`.
 
-Issue and PR changes Shoal makes for a workspace use the agent account: the
-host's `agent_token` under [`[machine.forges."<host>"]`](#forges), with
-`agent_email` for a Bitbucket API token. Without an `agent_token`, changes use
-your token, as the agent would.
+Issue and PR changes Shoal makes for a workspace or a chat use the agent
+account: the host's `agent_token` under
+[`[machine.forges."<host>"]`](#forges), with `agent_email` for a Bitbucket API
+token. Without an `agent_token`, changes use your token, as the agent would;
+without either, Shoal refuses the change and names the token to set instead of
+sending it unsigned.
 Forge reads follow the same rule: processes inside a workspace and a chat's
 agent read issues, PRs, labels, reactions and the forge's capabilities as the
 agent account, anyone else with your own logins.

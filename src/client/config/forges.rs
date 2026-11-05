@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use super::value::Value;
 use crate::forge::{
-    account::{Login, Logins, Token},
+    account::{Login, Logins, Missing, Token},
     backends::ForgeKind,
 };
 
@@ -172,6 +172,20 @@ impl Forge {
 }
 
 impl Whose {
+    /// What a change to a host without a token of `self`'s says: which token
+    /// to set, and that the daemon reads the global config only on reload.
+    pub fn missing(self) -> Missing {
+        let tokens = match self {
+            Self::User => "token",
+            Self::Agent => "agent_token, or your own token,",
+        };
+        Box::new(move |host| {
+            format!(
+                "no token for {host}: set {tokens} under [machine.forges.\"{host}\"] in the global config, then run `shoal daemon reload`"
+            )
+        })
+    }
+
     fn token_key(self) -> &'static str {
         match self {
             Self::User => "token",

@@ -55,6 +55,8 @@ pub(crate) struct Request {
     pub redirects: bool,
     /// The most of the response, in bytes, it may have.
     pub max_bytes: usize,
+    /// Whether it changes something on the forge, which needs a login.
+    pub changes: bool,
 }
 
 /// A file a request sends: as a multipart form's `field`, or as the raw
@@ -82,7 +84,15 @@ impl Request {
             conditions: Vec::new(),
             redirects: false,
             max_bytes: MAX_RESPONSE_BYTES,
+            changes: method != HttpMethod::Get,
         }
+    }
+
+    /// This request as a read whatever its method, such as a GraphQL query
+    /// sent as a POST.
+    pub fn reading(mut self) -> Self {
+        self.changes = false;
+        self
     }
 
     /// Follow the redirects the forge answers with; curl leaves the
@@ -223,8 +233,12 @@ impl ForgeRepo {
     }
 
     /// The response to `request`, refused without sending it while the
-    /// forge limits the account's requests.
+    /// forge limits the account's requests, or when it is a change and the
+    /// account has no login for the host.
     async fn within_limit(&self, account: &Account, request: &Request) -> Result<Response> {
+        if request.changes {
+            account.require_login(self)?;
+        }
         self.limited(account, self.kind.send(self, account, request))
             .await
     }

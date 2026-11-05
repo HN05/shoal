@@ -70,7 +70,8 @@ async fn graphql_nodes(
             HttpMethod::Post,
             "graphql".into(),
             Some(json!({ "query": query, "variables": variables })),
-        );
+        )
+        .reading();
         let response = repo.send(account, &request).await?;
         let page = connection(&response["data"]);
         nodes.extend(

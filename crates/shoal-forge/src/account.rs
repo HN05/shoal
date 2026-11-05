@@ -2,7 +2,7 @@
 //! agent's, which the caller chooses and describes.
 use std::collections::HashMap;
 
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 use futures_util::future::BoxFuture;
 use tokio::sync::OnceCell;
 
@@ -24,6 +24,10 @@ pub struct Login {
     /// with both.
     pub email: Option<String>,
 }
+
+/// What a request without a login for a host says: which token is
+/// missing and where to set it.
+pub type Missing = Box<dyn Fn(&str) -> String + Send + Sync>;
 
 /// An account's logins by host.
 #[derive(Default)]
@@ -58,6 +62,8 @@ pub struct Account {
     fallback: Logins,
     /// What earlier requests as this account taught.
     memory: Memory,
+    /// What a change says for a host the account has no login for.
+    missing: Option<Missing>,
 }
 
 impl Account {
@@ -75,7 +81,7 @@ impl Account {
         Self {
             logins: agent,
             fallback: user,
-            memory: Memory::default(),
+            ..Self::default()
         }
     }
 
@@ -83,6 +89,15 @@ impl Account {
     /// account given `memory`, which must act as the same account.
     pub fn remembering(self, memory: Memory) -> Self {
         Self { memory, ..self }
+    }
+
+    /// This account, refusing a change to a host it has no login for
+    /// with what `missing` says for that host.
+    pub fn naming_missing(self, missing: Missing) -> Self {
+        Self {
+            missing: Some(missing),
+            ..self
+        }
     }
 
     pub(crate) fn memory(&self) -> &Memory {
@@ -96,6 +111,18 @@ impl Account {
             return Ok(None);
         };
         signer.authorization(repo.kind).await.map(Some)
+    }
+
+    /// Refuse a change to `repo` without a login for its host, which the
+    /// forge would refuse anyway, saying which token is missing.
+    pub(crate) fn require_login(&self, repo: &ForgeRepo) -> Result<()> {
+        if self.signer(&repo.host).is_some() {
+            return Ok(());
+        }
+        match &self.missing {
+            Some(missing) => bail!("{}", missing(&repo.host)),
+            None => bail!("no token for {}", repo.host),
+        }
     }
 
     /// The login for `host`: the account's own, else the user's.

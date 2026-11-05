@@ -843,7 +843,7 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
 fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
     let fixture = Fixture::new(
         Forge::GitHub,
-        "[machine.forges.\"GHE.invalid\"]\ntype = \"github\"\n\
+        "[machine.forges.\"GHE.invalid\"]\ntype = \"github\"\ntoken = \"usertoken\"\n\
          [machine.forges.\"gitlab.invalid\"]\ntype = \"github\"\n",
     );
     git(
@@ -5125,6 +5125,62 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
     assert_eq!(direct["created"], true);
 }
 
+/// A chat's agent opens issues as the agent account; without any token
+/// for the host the change is refused before it reaches the forge, naming
+/// the token to set.
+#[test]
+fn a_chats_change_without_a_token_names_the_missing_one() {
+    let untokened = "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\n";
+    for (config, signed) in [(AGENT_TOKEN, true), (untokened, false)] {
+        let fixture = Fixture::new(Forge::Forgejo, config);
+        let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+        // The sleep stands in for the chat's agent.
+        let mut agent = support::isolated(fixture.root.path(), "sleep")
+            .arg("600")
+            .current_dir(fixture.root.path())
+            .spawn()
+            .unwrap();
+        let chat = fixture.request(json!({"start_chat": {"repository": repository,
+            "name": "planning", "agent": "claude", "pid": agent.id()}}));
+        let chat = chat["data"]["id"].as_str().unwrap().to_owned();
+        let scope = fixture.request(json!({"chat_scope": {"chat": chat}}));
+        let token = scope["data"]["token"].as_str().unwrap().to_owned();
+        let created = json!({"number": 40, "title": "Flaky", "state": "open", "labels": []});
+        fixture.respond(json!({
+            "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+            "GET repos/team/project/issues/40": {"body": created},
+        }));
+        fixture.requests();
+        let output = fixture
+            .command()
+            .current_dir(fixture.root.path())
+            .env("SHOAL_CHAT", &chat)
+            .env("SHOAL_SCOPE_TOKEN", &token)
+            .args(["--json", "issue", "open", "--title", "Flaky"])
+            .output()
+            .unwrap();
+        let posts: Vec<_> = (fixture.requests().into_iter())
+            .filter(|request| request[0] == "POST repos/team/project/issues")
+            .map(|request| request[2].clone())
+            .collect();
+        if signed {
+            assert!(output.status.success(), "{output:?}");
+            assert_eq!(posts, [json!("token agenttoken")]);
+        } else {
+            assert!(!output.status.success(), "{output:?}");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains("set agent_token, or your own token, under [machine.forges.")
+                    && stderr.contains("shoal daemon reload"),
+                "{stderr}"
+            );
+            assert!(posts.is_empty(), "{posts:?}");
+        }
+        agent.kill().unwrap();
+        agent.wait().unwrap();
+    }
+}
+
 /// A chat's agent proposes an issue as a workspace's does, from no branch
 /// or commit; approval opens it from the chat's checkout and assigns it to
 /// the chat.
@@ -6143,7 +6199,8 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
 fn agents_open_issues_directly_on_another_forge_when_allowed() {
     let fixture = Fixture::new(
         Forge::Forgejo,
-        "[permissions]\nissue_other_repositories = 'direct'\n",
+        "[permissions]\nissue_other_repositories = 'direct'\n\
+         [machine.forges.\"github.com\"]\ntoken = \"usertoken\"\n",
     );
     fixture.respond(json!({
         "POST repos/them/tool/issues": {"status": 201, "body": {"number": 5}},
