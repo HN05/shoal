@@ -426,6 +426,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 132 {
         db.execute_batch(include_str!("merges.sql"))?;
     }
+    if version >= 133 {
+        db.execute_batch(SPACE_MODES)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -553,6 +556,39 @@ fn migration_names_recorded_chats_and_keeps_what_they_own() -> Result<()> {
     assert_eq!(
         started,
         [("repo-chat".into(), None), ("repo-chat-3".into(), None)]
+    );
+    Ok(())
+}
+
+#[test]
+fn migration_starts_earlier_agents_in_the_mode_they_ran_as() -> Result<()> {
+    let mut db = historical_database(132)?;
+    db.execute_batch(
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+             VALUES ('shell','repo','shell','/shell','shell','ready');
+         INSERT INTO executions(id,workspace_id,state) VALUES ('command','shell','running');
+         UPDATE executions SET agent='claude' WHERE id='execution';
+         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('chat','repo','planning','claude',1,'b',1);",
+    )?;
+    migrate(&mut db)?;
+    let mode = |sql: &str| -> Result<Option<String>> { Ok(db.query_row(sql, [], |r| r.get(0))?) };
+    assert_eq!(
+        mode("SELECT mode FROM executions WHERE id='execution'")?.as_deref(),
+        Some("worker")
+    );
+    assert_eq!(
+        mode("SELECT mode FROM executions WHERE id='command'")?,
+        None
+    );
+    assert_eq!(
+        mode("SELECT mode FROM workspaces WHERE id='workspace'")?.as_deref(),
+        Some("worker")
+    );
+    assert_eq!(mode("SELECT mode FROM workspaces WHERE id='shell'")?, None);
+    assert_eq!(
+        mode("SELECT mode FROM chats WHERE id='chat'")?.as_deref(),
+        Some("chat")
     );
     Ok(())
 }

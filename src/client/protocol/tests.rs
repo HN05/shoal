@@ -351,6 +351,7 @@ fn tracked_execution_requests_require_a_known_kind() {
         (ExecutionKind::Merge, "merge"),
     ] {
         let method = ExecutionMethod::Execute {
+            mode: None,
             model: Default::default(),
             workspace: "worker".into(),
             wrapper: wrapper.clone(),

@@ -224,6 +224,7 @@ fn detached_round_trips_literal_arguments_and_globals() {
         OsString::from_vec(vec![0xff]),
     ];
     let happy = crate::execution::TrackedAgent {
+        mode: "plan".into(),
         name: "happy-codex".into(),
         model: crate::agent::ModelChoice {
             model: Some("gpt; $model".into()),
@@ -237,6 +238,7 @@ fn detached_round_trips_literal_arguments_and_globals() {
                 log: parsed_log,
                 agent: parsed_agent,
                 model,
+                mode,
                 command: parsed_command,
             } = parse(
                 Worker::Detached {
@@ -261,6 +263,8 @@ fn detached_round_trips_literal_arguments_and_globals() {
                 model,
                 agent.map(|agent| agent.model.clone()).unwrap_or_default()
             );
+            let expected = agent.map_or(crate::config::modes::DEFAULT, |agent| &agent.mode);
+            assert_eq!(mode, expected);
             assert_eq!(parsed_command, command);
         }
     }
@@ -312,6 +316,7 @@ fn session_round_trips_records_and_literal_arguments() {
             workspace,
             agent,
             model: parsed_model,
+            mode,
             records: parsed_records,
             command: parsed_command,
             host,
@@ -320,6 +325,7 @@ fn session_round_trips_records_and_literal_arguments() {
             Worker::Session {
                 workspace: "workspace-id",
                 agent: &crate::execution::TrackedAgent {
+                    mode: "chat".into(),
                     name: "claude".into(),
                     model: model.clone(),
                 },
@@ -335,6 +341,7 @@ fn session_round_trips_records_and_literal_arguments() {
         };
         assert_eq!(workspace, "workspace-id");
         assert_eq!(agent, "claude");
+        assert_eq!(mode, "chat");
         assert_eq!(crate::agent::ModelChoice::from(parsed_model), model);
         assert_eq!(parsed_records, records);
         assert_eq!(parsed_command, command);
@@ -377,6 +384,7 @@ fn take_over_round_trips_the_agent_and_its_connection() {
     let record = Path::new("/state/a record.json");
     let log = Path::new("/logs/session log");
     let agent = crate::execution::TrackedAgent {
+        mode: "plan".into(),
         name: "happy codex".into(),
         model: crate::agent::ModelChoice {
             model: Some("m1".into()),
@@ -388,6 +396,7 @@ fn take_over_round_trips_the_agent_and_its_connection() {
             workspace,
             agent: parsed_agent,
             model,
+            mode,
             connection,
             record: parsed_record,
             log: parsed_log,
@@ -407,6 +416,7 @@ fn take_over_round_trips_the_agent_and_its_connection() {
         assert_eq!(workspace, "workspace-id");
         assert_eq!(parsed_agent, "happy codex");
         assert_eq!(crate::agent::ModelChoice::from(model), agent.model);
+        assert_eq!(mode, "plan");
         assert_eq!(connection, 7);
         assert_eq!(parsed_record.as_deref(), record);
         assert_eq!(parsed_log.as_deref(), log);

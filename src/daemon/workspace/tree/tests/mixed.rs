@@ -370,6 +370,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         .await;
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let start = |workspace: &Workspace| crate::protocol::ChatMethod::StartChat {
+        mode: None,
         repository: repo.id.clone().into(),
         workspace: Some(workspace.name.clone()),
         name: "auditing".into(),
@@ -399,6 +400,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     };
     assert_eq!(workspace.as_deref(), Some(worker.id.as_str()));
     let new = crate::daemon::chats::NewChat {
+        mode: "chat".into(),
         name: "auditing".into(),
         agent: "claude".into(),
         pid: process.id(),

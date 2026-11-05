@@ -78,6 +78,9 @@ pub struct Workspace {
     /// What its agent calls the work, which its tabs show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// The mode its latest agent started in; none before it had one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
     pub path: PathBuf,
     /// Its branch; `None` for a workspace at a commit, which `at` describes.
     pub branch: Option<String>,
@@ -537,6 +540,7 @@ impl Workspace {
             repository_id,
             name,
             title: None,
+            mode: None,
             path,
             branch,
             at: None,
@@ -615,6 +619,9 @@ pub struct Execution {
     /// The model and effort its agent runs with.
     #[serde(default, flatten)]
     pub model: crate::agent::ModelChoice,
+    /// The mode its agent started in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
     /// Why Shoal stopped its agent, while its wrapper waits to restore it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped: Option<crate::client::protocol::Protection>,
@@ -1337,6 +1344,11 @@ fn count_commits(count: u64) -> String {
     }
 }
 
+/// The mode of a chat recorded without one.
+pub fn chat_mode() -> String {
+    "chat".to_owned()
+}
+
 /// An agent the user talks with in a repository's registered checkout, or
 /// in a workspace's worktree without being its agent, until it is removed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1350,6 +1362,9 @@ pub struct Chat {
     /// Unique among workspace names and the names of other chats.
     pub name: String,
     pub agent: String,
+    /// The mode its agent started in, which its restores keep.
+    #[serde(default = "chat_mode")]
+    pub mode: String,
     /// The workspace whose worktree it runs in; none for a chat in the
     /// registered checkout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1654,6 +1669,10 @@ pub struct QueueEntry {
     /// stopped agent's for a restore.
     pub name: String,
     pub agent: String,
+    /// The mode a launch's agent starts in; none for a restore, which keeps
+    /// its agent's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
     pub issue_title: Option<String>,
     pub state: QueueState,
     /// The 1-based place among waiting entries; `None` once starting.
@@ -1748,6 +1767,9 @@ pub struct QueueRequest {
     pub repository: crate::client::repository::Selector,
     pub name: String,
     pub agent: String,
+    /// The mode the agent starts in; the default mode when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
     pub issue_title: Option<String>,
     pub plan: String,
     /// Terminal multiplexer variables the start needs to reach the same window,

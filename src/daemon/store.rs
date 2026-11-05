@@ -364,7 +364,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
     })
 }
 
-pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,title,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped,disposable";
+pub const WORKSPACE_COLUMNS: &str = "id,number,repository_id,name,title,mode,path,branch,start_commit,made_for,state,error,base_commit,base_ref,git_dir,git_dir_id,setup_skipped,disposable";
 
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -388,6 +388,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,
         title: row.get("title")?,
+        mode: row.get("mode")?,
         path: PathBuf::from(row.get::<_, String>("path")?),
         branch: row.get("branch")?,
         at: starting_commit(row)?,
@@ -494,7 +495,7 @@ pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortRese
 }
 
 const EXECUTION_COLUMNS: &str =
-    "id,workspace_id,state,wrapper,child,group_id,origin,agent,model,effort";
+    "id,workspace_id,state,wrapper,child,group_id,origin,agent,model,effort,mode";
 
 fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     Ok(Execution {
@@ -510,6 +511,7 @@ fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
             model: row.get("model")?,
             effort: row.get("effort")?,
         },
+        mode: row.get("mode")?,
         stopped: None,
     })
 }

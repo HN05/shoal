@@ -14,6 +14,9 @@ pub enum ChatMethod {
         workspace: Option<String>,
         name: String,
         agent: String,
+        /// The mode its agent starts in; `chat` when omitted.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<String>,
         pid: u32,
         /// Where the chat runs in a terminal host.
         #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -331,6 +331,7 @@ pub(super) fn limit_globally(manager: &Manager, limit: u32) {
 
 pub(super) fn request(repository: &Repository, name: &str, now: bool) -> QueueRequest {
     QueueRequest {
+        mode: None,
         repository: repository.id.as_str().into(),
         name: name.into(),
         agent: "claude".into(),

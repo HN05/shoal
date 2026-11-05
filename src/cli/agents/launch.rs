@@ -111,9 +111,10 @@ pub(super) async fn tracked(
         settings,
         replaces,
         model,
+        mode,
         ..
     } = launch;
-    let agent = execution::TrackedAgent { name, model };
+    let agent = execution::TrackedAgent { name, model, mode };
     if let Some(code) =
         terminal::run_agent(ctx, &settings, &workspace, &agent, &replaces, &command).await?
     {

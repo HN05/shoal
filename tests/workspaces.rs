@@ -25288,10 +25288,12 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     assert_eq!(worker[session - 1], "internal");
     // The session names the host that opened it and closes with its workspace.
     assert_eq!(
-        worker[session + 1..session + 9],
+        worker[session + 1..session + 11],
         [
             id,
             "claude",
+            "--mode",
+            "worker",
             "--host",
             "zmx",
             "--close-in",

@@ -151,6 +151,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
                 "agent": "codex",
                 "stop_reason": "critical memory pressure",
                 "stage": "stopping",
+                "mode": "worker",
             })
         );
         std::fs::remove_file(&record).unwrap();
@@ -512,4 +513,59 @@ async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
         Record::load(&path).unwrap().unwrap().turn,
         Some(AgentState::Working)
     );
+}
+
+#[tokio::test]
+async fn an_agent_records_its_mode_with_its_execution_workspace_and_last_session() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "planned".into(), None, None, None)
+        .await
+        .unwrap();
+    assert_eq!(workspace.mode, None);
+    let id = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap()
+        .plan
+        .id;
+    let agent = TrackedAgent {
+        mode: "plan".into(),
+        ..TrackedAgent::named("claude")
+    };
+    manager
+        .track_agent(
+            &id,
+            &agent,
+            &workspace.id,
+            &workspace.name,
+            true,
+            std::time::Duration::ZERO,
+        )
+        .await;
+    let recorded = manager.workspace(&workspace.id).await.unwrap();
+    assert_eq!(recorded.mode.as_deref(), Some("plan"));
+    let executions = manager.workspace_executions(&workspace.id).await.unwrap();
+    assert_eq!(executions[0].mode.as_deref(), Some("plan"));
+    // The session a restore continues keeps the mode.
+    let tracked = manager
+        .executions
+        .with_agent(&id, |agent| agent.tracked())
+        .await
+        .unwrap();
+    crate::execution::recovery::LastSession::save(&manager.paths, &workspace.id, &tracked, &id)
+        .unwrap();
+    let path = crate::execution::recovery::LastSession::path(&manager.paths, &workspace.id, &id);
+    let saved: crate::execution::recovery::LastSession =
+        serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    assert_eq!(saved.mode, "plan");
+    // One saved before modes started in the default mode.
+    let earlier: crate::execution::recovery::LastSession =
+        serde_json::from_value(serde_json::json!({"execution": "e", "agent": "claude"})).unwrap();
+    assert_eq!(earlier.mode, "worker");
 }

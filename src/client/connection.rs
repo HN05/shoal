@@ -347,15 +347,22 @@ pub async fn workspaces(daemon: &impl Daemon) -> Result<Vec<Workspace>> {
     request(daemon, WorkspaceMethod::ListWorkspaces).await
 }
 
-/// Record the chat `name` whose agent replaces this process at `home`,
-/// running at `origin` in a terminal host when it runs in one, or when
-/// `hands_over` runs in a session this process starts and [`move_chat`]
-/// names.
+/// What a new chat is recorded as: its name, its agent and the mode the
+/// agent starts in.
+#[derive(Clone, Copy)]
+pub struct NewChat<'a> {
+    pub name: &'a str,
+    pub agent: &'a str,
+    pub mode: &'a str,
+}
+
+/// Record the `chat` whose agent replaces this process at `home`, running
+/// at `origin` in a terminal host when it runs in one, or when `hands_over`
+/// runs in a session this process starts and [`move_chat`] names.
 pub async fn start_chat(
     daemon: &impl Daemon,
     home: ChatHome<'_>,
-    name: &str,
-    agent: &str,
+    chat: NewChat<'_>,
     origin: Option<crate::client::sessions::Origin>,
     hands_over: bool,
 ) -> Result<Chat> {
@@ -364,8 +371,9 @@ pub async fn start_chat(
         ChatMethod::StartChat {
             repository: home.repository_id().to_owned().into(),
             workspace: home.workspace().map(|workspace| workspace.id.clone()),
-            name: name.to_owned(),
-            agent: agent.to_owned(),
+            name: chat.name.to_owned(),
+            agent: chat.agent.to_owned(),
+            mode: Some(chat.mode.to_owned()),
             pid: std::process::id(),
             origin,
             hands_over,
@@ -443,19 +451,18 @@ pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
 }
 
 /// [`start_chat`], or for a start that `restores` a stopped chat, by ID,
-/// [`restore_chat`], which keeps the chat's own name and agent.
+/// [`restore_chat`], which keeps the chat's own name, agent and mode.
 pub async fn record_chat(
     daemon: &impl Daemon,
     home: ChatHome<'_>,
-    name: &str,
-    agent: &str,
+    chat: NewChat<'_>,
     origin: Option<crate::client::sessions::Origin>,
     hands_over: bool,
     restores: Option<&str>,
 ) -> Result<Chat> {
     match restores {
-        Some(chat) => restore_chat(daemon, chat, origin, hands_over).await,
-        None => start_chat(daemon, home, name, agent, origin, hands_over).await,
+        Some(restored) => restore_chat(daemon, restored, origin, hands_over).await,
+        None => start_chat(daemon, home, chat, origin, hands_over).await,
     }
 }
 

@@ -79,11 +79,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             log,
             agent,
             model,
+            mode,
             command,
         } => {
             let agent = agent.map(|name| TrackedAgent {
                 name,
                 model: model.into(),
+                mode,
             });
             crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
         }
@@ -102,6 +104,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             workspace,
             agent,
             model,
+            mode,
             connection,
             record,
             log,
@@ -111,6 +114,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 agent: TrackedAgent {
                     name: agent,
                     model: model.into(),
+                    mode,
                 },
                 connection,
                 record,
@@ -137,6 +141,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             workspace,
             agent,
             model,
+            mode,
             records,
             command,
             host,
@@ -150,6 +155,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             let agent = TrackedAgent {
                 name: agent,
                 model: model.into(),
+                mode,
             };
             run_session(&ctx, workspace, agent, records, command).await
         }

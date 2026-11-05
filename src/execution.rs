@@ -32,12 +32,14 @@ pub use supervise::exit_code;
 use terminal::clear_terminal;
 pub(crate) use terminal::{reset_input_modes, run_in_terminal};
 
-/// An agent a tracked wrapper runs: its name, as `--agent` names it, and
-/// the model and effort it runs with, which its restores keep.
+/// An agent a tracked wrapper runs: its name, as `--agent` names it, the
+/// model and effort it runs with, and the mode it started in, which its
+/// restores keep.
 #[derive(Debug, Clone)]
 pub struct TrackedAgent {
     pub name: String,
     pub model: crate::agent::ModelChoice,
+    pub mode: String,
 }
 
 #[cfg(test)]
@@ -47,6 +49,7 @@ impl TrackedAgent {
         Self {
             name: name.into(),
             model: Default::default(),
+            mode: crate::config::modes::DEFAULT.to_owned(),
         }
     }
 }

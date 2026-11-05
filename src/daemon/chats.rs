@@ -59,6 +59,7 @@ impl Manager {
         let new = NewChat {
             name,
             agent,
+            mode: crate::model::chat_mode(),
             pid,
             origin,
             hands_over,
@@ -83,6 +84,7 @@ impl Manager {
         let new = NewChat {
             name,
             agent,
+            mode: crate::model::chat_mode(),
             pid,
             origin,
             hands_over,
@@ -149,6 +151,7 @@ impl Manager {
         let NewChat {
             name,
             agent,
+            mode,
             pid,
             origin,
             hands_over,
@@ -175,6 +178,7 @@ impl Manager {
             repository_id: repository.id.clone(),
             name,
             agent,
+            mode,
             workspace,
             pid: process.pid,
             started_at,
@@ -481,12 +485,13 @@ impl Manager {
     }
 }
 
-/// What a process records to start a chat as itself: the chat's name and
-/// agent, where it runs in a terminal host, whether it `hands_over` to a
+/// What a process records to start a chat as itself: the chat's name,
+/// agent and mode, where it runs in a terminal host, whether it `hands_over` to a
 /// session it starts, and the space it goes below.
 pub struct NewChat {
     pub name: String,
     pub agent: String,
+    pub mode: String,
     pub pid: u32,
     pub origin: Option<crate::sessions::Origin>,
     pub hands_over: bool,
@@ -522,8 +527,8 @@ fn insert(
     store::ensure_name_available(&tx, &chat.name, None)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
-            unique_id,scope_token,workspace_id)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+            unique_id,scope_token,workspace_id,mode)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
         params![
             chat.id,
             chat.repository_id,
@@ -539,7 +544,8 @@ fn insert(
             hands_over,
             unique_id(process)?,
             Uuid::new_v4().to_string(),
-            workspace
+            workspace,
+            chat.mode
         ],
     )?;
     chat.number = tx.query_row("SELECT number FROM chats WHERE id=?1", [&chat.id], |row| {
@@ -692,7 +698,7 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
         "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
                     chats.restore,chats.completion,
-                    workspaces.id,workspaces.name,workspaces.branch,chats.number
+                    workspaces.id,workspaces.name,workspaces.branch,chats.number,chats.mode
              FROM chats JOIN repositories ON repositories.id=chats.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
              ORDER BY chats.started_at, chats.rowid",
@@ -709,6 +715,7 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
             repository_id,
             name: row.get(2)?,
             agent: row.get(3)?,
+            mode: row.get(15)?,
             workspace: match row.get::<_, Option<String>>(11)? {
                 Some(id) => Some(WorkspaceRef {
                     id,

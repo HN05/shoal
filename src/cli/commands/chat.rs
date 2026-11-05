@@ -348,6 +348,7 @@ pub(super) async fn launch(
     let brief = brief(&settings, &agent, &repo, &topic, session.is_some())?;
     let launch = agents::ChatLaunch {
         name,
+        mode: topic.mode.clone(),
         instructions: brief.system,
         opening: brief.first_message,
         directories: topic.directories.clone(),
@@ -419,11 +420,15 @@ pub(super) async fn launch(
         return Ok(Started::Exited(0));
     }
     agents::trust_chat(ctx, &settings, agent.name(), &repo, home).await;
+    let new = client::NewChat {
+        name: &name,
+        agent: agent.name(),
+        mode: &topic.mode,
+    };
     let chat = client::record_chat(
         &ctx.paths,
         home,
-        &name,
-        agent.name(),
+        new,
         terminal::current_place().await,
         false,
         restore.as_deref(),

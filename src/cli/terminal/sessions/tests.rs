@@ -62,6 +62,7 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
         Origin::created(HostName::Zmx, "shell".to_owned()),
     );
     let execution = |origin: &Origin, agent: Option<&str>| Execution {
+        mode: None,
         model: Default::default(),
         id: origin.id().to_owned(),
         workspace_id: "workspace".into(),
@@ -131,6 +132,7 @@ fn stopped_by_load() -> Protection {
 fn a_workspace_records_where_a_stopped_agent_waits() {
     let place = Origin::created(HostName::Zmx, "agent".to_owned());
     let execution = Execution {
+        mode: None,
         model: Default::default(),
         id: "agent".into(),
         workspace_id: "workspace".into(),

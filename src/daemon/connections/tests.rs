@@ -95,6 +95,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         .unwrap()
         .unwrap();
     let execute = ExecutionMethod::Execute {
+        mode: None,
         model: Default::default(),
         workspace: workspace.name.clone(),
         wrapper: wrapper.clone(),
@@ -116,6 +117,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         assert!(matches!(reply, Body::Error { .. }), "{reply:?}");
     }
     let reattach = Method::Reattach(protocol::Reattachment::Reattach(protocol::Reattach {
+        mode: None,
         model: Default::default(),
         execution: "running".into(),
         wrapper,

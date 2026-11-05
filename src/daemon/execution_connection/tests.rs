@@ -102,6 +102,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
         crate::protocol::VERSION,
         manager.clone(),
         Reattach {
+            mode: None,
             model: Default::default(),
             execution: detaching.clone(),
             wrapper: wrapper.clone(),

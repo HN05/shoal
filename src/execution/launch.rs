@@ -467,6 +467,7 @@ async fn open_execution(
             .map(str::to_owned),
         agent: agent.map(|agent| agent.name.clone()),
         model: agent.map(|agent| agent.model.clone()).unwrap_or_default(),
+        mode: agent.map(|agent| agent.mode.clone()),
         recover,
         reattach: mode.reattaches(),
         demo: match mode {
@@ -518,6 +519,7 @@ fn allow_reattach(
             scope_token: plan.scope_token.clone(),
             agent: agent.map(|agent| agent.name.clone()),
             model: agent.map(|agent| agent.model.clone()).unwrap_or_default(),
+            mode: agent.map(|agent| agent.mode.clone()),
             recover,
             running_ms: 0,
             awaiting_restore: None,

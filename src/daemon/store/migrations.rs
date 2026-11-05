@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 132;
+pub(super) const SCHEMA_VERSION: i64 = 133;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -395,6 +395,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (130, REPOSITORY_RUNNERS_OPTIONAL, None),
     (131, CI_JOB_RUNNERS, None),
     (132, include_str!("merges.sql"), None),
+    (133, SPACE_MODES, None),
 ];
 
 /// The runner the forge registered for a claimed job alone, deleted once
@@ -432,6 +433,17 @@ pub(super) const REPOSITORY_RUNNERS_OPTIONAL: &str = "CREATE TABLE runners_optio
 INSERT INTO runners_optional SELECT repository_id,forge_repository,forge_id,uuid,token FROM runners;
 DROP TABLE runners;
 ALTER TABLE runners_optional RENAME TO runners;";
+
+/// The mode each agent started in, which its space, execution and queue
+/// entry record. Every agent before modes ran a workspace's worker or a
+/// chat.
+pub(super) const SPACE_MODES: &str = "ALTER TABLE workspaces ADD COLUMN mode TEXT;
+ALTER TABLE executions ADD COLUMN mode TEXT;
+ALTER TABLE agent_queue ADD COLUMN mode TEXT;
+ALTER TABLE chats ADD COLUMN mode TEXT NOT NULL DEFAULT 'chat';
+UPDATE executions SET mode='worker' WHERE agent IS NOT NULL;
+UPDATE workspaces SET mode='worker'
+WHERE id IN (SELECT workspace_id FROM executions WHERE agent IS NOT NULL);";
 
 /// The workspace whose worktree a chat runs in instead of its repository's
 /// checkout. Removing the workspace removes its chats first, so nothing

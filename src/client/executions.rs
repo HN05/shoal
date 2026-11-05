@@ -113,6 +113,14 @@ pub struct Record {
     /// The model and effort the agent ran with, which its restore keeps.
     #[serde(default, flatten)]
     pub model: ModelChoice,
+    /// The mode the agent started in, which its restore keeps.
+    #[serde(default = "default_mode")]
+    pub mode: String,
+}
+
+/// The mode of an agent recorded before modes existed.
+fn default_mode() -> String {
+    crate::config::modes::DEFAULT.to_owned()
 }
 
 /// Why and when Shoal stopped an agent, which its restore tells it.
@@ -173,6 +181,9 @@ pub struct LastSession {
     /// The model and effort the agent ran with, which its restore keeps.
     #[serde(default, flatten)]
     pub model: ModelChoice,
+    /// The mode the agent started in, which its restore keeps.
+    #[serde(default = "default_mode")]
+    pub mode: String,
 }
 
 /// The key of a last session saved without its execution.

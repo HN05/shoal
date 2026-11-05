@@ -299,6 +299,8 @@ pub(in crate::cli) struct Launch {
     pub fork: Vec<OsString>,
     /// The model and effort it runs with.
     pub model: ModelChoice,
+    /// The mode it starts in.
+    pub mode: String,
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
     pub replaces: Vec<PathBuf>,
@@ -313,6 +315,8 @@ pub(in crate::cli) struct ChatLaunch {
     pub workspace: Option<Workspace>,
     /// The name the chat is recorded under.
     pub name: String,
+    /// The mode its agent starts in.
+    pub mode: String,
     pub settings: Effective,
     /// The rendered chat template.
     pub instructions: String,
@@ -368,6 +372,12 @@ pub(in crate::cli) enum Opening {
 }
 
 impl Opening {
+    fn mode(&self) -> &str {
+        match self {
+            Self::New { mode, .. } | Self::Told { mode, .. } => mode,
+        }
+    }
+
     /// A new session of the default mode, on `subject` when given.
     pub fn worker(subject: Option<templates::Subject>) -> Self {
         Self::New {
@@ -477,6 +487,7 @@ pub(super) async fn launch_agent(
         args,
         fork,
         model,
+        mode: opening.mode().to_owned(),
         replaces: options.replaces,
     };
     let replaces = launch.replaces.clone();

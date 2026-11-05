@@ -315,8 +315,8 @@ fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> Result<()> {
     );
     let now = crate::time::unix_seconds() as i64;
     tx.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
         params![
             launch.id,
             QueueKind::Launch,
@@ -330,6 +330,7 @@ fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> Result<()> {
             now,
             (launch.state == QueueState::Starting).then_some(now),
             launch.opens,
+            request.mode,
         ],
     )?;
     dependencies::record(&tx, &launch.id, &launch.repository, &request.after)?;
@@ -455,7 +456,7 @@ pub(crate) struct Start {
     pub env: BTreeMap<String, String>,
 }
 
-const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch,job";
+const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,issue_title,state,created_at,workspace_id,execution_id,opens_workspace_id,base_branch,job";
 
 impl Manager {
     /// Admit `request` to a free slot or queue it. A launch that no limit
@@ -1417,6 +1418,7 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,
         agent: row.get("agent")?,
+        mode: row.get("mode")?,
         issue_title: row.get("issue_title")?,
         state: row.get("state")?,
         position: None,

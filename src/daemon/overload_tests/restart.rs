@@ -174,6 +174,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
     // A pass interrupted after keeping its session, which is gone.
     interrupted(&manager, &workspace, "kept", &earlier, None, None).await;
     let kept_session = LastSession {
+        mode: "worker".into(),
         model: Default::default(),
         execution: "kept".into(),
         agent: "fixture".into(),
@@ -228,6 +229,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         [
             kept_session,
             LastSession {
+                mode: "worker".into(),
                 model: Default::default(),
                 execution: "unrecorded".into(),
                 agent: "fixture".into(),

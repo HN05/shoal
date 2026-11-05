@@ -17,6 +17,7 @@ fn workspace(repository: &str, name: &str, branch: &str, state: WorkspaceState) 
 #[test]
 fn queue_status_names_the_work_a_launch_waits_for() {
     let mut entry = QueueEntry {
+        mode: None,
         id: "entry".into(),
         kind: QueueKind::Launch,
         repository_id: "repo".into(),
@@ -45,6 +46,7 @@ fn queue_status_names_the_work_a_launch_waits_for() {
 #[test]
 fn queue_status_names_a_restore_that_waits_for_an_update() {
     let mut entry = QueueEntry {
+        mode: None,
         id: "entry".into(),
         kind: QueueKind::Restore,
         repository_id: "repo".into(),

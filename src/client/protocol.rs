@@ -871,6 +871,9 @@ pub struct Reattach {
     /// The model and effort the agent runs with.
     #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
     pub model: crate::agent::ModelChoice,
+    /// The mode the agent started in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
     #[serde(default)]
     pub recover: bool,
     /// How long the command has run, keeping the overload stop order.

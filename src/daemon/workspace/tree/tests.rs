@@ -362,6 +362,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
     for (workspace, stopped_by) in [(&child, &parent), (&grandchild, &child)] {
         for (execution, stopped_by) in [("ours", Some(stopped_by.id.clone())), ("users", None)] {
             crate::execution::recovery::LastSession {
+                mode: "worker".into(),
                 model: Default::default(),
                 execution: execution.into(),
                 agent: "claude".into(),

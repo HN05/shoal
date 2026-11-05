@@ -426,6 +426,7 @@ async fn restore(
     let restored = Restored {
         agent: &session.agent,
         model: &session.model,
+        mode: &session.mode,
         session: session.session.as_deref(),
     };
     let recovery = Recovery::resolve(
@@ -467,7 +468,7 @@ async fn start_moved(
         ..Default::default()
     };
     let opening = crate::cli::agents::Opening::Told {
-        mode: crate::config::modes::DEFAULT.to_owned(),
+        mode: session.mode.clone(),
         message: crate::execution::recovery::moved_prompt(handoff),
     };
     crate::cli::agents::launch_agent(ctx, launch, workspace.clone(), opening, vec![], options).await

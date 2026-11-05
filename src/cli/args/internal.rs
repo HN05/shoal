@@ -141,6 +141,9 @@ pub enum InternalCommand {
         agent: Option<String>,
         #[command(flatten)]
         model: crate::cli::args::ModelArgs,
+        /// The mode the agent started in.
+        #[arg(long, default_value = crate::config::modes::DEFAULT)]
+        mode: String,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
@@ -183,6 +186,9 @@ pub enum InternalCommand {
         agent: String,
         #[command(flatten)]
         model: crate::cli::args::ModelArgs,
+        /// The mode the agent started in.
+        #[arg(long, default_value = crate::config::modes::DEFAULT)]
+        mode: String,
         #[arg(long = "record")]
         records: Vec<PathBuf>,
         /// The host that opened the place.
@@ -216,6 +222,9 @@ pub enum InternalCommand {
         agent: String,
         #[command(flatten)]
         model: crate::cli::args::ModelArgs,
+        /// The mode the agent started in.
+        #[arg(long, default_value = crate::config::modes::DEFAULT)]
+        mode: String,
         /// The descriptor of the wrapper's daemon connection.
         #[arg(long)]
         connection: i32,

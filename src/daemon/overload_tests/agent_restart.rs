@@ -101,6 +101,7 @@ fn waiting_launch(workspace: &crate::model::Workspace) -> QueueRequest {
         repository: workspace.repository_id.as_str().into(),
         name: "waiting".into(),
         agent: "claude".into(),
+        mode: None,
         issue_title: None,
         plan: "{}".into(),
         env: Default::default(),

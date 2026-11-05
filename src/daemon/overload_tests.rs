@@ -266,6 +266,7 @@ async fn built_in_restore_child() {
         ),
     ] {
         let restored = crate::execution::recovery::Restored {
+            mode: "worker",
             agent,
             model: &model,
             session: Some("s1"),
@@ -356,6 +357,7 @@ async fn built_in_restore_child() {
         effort: None,
     };
     let with_model = |agent| crate::execution::recovery::Restored {
+        mode: "worker",
         agent,
         model: &model,
         session: None,
@@ -1490,6 +1492,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
             "agent": "fixture",
             "stop_reason": "test memory pressure",
             "stage": "stopped",
+            "mode": "worker",
         })
     );
     assert!(
@@ -1883,6 +1886,7 @@ fn restored<'a>(
         effort: None,
     };
     crate::execution::recovery::Restored {
+        mode: "worker",
         agent,
         model: &OWN,
         session,

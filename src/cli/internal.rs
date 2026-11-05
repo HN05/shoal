@@ -240,6 +240,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             if let Some(agent) = agent {
                 args.extend(["--agent".into(), agent.name.as_str().into()]);
                 args.extend(model_args(&agent.model));
+                args.extend(["--mode".into(), agent.mode.as_str().into()]);
             }
             args.push("--".into());
             args.extend_from_slice(command);
@@ -263,6 +264,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
         } => {
             args.extend([SESSION.into(), workspace.into(), agent.name.as_str().into()]);
             args.extend(model_args(&agent.model));
+            args.extend(["--mode".into(), agent.mode.as_str().into()]);
             args.extend(["--host".into(), host.as_str().into()]);
             for record in records {
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);
@@ -339,6 +341,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
                 agent.name.as_str().into(),
             ]);
             args.extend(model_args(&agent.model));
+            args.extend(["--mode".into(), agent.mode.as_str().into()]);
             args.extend(["--connection".into(), connection.to_string().into()]);
             if let Some(record) = record {
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);

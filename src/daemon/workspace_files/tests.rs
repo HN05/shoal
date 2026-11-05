@@ -1166,6 +1166,9 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TABLE merges;
     ALTER TABLE workspaces DROP COLUMN made_for;
     ALTER TABLE workspaces DROP COLUMN setup_skipped;
     ALTER TABLE workspaces DROP COLUMN disposable;
+    ALTER TABLE workspaces DROP COLUMN mode;
+    ALTER TABLE executions DROP COLUMN mode;
+    ALTER TABLE chats DROP COLUMN mode;
     PRAGMA user_version=87;";
 
 /// Start a chat named `name` in the repository of `workspace` whose process

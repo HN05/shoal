@@ -22,6 +22,7 @@ pub(super) async fn handle(
             workspace,
             name,
             agent,
+            mode,
             pid,
             origin,
             hands_over,
@@ -30,6 +31,7 @@ pub(super) async fn handle(
             let new = NewChat {
                 name,
                 agent,
+                mode: mode.unwrap_or_else(crate::model::chat_mode),
                 pid,
                 origin,
                 hands_over,

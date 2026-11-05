@@ -104,6 +104,7 @@ pub(super) async fn start(
         prompt,
         args,
         model,
+        mode,
         ..
     } = launch;
     super::ensure_available(&name, &settings)?;
@@ -129,6 +130,7 @@ pub(super) async fn start(
     let agent = execution::TrackedAgent {
         name: app.execution_agent(),
         model,
+        mode,
     };
     let (launch, prepared) = launch_session(
         ctx,
@@ -369,6 +371,7 @@ pub(super) async fn start_chat(
     let ChatLaunch {
         repository,
         name: chat_name,
+        mode,
         settings,
         model,
         restores,
@@ -385,16 +388,13 @@ pub(super) async fn start_chat(
     }
     // This process holds the chat until the session runs, which is not in
     // this terminal.
-    let record = client::record_chat(
-        &ctx.paths,
-        home,
-        chat_name,
-        name,
-        None,
-        true,
-        restores.as_deref(),
-    )
-    .await?;
+    let new = client::NewChat {
+        name: chat_name,
+        agent: name,
+        mode,
+    };
+    let record =
+        client::record_chat(&ctx.paths, home, new, None, true, restores.as_deref()).await?;
     super::link_chat(ctx, &record, links).await;
     let (prompt, args) = chat_input(app, &ctx.paths.home, &record, chat);
     let args = [model_args, args].concat();

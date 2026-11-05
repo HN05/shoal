@@ -803,6 +803,7 @@ async fn a_chat_being_removed_takes_no_new_space() {
         .await
         .unwrap_err();
     let start = super::NewChat {
+        mode: "chat".into(),
         name: "late-chat".into(),
         agent: "claude".into(),
         pid: std::process::id(),
@@ -1088,4 +1089,30 @@ async fn a_chats_processes_in_a_workspace_are_not_its_leftovers() {
     for pid in &chat_pids {
         assert!(!leftovers.contains(pid), "{pid} in {found:?}");
     }
+}
+
+#[tokio::test]
+async fn a_chat_records_the_mode_its_agent_started_in() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let start = super::NewChat {
+        mode: "plan".into(),
+        name: "repo-plan-7".into(),
+        agent: "claude".into(),
+        pid: std::process::id(),
+        origin: None,
+        hands_over: false,
+        parent: None,
+    };
+    let chat = manager
+        .start_new_chat(repo.id.clone().into(), None, start)
+        .await
+        .unwrap();
+    assert_eq!(chat.mode, "plan");
+    let chats = manager.chats().await.unwrap();
+    assert_eq!(chats[0].mode, "plan");
 }

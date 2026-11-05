@@ -229,6 +229,7 @@ pub(super) async fn reattach(
         agent: request.agent.map(|name| TrackedAgent {
             name,
             model: request.model,
+            mode: (request.mode).unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
         }),
         recover: request.recover,
         reattach: true,

@@ -31,6 +31,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
     assert_eq!(record.stage, Some(Stage::Stopping));
     assert!(pending(&paths, "workspace").unwrap());
     let recovery = Recovery {
+        mode: "worker".into(),
         model: Default::default(),
         agent: "codex".into(),
         command: vec![],
@@ -97,6 +98,7 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let recovery = Recovery {
+        mode: "worker".into(),
         model: Default::default(),
         agent: "claude".into(),
         command: vec![],
@@ -166,6 +168,7 @@ fn the_first_saved_turn_stays_through_later_saves() {
     save_turn(&paths, "workspace", "execution", AgentState::Working).unwrap();
     save_turn(&paths, "workspace", "execution", AgentState::Idle).unwrap();
     let recovery = Recovery {
+        mode: "worker".into(),
         model: Default::default(),
         agent: "codex".into(),
         command: vec![],
@@ -186,6 +189,7 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let recovery = Recovery {
+        mode: "worker".into(),
         model: Default::default(),
         agent: "claude".into(),
         command: vec![],
@@ -296,6 +300,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
     assert_eq!(
         LastSession::all(&paths, "workspace").unwrap(),
         [LastSession {
+            mode: "worker".into(),
             model: Default::default(),
             execution: "execution".into(),
             agent: "claude".into(),

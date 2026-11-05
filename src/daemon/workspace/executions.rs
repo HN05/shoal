@@ -850,6 +850,8 @@ impl Manager {
             let agent = crate::execution::TrackedAgent {
                 name: name.clone(),
                 model: request.model.clone(),
+                mode: (request.mode.clone())
+                    .unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
             };
             self.track_agent(
                 &request.execution,

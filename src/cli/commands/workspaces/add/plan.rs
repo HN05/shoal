@@ -151,6 +151,7 @@ pub(crate) fn queued_agent_request(
         repository: workspace.repository_id.as_str().into(),
         name: workspace.name.clone(),
         agent,
+        mode: plan.mode.clone(),
         issue_title,
         plan: serde_json::to_string(&plan)?,
         env,

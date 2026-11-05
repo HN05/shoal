@@ -18,6 +18,9 @@ pub enum ExecutionMethod {
         /// The model and effort the agent runs with.
         #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
         model: crate::agent::ModelChoice,
+        /// The mode the agent started in.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<String>,
         #[serde(default)]
         recover: bool,
         /// The wrapper keeps its command running when the daemon goes away

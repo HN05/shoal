@@ -32,6 +32,8 @@ pub(crate) struct Recovery {
     pub agent: String,
     /// The model and effort the agent runs with, which its restore keeps.
     pub model: ModelChoice,
+    /// The mode the agent started in, which its restore keeps.
+    pub mode: String,
     pub command: Vec<OsString>,
     pub automatic: bool,
     /// Whether `command` carries the handoff message as the agent's prompt.
@@ -169,10 +171,11 @@ impl RestoreCommand<'_> {
 }
 
 /// The agent a restore continues: its name, the model and effort it ran
-/// with, and the session it reported, if any.
+/// with, the mode it started in, and the session it reported, if any.
 pub(crate) struct Restored<'a> {
     pub agent: &'a str,
     pub model: &'a ModelChoice,
+    pub mode: &'a str,
     pub session: Option<&'a str>,
 }
 
@@ -182,6 +185,7 @@ impl Recovery {
         super::TrackedAgent {
             name: self.agent.clone(),
             model: self.model.clone(),
+            mode: self.mode.clone(),
         }
     }
 
@@ -197,6 +201,7 @@ impl Recovery {
             let restored = Restored {
                 agent: &agent.name,
                 model: &agent.model,
+                mode: &agent.mode,
                 session: None,
             };
             Self::resolve(paths, &workspace, restored, None, None).await
@@ -207,6 +212,7 @@ impl Recovery {
             Self {
                 agent: agent.name.replace(' ', "-"),
                 model: agent.model.clone(),
+                mode: agent.mode.clone(),
                 command: vec![],
                 automatic: false,
                 handoff_delivered: false,
@@ -256,6 +262,7 @@ impl Recovery {
         Ok(Self {
             agent: name,
             model: restored.model.clone(),
+            mode: restored.mode.to_owned(),
             command,
             automatic,
             handoff_delivered: handoff_delivered && handoff.is_some(),
@@ -282,6 +289,7 @@ impl Recovery {
         let restored = Restored {
             agent: &self.agent,
             model: &self.model,
+            mode: &self.mode,
             session: record.session.as_deref(),
         };
         match Self::resolve(paths, workspace, restored, None, Some(&stop)).await {
@@ -373,6 +381,7 @@ impl Record {
             moved: false,
             turn: None,
             model: agent.model.clone(),
+            mode: agent.mode.clone(),
         }
     }
 
@@ -389,6 +398,7 @@ impl Record {
             stopped_by: None,
             stop: Some(stop),
             model: self.model,
+            mode: self.mode,
         }
     }
 
@@ -766,6 +776,7 @@ impl LastSession {
             stopped_by: None,
             stop: None,
             model: agent.model.clone(),
+            mode: agent.mode.clone(),
         }
         .write(paths, workspace_id)
     }

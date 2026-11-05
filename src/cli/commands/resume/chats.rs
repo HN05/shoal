@@ -127,6 +127,11 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
         }
         None => chat::Topic::repository(&repo),
     };
+    // The restored agent keeps its mode's rules; its subject was sent once.
+    let topic = chat::Topic {
+        mode: chat.mode.clone(),
+        ..topic
+    };
     let options = chat::Options {
         agent: Some(chat.agent.parse()?),
         place,
