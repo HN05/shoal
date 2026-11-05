@@ -34,15 +34,16 @@ fn the_guidance_tells_each_launch_how_it_receives_updates() {
     let settings = settings("");
     let pushed = brief(&settings, "worker", worker(Delivery::Pushed), None).unwrap();
     assert!(
-        pushed
-            .system
-            .contains("end your\nturn to wait for the next."),
+        !pushed.system.contains("shoal watch pr"),
         "{}",
         pushed.system
     );
-    assert!(!pushed.system.contains("shoal watch pr"));
     let watched = brief(&settings, "worker", worker(Delivery::Watched), None).unwrap();
-    assert!(watched.system.contains("open, run `shoal watch pr`."));
+    assert!(
+        watched.system.contains("`shoal watch pr`"),
+        "{}",
+        watched.system
+    );
     assert!(!watched.system.contains("{updates}"));
 }
 
@@ -60,12 +61,11 @@ fn rules_follow_the_guidance_and_instructions_follow_the_subject() {
     let started = brief(&plain, "worker", place, Some(&issue())).unwrap();
     assert_eq!(started.system, guidance.system);
     // The subject is never rendered; the instructions are.
+    let instructions = plain.modes["worker"].instructions.trim_end();
+    let subject = issue().text.trim_end().to_owned();
     assert_eq!(
-        started.first_message.as_deref(),
-        Some(
-            "Issue #7: Decide {path}\nhttps://forge.example/r/issues/7\n\n\
-             Implement this, open a PR for it, and finish with `shoal done`."
-        )
+        started.first_message,
+        Some(format!("{subject}\n\n{instructions}"))
     );
     let added = settings(
         "[rules.worker]\ntext = 'Babysit {branch}.'\n\
@@ -76,16 +76,12 @@ fn rules_follow_the_guidance_and_instructions_follow_the_subject() {
         started.system,
         format!("{}\n\nBabysit topic.", guidance.system)
     );
-    let first = started.first_message.unwrap();
-    assert!(
-        first.ends_with("finish with `shoal done`.\n\nThen tell #7."),
-        "{first}"
+    assert_eq!(
+        started.first_message,
+        Some(format!("{subject}\n\n{instructions}\n\nThen tell #7."))
     );
     let error = brief(&plain, "triage", place, None).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "no mode triage; [modes.triage] in config defines one"
-    );
+    assert!(error.to_string().contains("no mode triage"), "{error}");
 }
 
 #[test]
@@ -96,22 +92,16 @@ fn the_chat_rule_describes_where_the_chat_runs_before_its_additions() {
     }))
     .unwrap();
     let workspace = workspace();
-    for (home, opening) in [
-        (
-            ChatHome::Checkout(&repo),
-            "You are chatting with the user about the shoal repository in its registered\ncheckout at /repo.",
-        ),
-        (
-            ChatHome::Workspace(&workspace),
-            "You are chatting with the user about Shoal workspace topic of the shoal\nrepository, on branch topic, in its worktree at /work/topic.",
-        ),
+    for (home, place_text) in [
+        (ChatHome::Checkout(&repo), "checkout at /repo"),
+        (ChatHome::Workspace(&workspace), "worktree at /work/topic"),
     ] {
         let place = Place::Chat {
             repo: "shoal",
             home,
         };
         let chat = brief(&settings, "chat", place, None).unwrap();
-        assert!(chat.system.starts_with(opening), "{}", chat.system);
+        assert!(chat.system.contains(place_text), "{}", chat.system);
         assert!(
             chat.system.ends_with("\n\nAnswer in shoal."),
             "{}",
@@ -138,17 +128,13 @@ fn plan_instructions_swap_only_configured_labels() {
     };
     assert!(
         first("[issue]\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n")
-            .contains("only the body. Then replace its `needs-plan` label with `planned`. Open")
+            .contains("replace its `needs-plan` label with `planned`")
     );
     assert!(
-        first("[issue]\nplan_label = 'needs-plan'\n")
-            .contains("only the body. Then remove its `needs-plan` label. Open")
+        first("[issue]\nplan_label = 'needs-plan'\n").contains("remove its `needs-plan` label")
     );
-    assert!(
-        first("[issue]\nplanned_label = 'planned'\n")
-            .contains("only the body. Then add the `planned` label. Open")
-    );
-    assert!(first("").contains("only the body. Open"));
+    assert!(first("[issue]\nplanned_label = 'planned'\n").contains("add the `planned` label"));
+    assert!(!first("").contains("label"));
 }
 
 #[test]

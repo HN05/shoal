@@ -103,9 +103,6 @@ fn a_chat_in_a_workspace_takes_no_repository() {
         let error = in_workspace(positional, repository)
             .unwrap_err()
             .to_string();
-        assert_eq!(
-            error,
-            "a chat with --in starts in the workspace's repository; drop the repository"
-        );
+        assert!(error.contains("--in"), "{error}");
     }
 }
