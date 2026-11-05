@@ -12,7 +12,8 @@ use crate::{
     ForgeRepo,
     account::Account,
     ci::runner::{
-        Installation, JobCommand, JobLaunch, JobRun, Trigger, WaitingJob, quote, took_run_hook,
+        Installation, JobCommand, JobLaunch, JobRun, RunnerState, Trigger, WaitingJob, quote,
+        took_run_hook,
     },
     items::item::text,
     transport::api::{HttpMethod, Request},
@@ -155,11 +156,23 @@ pub(super) fn delete(repo: &ForgeRepo, id: u64) -> Request {
     Request::new(HttpMethod::Delete, endpoint, None)
 }
 
-/// Whether the runner `id` runs a job, or `None` once it is gone.
-pub(super) async fn busy(repo: &ForgeRepo, account: &Account, id: u64) -> Result<Option<bool>> {
+/// The state of the runner `id`, or `None` once it is gone.
+pub(super) async fn state(
+    repo: &ForgeRepo,
+    account: &Account,
+    id: u64,
+) -> Result<Option<RunnerState>> {
     let read = Request::get(repo.repo_endpoint(&format!("actions/runners/{id}")));
     Ok(match repo.read_refusable(account, &read, &[404]).await? {
-        Ok(runner) => Some(runner["busy"] == true),
+        Ok(runner) => Some(RunnerState {
+            busy: runner["busy"] == true,
+            labels: runner["labels"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|label| text(&label["name"]))
+                .collect(),
+        }),
         Err(_) => None,
     })
 }

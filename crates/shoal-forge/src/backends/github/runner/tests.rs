@@ -251,7 +251,9 @@ fn the_hook_goes_on_with_the_claimed_run_and_waits_for_the_daemon_with_another()
 async fn a_runner_is_busy_until_it_goes_and_names_the_job_it_took() {
     let server = Server::start(|request| {
         let body = match request.line.as_str() {
-            "GET /api/v3/repos/team/repo/actions/runners/77" => json!({"id": 77, "busy": true}),
+            "GET /api/v3/repos/team/repo/actions/runners/77" => {
+                json!({"id": 77, "busy": true, "labels": [{"name": "self-hosted"}, {"name": "shoal"}]})
+            }
             "GET /api/v3/repos/team/repo/actions/runs/2/jobs?filter=latest&per_page=100&page=1" => {
                 json!({"jobs": [
                     {"id": 9, "run_id": 2, "name": "docs", "runner_id": 76, "labels": ["shoal"]},
@@ -264,8 +266,10 @@ async fn a_runner_is_busy_until_it_goes_and_names_the_job_it_took() {
     });
     let github = repo_on(&server, ForgeKind::GitHub, "team/repo");
     let account = agent_on(&server, "user");
-    assert_eq!(github.runner_busy(&account, 77).await.unwrap(), Some(true));
-    assert_eq!(github.runner_busy(&account, 78).await.unwrap(), None);
+    let state = github.runner_state(&account, 77).await.unwrap().unwrap();
+    assert!(state.busy);
+    assert_eq!(state.labels, ["self-hosted", "shoal"]);
+    assert_eq!(github.runner_state(&account, 78).await.unwrap(), None);
     let job = github.runner_job(&account, 2, 77).await.unwrap().unwrap();
     assert_eq!((job.id, job.run, job.name.as_str()), (10, 2, "rust"));
     assert_eq!(github.runner_job(&account, 2, 78).await.unwrap(), None);

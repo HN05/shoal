@@ -4,10 +4,10 @@
 //! for the runner, which then exits so its workspace goes.
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rusqlite::params;
 
-use super::{ends::ClaimedJob, runner_labels};
+use super::ends::ClaimedJob;
 use crate::{
     daemon::workspace::Manager,
     forge::{ForgeRepo, ci::runner::took_job},
@@ -64,20 +64,20 @@ impl Manager {
     }
 
     /// Delete `runner`, registered for `job` alone, when it runs nothing and
-    /// the forge lists no job waiting for its labels.
+    /// the forge lists no job waiting for the labels it was registered with.
     async fn release_if_idle(&self, job: &ClaimedJob, runner: u64) -> Result<()> {
         let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
         // A runner already gone exits by itself.
-        if forge.runner_busy(&account, runner).await? != Some(false) {
+        let Some(state) = forge.runner_state(&account, runner).await? else {
             return Ok(());
-        }
-        let settings = self
-            .repository_settings(&job.repository_id)
-            .await
-            .context("read the repository's runner settings")?;
-        let labels = runner_labels(&settings.runner.labels);
-        if forge.waiting_jobs(&account, &labels).await?.is_empty() {
+        };
+        if !state.busy
+            && forge
+                .waiting_jobs(&account, &state.labels)
+                .await?
+                .is_empty()
+        {
             forge.delete_runner(&account, runner).await?;
         }
         Ok(())

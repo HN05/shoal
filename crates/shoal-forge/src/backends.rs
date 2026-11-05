@@ -23,7 +23,7 @@ use crate::{
         run::NewRun,
         run_action::{Run, RunOperation},
         run_view::{RunFilter, RunJob},
-        runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, WaitingJob},
+        runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, RunnerState, WaitingJob},
     },
     conventions::Lookup,
     items::{
@@ -734,13 +734,13 @@ pub(crate) trait Backend {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
 
-    /// Whether the runner `id` runs a job, or `None` once it is gone.
-    async fn runner_busy(
+    /// The state of the runner `id`, or `None` once it is gone.
+    async fn runner_state(
         &self,
         _repo: &ForgeRepo,
         _account: &Account,
         _id: u64,
-    ) -> Result<Option<bool>> {
+    ) -> Result<Option<RunnerState>> {
         Err(crate::capability::unsupported(self, Capability::RunJobs))
     }
 
@@ -1541,13 +1541,13 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.job_command(repo, account, launch).await)
     }
 
-    async fn runner_busy(
+    async fn runner_state(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         id: u64,
-    ) -> Result<Option<bool>> {
-        dispatch!(self, backend => backend.runner_busy(repo, account, id).await)
+    ) -> Result<Option<RunnerState>> {
+        dispatch!(self, backend => backend.runner_state(repo, account, id).await)
     }
 
     async fn runner_job(

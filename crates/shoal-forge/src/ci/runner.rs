@@ -71,6 +71,15 @@ pub struct RegisteredRunner {
     pub token: String,
 }
 
+/// A registered runner as the forge reports it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunnerState {
+    /// Whether it runs a job.
+    pub busy: bool,
+    /// The labels it takes jobs for, the forge's own included.
+    pub labels: Vec<String>,
+}
+
 /// What one job's run of the forge's runner needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JobLaunch<'a> {
@@ -178,9 +187,9 @@ impl ForgeRepo {
         self.kind.job_command(self, account, launch).await
     }
 
-    /// Whether the runner `id` runs a job, or `None` once it is gone.
-    pub async fn runner_busy(&self, account: &Account, id: u64) -> Result<Option<bool>> {
-        self.kind.runner_busy(self, account, id).await
+    /// The state of the runner `id`, or `None` once it is gone.
+    pub async fn runner_state(&self, account: &Account, id: u64) -> Result<Option<RunnerState>> {
+        self.kind.runner_state(self, account, id).await
     }
 
     /// The job of the run with API ID `run` that the runner `runner` took,

@@ -167,6 +167,8 @@ pub(super) struct GitHubState {
     pub busy: Option<bool>,
     /// The job each run lists as taken by runner 77.
     pub taken: HashMap<u64, Value>,
+    /// The labels runner 77 takes jobs for.
+    pub labels: Vec<&'static str>,
     /// The runners deleted.
     pub deleted: Vec<String>,
 }
@@ -197,6 +199,7 @@ pub(super) async fn github_fixture() -> GitHubFixture {
     git(&path, &["reset", "-q", "--hard", &head]);
     let state = Arc::new(Mutex::new(GitHubState {
         busy: Some(false),
+        labels: vec!["shoal"],
         ..GitHubState::default()
     }));
     let (seen, pushed, other) = (state.clone(), head.clone(), topic.clone());
@@ -246,7 +249,14 @@ pub(super) async fn github_fixture() -> GitHubFixture {
             json!({"runner": {"id": 77}, "encoded_jit_config": "Y29uZmln"})
         } else if line == "GET /api/v3/repos/team/repo/actions/runners/77" {
             match state.busy {
-                Some(busy) => json!({"id": 77, "busy": busy}),
+                Some(busy) => {
+                    let labels: Vec<_> = state
+                        .labels
+                        .iter()
+                        .map(|name| json!({"name": name}))
+                        .collect();
+                    json!({"id": 77, "busy": busy, "labels": labels})
+                }
                 None => return (404, Vec::new(), b"{}".to_vec()),
             }
         } else if line.starts_with("DELETE /api/v3/repos/team/repo/actions/runners/") {

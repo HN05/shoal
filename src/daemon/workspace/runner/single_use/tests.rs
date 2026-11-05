@@ -55,8 +55,9 @@ async fn a_jobs_runner_runs_from_its_copy_and_goes_once_no_job_is_left_for_it() 
     fixture.state.lock().unwrap().busy = Some(false);
     manager.release_idle_runners().await.unwrap();
     assert!(deleted(&fixture.state).is_empty());
-    // Another runner took the job, so this one goes.
-    fixture.state.lock().unwrap().queued.clear();
+    // The job waits for labels the runner was not registered with, as after
+    // a change of the configured ones, so this runner goes.
+    fixture.state.lock().unwrap().labels = vec!["shoal-old"];
     manager.release_idle_runners().await.unwrap();
     assert_eq!(deleted(&fixture.state), ["77"]);
 

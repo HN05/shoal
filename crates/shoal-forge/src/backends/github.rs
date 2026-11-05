@@ -28,7 +28,7 @@ use crate::{
         run::{NewRun, workflow_segment},
         run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
-        runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, WaitingJob},
+        runner::{JobCommand, JobLaunch, JobRun, RegisteredRunner, RunnerState, WaitingJob},
     },
     conventions::{Lookup, shared_lookups},
     items::{
@@ -709,13 +709,13 @@ impl Backend for GitHub {
         runner::job_command(repo, account, launch).await
     }
 
-    async fn runner_busy(
+    async fn runner_state(
         &self,
         repo: &ForgeRepo,
         account: &Account,
         id: u64,
-    ) -> Result<Option<bool>> {
-        runner::busy(repo, account, id).await
+    ) -> Result<Option<RunnerState>> {
+        runner::state(repo, account, id).await
     }
 
     async fn runner_job(
