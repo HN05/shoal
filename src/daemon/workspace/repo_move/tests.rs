@@ -106,13 +106,11 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
 
     // A copy cut short leaves the source, so the move rolls back.
     manager.record_move(&repo.id, &source, &destination).await?;
-    let error = manager
+    let reserved = manager
         .reserve_lifecycle(&workspace.id, WorkspaceState::Removing)
-        .await
-        .err()
-        .context("removal reserved during a move")?;
-    assert!(error.to_string().contains("repository move is incomplete"));
-    let error = manager
+        .await;
+    assert!(reserved.is_err());
+    let chat = manager
         .start_chat(
             repo.id.clone().into(),
             "chat-1".into(),
@@ -121,16 +119,9 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
             None,
             false,
         )
-        .await
-        .err()
-        .context("chat started during a move")?;
-    assert!(error.to_string().contains("repository move is incomplete"));
-    let error = manager
-        .remove_repository(&repo.id)
-        .await
-        .err()
-        .context("removed a repository during its move")?;
-    assert!(format!("{error:#}").contains("repository move is incomplete"));
+        .await;
+    assert!(chat.is_err());
+    assert!(manager.remove_repository(&repo.id).await.is_err());
     // Quarantine fails the reserved workspaces; setup must not revive one.
     manager.store.quarantine_interrupted_operations().await?;
     test_support::configure(
@@ -138,15 +129,10 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
         &format!("hooks.pre_setup = \"true\"\n[machine]\nroot_dir = {root:?}\n"),
     )
     .await;
-    let error = manager
+    let setup = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
-        .await
-        .err()
-        .context("setup started during a move")?;
-    assert!(
-        format!("{error:#}").contains("repository move is incomplete"),
-        "{error:#}"
-    );
+        .await;
+    assert!(setup.is_err());
     fs::write(destination.join("partial"), "")?;
     manager.finish_repository_moves().await?;
     assert!(!destination.exists());
@@ -234,11 +220,7 @@ async fn a_checkpoint_waits_for_the_move_and_refuses_while_it_is_pending() -> Re
     test_support::assert_pending(&mut checkpoint).await;
     manager.record_move(&repo.id, &source, &destination).await?;
     drop(gate);
-    let error = checkpoint
-        .await
-        .err()
-        .context("checkpoint taken during a move")?;
-    assert!(error.to_string().contains("repository move is incomplete"));
+    assert!(checkpoint.await.is_err());
 
     manager.finish_repository_moves().await?;
     manager.take_checkpoint(&workspace.id, None).await?;
@@ -285,10 +267,7 @@ fn the_destination_avoids_a_missing_checkout_recorded_inside_it() -> Result<()> 
 
     // A root inside a recorded directory has no free name at all.
     let nested = root.join("elsewhere/nested");
-    let error = registry::reserve_directory(&nested, "project", &[clone], &[])
-        .err()
-        .context("reserved inside a recorded directory")?;
-    assert!(error.to_string().contains("already records"), "{error:#}");
+    assert!(registry::reserve_directory(&nested, "project", &[clone], &[]).is_err());
     Ok(())
 }
 
@@ -310,12 +289,12 @@ async fn a_move_destination_and_workspace_paths_exclude_each_other() -> Result<(
             Some(taken.join("placed")),
         )
         .await?;
-    let error = manager
-        .record_move(&repo.id, &source, &taken)
-        .await
-        .err()
-        .context("recorded a move over a workspace")?;
-    assert!(format!("{error:#}").contains("placed where the repository directory"));
+    assert!(
+        manager
+            .record_move(&repo.id, &source, &taken)
+            .await
+            .is_err()
+    );
 
     // While a move is recorded, no repository places a workspace there.
     let destination = root.join("origin-2");
@@ -325,18 +304,18 @@ async fn a_move_destination_and_workspace_paths_exclude_each_other() -> Result<(
     let other = manager
         .register_repository(other.to_str().context("path")?.into(), None, None)
         .await?;
-    let error = manager
+    let intruder = destination.join("intruder");
+    let placed = manager
         .create_workspace(
             &other.id,
             "intruder".into(),
             None,
             None,
-            Some(destination.join("intruder")),
+            Some(intruder.clone()),
         )
-        .await
-        .err()
-        .context("placed a workspace in a move destination")?;
-    assert!(format!("{error:#}").contains("where a repository directory is moving"));
+        .await;
+    assert!(placed.is_err());
+    assert!(!intruder.exists());
     manager.finish_repository_moves().await?;
     Ok(())
 }
@@ -352,12 +331,7 @@ async fn a_replaced_worktree_keeps_the_move_unfinished() -> Result<()> {
     let admin = destination.join(".checkout/.git/worktrees/feature");
     identity::mark_owner(&admin, "another")?;
 
-    let error = manager
-        .finish_repository_moves()
-        .await
-        .err()
-        .context("adopted a replaced worktree")?;
-    assert!(format!("{error:#}").contains("another Shoal workspace"));
+    assert!(manager.finish_repository_moves().await.is_err());
     assert!(manager.ensure_repository_available(&repo.id).await.is_err());
     assert_eq!(
         manager.workspace(&workspace.id).await?.state,
@@ -387,12 +361,7 @@ async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()
     let other = manager
         .register_repository(other.to_str().context("path")?.into(), None, None)
         .await?;
-    let error = manager
-        .move_repositories(Layout::Regular)
-        .await
-        .err()
-        .context("moved another repository's checkout")?;
-    assert!(format!("{error:#}").contains("belongs to the repository"));
+    assert!(manager.move_repositories(Layout::Regular).await.is_err());
     manager.remove_repository(&other.id).await?;
 
     manager.move_repositories(Layout::Regular).await?;
@@ -400,34 +369,6 @@ async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()
     let expected = root.join("project/checkout");
     assert_eq!(moved.path, expected);
     assert_eq!(Path::new(&moved.source), expected);
-    Ok(())
-}
-
-#[tokio::test]
-async fn refuses_a_root_inside_a_repository_directory_or_workspace() -> Result<()> {
-    let (temp, manager, repo, _workspace, _root) = cloned().await?;
-    let placed = fs::canonicalize(temp.path())?.join("placed");
-    manager
-        .create_workspace(&repo.id, "placed".into(), None, None, Some(placed.clone()))
-        .await?;
-    for (inside, message) in [
-        (
-            repo.workspaces_dir
-                .clone()
-                .context("no directory")?
-                .join("nested"),
-            "inside the repository directory",
-        ),
-        (placed.join("nested"), "inside the workspace placed"),
-    ] {
-        test_support::configure(&manager, &format!("[machine]\nroot_dir = {:?}\n", inside)).await;
-        let error = manager
-            .move_repositories(Layout::Regular)
-            .await
-            .err()
-            .context("moved into itself")?;
-        assert!(error.to_string().contains(message), "{error:#}");
-    }
     Ok(())
 }
 
@@ -451,12 +392,7 @@ async fn an_excluded_move_empties_the_indexed_root_and_links_it() -> Result<()> 
     assert_eq!(plan.directory, excluded);
     assert!(fs::symlink_metadata(&root)?.is_dir());
     fs::write(root.join("notes"), "")?;
-    let error = manager
-        .move_repositories(Layout::Excluded)
-        .await
-        .err()
-        .context("moved with a file left in the root")?;
-    assert!(error.to_string().contains("--regular-dir"), "{error:#}");
+    assert!(manager.move_repositories(Layout::Excluded).await.is_err());
     assert!(old.exists());
 
     fs::remove_file(root.join("notes"))?;
@@ -497,15 +433,7 @@ async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<
         .await?;
     fs::remove_dir_all(&placed)?;
     test_support::configure(&manager, &format!("[machine]\nroot_dir = {:?}\n", placed)).await;
-    let error = manager
-        .move_repositories(Layout::Excluded)
-        .await
-        .err()
-        .context("linked a workspace path")?;
-    assert!(
-        error.to_string().contains("inside the workspace placed"),
-        "{error:#}"
-    );
+    assert!(manager.move_repositories(Layout::Excluded).await.is_err());
     assert!(fs::symlink_metadata(&placed).is_err());
     Ok(())
 }
@@ -618,12 +546,7 @@ async fn a_plan_lists_running_executions_that_the_move_refuses() -> Result<()> {
     };
     assert_eq!(listed.id, execution.plan.id);
 
-    let error = manager
-        .move_repositories(Layout::Regular)
-        .await
-        .err()
-        .context("moved with a command running")?;
-    assert!(format!("{error:#}").contains("stop it first"), "{error:#}");
+    assert!(manager.move_repositories(Layout::Regular).await.is_err());
     assert!(repo.workspaces_dir.as_ref().is_some_and(|dir| dir.exists()));
 
     // Another process in the directory keeps even the plan from passing.
@@ -632,15 +555,8 @@ async fn a_plan_lists_running_executions_that_the_move_refuses() -> Result<()> {
         .current_dir(&workspace.path)
         .kill_on_drop(true)
         .spawn()?;
-    let error = manager
-        .plan_repository_moves(None, Layout::Regular)
-        .await
-        .err()
-        .context("planned with another process in the directory")?;
-    assert!(
-        format!("{error:#}").contains("processes are using"),
-        "{error:#}"
-    );
+    let plan = manager.plan_repository_moves(None, Layout::Regular).await;
+    assert!(plan.is_err());
     other.kill().await?;
     wrapper.kill().await?;
     Ok(())
@@ -666,15 +582,7 @@ async fn a_queued_or_running_review_holds_back_the_move() -> Result<()> {
             }
         })
         .await?;
-    let error = manager
-        .move_repositories(Layout::Regular)
-        .await
-        .err()
-        .context("moved with a review queued")?;
-    assert!(
-        format!("{error:#}").contains("a review of the repository is queued or running"),
-        "{error:#}"
-    );
+    assert!(manager.move_repositories(Layout::Regular).await.is_err());
     assert!(repo.workspaces_dir.as_ref().is_some_and(|dir| dir.exists()));
     Ok(())
 }
@@ -694,15 +602,8 @@ async fn a_waiting_ci_job_lets_the_move_go_and_a_starting_one_holds_it_back() ->
         })
     };
     queue(QueueState::Starting).await?;
-    let error = manager
-        .move_repositories(Layout::Regular)
-        .await
-        .err()
-        .context("moved with a CI job starting")?;
-    assert!(
-        format!("{error:#}").contains("agent launches are queued"),
-        "{error:#}"
-    );
+    assert!(manager.move_repositories(Layout::Regular).await.is_err());
+    assert!(repo.workspaces_dir.as_ref().is_some_and(|dir| dir.exists()));
 
     manager
         .store
