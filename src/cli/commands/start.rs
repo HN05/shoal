@@ -232,7 +232,12 @@ async fn in_chat(ctx: &Context, args: StartArgs, mode: String) -> Result<i32> {
         handoff: args.handoff,
         parent: args.parent,
     };
-    let (repository, issue) = chat_target(args.repository, args.repository_override, args.issue)?;
+    let (repository, issue) = chat_target(
+        args.repository,
+        args.repository_override,
+        args.issue,
+        args.in_workspace.is_some(),
+    )?;
     let subject = chat::Subject { mode, issue };
     match args.in_workspace {
         Some(workspace) => chat::start_in_workspace(ctx, workspace, subject, options).await,
@@ -243,15 +248,32 @@ async fn in_chat(ctx: &Context, args: StartArgs, mode: String) -> Result<i32> {
 /// The repository and issue a chat starts on, from the positional argument,
 /// `--repo` and `--issue`: a positional issue number or URL is the issue, as
 /// it is for a workspace, and a positional repository is the repository. A
-/// PR or branch link, or two of the same, is refused.
+/// PR or branch link, two of the same, or a repository beside `--in`, whose
+/// workspace has one, is refused.
 fn chat_target(
     positional: Option<String>,
     repository: Option<String>,
     issue: Option<Option<String>>,
+    in_workspace: bool,
 ) -> Result<(Option<String>, Option<Option<String>>)> {
-    let Some(positional) = positional else {
-        return Ok((repository, issue));
+    let (repository, issue) = match positional {
+        Some(positional) => positional_target(positional, repository, issue)?,
+        None => (repository, issue),
     };
+    ensure!(
+        !in_workspace || repository.is_none(),
+        "a chat with --in starts in the workspace's repository; drop the repository"
+    );
+    Ok((repository, issue))
+}
+
+/// [`chat_target`] with a `positional` argument, before the check against
+/// `--in`.
+fn positional_target(
+    positional: String,
+    repository: Option<String>,
+    issue: Option<Option<String>>,
+) -> Result<(Option<String>, Option<Option<String>>)> {
     let names_issue = match IssueInput::parse(&positional) {
         IssueInput::Number => true,
         IssueInput::Url => match Link::parse(&positional) {

@@ -47,6 +47,7 @@ fn a_chat_takes_a_positional_issue_as_its_issue() {
             Some(positional.to_owned()),
             repository.map(str::to_owned),
             issue.map(|issue| issue.map(str::to_owned)),
+            false,
         )
     };
     let url = "https://forge.example/team/repo/issues/37";
@@ -81,5 +82,30 @@ fn a_chat_takes_a_positional_issue_as_its_issue() {
             .unwrap_err()
             .to_string();
         assert!(error.contains(refusal), "{positional}: {error}");
+    }
+}
+
+#[test]
+fn a_chat_in_a_workspace_takes_no_repository() {
+    let in_workspace = |positional: Option<&str>, repository: Option<&str>| {
+        chat_target(
+            positional.map(str::to_owned),
+            repository.map(str::to_owned),
+            None,
+            true,
+        )
+    };
+    assert_eq!(
+        in_workspace(Some("37"), None).unwrap(),
+        (None, Some(Some("37".into())))
+    );
+    for (positional, repository) in [(None, Some("other")), (Some("other"), None)] {
+        let error = in_workspace(positional, repository)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            error,
+            "a chat with --in starts in the workspace's repository; drop the repository"
+        );
     }
 }
