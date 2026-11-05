@@ -79,6 +79,13 @@ impl ZellijServer {
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
+        // The session opens its first tab after the command returns, and a
+        // client that attaches before then gets no tab to show.
+        wait_until("the user's session to open its pane", || {
+            server
+                .listed_panes("caller")
+                .is_some_and(|panes| panes.iter().any(|(pane, _)| pane == USERS))
+        });
         server.client = server.attach("caller");
         server.show();
         Some(server)
