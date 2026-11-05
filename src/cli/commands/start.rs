@@ -57,43 +57,52 @@ fn default_mode(args: &StartArgs) -> &'static str {
 }
 
 /// The kind of space the start creates: what `--chat`, `--in`,
-/// `--worktree` or `--fork` says, else the kind of `mode`. The default mode
-/// always starts in a workspace, so only another mode's start asks the
-/// daemon.
+/// `--worktree` or `--fork` says, else the kind of `mode`, which must exist
+/// before anything is created. The default mode always does and always
+/// starts in a workspace, so only another mode's start asks the daemon; a
+/// chat's start checks its mode itself once it has the repository.
 async fn kind(ctx: &Context, args: &StartArgs, mode: &str) -> Result<SpaceKind> {
     if args.chat || args.in_workspace.is_some() {
         return Ok(SpaceKind::Chat);
     }
-    if args.worktree || args.fork || mode == modes::DEFAULT {
+    let forced = args.worktree || args.fork;
+    if mode == modes::DEFAULT {
         return Ok(SpaceKind::Workspace);
     }
-    let named = args.repository_override.as_deref();
-    let settings = mode_settings(ctx, named.or(args.repository.as_deref())).await?;
-    Ok(modes::get(&settings.modes, mode)?.kind)
+    let settings = mode_settings(ctx, args).await?;
+    let kind = modes::get(&settings.modes, mode)?.kind;
+    Ok(if forced { SpaceKind::Workspace } else { kind })
 }
 
-/// The settings whose modes decide the kind: those of the repository
-/// `named` names, else of the current checkout or workspace, else the
-/// global config's. Nothing is asked; a repository the start resolves
-/// another way, such as from an issue URL, checks the mode again.
-async fn mode_settings(ctx: &Context, named: Option<&str>) -> Result<Effective> {
-    let repos = client::repositories(&ctx.paths).await?;
-    let named = match named.map(|named| ui::repository_selector(named.to_owned())) {
-        Some(Ok(selector)) => {
-            (crate::repository::select(&repos, selector).await.ok()).map(|repo| repo.id.clone())
-        }
-        _ => None,
-    };
-    let repository = match named {
-        Some(id) => Some(id),
-        None => super::issues::current_repository_id(ctx, &repos).await?,
-    };
-    match repository {
+/// The settings whose modes decide the kind: the repository's
+/// [`mode_repository`] finds, else the global config's. Nothing is asked.
+async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
+    match mode_repository(ctx, args).await? {
         Some(id) => client::settings(&ctx.paths, ConfigTarget::Repository(id.into())).await,
         None => {
             crate::config::Config::load_with_templates(&ctx.paths)?.resolve(&Default::default())
         }
     }
+}
+
+/// The ID of the registered repository `--repo` or the positional argument
+/// names, else of the one an issue or item URL belongs to, else of the
+/// current checkout or workspace, without asking.
+async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<String>> {
+    let repos = client::repositories(&ctx.paths).await?;
+    let named = (args.repository_override.as_deref()).or(args.repository.as_deref());
+    if let Some(Ok(selector)) = named.map(|named| ui::repository_selector(named.to_owned()))
+        && let Ok(repo) = crate::repository::select(&repos, selector).await
+    {
+        return Ok(Some(repo.id.clone()));
+    }
+    let urls = [args.issue.clone().flatten(), args.repository.clone()];
+    for url in urls.iter().flatten() {
+        if let Ok(Some(repo)) = super::issues::registered_for_item(&repos, url).await {
+            return Ok(Some(repo.id.clone()));
+        }
+    }
+    super::issues::current_repository_id(ctx, &repos).await
 }
 
 /// Start the agent in a new or reopened workspace.

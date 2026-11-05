@@ -19439,12 +19439,40 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
     );
     assert!(args.ends_with("`shoal start --issue 37`.\0"), "{args}");
     assert_eq!(status["workspace"]["mode"], "plan", "{status}");
-    // A mode no config defines is refused before anything is created.
-    let output = fixture.run(&["start", "38", "--repo", repo, "--mode", "missing"]);
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("no mode missing"),
-        "{output:?}"
-    );
+    // A mode no config defines is refused before anything is created, also
+    // when a flag decides the kind.
+    let before = fixture.ok(&["work"]);
+    for args in [
+        &["start", "38", "--repo", repo, "--mode", "missing"][..],
+        &["start", repo, "topic", "--worktree", "--mode", "missing"],
+    ] {
+        let output = fixture.run(args);
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("no mode missing"),
+            "{args:?}: {output:?}"
+        );
+    }
+    assert_eq!(fixture.ok(&["work"]), before);
+    // Outside any checkout, the issue URL names the repository whose mode
+    // it is.
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args([
+            "--json",
+            "start",
+            "--mode",
+            "triage",
+            "--issue",
+            "https://github.com/team/project/issues/37",
+        ])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("no mode"), "{output:?}");
+    let reopened: Value =
+        serde_json::from_slice(output.stdout.split(|b| *b == b'\n').next().unwrap()).unwrap();
+    assert_eq!(reopened["name"], "37-sort-queue", "{output:?}");
 }
 
 /// A chat started with `--parent` goes below that space, named by its
