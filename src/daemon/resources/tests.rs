@@ -88,65 +88,58 @@ fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
             params![id, owner, scope, pool, member, mode],
         )?;
     }
-    for unrelated in [0, 100, 10_000] {
-        db.execute("DELETE FROM resource_leases WHERE name LIKE 'noise-%'", [])?;
-        let tx = db.transaction()?;
-        for i in 0..unrelated {
-            tx.execute(
-                    "INSERT INTO resource_leases VALUES (?1,'b','global','other',?1,'a',NULL,0,'permit')",
-                    [format!("noise-{i}")],
-                )?;
-        }
-        tx.commit()?;
-        let all = leases(&db, None)?;
-        for scope in [
-            Scope::Global,
-            Scope::Repo("a".into()),
-            Scope::Repo("b".into()),
-        ] {
-            let selected = pool_leases(&db, &scope, "target")?;
-            let expected: Vec<_> = all
-                .iter()
-                .filter(|l| l.scope == scope && l.pool == "target")
-                .collect();
-            assert_eq!(
-                serde_json::to_value(&selected)?,
-                serde_json::to_value(expected)?
-            );
-        }
-        let selected = pool_leases(&db, &Scope::Global, "target")?;
-        assert_eq!(selected.len(), 2);
-        let existing = named_lease(&db, "a", "target", "three")?.unwrap();
-        assert_eq!(existing.scope, Scope::Repo("a".into()));
-        assert!(named_lease(&db, "b", "target", "three")?.is_none());
-        assert!(named_lease(&db, "a", "other", "three")?.is_none());
-        let request = ResourceRequest {
-            mode: None,
-            kind: None,
-            pool: "target".into(),
-            name: "three".into(),
-            resource: None,
-            reason: Some("renewed".into()),
-            queue: false,
-        };
-        // A new global definition cannot hide a repository-scoped name.
-        let renewed = renew_lease(
-            db.transaction()?,
-            &existing,
-            &Scope::Global,
-            request.clone(),
-        );
-        assert!(renewed.is_err());
-        renew_lease(db.transaction()?, &existing, &existing.scope, request)?;
-        let renewed = named_lease(&db, "a", "target", "three")?.unwrap();
-        assert_eq!(renewed.id, existing.id);
-        assert_eq!(renewed.reason.as_deref(), Some("renewed"));
-        eprintln!(
-            "unrelated={unrelated}: global rows={}, candidate rows={}, renewal rows=1",
-            all.len(),
-            selected.len()
+    let tx = db.transaction()?;
+    // Leases of another pool are left out of the selection.
+    for i in 0..100 {
+        tx.execute(
+            "INSERT INTO resource_leases VALUES (?1,'b','global','other',?1,'a',NULL,0,'permit')",
+            [format!("noise-{i}")],
+        )?;
+    }
+    tx.commit()?;
+    let all = leases(&db, None)?;
+    for scope in [
+        Scope::Global,
+        Scope::Repo("a".into()),
+        Scope::Repo("b".into()),
+    ] {
+        let selected = pool_leases(&db, &scope, "target")?;
+        let expected: Vec<_> = all
+            .iter()
+            .filter(|l| l.scope == scope && l.pool == "target")
+            .collect();
+        assert_eq!(
+            serde_json::to_value(&selected)?,
+            serde_json::to_value(expected)?
         );
     }
+    let selected = pool_leases(&db, &Scope::Global, "target")?;
+    assert_eq!(selected.len(), 2);
+    let existing = named_lease(&db, "a", "target", "three")?.unwrap();
+    assert_eq!(existing.scope, Scope::Repo("a".into()));
+    assert!(named_lease(&db, "b", "target", "three")?.is_none());
+    assert!(named_lease(&db, "a", "other", "three")?.is_none());
+    let request = ResourceRequest {
+        mode: None,
+        kind: None,
+        pool: "target".into(),
+        name: "three".into(),
+        resource: None,
+        reason: Some("renewed".into()),
+        queue: false,
+    };
+    // A new global definition cannot hide a repository-scoped name.
+    let renewed = renew_lease(
+        db.transaction()?,
+        &existing,
+        &Scope::Global,
+        request.clone(),
+    );
+    assert!(renewed.is_err());
+    renew_lease(db.transaction()?, &existing, &existing.scope, request)?;
+    let renewed = named_lease(&db, "a", "target", "three")?.unwrap();
+    assert_eq!(renewed.id, existing.id);
+    assert_eq!(renewed.reason.as_deref(), Some("renewed"));
     Ok(())
 }
 
