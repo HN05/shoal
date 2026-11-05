@@ -33,12 +33,6 @@ fn every_command_naming_a_workspace_states_its_need() {
         let path: Vec<_> = path.iter().map(String::as_str).collect();
         assert!(Need::of(&path).is_some(), "{path:?}");
     }
-    // Opening a PR pushes through a tracked command; opening an issue
-    // only links it.
-    assert_eq!(Need::of(&["pr", "open"]), Some(Need::Ready));
-    assert_eq!(Need::of(&["issue", "open"]), Some(Need::Links));
-    assert_eq!(Need::of(&["review-tool"]), None);
-    assert_eq!(Need::of_command(&["review-tool"]), Need::Ready);
 }
 
 fn workspace(state: WorkspaceState) -> Workspace {

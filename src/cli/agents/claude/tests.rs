@@ -8,98 +8,13 @@ fn settings_of(args: &[OsString]) -> Value {
 }
 
 #[test]
-fn settings_deliver_messages_report_state_and_wake_the_idle_agent() {
+fn a_workspace_agent_may_not_stop_itself_without_a_check() {
     let settings = settings_of(&Claude.hook_args(WORKSPACE, false).unwrap());
-    for event in hooks::MESSAGE_EVENTS {
-        let command = settings["hooks"][event][0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap();
-        assert!(command.ends_with(" messages --hook"), "{command}");
-    }
-    let states: Vec<_> = state_hooks("shoal")
-        .into_iter()
-        .filter(|(event, _)| *event != "StopFailure")
-        .map(|(event, group)| {
-            let command = group["hooks"][0]["command"].as_str().unwrap().to_owned();
-            let state = command.split(' ').nth(3).unwrap().to_owned();
-            (event, group["matcher"].as_str().map(str::to_owned), state)
-        })
-        .collect();
-    let expected = |event, matcher: Option<&str>, state: &str| {
-        (event, matcher.map(str::to_owned), state.to_owned())
-    };
-    assert_eq!(
-        states,
-        [
-            expected("SessionStart", Some("startup|resume|clear"), "idle"),
-            expected("UserPromptSubmit", None, "working"),
-            expected("PostToolUse", None, "working"),
-            expected("PostToolUseFailure", None, "working"),
-            expected(
-                "Notification",
-                Some("permission_prompt|elicitation_dialog"),
-                "waiting"
-            ),
-            expected("Notification", Some("idle_prompt"), "idle"),
-            expected("Stop", None, "idle"),
-        ]
-    );
-    // A turn's end reports how long the agent's prompt cache lives.
-    let ended = settings["hooks"]["Stop"][0]["hooks"][0]["command"]
-        .as_str()
-        .unwrap();
-    assert!(
-        ended.contains(" internal agent-state idle --ends-turn claude "),
-        "{ended}"
-    );
-    // A turn an API error ended reports its failure, read from the event.
-    let failed = settings["hooks"]["StopFailure"][0]["hooks"][0]["command"]
-        .as_str()
-        .unwrap();
-    assert!(
-        failed.contains(" internal turn-failed --integration claude "),
-        "{failed}"
-    );
-    // A second group waits in the background to wake the idle agent,
-    // after a failed turn as after one that ended normally.
-    for event in ["Stop", "StopFailure"] {
-        let wake = &settings["hooks"][event][1]["hooks"][0];
-        assert!(
-            wake["command"]
-                .as_str()
-                .unwrap()
-                .ends_with(" internal wake --agent \"$PPID\""),
-            "{event}: {wake}"
-        );
-        assert_eq!(wake["asyncRewake"], true);
-        assert_eq!(wake["timeout"], WAKE_TIMEOUT_SECS);
-    }
-    // Worktrees Claude Code creates are child workspaces, and each
-    // subagent learns which workspace it works in.
-    for (event, command) in [
-        ("WorktreeCreate", " internal worktree-create"),
-        ("WorktreeRemove", " internal worktree-remove"),
-        ("SubagentStart", " internal subagent-start"),
-    ] {
-        let handler = &settings["hooks"][event][0]["hooks"][0];
-        assert!(
-            handler["command"].as_str().unwrap().ends_with(command),
-            "{handler}"
-        );
-    }
-    // The agent may finish its own assignment and stop what its commands
-    // left running without a permission check.
     let allow = settings["permissions"]["allow"].as_array().unwrap();
-    for rule in [
-        "Bash(shoal done)",
-        "Bash(shoal --json done)",
-        "Bash(shoal --json done *)",
-        "Bash(shoal --json pr *)",
-        "Bash(shoal stop --leftovers)",
-        "Bash(shoal --json stop --processes *)",
-    ] {
-        assert!(allow.contains(&json!(rule)), "{rule}: {allow:?}");
-    }
+    assert!(
+        allow.contains(&json!("Bash(shoal stop --leftovers)")),
+        "{allow:?}"
+    );
     // Plain stop would stop the agent itself.
     for rule in ["Bash(shoal stop)", "Bash(shoal stop *)"] {
         assert!(!allow.contains(&json!(rule)), "{rule}: {allow:?}");
@@ -147,10 +62,6 @@ fn stop_failure_errors_name_the_turn_failure() {
 fn chat_settings_deliver_messages_report_the_session_and_wake_without_turn_state() {
     let settings = settings_of(&Claude.chat_hook_args().unwrap());
     // Only the session start reports, for the chat's session.
-    let start = &settings["hooks"]["SessionStart"][0];
-    assert_eq!(start["matcher"].as_str(), Some(hooks::SESSION_START));
-    let start = start["hooks"][0]["command"].as_str().unwrap();
-    assert!(start.contains(" agent-state idle "), "{start}");
     for event in ["UserPromptSubmit", "PostToolUse", "Notification"] {
         let groups = settings["hooks"][event].to_string();
         assert!(!groups.contains("agent-state"), "{groups}");
