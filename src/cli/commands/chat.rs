@@ -92,6 +92,7 @@ pub(super) async fn start_in_workspace(
         options.check_name(ctx).await?;
         let workspace = chosen_workspace(ctx, workspace).await?;
         let repo = workspace_repository(ctx, &workspace).await?;
+        ensure_not_below_host(options.parent.as_deref(), &workspace)?;
         check_parent(ctx, &repo, options.parent.as_deref()).await?;
         let settings = settings(ctx, &repo).await?;
         let topic = Topic {
@@ -104,6 +105,18 @@ pub(super) async fn start_in_workspace(
     .await;
     handoff::report(&started);
     client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+}
+
+/// Refuse a named `parent` that is `workspace`, whose worktree the chat runs
+/// in: the chat is not the workspace's child, whose questions would go to the
+/// workspace's agent while the user attends the chat.
+fn ensure_not_below_host(parent: Option<&str>, workspace: &Workspace) -> Result<()> {
+    ensure!(
+        parent != Some(workspace.id.as_str()),
+        "a chat in the worktree of {} cannot go below it; name another --parent",
+        workspace.name
+    );
+    Ok(())
 }
 
 /// Refuse `parent`, the space a chat in `repo` would go below, as its

@@ -246,3 +246,15 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     let unlinked = Topic::imported(&repo, "plan", &SpaceLinks::default());
     assert_eq!(unlinked.relaunch, Topic::repository(&repo, "plan").relaunch);
 }
+
+#[test]
+fn a_chat_in_a_worktree_never_goes_below_that_workspace() {
+    let workspace: Workspace = serde_json::from_value(serde_json::json!({
+        "id": "w", "repository_id": "repo", "name": "worker", "branch": "worker",
+        "path": "/work/worker", "state": "ready", "created_at": 0, "updated_at": 0,
+    }))
+    .unwrap();
+    assert!(ensure_not_below_host(Some("w"), &workspace).is_err());
+    ensure_not_below_host(Some("other"), &workspace).unwrap();
+    ensure_not_below_host(None, &workspace).unwrap();
+}
