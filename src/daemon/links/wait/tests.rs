@@ -1075,7 +1075,7 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
 }
 
 /// An open PR at `head` with `checks` by name and state, `pending` unfinished.
-pub(super) fn checks_at(head: &str, checks: &[(&str, &str)]) -> Snapshot {
+fn checks_at(head: &str, checks: &[(&str, &str)]) -> Snapshot {
     let checks = checks
         .iter()
         .map(|(name, state)| {

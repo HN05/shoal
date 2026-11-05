@@ -72,3 +72,13 @@ fn limits_are_found_among_an_errors_causes() {
     assert_eq!(rate_limited(&error), Some(&limited));
     assert_eq!(rate_limited(&anyhow::anyhow!("HTTP 404")), None);
 }
+
+#[test]
+fn a_limit_waits_until_it_ends_and_not_after() {
+    let limited = RateLimited {
+        host: "forge.example".into(),
+        until: 1_600,
+    };
+    assert_eq!(limited.wait_from(1_000), Duration::from_secs(600));
+    assert_eq!(limited.wait_from(2_000), Duration::ZERO);
+}

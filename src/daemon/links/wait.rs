@@ -10,9 +10,7 @@ use futures_util::{StreamExt, TryStreamExt, stream};
 use rusqlite::{OptionalExtension, params};
 use tokio::sync::Notify;
 
-use self::cursor::{
-    ActivityRecord, all_pending, cursor_record, pending_updates, save_cursor_record, save_pending,
-};
+use self::cursor::{all_pending, cursor_record, pending_updates, save_cursor_record, save_pending};
 use super::{
     pr::RegistrationKind,
     space::{LinkSpace, require_ready_space},
@@ -21,10 +19,7 @@ use crate::{
     daemon::{agent_messages::AgentMessage, notifications::NotificationKind, workspace::Manager},
     forge::{
         account::Account,
-        items::{
-            item::ItemState,
-            link::{ItemKind, LinkKind, Selection},
-        },
+        items::link::{ItemKind, LinkKind, Selection},
         transport::limits::rate_limited,
         updates::{Edited, MergeCheck, Snapshot, Update, UpdateKind},
     },
@@ -35,7 +30,6 @@ use crate::{
 pub(crate) use crate::client::links::Updates;
 
 mod cursor;
-mod held;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -1613,7 +1607,7 @@ pub(crate) fn watches_open_pr(db: &rusqlite::Connection, id: &str) -> Result<boo
 pub(crate) fn open_prs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
     let mut open = Vec::new();
     for (url, _) in linked_items(db, id, Some(ItemKind::Pr))? {
-        if observed_item(db, id, &url)?.is_none_or(|snapshot| !concluded(&snapshot)) {
+        if observed_item(db, id, &url)?.is_none_or(|snapshot| !snapshot.concluded()) {
             open.push(url);
         }
     }
@@ -1634,20 +1628,11 @@ fn observed_item(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Optio
         .transpose()?)
 }
 
-/// Whether the workspace's watch saw the item's activity end: a PR merged,
-/// or, once the assignment is `done`, an item closed.
+/// Whether the workspace's watch saw the item's activity end, as
+/// [`Snapshot::activity_ended`] decides.
 fn activity_ended(db: &rusqlite::Connection, id: &str, url: &str, done: bool) -> Result<bool> {
-    let Some(ActivityRecord { snapshot, .. }) = cursor_record(db, id, url)? else {
-        return Ok(false);
-    };
-    Ok(snapshot.state() == ItemState::Merged.as_str() || (done && concluded(&snapshot)))
-}
-
-/// Whether the item was seen merged or closed, ending its activity.
-fn concluded(snapshot: &Snapshot) -> bool {
-    [ItemState::Merged, ItemState::Closed]
-        .iter()
-        .any(|state| snapshot.state() == state.as_str())
+    let record = cursor_record(db, id, url)?;
+    Ok(record.is_some_and(|record| record.snapshot.activity_ended(done)))
 }
 
 impl Updates {
@@ -1776,8 +1761,7 @@ fn limited_poll(polled: Result<Vec<Update>>, now: u64) -> Result<(Vec<Update>, D
             let Some(limit) = rate_limited(&error) else {
                 return Err(error);
             };
-            let wait = limit.until.saturating_sub(now);
-            Ok((Vec::new(), POLL_INTERVAL.max(Duration::from_secs(wait))))
+            Ok((Vec::new(), POLL_INTERVAL.max(limit.wait_from(now))))
         }
     }
 }

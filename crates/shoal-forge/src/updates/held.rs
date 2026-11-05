@@ -2,7 +2,7 @@
 //! pending, so its agent wakes when a check fails or every check has passed.
 use serde::{Deserialize, Serialize};
 
-use crate::forge::{
+use crate::{
     review::status::CheckResult,
     updates::{Snapshot, Update},
 };

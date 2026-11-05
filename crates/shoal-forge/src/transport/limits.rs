@@ -1,7 +1,7 @@
 //! Rate limits as forges report them: `Retry-After`, and the remaining
 //! requests and reset time of GitHub's `X-RateLimit-*` or GitLab's
 //! `RateLimit-*` headers.
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::transport::response::Headed;
 
@@ -20,6 +20,14 @@ pub struct RateLimited {
     pub host: String,
     /// Unix seconds.
     pub until: u64,
+}
+
+impl RateLimited {
+    /// How long from `now`, in Unix seconds, until the forge accepts
+    /// requests again.
+    pub fn wait_from(&self, now: u64) -> Duration {
+        Duration::from_secs(self.until.saturating_sub(now))
+    }
 }
 
 impl std::fmt::Display for RateLimited {

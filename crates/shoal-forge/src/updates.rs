@@ -9,7 +9,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::{Backend, rest::RestCheck},
-    items::item::Current,
+    items::item::{Current, ItemState},
     review::status::CheckResult,
     transport::limits::{RateLimited, rate_limited},
 };
@@ -31,6 +31,9 @@ mod comments;
 pub(crate) use comments::{Entry, verdict_entries};
 mod details;
 pub use details::{Edited, ItemDetails};
+mod held;
+mod watch;
+pub use watch::WatchRecord;
 
 crate::state::states!(UpdateKind {
     Comment => "comment",
@@ -263,6 +266,19 @@ impl Snapshot {
     /// Whether the snapshot shows a finished run, whose activity has ended.
     pub fn run_finished(&self) -> bool {
         matches!(self.state.as_str(), "failed" | "finished")
+    }
+
+    /// Whether the item was seen merged or closed, ending its activity.
+    pub fn concluded(&self) -> bool {
+        [ItemState::Merged, ItemState::Closed]
+            .iter()
+            .any(|state| self.state == state.as_str())
+    }
+
+    /// Whether the item's activity ended: a PR merged, or, once the
+    /// assignment watching it is `done`, an item closed.
+    pub fn activity_ended(&self, done: bool) -> bool {
+        self.state == ItemState::Merged.as_str() || (done && self.concluded())
     }
 
     /// The message for a conflict `next` reports that `self` had not.

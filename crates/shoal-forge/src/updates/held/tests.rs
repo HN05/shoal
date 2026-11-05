@@ -1,5 +1,23 @@
+use serde_json::json;
+
 use super::*;
-use crate::{daemon::links::wait::tests::checks_at as snapshot, forge::updates::UpdateKind};
+use crate::updates::UpdateKind;
+
+/// An open PR at `head` with `checks` by name and state, `pending` unfinished.
+fn snapshot(head: &str, checks: &[(&str, &str)]) -> Snapshot {
+    let checks = checks
+        .iter()
+        .map(|(name, state)| {
+            let check = json!({"name": name, "state": state, "revision": head, "complete": *state != "pending"});
+            ((*name).to_owned(), check)
+        })
+        .collect::<serde_json::Map<_, _>>();
+    serde_json::from_value(json!({
+        "comments": {}, "checks": checks, "head": head,
+        "conflict": null, "state": "open", "errors": {}
+    }))
+    .unwrap()
+}
 
 fn completed(name: &str, result: &str) -> Update {
     Update {

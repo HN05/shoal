@@ -674,3 +674,14 @@ fn own_edits_are_taken_as_seen_leaving_other_changes_reported() {
     unobserved.adopt_edited(&Edited::retarget("feature", "main"));
     assert!(unobserved.details.is_none());
 }
+
+#[test]
+fn a_merge_ends_activity_and_closing_ends_it_once_the_assignment_is_done() {
+    let snapshot = |state: &str| Snapshot::new(state);
+    assert!(snapshot("merged").concluded() && snapshot("closed").concluded());
+    assert!(!snapshot("open").concluded());
+    assert!(snapshot("merged").activity_ended(false));
+    assert!(!snapshot("closed").activity_ended(false));
+    assert!(snapshot("closed").activity_ended(true));
+    assert!(!snapshot("open").activity_ended(true));
+}
