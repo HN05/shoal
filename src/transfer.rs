@@ -17,7 +17,7 @@ pub(crate) use crate::client::transfer::{
 use crate::{
     client::transcripts::{self, Environments},
     config::Effective,
-    execution::recovery::{LastSession, StoppedAgent},
+    execution::recovery::{Copied, LastSession, Record, StoppedAgent},
     git::{self, default_branch::DefaultBranchLookup},
     model::{Chat, RemovedWorkspace, Repository},
 };
@@ -26,15 +26,17 @@ use crate::{
 /// the lowest that reads the package, so an older Shoal imports what it
 /// can: 1 holds a workspace, 2 a workspace with session files, which
 /// version 1 importers would read as part of the bundle, 3 any space,
-/// naming its kind, and 4 a workspace at a commit, which earlier importers
-/// would open on a branch.
+/// naming its kind, 4 a workspace at a commit, which earlier importers
+/// would open on a branch, and 5 a copy, which earlier importers would
+/// open as the space it copies.
 const FORMAT: &str = "shoal workspace";
-const VERSION: u32 = 4;
+const VERSION: u32 = 5;
 
 /// The version of the format that reads the package `manifest` describes.
 fn version(manifest: &Manifest) -> u32 {
     match (&manifest.space, manifest.session_files.is_empty()) {
-        (Space::Workspace(packaged), _) if packaged.workspace.at.is_some() => VERSION,
+        _ if manifest.copy.is_some() => VERSION,
+        (Space::Workspace(packaged), _) if packaged.workspace.at.is_some() => 4,
         (Space::Chat(_), _) => 3,
         (Space::Workspace(_), false) => 2,
         (Space::Workspace(_), true) => 1,
@@ -225,6 +227,7 @@ impl Manifest {
             space,
             sessions: Some(sessions),
             session_files: Vec::new(),
+            copy: None,
         })
     }
 
@@ -240,7 +243,8 @@ impl Manifest {
     /// another. Each agent with a session keeps it as `keep_sessions` says,
     /// otherwise on the exporting machine or when the package carries its
     /// files; on another machine, it keeps no place or waiting wrapper there.
-    /// Every other agent starts a new session.
+    /// Every other agent starts a new session. A copy's agents start from
+    /// forks of their sessions, in no place of the original's.
     pub fn sessions_on(&self, machine: Option<&str>, keep_sessions: Option<bool>) -> Sessions {
         let Some(sessions) = &self.sessions else {
             return match &self.space {
@@ -286,10 +290,14 @@ impl Manifest {
                 }
             }
         });
-        Sessions {
+        let sessions = Sessions {
             machine: sessions.machine.clone(),
             agents: agents.collect(),
             last_sessions: last_sessions.collect(),
+        };
+        match self.copy {
+            Some(copied) => copied_sessions(sessions, copied),
+            None => sessions,
         }
     }
 
@@ -543,6 +551,31 @@ fn moved(removed: RemovedWorkspace) -> RemovedWorkspace {
             .map(LastSession::moved)
             .collect(),
         ..removed
+    }
+}
+
+/// `sessions` of a copy, whose agents start from forks of their sessions
+/// in a place of their own, marked as `copied` says.
+fn copied_sessions(sessions: Sessions, copied: Copied) -> Sessions {
+    let agents = sessions.agents.into_iter().map(|agent| {
+        let record = agent.record.elsewhere();
+        StoppedAgent {
+            record: Record {
+                copied: Some(copied),
+                ..record
+            },
+            ..agent
+        }
+    });
+    let last_sessions = sessions.last_sessions.into_iter().map(|last| LastSession {
+        copied: Some(copied),
+        origin: None,
+        ..last
+    });
+    Sessions {
+        agents: agents.collect(),
+        last_sessions: last_sessions.collect(),
+        ..sessions
     }
 }
 

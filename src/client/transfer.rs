@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     client::{
         connection::{Daemon, request},
-        executions::{LastSession, StoppedAgent},
+        executions::{Copied, LastSession, StoppedAgent},
         removal::{RemovalResult, UnsavedWork},
         repository::Selector,
     },
@@ -32,6 +32,11 @@ pub struct Manifest {
     /// this order, so their sessions continue on any machine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub session_files: Vec<SessionFile>,
+    /// Set for a copy of a space that keeps running where it was exported,
+    /// which the import opens as a new space whose agents start from forks
+    /// of their sessions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy: Option<Copied>,
 }
 
 /// The space a package holds, named by its `kind`.

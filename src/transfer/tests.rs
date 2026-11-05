@@ -271,7 +271,7 @@ async fn export_the_daemon_cannot_write_keeps_the_workspace() {
 #[test]
 fn import_refuses_other_files_and_newer_formats() {
     assert!(Import::read(&mut &b"not an export\n"[..]).is_err());
-    assert!(Import::read(&mut &b"shoal workspace 5\n{}\n"[..]).is_err());
+    assert!(Import::read(&mut &b"shoal workspace 6\n{}\n"[..]).is_err());
 }
 
 /// The header of format version `version`.
@@ -295,6 +295,13 @@ fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
         });
     }
     assert_eq!(version(&at_commit), 4);
+    // A copy needs an importer that opens it as a new space; one before it
+    // would open the space it copies.
+    let copy = Manifest {
+        copy: Some(Copied::default()),
+        ..manifest.clone()
+    };
+    assert_eq!(version(&copy), 5);
     // Earlier versions name no kind; their manifests hold a workspace.
     let mut value = serde_json::to_value(&manifest).unwrap();
     assert_eq!(value["kind"], "workspace");
@@ -352,6 +359,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
             last_sessions: vec![chat_session(&chat)],
         }),
         session_files: vec![session_file("p/s1.jsonl", 3)],
+        copy: None,
     };
     assert_eq!(version(&manifest), 3);
     let bytes = export_bytes(&header(3), &manifest, &["abc"]);
@@ -525,6 +533,7 @@ fn manifest_with_sessions() -> Manifest {
             workspace: moved(workspace),
         }),
         session_files: Vec::new(),
+        copy: None,
     }
 }
 
@@ -634,4 +643,28 @@ fn a_session_with_an_unreadable_file_is_left_out_with_a_warning() {
         panic!("one warning: {warnings:?}");
     };
     assert!(warning.contains("claude session s2"), "{warning}");
+}
+
+#[test]
+fn a_copy_forks_its_agents_sessions_in_no_place_of_the_original() {
+    let copied = Copied {
+        earlier_files: true,
+    };
+    let manifest = Manifest {
+        copy: Some(copied),
+        ..manifest_with_sessions()
+    };
+    let here = manifest.sessions_on(Some("m1"), None);
+    let agent = &here.agents[0].record;
+    assert_eq!(agent.session.as_deref(), Some("s1"));
+    assert_eq!((agent.origin.as_ref(), agent.copied), (None, Some(copied)));
+    let last = &here.last_sessions[0];
+    assert_eq!(last.session.as_deref(), Some("s2"));
+    assert_eq!((last.origin.as_ref(), last.copied), (None, Some(copied)));
+    // Without the session, the copy's agents start anew, still told it is
+    // a copy.
+    let new = manifest.sessions_on(Some("m2"), None);
+    assert_eq!(new.agents[0].record.session, None);
+    assert_eq!(new.agents[0].record.copied, Some(copied));
+    assert_eq!(new.last_sessions[0].copied, Some(copied));
 }
