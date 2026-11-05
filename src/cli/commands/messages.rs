@@ -1,6 +1,6 @@
 //! `shoal messages send` queues a message for a space's agents, or with
-//! `--all` for every running agent of the workspaces and chats, of one
-//! repository with `--repo`;
+//! `--all` for every running agent of the workspaces and chats, or with
+//! `--repo` for those of one repository;
 //! `shoal messages` shows the space's undelivered messages once.
 use std::{
     ffi::OsString,

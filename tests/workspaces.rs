@@ -20313,19 +20313,12 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
     fixture.add("idle");
     let (mut agent, _) = start_test_chat(&fixture, "planning");
     let repo = fixture.repo.to_str().unwrap();
-    let sent = fixture.ok(&[
-        "messages",
-        "send",
-        "--all",
-        "--repo",
-        repo,
-        "Rebase onto main",
-    ]);
+    let sent = fixture.ok(&["messages", "send", "--repo", repo, "Rebase onto main"]);
     assert_eq!(
         sent,
         serde_json::json!({"workspaces": [], "chats": ["planning"]})
     );
-    // Without --repo it reaches every repository, from outside any of them.
+    // --all reaches every repository, from outside any of them.
     let sent = fixture.ok(&["messages", "send", "--all", "The network works again"]);
     assert_eq!(
         sent,
@@ -20334,8 +20327,17 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
     assert_eq!(fixture.ok(&["messages", "idle"]), serde_json::json!([]));
     agent.kill().unwrap();
     agent.wait().unwrap();
-    let output = fixture.run(&["messages", "send", "--all", "--space", "idle", "hi"]);
-    assert!(!output.status.success(), "{output:?}");
+    for conflicting in [["--all", "--space"], ["--all", "--repo"]] {
+        let output = fixture.run(&[
+            "messages",
+            "send",
+            conflicting[0],
+            conflicting[1],
+            "idle",
+            "hi",
+        ]);
+        assert!(!output.status.success(), "{output:?}");
+    }
 }
 
 #[test]
