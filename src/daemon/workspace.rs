@@ -55,7 +55,7 @@ mod xcode;
 
 pub(crate) use agent_queue::Grant;
 pub use agents::RestartWaits;
-pub(crate) use agents::{Pause, Protection};
+pub(crate) use agents::{Outcome, Pause, Protection, Restart, Restarts, restarted};
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use daemon_exit::Ending;
 pub(crate) use executions::{Completing, ExecutionRequest, ReattachedExecution, StartedExecution};
@@ -161,6 +161,8 @@ pub struct Manager {
     /// restore or remove a stopped chat, so neither overlaps a stop.
     pub(crate) chat_saves: tokio::sync::Mutex<()>,
     pub(crate) chat_stops: crate::daemon::chats::Stopping,
+    /// The restarts of chats' agents.
+    pub(crate) chat_agents: crate::daemon::chats::ChatAgents,
     /// The chats a removal holds, which no restore runs again.
     pub(crate) chat_removals: crate::daemon::chats::Removing,
     /// The chats whose workspaces a removal under their completion takes,
@@ -210,6 +212,7 @@ impl Manager {
             chat_handoffs: Default::default(),
             chat_saves: Default::default(),
             chat_stops: Default::default(),
+            chat_agents: Default::default(),
             chat_removals: Default::default(),
             chat_owners: Default::default(),
             seeds: Default::default(),

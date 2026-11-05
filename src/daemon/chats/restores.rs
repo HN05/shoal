@@ -37,10 +37,14 @@ pub(super) async fn restore_automatic(manager: &Arc<Manager>) -> Result<Vec<Join
         .map(|chat| {
             let manager = manager.clone();
             tokio::spawn(async move {
-                if let Err(error) = resume(&manager.paths, &chat).await {
-                    manager
-                        .notify_restore_failed(&chat, &format!("{error:#}"))
-                        .await;
+                match resume(&manager.paths, &chat).await {
+                    Ok(Ok(())) => {}
+                    // Its own failures reach the user from it.
+                    Ok(Err(error)) => log!("chat {}: shoal resume failed: {error}", chat.id),
+                    Err(error) => {
+                        let error = format!("{error:#}");
+                        manager.notify_restore_failed(&chat, &error).await;
+                    }
                 }
             })
         })
@@ -94,10 +98,11 @@ fn claim_automatic(db: &mut Connection) -> Result<Vec<Chat>> {
 }
 
 /// Run `shoal resume` for `chat` detached from the daemon, as it would run
-/// from where the chat ran, and wait for it to open the chat's place. Its
-/// own failures reach the user from it, so only one to run it is returned.
+/// from where the chat ran, and wait for it to open the chat's place.
+/// Returns how it ended, with the error output of one that failed; an error
+/// is one to run it.
 #[cfg(not(test))]
-async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<()> {
+pub(super) async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<Result<(), String>> {
     use anyhow::Context as _;
     use std::process::Stdio;
 
@@ -122,26 +127,25 @@ async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<()> {
         });
     }
     let output = command.output().await.context("run shoal resume")?;
-    if !output.status.success() {
-        log!(
-            "chat {}: shoal resume failed: {}",
-            chat.id,
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    Ok(())
+    Ok(match output.status.success() {
+        true => Ok(()),
+        false => Err(String::from_utf8_lossy(&output.stderr).trim().to_owned()),
+    })
 }
 
 /// Tests record the chats restored instead of running this binary.
 #[cfg(test)]
-async fn resume(_paths: &crate::paths::Paths, chat: &Chat) -> Result<()> {
+pub(super) async fn resume(
+    _paths: &crate::paths::Paths,
+    chat: &Chat,
+) -> Result<Result<(), String>> {
     tests::RESUMED.lock().unwrap().push(chat.id.clone());
     anyhow::ensure!(
         !tests::UNRESUMABLE.lock().unwrap().contains(&chat.name),
         "no terminal host"
     );
-    Ok(())
+    Ok(Ok(()))
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

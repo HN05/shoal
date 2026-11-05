@@ -93,6 +93,21 @@ pub enum ChatMethod {
     ChatScope {
         chat: String,
     },
+    /// The agents of the running chats, and of those a restart stopped to
+    /// start again, each by its chat's ID, as `ListAgents` lists agents.
+    ChatAgents,
+    /// Save the session of the running chat `chat`, by ID, stop its agent
+    /// and restore it in a background place, answering with the place it
+    /// runs in once it runs again.
+    /// With `join`, only wait for that restart the run selected, which may
+    /// have ended already. `run` names the `shoal restart` run that asks.
+    RestartChat {
+        chat: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        join: Option<crate::model::PendingRestart>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        run: Option<String>,
+    },
 }
 
 /// The scope token a chat's agent carries.
@@ -103,6 +118,10 @@ pub struct ScopeToken {
 
 impl ChatMethod {
     pub fn lifetime(&self) -> Lifetime {
-        Lifetime::Reply
+        match self {
+            // A restart waits for requests of the `shoal resume` it runs.
+            Self::RestartChat { .. } => Lifetime::Open,
+            _ => Lifetime::Reply,
+        }
     }
 }

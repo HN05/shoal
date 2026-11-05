@@ -80,6 +80,11 @@ pub(super) async fn handle(
         ChatMethod::ChatScope { chat } => Body::ScopeToken(crate::protocol::ScopeToken {
             token: manager.chat_scope(&chat).await?,
         }),
+        ChatMethod::ChatAgents => Body::RunningAgents(manager.running_chat_agents().await?),
+        ChatMethod::RestartChat { chat, join, run } => Body::RestartedPlace(match join {
+            Some(joined) => manager.join_chat_restart(&chat, joined.run, run).await?,
+            None => manager.restart_chat(&chat, run).await?,
+        }),
     }))
 }
 
@@ -134,7 +139,9 @@ impl Scoped for ChatMethod {
                     .await?,
             ),
             ChatMethod::CheckChatName { .. } | ChatMethod::FreeChatName { .. } => None,
-            ChatMethod::RestoreChat { .. } => return Err(denied()),
+            ChatMethod::RestoreChat { .. }
+            | ChatMethod::ChatAgents
+            | ChatMethod::RestartChat { .. } => return Err(denied()),
         })
     }
 }

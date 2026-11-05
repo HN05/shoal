@@ -13,9 +13,9 @@ use crate::{
 };
 
 /// The chats the daemon ran `shoal resume` for, by ID.
-pub(super) static RESUMED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+pub(in crate::daemon::chats) static RESUMED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// The chats, by name, whose `shoal resume` fails.
-pub(super) static UNRESUMABLE: Mutex<Vec<String>> = Mutex::new(Vec::new());
+pub(in crate::daemon::chats) static UNRESUMABLE: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 /// Restore the chats saved to come back on their own and wait for their
 /// restores; returns how many started.

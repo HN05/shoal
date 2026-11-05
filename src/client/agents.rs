@@ -8,7 +8,7 @@ use crate::{
         sessions::Origin,
     },
     model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
-    protocol::{AgentMethod, ExecutionMethod, TurnEnd, WokenTurn},
+    protocol::{AgentMethod, ChatMethod, ExecutionMethod, TurnEnd, WokenTurn},
     state::{AgentState, TurnFailure},
 };
 
@@ -109,6 +109,24 @@ pub async fn restart(
         },
     )
     .await
+}
+
+/// The agents of the running chats, and of those a restart stopped to start
+/// again, each listed by its chat's ID as its execution and workspace.
+pub async fn of_chats(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
+    request(daemon, ChatMethod::ChatAgents).await
+}
+
+/// Restart the agent of the running chat `chat` in a background place, as
+/// part of the restart `run`, or join the restart `join` already pending.
+/// Returns the place the chat runs in again, when it runs in a terminal host.
+pub async fn restart_chat(
+    daemon: &impl Daemon,
+    chat: String,
+    join: Option<PendingRestart>,
+    run: Option<String>,
+) -> Result<Option<Origin>> {
+    request(daemon, ChatMethod::RestartChat { chat, join, run }).await
 }
 
 /// The agents connected in `workspace`.

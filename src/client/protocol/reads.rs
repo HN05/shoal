@@ -21,6 +21,7 @@ impl Operation {
                     ChatMethod::CheckChatName { .. }
                         | ChatMethod::CheckChatParent { .. }
                         | ChatMethod::FreeChatName { .. }
+                        | ChatMethod::ChatAgents
                 )
                 | Self::Ci(
                     CiMethod::CheckLog { .. }

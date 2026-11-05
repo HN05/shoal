@@ -16,8 +16,7 @@ mod renewal;
 mod state;
 use renewal::Renewal;
 pub(crate) use renewal::{Renewals, forget_ended as forget_ended_renewals};
-use state::Outcome;
-pub(crate) use state::{Restart, Restarts, restarted};
+pub(crate) use state::{Outcome, Restart, Restarts, restarted};
 
 impl Manager {
     /// Every connected agent, every execution whose wrapper is gone, which

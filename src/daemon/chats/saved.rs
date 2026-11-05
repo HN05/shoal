@@ -41,7 +41,7 @@ impl Manager {
         let Saved {
             running: saved,
             released,
-        } = match self.store.run(move |db| save(db, restore)).await {
+        } = match self.store.run(move |db| save(db, restore, None)).await {
             Ok(saved) => saved,
             Err(error) => {
                 log!("chats not saved: {error:#}");
@@ -59,6 +59,29 @@ impl Manager {
             }
         }
         self.ask_user_about(&released).await;
+    }
+
+    /// Save the running chat `id` for `shoal resume`, then stop the processes
+    /// it owns, as [`Self::save_chats`] saves each chat.
+    pub(crate) async fn save_chat(&self, id: &str) -> Result<()> {
+        let _saving = self.chat_saves.lock().await;
+        let _handoffs = self.chat_handoffs.write().await;
+        self.stop_finished_chats().await?;
+        let chat = id.to_owned();
+        let Saved { running, released } = self
+            .store
+            .run(move |db| save(db, ChatRestore::Resume, Some(&chat)))
+            .await?;
+        let (id, process) = running
+            .into_iter()
+            .next()
+            .context("the chat no longer runs")?;
+        let stopped = self.stop_saved(&id, &process).await;
+        if stopped.is_err() {
+            self.keep_after_failed_stop(id, process).await;
+        }
+        self.ask_user_about(&released).await;
+        stopped
     }
 
     /// Settle the chat `id`, saved while it ran as `process`, after a stop
@@ -248,10 +271,12 @@ struct Saved {
     released: Vec<ApprovalRequest>,
 }
 
-/// Mark every running chat saved to come back as `restore` says.
-fn save(db: &mut Connection, restore: ChatRestore) -> Result<Saved> {
+/// Mark every running chat, or only the chat `only`, saved to come back as
+/// `restore` says.
+fn save(db: &mut Connection, restore: ChatRestore, only: Option<&str>) -> Result<Saved> {
     let tx = db.transaction()?;
-    let running = super::recorded_processes(&tx)?;
+    let mut running = super::recorded_processes(&tx)?;
+    running.retain(|(id, _)| only.is_none_or(|only| only == id));
     let mut released = Vec::new();
     for (id, process) in &running {
         tx.execute(

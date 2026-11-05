@@ -1,0 +1,84 @@
+//! `shoal restart` of a chat: the daemon saves the chat's session and stops
+//! its agent, as a save before a daemon stop does, then restores it as
+//! `shoal resume` does, in a background place where a restored agent opens.
+//! The restart goes on without the requests that asked for it, and answers
+//! each once the chat runs again, with the place it runs in.
+use std::sync::Arc;
+
+use anyhow::{Result, anyhow};
+
+use super::restores::resume;
+use crate::{
+    daemon::workspace::{Manager, restarted},
+    model::{Chat, RunningAgent},
+    sessions::Origin,
+};
+
+impl Manager {
+    /// Restart the agent of the running chat `id` for the `shoal restart`
+    /// `run`, or join the restart in progress, returning the place it runs
+    /// in again.
+    pub(crate) async fn restart_chat(
+        self: &Arc<Self>,
+        id: &str,
+        run: Option<String>,
+    ) -> Result<Option<Origin>> {
+        let chat = self.running_chat(id).await?;
+        let requested = self.chat_agents.request(id, chat.as_ref(), run)?;
+        if let Some(chat) = requested.starts {
+            let manager = self.clone();
+            tokio::spawn(async move { manager.run_chat_restart(chat).await });
+        }
+        restarted(requested.answer).await
+    }
+
+    /// Wait for the restart of the chat `id` that `of_run` asked for as
+    /// [`Self::restart_chat`] does, or answer as it did if it ended; it
+    /// restarts the chat for `run` too.
+    pub(crate) async fn join_chat_restart(
+        &self,
+        id: &str,
+        of_run: Option<String>,
+        run: Option<String>,
+    ) -> Result<Option<Origin>> {
+        let name = match self.recorded_chat(id).await? {
+            Some(chat) => chat.name,
+            None => id.to_owned(),
+        };
+        match self.chat_agents.join(id, &name, &of_run, run) {
+            Ok(answer) => restarted(answer).await,
+            Err(ended) => ended.map_err(|reason| anyhow!(reason)),
+        }
+    }
+
+    /// The agents of the running chats, and of those a restart stopped to
+    /// start again, as `shoal restart` lists agents.
+    pub(crate) async fn running_chat_agents(&self) -> Result<Vec<RunningAgent>> {
+        Ok(self.chat_agents.running(self.chats().await?))
+    }
+
+    /// Restart `chat` and answer the requests for it with how that ended.
+    async fn run_chat_restart(&self, chat: Chat) {
+        let outcome = self.save_and_restore(&chat).await;
+        let outcome = outcome.map_err(|error| format!("{error:#}"));
+        self.chat_agents.finish(&chat.id, &outcome);
+    }
+
+    /// Save `chat` and stop its agent, then restore it, returning the place
+    /// it runs in again. A chat whose restore fails stays stopped for
+    /// `shoal resume`.
+    async fn save_and_restore(&self, chat: &Chat) -> Result<Option<Origin>> {
+        self.save_chat(&chat.id).await?;
+        let restored = resume(&self.paths, chat)
+            .await
+            .map_err(|error| format!("{error:#}"));
+        restored
+            .and_then(|ended| ended)
+            .map_err(|error| anyhow!("{error}; restore it with shoal resume {}", chat.name))?;
+        let restored = self.recorded_chat(&chat.id).await?;
+        Ok(restored.and_then(|chat| chat.origin))
+    }
+}
+
+#[cfg(test)]
+mod tests;

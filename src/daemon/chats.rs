@@ -852,15 +852,18 @@ fn forget_unstarted(db: &mut Connection, id: &str, process: &Identity) -> Result
     Ok(())
 }
 
+mod agents;
 mod done;
 mod processes;
 mod removal;
 mod removing;
+mod restart;
 mod restores;
 mod saved;
 mod stopped;
 mod stopping;
 
+pub(crate) use agents::ChatAgents;
 pub(crate) use removing::Removing;
 pub(crate) use stopping::Stopping;
 

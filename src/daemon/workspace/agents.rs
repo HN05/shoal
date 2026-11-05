@@ -33,7 +33,7 @@ mod interrupts;
 mod queue_move;
 mod restart;
 pub use restart::RestartWaits;
-pub(crate) use restart::{Renewals, forget_ended_renewals};
+pub(crate) use restart::{Outcome, Renewals, Restart, Restarts, forget_ended_renewals, restarted};
 
 impl Protection {
     /// Memory or CPU pressure.
