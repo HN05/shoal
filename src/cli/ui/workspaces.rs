@@ -388,32 +388,58 @@ pub async fn pick_workspace(
 }
 
 /// The space, a workspace or chat, a command acts on: the one `explicit`
-/// names, else the chat this process runs in, else the workspace `fallback`
-/// chooses, where a picker offers the workspaces and running chats.
+/// names, else in the chat this process runs in the workspace below the chat
+/// that contains the current directory, as a workspace's process chooses one
+/// below its own, then the chat, else the workspace `fallback` chooses, where
+/// a picker offers the workspaces and running chats. A `fallback` of the
+/// caller's own space takes the chat wherever its directory is.
 pub async fn select_space(
     ctx: &Context,
     explicit: Option<String>,
     fallback: Fallback,
 ) -> Result<String> {
-    if let Some(chat) = current_chat(&explicit) {
-        return Ok(chat);
+    match current_chat(&explicit) {
+        Some(chat) if matches!(fallback, Fallback::OwnWorkspace) => Ok(chat),
+        Some(chat) => current_workspace_or_chat(ctx, chat, Workspaces::Below).await,
+        None => select_other_space(ctx, explicit, fallback).await,
     }
-    select_other_space(ctx, explicit, fallback).await
 }
 
-/// [`select_space`] for a command that shows where it runs: the workspace of
-/// the current directory comes before the chat this process runs in, so a
-/// chat in a workspace's worktree gets the workspace.
+/// [`select_space`] for a command that shows where it runs: in a chat, any
+/// workspace containing the current directory comes before the chat, so a
+/// chat in a workspace's worktree, which reads that workspace without
+/// changing it, gets the workspace.
 pub async fn select_space_here(ctx: &Context, explicit: Option<String>) -> Result<String> {
-    if explicit.is_none() && current_chat(&None).is_some() {
-        let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-        if let Some(workspace) = current_workspace(&workspaces)? {
-            let id = workspace.id.clone();
-            recent::record(ctx, &id).await;
-            return Ok(id);
-        }
+    match current_chat(&explicit) {
+        Some(chat) => current_workspace_or_chat(ctx, chat, Workspaces::Any).await,
+        None => select_other_space(ctx, explicit, Fallback::CurrentDirectory).await,
     }
-    select_space(ctx, explicit, Fallback::CurrentDirectory).await
+}
+
+/// Which workspaces containing the current directory come before the chat.
+enum Workspaces {
+    /// Those below the chat, which its scope covers.
+    Below,
+    /// Any, such as the one whose worktree the chat runs in.
+    Any,
+}
+
+/// The workspace of `which` containing the current directory, else `chat`.
+async fn current_workspace_or_chat(
+    ctx: &Context,
+    chat: String,
+    which: Workspaces,
+) -> Result<String> {
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
+    let current = current_workspace(&workspaces)?.filter(|workspace| match which {
+        Workspaces::Below => workspace.is_below(&workspaces, &chat),
+        Workspaces::Any => true,
+    });
+    let Some(workspace) = current else {
+        return Ok(chat);
+    };
+    recent::record(ctx, &workspace.id).await;
+    Ok(workspace.id.clone())
 }
 
 /// [`select_space`] for a command that never acts on the chat it runs in,

@@ -139,8 +139,8 @@ pub enum ReviewCommand {
     /// List reviews with their state and unresolved findings, newest first.
     List {
         /// Space whose reviews to list, a workspace or a chat, whose reviews
-        /// are those of its linked PRs; defaults to the current chat or
-        /// workspace, else every review.
+        /// are those of its linked PRs; defaults to the current workspace or
+        /// chat, else every review.
         space: Option<String>,
         /// List the reviews of this registered repository's workspaces.
         #[arg(long = "repo", conflicts_with = "space")]
@@ -151,7 +151,7 @@ pub enum ReviewCommand {
         /// Review ID.
         id: Option<i64>,
         /// Space, a workspace or chat, whose review to cancel; defaults to
-        /// the current chat or workspace, or a picker.
+        /// the current workspace or chat, or a picker.
         #[arg(long, conflicts_with = "id")]
         space: Option<String>,
     },
@@ -334,7 +334,7 @@ pub enum IssueCommand {
     /// Open an issue in the space's repository or another one.
     Open {
         /// Space, a workspace or chat, that opens it; defaults to the current
-        /// chat or workspace, or a picker.
+        /// workspace or chat, or a picker.
         #[arg(long)]
         space: Option<String>,
         /// Open it in another repository: OWNER/NAME on the space's forge, or
@@ -446,8 +446,8 @@ pub struct ItemSelector {
     /// Number or URL; defaults to the linked one.
     #[arg(value_parser = item_reference)]
     pub item: Option<String>,
-    /// Space, a workspace or chat, to use; defaults to the current chat or
-    /// workspace, or a picker.
+    /// Space, a workspace or chat, to use; defaults to the current workspace or
+    /// chat, or a picker.
     #[arg(long, conflicts_with = "repo")]
     pub space: Option<String>,
     #[command(flatten)]
@@ -470,8 +470,8 @@ pub struct RevertedPr {
     /// Number or URL; defaults to the linked one.
     #[arg(value_parser = item_reference)]
     pub item: Option<String>,
-    /// Space, a workspace or chat, to use; defaults to the current chat or
-    /// workspace, or a picker.
+    /// Space, a workspace or chat, to use; defaults to the current workspace or
+    /// chat, or a picker.
     #[arg(long)]
     pub space: Option<String>,
 }

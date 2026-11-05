@@ -67,8 +67,8 @@ enum Space {
     Workspace(String),
 }
 
-/// The space `space` names, else the chat this runs in or the current
-/// workspace, else one the user picks.
+/// The space `space` names, else the current workspace or the chat this
+/// runs in, else one the user picks.
 async fn select(ctx: &Context, space: Option<String>) -> Result<Space> {
     let selected = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     Ok(
@@ -80,10 +80,14 @@ async fn select(ctx: &Context, space: Option<String>) -> Result<Space> {
 }
 
 /// The running chat `space` names, else the chat this runs in when `space`
-/// names nothing.
+/// names nothing and the current directory is in no workspace below it.
 async fn chat(ctx: &Context, space: Option<&str>) -> Result<Option<Chat>> {
-    let Some(named) = space.map(str::to_owned).or_else(crate::env::chat) else {
-        return Ok(None);
+    let named = match space {
+        Some(space) => space.to_owned(),
+        None if ui::current_chat(&None).is_some() => {
+            ui::select_space(ctx, None, Fallback::CurrentDirectory).await?
+        }
+        None => return Ok(None),
     };
     Ok(
         match crate::client::workspaces::present_space(&ctx.paths, &named).await? {

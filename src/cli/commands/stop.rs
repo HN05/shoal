@@ -102,10 +102,12 @@ pub(super) async fn processes(
     selectors: Vec<String>,
     selection: Selection,
 ) -> Result<i32> {
-    // Unlike what ends a space, a stop of its processes starts from the chat
-    // it runs in.
+    // Unlike what ends a space, a stop of its processes may take the chat it
+    // runs in.
     let selectors = match ui::current_chat(&None) {
-        Some(chat) if selectors.is_empty() => vec![chat],
+        Some(_) if selectors.is_empty() => {
+            vec![ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?]
+        }
         _ => ui::select_spaces(ctx, selectors, false).await?,
     };
     if selectors.len() > 1 {

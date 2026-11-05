@@ -90,8 +90,8 @@ pub enum WorkCommand {
     /// Give a workspace a short title, which the tabs Shoal opens for it
     /// show, or a chat a new name.
     ///
-    /// Without a space, renames the chat this runs in, else the current
-    /// workspace, else offers a picker. With --request, asks the space's
+    /// Without a space, titles the current workspace, else renames the chat
+    /// this runs in, else offers a picker. With --request, asks the space's
     /// running agent to choose a title or name that fits the work and set
     /// it. A chat's zmx session keeps its name; `shoal attach` finds it by
     /// the new one. `shoal branch rename` renames a workspace's Git branch

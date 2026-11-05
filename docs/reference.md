@@ -782,9 +782,9 @@ that no longer run as it passes over removed workspaces. Scoped callers keep no 
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
 current workspace, noninteractive and JSON calls require a target. Scoped callers
-remain confined to their own workspace and the spaces below it
-([child workspaces](#child-workspaces) and those a chat below opened): without a target, a scoped command acts on the child whose
-directory it runs in, otherwise on the caller's own workspace, and agent hooks
+remain confined to their own space, a workspace or [chat](#chats), and the spaces below it
+([child workspaces](#child-workspaces) and those a chat below opened): without a target, a scoped command acts on the workspace below
+whose directory it runs in, otherwise on the caller's own space, and agent hooks
 always report for the caller's own. Another omitted required argument that
 names an existing record opens a picker of those records, under the same
 noninteractive rule; the refusal names the missing argument and how the command
@@ -1869,9 +1869,9 @@ Shoal, which nothing keeps, removes its chats first and stops their agents;
 never moves to another directory: one about another workspace is a new chat.
 
 `shoal work rename [chat] NAME` gives a running chat a new name that is free as
-a new chat's would be, and frees the old one. Without a space it renames the
-chat it runs in, else the current checkout's only running chat, else the
-current workspace's title, else offers a picker. A Happy chat's log and saved first
+a new chat's would be, and frees the old one. Without a space it gives the
+current workspace a title, else renames the chat it runs in, else the current
+checkout's only running chat, else offers a picker. A Happy chat's log and saved first
 message move to the new name, so it is refused until its session runs. The zmx session keeps the name it started with,
 since `shoal attach` finds the chat's session where the chat runs. A Herdr tab
 or Rex block the chat runs in takes the new name while it still shows the old
@@ -4032,8 +4032,8 @@ shoal ci list --space planning           # a chat's linked PR's runs
 also runs outside a workspace as [issue and PR actions](#issue-and-pr-actions)
 do, from a registered checkout or with `--repo`, where `ci run` and `ci list`
 take the repository's default branch. `--space` names the workspace or running
-[chat](#chats) to act from, which defaults to the chat this runs in, then the
-current workspace or checkout, then a picker. A chat acts in its repository's
+[chat](#chats) to act from, which defaults to the current workspace, then the
+chat this runs in, then the current checkout, then a picker. A chat acts in its repository's
 checkout like a registered checkout, but with its links: `ci run` starts on
 `--branch` or the default branch and links the run it starts, `ci list` lists
 the runs on its one linked PR's head or else on the default branch, and
@@ -4182,7 +4182,7 @@ no downloads. The `downloads` capability says whether the forge has them.
 ### Linked items and cleanup
 
 `shoal link <number-or-url> <relation>` associates an issue or PR with a space,
-the workspace or chat it runs in or the one `--space` names; `shoal link issue <number-or-url> <relation>` and `shoal link pr
+the workspace it runs in, else the chat, or the one `--space` names; `shoal link issue <number-or-url> <relation>` and `shoal link pr
 <number-or-url> <relation>` select the kind explicitly, and omitting the item picks
 an open one. `shoal link ci <number-or-url> <relation>`, or a run's URL alone,
 links a CI run; a number alone never names one, since run numbers overlap issue

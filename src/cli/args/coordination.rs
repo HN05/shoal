@@ -14,7 +14,7 @@ pub enum CoordinationCommand {
         #[command(subcommand)]
         command: Option<MessagesCommand>,
         /// Space, a workspace or chat, whose messages to read; defaults to the
-        /// current chat or workspace, or a picker.
+        /// current workspace or chat, or a picker.
         space: Option<String>,
         /// Run as an agent hook: read the hook event on stdin, print new
         /// messages as additional context, and never fail the agent.
@@ -36,8 +36,8 @@ pub enum CoordinationCommand {
     Files {
         #[command(subcommand)]
         command: Option<FilesCommand>,
-        /// Space, a workspace or chat; defaults to the current chat or
-        /// workspace, or a picker.
+        /// Space, a workspace or chat; defaults to the current workspace or
+        /// chat, or a picker.
         space: Option<String>,
         /// Print only the paths of Shoal's copies, one per line.
         #[arg(long)]
@@ -51,7 +51,7 @@ pub enum CoordinationCommand {
     /// A chat records that its work is finished and keeps running.
     Done {
         /// Space, a workspace or chat, whose work is finished; defaults to
-        /// the current chat or workspace, or a picker.
+        /// the current workspace or chat, or a picker.
         space: Option<String>,
         /// Request cleanup even when [cleanup.done] enabled is false; preserve dirty or unpushed work.
         #[arg(long, conflicts_with = "undo")]
@@ -83,8 +83,8 @@ pub enum FilesCommand {
         /// Files to attach, as PATH or PATH#TITLE.
         #[arg(required = true, value_name = "FILE")]
         files: Vec<String>,
-        /// Space, a workspace or chat, to use; defaults to the current chat
-        /// or workspace, or a picker.
+        /// Space, a workspace or chat, to use; defaults to the current workspace
+        /// or chat, or a picker.
         #[arg(long)]
         space: Option<String>,
     },
@@ -94,8 +94,8 @@ pub enum FilesCommand {
         /// Delete only the files with these names; omit to delete them all.
         #[arg(value_name = "FILE")]
         files: Vec<String>,
-        /// Space, a workspace or chat, to use; defaults to the current chat
-        /// or workspace, or a picker.
+        /// Space, a workspace or chat, to use; defaults to the current workspace
+        /// or chat, or a picker.
         #[arg(long)]
         space: Option<String>,
         /// Delete the files of every workspace without a running agent or
@@ -139,7 +139,7 @@ pub enum MessagesCommand {
         #[arg(long = "attach", value_name = "FILE")]
         attach: Vec<String>,
         /// Space, a workspace or chat, to send to; defaults to the current
-        /// chat or workspace, or a picker.
+        /// workspace or chat, or a picker.
         #[arg(long, conflicts_with_all = ["all", "repository"])]
         space: Option<String>,
         /// Send to every running agent of the workspaces and chats, such as
@@ -183,7 +183,7 @@ pub struct QuestionAskArgs {
     #[arg(long)]
     pub wait: bool,
     /// Space, a workspace or chat, whose agents ask; defaults to the current
-    /// chat or workspace, or a picker.
+    /// workspace or chat, or a picker.
     #[arg(long)]
     pub space: Option<String>,
     /// The workspace the wait of an earlier release names when an upgrade

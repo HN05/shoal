@@ -20063,6 +20063,48 @@ fn a_chats_alert_names_it_until_withdrawn() {
     agent.wait().unwrap();
 }
 
+/// A chat's agent that changes into a workspace below the chat acts on that
+/// workspace, as a workspace's agent acts on its child, and on the chat
+/// anywhere else.
+#[test]
+fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() {
+    let fixture = Fixture::new();
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
+    let output = fixture
+        .command()
+        .args(["--json", "start", fixture.repo.to_str().unwrap(), "opened"])
+        .env("SHOAL_CHAT", &chat)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let opened: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let other = fixture.add("other");
+    let rename_in = |directory: &Value, name: &str| {
+        let output = fixture
+            .command()
+            .current_dir(directory.as_str().unwrap())
+            .env("SHOAL_CHAT", &chat)
+            .args(["--json", "work", "rename", name])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["id"].clone()
+    };
+
+    let renamed = rename_in(&opened["path"], "Child work");
+    assert_eq!(renamed, opened["id"]);
+    // A workspace not below the chat leaves the command to the chat.
+    let renamed = rename_in(&other["path"], "replanning");
+    assert_eq!(renamed, chat.as_str());
+    assert_eq!(
+        fixture.ok(&["status", "other"])["workspace"]["title"],
+        Value::Null
+    );
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
 #[test]
 fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
     let fixture = Fixture::new();

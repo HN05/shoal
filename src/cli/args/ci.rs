@@ -62,8 +62,8 @@ pub struct Subject {
     /// linked PR.
     #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "run", value_parser = item_reference)]
     pub pr: Option<String>,
-    /// Space, a workspace or chat, to use; defaults to the current chat or
-    /// workspace, or a picker.
+    /// Space, a workspace or chat, to use; defaults to the current workspace or
+    /// chat, or a picker.
     #[arg(long, conflicts_with = "repo")]
     pub space: Option<String>,
     #[command(flatten)]
@@ -73,8 +73,8 @@ pub struct Subject {
 // Which runs `shoal ci list` lists.
 #[derive(Debug, Args)]
 pub struct ListArgs {
-    /// Space, a workspace or chat, to use; defaults to the current chat or
-    /// workspace, or a picker.
+    /// Space, a workspace or chat, to use; defaults to the current workspace or
+    /// chat, or a picker.
     #[arg(long, conflicts_with = "repo")]
     pub space: Option<String>,
     /// Branch whose runs to list; defaults to the workspace's branch, in a
@@ -102,8 +102,8 @@ pub struct RunArgs {
     /// which workspace processes cannot start; GitLab runs the branch's
     /// pipeline and takes none.
     pub workflow: Option<String>,
-    /// Space, a workspace or chat, to use; defaults to the current chat or
-    /// workspace, or else the picker unless a URL names the workflow.
+    /// Space, a workspace or chat, to use; defaults to the current workspace or
+    /// chat, or else the picker unless a URL names the workflow.
     #[arg(long, conflicts_with = "repo")]
     pub space: Option<String>,
     /// Branch to run on; defaults to the branch a workflow file's URL names,

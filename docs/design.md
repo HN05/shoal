@@ -669,9 +669,11 @@ is refused, since spaces across repositories need a space without one. Every
 reader takes one walk up or one walk down that link, with no branch on kind,
 and asks each space one question, whether it has an agent: a workspace's
 agent, a chat's running agent, or a queued restore of either. A scope reaches
-its workspace and every space below it, the CLI resolves a scoped command to the
-child whose directory it runs in, and agent hooks always report for the agent's
-own workspace. The parent's agent, a workspace's or a chat's, receives the
+its space and every space below it, the CLI resolves a scoped command, a
+workspace's or a chat's, to the workspace below whose directory it runs in,
+else to its own space, and agent hooks always report for the agent's own space.
+So a chat's agent that changes into a workspace it opened acts on that
+workspace, as a workspace's agent acts on its child. The parent's agent, a workspace's or a chat's, receives the
 issue and PR activity of the spaces below it without an agent of their own,
 and theirs in turn, each update naming its space, through the same cursors,
 deliveries and acknowledgements as its own; a child's own agent, which reports its turn state or which Shoal tracks

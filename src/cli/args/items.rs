@@ -92,8 +92,8 @@ pub struct RelationArgs {
     /// pr/issue/ci, a number or URL, then assigned, opened or related.
     #[arg(required = true, num_args = 1..=3, value_name = "[ITEM] RELATION")]
     pub args: Vec<String>,
-    /// Space, a workspace or chat, to use; defaults to the current chat or
-    /// workspace, or a picker.
+    /// Space, a workspace or chat, to use; defaults to the current workspace or
+    /// chat, or a picker.
     #[arg(long)]
     pub space: Option<String>,
 }
@@ -127,8 +127,8 @@ pub struct ItemArgs {
     /// Number or URL when a kind is supplied.
     #[arg(requires = "kind_or_url", value_parser = item_reference)]
     pub item: Option<String>,
-    /// Space, a workspace or chat, to use; defaults to the current chat or
-    /// workspace, or a picker.
+    /// Space, a workspace or chat, to use; defaults to the current workspace or
+    /// chat, or a picker.
     #[arg(long)]
     pub space: Option<String>,
 }

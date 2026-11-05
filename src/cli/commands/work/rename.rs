@@ -35,9 +35,9 @@ pub(super) async fn request(ctx: &Context, space: Option<String>) -> Result<i32>
     }
 }
 
-/// The space `space` names, else the chat this runs in, else the current
-/// checkout's only running chat, else the current workspace or a picked
-/// space: a chat's ID, or else the workspace.
+/// The space `space` names, else the current workspace or the chat this runs
+/// in, else the current checkout's only running chat, else the current
+/// workspace or a picked space: a chat's ID, or else the workspace.
 async fn chosen_chat(ctx: &Context, space: Option<String>) -> Result<Result<String, String>> {
     if space.is_none() && ui::current_chat(&None).is_none() {
         let chats = crate::client::chats::list(&ctx.paths).await?;

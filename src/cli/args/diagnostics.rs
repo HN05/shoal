@@ -39,7 +39,7 @@ pub enum AlertsCommand {
         #[arg(long = "attach", value_name = "FILE")]
         attach: Vec<String>,
         /// Space, a workspace or chat, the notification names; defaults to
-        /// the current chat or workspace, or a picker.
+        /// the current workspace or chat, or a picker.
         #[arg(long)]
         space: Option<String>,
     },
@@ -50,7 +50,7 @@ pub enum AlertsCommand {
         /// Notification number, as shoal alerts send printed it.
         id: i64,
         /// Space, a workspace or chat, that sent it; defaults to the current
-        /// chat or workspace, or a picker.
+        /// workspace or chat, or a picker.
         #[arg(long)]
         space: Option<String>,
     },
