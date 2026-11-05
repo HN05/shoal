@@ -250,6 +250,16 @@ fn a_pane_listing_without_panes_is_no_answer() {
 }
 
 #[test]
+fn a_client_listing_without_its_header_is_no_answer() {
+    assert!(!lists_clients(""));
+    assert!(!lists_clients("1\n"));
+    assert!(lists_clients("CLIENT_ID ZELLIJ_PANE_ID RUNNING_COMMAND\n"));
+    assert!(lists_clients(
+        "CLIENT_ID ZELLIJ_PANE_ID RUNNING_COMMAND\n1 terminal_0 N/A\n"
+    ));
+}
+
+#[test]
 fn a_dump_without_a_line_is_no_answer() {
     assert!(!shows_screen(""));
     assert!(shows_screen("\n"));

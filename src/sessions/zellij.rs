@@ -404,7 +404,7 @@ impl Zellij {
     /// The pane each client attached to `session` shows.
     pub async fn clients(&self, session: &str) -> Result<Vec<String>> {
         let listed = self
-            .session_listing(session, None, &["list-clients"], |_| true)
+            .session_listing(session, None, &["list-clients"], lists_clients)
             .await?;
         Ok(parse_clients(&listed))
     }
@@ -930,6 +930,13 @@ fn parse_panes(listed: &str) -> Result<Vec<Pane>> {
             exited: pane.exited,
         })
         .collect())
+}
+
+/// Whether `listed` is what `list-clients` prints, which heads even a
+/// listing of no client: under load a command can return before its
+/// answer, or print the answer to another command.
+fn lists_clients(listed: &str) -> bool {
+    listed.starts_with("CLIENT_ID ")
 }
 
 /// Whether `listed`, what `list-panes --json` printed, lists a pane. A
