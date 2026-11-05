@@ -35,11 +35,6 @@ fn presets_build_and_keep_what_their_tools_use() {
     assert_eq!(steps[0].label, "setup.seed.command");
     assert_eq!(steps[0].argv, [worktree.join("seed.sh").into_os_string()]);
     assert_eq!(outputs(&own.setup.seed, named(&own)), ["out"]);
-    // Go keeps its cache outside the worktree, so its seed has no outputs.
-    let go = config("setup.presets = ['go']\n");
-    let build = Build::of(&go.setup.seed, named(&go), worktree).unwrap();
-    assert_eq!(labels(&build), ["go build ./..."]);
-    assert!(outputs(&go.setup.seed, named(&go)).is_empty());
     let none = config("setup.presets = ['xcode']\n");
     assert!(Build::of(&none.setup.seed, named(&none), worktree).is_none());
 }

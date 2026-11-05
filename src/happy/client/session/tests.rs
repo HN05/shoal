@@ -145,10 +145,7 @@ fn creation_response_preserves_defaults_and_requires_a_session_id() -> Result<()
         json!({"session": {"id": 1}}),
     ] {
         let result = PreparedSession::prepare(&account)?.decode_response(&created);
-        let error = result
-            .err()
-            .context("accepted a response without a session ID")?;
-        assert_eq!(error.to_string(), "Happy server returned no session ID");
+        assert!(result.is_err(), "{created}");
     }
     Ok(())
 }

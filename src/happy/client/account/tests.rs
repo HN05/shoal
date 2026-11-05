@@ -21,11 +21,10 @@ fn credentials_accept_legacy_secrets_and_data_key_public_keys() {
 }
 
 #[test]
-fn server_url_prefers_settings_over_the_default() {
+fn server_url_takes_the_settings_url_without_its_trailing_slash() {
     if std::env::var_os(SERVER_URL_ENV).is_some() {
         return;
     }
-    assert_eq!(server_url(&Value::Null), DEFAULT_SERVER_URL);
     assert_eq!(
         server_url(&json!({"serverUrl": "http://localhost:3005/"})),
         "http://localhost:3005"

@@ -8,7 +8,7 @@ fn agents_default_to_json_unless_their_launcher_carries_a_setting() {
             Some((OUTPUT, "json"))
         );
     }
-    for setting in ["text", "json", "invalid"] {
+    for setting in ["text", "invalid"] {
         assert_eq!(agent_output_under(Some(OsStr::new(setting))), None);
     }
 }

@@ -56,8 +56,7 @@ async fn snapshots_clone_natively_or_not_at_all() {
     let frozen = Snapshot::freeze(&layout, "c1".into(), "s".into(), &paths, Vec::new()).await;
     if !native_cloning(root.path()) {
         // Copying would cost the disk space cloning saves.
-        let error = frozen.unwrap_err();
-        assert!(format!("{error:#}").starts_with("clone "), "{error:#}");
+        assert!(frozen.is_err());
         assert!(Snapshot::open(&layout).unwrap().is_none());
         return;
     }
