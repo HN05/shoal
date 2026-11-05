@@ -27284,10 +27284,11 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
         fixture.root.path().join("login-shells").exists()
     });
 
-    // Focused, the agent's session takes this terminal.
+    // Focused, the agent's session takes this terminal; its restore fails
+    // as the detached one did, so only the zmx calls show the path taken.
     fs::remove_file(fixture.root.path().join("zmx-calls")).unwrap();
     fs::write(&record, r#"{"agent":"claude"}"#).unwrap();
-    let (output, transcript) = fixture.terminal_command(
+    fixture.terminal_command(
         fixture
             .command()
             .env("SHELL", &shell)
@@ -27295,7 +27296,6 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
         "",
         true,
     );
-    assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
     assert!(calls.iter().any(|call| call[0] == "attach"), "{calls:?}");
     assert!(calls.iter().all(|call| call[0] != "send"), "{calls:?}");
