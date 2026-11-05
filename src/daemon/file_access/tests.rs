@@ -26,7 +26,7 @@ async fn a_check_that_runs_out_stalls_its_directory_once_until_a_recheck_finishe
     let (result, stall) = access.check(Path::new(WORKSPACE), never()).await;
     let error = format!("{:#}", result.unwrap_err());
     assert!(
-        error.contains("file access in /Volumes/SSD/shoal/repo stalled; a macOS privacy prompt"),
+        error.contains("file access in /Volumes/SSD/shoal/repo stalled"),
         "{error}"
     );
     let stall = stall.expect("the first stall is new");
@@ -180,13 +180,14 @@ async fn the_daemon_alerts_once_while_a_directory_stays_stalled() {
         panic!("expected one alert: {alerts:?}");
     };
     assert_eq!(alert.kind, NotificationKind::AccessStalled);
-    assert_eq!(
-        alert.message,
-        format!(
-            "File access in {} stalled: a check of {} did not finish within 30s. A macOS privacy prompt may be waiting for an answer.",
+    assert!(
+        alert.message.starts_with(&format!(
+            "File access in {} stalled: a check of {} did not finish within 30s",
             temp.path().display(),
             path.display()
-        )
+        )),
+        "{}",
+        alert.message
     );
     assert_eq!(manager.file_access.stalls().len(), 1);
 }

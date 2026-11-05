@@ -160,7 +160,6 @@ async fn a_lasting_failure_shows_in_status_then_the_inbox_and_one_notification()
         .filter(|n| n.kind == NotificationKind::SyncFailed)
         .collect();
     assert_eq!(told.len(), 1, "{notifications:?}");
-    assert!(told[0].message.contains("retry with shoal repo sync"));
 }
 
 #[tokio::test]

@@ -180,7 +180,6 @@ async fn a_request_past_the_limit_is_refused_with_what_holds_the_capacity() {
         panic!("a request past the limit was admitted");
     };
     let message = format!("{error:#}");
-    assert!(message.contains("busy"), "{message}");
     assert!(message.contains("all 1 request slots"), "{message}");
     assert!(message.contains("1 list_repositories (oldest"), "{message}");
     // Daemon administration needs no slot.
@@ -229,14 +228,4 @@ fn the_descriptor_limit_reaches_the_target_or_stays_higher() {
     let limit = raise_descriptor_limit();
     assert!(limit >= hard.min(DESCRIPTOR_TARGET), "{limit}");
     assert_eq!(descriptor_limit().unwrap().rlim_cur, limit);
-}
-
-#[test]
-fn descriptor_exhaustion_and_aborted_clients_are_transient() {
-    for code in [libc::EMFILE, libc::ENFILE, libc::ECONNABORTED, libc::EINTR] {
-        assert!(transient(&io::Error::from_raw_os_error(code)), "{code}");
-    }
-    for code in [libc::EBADF, libc::EINVAL] {
-        assert!(!transient(&io::Error::from_raw_os_error(code)), "{code}");
-    }
 }

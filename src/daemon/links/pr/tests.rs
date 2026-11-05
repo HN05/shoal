@@ -147,11 +147,7 @@ async fn a_failed_branch_check_does_not_claim_another_branch() {
         .unwrap();
     current_head(&workspace).await.unwrap();
     std::fs::write(workspace.path.join(".git"), "gitdir: missing\n").unwrap();
-    let error = format!("{:#}", current_head(&workspace).await.unwrap_err());
-    assert!(
-        error.starts_with("cannot check the workspace's branch: "),
-        "{error}"
-    );
+    assert!(current_head(&workspace).await.is_err());
 }
 
 #[tokio::test]

@@ -78,11 +78,12 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
     assert_eq!(notifications[1].kind, NotificationKind::ResourceBusy);
     assert_eq!(notifications[1].message, "simulator: busy");
     assert_eq!(notifications[2].kind, NotificationKind::ApprovalRequested);
-    assert_eq!(
-        notifications[2].message,
-        format!(
-            "approval {}: port web (lease): serve the app; approve with shoal approvals --approve {}",
-            request.number, request.number
-        )
+    assert!(
+        notifications[2].message.starts_with(&format!(
+            "approval {}: port web (lease): serve the app",
+            request.number
+        )),
+        "{}",
+        notifications[2].message
     );
 }

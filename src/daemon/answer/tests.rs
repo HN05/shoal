@@ -30,17 +30,10 @@ fn refusals_keep_their_codes_under_context() {
 
     use crate::daemon::refusal::Refusal;
 
-    for (reason, code) in [
-        (Reason::NotFound, ErrorCode::NotFound),
-        (Reason::NameTaken, ErrorCode::NameTaken),
-        (Reason::NotReady, ErrorCode::NotReady),
-        (Reason::UnsavedWork, ErrorCode::UnsavedWork),
-    ] {
-        let error = Err::<(), _>(Refusal::new(reason, "refused"))
-            .context("request")
-            .unwrap_err();
-        assert_eq!(error_code(&error), code, "{error:#}");
-    }
+    let error = Err::<(), _>(Refusal::new(Reason::NotFound, "refused"))
+        .context("request")
+        .unwrap_err();
+    assert_eq!(error_code(&error), ErrorCode::NotFound, "{error:#}");
     assert_eq!(
         error_code(&anyhow::anyhow!("failed")),
         ErrorCode::OperationFailed

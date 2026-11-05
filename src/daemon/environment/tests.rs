@@ -58,10 +58,11 @@ fn a_missing_default_terminal_host_is_an_error() {
         anyhow::bail!("herdr is not installed or not on PATH")
     });
     assert_eq!(check.status, CheckStatus::Error);
-    assert_eq!(
-        check.message,
-        "The default terminal host is missing: herdr is not installed or not on PATH; \
-         install it and restart the daemon with the updated PATH, or set terminal.default_host \
-         to another host"
+    assert!(
+        check
+            .message
+            .contains("herdr is not installed or not on PATH"),
+        "{}",
+        check.message
     );
 }

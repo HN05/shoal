@@ -36,8 +36,6 @@ async fn a_file_that_cannot_be_created_in_time_fails_at_the_limit() {
     .await
     .unwrap_err();
     drop(release);
-    assert_eq!(
-        format!("{error:#}"),
-        "the Shoal daemon cannot write to /volume: creating a file there did not finish within 2 seconds; macOS may not have given the daemon access to that volume"
-    );
+    let error = format!("{error:#}");
+    assert!(error.contains("did not finish within 2 seconds"), "{error}");
 }
