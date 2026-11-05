@@ -250,7 +250,9 @@ agent already restarting joins that restart and is answered as the first one
 is. Each `shoal restart` run names itself in its requests, and the daemon
 lists each pending restart with the run that asked for it and each agent with
 the run that last restarted it, so a run that finds restarts in progress
-continues under their run's name and leaves out what that run restarted. The
+continues under their run's name and leaves out what that run restarted. An
+agent between its wrappers is listed as the execution it ran as, and one a new
+wrapper runs with the executions it ran as, which requests may still name. The
 restore command resolves the agent again, so an updated agent
 binary runs. A wrapper whose binary an upgrade replaced execs the installed one
 when the daemon resumes its agent in place, keeping its process, terminal and daemon

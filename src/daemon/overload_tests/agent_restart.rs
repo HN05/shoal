@@ -220,6 +220,72 @@ async fn a_restart_whose_new_wrapper_fails_to_start_leaves_the_agent_for_shoal_r
     serving.abort();
 }
 
+/// A run that selects the agent while no wrapper runs it, or once the new
+/// wrapper does, finds it and joins its restart by the execution it ran as.
+#[tokio::test]
+async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = agent_execution(&manager, &workspace).await;
+    let restarted = tokio::spawn({
+        let (manager, execution) = (manager.clone(), execution.clone());
+        async move {
+            manager
+                .restart_agent(&execution, Some("first".into()), false)
+                .await
+        }
+    });
+    bounded(launched).await.unwrap().unwrap();
+    let restore = starting_restore(&manager, &execution).await;
+    let agents = manager.running_agents().await.unwrap();
+    let [agent] = agents.as_slice() else {
+        panic!("expected the restarting agent: {agents:?}");
+    };
+    assert_eq!(agent.execution, execution);
+    assert_eq!(
+        agent
+            .restart
+            .as_ref()
+            .and_then(|restart| restart.run.as_deref()),
+        Some("first")
+    );
+    let joined = tokio::spawn({
+        let (manager, execution) = (manager.clone(), execution.clone());
+        async move {
+            let first = Some("first".into());
+            manager
+                .join_restart(&execution, first, Some("second".into()))
+                .await
+        }
+    });
+    let mut renewed = child_command(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::agent_restart::renewed_agent_child",
+    );
+    renewed.env("SHOAL_TEST_QUEUE_ENTRY", &restore.id);
+    let renewed = run_child(renewed);
+    bounded(restarted).await.unwrap().unwrap();
+    bounded(joined).await.unwrap().unwrap();
+    let agents = manager.running_agents().await.unwrap();
+    let [agent] = agents.as_slice() else {
+        panic!("expected the restarted agent: {agents:?}");
+    };
+    assert_eq!(agent.restarted_from, std::slice::from_ref(&execution));
+    assert_eq!(agent.restarted_by, ["first", "second"]);
+    assert_eq!(agent.restart, None);
+    let first = Some("first".into());
+    bounded(manager.join_restart(&execution, first, Some("third".into())))
+        .await
+        .unwrap();
+    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
+        .await
+        .unwrap();
+    bounded(renewed).await.unwrap().unwrap();
+    serving.abort();
+}
+
 /// The new wrapper the agent queue starts for a restart: it takes over the
 /// queue entry `SHOAL_TEST_QUEUE_ENTRY` names, and its agent writes `renewed`.
 #[tokio::test]

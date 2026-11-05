@@ -13,19 +13,21 @@ use crate::{
 
 mod renewal;
 mod state;
+use renewal::Renewal;
 pub(crate) use renewal::{Renewals, forget_ended as forget_ended_renewals};
 use state::restarted;
 pub(crate) use state::{Restart, Restarts};
 
 impl Manager {
-    /// Every connected agent, and every execution whose wrapper is gone,
-    /// which may have run one; connected commands are left out.
+    /// Every connected agent, every execution whose wrapper is gone, which
+    /// may have run one, and every agent a restart starts in a new wrapper,
+    /// by the execution it ran as; connected commands are left out.
     pub(crate) async fn running_agents(&self) -> Result<Vec<RunningAgent>> {
         let executions = self.store.run(|db| store::all_executions(db)).await?;
         let connections = self.executions.connections().await;
         Ok(connections
-            .with_agents(|agents| {
-                executions
+            .with_restarts(|agents, renewals| {
+                let mut listed: Vec<RunningAgent> = executions
                     .into_iter()
                     .filter_map(|execution| {
                         let agent = agents.get(&execution.id);
@@ -43,12 +45,23 @@ impl Manager {
                                 .unwrap_or_default(),
                             restart: agent.and_then(|agent| agent.restarts.pending()),
                             stopped: agent.and_then(|agent| agent.overload.clone()),
+                            restarted_from: renewal::earlier(renewals, &execution.id),
                             execution: execution.id,
                             workspace_id: execution.workspace_id,
                             origin: execution.origin,
                         })
                     })
-                    .collect()
+                    .collect();
+                let handed_over = renewal::handed_over(renewals);
+                let handed_over: Vec<RunningAgent> = handed_over
+                    .filter(|agent| {
+                        listed
+                            .iter()
+                            .all(|listed| listed.execution != agent.execution)
+                    })
+                    .collect();
+                listed.extend(handed_over);
+                listed
             })
             .await)
     }
@@ -78,11 +91,18 @@ impl Manager {
     ) -> Result<()> {
         let joined = self
             .executions
-            .with_agents(|agents| {
-                let agent = agents
-                    .get_mut(execution)
-                    .with_context(|| format!("no connected agent runs execution {execution}"))?;
-                anyhow::Ok(agent.restarts.join(&agent.name, &of_run, run))
+            .with_restarts(|agents, renewals| {
+                let id = renewal::current(renewals, execution);
+                let (name, restarts) = match renewals.get_mut(&id) {
+                    Some(Renewal::Starting(handover)) => (&handover.name, &mut handover.restarts),
+                    _ => {
+                        let agent = agents.get_mut(&id).with_context(|| {
+                            format!("no connected agent runs execution {execution}")
+                        })?;
+                        (&agent.name, &mut agent.restarts)
+                    }
+                };
+                anyhow::Ok(restarts.join(name, &of_run, run))
             })
             .await?;
         match joined {
@@ -91,7 +111,9 @@ impl Manager {
         }
     }
 
-    /// Ask the agent's wrapper to stop it for a restart.
+    /// Ask the agent's wrapper to stop it for a restart, or join the
+    /// restart that starts it in a new wrapper. `id` may name an execution
+    /// the agent ran as before such a restart.
     async fn request_restart(
         &self,
         id: &str,
@@ -99,7 +121,13 @@ impl Manager {
         in_place: bool,
     ) -> Result<oneshot::Receiver<Result<()>>> {
         self.executions
-            .with_agents(|agents| self.stop_for_restart(id, agents.get_mut(id), run, in_place))
+            .with_restarts(|agents, renewals| {
+                let id = renewal::current(renewals, id);
+                if let Some(Renewal::Starting(handover)) = renewals.get_mut(&id) {
+                    return Ok(handover.answer(run));
+                }
+                self.stop_for_restart(&id, agents.get_mut(&id), run, in_place)
+            })
             .await
     }
 

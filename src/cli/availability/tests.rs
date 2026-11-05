@@ -120,6 +120,7 @@ fn agent_places_set_stopped_agents_apart() {
         restarted_by: Vec::new(),
         restart: None,
         stopped: None,
+        restarted_from: Vec::new(),
     };
     let agents = [
         agent("w1", Some(&running), Some("claude")),

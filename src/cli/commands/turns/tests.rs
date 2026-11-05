@@ -15,6 +15,7 @@ fn agent(origin: Option<Origin>) -> RunningAgent {
         restarted_by: Vec::new(),
         restart: None,
         stopped: None,
+        restarted_from: Vec::new(),
     }
 }
 

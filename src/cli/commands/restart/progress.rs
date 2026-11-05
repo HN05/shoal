@@ -95,13 +95,20 @@ impl Progress {
         let pending: Vec<String> = agents
             .iter()
             .filter(|agent| agent.restart.is_some())
-            .filter_map(|agent| self.workspaces.get(&agent.execution).cloned())
+            .filter_map(|agent| self.workspace_of(agent))
             .collect();
         if !ctx.json {
             eprintln!("{}", interruption(&pending, agent));
         }
         self.report(ctx, true, pending)?;
         Ok(130)
+    }
+
+    /// The workspace of `agent`, selected as the execution it runs or ran as.
+    fn workspace_of(&self, agent: &RunningAgent) -> Option<String> {
+        std::iter::once(&agent.execution)
+            .chain(&agent.restarted_from)
+            .find_map(|execution| self.workspaces.get(execution).cloned())
     }
 
     /// Print the JSON object, exiting 1 when any restart failed.

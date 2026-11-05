@@ -27,6 +27,7 @@ fn a_joined_restart_stays_joined_once_it_ends() {
             joined: Vec::new(),
         }),
         stopped: None,
+        restarted_from: Vec::new(),
     };
     let mut restarts = vec![Restart {
         workspace,
@@ -39,8 +40,16 @@ fn a_joined_restart_stays_joined_once_it_ends() {
         restart: None,
         ..agent
     };
-    assert!(refresh(&mut restarts, &[ended], "earlier").is_empty());
+    assert!(refresh(&mut restarts, std::slice::from_ref(&ended), "earlier").is_empty());
     assert!(restarts[0].joins.is_some() && restarts[0].ready());
+    // A restart in a new wrapper started the agent as another execution.
+    let renewed = RunningAgent {
+        execution: "api-renewed".into(),
+        restarted_from: vec!["api-execution".into()],
+        ..ended
+    };
+    assert!(refresh(&mut restarts, &[renewed], "earlier").is_empty());
+    assert_eq!(restarts[0].agent.execution, "api-renewed");
 }
 
 #[test]
@@ -63,6 +72,7 @@ fn an_agent_another_command_of_the_run_restarted_is_skipped() {
         restarted_by: Vec::new(),
         restart: None,
         stopped: None,
+        restarted_from: Vec::new(),
     };
     let mut restarts = vec![Restart {
         workspace,

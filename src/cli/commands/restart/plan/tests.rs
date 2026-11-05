@@ -26,6 +26,7 @@ fn running(workspace: &Workspace, agent: Option<&str>, restorable: bool) -> Runn
         restarted_by: Vec::new(),
         restart: None,
         stopped: None,
+        restarted_from: Vec::new(),
     }
 }
 

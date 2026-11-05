@@ -255,15 +255,16 @@ async fn list_agents(ctx: &Context) -> Result<Vec<RunningAgent>> {
     agents::all(&ctx.paths).await
 }
 
-/// Take each agent's turn state and restart from `running`, and drop the
-/// agents that no longer run, whose wrapper is gone, or that another command
-/// of `run` restarted meanwhile, returning them.
+/// Take each agent's turn state and restart from `running`, where a
+/// restart may have started it in a new wrapper, and drop the agents that no
+/// longer run, whose wrapper is gone, or that another command of `run`
+/// restarted meanwhile, returning them.
 fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent], run: &str) -> Vec<Skipped> {
     let mut ended = Vec::new();
     for mut restart in std::mem::take(restarts) {
         let Some(current) = running
             .iter()
-            .find(|agent| agent.execution == restart.agent.execution)
+            .find(|agent| agent.ran_as(&restart.agent.execution))
         else {
             ended.push(restart.skipped("the agent no longer runs"));
             continue;

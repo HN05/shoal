@@ -5,9 +5,10 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow};
+use tokio::sync::oneshot;
 
 use super::{Agent, Manager, Restart, Restarts};
-use crate::model::Workspace;
+use crate::model::{RunningAgent, Workspace};
 
 /// A restart whose agent starts again in a new wrapper, kept by the
 /// execution the agent ran as.
@@ -21,7 +22,10 @@ pub(crate) enum Renewal {
 /// The restart of an agent whose wrapper finished, until a new one
 /// registers it.
 pub(crate) struct Handover {
-    restarts: Restarts,
+    /// The agent's name and workspace.
+    pub(super) name: String,
+    pub(super) workspace_id: String,
+    pub(super) restarts: Restarts,
     /// The agent queue entry whose start runs the new wrapper, once recorded.
     entry: Option<String>,
 }
@@ -37,11 +41,72 @@ impl Agent {
         let continues = (self.restarts.current.as_ref()).is_some_and(Restart::in_new_wrapper);
         continues.then(|| {
             Renewal::Starting(Handover {
+                name: self.name.clone(),
+                workspace_id: self.workspace_id.clone(),
                 restarts: std::mem::take(&mut self.restarts),
                 entry: None,
             })
         })
     }
+}
+
+impl Handover {
+    /// Answer one more request, of `run`, for the restart in progress.
+    pub(super) fn answer(&mut self, run: Option<String>) -> oneshot::Receiver<Result<()>> {
+        match &mut self.restarts.current {
+            Some(restart) => restart.answer(run),
+            None => {
+                let (done, answer) = oneshot::channel();
+                let _ = done.send(Err(anyhow!("the restart was cancelled")));
+                answer
+            }
+        }
+    }
+}
+
+/// The agents whose restart starts them in a new wrapper, each as the
+/// execution it ran as.
+pub(super) fn handed_over(renewals: &Renewals) -> impl Iterator<Item = RunningAgent> + '_ {
+    renewals.iter().filter_map(|(execution, renewal)| {
+        let Renewal::Starting(handover) = renewal else {
+            return None;
+        };
+        Some(RunningAgent {
+            execution: execution.clone(),
+            workspace_id: handover.workspace_id.clone(),
+            agent: Some(handover.name.replace(' ', "-")),
+            restorable: true,
+            state: None,
+            interrupted: false,
+            origin: None,
+            restarted_by: handover.restarts.restarted_by(),
+            restart: handover.restarts.pending(),
+            stopped: None,
+            restarted_from: earlier(renewals, execution),
+        })
+    })
+}
+
+/// The execution the agent that ran as `id` runs as now, following the
+/// restarts that started it in new wrappers.
+pub(super) fn current(renewals: &Renewals, id: &str) -> String {
+    let mut id = id;
+    while let Some(Renewal::Started(next)) = renewals.get(id) {
+        id = next;
+    }
+    id.to_owned()
+}
+
+/// The executions the agent of `id` ran as before restarts started it in
+/// new wrappers.
+pub(super) fn earlier(renewals: &Renewals, id: &str) -> Vec<String> {
+    let mut earlier: Vec<String> = renewals
+        .keys()
+        .filter(|execution| *execution != id && current(renewals, execution) == id)
+        .cloned()
+        .collect();
+    earlier.sort();
+    earlier
 }
 
 /// Forget what leads to executions that ended without handing their agent

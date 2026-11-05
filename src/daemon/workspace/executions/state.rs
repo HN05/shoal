@@ -354,6 +354,15 @@ impl Connections<'_> {
         self.executions.with_agents(f).await
     }
 
+    /// Run `f` on every tracked agent and every restart that starts its
+    /// agent in a new wrapper.
+    pub(crate) async fn with_restarts<R>(
+        &self,
+        f: impl FnOnce(&mut HashMap<String, Agent>, &mut Renewals) -> R,
+    ) -> R {
+        self.executions.with_restarts(f).await
+    }
+
     /// Drop the connection of `id`, then, without the lock, what the daemon
     /// kept for it, returning whether it ran an agent.
     pub(crate) async fn disconnect(mut self, id: &str) -> bool {

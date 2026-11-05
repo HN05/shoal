@@ -146,6 +146,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                     restarted_by: Vec::new(),
                     restart: None,
                     stopped: None,
+                    restarted_from: Vec::new(),
                 })
                 .into(),
             )

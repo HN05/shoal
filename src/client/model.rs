@@ -1597,6 +1597,18 @@ pub struct RunningAgent {
     /// Why Shoal stopped it, while its wrapper waits to restore it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped: Option<crate::client::protocol::Protection>,
+    /// The executions it ran as before restarts started it in new wrappers,
+    /// while this daemon runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub restarted_from: Vec<String>,
+}
+
+impl RunningAgent {
+    /// Whether it runs as `execution`, or ran as it before a restart
+    /// started it in a new wrapper.
+    pub fn ran_as(&self, execution: &str) -> bool {
+        self.execution == execution || self.restarted_from.iter().any(|id| id == execution)
+    }
 }
 
 /// A `shoal restart` that has not started its agent again yet.
