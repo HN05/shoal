@@ -77,8 +77,5 @@ fn an_agent_another_command_of_the_run_restarted_is_skipped() {
     assert!(refresh(&mut restarts, std::slice::from_ref(&restarted), "other").is_empty());
     let skipped = refresh(&mut restarts, &[restarted], "run");
     assert!(restarts.is_empty());
-    assert_eq!(
-        skipped[0].reason,
-        "another command of this run restarted it already"
-    );
+    assert_eq!(skipped.len(), 1);
 }

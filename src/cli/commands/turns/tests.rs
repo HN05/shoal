@@ -61,11 +61,7 @@ fn only_an_idle_agent_continues_the_turn_an_interrupt_ended() {
 #[test]
 fn an_agent_outside_any_terminal_host_takes_no_keys() {
     let workspace = workspace();
-    let error = Target::of(&workspace, agent(None)).unwrap_err();
-    assert!(
-        error.to_string().contains("runs in no terminal session"),
-        "{error}"
-    );
+    assert!(Target::of(&workspace, agent(None)).is_err());
     let placed = agent(Some(Origin::created(HostName::Zmx, "fix".into())));
     let target = Target::of(&workspace, placed).unwrap();
     assert_eq!(

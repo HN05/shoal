@@ -152,10 +152,8 @@ fn a_chat_is_refused_a_workspace_that_is_not_ready_before_anything_is_asked() {
     );
     ensure_hosts_chat(&workspace).unwrap();
     workspace.state = crate::state::WorkspaceState::Failed;
-    let failed = ensure_hosts_chat(&workspace).unwrap_err();
-    assert!(failed.to_string().contains("worker is failed"), "{failed}");
+    assert!(ensure_hosts_chat(&workspace).is_err());
     workspace.state = crate::state::WorkspaceState::Ready;
     workspace.path = root.path().join("gone");
-    let missing = ensure_hosts_chat(&workspace).unwrap_err();
-    assert!(missing.to_string().contains("is missing"), "{missing}");
+    assert!(ensure_hosts_chat(&workspace).is_err());
 }

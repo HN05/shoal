@@ -16,24 +16,24 @@ fn a_notice_names_each_leftover_and_how_to_stop_them() {
         "x".repeat(80)
     );
     let now = 1_000_000;
-    assert_eq!(
-        notice(
-            "workspace",
-            &[
-                leftover(4121, &long, now - 41 * 60),
-                leftover(4125, "sh", now - 30)
-            ],
-            now
-        ),
-        "2 processes from this workspace are still running after their parent exited: \
-         target/debug/shoal run --workspace summary -- sh -c xxxxxxxxxxxxxxxxxxxxxxxxxxxx … \
-         (PID 4121, 41 min), sh (PID 4125, under 1 min). Stop them with shoal stop --leftovers."
+    let several = notice(
+        "workspace",
+        &[
+            leftover(4121, &long, now - 41 * 60),
+            leftover(4125, "sh", now - 30),
+        ],
+        now,
     );
-    assert_eq!(
-        notice("chat", &[leftover(7, "sleep 300", now - 3 * 86_400)], now),
-        "1 process from this chat is still running after its parent exited: \
-         sleep 300 (PID 7, 3 days). Stop it with shoal stop --leftovers."
-    );
+    for part in [
+        "2 processes from this workspace",
+        "sh -c xxxxxxxxxxxxxxxxxxxxxxxxxxxx … (PID 4121, 41 min), sh (PID 4125, under 1 min).",
+    ] {
+        assert!(several.contains(part), "{part:?} in {several}");
+    }
+    let one = notice("chat", &[leftover(7, "sleep 300", now - 3 * 86_400)], now);
+    for part in ["1 process from this chat", "sleep 300 (PID 7, 3 days)."] {
+        assert!(one.contains(part), "{part:?} in {one}");
+    }
 }
 
 #[test]

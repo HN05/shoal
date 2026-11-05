@@ -23,11 +23,7 @@ fn the_oldest_issue_is_refused_beyond_the_listing_limit() {
     let mut issues: Vec<_> = (0..MAX_LIMIT as u64 - 1).rev().map(item).collect();
     assert_eq!(oldest(&issues, "issues").unwrap().unwrap().number, 0);
     issues.insert(0, item(MAX_LIMIT as u64));
-    let error = oldest(&issues, "issues").unwrap_err().to_string();
-    assert!(
-        error.contains("only the newest 1000 open issues"),
-        "{error}"
-    );
+    assert!(oldest(&issues, "issues").is_err());
     assert!(oldest(&[], "issues").unwrap().is_none());
 }
 

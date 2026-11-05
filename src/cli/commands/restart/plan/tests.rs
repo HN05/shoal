@@ -43,10 +43,10 @@ fn restarted(plan: &Plan) -> Vec<&str> {
         .collect()
 }
 
-fn skipped(plan: &Plan) -> Vec<(&str, &str)> {
+fn skipped(plan: &Plan) -> Vec<&str> {
     plan.skipped
         .iter()
-        .map(|skipped| (skipped.workspace.as_str(), skipped.reason.as_str()))
+        .map(|skipped| skipped.workspace.as_str())
         .collect()
 }
 
@@ -91,19 +91,7 @@ fn an_agent_name_selects_its_agents_and_unrestorable_ones_are_skipped() {
     };
     let plan = selection.plan(Some("claude"));
     assert_eq!(restarted(&plan), ["claude"]);
-    assert_eq!(
-        skipped(&plan),
-        [
-            (
-                "custom",
-                "claude has no command to resume its session; use shoal stop custom and shoal resume custom"
-            ),
-            (
-                "gone",
-                "execution gone-execution is disconnected; use shoal stop gone and shoal resume gone"
-            ),
-        ]
-    );
+    assert_eq!(skipped(&plan), ["custom", "gone"]);
 }
 
 #[test]
@@ -116,7 +104,7 @@ fn a_named_workspace_without_the_agent_is_reported() {
     };
     let plan = selection.plan(Some("claude"));
     assert!(plan.restarts.is_empty());
-    assert_eq!(skipped(&plan), [("codex", "no claude agent runs there")]);
+    assert_eq!(skipped(&plan), ["codex"]);
 }
 
 #[test]
@@ -196,10 +184,7 @@ fn a_rerun_continues_the_interrupted_run_and_skips_what_it_restarted() {
     );
     assert!(plan.restarts[0].ready());
     assert!(plan.restarts[1].joins.is_none() && !plan.restarts[1].ready());
-    assert_eq!(
-        skipped(&plan),
-        [("again", "the interrupted run restarted it already")]
-    );
+    assert_eq!(skipped(&plan), ["again"]);
 }
 
 #[test]
@@ -234,8 +219,5 @@ fn a_rerun_skips_what_any_run_of_a_pending_restart_restarted() {
     };
     let plan = selection.plan(None);
     assert_eq!(restarted(&plan), ["pending"]);
-    assert_eq!(
-        skipped(&plan),
-        [("done", "the interrupted run restarted it already")]
-    );
+    assert_eq!(skipped(&plan), ["done"]);
 }

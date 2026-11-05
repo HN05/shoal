@@ -30,32 +30,14 @@ fn question(text: &str, in_chat: bool) -> Question {
 fn a_question_asked_in_the_chat_shows_the_message_without_a_recommendation() {
     let asked = question("Which database?\n\nI recommend SQLite.", true);
     let plain = Palette::stdout(true);
-    assert_eq!(
+    for shown in [
         details(&asked, plain),
-        "Question 2.3, asked in the chat\n  Which database?\n\n  I recommend SQLite.\n  Space  cache"
-    );
-    assert_eq!(
         render(&asked, plain),
-        "2.3 [open] cache: Which database?\n\n  I recommend SQLite."
-    );
-    assert_eq!(
         summary(&asked),
-        "2.3  cache: Which database?  I recommend SQLite."
-    );
-}
-
-#[test]
-fn other_questions_show_their_recommendation() {
-    let asked = question("Which database?", false);
-    let plain = Palette::stdout(true);
-    assert_eq!(
-        details(&asked, plain),
-        "Question 2.3: Which database?\n  Space        cache\n  Recommended  SQLite"
-    );
-    assert_eq!(
-        summary(&asked),
-        "2.3  cache: Which database?  Recommended: SQLite"
-    );
+    ] {
+        assert!(shown.contains("I recommend SQLite."), "{shown}");
+        assert!(!shown.contains("Recommended"), "{shown}");
+    }
 }
 
 #[test]

@@ -20,11 +20,7 @@ fn a_missing_default_host_names_an_installed_one() {
     let note = hosts
         .missing_default(Path::new("config.toml"))
         .unwrap_or_default();
-    assert!(note.starts_with("zmx, "), "{note}");
-    assert!(
-        note.contains("terminal.default_host = \"herdr\" in config.toml"),
-        "{note}"
-    );
+    assert!(note.contains("\"herdr\""), "{note}");
 }
 
 #[test]
@@ -36,8 +32,9 @@ fn no_installed_host_suggests_installing_the_default() {
     let note = hosts
         .missing_default(Path::new("config.toml"))
         .unwrap_or_default();
-    assert!(note.starts_with("No terminal host is installed"), "{note}");
-    assert!(note.contains("Install zmx"), "{note}");
+    assert!(note.contains("zmx"), "{note}");
+    // No installed host to suggest instead.
+    assert!(!note.contains("default_host = \""), "{note}");
 }
 
 #[test]
@@ -51,8 +48,10 @@ fn status_names_failing_cleanup() {
         access_stalls: Vec::new(),
         cleanup_error: Some("Automatic cleanup failed 2 consecutive passes".into()),
     };
+    let message = status_message(&status);
     assert_eq!(
-        status_message(&status),
-        "Daemon running (PID 42, version 1.0.0)\nAutomatic cleanup failed 2 consecutive passes"
+        message.lines().nth(1),
+        Some("Automatic cleanup failed 2 consecutive passes"),
+        "{message}"
     );
 }

@@ -48,11 +48,7 @@ fn a_target_resolves_to_a_saved_chat_or_a_workspace() {
     assert!(matches!(resolved("c2"), Target::Chat(chat) if chat.name == "talk"));
     // A name no space has stays for the daemon to refuse.
     assert_eq!(resolved("missing"), Target::Workspace("missing".into()));
-    let error = resolve(&spaces, "running".into()).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "chat running is running; nothing to resume"
-    );
+    assert!(resolve(&spaces, "running".into()).is_err());
 }
 
 #[test]

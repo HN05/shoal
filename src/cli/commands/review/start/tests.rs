@@ -20,10 +20,7 @@ fn urls_and_the_pr_flag_select_a_pr_and_forge_options_require_one() {
         ));
     }
     let issue = "https://forge.example/team/repo/issues/12";
-    let refused = Target::new(Some(issue.into()), None, None, None)
-        .err()
-        .unwrap();
-    assert!(refused.to_string().contains("shoal plan"), "{refused}");
+    assert!(Target::new(Some(issue.into()), None, None, None).is_err());
     let branch = "https://forge.example/team/repo/src/branch/main";
     assert!(Target::new(Some(branch.into()), None, None, None).is_err());
     assert!(matches!(

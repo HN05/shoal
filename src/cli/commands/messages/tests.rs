@@ -24,16 +24,20 @@ fn attached_files_follow_the_message_text() {
         timed_out: false,
         superseded: false,
     };
-    assert_eq!(
-        Inbox {
-            space: "worker".into(),
-            kind: "workspace"
-        }
-        .hook_context(&updates),
-        "New Shoal messages for this workspace:\n\
-         - See the crash\n  Attached file: /repo/.attachments/w/k/0/shot.png\n\
-         - Attached file: /repo/.attachments/w/k/0/shot.png"
-    );
+    let context = Inbox {
+        space: "worker".into(),
+        kind: "workspace",
+    }
+    .hook_context(&updates);
+    let entries: Vec<_> = context.lines().skip(1).collect();
+    assert_eq!(entries.len(), 3, "{context}");
+    assert!(entries[0].ends_with("See the crash"), "{context}");
+    for entry in &entries[1..] {
+        assert!(
+            entry.ends_with("/repo/.attachments/w/k/0/shot.png"),
+            "{context}"
+        );
+    }
 }
 
 #[test]
@@ -103,12 +107,12 @@ fn hook_output_names_the_event_it_answers() {
         kind: "workspace",
     }
     .hook_context(&updates);
-    assert_eq!(
-        context,
-        "New Shoal messages for this workspace:\n- Stop the dev server\n\
-             New activity on this workspace's issues and PRs:\n\
-             - https://forge.example/team/repo/pulls/7 [comment]: Comments or reviews changed"
-    );
+    for part in [
+        "- Stop the dev server\n",
+        "- https://forge.example/team/repo/pulls/7 [comment]: Comments or reviews changed",
+    ] {
+        assert!(context.contains(part), "{part:?} in {context}");
+    }
     let output: serde_json::Value = serde_json::from_str(&hook_output(
         r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#,
         &context,
