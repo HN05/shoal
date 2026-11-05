@@ -734,8 +734,13 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
 async fn a_completion_hands_back_a_bounded_number_of_files() {
     let (temp, manager) = manager().await;
     let audit = workspace(&temp, &manager).await;
+    // Each file exists, so only the count can refuse them.
     let results = (0..=crate::client::files::MAX_RESULTS)
-        .map(|n| temp.path().join(format!("{n}.md")).into())
+        .map(|n| {
+            let path = temp.path().join(format!("{n}.md"));
+            std::fs::write(&path, "result").unwrap();
+            path.into()
+        })
         .collect();
     let done = manager
         .mark_done(&audit.id, false, false, results, &Attacher::User)

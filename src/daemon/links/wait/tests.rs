@@ -1877,7 +1877,15 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         .unwrap();
     assert!(restarted.wait_prs(&workspace.id, Some(0)).await.is_err());
     assert!(restarted.wait_prs(&workspace.id, Some(3601)).await.is_err());
-    assert!(restarted.wait_prs(&workspace.id, Some(3600)).await.is_err());
+    // The longest timeout passes validation and reaches the missing links.
+    assert!(
+        restarted
+            .wait_prs(&workspace.id, Some(3600))
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("no linked items")
+    );
     assert!(restarted.completion(&workspace.id).await.unwrap().is_none());
 }
 
