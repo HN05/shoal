@@ -122,7 +122,7 @@ async fn stop_running(
 
 /// Whether the daemon still lists `workspace`.
 async fn workspace_listed(ctx: &Context, workspace: &str) -> Result<bool> {
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     Ok(workspaces.iter().any(|listed| listed.id == workspace))
 }
 
@@ -171,7 +171,7 @@ impl Registrations {
     async fn load(ctx: &Context) -> Result<Self> {
         Ok(Self {
             repositories: crate::client::repositories::list(&ctx.paths).await?,
-            workspaces: client::workspaces(&ctx.paths).await?,
+            workspaces: crate::client::workspaces::list(&ctx.paths).await?,
         })
     }
 }

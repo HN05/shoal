@@ -1,13 +1,7 @@
 //! Linking the PR a workspace was opened on.
 use anyhow::Result;
 
-use crate::{
-    cli::{
-        client::{self},
-        context::Context,
-    },
-    model::Workspace,
-};
+use crate::{cli::context::Context, model::Workspace};
 
 /// Link the PR a workspace was opened on and return the workspace with that
 /// link. The workspace already exists, so a refused link only warns.
@@ -19,7 +13,9 @@ pub(in crate::cli::commands) async fn link_pull(
     if !link_or_warn(ctx, &workspace.id, &url).await {
         return Ok(workspace);
     }
-    Ok(client::inspect(&ctx.paths, workspace.id).await?.workspace)
+    Ok(crate::client::workspaces::inspect(&ctx.paths, workspace.id)
+        .await?
+        .workspace)
 }
 
 /// Link PR `url` as the one workspace `id` was opened on; whether it did,

@@ -45,7 +45,7 @@ pub(super) async fn current_repository_id(
     if let Some(repo) = repos.iter().find(|repo| repo.path == root) {
         return Ok(Some(repo.id.clone()));
     }
-    Ok(client::workspaces(&ctx.paths)
+    Ok(crate::client::workspaces::list(&ctx.paths)
         .await?
         .into_iter()
         .find(|workspace| workspace.path == root)
@@ -314,7 +314,7 @@ pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Re
         crate::env::chat()
     };
     if let Some(space) = own
-        && let Some(space) = client::present_space(&ctx.paths, &space).await?
+        && let Some(space) = crate::client::workspaces::present_space(&ctx.paths, &space).await?
         && space.repository_id() == repo.id
     {
         return Ok(match space {

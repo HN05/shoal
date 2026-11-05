@@ -11,7 +11,7 @@ use anyhow::{Result, ensure};
 
 use super::AgentEnvironment;
 use crate::{
-    cli::{client, commands::workspaces, context::Context},
+    cli::{commands::workspaces, context::Context},
     client::transcripts,
     config::Effective,
     model::Workspace,
@@ -48,7 +48,7 @@ pub(in crate::cli) async fn install_session_files(
         ),
         SessionHome::Repository(selector) => (ConfigTarget::Repository(selector), None),
     };
-    let settings = match client::settings(&ctx.paths, target).await {
+    let settings = match crate::client::workspaces::settings(&ctx.paths, target).await {
         Ok(settings) => settings,
         // The import's own error says why it found no repository.
         Err(_) if workspace.is_none() => return,

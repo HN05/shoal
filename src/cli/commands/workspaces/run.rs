@@ -5,7 +5,6 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{
-        client,
         commands::configured,
         context::Context,
         ui::{self, Fallback},
@@ -32,13 +31,15 @@ pub(in crate::cli::commands) async fn edit(
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
+    let settings =
+        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+            .await?;
     if settings.commands.contains_key(EDIT) {
         return configured::run(ctx, EDIT, Some(workspace), args).await;
     }
     let mut command = editor([std::env::var_os("VISUAL"), std::env::var_os("EDITOR")])?;
     command.push(
-        client::inspect(&ctx.paths, workspace.clone())
+        crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
             .await?
             .workspace
             .path

@@ -6,7 +6,6 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
-        client,
         commands::chat::{self, ChatPlace, Started},
         context::Context,
         ui,
@@ -28,7 +27,7 @@ pub(super) async fn restore_here(ctx: &Context, chat: &Chat) -> Result<i32> {
 /// which its removal would take, is left to `shoal rm`, which shows them.
 pub(super) async fn discard_each(ctx: &Context, chats: &[Chat]) -> (Vec<Chat>, Vec<Failure>) {
     let mut report = ui::Report::new("discard");
-    let spaces = match client::spaces(&ctx.paths).await {
+    let spaces = match crate::client::workspaces::spaces(&ctx.paths).await {
         Ok(spaces) => spaces,
         Err(error) => {
             for chat in chats {

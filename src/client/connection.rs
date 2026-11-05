@@ -1,7 +1,7 @@
 //! The client side of the daemon protocol, which the CLI and apps share:
 //! finding the daemon, sending one request per connection with the caller's
-//! scope token, reading its reply, and typed helpers for the queries
-//! commands share.
+//! scope token, reading its reply, and the daemon's own status, reload, exit
+//! and wait.
 use std::{io, sync::OnceLock, time::Duration};
 
 use anyhow::{Context, Result, ensure};
@@ -16,10 +16,8 @@ use tokio::{
 
 use crate::{
     client::{paths::Paths, processes::Identity},
-    model::{Inspection, PresentSpace, Spaces, Workspace},
     protocol::{
-        self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method, Request, Response,
-        WorkspaceMethod, timing,
+        self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method, Request, Response, timing,
     },
 };
 
@@ -316,121 +314,6 @@ where
             body => items.extend(Vec::<T>::try_from(body)?),
         }
     }
-}
-
-/// The settings that apply to `target` after every layer. The global config
-/// is read now, so launch defaults follow it without a daemon restart.
-pub async fn settings(
-    daemon: &impl Daemon,
-    target: crate::protocol::ConfigTarget,
-) -> Result<crate::config::Effective> {
-    Ok(configuration(daemon, target).await?.1)
-}
-
-/// The global config read at launch and the settings it yields for `target`.
-pub async fn configuration(
-    daemon: &impl Daemon,
-    target: crate::protocol::ConfigTarget,
-) -> Result<(crate::config::Config, crate::config::Effective)> {
-    let layers = crate::client::workspaces::config_layers(daemon, target).await?;
-    let config = crate::config::Config::load_with_templates(daemon.paths())?;
-    let settings = config.resolve(&layers)?;
-    // With every layer's mode and rule files read, a launch refuses a mode
-    // naming a rule none defines before it creates anything.
-    crate::config::modes::check(&settings.modes, &settings.rules)?;
-    Ok((config, settings))
-}
-
-pub async fn inspect(daemon: &impl Daemon, workspace: String) -> Result<Inspection> {
-    request(daemon, WorkspaceMethod::InspectWorkspace { workspace }).await
-}
-
-/// Workspaces visible to this caller; the daemon filters scoped requests.
-pub async fn workspaces(daemon: &impl Daemon) -> Result<Vec<Workspace>> {
-    request(daemon, WorkspaceMethod::ListWorkspaces).await
-}
-
-/// The workspace or chat `selector` names, by ID or name.
-pub async fn present_space(daemon: &impl Daemon, selector: &str) -> Result<Option<PresentSpace>> {
-    Ok(spaces(daemon).await?.find(selector))
-}
-
-/// The workspaces and chats, running or stopped, visible to this caller.
-pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
-    Ok(Spaces {
-        workspaces: workspaces(daemon).await?,
-        chats: crate::client::chats::recorded(daemon).await?,
-    })
-}
-
-/// Close `place`, a place Shoal created for `workspace`, while the daemon
-/// still records it as that workspace's.
-pub async fn close_owned_place(
-    daemon: &impl Daemon,
-    workspace: &str,
-    place: &crate::client::sessions::Origin,
-) -> Result<crate::client::sessions::PlaceClose> {
-    request(
-        daemon,
-        WorkspaceMethod::CloseOwnedPlace {
-            workspace: workspace.to_owned(),
-            place: place.clone(),
-        },
-    )
-    .await
-}
-
-/// Whose `place`, the place of a terminal host, is for `workspace`, as the
-/// daemon knows it.
-pub async fn place_ownership(
-    daemon: &impl Daemon,
-    workspace: &str,
-    place: &crate::client::sessions::Origin,
-) -> Result<crate::client::sessions::PlaceOwnership> {
-    request(
-        daemon,
-        WorkspaceMethod::PlaceOwnership {
-            workspace: workspace.to_owned(),
-            place: place.clone(),
-        },
-    )
-    .await
-}
-
-/// Record `origin`, a place Shoal created for `workspace`, so the daemon
-/// closes it once the workspace is removed.
-pub async fn record_owned_place(
-    daemon: &impl Daemon,
-    workspace: &str,
-    origin: crate::client::sessions::Origin,
-) -> Result<()> {
-    call(
-        daemon,
-        WorkspaceMethod::RecordOwnedPlace {
-            workspace: workspace.to_owned(),
-            origin,
-        },
-    )
-    .await?;
-    Ok(())
-}
-
-/// Keep where an agent of `workspace` keeps its configuration for the
-/// repository's removal.
-pub async fn keep_agent_environment(
-    daemon: &impl Daemon,
-    workspace: &str,
-    environment: std::collections::BTreeMap<String, String>,
-) -> Result<()> {
-    call(
-        daemon,
-        WorkspaceMethod::KeepAgentEnvironment {
-            workspace: workspace.to_owned(),
-            environment,
-        },
-    )
-    .await?;
-    Ok(())
 }
 
 /// `None` when no daemon is running; one that runs without answering is an

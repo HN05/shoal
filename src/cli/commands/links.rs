@@ -238,7 +238,10 @@ pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>)
 /// What a mark on the space `space` itself is called: `workspace` or
 /// `chat`.
 async fn space_kind(ctx: &Context, space: &str) -> Result<&'static str> {
-    Ok((client::present_space(&ctx.paths, space).await?).map_or("workspace", |space| space.kind()))
+    Ok(
+        (crate::client::workspaces::present_space(&ctx.paths, space).await?)
+            .map_or("workspace", |space| space.kind()),
+    )
 }
 
 /// One indented line per mark: its item, or the space itself, called
@@ -434,7 +437,7 @@ pub(super) async fn pull_creation(
         creation.pr = Some(pull.url);
         return Ok(());
     }
-    let owned = client::workspaces(&ctx.paths)
+    let owned = crate::client::workspaces::list(&ctx.paths)
         .await?
         .iter()
         .any(|workspace| {

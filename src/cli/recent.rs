@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     cli::{
-        client,
         context::Context,
         ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
@@ -119,7 +118,7 @@ fn command(ctx: &Context) -> Result<&str> {
 /// The most recent of the workspaces and `chats` in `command`'s history
 /// other than the current workspace and chat.
 async fn previous_among(ctx: &Context, command: &str, chats: &[Chat]) -> Result<Option<String>> {
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let current_chat = crate::env::chat();
     let current: Vec<&str> = ui::current_workspace(&workspaces)?
         .map(|workspace| workspace.id.as_str())
@@ -177,7 +176,7 @@ async fn remember(ctx: &Context, command: &str, selector: &str, from_current: bo
     if !keeps_history(ctx) {
         return;
     }
-    let Ok(workspaces) = client::workspaces(&ctx.paths).await else {
+    let Ok(workspaces) = crate::client::workspaces::list(&ctx.paths).await else {
         return;
     };
     let Some(target) = WorkspaceContext::from_directory(&workspaces, None).resolve(

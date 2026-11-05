@@ -8,7 +8,7 @@ use super::{
     target::AddTarget,
 };
 use crate::{
-    cli::{client, commands::issues, context::Context, terminal},
+    cli::{commands::issues, context::Context, terminal},
     protocol::ConfigTarget,
 };
 
@@ -37,7 +37,7 @@ pub(in crate::cli) async fn start_queued(
     mut plan: AddPlan,
     name: &str,
 ) -> Result<()> {
-    let settings = client::settings(
+    let settings = crate::client::workspaces::settings(
         &ctx.paths,
         ConfigTarget::Repository(plan.repository.clone()),
     )

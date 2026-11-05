@@ -14,7 +14,6 @@ use crate::client::operations::NewWorkspace;
 use crate::{
     cli::{
         agents,
-        client::{self},
         commands::{
             agent_queue, issues, operations,
             workspaces::{SetUp, follow_setup},
@@ -203,8 +202,11 @@ async fn enters_added(
     let Some((agent, chosen)) = agent.and_then(|agent| Some((agent, agent.agent.as_ref()?))) else {
         return Ok(true);
     };
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
     Ok(!agents::runs_in_session(
         chosen,
         &settings,
@@ -349,7 +351,9 @@ async fn prepare_after_setup(
         Ok(prepared) => (prepared.agent, Ok(())),
         Err(error) => (None, Err(error)),
     };
-    let workspace = client::inspect(&ctx.paths, workspace.id).await?.workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.id)
+        .await?
+        .workspace;
     let workspace = Box::new(workspace);
     Ok((Prepared { workspace, agent }, result))
 }

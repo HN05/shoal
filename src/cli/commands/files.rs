@@ -6,7 +6,6 @@ use anyhow::{Result, ensure};
 use crate::{
     cli::{
         args::WorkspaceScope,
-        client,
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},
@@ -138,7 +137,7 @@ async fn confirmation(ctx: &Context, space: Option<&str>) -> Result<Option<Strin
 /// The name of the workspace where an agent or command runs, or of the
 /// running chat, that `selector` names.
 async fn running_space(ctx: &Context, selector: &str) -> Result<Option<String>> {
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     if let Some(listed) = workspaces
         .iter()
         .find(|listed| listed.id == selector || listed.name == selector)

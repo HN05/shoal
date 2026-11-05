@@ -28,7 +28,7 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     agent::{Agent, AgentMode, ModelChoice},
     ai::IntegrationKind,
-    cli::{client, commands::configured, context::Context, terminal, ui},
+    cli::{commands::configured, context::Context, terminal, ui},
     client::transcripts::Environments,
     config::{Config, Effective, modes, named_commands::Commands, templates},
     execution::recovery,
@@ -467,8 +467,11 @@ pub(super) async fn launch_agent(
     args: Vec<OsString>,
     options: LaunchOptions,
 ) -> Result<i32> {
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
     let integration = agent_integration(&settings, agent.name());
     let fork = match &options.fork {
         Some(session) => fork_args(&settings, agent.name(), session, &workspace.path)?,
@@ -616,7 +619,9 @@ async fn classify(ctx: &Context, name: &str, workspace: Option<&str>) -> Result<
     let in_workspace = target.is_some() || workspace.is_some();
     // A workspace that does not resolve is the command's own error to report.
     let settings = match target {
-        Some(target) => client::settings(&ctx.paths, target).await.ok(),
+        Some(target) => crate::client::workspaces::settings(&ctx.paths, target)
+            .await
+            .ok(),
         None => None,
     };
     let tools = match settings {
@@ -639,14 +644,14 @@ async fn classify(ctx: &Context, name: &str, workspace: Option<&str>) -> Result<
 
 /// The workspaces whose settings resolve `name` as an agent.
 async fn defining_workspaces(ctx: &Context, name: &str) -> Vec<crate::model::Workspace> {
-    let Ok(workspaces) = client::workspaces(&ctx.paths).await else {
+    let Ok(workspaces) = crate::client::workspaces::list(&ctx.paths).await else {
         return Vec::new();
     };
     let mut defining = Vec::new();
     for workspace in workspaces {
         let target = ConfigTarget::Workspace(workspace.id.clone());
         // A workspace whose configuration cannot load has no agents.
-        if let Ok(settings) = client::settings(&ctx.paths, target).await
+        if let Ok(settings) = crate::client::workspaces::settings(&ctx.paths, target).await
             && crate::ai::agents(&settings.tools).any(|agent| agent == name)
         {
             defining.push(workspace);
@@ -664,7 +669,7 @@ async fn agent_target(ctx: &Context, workspace: Option<&str>) -> Result<Option<C
         return Ok(workspace.ok().map(ConfigTarget::Workspace));
     }
     // Without a daemon there is no workspace context, only the machine's.
-    let Ok(workspaces) = client::workspaces(&ctx.paths).await else {
+    let Ok(workspaces) = crate::client::workspaces::list(&ctx.paths).await else {
         return Ok(None);
     };
     let current = configured::current_workspace(&workspaces)?;
@@ -708,7 +713,7 @@ pub(super) async fn default_agent(
     target: ConfigTarget,
     agent: Option<Agent>,
 ) -> Result<Option<Agent>> {
-    let settings = client::settings(&ctx.paths, target).await?;
+    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     match agent.or(settings.agent.default.clone()) {
         Some(agent) => {
             ensure_available(agent.name(), &settings)?;
@@ -1323,17 +1328,21 @@ fn saved_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<String>> {
 /// Trust the path of `workspace` for each of `agents` as a tracked launch
 /// does. Failures only warn.
 async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<String>) {
-    let settings =
-        match client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await {
-            Ok(settings) => settings,
-            Err(error) => {
-                eprintln!(
-                    "warning: cannot trust {} for its agents: {error:#}",
-                    workspace.path.display()
-                );
-                return;
-            }
-        };
+    let settings = match crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await
+    {
+        Ok(settings) => settings,
+        Err(error) => {
+            eprintln!(
+                "warning: cannot trust {} for its agents: {error:#}",
+                workspace.path.display()
+            );
+            return;
+        }
+    };
     for name in &agents {
         if let Some(trust) = agent_integration(&settings, name).trust_file() {
             let profile = &settings.launch(name).environment;

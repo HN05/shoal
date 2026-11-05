@@ -5,7 +5,7 @@ use serde_json::json;
 
 use super::AgentEnvironment;
 use crate::{
-    cli::{client, commands::workspaces, context::Context},
+    cli::{commands::workspaces, context::Context},
     env,
     model::{ChatHome, Repository, Workspace},
 };
@@ -87,7 +87,12 @@ impl TrustFile {
         }
         let kept = match holder {
             Holder::Workspace(workspace) => {
-                client::keep_agent_environment(&ctx.paths, &workspace.id, environment).await
+                crate::client::workspaces::keep_agent_environment(
+                    &ctx.paths,
+                    &workspace.id,
+                    environment,
+                )
+                .await
             }
             Holder::Repository(repository) => {
                 crate::client::repositories::keep_agent_environment(

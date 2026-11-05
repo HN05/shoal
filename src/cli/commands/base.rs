@@ -5,7 +5,6 @@ use crate::client::output::workspaces::Bases;
 use crate::{
     cli::{
         args::changes::BaseCommand,
-        client,
         context::Context,
         ui::{self, Fallback},
     },
@@ -33,7 +32,11 @@ pub(super) async fn run(
             };
             crate::client::workspaces::set_base(&ctx.paths, workspace, base).await?
         }
-        None => find(&client::workspaces(&ctx.paths).await?, &workspace)?.clone(),
+        None => find(
+            &crate::client::workspaces::list(&ctx.paths).await?,
+            &workspace,
+        )?
+        .clone(),
     };
     let value = Bases {
         base_workspace: workspace.base_workspace.clone(),
@@ -65,7 +68,7 @@ fn find<'a>(workspaces: &'a [Workspace], selector: &str) -> Result<&'a Workspace
 
 /// Choose another workspace of the same repository as the base.
 async fn pick(ctx: &Context, selector: &str) -> Result<String> {
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let workspace = find(&workspaces, selector)?;
     let candidates: Vec<_> = workspaces
         .iter()

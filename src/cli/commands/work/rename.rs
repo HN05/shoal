@@ -5,7 +5,6 @@ use anyhow::Result;
 use super::super::{chat, workspaces};
 use crate::{
     cli::{
-        client,
         context::Context,
         ui::{self, Fallback},
     },
@@ -47,8 +46,10 @@ async fn chosen_chat(ctx: &Context, space: Option<String>) -> Result<Result<Stri
         }
     }
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    Ok(match client::present_space(&ctx.paths, &space).await? {
-        Some(PresentSpace::Chat(chat)) => Ok(chat.id),
-        _ => Err(space),
-    })
+    Ok(
+        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
+            Some(PresentSpace::Chat(chat)) => Ok(chat.id),
+            _ => Err(space),
+        },
+    )
 }

@@ -17,7 +17,7 @@ pub(crate) use crate::client::executions::{
 };
 use crate::{
     agent::ModelChoice,
-    cli::{client, commands::configured},
+    cli::commands::configured,
     fsutil::{Permissions, ReplaceOptions},
     model::Workspace,
     paths::Paths,
@@ -200,7 +200,7 @@ impl Recovery {
         agent: &super::TrackedAgent,
     ) -> Self {
         let resolved = async {
-            let workspace = client::inspect(paths, workspace_id.to_owned())
+            let workspace = crate::client::workspaces::inspect(paths, workspace_id.to_owned())
                 .await?
                 .workspace;
             let restored = Restored {
@@ -238,8 +238,11 @@ impl Recovery {
         handoff: Option<&str>,
         stop: Option<&Stop>,
     ) -> Result<Self> {
-        let settings =
-            client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+        let settings = crate::client::workspaces::settings(
+            paths,
+            ConfigTarget::Workspace(workspace.id.clone()),
+        )
+        .await?;
         let name = restored.agent.replace(' ', "-");
         let configured = settings.resume_commands.get(&name);
         let resume_args = settings

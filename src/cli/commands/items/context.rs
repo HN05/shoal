@@ -4,7 +4,7 @@
 use anyhow::{Result, ensure};
 
 use crate::{
-    cli::{client, context::Context, ui},
+    cli::{context::Context, ui},
     env,
     forge::{ForgeRepo, IssueInput},
     model::{PresentSpace, Repository},
@@ -59,11 +59,13 @@ pub(in crate::cli::commands) async fn space_context(
     ctx: &Context,
     space: String,
 ) -> Result<ItemContext> {
-    Ok(match client::present_space(&ctx.paths, &space).await? {
-        Some(PresentSpace::Chat(chat)) => ItemContext::Chat(chat.id),
-        Some(PresentSpace::Workspace(workspace)) => ItemContext::Workspace(workspace.id),
-        None => ItemContext::Workspace(space),
-    })
+    Ok(
+        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
+            Some(PresentSpace::Chat(chat)) => ItemContext::Chat(chat.id),
+            Some(PresentSpace::Workspace(workspace)) => ItemContext::Workspace(workspace.id),
+            None => ItemContext::Workspace(space),
+        },
+    )
 }
 
 /// The context of a command whose `--repo` names any repository, and the

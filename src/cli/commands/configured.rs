@@ -189,7 +189,7 @@ fn defined_globally(ctx: &Context, name: &str) -> Result<bool> {
 
 /// The daemon's workspaces; none without a running daemon.
 async fn running_workspaces(ctx: &Context) -> Result<Vec<Workspace>> {
-    match client::workspaces(&ctx.paths).await {
+    match crate::client::workspaces::list(&ctx.paths).await {
         Err(error) if client::is_unreachable(&error) => Ok(Vec::new()),
         workspaces => workspaces,
     }
@@ -224,7 +224,7 @@ pub(in crate::cli) fn current_workspace(workspaces: &[Workspace]) -> Result<Opti
 
 async fn defines(ctx: &Context, workspace: &str, name: &str) -> Result<bool> {
     let target = ConfigTarget::Workspace(workspace.to_owned());
-    Ok(client::settings(&ctx.paths, target)
+    Ok(crate::client::workspaces::settings(&ctx.paths, target)
         .await?
         .commands
         .contains_key(name))
@@ -271,8 +271,10 @@ pub(super) async fn run_defined(
         Definition::Elsewhere(defining) => ui::pick_workspace(ctx, defining, "workspace").await?,
     };
     recent::record(ctx, &workspace).await;
-    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
-    let inspection = client::inspect(&ctx.paths, workspace.clone()).await?;
+    let settings =
+        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+            .await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
     let command = expand(
         &ctx.paths,
         &settings.commands,

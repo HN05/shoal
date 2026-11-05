@@ -5,7 +5,7 @@ use anyhow::Result;
 
 pub(super) use crate::client::output::agents::Skipped;
 use crate::{
-    cli::{args::WorkspaceTargets, client, context::Context, ui},
+    cli::{args::WorkspaceTargets, context::Context, ui},
     model::{PendingRestart, RunningAgent, Workspace},
     state::AgentState,
 };
@@ -58,7 +58,7 @@ impl Selection {
     /// picker.
     pub(super) async fn load(ctx: &Context, targets: WorkspaceTargets) -> Result<Self> {
         let named = !targets.all && !targets.workspace.is_empty();
-        let mut workspaces = client::workspaces(&ctx.paths).await?;
+        let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
         if !targets.all {
             let selected = ui::select_workspaces(ctx, targets.workspace).await?;
             workspaces = in_order(ctx, workspaces, selected).await?;
@@ -171,7 +171,11 @@ async fn in_order(
     for selector in selected {
         ordered.push(match by_id.remove(&selector) {
             Some(workspace) => workspace,
-            None => client::inspect(&ctx.paths, selector).await?.workspace,
+            None => {
+                crate::client::workspaces::inspect(&ctx.paths, selector)
+                    .await?
+                    .workspace
+            }
         });
     }
     Ok(ordered)

@@ -8,10 +8,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, de::DeserializeOwned};
 
-use crate::{
-    cli::{client, context::Context},
-    model::Workspace,
-};
+use crate::{cli::context::Context, model::Workspace};
 
 /// What `WorktreeCreate` passes besides the common fields.
 #[derive(Deserialize)]
@@ -34,7 +31,7 @@ struct Remove {
 /// worktree's creation.
 pub(super) async fn create(ctx: &Context) -> Result<i32> {
     let input: Create = hook_input()?;
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let parent = enclosing(&workspaces, &input.cwd)?.id.clone();
     let start = crate::client::operations::NewSplit::new(parent, input.name);
     let child = super::split::start_child(ctx, start).await?;
@@ -50,7 +47,7 @@ pub(super) async fn create(ctx: &Context) -> Result<i32> {
 /// Code the worktree is gone, which is what it needs: Shoal owns the removal.
 pub(super) async fn remove(ctx: &Context) -> Result<i32> {
     let input: Remove = hook_input()?;
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     match rooted_at(&workspaces, &input.worktree_path) {
         // Its subagent may already have finished it.
         Some(child) if done_at_head(ctx, child).await? => Ok(0),
@@ -64,7 +61,7 @@ pub(super) async fn remove(ctx: &Context) -> Result<i32> {
 
 /// Whether `child`'s assignment is already marked done at its current HEAD.
 async fn done_at_head(ctx: &Context, child: &Workspace) -> Result<bool> {
-    let completion = client::inspect(&ctx.paths, child.id.clone())
+    let completion = crate::client::workspaces::inspect(&ctx.paths, child.id.clone())
         .await?
         .completion;
     let Some(completion) = completion else {

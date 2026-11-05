@@ -14,7 +14,6 @@ use super::{
 use crate::{
     agent::Agent,
     cli::{
-        client,
         commands::configured,
         context::Context,
         terminal,
@@ -32,7 +31,9 @@ pub(super) async fn shortcut_workspace(
     workspace: Option<String>,
 ) -> Result<Workspace> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    Ok(client::inspect(&ctx.paths, workspace).await?.workspace)
+    Ok(crate::client::workspaces::inspect(&ctx.paths, workspace)
+        .await?
+        .workspace)
 }
 
 /// Start `agent` in the workspace a shortcut names, as

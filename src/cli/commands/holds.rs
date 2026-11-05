@@ -7,7 +7,6 @@ use crate::client::output::acquisition::{NotAcquired, Released};
 use crate::{
     cli::{
         args::WorkspaceScope,
-        client,
         context::{Context, optional},
         output::{Palette, Style},
         ui,
@@ -52,7 +51,7 @@ pub(super) async fn release(ctx: &Context, workspace: String, name: Option<Strin
 
 pub(super) async fn list(ctx: &Context, scope: WorkspaceScope) -> Result<i32> {
     let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
-        let workspaces = client::workspaces(&ctx.paths).await?;
+        let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
         ctx.show(&workspaces, |workspaces| {
             for workspace in workspaces {
                 outln!(

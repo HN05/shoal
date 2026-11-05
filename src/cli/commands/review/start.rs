@@ -240,7 +240,7 @@ async fn pull_request(
         let subject = Subject::Pull { pull, post };
         return run(ctx, Some(workspace), reviewer, subject, model, args).await;
     }
-    let owner = client::workspaces(&ctx.paths)
+    let owner = crate::client::workspaces::list(&ctx.paths)
         .await?
         .into_iter()
         .find(|workspace| {
@@ -285,7 +285,7 @@ async fn pull_request(
             if code != 0 {
                 return Ok(code);
             }
-            client::workspaces(&ctx.paths)
+            crate::client::workspaces::list(&ctx.paths)
                 .await?
                 .into_iter()
                 .find(|workspace| {
@@ -375,7 +375,9 @@ async fn run(
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
+    let settings =
+        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+            .await?;
     let post = match &subject {
         Subject::Changes => None,
         Subject::Pull { post, .. } => *post,
@@ -418,7 +420,7 @@ async fn run(
 /// the PR head it was opened at: the review command reads the checkout, so
 /// it would review commits the PR does not have.
 async fn ensure_at_pull_head(ctx: &Context, workspace: &str) -> Result<()> {
-    let workspace = client::inspect(&ctx.paths, workspace.to_owned())
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.to_owned())
         .await?
         .workspace;
     let Some(at) = &workspace.at else {

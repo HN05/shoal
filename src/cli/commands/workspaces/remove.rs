@@ -5,7 +5,6 @@ use super::removal::{ensure_batch_removable, leaving};
 use crate::client::output::workspaces::{Removals, Removed};
 use crate::{
     cli::{
-        client::{self},
         commands::{agent_queue, chat::removal as chats},
         context::Context,
         output::Style,
@@ -26,7 +25,7 @@ pub(in crate::cli::commands) async fn remove(
         return Ok(code);
     }
     let selected = ui::select_spaces(ctx, names, true).await?;
-    let spaces = client::spaces(&ctx.paths).await?;
+    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
     let (chats, workspaces) = named_chats(&spaces, selected);
     let checks = check_removals(ctx, workspaces, yes).await?;
     if !yes {

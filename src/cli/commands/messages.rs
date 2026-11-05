@@ -11,7 +11,6 @@ use anyhow::{Context as _, Result, bail};
 
 use crate::{
     cli::{
-        client::{self},
         context::Context,
         installed::{Executable, arguments, replace_option, with_flag, without_option},
         output::{Palette, Style},
@@ -412,7 +411,7 @@ struct Inbox {
 impl Inbox {
     /// The inbox of the workspace or running chat `space` names.
     async fn named(ctx: &Context, space: &str) -> Result<Self> {
-        match client::present_space(&ctx.paths, space).await? {
+        match crate::client::workspaces::present_space(&ctx.paths, space).await? {
             Some(space) => Ok(Self {
                 kind: space.kind(),
                 space: space.id().to_owned(),

@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, anyhow, bail, ensure};
 
 use crate::{
     cli::{
-        agents, client,
+        agents,
         context::Context,
         recent,
         terminal::{self, Recorded},
@@ -26,7 +26,7 @@ pub(super) async fn attach(
     );
     ensure!(ctx.interactive(), "attach requires a terminal");
     let target = Target::resolve(ctx, target).await?;
-    let settings = client::settings(&ctx.paths, target.config()).await?;
+    let settings = crate::client::workspaces::settings(&ctx.paths, target.config()).await?;
     let sessions = terminal::sessions(&settings, &target.places()).await?;
     let sessions = terminal::attachable(sessions, session.as_deref())
         .map_err(|protection| anyhow!("{}", stopped_agent(target.name(), &protection)))?;
@@ -95,7 +95,7 @@ impl Target {
     }
 
     async fn inspected(ctx: &Context, id: String) -> Result<Self> {
-        let inspection = client::inspect(&ctx.paths, id).await?;
+        let inspection = crate::client::workspaces::inspect(&ctx.paths, id).await?;
         Ok(Self::Workspace(Box::new(inspection)))
     }
 
@@ -106,7 +106,7 @@ impl Target {
             .into_iter()
             .filter(|chat| attachable.contains(&chat.id))
             .collect();
-        let workspaces = client::workspaces(&ctx.paths).await?;
+        let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
         let id = ui::pick_space(ctx, workspaces, &chats, "workspace").await?;
         Self::space(ctx, chats, id).await
     }

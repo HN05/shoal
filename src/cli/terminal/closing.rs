@@ -109,7 +109,7 @@ fn spawn_detached(ctx: &Context, argv: &[std::ffi::OsString]) -> std::io::Result
 
 /// The HEAD of `workspace`'s kept completion, if it has one.
 async fn kept_completion(ctx: &Context, workspace: &str) -> Result<Option<String>> {
-    let inspection = client::inspect(&ctx.paths, workspace.into()).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.into()).await?;
     Ok(inspection
         .completion
         .filter(|completion| !completion.cleanup)
@@ -187,7 +187,7 @@ pub async fn watch(
 /// workspace or a chat took over is the daemon's to keep: only one it does
 /// not know is the watcher's.
 async fn at_removal(ctx: &Context, workspace: &str, record: &Origin) -> Option<AtRemoval> {
-    match client::place_ownership(&ctx.paths, workspace, record).await {
+    match crate::client::workspaces::place_ownership(&ctx.paths, workspace, record).await {
         Ok(PlaceOwnership::Workspace | PlaceOwnership::Elsewhere) => Some(AtRemoval::Daemon),
         Ok(PlaceOwnership::Unknown) => Some(AtRemoval::Watcher),
         Err(_) => None,
@@ -205,7 +205,8 @@ async fn close_place(
     record: &Origin,
     at_removal: Option<AtRemoval>,
 ) -> Result<()> {
-    let closed = client::close_owned_place(&ctx.paths, &place.workspace, record).await?;
+    let closed =
+        crate::client::workspaces::close_owned_place(&ctx.paths, &place.workspace, record).await?;
     close_left_to_host(host, place, closed, at_removal).await
 }
 
@@ -437,7 +438,7 @@ impl Lifecycle {
 }
 
 async fn workspace_lifecycle(ctx: &Context, workspace: &str) -> Result<Lifecycle> {
-    match client::inspect(&ctx.paths, workspace.into()).await {
+    match crate::client::workspaces::inspect(&ctx.paths, workspace.into()).await {
         // Completion cleanup keeps the place until removal, after its grace period.
         Ok(Inspection {
             completion: Some(completion),
@@ -452,7 +453,7 @@ async fn workspace_lifecycle(ctx: &Context, workspace: &str) -> Result<Lifecycle
         }),
         Ok(_) => Ok(Lifecycle::Active),
         Err(error) => {
-            if client::workspaces(&ctx.paths)
+            if crate::client::workspaces::list(&ctx.paths)
                 .await?
                 .iter()
                 .any(|item| item.id == workspace)

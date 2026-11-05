@@ -16,7 +16,7 @@ use crate::{
     cli::{
         agents,
         availability::{self, Fit, Need},
-        client, terminal, ui,
+        terminal, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
     client::leases,
@@ -359,7 +359,7 @@ impl Typed {
             .build()
         {
             let layer = runtime.block_on(live(async {
-                let workspaces = client::workspaces(&paths).await?;
+                let workspaces = crate::client::workspaces::list(&paths).await?;
                 let cwd = std::env::current_dir().ok();
                 let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
                 let workspace = context
@@ -434,7 +434,7 @@ impl Typed {
         }
         if matches!(target, Target::RestorableWorkspaces) {
             let removed = crate::client::removal::removed(&paths).await?;
-            let existing = client::workspaces(&paths).await?;
+            let existing = crate::client::workspaces::list(&paths).await?;
             return Ok(removed
                 .into_iter()
                 .map(|workspace| workspace.name)
@@ -465,7 +465,7 @@ impl Typed {
                 })
                 .collect());
         }
-        let workspaces = client::workspaces(&paths).await?;
+        let workspaces = crate::client::workspaces::list(&paths).await?;
         if let Target::Workspaces(need) | Target::Spaces(need) = target {
             let availability = availability::load(need, &paths, &workspaces).await;
             let mut candidates: Vec<_> = workspaces

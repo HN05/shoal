@@ -11,7 +11,6 @@ use crate::{
             WorkspaceScope,
             resources::{AcquireKind, LeaseKind, LeaseOptions, PoolSelection, ReleaseKind},
         },
-        client,
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},
@@ -186,7 +185,7 @@ async fn select_held(
         }
         _ => {}
     }
-    let inspection = client::inspect(&ctx.paths, workspace.to_owned()).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.to_owned()).await?;
     let ports = inspection
         .ports
         .into_iter()

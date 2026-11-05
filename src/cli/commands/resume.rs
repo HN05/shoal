@@ -6,9 +6,7 @@ use crate::client::output::resume::{
     DiscardedWork, Queued, Resumed, ResumedAgent, StoppedCommands,
 };
 use crate::{
-    cli::{
-        args::SpaceTargets, client, commands::turns::Continuation, context::Context, terminal, ui,
-    },
+    cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, terminal, ui},
     client::recovery::ReconcileOptions,
     execution::recovery::{
         LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,
@@ -172,7 +170,7 @@ pub(super) type Stopped = std::collections::BTreeMap<String, std::collections::B
 pub(super) async fn queue_stopped(ctx: &Context, stopped: &Stopped) -> Result<Queued> {
     let mut queued = Vec::new();
     for (workspace, executions) in stopped {
-        let workspace = client::inspect(&ctx.paths, workspace.clone())
+        let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
             .await?
             .workspace;
         let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
@@ -192,7 +190,9 @@ async fn stopped_agents(
     selector: String,
     execution: Option<&str>,
 ) -> Result<(Workspace, Saved)> {
-    let workspace = client::inspect(&ctx.paths, selector).await?.workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector)
+        .await?
+        .workspace;
     let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
     if let Some(execution) = execution {
         saved.retain_execution(execution, true);
@@ -216,7 +216,9 @@ async fn queue_workspace(
     workspace: String,
     execution: Option<String>,
 ) -> Result<i32> {
-    let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
+        .await?
+        .workspace;
     let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
     if let Some(execution) = &execution {
         saved.retain_execution(execution, true);
@@ -269,11 +271,14 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
     let (Some(workspace), Some(execution)) = (&entry.workspace_id, &entry.execution) else {
         anyhow::bail!("the queued restore names no stopped agent");
     };
-    let workspace = client::inspect(&ctx.paths, workspace.clone())
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
         .await?
         .workspace;
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
     let record = crate::execution::recovery::saved_path(&ctx.paths, &workspace.id, execution);
     let args = [
         "resume",
@@ -317,7 +322,7 @@ pub async fn run(
     if discard {
         return discard_work(ctx, workspace, execution).await;
     }
-    let mut inspection = client::inspect(&ctx.paths, workspace).await?;
+    let mut inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     let workspace_id = inspection.workspace.id.clone();
     let mut saved = Saved::load(&ctx.paths, &workspace_id)?;
     if let Some(execution) = &execution {
@@ -334,7 +339,7 @@ pub async fn run(
         .as_deref()
         .or_else(|| (saved.agents.len() == 1).then(|| saved.agents[0].0.as_str()));
     reconcile_stale_execution(ctx, &inspection, recovery_id).await?;
-    inspection = client::inspect(&ctx.paths, workspace_id).await?;
+    inspection = crate::client::workspaces::inspect(&ctx.paths, workspace_id).await?;
     let workspace = &inspection.workspace;
     let active = |id: &str| inspection.executions.iter().any(|e| e.id == id);
     if saved.agents.is_empty() {
@@ -493,8 +498,11 @@ async fn launch(
             recovery.agent
         );
     }
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
     let agent = recovery.tracked();
     if let Some(code) = terminal::run_agent(
         ctx,
@@ -756,8 +764,11 @@ async fn start_session(
     record: &Path,
     single: bool,
 ) -> Result<Started> {
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
     let args = ["resume", &workspace.id, "--execution", id, "--focus"].map(OsString::from);
     if let Some(places) = terminal::rerun_where_stopped(ctx, &settings, record, &args).await? {
         return Ok(Started::Elsewhere {
@@ -828,7 +839,7 @@ async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> R
 async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspace, Saved)>> {
     let mut stopped = Vec::new();
     for selector in selectors {
-        let workspace = client::inspect(&ctx.paths, selector.clone())
+        let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
             .await?
             .workspace;
         let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
@@ -848,7 +859,7 @@ async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspac
 /// only to `discard`.
 async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Saved)>> {
     let mut stopped = Vec::new();
-    for workspace in client::workspaces(&ctx.paths).await? {
+    for workspace in crate::client::workspaces::list(&ctx.paths).await? {
         if workspace.done && !discard {
             continue;
         }

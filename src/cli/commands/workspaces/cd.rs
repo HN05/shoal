@@ -3,7 +3,7 @@ use anyhow::{Result, ensure};
 
 use crate::client::output::workspaces::Directory;
 use crate::{
-    cli::{client, context::Context, recent, ui},
+    cli::{context::Context, recent, ui},
     shell,
 };
 
@@ -12,7 +12,7 @@ pub(in crate::cli::commands) async fn cd(ctx: &Context, workspace: Option<String
         Some(workspace) => ui::explicit_workspace(ctx, workspace).await?,
         None => ui::workspace_picker(ctx).await?,
     };
-    let inspection = client::inspect(&ctx.paths, workspace).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     ensure!(
         inspection.workspace.path.is_dir(),
         "workspace directory is missing"

@@ -4,10 +4,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    client::{
-        connection::{self, Daemon},
-        list_status::ListStatus,
-    },
+    client::{connection::Daemon, list_status::ListStatus},
     model::Workspace,
     state::WorkspaceState,
 };
@@ -167,7 +164,7 @@ async fn busy_workspaces(daemon: &impl Daemon, workspaces: &[Workspace]) -> Hash
     let mut busy = HashSet::new();
     for workspace in workspaces.iter().filter(|w| w.running) {
         let blocking = match &own {
-            Some(own) => connection::inspect(daemon, workspace.id.clone())
+            Some(own) => crate::client::workspaces::inspect(daemon, workspace.id.clone())
                 .await
                 .map_or(true, |inspection| {
                     inspection.executions.iter().any(|e| &e.id != own)

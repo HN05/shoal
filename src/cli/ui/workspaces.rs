@@ -12,7 +12,6 @@ use crate::{
     cli::{
         args::WorkspaceScope,
         availability::{self, Availability, Fit},
-        client,
         context::Context,
         list_status::ListStatus,
         output::{Palette, Style},
@@ -150,7 +149,7 @@ async fn named_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<Strin
     if names.is_empty() {
         return Ok(Vec::new());
     }
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let context = WorkspaceContext::from_directory(&workspaces, None);
     let mut selected = Vec::new();
     for name in names {
@@ -205,7 +204,7 @@ pub async fn select_stopped_spaces(
         Resolution::Workspace(id) if resumable(&ctx.paths, &id).is_some() => {
             return Ok(Some(vec![id]));
         }
-        Resolution::Workspace(_) => client::workspaces(&ctx.paths).await?,
+        Resolution::Workspace(_) => crate::client::workspaces::list(&ctx.paths).await?,
         Resolution::Picker(workspaces) => workspaces,
     };
     let Some(entries) = resume_entries(ctx, workspaces, saved) else {
@@ -327,7 +326,7 @@ async fn resolve_workspace(
     }
     // A scoped caller lists its own workspace first, then the workspaces
     // split from it, which the current directory selects.
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let scoped = crate::env::workspace_scoped();
     let order = match fallback {
         Fallback::OwnWorkspace => ScopeOrder::BeforeDirectory,
@@ -364,7 +363,12 @@ pub fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>>
 
 /// Always run the picker, including for scoped callers (whose list is filtered).
 pub async fn workspace_picker(ctx: &Context) -> Result<String> {
-    pick_workspace(ctx, client::workspaces(&ctx.paths).await?, WORKSPACE).await
+    pick_workspace(
+        ctx,
+        crate::client::workspaces::list(&ctx.paths).await?,
+        WORKSPACE,
+    )
+    .await
 }
 
 /// The command's argument that names the workspace it acts on.
@@ -402,7 +406,7 @@ pub async fn select_space(
 /// chat in a workspace's worktree gets the workspace.
 pub async fn select_space_here(ctx: &Context, explicit: Option<String>) -> Result<String> {
     if explicit.is_none() && current_chat(&None).is_some() {
-        let workspaces = client::workspaces(&ctx.paths).await?;
+        let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
         if let Some(workspace) = current_workspace(&workspaces)? {
             let id = workspace.id.clone();
             recent::record(ctx, &id).await;

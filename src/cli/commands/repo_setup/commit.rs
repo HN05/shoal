@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     agent::{Agent, ModelChoice},
-    cli::{agents, client, commands::workspaces, context::Context},
+    cli::{agents, commands::workspaces, context::Context},
     git,
     model::{Repository, Workspace},
     protocol::ConfigTarget,
@@ -62,7 +62,7 @@ pub(super) async fn start(
 
 /// The repository's workspace on the setup branch.
 async fn setup_workspace(ctx: &Context, repo: &Repository) -> Result<Option<Workspace>> {
-    Ok(client::workspaces(&ctx.paths)
+    Ok(crate::client::workspaces::list(&ctx.paths)
         .await?
         .into_iter()
         .find(|workspace| {

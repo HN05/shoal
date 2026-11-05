@@ -18,7 +18,7 @@ pub(in crate::cli::commands) async fn list(
 ) -> Result<i32> {
     // Listing chats first ends finished ones, returning their workspaces to the user.
     let chats = chat::listed(ctx, filter).await?;
-    let mut workspaces = client::workspaces(&ctx.paths).await?;
+    let mut workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
     workspaces
         .retain(|workspace| filter.keeps_workspace(workspace, stopped.contains(&workspace.id)));

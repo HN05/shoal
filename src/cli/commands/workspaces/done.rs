@@ -5,7 +5,6 @@ use crate::client::assignments;
 use crate::client::output::workspaces::Withdrawn;
 use crate::{
     cli::{
-        client::{self},
         context::Context,
         ui::{self, Fallback},
     },
@@ -16,10 +15,12 @@ use crate::{
 /// picked one: a running chat's ID, or else a workspace.
 async fn selected(ctx: &Context, space: Option<String>) -> Result<Selected> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    Ok(match client::present_space(&ctx.paths, &space).await? {
-        Some(PresentSpace::Chat(chat)) => Selected::Chat(chat.id),
-        _ => Selected::Workspace(space),
-    })
+    Ok(
+        match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
+            Some(PresentSpace::Chat(chat)) => Selected::Chat(chat.id),
+            _ => Selected::Workspace(space),
+        },
+    )
 }
 
 enum Selected {

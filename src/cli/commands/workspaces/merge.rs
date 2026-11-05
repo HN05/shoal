@@ -6,7 +6,6 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     cli::{
-        client::{self},
         commands::{
             approvals,
             operations::{self, Reporter},
@@ -35,7 +34,9 @@ pub(in crate::cli::commands) async fn merge(
     yes: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
+    let settings =
+        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
+            .await?;
     let push = push.unwrap_or(settings.merge.push);
     let confirmed = match yes {
         true => None,

@@ -13,7 +13,6 @@ use crate::client::output::acquisition::NotAcquired;
 use crate::{
     cli::{
         args::approvals::ApprovalsArgs,
-        client::{self},
         context::Context,
         output::{Palette, Style},
         ui::{self, Cell},
@@ -99,7 +98,10 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
         Some(chat) => chat,
         None => {
             let owner = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
-            client::inspect(&ctx.paths, owner).await?.workspace.id
+            crate::client::workspaces::inspect(&ctx.paths, owner)
+                .await?
+                .workspace
+                .id
         }
     };
     Ok(request.decider.as_deref() == Some(owner.as_str()))

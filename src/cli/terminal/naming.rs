@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use super::{Configured, Host};
 use crate::{
     cli::{
-        client,
         commands::{
             issues::{self, Issue},
             workspaces::AddPlan,
@@ -163,8 +162,11 @@ pub(super) async fn workspace_label(
 /// and only those on its own server; a place that is gone is skipped.
 pub(in crate::cli) async fn relabel_places(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let places = crate::client::workspaces::places(&ctx.paths, workspace.id.clone()).await?;
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
     for configured in Configured::all(&settings).filter(|host| host.options.enabled) {
         let Some(host_places) = configured.host.places().filter(|p| p.names_places()) else {
             continue;
@@ -193,7 +195,7 @@ pub(in crate::cli) async fn relabel_chat(ctx: &Context, old: &str, chat: &Chat) 
     let Some(place) = chat.origin.as_ref().filter(|_| chat.name != old) else {
         return Ok(());
     };
-    let settings = client::settings(
+    let settings = crate::client::workspaces::settings(
         &ctx.paths,
         ConfigTarget::Repository(chat.repository_id.clone().into()),
     )

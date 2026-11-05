@@ -10,14 +10,7 @@ use crate::client::output::agents::{
     CancelledRun, StoppedProcesses, StoppedWorkspaces, WorkspaceStopped,
 };
 use crate::{
-    cli::{
-        args::SpaceTargets,
-        client::{self},
-        commands::agent_queue,
-        context::Context,
-        output::Style,
-        ui,
-    },
+    cli::{args::SpaceTargets, commands::agent_queue, context::Context, output::Style, ui},
     client::processes::{Selection, Stopped},
     execution::recovery,
     model::{SpaceKind, StoppedWorkspace, Workspace},
@@ -73,7 +66,9 @@ async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
     }
     let cancelled = stopped.cancelled;
     let other = stop_untracked(ctx, &workspace, Selection::Processes).await?;
-    let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
+        .await?
+        .workspace;
     let saved = !recovery::Saved::load(&ctx.paths, &workspace.id)?.is_empty();
     let mut message = "Workspace processes stopped".to_owned();
     if other.processes > 0 {
@@ -235,10 +230,13 @@ pub(super) async fn stop(
 /// workspaces below it, through spaces of either kind, which a stop of it
 /// stops too: their agents work for it.
 async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<String>> {
-    let spaces = client::spaces(&ctx.paths).await?;
+    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
     let mut found: Vec<String> = Vec::new();
     for selector in selectors {
-        let id = client::inspect(&ctx.paths, selector).await?.workspace.id;
+        let id = crate::client::workspaces::inspect(&ctx.paths, selector)
+            .await?
+            .workspace
+            .id;
         let below = spaces.below(&id).into_iter();
         let workspaces = below.filter(|space| space.kind == SpaceKind::Workspace);
         for id in std::iter::once(id).chain(workspaces.map(|space| space.id)) {
@@ -265,7 +263,7 @@ pub(super) async fn ensure_below(ctx: &Context, selected: &[String]) -> Result<(
         .context(REFUSAL)?;
     ensure!(crate::env::is_scoped(), "{REFUSAL}");
     for selector in selected {
-        let id = client::inspect(&ctx.paths, selector.clone())
+        let id = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
             .await?
             .workspace
             .id;
@@ -281,7 +279,8 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
     let mut workspaces = Vec::new();
     let mut refusals = Vec::new();
     for selector in selectors {
-        let workspace = match client::inspect(&ctx.paths, selector.clone()).await {
+        let workspace = match crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await
+        {
             Ok(inspection) => inspection.workspace,
             Err(error) => {
                 refusals.push(format!("{selector}: {error:#}"));

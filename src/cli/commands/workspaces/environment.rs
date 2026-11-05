@@ -6,7 +6,6 @@ use anyhow::{Context as _, Result};
 use crate::client::output::workspaces::Revoked;
 use crate::{
     cli::{
-        client::{self},
         context::Context,
         output::Style,
         ui::{self, Fallback},
@@ -47,8 +46,11 @@ pub(in crate::cli) async fn configured_environment(
     ctx: &Context,
     workspace: &Workspace,
 ) -> Result<BTreeMap<String, OsString>> {
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
     let repo = crate::client::repositories::list(&ctx.paths)
         .await?
         .into_iter()
@@ -58,7 +60,7 @@ pub(in crate::cli) async fn configured_environment(
         &settings.env,
         workspace,
         repository::name(&repo),
-        &client::inspect(&ctx.paths, workspace.id.clone())
+        &crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone())
             .await?
             .ports,
         // Only the daemon creates them; tools create a missing cache, and

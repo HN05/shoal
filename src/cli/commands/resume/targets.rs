@@ -3,7 +3,7 @@
 use anyhow::{Result, bail};
 
 use crate::{
-    cli::{args::SpaceTargets, client, context::Context, ui},
+    cli::{args::SpaceTargets, context::Context, ui},
     model::{Chat, PresentSpace, Spaces},
 };
 
@@ -96,7 +96,7 @@ impl Selected {
 /// The spaces a resume can name. A workspace process, `scoped` by its scope
 /// or its ancestry, gets no chats, which act with the user's authority.
 async fn candidates(ctx: &Context, scoped: bool) -> Result<Spaces> {
-    let mut spaces = client::spaces(&ctx.paths).await?;
+    let mut spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
     if scoped {
         spaces.chats.clear();
     }

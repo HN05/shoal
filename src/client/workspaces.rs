@@ -1,22 +1,48 @@
-//! Workspaces: creating and adopting them, their names, titles, bases and
-//! places, their status and environment, and the Git state the daemon reads
-//! in their worktrees.
+//! Workspaces: listing, creating and adopting them, their names, titles,
+//! bases and places, their status, environment and settings, and the Git
+//! state the daemon reads in their worktrees; and the spaces, workspaces and
+//! chats together.
 use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
 
 use crate::{
     client::{
-        connection::{Daemon, pages, request},
+        chats,
+        connection::{Daemon, call, pages, request},
         repository::Selector,
+        sessions::{Origin, PlaceClose, PlaceOwnership},
     },
-    config::{hooks::HookKind, repo::ConfigLayers},
+    config::{Config, Effective, hooks::HookKind, repo::ConfigLayers},
     model::{
-        ConflictCheck, Dependency, DiffBase, MergePreview, OwnedPlace, PresentSpace, SpaceStatus,
-        SpaceTarget, UntrackedWorktree, Workspace,
+        ConflictCheck, Dependency, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
+        SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree, Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, WorkspaceMethod},
 };
+
+/// `workspace` with its links, completion, executions, places and leases.
+pub async fn inspect(daemon: &impl Daemon, workspace: String) -> Result<Inspection> {
+    request(daemon, WorkspaceMethod::InspectWorkspace { workspace }).await
+}
+
+/// Workspaces visible to this caller; the daemon filters scoped requests.
+pub async fn list(daemon: &impl Daemon) -> Result<Vec<Workspace>> {
+    request(daemon, WorkspaceMethod::ListWorkspaces).await
+}
+
+/// The workspaces and chats, running or stopped, visible to this caller.
+pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
+    Ok(Spaces {
+        workspaces: list(daemon).await?,
+        chats: chats::recorded(daemon).await?,
+    })
+}
+
+/// The workspace or chat `selector` names, by ID or name.
+pub async fn present_space(daemon: &impl Daemon, selector: &str) -> Result<Option<PresentSpace>> {
+    Ok(spaces(daemon).await?.find(selector))
+}
 
 /// A workspace whose creation [`check_creation`] checks: on the new branch
 /// `branch` or the existing one `existing`, or named by default.
@@ -189,6 +215,58 @@ pub async fn places(daemon: &impl Daemon, workspace: String) -> Result<Vec<Owned
     request(daemon, WorkspaceMethod::WorkspacePlaces { workspace }).await
 }
 
+/// Record `origin`, a place Shoal created for `workspace`, so the daemon
+/// closes it once the workspace is removed.
+pub async fn record_owned_place(
+    daemon: &impl Daemon,
+    workspace: &str,
+    origin: Origin,
+) -> Result<()> {
+    call(
+        daemon,
+        WorkspaceMethod::RecordOwnedPlace {
+            workspace: workspace.to_owned(),
+            origin,
+        },
+    )
+    .await?;
+    Ok(())
+}
+
+/// Whose `place`, the place of a terminal host, is for `workspace`, as the
+/// daemon knows it.
+pub async fn place_ownership(
+    daemon: &impl Daemon,
+    workspace: &str,
+    place: &Origin,
+) -> Result<PlaceOwnership> {
+    request(
+        daemon,
+        WorkspaceMethod::PlaceOwnership {
+            workspace: workspace.to_owned(),
+            place: place.clone(),
+        },
+    )
+    .await
+}
+
+/// Close `place`, a place Shoal created for `workspace`, while the daemon
+/// still records it as that workspace's.
+pub async fn close_owned_place(
+    daemon: &impl Daemon,
+    workspace: &str,
+    place: &Origin,
+) -> Result<PlaceClose> {
+    request(
+        daemon,
+        WorkspaceMethod::CloseOwnedPlace {
+            workspace: workspace.to_owned(),
+            place: place.clone(),
+        },
+    )
+    .await
+}
+
 /// The environment `workspace`'s configuration gives its commands.
 pub async fn environment(
     daemon: &impl Daemon,
@@ -210,6 +288,24 @@ pub async fn revoke_environment(
     .await
 }
 
+/// Keep where an agent of `workspace` keeps its configuration for the
+/// repository's removal.
+pub async fn keep_agent_environment(
+    daemon: &impl Daemon,
+    workspace: &str,
+    environment: BTreeMap<String, String>,
+) -> Result<()> {
+    call(
+        daemon,
+        WorkspaceMethod::KeepAgentEnvironment {
+            workspace: workspace.to_owned(),
+            environment,
+        },
+    )
+    .await?;
+    Ok(())
+}
+
 /// The command of `workspace`'s hook of `kind`, if its configuration has one.
 pub async fn hook(
     daemon: &impl Daemon,
@@ -225,6 +321,26 @@ pub async fn config_layers(daemon: &impl Daemon, target: ConfigTarget) -> Result
     let layers: Box<ConfigLayers> =
         request(daemon, WorkspaceMethod::LayeredConfig { target }).await?;
     Ok(*layers)
+}
+
+/// The settings that apply to `target` after every layer. The global config
+/// is read now, so launch defaults follow it without a daemon restart.
+pub async fn settings(daemon: &impl Daemon, target: ConfigTarget) -> Result<Effective> {
+    Ok(configuration(daemon, target).await?.1)
+}
+
+/// The global config read at launch and the settings it yields for `target`.
+pub async fn configuration(
+    daemon: &impl Daemon,
+    target: ConfigTarget,
+) -> Result<(Config, Effective)> {
+    let layers = config_layers(daemon, target).await?;
+    let config = Config::load_with_templates(daemon.paths())?;
+    let settings = config.resolve(&layers)?;
+    // With every layer's mode and rule files read, a launch refuses a mode
+    // naming a rule none defines before it creates anything.
+    crate::config::modes::check(&settings.modes, &settings.rules)?;
+    Ok((config, settings))
 }
 
 /// The commit `workspace`'s changes are counted from.

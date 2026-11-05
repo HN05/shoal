@@ -5,7 +5,6 @@ use anyhow::Result;
 use crate::{
     cli::{
         args::changes::ReviewCommand,
-        client,
         context::Context,
         ui::{self, Fallback},
     },
@@ -72,10 +71,12 @@ enum Space {
 /// workspace, else one the user picks.
 async fn select(ctx: &Context, space: Option<String>) -> Result<Space> {
     let selected = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    Ok(match client::present_space(&ctx.paths, &selected).await? {
-        Some(PresentSpace::Chat(chat)) => Space::Chat(Box::new(chat)),
-        _ => Space::Workspace(selected),
-    })
+    Ok(
+        match crate::client::workspaces::present_space(&ctx.paths, &selected).await? {
+            Some(PresentSpace::Chat(chat)) => Space::Chat(Box::new(chat)),
+            _ => Space::Workspace(selected),
+        },
+    )
 }
 
 /// The running chat `space` names, else the chat this runs in when `space`
@@ -84,10 +85,12 @@ async fn chat(ctx: &Context, space: Option<&str>) -> Result<Option<Chat>> {
     let Some(named) = space.map(str::to_owned).or_else(crate::env::chat) else {
         return Ok(None);
     };
-    Ok(match client::present_space(&ctx.paths, &named).await? {
-        Some(PresentSpace::Chat(chat)) => Some(chat),
-        _ => None,
-    })
+    Ok(
+        match crate::client::workspaces::present_space(&ctx.paths, &named).await? {
+            Some(PresentSpace::Chat(chat)) => Some(chat),
+            _ => None,
+        },
+    )
 }
 
 /// A chat's reviews: those of its linked PRs, which run in the workspaces

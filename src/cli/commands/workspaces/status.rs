@@ -7,7 +7,6 @@ use self::render::render_status;
 use crate::client::{output::status::StatusView, transcripts};
 use crate::{
     cli::{
-        client::{self},
         context::Context,
         terminal::{self, Recorded},
         ui,
@@ -86,7 +85,7 @@ async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<terminal::Se
             Recorded::chat(chat),
         ),
     };
-    let settings = client::settings(&ctx.paths, target).await?;
+    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     terminal::sessions(&settings, &places).await
 }
 

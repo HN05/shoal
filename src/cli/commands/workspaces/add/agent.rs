@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use crate::{
     agent::{Agent, ModelChoice},
-    cli::{agents, client, context::Context, terminal},
+    cli::{agents, context::Context, terminal},
     model::Workspace,
     protocol::ConfigTarget,
 };
@@ -70,7 +70,7 @@ impl<'a> AddSettings<'a> {
     pub(super) async fn get(&self) -> Result<&crate::config::Effective> {
         self.effective
             .get_or_try_init(|| {
-                client::settings(
+                crate::client::workspaces::settings(
                     &self.ctx.paths,
                     ConfigTarget::Repository(self.repository.into()),
                 )

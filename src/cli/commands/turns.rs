@@ -8,12 +8,7 @@ use anyhow::{Context as _, Result};
 
 use crate::client::output::agents::{Agent, Continued, Interrupted};
 use crate::{
-    cli::{
-        agents,
-        client::{self},
-        context::Context,
-        terminal, ui,
-    },
+    cli::{agents, context::Context, terminal, ui},
     config::Effective,
     model::{RunningAgent, Workspace},
     protocol::ConfigTarget,
@@ -146,14 +141,17 @@ pub(super) async fn agents_of(
     ctx: &Context,
     selector: String,
 ) -> Result<(Workspace, Vec<RunningAgent>)> {
-    let workspace = client::inspect(&ctx.paths, selector).await?.workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector)
+        .await?
+        .workspace;
     let agents = crate::client::agents::running(&ctx.paths, workspace.id.clone()).await?;
     Ok((workspace, agents))
 }
 
 /// The settings that choose the integration of each agent of `workspace`.
 async fn settings(ctx: &Context, workspace: &Workspace) -> Result<Effective> {
-    client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await
+    crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone()))
+        .await
 }
 
 /// An agent Shoal types into, by workspace and name as output shows it, with

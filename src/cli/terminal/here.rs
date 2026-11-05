@@ -69,7 +69,7 @@ pub(in crate::cli) async fn closes_with(
     }
     match current_place().await {
         Some(place) => Ok(
-            crate::cli::client::place_ownership(paths, workspace, &place).await?
+            crate::client::workspaces::place_ownership(paths, workspace, &place).await?
                 == crate::sessions::PlaceOwnership::Workspace,
         ),
         None => Ok(false),
@@ -80,7 +80,9 @@ pub(in crate::cli) async fn closes_with(
 /// it once the workspace is removed. Without the record the place stays
 /// open, so a failure only warns.
 async fn record_owned(ctx: &Context, workspace: &str, place: Origin) {
-    if let Err(error) = crate::cli::client::record_owned_place(&ctx.paths, workspace, place).await {
+    if let Err(error) =
+        crate::client::workspaces::record_owned_place(&ctx.paths, workspace, place).await
+    {
         eprintln!("warning: cannot record the place Shoal opened: {error:#}");
     }
 }

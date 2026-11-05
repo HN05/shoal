@@ -9,7 +9,6 @@ use super::link_pull::link_or_warn;
 use super::{check_queued_launch, queued_agent_request};
 use crate::{
     cli::{
-        client::{self},
         commands::operations::{Failed, Reporter},
         context::Context,
     },
@@ -30,7 +29,9 @@ pub(in crate::cli::commands) async fn prepare(
     steps: Preparation,
     reporter: &Reporter<'_>,
 ) -> Result<Prepared> {
-    let mut workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+    let mut workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
+        .await?
+        .workspace;
     if steps.setup {
         reporter.step(Step::SetupStarted).await?;
         workspace = run_setup(ctx, &workspace).await?;
@@ -74,7 +75,7 @@ async fn run_setup(ctx: &Context, workspace: &Workspace) -> Result<Workspace> {
     if let Some(message) = failure {
         return Err(Failed(Failure::SetupFailed { message }).into());
     }
-    let workspace = client::inspect(&ctx.paths, workspace.id.clone())
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone())
         .await?
         .workspace;
     ensure!(
@@ -123,7 +124,9 @@ async fn link_pr(
         return Ok(workspace);
     }
     reporter.reached(Step::PrLinked).await?;
-    Ok(client::inspect(&ctx.paths, workspace.id).await?.workspace)
+    Ok(crate::client::workspaces::inspect(&ctx.paths, workspace.id)
+        .await?
+        .workspace)
 }
 
 /// Queue `launch` in the ready workspace, which the agent queue starts
@@ -136,8 +139,11 @@ async fn queue_agent(
     launch: QueuedLaunch,
     reporter: &Reporter<'_>,
 ) -> Result<QueueEntry> {
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
     check_queued_launch(&launch, &settings)?;
     let request = queued_agent_request(workspace, launch)?;
     reporter.ensure_running()?;

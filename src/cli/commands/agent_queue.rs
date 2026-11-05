@@ -6,12 +6,7 @@ use anyhow::Result;
 use super::{listing::ListFilter, workspaces::AddPlan};
 use crate::client::queue;
 use crate::{
-    cli::{
-        client::{self},
-        context::Context,
-        output::Palette,
-        terminal, ui,
-    },
+    cli::{context::Context, output::Palette, terminal, ui},
     model::{Dependency, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     state::{QueueKind, QueueState},
 };
@@ -137,7 +132,7 @@ pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
 async fn start_launch(ctx: &Context, entry: &str) -> Result<()> {
     let (queued, plan) = plan(ctx, entry).await?;
     if let Some(workspace) = &queued.entry.opens {
-        let workspace = client::inspect(&ctx.paths, workspace.clone())
+        let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
             .await?
             .workspace;
         anyhow::ensure!(
@@ -205,7 +200,7 @@ async fn remove_waiting(
         return Ok(None);
     };
     if entry.id != selector
-        && let Some(workspace) = client::workspaces(&ctx.paths)
+        && let Some(workspace) = crate::client::workspaces::list(&ctx.paths)
             .await?
             .into_iter()
             .find(|workspace| workspace.name == selector)

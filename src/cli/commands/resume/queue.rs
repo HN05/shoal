@@ -8,7 +8,7 @@ use crate::client::output::{
     resume::{Queued, RestoredChat},
 };
 use crate::{
-    cli::{client, context::Context, terminal, ui},
+    cli::{context::Context, terminal, ui},
     execution::recovery::Saved,
     model::{QueueEntry, Workspace},
 };
@@ -80,7 +80,7 @@ fn summary(count: usize) -> String {
 /// Queue the restore of the agent stopped as `execution` in `workspace`,
 /// once an execution a daemon restart left unknown is proven ended.
 async fn queue(ctx: &Context, workspace: &Workspace, execution: &str) -> Result<QueueEntry> {
-    let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone()).await?;
     reconcile_stale_execution(ctx, &inspection, Some(execution)).await?;
     let (workspace, execution) = (workspace.id.clone(), execution.to_owned());
     crate::client::queue::restore(

@@ -12,7 +12,6 @@ use crate::{
     agent::Agent,
     cli::{
         args::create::StartArgs,
-        client,
         context::Context,
         ui::{self, Fallback},
     },
@@ -86,7 +85,9 @@ fn workspace_flags(args: &StartArgs) -> Vec<&'static str> {
 
 /// The ID of the space `selector` names, by ID, name or number.
 async fn space_id(ctx: &Context, selector: &str) -> Result<String> {
-    let space = client::spaces(&ctx.paths).await?.find_numbered(selector);
+    let space = crate::client::workspaces::spaces(&ctx.paths)
+        .await?
+        .find_numbered(selector);
     Ok(space
         .with_context(|| format!("no space {selector}"))?
         .id()
@@ -124,7 +125,10 @@ async fn kind(ctx: &Context, args: &StartArgs, mode: &str) -> Result<SpaceKind> 
 /// [`mode_repository`] finds, else the global config's. Nothing is asked.
 async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
     match mode_repository(ctx, args).await? {
-        Some(id) => client::settings(&ctx.paths, ConfigTarget::Repository(id.into())).await,
+        Some(id) => {
+            crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Repository(id.into()))
+                .await
+        }
         None => {
             crate::config::Config::load_with_templates(&ctx.paths)?.resolve(&Default::default())
         }
@@ -213,7 +217,7 @@ async fn forked(
         None => running.parse()?,
     };
     let target = ConfigTarget::Workspace(parent.clone());
-    let settings = client::settings(&ctx.paths, target).await?;
+    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     crate::cli::agents::ensure_forks(&settings, agent.name())?;
     Ok((parent, agent, session))
 }

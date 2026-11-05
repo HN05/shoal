@@ -16,7 +16,7 @@ use crate::client::output::chat::BackgroundChat;
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
-        agents, client,
+        agents,
         context::Context,
         output::{self, Palette},
         recent, terminal, ui,
@@ -162,7 +162,7 @@ async fn chosen_workspace(ctx: &Context, selector: Option<String>) -> Result<Wor
 /// The workspace `selector` names, by ID or name, refused before anything
 /// is asked unless a chat may run in it; the daemon checks again.
 pub(super) async fn hosting_workspace(ctx: &Context, selector: &str) -> Result<Workspace> {
-    let workspace = client::workspaces(&ctx.paths)
+    let workspace = crate::client::workspaces::list(&ctx.paths)
         .await?
         .into_iter()
         .find(|workspace| workspace.id == selector || workspace.name == selector)
@@ -405,7 +405,11 @@ pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
 
 /// The repository's settings, which choose the chat's agent and template.
 pub(super) async fn settings(ctx: &Context, repo: &Repository) -> Result<Effective> {
-    client::settings(&ctx.paths, ConfigTarget::Repository(repo.id.clone().into())).await
+    crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Repository(repo.id.clone().into()),
+    )
+    .await
 }
 
 /// Start a chat about `repo` and `topic` with the chosen agent. `settings`

@@ -124,7 +124,7 @@ async fn issue_creation(
     issue_url: &str,
 ) -> Result<Creation> {
     let repo = target.repository(ctx).await?;
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let mut associated = None;
     for workspace in workspaces
         .iter()
@@ -174,7 +174,7 @@ async fn issue_creation(
 async fn pick_add_branch(ctx: &Context, target: &AddTarget) -> Result<String> {
     let branches =
         crate::client::repositories::branches(&ctx.paths, target.selector.clone()).await?;
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let repo = target.repository(ctx).await?;
     let entries = branches
         .into_iter()

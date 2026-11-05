@@ -28,7 +28,6 @@ use crate::{
             sessions::SessionsCommand,
             workspace::{WorkCommand, WorkspaceCommand},
         },
-        client,
         context::Context,
         internal::{self, Worker},
         output::{Palette, Style},
@@ -416,7 +415,7 @@ pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Choice>
 /// An exact search for the current workspace's name when `entries` hold
 /// items of it.
 async fn current_items(ctx: &Context, entries: &Entries) -> Result<Option<String>> {
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let Some(current) = ui::current_workspace(&workspaces)? else {
         return Ok(None);
     };
@@ -562,7 +561,7 @@ async fn inbox_rows(ctx: &Context) -> Result<Entries> {
 /// Every workspace, then an entry that adds one unless workspace processes ask.
 async fn work_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
     let repos = ui::repository_choices(crate::client::repositories::list(&ctx.paths).await?).await;
-    let workspaces = client::workspaces(&ctx.paths).await?;
+    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let palette = Palette::picker();
     let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
     let rows = ui::workspace_rows(&workspaces, &repos, &stopped, palette, ui::picker_width());
@@ -608,10 +607,12 @@ async fn chat_name(ctx: &Context, id: Option<&str>) -> Result<Option<String>> {
     let Some(id) = id else {
         return Ok(None);
     };
-    Ok(match client::present_space(&ctx.paths, id).await? {
-        Some(PresentSpace::Chat(chat)) => Some(chat.name),
-        _ => None,
-    })
+    Ok(
+        match crate::client::workspaces::present_space(&ctx.paths, id).await? {
+            Some(PresentSpace::Chat(chat)) => Some(chat.name),
+            _ => None,
+        },
+    )
 }
 
 /// What `key` does to the chat `chat`: only attaching, viewing its items
@@ -788,7 +789,9 @@ async fn view_command(ctx: &Context, space: Option<String>) -> Result<Command> {
 /// registered checkout's; with the space's kind.
 async fn linked_items(ctx: &Context, space: &str) -> Result<(Vec<LinkedItem>, &'static str)> {
     let unknown = || Refusal::new(Reason::NotFound, format!("unknown space: {space}"));
-    let (links, path, kind) = match client::present_space(&ctx.paths, space).await? {
+    let (links, path, kind) = match crate::client::workspaces::present_space(&ctx.paths, space)
+        .await?
+    {
         Some(PresentSpace::Workspace(workspace)) => (workspace.links, workspace.path, "workspace"),
         Some(PresentSpace::Chat(chat)) => {
             let repos = crate::client::repositories::list(&ctx.paths).await?;
@@ -900,7 +903,8 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
     let target = workspace
         .clone()
         .context("select a workspace to execute in")?;
-    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(target)).await?;
+    let settings =
+        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(target)).await?;
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let agents = agents::names(&settings)
         .into_iter()

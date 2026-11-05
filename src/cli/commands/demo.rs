@@ -8,7 +8,6 @@ use crate::client::output::demo::{Listing, Screen, Sent, Stopping};
 use crate::{
     cli::{
         args::sessions::DemoCommand,
-        client,
         context::Context,
         internal::{Worker, internal_command},
         output::{Palette, Style},
@@ -137,9 +136,14 @@ async fn start(
     // Before a picker opens or a running demo is replaced.
     overrides.validate()?;
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = client::inspect(&ctx.paths, id).await?.workspace;
-    let settings =
-        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, id)
+        .await?
+        .workspace;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
     let chosen = choose(&settings.demos, name, command)?.with(overrides);
     chosen.demo.validate_scheme()?;
     replace(ctx, &workspace, &chosen.name).await?;
@@ -302,7 +306,9 @@ async fn not_started(launch: &Launch) -> anyhow::Error {
 
 async fn stop(ctx: &Context, workspace: Option<String>, name: Option<String>) -> Result<i32> {
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = client::inspect(&ctx.paths, id).await?.workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, id)
+        .await?
+        .workspace;
     stop_named(ctx, &workspace, name.clone()).await?;
     let message = match &name {
         Some(name) => format!("Stopping demo {name}"),
@@ -346,10 +352,13 @@ async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = scope(ctx, workspace).await?;
     let configured = match &workspace {
         Some(workspace) => {
-            client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone()))
-                .await?
-                .into_settings()
-                .demos
+            crate::client::workspaces::settings(
+                &ctx.paths,
+                ConfigTarget::Workspace(workspace.id.clone()),
+            )
+            .await?
+            .into_settings()
+            .demos
         }
         None => BTreeMap::new(),
     };
@@ -491,7 +500,9 @@ async fn send(ctx: &Context, workspace: Option<String>, name: &str, keys: &str) 
 /// The running demo `name` of the workspace given or chosen.
 async fn named(ctx: &Context, workspace: Option<String>, name: &str) -> Result<Running> {
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = client::inspect(&ctx.paths, id).await?.workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, id)
+        .await?
+        .workspace;
     find(
         running(ctx, Some(&workspace)).await?,
         name,
@@ -523,12 +534,16 @@ async fn scope(ctx: &Context, workspace: Option<String>) -> Result<Option<Worksp
             Some(ui::select_workspace(ctx, None, Fallback::CurrentDirectoryOnly).await?)
         }
         None => {
-            let workspaces = client::workspaces(&ctx.paths).await?;
+            let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
             ui::current_workspace(&workspaces)?.map(|workspace| workspace.id.clone())
         }
     };
     match id {
-        Some(id) => Ok(Some(client::inspect(&ctx.paths, id).await?.workspace)),
+        Some(id) => Ok(Some(
+            crate::client::workspaces::inspect(&ctx.paths, id)
+                .await?
+                .workspace,
+        )),
         None => Ok(None),
     }
 }

@@ -6,7 +6,6 @@ use anyhow::{Result, ensure};
 use super::recovery::{issues, reconcile};
 use crate::{
     cli::{
-        client::{self},
         commands::operations,
         context::Context,
         output::{Palette, Style},
@@ -59,7 +58,7 @@ pub(in crate::cli::commands) async fn setup(
     workspace: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let inspection = client::inspect(&ctx.paths, workspace).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
     let Some(set_up) = setup_workspace(ctx, &inspection.workspace, true).await? else {
         return Ok(1);
     };
@@ -79,7 +78,9 @@ pub(in crate::cli::commands) async fn skip_setup(
     workspace: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
+        .await?
+        .workspace;
     ensure!(
         workspace.state == WorkspaceState::Failed,
         "{} is {}; only a failed setup can be skipped",
@@ -87,7 +88,9 @@ pub(in crate::cli::commands) async fn skip_setup(
         workspace.state
     );
     ignore_setup_failure(ctx, &workspace).await?;
-    let workspace = client::inspect(&ctx.paths, workspace.id).await?.workspace;
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.id)
+        .await?
+        .workspace;
     run_post_setup(ctx, &workspace).await?;
     ctx.emit_styled(
         Style::Success,
@@ -211,7 +214,8 @@ async fn settle_setup(
                 report_setup_verification_failure(ctx, workspace, failure.exit_code).await
             }
             Err(error) if is_hook_failure(&error) => {
-                let workspace = client::inspect(&ctx.paths, workspace.id.clone()).await?;
+                let workspace =
+                    crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone()).await?;
                 Ok(Some(SetUp {
                     workspace: workspace.workspace,
                     post_setup: Some(Err(error)),
@@ -227,7 +231,7 @@ async fn settle_setup(
 /// Whether `workspace` is ready, so what failed came after its setup, such
 /// as queuing its agent, and leaves no setup to recover.
 async fn after_setup(ctx: &Context, workspace: &Workspace) -> Result<bool> {
-    let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone()).await?;
     Ok(inspection.workspace.state == WorkspaceState::Ready)
 }
 
@@ -257,7 +261,7 @@ async fn handle_setup_failure(
         ui::SetupFailureChoice::Ignore => ignore_setup_failure(ctx, workspace).await?,
         ui::SetupFailureChoice::Cancel => return Ok(None),
     }
-    let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone()).await?;
     ensure!(
         inspection.workspace.state == WorkspaceState::Ready,
         "workspace setup did not complete"
@@ -284,7 +288,7 @@ async fn report_setup_verification_failure(
     workspace: &Workspace,
     code: i32,
 ) -> Result<Option<SetUp>> {
-    let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
+    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone()).await?;
     let name = &workspace.name;
     let reason = inspection
         .workspace

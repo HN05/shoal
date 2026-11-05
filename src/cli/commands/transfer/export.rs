@@ -10,7 +10,6 @@ use anyhow::{Context as _, Result, bail, ensure};
 use crate::client::output::transfer::{Exported, Exports};
 use crate::{
     cli::{
-        client::{self},
         context::Context,
         ui::{self, Fallback},
     },
@@ -33,7 +32,9 @@ pub(super) async fn export(
 ) -> Result<i32> {
     ensure_unscoped_export(ctx)?;
     if let [selector] = names.as_slice()
-        && client::present_space(&ctx.paths, selector).await?.is_none()
+        && crate::client::workspaces::present_space(&ctx.paths, selector)
+            .await?
+            .is_none()
     {
         let output = Output::reserve(&file)?;
         let exported = export_removed(ctx, selector, &output).await?;
@@ -51,7 +52,7 @@ pub(super) async fn export(
     let named = names.into_iter().next();
     // The export ends its space, so it never takes the chat it runs in.
     let selector = ui::select_other_space(ctx, named, Fallback::CurrentDirectory).await?;
-    let space = client::present_space(&ctx.paths, &selector)
+    let space = crate::client::workspaces::present_space(&ctx.paths, &selector)
         .await?
         .with_context(|| format!("no space {selector}"))?;
     let exported = export_space(ctx, space, yes, &output).await?;
@@ -79,7 +80,7 @@ pub(super) async fn selected_spaces(
 ) -> Result<Vec<PresentSpace>> {
     let mut spaces = Vec::new();
     for selector in ui::select_spaces(ctx, names, true).await? {
-        let space = client::present_space(&ctx.paths, &selector)
+        let space = crate::client::workspaces::present_space(&ctx.paths, &selector)
             .await?
             .with_context(|| format!("no space {selector}"))?;
         spaces.push(space);
@@ -447,7 +448,7 @@ pub(super) async fn repository_spaces(
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let repo =
         crate::repository::select(&repositories, ui::repository_selector(repository)?).await?;
-    let workspaces = client::workspaces(&ctx.paths)
+    let workspaces = crate::client::workspaces::list(&ctx.paths)
         .await?
         .into_iter()
         .filter(|workspace| workspace.repository_id == repo.id)

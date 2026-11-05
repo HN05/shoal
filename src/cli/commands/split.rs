@@ -7,7 +7,6 @@ use anyhow::Result;
 use crate::client::{operations::NewSplit, output::split::Child};
 use crate::{
     cli::{
-        client::{self},
         context::Context,
         output::{Palette, Style},
         terminal,
@@ -92,7 +91,7 @@ async fn commit_owner(
 ) -> Result<(crate::repository::Selector, Option<String>)> {
     match ui::choose_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await {
         Ok(parent) => {
-            let repository = client::workspaces(&ctx.paths)
+            let repository = crate::client::workspaces::list(&ctx.paths)
                 .await?
                 .into_iter()
                 .find(|workspace| workspace.id == parent || workspace.name == parent)
