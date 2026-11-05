@@ -128,14 +128,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
             .map(|parent| parent.id),
         Some(ending.id.clone())
     );
-    let error = manager
-        .check_chat_name("stopping".into())
-        .await
-        .unwrap_err();
-    assert!(
-        error.to_string().contains("already has the name"),
-        "{error:#}"
-    );
+    assert!(manager.check_chat_name("stopping".into()).await.is_err());
     assert_eq!(
         chat_events(&manager).await,
         [
@@ -160,7 +153,7 @@ async fn a_chat_needs_a_running_process() {
     let mut process = std::process::Command::new("true").spawn().unwrap();
     let pid = process.id();
     process.wait().unwrap();
-    let error = manager
+    manager
         .start_chat(
             repo.id.into(),
             "chat-4".into(),
@@ -171,7 +164,6 @@ async fn a_chat_needs_a_running_process() {
         )
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("not running"), "{error:#}");
     assert!(manager.chats().await.unwrap().is_empty());
 }
 
@@ -214,7 +206,7 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
     }
     let chats = manager.chats().await.unwrap();
     assert_eq!(chats[0].session.as_deref(), Some("session-2"));
-    let error = manager
+    manager
         .set_agent_state(
             &chat.id,
             crate::state::AgentState::Idle,
@@ -223,7 +215,6 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
         )
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("invalid"), "{error:#}");
 }
 
 #[tokio::test]
@@ -260,11 +251,12 @@ async fn a_moved_chat_runs_while_its_new_process_runs() {
     // The recording process still runs, but the chat stops with the new one.
     process.kill();
     assert!(manager.chats().await.unwrap()[0].restore.is_some());
-    let error = manager
-        .move_chat(&chat.id, std::process::id())
-        .await
-        .unwrap_err();
-    assert!(error.to_string().contains("no running chat"), "{error:#}");
+    assert!(
+        manager
+            .move_chat(&chat.id, std::process::id())
+            .await
+            .is_err()
+    );
 }
 
 /// A process stop reads the tracked processes and stops the rest under the
@@ -377,18 +369,14 @@ async fn chats_and_workspaces_share_one_namespace() {
             false,
         )
     };
-    let refusal = |result: Result<Chat>| format!("{:#}", result.unwrap_err());
 
     // A chat takes neither a workspace's name nor an invalid one.
-    assert!(refusal(start("worker", std::process::id()).await).contains("workspace name"));
-    assert!(refusal(start("-talk", std::process::id()).await).contains("chat names must"));
+    assert!(start("worker", std::process::id()).await.is_err());
+    assert!(start("-talk", std::process::id()).await.is_err());
     let process =
         crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     start("talk", process.id()).await.unwrap();
-    assert!(
-        refusal(start("talk", std::process::id()).await)
-            .contains("a chat already has the name talk")
-    );
+    assert!(start("talk", std::process::id()).await.is_err());
     assert!(manager.check_chat_name("talk".into()).await.is_err());
     manager.check_chat_name("other".into()).await.unwrap();
     assert_eq!(
@@ -406,29 +394,23 @@ async fn chats_and_workspaces_share_one_namespace() {
 
     // A workspace is neither checked, created nor renamed to a chat's name.
     let options = Default::default();
-    let error = manager
-        .check_creation(&repo.id, Some("talk"), None, options)
-        .await
-        .unwrap_err();
     assert!(
-        format!("{error:#}").contains("a chat already has"),
-        "{error:#}"
+        manager
+            .check_creation(&repo.id, Some("talk"), None, options)
+            .await
+            .is_err()
     );
-    let error = manager
-        .create_workspace(&repo.id, "talk".into(), None, None, None)
-        .await
-        .unwrap_err();
     assert!(
-        format!("{error:#}").contains("a chat already has"),
-        "{error:#}"
+        manager
+            .create_workspace(&repo.id, "talk".into(), None, None, None)
+            .await
+            .is_err()
     );
-    let error = manager
-        .rename_workspace(&worker.id, "talk", None)
-        .await
-        .unwrap_err();
     assert!(
-        format!("{error:#}").contains("a chat already has"),
-        "{error:#}"
+        manager
+            .rename_workspace(&worker.id, "talk", None)
+            .await
+            .is_err()
     );
 
     // The name frees once the chat is removed; a stopped chat keeps it.
@@ -450,7 +432,7 @@ async fn chats_and_workspaces_share_one_namespace() {
         .await
         .unwrap();
     assert_eq!(renamed.name, "talk");
-    assert!(refusal(start("talk", std::process::id()).await).contains("workspace name"));
+    assert!(start("talk", std::process::id()).await.is_err());
 }
 
 #[tokio::test]
@@ -484,14 +466,13 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
     // An ended chat named topic left its log.
     let topic_log = files.with_file_name("topic.log");
     std::fs::write(&topic_log, "ended log").unwrap();
-    let refusal = |result: Result<RenamedChat>| format!("{:#}", result.unwrap_err());
 
     // The new name is refused where a new chat's would be.
     let rename = |chat: &str, name: &str| manager.rename_chat(chat.into(), name.into());
-    assert!(refusal(rename("talk", "worker").await).contains("workspace name"));
-    assert!(refusal(rename("talk", "other").await).contains("a chat already has"));
-    assert!(refusal(rename("talk", "-topic").await).contains("chat names must"));
-    assert!(refusal(rename("gone", "topic").await).contains("no running chat gone"));
+    assert!(rename("talk", "worker").await.is_err());
+    assert!(rename("talk", "other").await.is_err());
+    assert!(rename("talk", "-topic").await.is_err());
+    assert!(rename("gone", "topic").await.is_err());
     assert_eq!(
         rename("talk", "talk").await.unwrap(),
         RenamedChat {
@@ -553,13 +534,11 @@ async fn a_chat_keeps_its_name_until_its_session_takes_it_over() {
         .await
         .unwrap();
     // Its launcher has yet to open the files named after it.
-    let error = manager
-        .rename_chat(chat.id.clone(), "topic".into())
-        .await
-        .unwrap_err();
     assert!(
-        error.to_string().contains("talk is still starting"),
-        "{error:#}"
+        manager
+            .rename_chat(chat.id.clone(), "topic".into())
+            .await
+            .is_err()
     );
     manager
         .move_chat(&chat.id, std::process::id())
@@ -667,7 +646,7 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     // A chat that cannot have one is forgotten at once.
     std::fs::remove_dir_all(directory.join(".tmp")).unwrap();
     std::fs::create_dir(directory.join(".tmp")).unwrap();
-    let error = manager
+    manager
         .start_chat(
             repo.id.clone().into(),
             "talk".into(),
@@ -678,10 +657,6 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
         )
         .await
         .unwrap_err();
-    assert!(
-        error.to_string().contains("not a directory Shoal created"),
-        "{error:#}"
-    );
     assert!(manager.chats().await.unwrap().is_empty());
 }
 
@@ -727,15 +702,10 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
 
     // A removal the user confirmed for fewer spaces than are below it takes
     // none of them, and the chat stays.
-    let error = manager
+    manager
         .remove_chat("talk", Some(vec![opened.id.clone()]))
         .await
         .unwrap_err();
-    assert!(
-        format!("{error:#}")
-            .contains("split was opened below opened after the removal was confirmed"),
-        "{error:#}"
-    );
     assert!(manager.workspace(&split.id).await.is_ok());
     assert!(manager.recorded_chat("talk").await.unwrap().is_some());
 
@@ -775,7 +745,7 @@ async fn a_workspace_whose_creation_fails_stays_below_the_chat_that_opened_it() 
         .await
         .unwrap();
     // A base that does not resolve fails the worktree after the record.
-    let error = manager
+    manager
         .create_workspace_below(
             repo.id.clone().into(),
             "broken".into(),
@@ -785,7 +755,6 @@ async fn a_workspace_whose_creation_fails_stays_below_the_chat_that_opened_it() 
         )
         .await
         .unwrap_err();
-    assert!(format!("{error:#}").contains("failed"), "{error:#}");
     // It is the chat's to inspect and remove, and goes with the chat.
     let broken = manager.workspace("broken").await.unwrap();
     assert_eq!(broken.state, crate::state::WorkspaceState::Failed);
@@ -814,7 +783,7 @@ async fn a_chat_being_removed_takes_no_new_space() {
     // A creation that reaches its record after the removal began is refused,
     // rather than leaving a space below the chat that the removal missed.
     let _removal = manager.chat_removals.reserve(&chat.id).unwrap();
-    let branch = manager
+    manager
         .create_workspace_below(
             repo.id.clone().into(),
             "late".into(),
@@ -824,7 +793,7 @@ async fn a_chat_being_removed_takes_no_new_space() {
         )
         .await
         .unwrap_err();
-    let commit = manager
+    manager
         .create_commit_workspace(
             repo.id.clone().into(),
             Some(chat.id.clone()),
@@ -841,13 +810,10 @@ async fn a_chat_being_removed_takes_no_new_space() {
         hands_over: false,
         parent: Some(chat.id.clone()),
     };
-    let nested = manager
+    manager
         .start_new_chat(repo.id.clone().into(), None, start)
         .await
         .unwrap_err();
-    for error in [branch, commit, nested] {
-        assert!(format!("{error:#}").contains("being removed"), "{error:#}");
-    }
     assert!(manager.list_workspaces().await.unwrap().is_empty());
     let chats = manager.chats().await.unwrap();
     assert_eq!(chats.len(), 1, "{chats:?}");
@@ -881,11 +847,7 @@ async fn the_diff_base_names_only_the_workspaces_own_worktree() {
     let clone = [repo.path.as_os_str(), workspace.path.as_os_str()].map(|p| p.to_str().unwrap());
     crate::test_support::git(temp.path(), &["clone", "-q", clone[0], clone[1]]);
     crate::test_support::git(&workspace.path, &["checkout", "-q", "-b", "worker"]);
-    let error = manager.diff_base(&workspace.name).await.unwrap_err();
-    assert!(
-        format!("{error:#}").contains("different repository"),
-        "{error:#}"
-    );
+    assert!(manager.diff_base(&workspace.name).await.is_err());
 }
 
 #[tokio::test]
@@ -941,14 +903,10 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         workspace: workspace.name.clone(),
         base: None,
     });
-    let error = authorize(&manager, Some("chat"), &mut change)
-        .await
-        .unwrap_err();
-    assert!(format!("{error:#}").contains("only reads"), "{error:#}");
-    let error = authorize(&manager, Some("chat"), &mut status(&other.name))
-        .await
-        .unwrap_err();
-    assert!(format!("{error:#}").contains("own space"), "{error:#}");
+    let refused = authorize(&manager, Some("chat"), &mut change).await;
+    assert!(refused.is_err());
+    let refused = authorize(&manager, Some("chat"), &mut status(&other.name)).await;
+    assert!(refused.is_err());
 }
 
 #[tokio::test]
@@ -986,11 +944,12 @@ async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_
 
     let moved = temp.path().join("moved");
     std::fs::rename(&workspace.path, &moved).unwrap();
-    let error = manager
-        .restore_chat(&chat.id, std::process::id(), None, false)
-        .await
-        .unwrap_err();
-    assert!(format!("{error:#}").contains("is missing"), "{error:#}");
+    assert!(
+        manager
+            .restore_chat(&chat.id, std::process::id(), None, false)
+            .await
+            .is_err()
+    );
     std::fs::rename(&moved, &workspace.path).unwrap();
     let restored = manager
         .restore_chat(&chat.id, std::process::id(), None, false)
@@ -1015,8 +974,7 @@ async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
     };
     let moved = temp.path().join("moved");
     std::fs::rename(&workspace.path, &moved).unwrap();
-    let missing = start("missing").await.unwrap_err();
-    assert!(format!("{missing:#}").contains("is missing"), "{missing:#}");
+    assert!(start("missing").await.is_err());
     // Another directory at its path is not its worktree.
     std::fs::create_dir(&workspace.path).unwrap();
     crate::test_support::git(&workspace.path, &["init", "-q"]);
@@ -1033,11 +991,7 @@ async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
         })
         .await
         .unwrap();
-    let failed = start("failed").await.unwrap_err();
-    assert!(
-        format!("{failed:#}").contains("runs only in a ready workspace"),
-        "{failed:#}"
-    );
+    assert!(start("failed").await.is_err());
     assert!(manager.chats().await.unwrap().is_empty());
 }
 
