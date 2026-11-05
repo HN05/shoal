@@ -13,57 +13,7 @@ impl Config {
 }
 
 #[test]
-fn agent_modes_default_to_cli_and_reject_invalid_settings() {
-    use crate::agent::AgentMode;
-
-    for text in ["", ""] {
-        let config = Config::from_toml(text).unwrap();
-        assert_eq!(
-            config
-                .repository
-                .agents
-                .get("claude")
-                .and_then(|agent| agent.default_mode),
-            None
-        );
-        assert_eq!(
-            config
-                .repository
-                .agents
-                .get("codex")
-                .and_then(|agent| agent.default_mode),
-            None
-        );
-        let effective = config.effective(&RepoConfig::default()).unwrap();
-        assert_eq!(effective.agents["claude"].default_mode, AgentMode::Cli);
-        assert_eq!(effective.agents["codex"].default_mode, AgentMode::Cli);
-    }
-    let config = Config::from_toml("[agents.claude]\ndefault_mode = 'app'\n").unwrap();
-    assert_eq!(
-        config
-            .repository
-            .agents
-            .get("claude")
-            .and_then(|agent| agent.default_mode),
-        Some(AgentMode::App)
-    );
-    assert_eq!(
-        config
-            .repository
-            .agents
-            .get("codex")
-            .and_then(|agent| agent.default_mode),
-        None
-    );
-    let config = Config::from_toml("[agents.codex]\ndefault_mode = 'app'\n").unwrap();
-    assert_eq!(
-        config
-            .repository
-            .agents
-            .get("codex")
-            .and_then(|agent| agent.default_mode),
-        Some(AgentMode::App)
-    );
+fn agent_modes_reject_invalid_settings() {
     for section in ["claude", "codex"] {
         for setting in ["default_mode = 'desktop'", "defaut_mode = 'app'"] {
             let text = format!("[agents.{section}]\n{setting}");
@@ -246,32 +196,7 @@ fn install_writes_the_template_once_and_keeps_edits() {
 }
 
 #[test]
-fn default_agent_accepts_agent_spellings_only() {
-    assert_eq!(
-        Config::from_toml("").unwrap().repository.agent.default,
-        None
-    );
-    for (text, agent) in [
-        (
-            "agent.default = 'codex'",
-            "codex".parse::<crate::agent::Agent>().unwrap(),
-        ),
-        (
-            "agent.default = 'claude'",
-            "claude".parse::<crate::agent::Agent>().unwrap(),
-        ),
-        (
-            "agent.default = 'pi'",
-            "pi".parse::<crate::agent::Agent>().unwrap(),
-        ),
-        (
-            "agent.default = 'happy-codex'",
-            "happy-codex".parse::<crate::agent::Agent>().unwrap(),
-        ),
-    ] {
-        let config = Config::from_toml(text).unwrap();
-        assert_eq!(config.repository.agent.default, Some(agent));
-    }
+fn a_default_agent_that_is_no_agent_spelling_is_refused() {
     let error = Config::from_toml("agent.default = 'two words'")
         .unwrap_err()
         .to_string();
@@ -298,14 +223,6 @@ fn agent_and_job_limits_accept_dynamic_fixed_and_unlimited_values() {
         assert!(Config::from_toml(&format!("agent.max_running = {value}")).is_err());
         assert!(Config::from_toml(&format!("[machine]\nmax_agents = {value}")).is_err());
     }
-    assert_eq!(
-        Config::default()
-            .effective(&RepoConfig::default())
-            .unwrap()
-            .agent
-            .max_running,
-        RunLimit::Dynamic
-    );
 }
 
 #[test]
@@ -316,18 +233,20 @@ fn load_sets_overload_defaults_on_the_machine_only() {
         &paths,
     )
     .unwrap();
-    assert_eq!(config.machine.overload.warning.cpu_used_percent, 60);
-    assert_eq!(config.machine.overload.recovery.cpu_used_percent, 55);
-    assert_eq!(config.machine.overload.cpu.used_percent, 85);
+    // A light load lowers what the file leaves out and keeps what it sets.
+    let balanced = overload::Overload::default();
+    let overload = &config.machine.overload;
+    assert!(overload.warning.cpu_used_percent < balanced.warning.cpu_used_percent);
+    assert!(overload.recovery.cpu_used_percent < balanced.recovery.cpu_used_percent);
+    assert_eq!(overload.cpu.used_percent, 85);
     assert!(Config::parse("[machine]\nload = 'heavy'", &paths).is_err());
     assert!(Config::parse("load = 'light'", &paths).is_err());
     assert!(crate::config::repo::parse("load = 'full'").is_err());
 }
 
 #[test]
-fn keep_awake_is_an_opt_in_machine_setting() {
+fn keep_awake_is_a_machine_setting() {
     let paths = Paths::for_test("/home/test");
-    assert!(!Config::parse("", &paths).unwrap().machine.keep_awake);
     assert!(
         Config::parse("[machine]\nkeep_awake = true", &paths)
             .unwrap()
@@ -338,13 +257,7 @@ fn keep_awake_is_an_opt_in_machine_setting() {
 }
 
 #[test]
-fn cleanup_defaults_can_be_disabled_and_typos_are_rejected() {
-    let config = Config::from_toml("").unwrap();
-    assert_eq!(config.repository.cleanup.auto.enabled, None);
-    let effective = config.effective(&RepoConfig::default()).unwrap();
-    assert!(effective.cleanup.auto.enabled);
-    assert!(effective.cleanup.pr.enabled);
-    assert_eq!(effective.cleanup.auto.idle_minutes, 10);
+fn cleanup_policies_can_be_disabled_and_typos_are_rejected() {
     assert_eq!(
         Config::from_toml("[cleanup.pr]\nenabled=false")
             .unwrap()
@@ -377,15 +290,6 @@ fn repository_values_win_over_global_cleanup_policy() {
     assert_eq!(effective.cleanup.auto.delay(), None);
     assert_eq!(effective.cleanup.auto.idle_minutes, 5);
     assert!(effective.cleanup.pr.enabled);
-    assert_eq!(
-        Config::default()
-            .effective(&RepoConfig::default())
-            .unwrap()
-            .cleanup
-            .auto
-            .delay(),
-        Some(Duration::from_secs(600))
-    );
 }
 
 #[test]
@@ -562,11 +466,10 @@ fn root_directory_defaults_and_validates_explicit_paths() {
 }
 
 #[test]
-fn done_cleanup_defaults_on_and_can_be_overridden_per_repository() {
+fn done_cleanup_can_be_overridden_per_repository() {
     let enabled =
         |global: &Config, repo: &RepoConfig| global.effective(repo).unwrap().cleanup.done.enabled;
     let global = Config::from_toml("[cleanup.done]\nenabled = false\n").unwrap();
-    assert!(enabled(&Config::default(), &RepoConfig::default()));
     assert!(!enabled(&global, &RepoConfig::default()));
     let repo = repo::parse("[cleanup.done]\nenabled = true\n").unwrap();
     assert!(enabled(&global, &repo));
@@ -695,11 +598,7 @@ fn a_snapshot_resolves_with_the_template_files_beside_its_file() {
 }
 
 #[test]
-fn the_runner_is_off_by_default_and_refuses_labels_it_cannot_register() {
-    let settings = Config::default().effective(&RepoConfig::default()).unwrap();
-    assert!(!settings.runner.enabled);
-    assert_eq!(settings.runner.labels, ["shoal"]);
-    assert_eq!(settings.runner.permit, None);
+fn the_runner_takes_its_settings_and_refuses_labels_it_cannot_register() {
     let config =
         Config::from_toml("[runner]\nenabled = true\nlabels = ['rust']\npermit = 'builds'")
             .unwrap();

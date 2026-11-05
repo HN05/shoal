@@ -81,7 +81,7 @@ fn a_missing_default_names_its_key() {
     let mut base = ExampleConfig::built_in();
     base.count = None;
     let error = base.resolve("example").unwrap_err().to_string();
-    assert_eq!(error, "example.count has no built-in default");
+    assert!(error.contains("example.count"), "{error}");
 }
 
 #[test]

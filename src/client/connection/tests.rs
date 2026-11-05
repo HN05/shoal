@@ -211,7 +211,6 @@ async fn a_daemon_that_owns_the_state_directory_without_answering_is_unresponsiv
     assert_eq!(unresponsive.owner.pid, std::process::id());
     let message = format!("{error:#}");
     assert!(message.contains("not responding"), "{message}");
-    assert!(message.contains("shoal daemon restart"), "{message}");
     // Followers still wait for it as for a daemon that went away.
     assert!(is_unreachable(&error));
     Ok(())

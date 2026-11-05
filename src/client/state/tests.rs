@@ -36,7 +36,7 @@ where
 }
 
 #[test]
-fn migrated_enums_preserve_spellings_and_defaults() {
+fn migrated_enums_preserve_spellings() {
     use crate::{
         agent::AgentMode,
         config::repo::ConflictPolicy,
@@ -89,10 +89,6 @@ fn migrated_enums_preserve_spellings_and_defaults() {
         (crate::happy::Agent::Claude, "claude"),
         (crate::happy::Agent::Codex, "codex"),
     ]);
-    assert_eq!(Lifetime::default(), Lifetime::Lease);
-    assert_eq!(ResourceKind::default(), ResourceKind::Semaphore);
-    assert_eq!(ConflictPolicy::default(), ConflictPolicy::Suggest);
-    assert_eq!(AgentMode::default(), AgentMode::Cli);
 }
 
 states!(

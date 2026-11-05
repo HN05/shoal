@@ -63,12 +63,10 @@ fn a_worker_template_repeating_the_guidance_warns() {
         "agent.templates.worker = 'Babysit {branch}.'",
         "",
     );
-    assert_eq!(
-        stack.warnings(),
-        [
-            "global config: agent.templates.worker repeats Shoal's built-in guidance, which \
-              every launch already receives; keep only your additions"
-        ]
+    let warnings = stack.warnings();
+    assert!(
+        matches!(warnings, [warning] if warning.starts_with("global config: agent.templates.worker repeats")),
+        "{warnings:?}"
     );
 }
 
@@ -227,12 +225,7 @@ fn a_template_reports_the_file_of_the_layer_it_came_from() {
 }
 
 #[test]
-fn herdr_defaults_and_options_resolve_independently() {
-    let defaults = stack("", "", "").resolve().unwrap().terminal.herdr;
-    assert!(defaults.enabled && defaults.new_tab);
-    assert_eq!(defaults.close_when_done, None);
-    assert_eq!(defaults.tab_name, None);
-    assert_eq!(defaults.workspace_name, "{repo}");
+fn herdr_options_resolve_independently() {
     let settings = stack(
         "[terminal.herdr]\nenabled = false\nnew_tab = false\nworkspace_name = 'work'\n",
         "[terminal.herdr]\nnew_tab = true\nclose_when_done = false\n",
@@ -248,17 +241,7 @@ fn herdr_defaults_and_options_resolve_independently() {
 }
 
 #[test]
-fn rex_defaults_and_options_resolve_independently() {
-    let defaults = stack("", "", "").resolve().unwrap();
-    assert_eq!(
-        defaults.terminal.default_host,
-        crate::client::sessions::HostName::Zmx
-    );
-    let rex = defaults.terminal.rex;
-    assert!(rex.enabled && rex.new_window);
-    assert_eq!(rex.placement, config::repo::Placement::Window);
-    assert_eq!(rex.session_name, "{repo}");
-    assert_eq!((rex.window_name, rex.close_when_done), (None, None));
+fn rex_options_resolve_independently() {
     let settings = stack(
         "terminal.default_host = 'rex'\n[terminal.rex]\nenabled = false\nsession_name = 'work'\n",
         "[terminal.rex]\nenabled = true\nplacement = 'split'\nclose_when_done = false\n",

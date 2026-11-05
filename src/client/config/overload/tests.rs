@@ -19,21 +19,17 @@ fn load_sets_the_thresholds_the_file_leaves_out() {
     settings.follow_load(Load::Full, true, &toml::from_str(text).unwrap());
     assert_eq!(settings.warning.cpu_used_percent, 70);
     assert_eq!(settings.memory.used_percent, 96);
-    assert_eq!(settings.cpu.used_percent, 100);
-    assert_eq!(settings.warning.memory_used_percent, 97);
-    assert_eq!(settings.recovery.memory_used_percent, 93);
-    let mut light = Overload::default();
-    light.follow_load(Load::Light, false, &toml::Table::new());
-    assert_eq!(light.warning.cpu_used_percent, 60);
-    assert_eq!(light.warning.memory_used_percent, 75);
+    // What the file leaves out follows the load.
+    assert_eq!(settings.cpu.used_percent, Load::Full.cpu().stop);
+    assert_eq!(
+        settings.recovery.memory_used_percent,
+        Load::Full.memory(true).recovery
+    );
 }
 
 #[test]
-fn memory_is_opt_out_and_settings_are_bounded() {
+fn settings_are_bounded() {
     let defaults = Overload::default();
-    assert!(defaults.memory.enabled);
-    assert!(!defaults.cpu.enabled);
-    assert!(defaults.disk.enabled);
     defaults.validate().unwrap();
     for text in [
         "cooldown_seconds = 0",

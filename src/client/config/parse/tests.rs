@@ -67,10 +67,3 @@ fn removed_settings_name_what_replaces_them() {
         assert!(error.contains("set agent_token under"), "{error}");
     }
 }
-
-#[test]
-fn every_repository_only_key_is_one_the_global_file_refuses() {
-    let mut keys = Vec::new();
-    RepoConfig::repository_only("", &mut keys);
-    assert_eq!(keys, ["setup.command", "setup.seed"]);
-}

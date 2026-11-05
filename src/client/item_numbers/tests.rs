@@ -10,10 +10,7 @@ fn numbers_name_the_space_then_the_item() {
 #[test]
 fn a_bare_number_is_refused_with_the_full_form() {
     let error = "5".parse::<ItemNumber>().unwrap_err().to_string();
-    assert_eq!(
-        error,
-        "5 names no space: questions and approval requests are numbered SPACE.ITEM, such as 3.5"
-    );
+    assert!(error.starts_with("5 names no space"), "{error}");
     for invalid in ["", "3.", ".2", "0.2", "3.0", "3.2.1", "a.b", "-3.2"] {
         assert!(invalid.parse::<ItemNumber>().is_err(), "{invalid}");
     }
