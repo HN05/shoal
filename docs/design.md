@@ -1757,8 +1757,8 @@ Shoal owns forge writes for its workspaces so that every client, from an agent
 in a terminal to an app built on Shoal, gets one item model, one account rule
 and one policy. Issue and PR actions are typed (edit, comment, close, reopen,
 merge) and planned per forge as REST requests, sent with curl and the token
-`[machine.forges."<host>"]` gives the host, or anonymously without one; GitHub's
-GraphQL requests go the same way. Shoal needs only a token per host, so it runs
+`[machine.forges."<host>"]` gives the host; without one only reads go out,
+anonymously. GitHub's GraphQL requests go the same way. Shoal needs only a token per host, so it runs
 no forge CLI and reads none of their login files, and a forge works without its
 CLI installed. A token
 is given in the shared value form, so it may come from a command such as a
