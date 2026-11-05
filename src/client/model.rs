@@ -1846,8 +1846,7 @@ impl Selected {
             .iter()
             .filter(|item| item.kind.item().is_some())
             .filter(|item| {
-                crate::forge::items::link::item(item.kind, &item.url)
-                    .is_ok_and(|(repository, item)| item == number && repository.is_remote(remote))
+                crate::forge::items::link::names_item(item.kind, &item.url, remote, number)
             })
             .map(|item| item.kind);
         let kind = kinds.next();

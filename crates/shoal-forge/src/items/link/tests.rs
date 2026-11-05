@@ -171,3 +171,81 @@ fn an_item_url_names_its_repository_and_number_by_its_kind() -> Result<()> {
     assert!(own.item(LinkKind::Ci, pull).is_err());
     Ok(())
 }
+
+#[test]
+fn item_links_of_every_forge_are_told_from_repositories() {
+    for link in [
+        "https://github.com/team/repo/issues/3",
+        "https://github.com/team/repo/pull/4",
+        "https://github.com/team/repo/tree/fix/a",
+        "https://forge.example/team/repo/pulls/4",
+        "https://forge.example/team/repo/src/branch/fix",
+        "https://gitlab.com/group/repo/-/merge_requests/5",
+        "https://gitlab.com/group/repo/-/issues/6",
+        "https://bitbucket.org/team/repo/pull-requests/7",
+        "https://bitbucket.org/team/repo/branch/fix",
+    ] {
+        assert!(is_item_link(link), "{link}");
+    }
+    for repository in ["https://github.com/team/repo", "my-project", "42"] {
+        assert!(!is_item_link(repository), "{repository}");
+    }
+}
+
+#[test]
+fn an_item_url_names_its_number_in_its_own_repository_only() {
+    let url = "https://github.com/team/repo/pull/4";
+    assert!(names_item(
+        LinkKind::Pr,
+        url,
+        "git@github.com:team/repo.git",
+        4
+    ));
+    assert!(!names_item(
+        LinkKind::Pr,
+        url,
+        "git@github.com:team/repo.git",
+        5
+    ));
+    assert!(!names_item(
+        LinkKind::Pr,
+        url,
+        "git@github.com:team/other.git",
+        4
+    ));
+    assert!(!names_item(
+        LinkKind::Issue,
+        url,
+        "git@github.com:team/repo.git",
+        4
+    ));
+}
+
+#[test]
+fn a_branch_link_uses_the_route_that_holds_the_others_it_contains() {
+    for (url, forge, repository, branch) in [
+        (
+            "https://github.com/team/repo/tree/feature/branch/x",
+            ForgeKind::GitHub,
+            "https://github.com/team/repo",
+            "feature/branch/x",
+        ),
+        (
+            "https://gitlab.com/group/tree/project/-/tree/fix",
+            ForgeKind::GitLab,
+            "https://gitlab.com/group/tree/project",
+            "fix",
+        ),
+        (
+            "https://forge.example/team/repo/src/branch/fix",
+            ForgeKind::Forgejo,
+            "https://forge.example/team/repo",
+            "fix",
+        ),
+    ] {
+        assert_eq!(branch_forge(url), Some(forge), "{url}");
+        let link = Link::parse(url).unwrap();
+        assert_eq!(link.repository.repository_url(), repository);
+        assert!(matches!(link.target, LinkTarget::Branch(name) if name == branch));
+    }
+}

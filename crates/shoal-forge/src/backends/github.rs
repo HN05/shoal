@@ -126,6 +126,10 @@ impl Backend for GitHub {
         ItemRoute::Pull
     }
 
+    fn branch_route(&self) -> &'static str {
+        "/tree/"
+    }
+
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {
         format!("repos/{}/{path}", repo.path)
     }

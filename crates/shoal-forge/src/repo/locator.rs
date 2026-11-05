@@ -25,7 +25,7 @@ pub(crate) struct ItemUrl<'a> {
 }
 
 impl ItemRoute {
-    fn marker(self) -> &'static str {
+    pub(crate) fn marker(self) -> &'static str {
         match self {
             Self::Issue => "/issues/",
             Self::GitLabIssue => "/-/issues/",

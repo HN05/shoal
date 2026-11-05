@@ -131,6 +131,20 @@ pub(crate) trait Backend {
 
     fn pull_route(&self) -> ItemRoute;
 
+    /// What precedes a branch's name in the forge's branch URLs.
+    fn branch_route(&self) -> &'static str;
+
+    /// Whether `url` uses one of the forge's issue, PR or branch routes.
+    fn links_item(&self, url: &str) -> bool {
+        [
+            self.issue_route().marker(),
+            self.pull_route().marker(),
+            self.branch_route(),
+        ]
+        .iter()
+        .any(|route| url.contains(route))
+    }
+
     /// The API endpoint for `path` under the repository.
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String;
 
@@ -972,6 +986,14 @@ impl Backend for ForgeKind {
 
     fn pull_route(&self) -> ItemRoute {
         dispatch!(self, backend => backend.pull_route())
+    }
+
+    fn branch_route(&self) -> &'static str {
+        dispatch!(self, backend => backend.branch_route())
+    }
+
+    fn links_item(&self, url: &str) -> bool {
+        dispatch!(self, backend => backend.links_item(url))
     }
 
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {

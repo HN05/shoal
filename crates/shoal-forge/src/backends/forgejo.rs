@@ -156,6 +156,10 @@ impl Backend for Forgejo {
         ItemRoute::Pulls
     }
 
+    fn branch_route(&self) -> &'static str {
+        "/src/branch/"
+    }
+
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {
         format!("repos/{}/{path}", repo.path)
     }

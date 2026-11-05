@@ -121,6 +121,10 @@ impl Backend for GitLab {
         ItemRoute::MergeRequest
     }
 
+    fn branch_route(&self) -> &'static str {
+        "/-/tree/"
+    }
+
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {
         format!("projects/{}/{path}", encode(&repo.path, false))
     }

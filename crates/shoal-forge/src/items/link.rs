@@ -4,8 +4,11 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, ISSUE_ROUTES, IssueInput, PULL_ROUTES, backends::ForgeKind,
-    ci::run_action::run_repository, hosts::HostTypes, repo::locator::ItemRoute,
+    ForgeRepo, ISSUE_ROUTES, IssueInput, PULL_ROUTES,
+    backends::{Backend, ForgeKind},
+    ci::run_action::run_repository,
+    hosts::HostTypes,
+    repo::locator::ItemRoute,
 };
 
 crate::state::states!(ItemKind {
@@ -148,6 +151,19 @@ impl Selection {
     }
 }
 
+/// Whether `input` is an issue, PR or branch URL of any forge, rather than a
+/// repository.
+pub fn is_item_link(input: &str) -> bool {
+    IssueInput::parse(input) == IssueInput::Url
+        && ForgeKind::ALL.iter().any(|forge| forge.links_item(input))
+}
+
+/// Whether the `kind` item URL `url` names the item numbered `number` of
+/// the repository `remote` names.
+pub fn names_item(kind: LinkKind, url: &str, remote: &str, number: u64) -> bool {
+    item(kind, url).is_ok_and(|(repository, item)| item == number && repository.is_remote(remote))
+}
+
 /// The repository and number of an issue, PR or CI run URL.
 pub fn item(kind: LinkKind, url: &str) -> Result<(ForgeRepo, u64)> {
     let repository = ForgeRepo::from_item_url(kind, url)?;
@@ -240,15 +256,8 @@ impl Link {
                 target: LinkTarget::Run,
             });
         }
-        let ((repository, branch), forge) = [
-            ("/src/branch/", ForgeKind::Forgejo),
-            ("/-/tree/", ForgeKind::GitLab),
-            ("/tree/", ForgeKind::GitHub),
-            ("/branch/", ForgeKind::Bitbucket),
-        ]
-        .iter()
-        .find_map(|&(marker, forge)| Some((url.split_once(marker)?, forge)))
-        .context("expected an issue, PR, CI run or branch URL")?;
+        let forge = branch_forge(url).context("expected an issue, PR, CI run or branch URL")?;
+        let (repository, branch) = url.split_once(forge.branch_route()).unwrap();
         let repository = ForgeRepo::parse_linked(repository, Some(forge))?;
         let branch = decode_branch(branch)?;
         ensure!(!branch.is_empty(), "branch URL has no branch");
@@ -257,6 +266,23 @@ impl Link {
             target: LinkTarget::Branch(branch),
         })
     }
+}
+
+/// The forge whose branch route `url` uses. A route inside another one the
+/// URL uses, as `/tree/` is inside `/-/tree/`, is that other forge's.
+fn branch_forge(url: &str) -> Option<ForgeKind> {
+    let used: Vec<&str> = ForgeKind::ALL
+        .iter()
+        .map(|forge| forge.branch_route())
+        .filter(|route| url.contains(route))
+        .collect();
+    ForgeKind::ALL.iter().copied().find(|forge| {
+        let route = forge.branch_route();
+        used.contains(&route)
+            && !used
+                .iter()
+                .any(|other| *other != route && other.contains(route))
+    })
 }
 
 pub(crate) fn decode_branch(input: &str) -> Result<String> {

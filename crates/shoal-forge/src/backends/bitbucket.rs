@@ -137,6 +137,10 @@ impl Backend for Bitbucket {
         ItemRoute::PullRequests
     }
 
+    fn branch_route(&self) -> &'static str {
+        "/branch/"
+    }
+
     fn repo_endpoint(&self, repo: &ForgeRepo, path: &str) -> String {
         format!("repositories/{}/{path}", repo.path)
     }

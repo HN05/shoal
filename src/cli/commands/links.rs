@@ -17,7 +17,7 @@ use crate::{
     forge::{
         IssueInput, PullRequest,
         items::{
-            link::{ItemKind, Link, LinkKind, LinkTarget, Selection},
+            link::{ItemKind, Link, LinkKind, LinkTarget, Selection, is_item_link},
             list::Search,
         },
     },
@@ -265,22 +265,6 @@ pub(super) fn review_lines(marks: &[ReviewMark], itself: &str) -> String {
         .join("\n")
 }
 
-/// Whether `positional` is a pasted issue, PR or branch URL of any forge,
-/// rather than a repository.
-fn is_item_link(positional: &str) -> bool {
-    const ROUTES: &[&str] = &[
-        "/issues/",
-        "/pull/",
-        "/pulls/",
-        "/-/merge_requests/",
-        "/pull-requests/",
-        "/tree/",
-        "/branch/",
-    ];
-    IssueInput::parse(positional) == IssueInput::Url
-        && ROUTES.iter().any(|route| positional.contains(route))
-}
-
 pub(super) struct AddInput {
     pub positional: Option<String>,
     pub repository: Option<String>,
@@ -478,6 +462,3 @@ pub(super) async fn fork_head(repo: &Repository, pull: &PullRequest) -> Result<P
         base: Some(base),
     })
 }
-
-#[cfg(test)]
-mod tests;
