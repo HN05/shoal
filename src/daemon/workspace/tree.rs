@@ -296,13 +296,7 @@ pub(crate) fn ensure_parent(
     space: &str,
     parent: &str,
 ) -> Result<()> {
-    let (name, state) = parent_in_repository(db, repository_id, parent)?;
-    if let Some(state) = state {
-        ensure!(
-            state == WorkspaceState::Ready,
-            "parent workspace is {state}; open a child below a ready workspace"
-        );
-    }
+    let name = ready_parent(db, repository_id, parent)?;
     let taken: bool = db.query_row(
         &format!("{} SELECT EXISTS(SELECT 1 FROM taken WHERE id=?2)", taken()),
         [space, parent],
@@ -313,6 +307,19 @@ pub(crate) fn ensure_parent(
         "{name} is below or in the space it would take as a child"
     );
     Ok(())
+}
+
+/// The name of the space `parent`, once it is a space of `repository_id`
+/// that takes a child now: a workspace must be ready.
+pub(crate) fn ready_parent(db: &Connection, repository_id: &str, parent: &str) -> Result<String> {
+    let (name, state) = parent_in_repository(db, repository_id, parent)?;
+    if let Some(state) = state {
+        ensure!(
+            state == WorkspaceState::Ready,
+            "parent workspace is {state}; open a child below a ready workspace"
+        );
+    }
+    Ok(name)
 }
 
 /// The name of the space `parent` and, for a workspace, its state, once it

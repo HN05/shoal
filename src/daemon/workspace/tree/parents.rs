@@ -74,7 +74,8 @@ impl Manager {
     }
 
     /// Refuse a space below `parent` in another repository than the
-    /// parent's, before creating anything.
+    /// parent's, or below a workspace that is not ready, before creating
+    /// anything.
     pub(crate) async fn ensure_parent_repository(
         &self,
         repository: &crate::repository::Selector,
@@ -86,7 +87,7 @@ impl Manager {
         let repository = self.repository(repository.clone()).await?;
         self.store
             .run(move |db| {
-                super::parent_in_repository(db, &repository.id, &parent)?;
+                super::ready_parent(db, &repository.id, &parent)?;
                 Ok(())
             })
             .await

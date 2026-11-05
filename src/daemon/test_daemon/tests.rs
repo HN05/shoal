@@ -522,6 +522,34 @@ async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts()
     assert!(refused(check(&other, None, &parent.id)).await);
     // Nor does a chat go below the workspace it runs in.
     assert!(refused(check(&daemon.repository, Some(&parent.id), &parent.id)).await);
+    // A workspace that is not ready takes no child, chat or workspace.
+    let failed = daemon.workspace("failed").await;
+    (daemon.manager)
+        .set_state(&failed.id, crate::state::WorkspaceState::Failed, None)
+        .await
+        .unwrap();
+    assert!(refused(check(&daemon.repository, None, &failed.id)).await);
+    let creation = WorkspaceMethod::CheckCreation {
+        repository: daemon.repository.id.clone().into(),
+        branch: Some("child".into()),
+        existing: None,
+        base: None,
+        git_profile: None,
+        path: None,
+        options: Default::default(),
+        parent: Some(failed.id.clone()),
+    };
+    assert!(connection::request::<()>(&app, creation).await.is_err());
+    let mut child = start_workspace(&daemon, WorkspaceStart::Name("child".into()));
+    if let OperationMethod::StartWorkspace { parent, .. } = &mut child {
+        *parent = Some(failed.id.clone());
+    }
+    assert!(
+        connection::request::<StartedWorkspace>(&app, child)
+            .await
+            .is_err()
+    );
+    assert_eq!(code(inspect(&app, "child").await), ErrorCode::NotFound);
 }
 
 #[tokio::test]
