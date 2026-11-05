@@ -147,9 +147,9 @@ fn prompt(issue: &Issue, labels: &config::Issue) -> String {
          with the user here, one point at a time, recommending an answer for each. Keep the \
          discussion in this conversation: do not post questions to the forge or ask them with \
          `shoal questions ask`.\n\n\
-         Once the user agrees, rewrite the issue's body with your forge CLI so it states the \
-         goal and a Plan section with the decisions, the approach and what done looks like, \
-         since an implementing agent receives only the body.{relabel} Open follow-up issues for \
+         Once the user agrees, rewrite the issue's body so it states the goal and a Plan \
+         section with the decisions, the approach and what done looks like, since an \
+         implementing agent receives only the body.{relabel} Open follow-up issues for \
          work the plan splits off. Then offer to start an agent on it with \
          `shoal add --issue {number} --agent <name>`.",
         number = issue.number,
