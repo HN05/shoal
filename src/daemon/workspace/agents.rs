@@ -144,11 +144,8 @@ pub(crate) struct Agent {
     /// Holds back a daemon update from the stop until the execution's
     /// connection takes over, so an update waits for the restore.
     update_hold: Option<OwnedRwLockReadGuard<()>>,
-    /// Set while `shoal restart` restarts the agent.
-    restart: Option<restart::Restart>,
-    /// How each of its restarts that ended did, by the run that asked for
-    /// it, which answers a request that joins it late.
-    ended_restarts: HashMap<Option<String>, Result<(), String>>,
+    /// The `shoal restart` of it in progress and those that ended.
+    restarts: restart::Restarts,
     /// The turn state the agent reported last, which the workspace's state
     /// keeps only while no other execution there reports.
     turn: Option<crate::state::AgentState>,
@@ -176,7 +173,7 @@ impl Agent {
     pub(super) fn cancel_recovery(&mut self) {
         self.overload = None;
         self.update_hold = None;
-        self.cancel_restart();
+        self.restarts.cancel();
     }
 
     /// Whether protection stopped the agent and it awaits automatic recovery.
@@ -412,8 +409,7 @@ impl Manager {
             stop: stop.clone(),
             overload: None,
             update_hold: None,
-            restart: None,
-            ended_restarts: HashMap::new(),
+            restarts: Default::default(),
             turn: None,
             turns_started: 0,
             interrupted: false,
@@ -574,7 +570,8 @@ impl Manager {
                     .get_mut(id)
                     .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
                 let restarting = agent
-                    .restart
+                    .restarts
+                    .current
                     .as_mut()
                     .map(restart::Restart::resume)
                     .is_some();
@@ -623,7 +620,7 @@ impl Manager {
         self.executions
             .with_agent(id, |agent| {
                 if protection.is_restart() {
-                    agent.restart = Some(restart::Restart::unanswered(None));
+                    agent.restarts.current = Some(restart::Restart::unanswered(None));
                 } else {
                     agent.overload = Some(protection);
                 }

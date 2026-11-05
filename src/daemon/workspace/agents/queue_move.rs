@@ -50,7 +50,7 @@ impl Manager {
             agent.name
         );
         ensure!(
-            !*agent.stop.borrow() && agent.restart.is_none() && agent.overload.is_none(),
+            !*agent.stop.borrow() && agent.restarts.current.is_none() && agent.overload.is_none(),
             "{} is already stopping",
             agent.name
         );

@@ -6,80 +6,13 @@ use tokio::sync::oneshot;
 
 use super::{Agent, Manager};
 use crate::{
-    daemon::store,
-    execution::recovery,
-    model::{PendingRestart, RunningAgent},
-    protocol::Protection,
+    daemon::store, execution::recovery, model::RunningAgent, protocol::Protection,
     state::AgentState,
 };
 
-/// A restart in progress, which answers each request for it.
-pub(super) struct Restart {
-    /// The requests still to answer; a request for an agent already
-    /// restarting joins them.
-    answers: Vec<oneshot::Sender<Result<()>>>,
-    /// The `shoal restart` run that asked for it.
-    run: Option<String>,
-    /// The other runs whose requests joined it, for which it restarts the
-    /// agent as well.
-    joined: Vec<String>,
-    /// The stopped agent was resumed, so its wrapper's next start is the
-    /// restarted agent rather than the first one.
-    resumed: bool,
-    /// Why the restart waits for the stopped agent's processes, which
-    /// answers each request at once.
-    waits: Option<String>,
-}
-
-impl Restart {
-    /// A restart for `run` without requests to answer, such as one whose
-    /// request ended with the daemon that took it.
-    pub(super) fn unanswered(run: Option<String>) -> Self {
-        Self {
-            answers: Vec::new(),
-            run,
-            joined: Vec::new(),
-            resumed: false,
-            waits: None,
-        }
-    }
-
-    /// Answer one more request, of `run`: at once while the restart waits
-    /// for the agent's processes, otherwise once it ends.
-    fn answer(&mut self, run: Option<String>) -> oneshot::Receiver<Result<()>> {
-        if let Some(run) = run
-            && self.run.as_ref() != Some(&run)
-            && !self.joined.contains(&run)
-        {
-            self.joined.push(run);
-        }
-        let (done, answer) = oneshot::channel();
-        match &self.waits {
-            Some(waits) => {
-                let _ = done.send(Err(RestartWaits(waits.clone()).into()));
-            }
-            None => self.answers.push(done),
-        }
-        answer
-    }
-
-    pub(super) fn resume(&mut self) {
-        self.resumed = true;
-        self.waits = None;
-    }
-
-    fn pending(&self) -> PendingRestart {
-        PendingRestart {
-            run: self.run.clone(),
-            joined: self.joined.clone(),
-        }
-    }
-
-    /// Every run it restarts the agent for.
-    fn runs(&self) -> impl Iterator<Item = Option<String>> + '_ {
-        std::iter::once(self.run.clone()).chain(self.joined.iter().cloned().map(Some))
-    }
-}
+mod state;
+use state::restarted;
+pub(crate) use state::{Restart, Restarts};
 
 impl Manager {
     /// Every connected agent, and every execution whose wrapper is gone,
@@ -102,10 +35,10 @@ impl Manager {
                             restorable: agent.is_some_and(|agent| agent.recover),
                             state: agent.and_then(|agent| agent.turn),
                             interrupted: agent.is_some_and(|agent| agent.interrupted),
-                            restarted_by: agent.map(Agent::restarted_by).unwrap_or_default(),
-                            restart: agent
-                                .and_then(|agent| agent.restart.as_ref())
-                                .map(Restart::pending),
+                            restarted_by: agent
+                                .map(|agent| agent.restarts.restarted_by())
+                                .unwrap_or_default(),
+                            restart: agent.and_then(|agent| agent.restarts.pending()),
                             stopped: agent.and_then(|agent| agent.overload.clone()),
                             execution: execution.id,
                             workspace_id: execution.workspace_id,
@@ -140,12 +73,7 @@ impl Manager {
                 let agent = agents
                     .get_mut(execution)
                     .with_context(|| format!("no connected agent runs execution {execution}"))?;
-                anyhow::Ok(match &mut agent.restart {
-                    Some(restart) if of_run.is_none() || restart.run == of_run => {
-                        Ok(restart.answer(run))
-                    }
-                    _ => Err(agent.joined_late(&of_run, run)),
-                })
+                anyhow::Ok(agent.restarts.join(&agent.name, &of_run, run))
             })
             .await?;
         match joined {
@@ -176,12 +104,12 @@ impl Manager {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         // Another command continuing the same run restarted it already,
         // even if another run restarts it since.
-        if run.is_some() && agent.ended_restarts.get(&run) == Some(&Ok(())) {
+        if agent.restarts.restarted_for(&run) {
             let (done, answer) = oneshot::channel();
             let _ = done.send(Ok(()));
             return Ok(answer);
         }
-        if let Some(restart) = &mut agent.restart {
+        if let Some(restart) = &mut agent.restarts.current {
             return Ok(restart.answer(run));
         }
         ensure!(
@@ -203,9 +131,9 @@ impl Manager {
         .context("save the agent's recovery record")?;
         let mut restart = Restart::unanswered(run);
         let answer = restart.answer(None);
-        agent.restart = Some(restart);
+        agent.restarts.current = Some(restart);
         if agent.stop.send(true).is_err() {
-            agent.restart = None;
+            agent.restarts.current = None;
             recovery::consume(&handoff)?;
             anyhow::bail!("{} disconnected", agent.name);
         }
@@ -218,7 +146,8 @@ impl Manager {
         self.executions
             .with_agent(id, |agent| {
                 agent
-                    .restart
+                    .restarts
+                    .current
                     .as_ref()
                     .is_some_and(|restart| !restart.resumed)
             })
@@ -264,7 +193,7 @@ impl Manager {
     /// Whether `shoal restart` is restarting the agent of `id`.
     pub(crate) async fn restart_requested(&self, id: &str) -> bool {
         self.executions
-            .with_agent(id, |agent| agent.restart.is_some())
+            .with_agent(id, |agent| agent.restarts.current.is_some())
             .await
             .unwrap_or(false)
     }
@@ -288,7 +217,7 @@ impl Manager {
         let answered = self
             .executions
             .with_agent(id, |agent| {
-                let restart = agent.restart.as_mut()?;
+                let restart = agent.restarts.current.as_mut()?;
                 let waits = format!(
                     "{} restarts once its remaining processes exit: {issue}; shoal stop {} cancels the restart",
                     agent.name, agent.workspace
@@ -311,9 +240,10 @@ impl Manager {
             .executions
             .with_agent(id, |agent| {
                 let restart = agent
-                    .restart
+                    .restarts
+                    .current
                     .take_if(|restart| restart.resumed || !once_resumed)?;
-                agent.end_restart(&restart, &outcome);
+                agent.restarts.end(&restart, &outcome);
                 Some(restart)
             })
             .await
@@ -323,55 +253,6 @@ impl Manager {
             let _ = done.send(outcome.clone().map_err(|reason| anyhow!(reason)));
         }
     }
-}
-
-impl Agent {
-    /// Drop the restart in progress, recording that it was cancelled.
-    pub(super) fn cancel_restart(&mut self) {
-        if let Some(restart) = self.restart.take() {
-            self.end_restart(&restart, &Err("the restart was cancelled".into()));
-        }
-    }
-
-    /// Record `outcome` for every run `restart` restarted the agent for.
-    fn end_restart(&mut self, restart: &Restart, outcome: &Result<(), String>) {
-        for run in restart.runs() {
-            self.ended_restarts.insert(run, outcome.clone());
-        }
-    }
-
-    /// How the restart of `of_run` that ended did, which also counts for
-    /// `run`, joining it late.
-    fn joined_late(&mut self, of_run: &Option<String>, run: Option<String>) -> Result<(), String> {
-        let outcome = self
-            .ended_restarts
-            .get(of_run)
-            .cloned()
-            .unwrap_or_else(|| Err(format!("no restart of {} is in progress", self.name)));
-        if run.is_some() {
-            self.ended_restarts.insert(run, outcome.clone());
-        }
-        outcome
-    }
-
-    /// The runs a restart started the agent again for.
-    fn restarted_by(&self) -> Vec<String> {
-        let mut runs: Vec<String> = self
-            .ended_restarts
-            .iter()
-            .filter(|(_, outcome)| outcome.is_ok())
-            .filter_map(|(run, _)| run.clone())
-            .collect();
-        runs.sort();
-        runs
-    }
-}
-
-/// How the restart `answer` answers ended.
-async fn restarted(answer: oneshot::Receiver<Result<()>>) -> Result<()> {
-    answer
-        .await
-        .unwrap_or_else(|_| Err(anyhow!("the agent did not start again")))
 }
 
 /// A restart that continues after its request was answered, once the
