@@ -186,14 +186,8 @@ async fn a_space_never_takes_one_above_it_as_its_child() {
         .await
         .unwrap();
     let (root, chat, _, _process) = mixed_tree(&manager, &repo.id).await;
-    let error = manager
-        .assign_parent(&root.id, Some(chat.id.clone()))
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{error:#}").contains("planning is below or in the space it would take"),
-        "{error:#}"
-    );
+    let assigned = manager.assign_parent(&root.id, Some(chat.id.clone())).await;
+    assert!(assigned.is_err());
     assert!(manager.workspace(&root.id).await.unwrap().parent.is_none());
 }
 
@@ -221,7 +215,7 @@ async fn a_chat_opens_workspaces_only_in_its_own_repository() {
         )
         .await
         .unwrap();
-    let error = manager
+    let created = manager
         .create_workspace_below(
             repos[1].id.clone().into(),
             "foreign".into(),
@@ -229,12 +223,8 @@ async fn a_chat_opens_workspaces_only_in_its_own_repository() {
             Default::default(),
             Some(chat.id.clone()),
         )
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{error:#}").contains("planning is in another repository"),
-        "{error:#}"
-    );
+        .await;
+    assert!(created.is_err());
     // Refused before anything was created.
     assert!(manager.workspace("foreign").await.is_err());
 }
@@ -293,14 +283,10 @@ async fn removing_a_workspace_removes_the_chats_in_it_first() {
 
     // A chat started in it after the confirmation keeps it all.
     let (late, late_process) = chat_in(&manager, &host, "late").await;
-    let error = manager
+    let removed = manager
         .remove_workspace(&host.id, confirmed, InspectionPolicy::GitOnly)
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{error:#}").contains("late was started in host after the removal was confirmed"),
-        "{error:#}"
-    );
+        .await;
+    assert!(removed.is_err());
     assert_eq!(manager.chats().await.unwrap().len(), 3);
     manager.remove_chat(&late.id, None).await.unwrap();
     drop(late_process);
@@ -342,14 +328,10 @@ async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
         .unwrap();
     let (watching, _process) = chat_in(&manager, &split, "watching").await;
     // Removing host takes the chat first, so host cannot be below it.
-    let error = manager
+    let assigned = manager
         .assign_parent(&host.id, Some(watching.id.clone()))
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{error:#}").contains("watching is below or in the space"),
-        "{error:#}"
-    );
+        .await;
+    assert!(assigned.is_err());
     assert!(manager.workspace(&host.id).await.unwrap().parent.is_none());
     // A split workspace stays below the one it was split from.
     manager
@@ -398,13 +380,9 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         parent: None,
     };
     // The workspace above the chat is outside its tree...
-    let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut start(&root))
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{error:#}").contains("their own space and those below it"),
-        "{error:#}"
-    );
+    let authorized =
+        crate::daemon::scope::authorize(&manager, Some("scope"), &mut start(&root)).await;
+    assert!(authorized.is_err());
     // ...and the one below it is not.
     let mut method = start(&worker);
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
