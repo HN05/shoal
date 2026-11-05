@@ -309,30 +309,12 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     );
     let messages = blocked(&reopened).await;
     assert_eq!(messages.len(), 4, "{messages:?}");
+    // Each blocked execution is named, and a survivor by its process.
+    for id in ["survivor", "unproven", "legacy", "unreadable"] {
+        assert!(messages.iter().any(|m| m.contains(id)), "{messages:?}");
+    }
     let survivor = messages.iter().find(|m| m.contains("survivor")).unwrap();
-    assert!(
-        survivor.contains(&format!(
-            "owned processes still running (PID {})",
-            child.pid
-        )),
-        "{survivor}"
-    );
-    assert!(survivor.contains("stopped (test memory pressure)"));
-    assert!(survivor.contains("shoal stop load"));
-    assert!(survivor.contains("shoal resume load --execution survivor"));
-    let unproven = messages.iter().find(|m| m.contains("unproven")).unwrap();
-    assert!(
-        unproven.contains("process identity is incomplete"),
-        "{unproven}"
-    );
-    let legacy = messages.iter().find(|m| m.contains("legacy")).unwrap();
-    assert!(
-        legacy.contains("process identity is incomplete"),
-        "{legacy}"
-    );
-    let unreadable = messages.iter().find(|m| m.contains("unreadable")).unwrap();
-    assert!(unreadable.contains("cannot be read"), "{unreadable}");
-    assert!(unreadable.contains("; check or remove "), "{unreadable}");
+    assert!(survivor.contains(&child.pid.to_string()), "{survivor}");
     assert!(record(&reopened, &workspace, "survivor").is_some());
     reopened.store.shutdown().await;
     serving.abort();

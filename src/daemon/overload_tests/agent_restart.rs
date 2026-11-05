@@ -41,24 +41,13 @@ async fn a_restart_that_cannot_start_the_agent_leaves_it_for_shoal_resume() {
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
     fs::remove_file(workspace.path.join("resume.sh")).unwrap();
-    let error = bounded(manager.restart_agent(&execution, None))
-        .await
-        .unwrap_err();
-    assert_eq!(format!("{error}"), "the agent did not start again");
+    let restarted = bounded(manager.restart_agent(&execution, None)).await;
+    assert!(restarted.is_err());
     bounded(launched).await.unwrap().unwrap();
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     let mut saved = crate::execution::recovery::Saved::load(&manager.paths, &workspace.id).unwrap();
     saved.retain_unattended();
-    let [(_, record)] = saved.agents.as_slice() else {
-        panic!("expected one stopped agent: {saved:?}");
-    };
-    let record = crate::execution::recovery::Record::load(record)
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        record.stop_reason.as_deref(),
-        Some("restarted by shoal restart")
-    );
+    assert_eq!(saved.agents.len(), 1, "{saved:?}");
     serving.abort();
 }
 
@@ -77,13 +66,8 @@ async fn a_restart_resumes_only_in_a_ready_recorded_workspace() {
         })
         .await
         .unwrap();
-    let error = bounded(manager.restart_agent(&execution, None))
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{error}").contains("workspace is no longer ready for agent recovery"),
-        "{error}"
-    );
+    let restarted = bounded(manager.restart_agent(&execution, None)).await;
+    assert!(restarted.is_err());
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());

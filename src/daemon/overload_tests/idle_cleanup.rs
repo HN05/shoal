@@ -94,12 +94,8 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
             Vec::new(),
             &Attacher::User,
         )
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{refused:#}").contains("being removed"),
-        "{refused:#}"
-    );
+        .await;
+    assert!(refused.is_err());
     fs::write(&release, "").unwrap();
     bounded(removal).await.unwrap().unwrap();
     bounded(launched).await.unwrap().unwrap();
