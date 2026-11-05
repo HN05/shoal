@@ -202,7 +202,8 @@ fn a_restored_chat_takes_the_issue_its_saved_chat_is_linked_to() {
 }
 
 #[test]
-fn an_imported_chat_reopens_on_its_issue() {
+fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
+    use clap::Parser;
     let repo = Repository {
         id: "repo".into(),
         path: "/repos/shoal".into(),
@@ -213,15 +214,35 @@ fn an_imported_chat_reopens_on_its_issue() {
         contribution: false,
     };
     let url = "https://forge.example/team/repo/issues/7";
-    let links: SpaceLinks =
-        serde_json::from_value(serde_json::json!({"issue": url, "prs": []})).unwrap();
+    let links: SpaceLinks = serde_json::from_value(serde_json::json!({
+        "issue": url, "issue_title": "Decide", "prs": [],
+    }))
+    .unwrap();
+    let agent: Agent = "claude".parse().unwrap();
     let topic = Topic::imported(&repo, "plan", &links);
-    assert!(
-        (topic.relaunch.windows(2)).any(|pair| pair == [OsString::from("--issue"), url.into()]),
-        "{:?}",
-        topic.relaunch
-    );
-    assert_eq!(topic.linked_issue.map(|issue| issue.number), Some(7));
+    let beside = Beside {
+        topic: &topic,
+        name: "shoal-plan-7",
+        agent: &agent,
+        model: &ModelChoice::default(),
+        args: &[],
+        session: Some("s1"),
+        restore: None,
+        parent: None,
+    };
+    // The process the import starts in a new tab takes the issue as given.
+    let relaunch = beside.relaunch(None);
+    let cli =
+        crate::cli::Cli::try_parse_from(std::iter::once("shoal".into()).chain(relaunch)).unwrap();
+    let Some(crate::cli::Command::Create(crate::cli::args::create::CreateCommand::Start(start))) =
+        cli.command
+    else {
+        panic!("expected start");
+    };
+    assert_eq!(start.issue, None);
+    let issue =
+        templates::IssueFields::at(&start.linked_issue.unwrap(), start.linked_issue_title).unwrap();
+    assert_eq!((issue.number, issue.title.as_str()), (7, "Decide"));
     let unlinked = Topic::imported(&repo, "plan", &SpaceLinks::default());
-    assert!(!unlinked.relaunch.contains(&OsString::from("--issue")));
+    assert_eq!(unlinked.relaunch, Topic::repository(&repo, "plan").relaunch);
 }

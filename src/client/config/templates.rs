@@ -153,12 +153,17 @@ impl IssueFields {
     /// The fields of the issue `links` assign, for an agent restored
     /// without its subject; none for an issue URL Shoal cannot read.
     pub fn linked(links: &SpaceLinks) -> Option<Self> {
-        let url = links.issue.as_ref()?;
+        Self::at(links.issue.as_ref()?, links.issue_title.clone())
+    }
+
+    /// The fields of the issue at `url`, titled `title`, without asking the
+    /// forge; none for a URL Shoal cannot read.
+    pub fn at(url: &str, title: Option<String>) -> Option<Self> {
         let (_, number) = crate::forge::items::link::item(LinkKind::Issue, url).ok()?;
         Some(Self {
             number,
-            title: links.issue_title.clone().unwrap_or_default(),
-            url: url.clone(),
+            title: title.unwrap_or_default(),
+            url: url.to_owned(),
         })
     }
 }

@@ -16,7 +16,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    config::{Effective, modes},
+    config::{Effective, modes, templates},
     forge::{
         IssueInput,
         items::link::{Link, LinkTarget},
@@ -238,7 +238,13 @@ async fn in_chat(ctx: &Context, args: StartArgs, mode: String) -> Result<i32> {
         args.issue,
         args.in_workspace.is_some(),
     )?;
-    let subject = chat::Subject { mode, issue };
+    let linked_issue = (args.linked_issue.as_deref())
+        .and_then(|url| templates::IssueFields::at(url, args.linked_issue_title));
+    let subject = chat::Subject {
+        mode,
+        issue,
+        linked_issue,
+    };
     match args.in_workspace {
         Some(workspace) => chat::start_in_workspace(ctx, workspace, subject, options).await,
         None => chat::start(ctx, repository, subject, options).await,

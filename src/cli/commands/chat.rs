@@ -42,6 +42,8 @@ pub(super) const CHAT_MODE: &str = "chat";
 pub(super) struct Subject {
     pub mode: String,
     pub issue: Option<Option<String>>,
+    /// The issue an imported chat is linked to, as [`Topic::linked_issue`].
+    pub linked_issue: Option<templates::IssueFields>,
 }
 
 /// Start a chat about the repository `repository` names, else the issue's,
@@ -63,7 +65,10 @@ pub(super) async fn start(
             None => chosen(ctx, repository).await?,
         };
         let settings = settings(ctx, &repo).await?;
-        let topic = Topic::repository(&repo, &subject.mode);
+        let topic = Topic {
+            linked_issue: subject.linked_issue.clone(),
+            ..Topic::repository(&repo, &subject.mode)
+        };
         let topic = on_issue(ctx, &repo, &settings, topic, subject, &mut options).await?;
         begin(ctx, repo, settings, topic, options).await
     }
@@ -87,7 +92,10 @@ pub(super) async fn start_in_workspace(
         let workspace = chosen_workspace(ctx, workspace).await?;
         let repo = workspace_repository(ctx, &workspace).await?;
         let settings = settings(ctx, &repo).await?;
-        let topic = Topic::workspace(workspace, &subject.mode);
+        let topic = Topic {
+            linked_issue: subject.linked_issue.clone(),
+            ..Topic::workspace(workspace, &subject.mode)
+        };
         let topic = on_issue(ctx, &repo, &settings, topic, subject, &mut options).await?;
         begin(ctx, repo, settings, topic, options).await
     }
@@ -312,12 +320,18 @@ impl Topic {
     }
 
     /// A chat in `mode` in the checkout of `repo` with `links`, imported
-    /// from another machine. One linked to an issue reopens in a new tab on
-    /// that issue, which the new process reads again for its rules.
+    /// from another machine. One linked to an issue reopens in a new tab
+    /// with the issue's fields, for its rules, without asking the forge,
+    /// which may have closed it.
     pub(super) fn imported(repo: &Repository, mode: &str, links: &SpaceLinks) -> Self {
         let mut topic = Self::repository(repo, mode);
         if let Some(url) = &links.issue {
-            topic.relaunch.extend(["--issue".into(), url.into()]);
+            topic.relaunch.extend(["--linked-issue".into(), url.into()]);
+        }
+        if let Some(title) = links.issue.as_ref().and(links.issue_title.as_ref()) {
+            topic
+                .relaunch
+                .extend(["--linked-issue-title".into(), title.into()]);
         }
         Self {
             links: links.relations(),

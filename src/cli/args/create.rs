@@ -145,6 +145,13 @@ pub struct StartArgs {
     /// which shoal resume passes.
     #[arg(long, hide = true, requires_all = ["chat", "name"])]
     pub restore: Option<String>,
+    /// Issue, by URL, that an imported chat is linked to, whose fields its
+    /// rules take without asking the forge, which shoal move import passes.
+    #[arg(long, hide = true, requires = "chat")]
+    pub linked_issue: Option<String>,
+    /// Title of --linked-issue.
+    #[arg(long, hide = true, requires = "linked_issue")]
+    pub linked_issue_title: Option<String>,
     /// Handoff of a scoped starter that waits on this background place,
     /// which shoal start passes.
     #[arg(long, hide = true, requires_all = ["chat", "here"])]
