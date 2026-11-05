@@ -46,7 +46,7 @@ use crate::cli::args::{
     about,
     disable_help_subcommand = true,
     help_template = help::template(),
-    after_help = "Start here (with a registered repository):\n  shoal add my-project fix-login\n  shoal run --workspace fix-login -- cargo test\n  shoal status fix-login\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
+    after_help = "Start here (with a registered repository):\n  shoal start my-project fix-login\n  shoal run --workspace fix-login -- cargo test\n  shoal status fix-login\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
 )]
 pub struct Cli {
     #[arg(skip)]

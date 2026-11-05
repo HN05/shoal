@@ -1,5 +1,5 @@
 //! Opening a workspace and starting its preparation in one request, as
-//! `shoal add` and `shoal split` do: the checks before anything is created,
+//! `shoal start` and `shoal split` do: the checks before anything is created,
 //! the workspace and its issue, then the operation that prepares it.
 use std::{collections::BTreeMap, sync::Arc};
 

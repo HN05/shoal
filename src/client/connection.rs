@@ -347,13 +347,16 @@ pub async fn workspaces(daemon: &impl Daemon) -> Result<Vec<Workspace>> {
     request(daemon, WorkspaceMethod::ListWorkspaces).await
 }
 
-/// What a new chat is recorded as: its name, its agent and the mode the
-/// agent starts in.
+/// What a new chat is recorded as: its name, its agent, the mode the agent
+/// starts in and the space it goes below.
 #[derive(Clone, Copy)]
 pub struct NewChat<'a> {
     pub name: &'a str,
     pub agent: &'a str,
     pub mode: &'a str,
+    /// The space it goes below; a scoped caller's daemon puts it below the
+    /// caller's own space without one.
+    pub parent: Option<&'a str>,
 }
 
 /// Record the `chat` whose agent replaces this process at `home`, running
@@ -377,8 +380,7 @@ pub async fn start_chat(
             pid: std::process::id(),
             origin,
             hands_over,
-            // A scoped caller's daemon puts the chat below its own space.
-            parent: None,
+            parent: chat.parent.map(str::to_owned),
         },
     )
     .await

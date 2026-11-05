@@ -95,7 +95,7 @@ pub(super) fn prompt(name: &str, config: &Path) -> String {
              commit nothing: the local config applies to every workspace of the repository \
              as soon as you save it.\n\n\
              Check the result with `shoal config show --repo {name}`. Try the setup script in a \
-             temporary workspace: `shoal add {name} {TRIAL_BRANCH}` creates one and runs it, \
+             temporary workspace: `shoal start {name} {TRIAL_BRANCH}` creates one and runs it, \
              and `shoal work setup <workspace>` runs it again after a change. Then remove that \
              workspace and its branch with `shoal rm <workspace> -y`, and tell the user to \
              check the config with `shoal config show --repo {name}`."

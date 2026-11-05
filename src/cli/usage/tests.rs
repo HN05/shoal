@@ -7,13 +7,13 @@ fn path(names: &[&str]) -> Vec<String> {
 #[test]
 fn arguments_show_as_the_command_line_passes_them() {
     for (command, argument, shown) in [
-        (&["add"][..], "repository", Some("<repository>")),
+        (&["start"][..], "repository", Some("<repository>")),
         (&["status"], "space", Some("<target>")),
         (&["run"], "workspace", Some("--workspace <workspace>")),
         (&["attach"], "workspace", Some("<target>")),
         (&["release", "hold"], "name", Some("--name <name>")),
         (&["repo", "rm"], "repository", Some("<repository>")),
-        (&["add"], "branch", Some("<repository> <branch>")),
+        (&["start"], "branch", Some("<repository> <branch>")),
         (&["repo", "rename"], "name", Some("<repository> <name>")),
         (&["status"], "repository", None),
         (&["check"], "workspace", Some("<workspace>")),

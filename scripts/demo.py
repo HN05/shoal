@@ -42,7 +42,7 @@ def fill(sandbox):
     repo = repository(sandbox.env)
     sandbox.run(["repo", "add", str(repo)])
     for workspace in WORKSPACES:
-        sandbox.run(["add", str(repo), workspace])
+        sandbox.run(["start", str(repo), workspace])
     in_workspace(sandbox, "fix-login",
                  ["questions", "ask", "Which database should the session cache use?",
                   "--recommend", "SQLite", "--reason", "No server to run",

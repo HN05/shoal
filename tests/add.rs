@@ -17,30 +17,30 @@ use std::{
 fn add_reuses_resolution_requests_without_reordering_failures() {
     let url = "https://forge.example/team/repo/issues/0";
     for (args, expected, diagnostic) in [
-        (vec!["add", url], vec![], "issue number must be positive"),
+        (vec!["start", url], vec![], "issue number must be positive"),
         (
-            vec!["add", "--issue", url, "--agent", "custom"],
+            vec!["start", "--issue", url, "--agent", "custom"],
             vec!["list_repositories", "layered_config test", "issue_details"],
             "issue number must be positive",
         ),
         (
-            vec!["add", "0", "--repo", "test"],
+            vec!["start", "0", "--repo", "test"],
             vec!["layered_config test", "list_repositories", "issue_details"],
             "issue number must be positive",
         ),
         (
-            vec!["add", "0", "--repo", "test", "--agent", "missing"],
+            vec!["start", "0", "--repo", "test", "--agent", "missing"],
             vec!["layered_config test"],
             "\"missing\"",
         ),
         (
-            vec!["add", "https://other.example/team/repo/issues/7"],
+            vec!["start", "https://other.example/team/repo/issues/7"],
             vec!["list_repositories"],
             "shoal repo add https://other.example/team/repo",
         ),
         (
             vec![
-                "add",
+                "start",
                 "--issue",
                 "https://other.example/team/repo/issues/7#comment",
             ],
@@ -57,12 +57,12 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             "shoal repo add http://other.example:3000/team/repo",
         ),
         (
-            vec!["add", "test", "new"],
+            vec!["start", "test", "new"],
             vec!["start_workspace"],
             "creation reached",
         ),
         (
-            vec!["add", "test", "new", "--agent", "codex"],
+            vec!["start", "test", "new", "--agent", "codex"],
             vec!["layered_config test", "queue_add", "start_workspace"],
             "creation reached",
         ),
@@ -80,7 +80,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
         // Work to wait for is refused before the agent or any picker.
         (
             vec![
-                "add", "test", "new", "--agent", "codex", "--after", "missing",
+                "start", "test", "new", "--agent", "codex", "--after", "missing",
             ],
             vec!["list_repositories", "check_dependencies"],
             "neither a workspace nor a queued agent",
@@ -120,8 +120,8 @@ fn unregistered_repositories_are_registered_on_confirmation() {
         "check_creation registered",
         "layered_config registered",
     ];
-    let url_args: &[&str] = &["add", "https://other.example/team/repo/issues/7"];
-    let explicit_args: &[&str] = &["add", "0", "--repo", "https://other.example/team/repo"];
+    let url_args: &[&str] = &["start", "https://other.example/team/repo/issues/7"];
+    let explicit_args: &[&str] = &["start", "0", "--repo", "https://other.example/team/repo"];
     for (args, answer, expected) in [
         (url_args, "y\n", registered.clone()),
         (url_args, "n\n", vec!["list_repositories"]),
@@ -143,14 +143,14 @@ fn unregistered_repositories_are_registered_on_confirmation() {
 fn interactive_commands_refuse_their_arguments_before_prompting() {
     for (args, answer, expected, refusal) in [
         (
-            &["add", "missing"][..],
+            &["start", "missing"][..],
             "",
             &["check_creation missing"][..],
             "repository is not registered",
         ),
         // The typed branch is checked again before the agent picker.
         (
-            &["add", "test", "--base", "main"],
+            &["start", "test", "--base", "main"],
             "taken\n",
             &["check_creation test", "check_creation test taken"],
             "workspace name already exists: taken",

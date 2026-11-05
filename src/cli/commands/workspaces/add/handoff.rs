@@ -30,7 +30,7 @@ pub(super) async fn start_beside(
     terminal::start_add(ctx, settings, options.focus, plan, issue, &name).await
 }
 
-/// Start an admitted queue entry's plan in the background where `shoal add`
+/// Start an admitted queue entry's plan in the background where `shoal start`
 /// would have from the terminal that queued it.
 pub(in crate::cli) async fn start_queued(
     ctx: &Context,

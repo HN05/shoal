@@ -306,7 +306,7 @@ instead of the PR delivery guidance below.
 - `pr open` pushes to the branch's push remote and opens the PR in `origin`'s
   repository; a push remote on the same forge host is a fork the PR comes from,
   and contribution clones keep `origin` as the repository itself.
-- Pasted links select repositories by origin identity: `add` opens issue, PR or
+- Pasted links select repositories by origin identity: `start` opens issue, PR or
   branch links; `link`/`unlink` manage issue and PR completion associations. `watch`
   defaults to linked items, supports kind filters and explicit items without
   changing completion. Cursors are workspace/item-owned, recheck associations
@@ -391,7 +391,7 @@ instead of the PR delivery guidance below.
   action on one kind of linked item, and a cross-kind verb that refuses a kind
   it applies to.
 - Commands refuse invalid given arguments before any prompt for omitted ones;
-  interactive `add` has the daemon check its creation request first.
+  interactive `start` has the daemon check its creation request first.
 - Agent pickers offer “No agent”: issue creation continues without a launch,
   and review returns without starting a reviewer. An agent whose executables are
   not on PATH is refused before any work and left out of pickers, the workspace

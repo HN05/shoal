@@ -84,6 +84,7 @@ pub(super) async fn plan_addition(
         fork: None,
         queue_entry: None,
         chat: env::in_chat(),
+        parent: None,
         workspace: None,
     })
 }
@@ -126,7 +127,7 @@ pub(crate) fn check_queued_launch(launch: &QueuedLaunch, settings: &Effective) -
 
 /// Agent arguments as a queued launch carries them, refusing one that is
 /// not UTF-8.
-pub(in crate::cli::commands) fn launch_args(args: Vec<OsString>) -> Result<Vec<String>> {
+pub(super) fn launch_args(args: Vec<OsString>) -> Result<Vec<String>> {
     (args.into_iter())
         .map(|arg| {
             arg.into_string()
@@ -186,9 +187,13 @@ pub(in crate::cli) struct AddPlan {
     /// The agent queue entry whose slot this launch uses.
     #[serde(default)]
     pub queue_entry: Option<String>,
-    /// The chat that planned the addition, which the workspace belongs to.
+    /// The chat that planned the addition, which the workspace belongs to
+    /// unless `parent` names another space.
     #[serde(default)]
     pub(super) chat: Option<String>,
+    /// The space the workspace goes below, which `--parent` names.
+    #[serde(default)]
+    pub(super) parent: Option<String>,
     /// The existing workspace a launch in it reopens; it never creates one.
     #[serde(default)]
     pub(super) workspace: Option<String>,
@@ -230,8 +235,17 @@ impl AddPlan {
             fork,
             queue_entry: None,
             chat: None,
+            parent: None,
             workspace: Some(workspace.id.clone()),
         })
+    }
+
+    /// Start the agent in the mode `options` names, below the space it
+    /// names, from a fork of the session it names.
+    pub(super) fn start_as(&mut self, options: &super::AddOptions) {
+        self.mode.clone_from(&options.mode);
+        self.parent.clone_from(&options.parent);
+        self.fork.clone_from(&options.fork);
     }
 
     /// Whether the plan opens `workspace`'s branch in its repository without
@@ -279,7 +293,7 @@ impl AddPlan {
             .branch
             .as_deref()
             .or(self.creation.existing.as_deref())
-            .unwrap_or("shoal add");
+            .unwrap_or("shoal start");
         self.place_name
             .as_ref()
             .map_or_else(|| branch.to_owned(), |name| name.render(branch, None))

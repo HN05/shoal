@@ -107,7 +107,7 @@ impl Manager {
 
     /// The canonical URL and title of the open issue `input` names in the
     /// repository whose origin `checkout` has, read with the user's logins,
-    /// as `shoal add` reads it. A closed or unknown issue is refused.
+    /// as `shoal start` reads it. A closed or unknown issue is refused.
     pub(crate) async fn read_open_issue(&self, checkout: &Path, input: &str) -> Result<OpenIssue> {
         let remote = crate::repository::remote_url_from_path(checkout)
             .await?

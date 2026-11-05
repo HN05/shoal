@@ -1,12 +1,9 @@
-//! Arguments of commands that start agents, apps and chats.
-use std::{ffi::OsString, path::PathBuf};
+//! Arguments of commands that open agents and apps in a workspace.
+use std::ffi::OsString;
 
 use clap::Subcommand;
 
-use crate::{
-    agent::Agent,
-    cli::args::{AgentParser, ModelArgs, item_reference},
-};
+use crate::cli::args::ModelArgs;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -45,86 +42,6 @@ pub enum AgentsCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
-    /// Start a new chat with an agent about a repository in its registered checkout.
-    ///
-    /// With --workspace the chat runs in a workspace's worktree instead, to
-    /// debug, audit or review its work without being its agent. Inside Herdr
-    /// the chat opens in a focused tab; on a terminal it runs in a zmx
-    /// session. A Happy chat starts detached, to continue in the Happy app.
-    /// Chats are not tracked executions.
-    #[command(args_conflicts_with_subcommands = true)]
-    Chat {
-        #[command(subcommand)]
-        command: Option<ChatCommand>,
-        /// Run in this terminal instead of a new tab or detached session.
-        #[arg(long)]
-        here: bool,
-        /// Registered repository; defaults to the current checkout or workspace, else a picker.
-        repository: Option<String>,
-        /// Run in this ready workspace's worktree; without a value, the
-        /// current workspace, else a picker.
-        #[arg(long, num_args = 0..=1, value_name = "WORKSPACE", conflicts_with = "repository")]
-        workspace: Option<Option<String>>,
-        /// Agent to start; defaults to agent.default, otherwise a picker.
-        #[arg(long, value_parser = AgentParser)]
-        agent: Option<Agent>,
-        /// Name of the chat; defaults to <repo>-chat, or <workspace>-chat
-        /// with --workspace, asked for on a terminal.
-        #[arg(long)]
-        name: Option<String>,
-        #[command(flatten)]
-        model: ModelArgs,
-        /// Agent session the chat continues, which shoal move import passes.
-        #[arg(long, hide = true)]
-        session: Option<String>,
-        /// Stopped chat, by ID, that this start restores under its own name,
-        /// which shoal resume passes.
-        #[arg(long, hide = true, requires = "name")]
-        restore: Option<String>,
-        /// Handoff of a scoped starter that waits on this background place,
-        /// which shoal chat passes.
-        #[arg(long, hide = true, requires = "here")]
-        handoff: Option<PathBuf>,
-        /// Arguments forwarded to the agent.
-        #[arg(last = true)]
-        args: Vec<OsString>,
-    },
-    /// Settle an issue's plan with an agent in a chat before anyone implements it.
-    ///
-    /// Without an issue, offers the open issues labelled [issue] plan_label.
-    /// The chat opens like `shoal chat`, with the issue as its first task.
-    Plan {
-        /// Issue number or URL; defaults to a picker.
-        #[arg(value_parser = item_reference)]
-        issue: Option<String>,
-        /// Plan the oldest open issue labelled [issue] plan_label.
-        #[arg(long, conflicts_with_all = ["issue", "newest"])]
-        oldest: bool,
-        /// Plan the newest open issue labelled [issue] plan_label.
-        #[arg(long, conflicts_with = "issue")]
-        newest: bool,
-        /// Registered repository of the issue; defaults to the URL's repository or the current checkout/workspace.
-        #[arg(long = "repo")]
-        repository: Option<String>,
-        /// Run in this terminal instead of a new tab or detached session.
-        #[arg(long)]
-        here: bool,
-        /// Agent to start; defaults to agent.default, otherwise a picker.
-        #[arg(long, value_parser = AgentParser)]
-        agent: Option<Agent>,
-        /// Name of the chat; defaults to <repo>-plan-<issue number>.
-        #[arg(long)]
-        name: Option<String>,
-        #[command(flatten)]
-        model: ModelArgs,
-        /// Handoff of a scoped starter that waits on this background place,
-        /// which shoal plan passes.
-        #[arg(long, hide = true, requires = "here")]
-        handoff: Option<PathBuf>,
-        /// Arguments forwarded to the agent.
-        #[arg(last = true)]
-        args: Vec<OsString>,
-    },
     /// Start a detached agent session in Happy.
     #[cfg(feature = "happy")]
     Happy {
@@ -136,29 +53,5 @@ pub enum AgentsCommand {
         prompt: Option<String>,
         #[arg(last = true)]
         args: Vec<OsString>,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-#[command(defer = true)]
-pub enum ChatCommand {
-    /// Rename a running chat, `shoal plan` chats included.
-    ///
-    /// Without a chat, renames the chat this runs in, else the current
-    /// checkout's only running chat, else offers a picker. With --request,
-    /// asks the chat's agent to choose a name that fits the work and set it.
-    /// A chat's zmx session keeps its name; `shoal attach` finds it by the
-    /// new one.
-    #[command(allow_missing_positional = true)]
-    Rename {
-        /// Running chat, by name.
-        chat: Option<String>,
-        /// New name, free among workspaces and running chats.
-        #[arg(required_unless_present = "request")]
-        name: Option<String>,
-        /// Ask the chat's agent to choose the name; a single argument then
-        /// names the chat.
-        #[arg(long, conflicts_with = "chat")]
-        request: bool,
     },
 }

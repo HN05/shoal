@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Register the repository a repository URL, or an issue, PR or branch link
-/// names, then add the workspace as `shoal add` would.
+/// names, then add the workspace as `shoal start` would.
 pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i32> {
     let ContributeArgs {
         here,
@@ -35,6 +35,7 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         now,
         after: Vec::new(),
         model: model.into(),
+        ..Default::default()
     };
     ensure_agent_available(ctx, agent.as_ref())?;
     let link = Link::parse(&target).ok();
@@ -64,7 +65,7 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
 
 /// Refuse an unavailable agent before registration, which may fork and clone.
 /// Only the global settings can name it before the repository is cloned;
-/// `add` checks it again against the repository's.
+/// `start` checks it again against the repository's.
 fn ensure_agent_available(ctx: &Context, agent: Option<&Agent>) -> Result<()> {
     let Some(agent) = agent else {
         return Ok(());

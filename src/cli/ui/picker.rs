@@ -219,7 +219,7 @@ pub(super) fn picker_output(
 ) -> Result<String> {
     ensure!(
         !entries.is_empty(),
-        "nothing to select; register a repository with `shoal repo add <path-or-url>` or create a workspace with `shoal add`"
+        "nothing to select; register a repository with `shoal repo add <path-or-url>` or start an agent with `shoal start`"
     );
     fzf_output(ctx, prompt, entries, extra)
 }

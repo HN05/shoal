@@ -190,9 +190,12 @@ impl Package {
         )
         .await;
         let settings = chat::settings(ctx, &repo).await?;
+        // The package's session keeps the mode the chat started in.
+        let mode = (self.sessions.last_sessions.first())
+            .map_or_else(crate::model::chat_mode, |last| last.mode.clone());
         let topic = chat::Topic {
             links: packaged.links.relations(),
-            ..chat::Topic::repository(&repo)
+            ..chat::Topic::repository(&repo, &mode)
         };
         let options = self.chat_options(ctx, packaged, place).await?;
         chat::launch(ctx, repo, settings, topic, options).await
@@ -219,6 +222,7 @@ impl Package {
             session,
             restore: None,
             handoff: None,
+            parent: None,
         })
     }
 }

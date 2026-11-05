@@ -1,5 +1,5 @@
 //! Where an item command that needs only a repository runs: a workspace, or
-//! a registered checkout, where `shoal chat` runs its agent and where the
+//! a registered checkout, where a chat runs its agent and where the
 //! user names a registered repository to act in without a workspace.
 use anyhow::{Result, ensure};
 

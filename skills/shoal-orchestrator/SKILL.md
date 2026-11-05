@@ -17,25 +17,30 @@ own checkout. Change or remove another agent's workspace only when the user asks
 
 Sessions launched through Shoal are scoped to their own space and the spaces
 below it, such as child workspaces they split from it with `shoal split`, which
-they work on themselves; `shoal add` and `shoal chat` run there create children
-of their space too, and nothing else. A `shoal chat` is scoped the same way, to
-the chat and the spaces below it: the workspaces and chats it opens go below
-it; only the user's own terminal is unscoped and creates top-level spaces. Unscoped commands also
+they work on themselves; `shoal start` run there creates children of their space
+too, or of a space below it that `--parent` names, and nothing else. A chat is
+scoped the same way, to the chat and the spaces below it: the workspaces and
+chats it starts go below it; only the user's own terminal is unscoped and
+creates top-level spaces. Unscoped commands also
 decide approval requests, so act on those only as the user directs.
 
 ## Start work
 
 ```sh
 shoal repo ls
-shoal add https://github.com/owner/repo/issues/34 --agent happy-codex
-shoal add my-project fix-login --agent happy-claude
-shoal add my-project fix-ui --base fix-login --agent happy-claude
+shoal start https://github.com/owner/repo/issues/34 --agent happy-codex
+shoal start my-project fix-login --agent happy-claude
+shoal start my-project fix-ui --base fix-login --agent happy-claude
+shoal start my-project --mode plan --issue 42 --agent claude
 shoal happy codex fix-login --prompt "Fix the login bug" -- --yolo
 shoal contribute https://github.com/other/repo/issues/12 --agent happy-claude
 ```
 
-`add` accepts a registered repository and branch, or an issue, PR or branch URL;
-an issue becomes the agent's prompt. For a repository the user does not maintain,
+`start` accepts a registered repository and branch, or an issue, PR or branch
+URL; an issue becomes the agent's first message, followed by its mode's
+instructions. `--mode` picks the mode, `worker` by default, which starts in a
+workspace; `chat` and `plan` start in a chat, and `--chat` or `--worktree`
+overrides the mode's kind. For a repository the user does not maintain,
 `contribute` takes the same URLs: it clones the repository, forks it when the
 user cannot push there, and removes the clone once nothing of it is left. Happy agents (`happy-codex`, `happy-claude`)
 run detached and appear in the Happy app. CLI agents (`codex`, `claude`) run in
@@ -50,7 +55,7 @@ text reaches the agent as its first message (Codex through Happy's server, which
 needs this machine's Happy login). Check `prompt_delivered`; when false, the text
 is in `prompt_file` and the user must send it from the app.
 
-With `max_agents` configured (the default starts agents one at a time while measured load allows), `add` may queue the agent instead: it then emits
+With `max_agents` configured (the default starts agents one at a time while measured load allows), `start` may queue a workspace's agent instead: it then emits
 the queue entry (`state: queued`, `position`) and creates nothing yet. The
 daemon starts it when a slot frees; `shoal queue` lists entries, and
 `--now` or `--focus` starts one regardless only when the user asks.
@@ -118,7 +123,7 @@ recommendation and any choices, or, asked in the agent's chat, is its final mess
 there. Relay them to the user and answer as the user
 decides; the answer reaches the agent as a message.
 
-In a `shoal chat`, you coordinate only the spaces below the chat: the
+In a chat, you coordinate only the spaces below the chat: the
 workspaces you open, which must be in the chat's repository, and those below
 them. Their agents report to you instead of the user: their messages,
 questions, completion, ready marks and exits arrive as Shoal messages naming
@@ -154,7 +159,7 @@ grace period, with the workspaces below it, stopping your agent. A chat stays
 after its agent exits until it is removed: the user continues it with
 `shoal resume <chat>`.
 
-`shoal chat --workspace <name>` starts a chat in a workspace's worktree, to
+`shoal start --in <name>` starts a chat in a workspace's worktree, to
 debug, audit or review its live work beside the workspace's own agent, which
 stays its only editing agent: the chat changes nothing there. In such a chat,
 `shoal diff`, `shoal conflicts`, `shoal status` and `shoal branch base` act on

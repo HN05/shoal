@@ -75,36 +75,36 @@ repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`;
 shoal repo add /path/to/project --name my-project
 shoal repo setup my-project   # Have an agent write and commit its .shoal.toml
 shoal repo setup my-project --local  # Or save the config outside Git
-shoal add my-project fix-login
+shoal start my-project fix-login
 shoal codex fix-login --cli
 ```
 
-Use `shoal add my-project` to pick a new or existing branch, an open issue or an open PR, or pass it explicitly:
+Use `shoal start my-project` to pick a new or existing branch, an open issue or an open PR, or pass it explicitly:
 
 ```sh
-shoal add my-project fix-api --base feature/api  # Branch from feature/api
-shoal add my-project fix-api --base origin/feature/api  # Fetch the pushed branch first
+shoal start my-project fix-api --base feature/api  # Branch from feature/api
+shoal start my-project fix-api --base origin/feature/api  # Fetch the pushed branch first
 shoal branch base set feature-api --workspace fix-api  # Record the workspace fix-api builds on
 shoal split fix-typo --workspace fix-api     # Create a child workspace for work in its own PR
-shoal add my-project --existing origin/feature/api --agent codex
-shoal add my-project quick-fix --path ../quick-fix
+shoal start my-project --existing origin/feature/api --agent codex
+shoal start my-project quick-fix --path ../quick-fix
 shoal work adopt ../existing-worktree        # Take ownership, including automatic cleanup
 shoal work adopt --copy ../existing-worktree # Copy work into Shoal's default directory
 shoal branch rename fix-login fix/login      # Rename its branch and workspace together
 shoal work rename fix-login "Login retries"  # Title the tabs Shoal opens for it
 shoal work rename --request fix-login        # Ask its agent to choose the title
-shoal add https://github.com/owner/repo/issues/68 # Create from an issue
-shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
+shoal start https://github.com/owner/repo/issues/68 # Create from an issue
+shoal start https://github.com/owner/repo/issues/34  # Start on an issue, PR, or branch link
 shoal contribute https://github.com/owner/repo/issues/68  # Fork when you cannot push; remove the clone afterwards
 shoal link https://github.com/owner/repo/issues/34 assigned  # Assign an issue to the current workspace or chat
 shoal unlink issue assigned                # Remove the assigned issue
 shoal watch pr 505                         # Watch an explicit PR
 ```
 
-Inside Herdr, `add` opens a new tab after your choices; use `--here`
+Inside Herdr, `start` opens a new tab after your choices; use `--here`
 to run in the current pane, `--focus` to switch to the new tab, or
 `terminal.herdr.enabled = false` to treat Herdr as a plain terminal. Inside
-[Rex](https://www.superlogical.com/rex), `add` opens a window in the current
+[Rex](https://www.superlogical.com/rex), `start` opens a window in the current
 session instead, inside tmux with `terminal.tmux.enabled` a tmux window, and
 inside Zellij with `terminal.zellij.enabled` a Zellij tab.
 `[terminal] default_host = "herdr"`, `"rex"`, `"tmux"` or `"zellij"` sends launches
@@ -116,22 +116,22 @@ arguments runs in a detached zmx session that `shoal attach` reaches. See
 Use `--agent claude` for Claude Code, `opencode`, `pi` or `grok` for those
 tools, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
-Happy app. Interactive `shoal add` uses `--agent` or picks an installed agent.
-Issue additions also use `agent.default = "codex"` from the repository or global
-config. Edit `~/.config/shoal/rules/worker.md` to add instructions for every
+Happy app. Interactive `shoal start` uses `--agent` or picks an installed agent.
+Starts on an issue also use `agent.default = "codex"` from the repository or
+global config. Edit `~/.config/shoal/rules/worker.md` to add instructions for every
 workspace agent and `rules/chat.md` for every chat. Agents read a
 repository's own rules from its `AGENTS.md` or `CLAUDE.md`; the same rule
 files in a repository's `.shoal/` directory add instructions only Shoal's agents
 need.
 New workspaces branch from the repository's default branch unless `--base REF`
-is supplied to `add`. With shell integration, `shoal add` enters the
+is supplied to `start`. With shell integration, `shoal start` enters the
 workspace unless its agent runs in a zmx session.
 
 Agent admission defaults to starting agents one at a time while measured CPU,
 memory and disk load leaves room; `machine.load = "light"`, `"balanced"` or
 `"full"` says how hard to push the machine. Set a fixed machine-wide limit
 (`shoal config set machine.max_agents 3`) or `none` to disable queuing, and
-limit one repository's agents with `agent.max_running` (`--repo my-project`). `shoal add` queues agents past the effective
+limit one repository's agents with `agent.max_running` (`--repo my-project`). `shoal start` queues agents past the effective
 limit and starts them as slots free; `--now` starts one anyway, and `shoal rm
 <name>` drops a queued one. `--after <workspace|issue>` holds an agent until
 that work is done and starts it on the finished branch; an issue's agent also
@@ -146,7 +146,13 @@ end. See the [runner](docs/reference.md#runner).
 ## Everyday commands
 
 After [adding an AI tool](docs/reference.md#agents), run
-`shoal add my-project fix-api --agent droid` or `shoal add <issue-url>`.
+`shoal start my-project fix-api --agent droid` or `shoal start <issue-url>`.
+
+An agent starts in a mode, which decides what it is told and whether it gets a
+workspace or a chat: `worker`, the default, implements its subject in a
+workspace; `chat` discusses the repository; `plan` settles an issue's plan
+with you. Configure your own under `[modes.<name>]` and `[rules.<name>]`; see
+[modes and rules](docs/reference.md#modes-and-rules).
 
 ```sh
 shoal                         # Inbox when something needs you, else workspaces; Tab switches
@@ -177,11 +183,11 @@ shoal attach fix-login         # Reattach to the workspace's agent session; Ctrl
 shoal demo                     # Pick a running demo an agent started and open it
 shoal demo start web           # Start the configured demo `web` for the user to try
 shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
-shoal chat my-project          # Discuss the repository with an agent in its checkout
-shoal chat --workspace fix-login  # Review a workspace's live work in its worktree, beside its agent
-shoal chat rename my-project-chat login  # Rename a running chat
-shoal chat rename --request my-project-chat  # Ask its agent to choose the name
-shoal plan --oldest            # Settle the oldest unplanned issue's plan in a chat
+shoal start my-project --mode chat  # Discuss the repository with an agent in its checkout
+shoal start --in fix-login     # Review a workspace's live work in a chat in its worktree, beside its agent
+shoal start --mode plan --issue  # Settle the plan of an issue that needs one, in a chat
+shoal work rename my-project-chat login  # Rename a running chat
+shoal work rename --request my-project-chat  # Ask its agent to choose the name
 shoal diff fix-login           # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main
 shoal alerts                  # Conflicts, finished agents, and removals you missed
@@ -400,7 +406,7 @@ requests with `shoal approvals`, then use `shoal approvals --approve <S.N>` or
 requesting space's number and the request's, such as `3.2`.
 
 Select a named Git identity with `git_profile = "work"` in that file, or use
-`shoal add my-project feature --git-profile work`. Define the profile
+`shoal start my-project feature --git-profile work`. Define the profile
 in global config; see [Git profiles](docs/reference.md#git-profiles).
 
 New workspaces get the repository checkout's ignored local files, such as `.env`;

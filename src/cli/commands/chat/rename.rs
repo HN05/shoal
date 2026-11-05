@@ -1,28 +1,23 @@
-//! Renaming a running chat, or asking its agent to.
+//! Renaming a running chat, or asking its agent to, for `shoal work
+//! rename`.
 use anyhow::Result;
 
 use crate::{
-    cli::{
-        client::{self},
-        commands::sessions,
-        context::Context,
-        terminal, ui,
-    },
+    cli::{client, context::Context, terminal},
     model::RenamedChat,
 };
 
-/// What `shoal chat rename --request` asks the chat's agent.
-const NAME_REQUEST: &str = "The user asks you to rename this chat: name the work as it stands now in two to five hyphenated words with `shoal chat rename <name>`.";
+/// What `shoal work rename --request` asks a chat's agent.
+const NAME_REQUEST: &str = "The user asks you to rename this chat: name the work as it stands now in two to five hyphenated words with `shoal work rename <name>`.";
 
+/// Rename `chat`, by ID or name; the daemon lets a chat's agent rename only
+/// its own chat.
 pub(in crate::cli::commands) async fn rename(
     ctx: &Context,
-    chat: Option<String>,
+    chat: String,
     name: String,
 ) -> Result<i32> {
-    // Refuse an invalid name before a picker asks for the chat; the daemon
-    // lets a chat's agent rename only its own chat.
     crate::validate::name("chat", &name)?;
-    let chat = select(ctx, chat).await?;
     let renamed = client::rename_chat(&ctx.paths, chat, name).await?;
     relabel(ctx, &renamed).await;
     ctx.show(&renamed.chat, |chat| {
@@ -31,14 +26,10 @@ pub(in crate::cli::commands) async fn rename(
     Ok(0)
 }
 
-/// Ask the running chat's agent to choose its name. A chat runs as long as
-/// its agent, so the message always has a reader.
-pub(in crate::cli::commands) async fn request_name(
-    ctx: &Context,
-    chat: Option<String>,
-) -> Result<i32> {
+/// Ask the agent of the running `chat`, by ID or name, to choose its name.
+/// A chat runs as long as its agent, so the message always has a reader.
+pub(in crate::cli::commands) async fn request_name(ctx: &Context, chat: String) -> Result<i32> {
     super::ensure_scope_token(ctx)?;
-    let chat = select(ctx, chat).await?;
     crate::client::agent_messages::send(&ctx.paths, chat, NAME_REQUEST.into(), Vec::new(), None)
         .await?;
     ctx.emit("Asked the chat's agent to choose its name.", ())?;
@@ -58,17 +49,4 @@ async fn relabel(ctx: &Context, renamed: &RenamedChat) {
             chat.name
         );
     }
-}
-
-/// The named chat, else the chat this process runs in, else the current
-/// checkout's only running chat, else one from a picker, as a name or ID.
-async fn select(ctx: &Context, chat: Option<String>) -> Result<String> {
-    if let Some(chat) = chat.or_else(crate::env::chat) {
-        return Ok(chat);
-    }
-    let chats = client::chats(&ctx.paths).await?;
-    if let Some(chat) = sessions::checkout_chat(ctx, &chats).await? {
-        return Ok(chat.id);
-    }
-    ui::pick_chat(ctx, &chats)
 }

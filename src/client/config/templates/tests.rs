@@ -123,10 +123,7 @@ fn the_chat_rule_describes_where_the_chat_runs_before_its_additions() {
         assert_eq!(plan.system, chat.system);
         let first = plan.first_message.unwrap();
         assert!(first.starts_with("Issue #7: Decide {path}\n"), "{first}");
-        assert!(
-            first.ends_with("`shoal add --issue 7 --agent <name>`."),
-            "{first}"
-        );
+        assert!(first.ends_with("`shoal start --issue 7`."), "{first}");
     }
 }
 

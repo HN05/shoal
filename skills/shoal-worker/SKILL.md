@@ -408,12 +408,13 @@ one the user holds, or with such a workspace below it, is the user's to remove.
 You can split children from children; each workspace process reaches its own
 workspace and those below it.
 
-`shoal add <branch>` inside your workspace also opens a child, on a branch from
-the default branch rather than yours, and `shoal chat --agent <agent>` starts a
-child chat, a discussion agent with no worktree of its own, in a background
-place the user can attach to; it returns once the chat has started, and
-`--here` is refused. Both go below your workspace, in its repository;
-you cannot create anything outside it.
+`shoal start <repository> <branch>` inside your workspace also opens a child,
+on a branch from the default branch rather than yours, and `shoal start --chat
+--agent <agent>` starts a child chat, a discussion agent with no worktree of its
+own, in a background place the user can attach to; it returns once the chat has
+started, and `--here` is refused. Both go below your workspace, or below a space
+under it that `--parent` names, in its repository; you cannot create anything
+outside it.
 
 To have work done in parallel, give it to a subagent where your instructions
 allow delegation. A subagent you run in its own worktree gets a child split from
@@ -421,19 +422,20 @@ your workspace as that worktree; otherwise split the child first, then tell the
 subagent its `path` and to work only there. Either way its Shoal commands act on
 the child, and its report and the child's issue and PR activity come to you, so
 you see and steer its work directly; hand it the child's deliveries or handle
-them yourself. Prefer this to `--agent`, which starts a separate session you
-supervise only through Shoal's messages:
+them yourself. Prefer this to `shoal start`, which starts a separate session
+you supervise only through Shoal's messages:
 
 ```sh
-shoal split --issue 43 --agent claude
-shoal split api-part --agent codex -- "Move the API client into its own crate"
-shoal split api-part --fork -- "Implement the API part of the plan we agreed"
+shoal start --issue 43 --agent claude
+shoal start <repository> api-part --agent codex -- "Move the API client into its own crate"
+shoal start <repository> api-part --fork -- "Implement the API part of the plan we agreed"
 ```
 
-It starts from the agent queue, detached, as the child's own agent, and its
-issue and PR activity goes to it rather than to you. `--fork` starts your own
-agent there from a fork of your session, so it begins with your conversation
-and needs only its task after `--`. You coordinate it: its
+It starts from the agent queue, detached, as the child's own agent, in the
+mode `--mode` names, `worker` by default, and its issue and PR activity goes to
+it rather than to you. `--fork` starts your own agent there from a fork of your
+session, so it begins with your conversation and needs only its task after
+`--`. You coordinate it: its
 messages, questions, completion and ready marks, and its exits, reach you as
 messages naming the child instead of reaching the user; `shoal files <child>`
 shows the files it hands back with `done --attach`. Answer its questions

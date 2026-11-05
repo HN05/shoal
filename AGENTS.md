@@ -42,8 +42,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
 - A space is a workspace or a chat. Flags, arguments, user-facing text and
   code call what applies to both a space (`--space`), and say workspace only
   for what needs a worktree. A command's flag becomes `--space` in the change
-  that lets it act on a chat. Command names stay short: `shoal work` for
-  workspaces, `shoal chat` for chats.
+  that lets it act on a chat. Command names stay short: `shoal start` starts
+  every agent, in a workspace or a chat, and `shoal work` maintains spaces.
 - Spaces form one tree in `space_parents`: every space has at most one parent,
   a ready workspace or a chat of its own repository, never one below it; a
   child in another repository is refused. Scope, approvals, coordinator and
@@ -114,9 +114,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   its own. A chat's agent follows the workspace-agent rules below, without what
   needs a worktree; it renames its own chat. A chat in a workspace's worktree
   also reads that workspace, with requests that only read state, and changes
-  nothing there. `shoal add`, `shoal split` and
-  `shoal chat` run inside a space create a child of that space, in its
-  repository, `split` from a workspace's branch; scoped callers create only
+  nothing there. `shoal start` and `shoal split` run inside a space create a
+  child of that space, or of a space below it that `start --parent` names, in
+  its repository, `split` from a workspace's branch; scoped callers create only
   children, run chats only in worktrees of their tree, never take over a workspace outside their tree, and start chats in
   a background place, waiting until the chat holds its own scope, and the user's terminal creates top-level spaces. Enforce own-worktree resource access
   in the daemon and deny workspace allocation/removal/recovery other than creating a child of their own space and removing a space below it the user holds nothing below, and shared
@@ -373,7 +373,7 @@ Issues and PRs carry one or more `area/` labels and one `type/` and one
 `.forgejo/scripts/labels.py` creates the scheme. An issue states the problem or
 goal and what done looks like. One whose approach is settled is labelled
 `planned`, and agents implement it without asking; one that leaves a choice for
-the owner is labelled `needs-plan` until `shoal plan` settles a Plan section in
+the owner is labelled `needs-plan` until `shoal start --mode plan` settles a Plan section in
 its body. Issues with neither, such as tracking and meta issues, stay out of that
 flow. A PR description follows
 `.forgejo/pull_request_template.md`. Push the branch and let CI verify instead

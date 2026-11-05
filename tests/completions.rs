@@ -128,9 +128,12 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "repo", "r"], "rm"),
         (vec!["shoal", "run", "rev"], "review"),
         (vec!["shoal", "codex", "--a"], "--app"),
-        (vec!["shoal", "add", "--agent", "co"], "codex"),
+        (vec!["shoal", "start", "--agent", "co"], "codex"),
         (vec!["shoal", "dro"], "droid"),
-        (vec!["shoal", "add", "--agent", "happy-cl"], "happy-claude"),
+        (
+            vec!["shoal", "start", "--agent", "happy-cl"],
+            "happy-claude",
+        ),
         (vec!["shoal", "happy", "co"], "codex"),
         (vec!["shoal", "skill", "install", "pi"], "pi"),
     ] {
@@ -163,21 +166,21 @@ fn agents_without_installed_executables_are_not_completed() {
         (vec!["shoal", "ha"], &[], &["happy"]),
         (vec!["shoal", "dr"], &[], &["droid"]),
         // Plain configured commands are not agents.
-        (vec!["shoal", "add", "--agent", "r"], &[], &["review"]),
+        (vec!["shoal", "start", "--agent", "r"], &[], &["review"]),
         (vec!["shoal", "codex", "--a"], &[], &["--app"]),
         (
-            vec!["shoal", "add", "--agent", "c"],
+            vec!["shoal", "start", "--agent", "c"],
             &["claude", "claude-direct"],
             &["codex"],
         ),
         // Launch profiles run their base's launcher.
         (
-            vec!["shoal", "add", "--agent", "droid-"],
+            vec!["shoal", "start", "--agent", "droid-"],
             &[],
             &["droid-direct"],
         ),
         (
-            vec!["shoal", "add", "--agent", "happy-"],
+            vec!["shoal", "start", "--agent", "happy-"],
             &[],
             &["happy-claude"],
         ),

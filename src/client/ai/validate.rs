@@ -176,7 +176,7 @@ fn environment(agent: &Agent) -> Result<()> {
 /// The names of Shoal's own subcommands, which a test keeps equal to the
 /// CLI's.
 pub const BUILT_IN_COMMANDS: &[&str] = &[
-    "add",
+    "start",
     "contribute",
     "split",
     "inbox",
@@ -197,8 +197,6 @@ pub const BUILT_IN_COMMANDS: &[&str] = &[
     "codex",
     "happy",
     "t3",
-    "chat",
-    "plan",
     "attach",
     "demo",
     "stop",

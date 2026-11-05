@@ -501,14 +501,6 @@ async fn space_entries(ctx: &Context, workspaces: Vec<Workspace>, chats: &[Chat]
     entries
 }
 
-/// Pick one of `chats`, listed by name. Returns the chosen chat's ID.
-pub fn pick_chat(ctx: &Context, chats: &[Chat]) -> Result<String> {
-    let entries = chat_entries(chats, Palette::stderr(ctx.json), picker_width());
-    ensure!(!entries.is_empty(), "no chat is running");
-    require_argument(ctx, "chat", "chat")?;
-    pick(ctx, "Chat> ", entries)
-}
-
 async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Vec<String>> {
     // `stop` takes spaces, of which it picks workspaces.
     let argument = match crate::cli::usage::of(&ctx.command, WORKSPACE) {

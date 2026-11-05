@@ -353,7 +353,7 @@ pub(super) async fn add(
                 ctx,
                 &mut repos,
                 link.repository.clone(),
-                "shoal add <link> --repo <repository>",
+                "shoal start <link> --repo <repository>",
             )
             .await?
             .into(),

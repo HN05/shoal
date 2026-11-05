@@ -752,7 +752,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     // existing execution's daemon connection.
     let repo = git_fixture::init_repo(root.path(), "repo", &[]);
     run(&["repo", "add", repo.to_str().unwrap()]);
-    run(&["add", repo.to_str().unwrap(), "keep-running"]);
+    run(&["start", repo.to_str().unwrap(), "keep-running"]);
     let marker = root.path().join("started");
     let finish = root.path().join("finish");
     let mut execution = command(root.path())

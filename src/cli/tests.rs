@@ -67,10 +67,11 @@ fn agent_cli_and_config_spellings_remain_compatible() {
     ] {
         let expected: Agent = spelling.parse().unwrap();
         assert_eq!(expected.name(), spelling);
-        let parsed = Cli::try_parse_from(["shoal", "add", "--agent", spelling]).unwrap();
-        let Some(Command::Create(CreateCommand::Add { agent, .. })) = parsed.command else {
+        let parsed = Cli::try_parse_from(["shoal", "start", "--agent", spelling]).unwrap();
+        let Some(Command::Create(CreateCommand::Start(start))) = parsed.command else {
             panic!("wrong command")
         };
+        let agent = start.agent;
         assert_eq!(agent, Some(expected.clone()));
         let text = format!("agent.default = {spelling:?}");
         let global = crate::config::Config::from_toml(&text).unwrap();
@@ -84,7 +85,7 @@ fn agent_cli_and_config_spellings_remain_compatible() {
         );
     }
     for invalid in ["Codex", "happy-Codex", "", "two words", "-agent"] {
-        assert!(Cli::try_parse_from(["shoal", "add", "--agent", invalid]).is_err());
+        assert!(Cli::try_parse_from(["shoal", "start", "--agent", invalid]).is_err());
         let text = format!("agent.default = {invalid:?}");
         assert!(crate::config::Config::from_toml(&text).is_err());
         assert!(toml::from_str::<crate::config::repo::RepoConfig>(&text).is_err());
@@ -309,4 +310,36 @@ fn ai_tool_validation_knows_every_built_in_command() {
         .map(|name| (*name).to_owned())
         .collect();
     assert_eq!(names, listed);
+}
+
+#[test]
+fn start_takes_an_optional_in_and_issue_and_refuses_flags_its_space_cannot_use() {
+    let start = |args: &[&str]| {
+        let cli = Cli::try_parse_from(["shoal", "start"].iter().chain(args))?;
+        let Some(Command::Create(CreateCommand::Start(start))) = cli.command else {
+            panic!("expected start");
+        };
+        Ok::<_, clap::Error>(*start)
+    };
+    // Without a value, --issue in plan mode offers the issues needing a plan.
+    let plan = start(&["--mode", "plan", "--issue"]).unwrap();
+    assert_eq!(plan.issue, Some(None));
+    let inside = start(&["--in", "--mode", "chat"]).unwrap();
+    assert_eq!(inside.in_workspace, Some(None));
+    // A positional issue reaches the start, which refuses a repository.
+    let on_issue = start(&["37", "--in", "worker"]).unwrap();
+    assert_eq!(on_issue.repository.as_deref(), Some("37"));
+    assert_eq!(on_issue.in_workspace, Some(Some("worker".into())));
+    // A chat has no worktree to create, and a workspace no chat name.
+    for refused in [
+        &["--chat", "--worktree"][..],
+        &["--chat", "repo", "topic"],
+        &["--chat", "--now"],
+        &["--chat", "--fork"],
+        &["--in", "worker", "--base", "main"],
+        &["--worktree", "--name", "talk"],
+        &["--restore", "c1", "--name", "talk"],
+    ] {
+        assert!(start(refused).is_err(), "{refused:?}");
+    }
 }

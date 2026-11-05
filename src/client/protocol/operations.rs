@@ -35,7 +35,7 @@ pub enum OperationMethod {
     /// that ran its work did.
     CancelOperation { id: String },
     /// Open a workspace in `repository` where `start` says and start
-    /// preparing it, as `shoal add` does: refuse an agent that cannot run
+    /// preparing it, as `shoal start` does: refuse an agent that cannot run
     /// there or an issue that is not open before anything is created, assign
     /// the issue, then run setup, link `pr` and queue `agent`, with `env` as
     /// [`Self::StartOperation`] takes it. Answers with
@@ -180,7 +180,7 @@ pub struct Preparation {
     pub agent: Option<Box<QueuedLaunch>>,
 }
 
-/// An agent to queue in a ready workspace, as `shoal split --agent` queues
+/// An agent to queue in a ready workspace, as a scoped `shoal start` queues
 /// a child's.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QueuedLaunch {

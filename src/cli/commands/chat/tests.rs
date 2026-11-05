@@ -4,16 +4,16 @@ use super::*;
 
 #[test]
 fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
-    let topic = Topic {
-        relaunch: vec!["chat".into(), "repo".into()],
-        name: "repo-chat".into(),
-        asks_name: true,
-        mode: CHAT_MODE.into(),
-        subject: None,
-        directories: Vec::new(),
-        links: Vec::new(),
-        workspace: None,
+    let repo = Repository {
+        id: "repo".into(),
+        path: "/repos/shoal".into(),
+        source: "/repos/shoal".into(),
+        last_used: 0,
+        name: Some("shoal".into()),
+        workspaces_dir: None,
+        contribution: false,
     };
+    let topic = Topic::repository(&repo, CHAT_MODE);
     let agent: Agent = "codex".parse().unwrap();
     let model = ModelChoice {
         model: None,
@@ -28,25 +28,31 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         args: &args,
         session: None,
         restore: None,
+        parent: None,
     };
     assert_eq!(
         beside.relaunch(None),
         [
-            "chat", "repo", "--here", "--name", "named", "--agent", "codex", "--effort", "high",
-            "--", "--search",
+            "start", "--chat", "--mode", "chat", "repo", "--here", "--name", "named", "--agent",
+            "codex", "--effort", "high", "--", "--search",
         ]
         .map(OsString::from)
     );
     // A chat continuing a session takes it to the place it opens, as a
     // restore takes the saved chat, and so does a scoped start its handoff.
+    // A chat below a named parent goes there too.
     let resumed = Beside {
         session: Some("s1"),
         restore: Some("c1"),
+        parent: Some("7"),
         ..beside
     };
     assert_eq!(
         resumed.relaunch(Some(Path::new("/tmp/shoal-chat.1"))),
         [
+            "start",
+            "--chat",
+            "--mode",
             "chat",
             "repo",
             "--here",
@@ -60,6 +66,8 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
             "s1",
             "--restore",
             "c1",
+            "--parent",
+            "7",
             "--handoff",
             "/tmp/shoal-chat.1",
             "--",
@@ -79,7 +87,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         crate::state::WorkspaceState::Ready,
     );
     workspace.id = "worker-id".into();
-    let topic = Topic::workspace(workspace.clone());
+    let topic = Topic::workspace(workspace.clone(), "plan");
     assert_eq!(topic.name, "worker-chat");
     let agent: Agent = "claude".parse().unwrap();
     let beside = Beside {
@@ -90,12 +98,16 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         args: &[],
         session: None,
         restore: None,
+        parent: None,
     };
     assert_eq!(
         beside.relaunch(None),
         [
-            "chat",
-            "--workspace",
+            "start",
+            "--chat",
+            "--mode",
+            "plan",
+            "--in",
             "worker-id",
             "--here",
             "--name",
@@ -138,7 +150,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         commit: "0123456789abcdef".into(),
         made_for: None,
     });
-    let at_commit = Topic::workspace(workspace);
+    let at_commit = Topic::workspace(workspace, CHAT_MODE);
     let told = brief(&settings, &agent, &repo, &at_commit, false)
         .unwrap()
         .system;

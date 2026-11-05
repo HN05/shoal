@@ -329,13 +329,15 @@ impl PackagedWorkspace {
 }
 
 /// How the user continues `chat`, about the repository called
-/// `repository`, here once it ended: the `shoal chat` command that resumes
-/// its agent's session; `None` for a chat whose agent reported none.
+/// `repository`, here once it ended: the `shoal start` command that resumes
+/// its agent's session in its mode; `None` for a chat whose agent reported
+/// none.
 pub fn continue_chat(chat: &Chat, repository: &str) -> Option<String> {
     let session = chat.session.as_deref()?;
     Some(format!(
-        "chat {name} ended here; shoal chat {repository} --name {name} --agent {agent} --session {session} continues it",
+        "chat {name} ended here; shoal start --chat --mode {mode} {repository} --name {name} --agent {agent} --session {session} continues it",
         name = chat.name,
+        mode = chat.mode,
         agent = chat.agent,
     ))
 }

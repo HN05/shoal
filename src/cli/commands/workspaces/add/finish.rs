@@ -80,6 +80,7 @@ pub(super) async fn add_planned(
         fork,
         queue_entry,
         chat,
+        parent,
         workspace,
     } = plan;
     let pr = creation.pr.clone();
@@ -91,7 +92,7 @@ pub(super) async fn add_planned(
     };
     let start = AddStart {
         creation,
-        chat,
+        parent: parent.or(chat),
         workspace,
         agent: launch.clone(),
     };
@@ -148,7 +149,7 @@ pub(super) async fn add_planned(
 /// The launch of `agent` in `mode` that preparing the added workspace
 /// queues, prompted with `issue` or else the plan's own prompt, with its
 /// arguments and fork. The daemon starts it outside this process, so it gets the
-/// workspace's own scope, as `shoal split --agent` does.
+/// workspace's own scope.
 fn queued_launch(
     agent: &ResolvedAddAgent,
     issue: Option<&issues::Issue>,
@@ -213,11 +214,11 @@ async fn enters_added(
 }
 
 /// What the planned workspace opens: the recorded `workspace` a launch
-/// goes to, or else what `creation` makes for `chat`, or for the user
+/// goes to, or else what `creation` makes below `parent`, or for the user
 /// without one.
 struct AddStart {
     creation: Creation,
-    chat: Option<String>,
+    parent: Option<String>,
     workspace: Option<String>,
     /// The agent its preparation queues.
     agent: Option<Box<QueuedLaunch>>,
@@ -229,7 +230,7 @@ async fn start_add_workspace(
     target: &AddTarget,
     AddStart {
         creation,
-        chat,
+        parent,
         workspace,
         agent,
     }: AddStart,
@@ -260,7 +261,7 @@ async fn start_add_workspace(
         base,
         path,
         git_profile,
-        parent: chat,
+        parent,
         options,
         issue: issue.map(|issue| issue.url.clone()),
         pr,

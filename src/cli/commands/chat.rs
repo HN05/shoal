@@ -1,7 +1,8 @@
-//! `shoal chat`: talk with an agent about a repository in its registered
-//! checkout, or about a workspace's work in its worktree. A chat is no
-//! workspace's agent, so it is not a tracked execution; the daemon records
-//! it while its agent runs. Every call starts a new chat and gives it focus.
+//! Chats, which `shoal start` starts for a mode of their kind: an agent the
+//! user talks with about a repository in its registered checkout, or about a
+//! workspace's work in its worktree. A chat is no workspace's agent, so it
+//! is not a tracked execution; the daemon records it while its agent runs.
+//! Every start makes a new chat and gives it focus.
 use std::{
     ffi::{OsStr, OsString},
     os::unix::process::CommandExt,
@@ -27,6 +28,7 @@ use crate::{
 };
 
 pub(super) mod handoff;
+mod issue;
 pub(super) mod removal;
 mod rename;
 
@@ -35,20 +37,34 @@ pub(super) use rename::{rename, request_name};
 /// The mode of a chat started without one.
 pub(super) const CHAT_MODE: &str = "chat";
 
+/// What a chat starts as: its mode, and the issue it starts on, if any,
+/// where `Some(None)` asks for one.
+pub(super) struct Subject {
+    pub mode: String,
+    pub issue: Option<Option<String>>,
+}
+
+/// Start a chat about the repository `repository` names, else the issue's,
+/// else the current one, else one picked.
 pub(super) async fn start(
     ctx: &Context,
     repository: Option<String>,
+    subject: Subject,
     options: Options,
 ) -> Result<i32> {
     // A restore runs where nobody may watch it, so any failure reaches the
     // user through the daemon.
     let restores = options.restore.clone();
     let started = async {
-        let options = options.for_caller(ctx)?;
+        let mut options = options.for_caller(ctx)?;
         options.check_name(ctx).await?;
-        let repo = chosen(ctx, repository).await?;
+        let repo = match &subject.issue {
+            Some(input) => issue::repository(ctx, input.as_deref(), repository).await?,
+            None => chosen(ctx, repository).await?,
+        };
         let settings = settings(ctx, &repo).await?;
-        let topic = Topic::repository(&repo);
+        let topic = Topic::repository(&repo, &subject.mode);
+        let topic = on_issue(ctx, &repo, &settings, topic, subject, &mut options).await?;
         begin(ctx, repo, settings, topic, options).await
     }
     .await;
@@ -61,21 +77,46 @@ pub(super) async fn start(
 pub(super) async fn start_in_workspace(
     ctx: &Context,
     workspace: Option<String>,
+    subject: Subject,
     options: Options,
 ) -> Result<i32> {
     let restores = options.restore.clone();
     let started = async {
-        let options = options.for_caller(ctx)?;
+        let mut options = options.for_caller(ctx)?;
         options.check_name(ctx).await?;
         let workspace = chosen_workspace(ctx, workspace).await?;
         let repo = workspace_repository(ctx, &workspace).await?;
         let settings = settings(ctx, &repo).await?;
-        let topic = Topic::workspace(workspace);
+        let topic = Topic::workspace(workspace, &subject.mode);
+        let topic = on_issue(ctx, &repo, &settings, topic, subject, &mut options).await?;
         begin(ctx, repo, settings, topic, options).await
     }
     .await;
     handoff::report(&started);
     client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+}
+
+/// `topic` in `repo` started on the issue `subject` names, if any. The mode
+/// must exist, and a named agent, or a model it cannot take, is refused
+/// before an issue is asked for.
+async fn on_issue(
+    ctx: &Context,
+    repo: &Repository,
+    settings: &Effective,
+    topic: Topic,
+    subject: Subject,
+    options: &mut Options,
+) -> Result<Topic> {
+    crate::config::modes::get(&settings.modes, &subject.mode)?;
+    let Some(input) = subject.issue else {
+        return Ok(topic);
+    };
+    options.agent = named_agent(settings, options.agent.take())?;
+    if let Some(agent) = &options.agent {
+        check_model(settings, agent, &options.model)?;
+    }
+    let issue = issue::chosen(ctx, repo, &settings.issue, &subject.mode, input).await?;
+    Ok(issue::on(topic, repo, &issue))
 }
 
 /// The workspace `selector` names, else the current one, else one picked
@@ -147,6 +188,9 @@ pub(super) struct Options {
     /// The handoff of a scoped starter that waits on this place to start
     /// the chat with its scope.
     pub handoff: Option<PathBuf>,
+    /// The space the chat goes below; the daemon puts a scoped starter's
+    /// below its own space without one.
+    pub parent: Option<String>,
 }
 
 /// Where a chat runs.
@@ -233,12 +277,13 @@ pub(super) struct Topic {
 }
 
 impl Topic {
-    pub(super) fn repository(repo: &Repository) -> Self {
+    /// A chat in `mode` in the checkout of `repo`.
+    pub(super) fn repository(repo: &Repository, mode: &str) -> Self {
         Self {
-            relaunch: vec!["chat".into(), repo.id.clone().into()],
+            relaunch: [start_args(mode), vec![repo.id.clone().into()]].concat(),
             name: format!("{}-chat", repository::name(repo)),
             asks_name: true,
-            mode: CHAT_MODE.to_owned(),
+            mode: mode.to_owned(),
             subject: None,
             directories: Vec::new(),
             links: Vec::new(),
@@ -246,17 +291,14 @@ impl Topic {
         }
     }
 
-    /// A chat in the worktree of `workspace`.
-    pub(super) fn workspace(workspace: Workspace) -> Self {
+    /// A chat in `mode` in the worktree of `workspace`.
+    pub(super) fn workspace(workspace: Workspace, mode: &str) -> Self {
+        let place = vec!["--in".into(), workspace.id.clone().into()];
         Self {
-            relaunch: vec![
-                "chat".into(),
-                "--workspace".into(),
-                workspace.id.clone().into(),
-            ],
+            relaunch: [start_args(mode), place].concat(),
             name: format!("{}-chat", workspace.name),
             asks_name: true,
-            mode: CHAT_MODE.to_owned(),
+            mode: mode.to_owned(),
             subject: None,
             directories: Vec::new(),
             links: Vec::new(),
@@ -271,6 +313,13 @@ impl Topic {
             None => ChatHome::Checkout(repo),
         }
     }
+}
+
+/// The `shoal` arguments that start a chat in `mode`.
+fn start_args(mode: &str) -> Vec<OsString> {
+    ["start", "--chat", "--mode", mode]
+        .map(OsString::from)
+        .to_vec()
 }
 
 /// Refuse a workspace process that cleared its scope token, which the
@@ -338,6 +387,7 @@ pub(super) async fn launch(
         restore,
         // Received with the caller's options.
         handoff: _,
+        parent,
     } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
@@ -349,6 +399,7 @@ pub(super) async fn launch(
     let launch = agents::ChatLaunch {
         name,
         mode: topic.mode.clone(),
+        parent: parent.clone(),
         instructions: brief.system,
         opening: brief.first_message,
         directories: topic.directories.clone(),
@@ -381,6 +432,7 @@ pub(super) async fn launch(
         args: &args,
         session: session.as_deref(),
         restore: restore.as_deref(),
+        parent: parent.as_deref(),
     };
     let home = topic.home(&repo);
     if place == ChatPlace::Background {
@@ -424,6 +476,7 @@ pub(super) async fn launch(
         name: &name,
         agent: agent.name(),
         mode: &topic.mode,
+        parent: parent.as_deref(),
     };
     let chat = client::record_chat(
         &ctx.paths,
@@ -611,6 +664,7 @@ struct Beside<'a> {
     args: &'a [OsString],
     session: Option<&'a str>,
     restore: Option<&'a str>,
+    parent: Option<&'a str>,
 }
 
 impl Beside<'_> {
@@ -638,6 +692,9 @@ impl Beside<'_> {
         }
         if let Some(restore) = self.restore {
             chat.extend(["--restore".into(), restore.into()]);
+        }
+        if let Some(parent) = self.parent {
+            chat.extend(["--parent".into(), parent.into()]);
         }
         if let Some(handoff) = handoff {
             chat.extend(["--handoff".into(), handoff.into()]);

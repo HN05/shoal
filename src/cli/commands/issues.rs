@@ -23,23 +23,33 @@ pub(super) async fn current_repository(
     repos: Vec<Repository>,
     hint: &str,
 ) -> Result<String> {
-    if let Some(root) = current_root().await? {
-        if let Some(repo) = repos.iter().find(|repo| repo.path == root) {
-            return Ok(repo.id.clone());
-        }
-        if let Some(workspace) = client::workspaces(&ctx.paths)
-            .await?
-            .iter()
-            .find(|workspace| workspace.path == root)
-        {
-            return Ok(workspace.repository_id.clone());
-        }
+    if let Some(id) = current_repository_id(ctx, &repos).await? {
+        return Ok(id);
     }
     ensure!(
         ctx.interactive(),
         "no current registered repository; {hint}"
     );
     ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)
+}
+
+/// The ID of the registered repository of the current checkout or
+/// workspace, without asking.
+pub(super) async fn current_repository_id(
+    ctx: &Context,
+    repos: &[Repository],
+) -> Result<Option<String>> {
+    let Some(root) = current_root().await? else {
+        return Ok(None);
+    };
+    if let Some(repo) = repos.iter().find(|repo| repo.path == root) {
+        return Ok(Some(repo.id.clone()));
+    }
+    Ok(client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|workspace| workspace.path == root)
+        .map(|workspace| workspace.repository_id))
 }
 
 /// The registered repository whose checkout the current directory is in.
@@ -69,7 +79,7 @@ pub(super) async fn repository_for(
 ) -> Result<String> {
     let (forge, retry) = (
         ForgeRepo::from_issue_url(url)?,
-        "shoal add <repository> --issue <url>",
+        "shoal start <repository> --issue <url>",
     );
     if !offer {
         return Ok(repository_with_remote(repos, forge, retry)

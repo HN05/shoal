@@ -1,4 +1,4 @@
-//! The agent queue: `shoal add` launches past `max_agents`, restores of
+//! The agent queue: `shoal start` launches past `max_agents`, restores of
 //! stopped agents and one-shot runs such as reviews wait here and start in
 //! order as slots free. Slots are
 //! counted from what the daemon already tracks, so a limit applies however an

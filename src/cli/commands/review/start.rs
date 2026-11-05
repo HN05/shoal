@@ -68,7 +68,7 @@ impl Target {
                     LinkTarget::Pr => input,
                     LinkTarget::Issue => {
                         bail!(
-                            "shoal review run takes a workspace or a PR; settle an issue's plan with shoal plan {input}"
+                            "shoal review run takes a workspace or a PR; settle an issue's plan with shoal start --mode plan --issue {input}"
                         )
                     }
                     LinkTarget::Run | LinkTarget::Branch(_) => bail!("expected a PR URL"),
@@ -276,7 +276,7 @@ async fn pull_request(
                     focus: false,
                     now: false,
                     after: Vec::new(),
-                    model: Default::default(),
+                    ..Default::default()
                 },
             )
             .await?;

@@ -472,7 +472,7 @@ fn add_inside(fixture: &Fixture, zellij: &mut ZellijServer, workspace: &str) {
             fixture
                 .command()
                 .current_dir(&fixture.repo)
-                .args(["add", repo, workspace, "--agent", "pi"]),
+                .args(["start", repo, workspace, "--agent", "pi"]),
         ),
         "",
     );
@@ -596,7 +596,7 @@ fn additions_outside_zellij_open_sessions_that_removal_ends() {
                     fixture
                         .command()
                         .current_dir(&fixture.repo)
-                        .args(["add", repo, "outside", "--agent", "pi"]),
+                        .args(["start", repo, "outside", "--agent", "pi"]),
                 ),
                 "",
                 true,

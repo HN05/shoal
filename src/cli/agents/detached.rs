@@ -372,6 +372,7 @@ pub(super) async fn start_chat(
         repository,
         name: chat_name,
         mode,
+        parent,
         settings,
         model,
         restores,
@@ -392,6 +393,7 @@ pub(super) async fn start_chat(
         name: chat_name,
         agent: name,
         mode,
+        parent: parent.as_deref(),
     };
     let record =
         client::record_chat(&ctx.paths, home, new, None, true, restores.as_deref()).await?;

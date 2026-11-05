@@ -6,7 +6,7 @@ use crate::cli::{
     Command,
     args::{
         ConfirmationArgs,
-        create::CreateCommand,
+        create::{CreateCommand, StartArgs},
         repository::{RepoCommand, RepositoryCommand},
     },
     client,
@@ -46,24 +46,12 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             name: None,
             path: None,
         }),
-        RepoMenuAction::AddWorkspace => Command::Create(CreateCommand::Add {
-            here: false,
-            focus: false,
-            path: None,
-            repository: Some(picked.id),
-            repository_override: None,
-            branch: None,
-            existing: None,
-            issue: None,
-            base: None,
-            git_profile: None,
-            agent: None,
-            now: false,
-            after: vec![],
-            creation: Default::default(),
-            model: Default::default(),
-            args: vec![],
-        }),
+        RepoMenuAction::AddWorkspace => {
+            Command::Create(CreateCommand::Start(Box::new(StartArgs {
+                repository: Some(picked.id),
+                ..Default::default()
+            })))
+        }
         RepoMenuAction::Rename => repo(RepoCommand::Rename {
             repository: Some(picked.id),
             name: Some(ui::input(ctx, "New name")?),

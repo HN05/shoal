@@ -197,7 +197,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
             fixture
                 .command()
                 .current_dir(&fixture.repo)
-                .args(["add", repo, "placed", "--agent", "pi"]),
+                .args(["start", repo, "placed", "--agent", "pi"]),
             &session,
             &users,
         ),
@@ -269,7 +269,7 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
         );
         assert!(output.status.success(), "{output:?} {transcript}");
     };
-    launch(&["add", repo, "placed", "--agent", "pi"]);
+    launch(&["start", repo, "placed", "--agent", "pi"]);
     wait_until("setup to finish with the agent running", || {
         fixture
             .ok(&["work"])
@@ -283,7 +283,7 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
     // The split names itself, never the caller's window.
     assert_eq!(rex.windows(&session), windows);
     assert_eq!(sessions(&fixture, "placed"), ["placed"]);
-    launch(&["chat", repo, "--name", "talk", "--agent", "pi"]);
+    launch(&["start", "--chat", repo, "--name", "talk", "--agent", "pi"]);
     wait_until("the chat to open beside the caller", || {
         rex.blocks(&session).len() == 3
     });
@@ -326,11 +326,11 @@ fn chat_rename_relabels_a_block_that_still_shows_the_old_name() {
     assert_eq!(response["type"], "chat", "{response}");
 
     label("talk");
-    fixture.ok(&["chat", "rename", "talk", "topic"]);
+    fixture.ok(&["work", "rename", "talk", "topic"]);
     assert_eq!(rex.windows(&session), ["topic"]);
     // A name the user gave stays.
     label("notes");
-    fixture.ok(&["chat", "rename", "topic", "other"]);
+    fixture.ok(&["work", "rename", "topic", "other"]);
     assert_eq!(rex.windows(&session), ["notes"]);
 }
 

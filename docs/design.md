@@ -112,15 +112,15 @@ environment without the secrets an agent launch exported, and runs the same trac
 the same checks; what it and its processes write becomes the operation's output,
 and it reports typed steps and its end. The CLI starts an operation and follows
 it through `shoal::client`, as an app does, showing its output where it showed
-it before, so the CLI and apps cannot drift. `shoal add`, `split` and apps open a
+it before, so the CLI and apps cannot drift. `shoal start`, `split` and apps open a
 workspace and start its preparation through one request, `StartWorkspace` or
 `StartSplit`: it refuses an agent that cannot run or an issue that is not open
 before creating anything, creates the workspace or reopens the one on the
 branch, PR head or record it names, assigns the issue, removing a new workspace
 it cannot assign, and starts the operation, which sets it up, links its PR, runs
 a new workspace's post-setup hook and queues the detached agent the request
-names, with its model, arguments, fork, issue and caller's place, as
-`split --agent` and a scoped `add --agent` start theirs. The CLI follows it
+names, with its mode, model, arguments, fork, issue and caller's place, as a
+scoped `start --agent` starts its agent. The CLI follows it
 and keeps its prompt for a failed setup and an agent it launches in the terminal. An interrupt or termination of the CLI cancels the operation, which
 interrupts the worker as it interrupted the CLI; a CLI that ends otherwise leaves
 it running. The daemon keeps an operation in memory until ten minutes after it
@@ -639,7 +639,7 @@ the same way, that is reused per PR and moved to its new head while it has nothi
 starting commit counts as kept on removal, since a fork's head or a local commit is
 on no remote, while commits made on top count as unsaved work; restore reopens it
 without a branch, and branch-only commands refuse it. `--skip-setup` and
-`--disposable` are general creation options of `add` and `split`, not special cases
+`--disposable` are general creation options of `start` and `split`, not special cases
 for a runner: one skips what gates readiness, with the removal hooks that tear it
 down, and the other makes every removal delete the workspace without inspecting it,
 asking or keeping a checkpoint.
@@ -649,9 +649,10 @@ work needs another PR gets another branch and worktree instead of switching
 branches or creating worktrees Shoal does not own. Splitting creates a new
 branch in the parent's repository, from the default branch or a `--base` that
 stacks it as usual, records the parent, and links an `--issue`. Any space opens
-a child of either kind the same way: `shoal add` and `shoal chat` run inside a
-space put the new workspace or chat below it, in its repository, and a scoped
-caller creates nothing else, while the user's terminal creates top-level spaces.
+a child of either kind the same way: `shoal start` run inside a space puts the
+new workspace or chat below it, or below a space under it that `--parent`
+names, in its repository, and a scoped caller creates nothing else, while the
+user's terminal creates top-level spaces.
 A chat an agent starts opens in a background place, since the agent cannot
 hand over its terminal, and keeps the agent's scope until it records the chat
 below the agent's space. The scope token goes through a private directory the
@@ -687,8 +688,10 @@ whatever their own work, unless one of their own keep-reasons, or a space still
 below them, keeps them; a child's own `done` follows the usual rules. The parent owns its
 children, so its processes may remove and hold them, except that the user's
 holds anywhere below refuse the removal. `work` lists children below their
-parent, and `status` names the parent and children of either kind. `split --agent` gives a child an agent of its
-own through the agent queue, and `split --fork` gives it the parent's agent
+parent, and `status` names the parent and children of either kind. `shoal start`
+is the only command that starts an agent, so `split` creates worktrees alone: a
+workspace process's `start` gives a child an agent of its own through the agent
+queue, and `start --fork` gives it the parent's agent
 from a fork of its session, the one the caller's agent or else the parent's only
 agent reported last, so the parent need not restate what it learned; the daemon starts every launch in an existing
 workspace itself, detached, so the agent never inherits the caller's scope, and
@@ -733,7 +736,7 @@ recorded, and interrupted intent blocks reuse until explicit repair or verified
 deleted-worktree cleanup.
 
 Named Git profiles live in global config; repository or global `git_profile`
-selects one for newly created worktrees, overridden by `add --git-profile`.
+selects one for newly created worktrees, overridden by `start --git-profile`.
 Apply it before setup using Git's
 per-worktree config, preserving other worktrees' settings. Enable the shared
 `worktreeConfig` extension only when the existing repository layout supports it;
@@ -745,7 +748,7 @@ single executable paths run directly without shell parsing or PATH lookup.
 Hooks that run with a worktree resolve paths against it and use it as their
 working directory. Setup runs through
 the tracked wrapper with workspace scope; the daemon owns readiness and execution
-records, and `add` keeps the workspace preparing until setup exits cleanly with no
+records, and `start` keeps the workspace preparing until setup exits cleanly with no
 survivors; manual removal also takes a preparing workspace with no execution, whose
 setup an interrupted command never started. Failures preserve files, branches, and leases; process-verification
 failures retain the workspace and report the command's exit status and the
@@ -1298,7 +1301,7 @@ place and a restart cannot restore it twice; an entry without its wrapper for th
 start grace period is dropped, and cancellation or failure leaves the recovery
 record.
 `shoal resume` queues restores instead of starting every stopped agent at once,
-which overloaded the machine; `--now` starts them at once, as `add --now` does.
+which overloaded the machine; `--now` starts them at once, as `start --now` does.
 No wrapper waits for such a restore, so the daemon starts it through the queue
 start worker as it starts a launch in an existing workspace, and admits it like
 a launch: its stopped agent holds no slot while it waits, so stopped agents past
@@ -1343,7 +1346,7 @@ Single-workspace actions select an explicit target, otherwise the caller's scope
 workspace or the workspace containing the current directory, then an interactive
 picker; a deleted current directory provides no workspace context. Explicit misses
 and other refused arguments fail without fallback, before any prompt for the
-omitted ones; `add` asks the daemon to check its creation request first.
+omitted ones; `start` asks the daemon to check its creation request first.
 Noninteractive and JSON calls without a current workspace require a target.
 An action that can apply to several workspaces takes several targets, and its
 picker selects several: Tab selects each entry and Ctrl-A all of them. It checks
@@ -1354,10 +1357,10 @@ A `-` target selects from a per-command history of space IDs that the CLI keeps
 in the state directory, shared across terminals so `attach -` works from a new pane;
 it only saves typing a name, so it never fails a command or authorizes anything, and
 scoped callers neither read nor write it. `attach` and every launch that shows a
-workspace's or a chat's agent session here, such as `add`, `claude` or `chat`, record
+workspace's or a chat's agent session here, such as `start` or `claude`, record
 the space in `attach`'s history once the session is shown and still runs: when the terminal
 detaches, or right away for a host that shows it without attaching the terminal. A
-focused `add` that opens a place records the workspace once the place hosts it, and a
+focused `start` that opens a place records the workspace once the place hosts it, and a
 focused `chat` that opens one records the chat once it registers there, since the host
 may show the place before the workspace or chat exists. So `attach -` returns to the
 session last detached from, not one another terminal still shows or one that ended;
@@ -1476,7 +1479,7 @@ fast-forwarding it to the pushed head; local commits ahead stay, divergence is r
 The daemon fast-forwards under a lifecycle reservation and the repository's Git gate,
 after verifying the recorded worktree and its branch, so a switched or replaced
 checkout is never moved.
-Refining an issue before implementation is `shoal plan`'s, which settles it with
+Refining an issue before implementation is the plan mode's, which settles it with
 the user in a chat. `repo setup`
 likewise prompts an agent, in a workspace on the `shoal-setup` branch, to write the
 tracked repository config, so it arrives as a reviewable commit that every clone
@@ -1593,7 +1596,7 @@ be replaced. Status and inspection expose them.
 The derived name is the issue number and at most three title words, short
 enough to read in full in tabs, session names and branch lists.
 
-`add <link>` recognizes issue, PR and branch URLs and selects their registered
+`start <link>` recognizes issue, PR and branch URLs and selects their registered
 repository by origin identity, offering interactive registration when missing.
 Issue links and numbers invoke issue opening with `agent.default` standing in
 for `--agent`; numbers use `--repo`, the current checkout/workspace, then a picker.
@@ -1602,11 +1605,11 @@ the workspace is ready, as issue links associate their issue; branch links open
 an origin branch. Both use existing-branch ownership checks and retain an owned
 workspace's diff base. A fork PR has no origin branch, so its head opens in the
 PR's workspace at a commit instead, with the PR's base as its diff base, and
-`--agent`, `--path`, `--git-profile` and `--base` are refused. Interactive `add`
+`--agent`, `--path`, `--git-profile` and `--base` are refused. Interactive `start`
 without a branch, base or issue also offers the repository's open issues and PRs,
 which open as their links do.
-Interactive `add` uses an agent picker when no agent is named; non-interactive
-additions launch only when an agent is named. `add --agent` launches only after
+Interactive `start` uses an agent picker when no agent is named; non-interactive
+additions launch only when an agent is named. `start --agent` launches only after
 creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Claude and Codex apps, T3) provide no
@@ -2085,12 +2088,12 @@ Issues split by whether their plan is settled: `[issue] plan_label` marks one
 that needs the owner's choices and `planned_label` one whose body holds a plan
 an agent implements without asking. Both are repository configuration, so Shoal
 assumes no label scheme, and issues with neither stay outside the flow.
-`shoal plan` settles a plan in a chat, not a workspace: planning changes no
+The plan mode settles a plan in a chat, not a workspace: planning changes no
 code, needs the user's attention and their authority to rewrite the issue, and
 the chat then coordinates the implementing workspace it opens. The plan goes
 into the issue body because the body is all an implementing agent's prompt
-carries. The planning task is built in, since a
-repository's planning conventions belong in its own contributor rules, and it
+carries. The planning task is the plan mode's built-in instructions, which a
+repository extends like any mode's text, and it
 keeps the discussion in the conversation: questions and forge comments serve
 agents blocked during implementation.
 
@@ -2157,9 +2160,17 @@ One declaration of each option, the field of the repository schema with its
 kind, generates its built-in default, merge, resolved form and provenance, so a
 reported layer is the one whose value is in use; the daemon resolves a workspace's settings
 once per request and every use site reads them rather than layering on its own.
-An agent starts in a mode: a named entry that lists the rules its system text
-carries, holds the instructions its first message ends with, and says which kind
-of space it starts in. Rules are named and shared, since several modes need the
+Every agent starts with `shoal start`, in a mode: a named entry that lists the
+rules its system text carries, holds the instructions its first message ends
+with, and says which kind of space it starts in, so one command replaces a
+command per kind of start. The default mode, `worker`, always starts in a
+workspace, so a plain `start` needs nothing from the daemon before it resolves
+its repository, as adding a workspace never did; another mode's kind is read
+from the named or current repository's settings, and `--chat`, `--in` and
+`--worktree` override it, a chat without `--mode` starting in the `chat` mode,
+since a worker would not be told it is in a chat. The space records the mode
+its agent started in, carried with the agent's name and model through every
+restore, so a restored or moved agent is told its own mode's rules again. Rules are named and shared, since several modes need the
 same guidance, while instructions say how to do one mode's job. Rules go
 through the agent CLI's system channel so they hold for the whole session,
 across restores and compaction; instructions follow the subject once, in the
@@ -2580,7 +2591,7 @@ setup and guidance, told the workspace moved. Moving a chat removes it here,
 stopping its agent, since a session that kept growing here would fork from the one that
 continues there, and the user attends a chat, so export asks first; a chat whose
 agent reported no session refuses before stopping it, since nothing could continue
-it, and so does one with spaces below it, which its removal would take. Import starts the chat through `shoal chat`'s launch with the agent's resume
+it, and so does one with spaces below it, which its removal would take. Import starts the chat through the chat launch, in its mode, with the agent's resume
 arguments, under a free name since its own may be taken there, in the background
 when no terminal attends the import, as queued agents start. A chat keeps no
 record once it is removed, so a failed `move ssh` keeps its package where a workspace

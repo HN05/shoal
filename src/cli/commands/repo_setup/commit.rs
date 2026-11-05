@@ -91,7 +91,7 @@ async fn open(ctx: &Context, repo: &Repository) -> Result<i32> {
             focus: false,
             now: false,
             after: Vec::new(),
-            model: Default::default(),
+            ..Default::default()
         },
     )
     .await

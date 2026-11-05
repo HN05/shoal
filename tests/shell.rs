@@ -60,7 +60,7 @@ cd "$REMOVED/nested"
 if shoal cleanup; then exit 1; else test "$?" -eq 7; fi
 test "$PWD" = "$parent"
 test ! -e "$HOME/injected"
-# add --agent may record a destination that cleanup removes before return.
+# start --agent may record a destination that cleanup removes before return.
 mkdir -p "$REMOVED"
 cd "$HOME"
 if shoal stale; then exit 1; else test "$?" -eq 7; fi

@@ -19,7 +19,7 @@ fn local_setup_names_the_local_config_and_its_directory() {
     for expected in [
         "`/shoal/app/.shoal/config.toml`",
         "`/shoal/app/.shoal`",
-        "`shoal add app shoal-setup-trial`",
+        "`shoal start app shoal-setup-trial`",
         "`shoal config show --repo app`",
     ] {
         assert!(

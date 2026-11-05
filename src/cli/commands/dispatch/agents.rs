@@ -3,12 +3,7 @@ use anyhow::Result;
 use crate::{
     agent::AgentMode,
     ai::IntegrationKind,
-    cli::{
-        agents,
-        args::agents::{AgentsCommand, ChatCommand},
-        commands::{chat, plan},
-        context::Context,
-    },
+    cli::{agents, args::agents::AgentsCommand, context::Context},
 };
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) -> Result<i32> {
@@ -45,78 +40,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             prompt,
             args,
         } => agents::happy(&ctx, agent, workspace, prompt, args).await,
-        AgentsCommand::Chat {
-            command:
-                Some(ChatCommand::Rename {
-                    chat,
-                    name: Some(name),
-                    request: false,
-                }),
-            ..
-        } => chat::rename(&ctx, chat, name).await,
-        // Only --request leaves out the name, and its single argument takes
-        // the name's place.
-        AgentsCommand::Chat {
-            command: Some(ChatCommand::Rename { chat, name, .. }),
-            ..
-        } => chat::request_name(&ctx, name.or(chat)).await,
-        AgentsCommand::Chat {
-            command: None,
-            here,
-            repository,
-            workspace,
-            agent,
-            name,
-            model,
-            session,
-            restore,
-            handoff,
-            args,
-        } => {
-            let options = chat::Options {
-                agent,
-                place: chat::ChatPlace::here(here),
-                name,
-                model: model.into(),
-                args,
-                session,
-                restore,
-                handoff,
-            };
-            match workspace {
-                Some(workspace) => chat::start_in_workspace(&ctx, workspace, options).await,
-                None => chat::start(&ctx, repository, options).await,
-            }
-        }
-        AgentsCommand::Plan {
-            issue,
-            oldest,
-            newest,
-            repository,
-            here,
-            agent,
-            name,
-            model,
-            handoff,
-            args,
-        } => {
-            let pick = match (oldest, newest) {
-                (true, _) => plan::Pick::Oldest,
-                (_, true) => plan::Pick::Newest,
-                _ => plan::Pick::Picker,
-            };
-            let options = chat::Options {
-                agent,
-                place: chat::ChatPlace::here(here),
-                name,
-                model: model.into(),
-                args,
-                session: None,
-                restore: None,
-                handoff,
-            };
-            plan::start(&ctx, issue, repository, pick, options).await
-        }
     }
 }
 

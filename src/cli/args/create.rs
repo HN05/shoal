@@ -11,59 +11,12 @@ use crate::{
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum CreateCommand {
-    /// Create or reopen a workspace.
-    Add {
-        /// Run in this terminal instead of a new tab or detached session.
-        #[arg(long)]
-        here: bool,
-        /// Give the new tab or session the terminal, overriding the `focus` setting;
-        /// its agent starts now, as with --now.
-        #[arg(long, conflicts_with = "here")]
-        focus: bool,
-        /// Registered repository, or an issue, PR or branch URL; defaults to the
-        /// current checkout or workspace, else a picker.
-        #[arg(value_parser = item_reference)]
-        repository: Option<String>,
-        /// Repository for an issue number or a pasted link.
-        #[arg(long = "repo")]
-        repository_override: Option<String>,
-        /// Git branch name; a portable workspace name is derived from it.
-        branch: Option<String>,
-        /// Use an existing local branch or remote/branch without creating a new branch.
-        #[arg(long, conflicts_with_all = ["branch", "issue"])]
-        existing: Option<String>,
-        /// Derive a name and agent prompt from a forge issue number or URL.
-        #[arg(long, value_parser = item_reference)]
-        issue: Option<String>,
-        /// Create this worktree at an exact new directory instead of the repository default.
-        #[arg(long)]
-        path: Option<PathBuf>,
-        /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream;
-        /// a remote branch such as origin/feature is fetched first);
-        /// with --existing, the ref its changes are compared against.
-        #[arg(long, value_name = "REF")]
-        base: Option<String>,
-        /// Apply a named Git profile to the new worktree, overriding repository defaults.
-        #[arg(long)]
-        git_profile: Option<String>,
-        /// Start a built-in agent or a configured command after worktree creation.
-        #[arg(long, value_parser = AgentParser)]
-        agent: Option<Agent>,
-        /// Start the agent now even when max_agents is reached, instead of queuing it.
-        #[arg(long)]
-        now: bool,
-        /// Queue the agent until this workspace, queued agent or issue is complete;
-        /// repeat for more. An issue's agent also waits for the issues blocking it.
-        #[arg(long, value_name = "WORK", conflicts_with_all = ["now", "focus"])]
-        after: Vec<String>,
-        #[command(flatten)]
-        creation: CreationArgs,
-        #[command(flatten)]
-        model: ModelArgs,
-        /// Arguments forwarded to the agent.
-        #[arg(last = true)]
-        args: Vec<OsString>,
-    },
+    /// Start an agent in a mode, in a new or reopened workspace or in a chat.
+    ///
+    /// The mode decides what the agent is told and, unless --chat, --worktree
+    /// or --in says otherwise, the kind of space it starts in. Run inside a
+    /// space, the new space goes below it.
+    Start(Box<StartArgs>),
     /// Create a workspace in someone else's repository for a PR.
     ///
     /// Shoal clones the repository and, when you cannot push to it, forks it
@@ -74,8 +27,7 @@ pub enum CreateCommand {
     ///
     /// The parent workspace's agent works on the child and receives its
     /// issue and PR activity; the parent's cleanup waits until its children
-    /// are removed.
-    #[command(group(clap::ArgGroup::new("child_agent").args(["agent", "fork"])))]
+    /// are removed. `shoal start` starts an agent of the child's own.
     Split {
         /// Git branch name; a portable workspace name is derived from it.
         #[arg(required_unless_present_any = ["issue", "no_branch"])]
@@ -83,10 +35,7 @@ pub enum CreateCommand {
         /// Create a workspace at a commit, with no branch of its own, for
         /// comparisons and research: at --base, a tag or commit, or the default
         /// branch. Without a parent workspace, the user owns it.
-        #[arg(
-            long,
-            conflicts_with_all = ["branch", "issue", "agent", "fork", "model", "effort"]
-        )]
+        #[arg(long, conflicts_with_all = ["branch", "issue"])]
         no_branch: bool,
         /// Derive the branch name from a forge issue number or URL and link the issue.
         #[arg(long, value_parser = item_reference)]
@@ -99,23 +48,110 @@ pub enum CreateCommand {
         /// with --no-branch to none outside a workspace.
         #[arg(long)]
         workspace: Option<String>,
-        /// Start an agent of its own in the child, which reports to the parent's agent;
-        /// it starts detached, from the agent queue.
-        #[arg(long, value_parser = AgentParser)]
-        agent: Option<Agent>,
-        /// Start the parent's agent in the child as --agent does, from a fork of its
-        /// session, so it begins with the parent's conversation; the parent's session
-        /// stays unchanged.
-        #[arg(long)]
-        fork: bool,
         #[command(flatten)]
         creation: CreationArgs,
-        #[command(flatten)]
-        model: ModelArgs,
-        /// Arguments forwarded to the agent, such as its prompt.
-        #[arg(last = true, requires = "child_agent")]
-        args: Vec<OsString>,
     },
+}
+
+// Arguments of `shoal start`.
+#[derive(Debug, Default, Args)]
+pub struct StartArgs {
+    /// The mode the agent starts in; defaults to chat with --chat or --in,
+    /// else worker.
+    #[arg(long)]
+    pub mode: Option<String>,
+    /// Start in a chat, whatever the mode's kind.
+    #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable"])]
+    pub chat: bool,
+    /// Start in a workspace with a worktree, whatever the mode's kind.
+    #[arg(long, conflicts_with_all = ["name", "in_workspace"])]
+    pub worktree: bool,
+    /// Run the chat in this ready workspace's worktree; without a value, the
+    /// current workspace, else a picker.
+    #[arg(
+        long = "in",
+        num_args = 0..=1,
+        value_name = "WORKSPACE",
+        conflicts_with_all = ["repository", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable"]
+    )]
+    pub in_workspace: Option<Option<String>>,
+    /// The space the new one goes below, by name or number; defaults to the
+    /// space this runs in, else none.
+    #[arg(long, value_name = "SPACE")]
+    pub parent: Option<String>,
+    /// Run in this terminal instead of a new tab or detached session.
+    #[arg(long)]
+    pub here: bool,
+    /// Give the new tab or session the terminal, overriding the `focus` setting;
+    /// its agent starts now, as with --now.
+    #[arg(long, conflicts_with = "here")]
+    pub focus: bool,
+    /// Registered repository, or an issue, PR or branch URL; defaults to the
+    /// current checkout or workspace, else a picker.
+    #[arg(value_parser = item_reference)]
+    pub repository: Option<String>,
+    /// Repository for an issue number or a pasted link.
+    #[arg(long = "repo")]
+    pub repository_override: Option<String>,
+    /// Git branch name; a portable workspace name is derived from it.
+    pub branch: Option<String>,
+    /// Use an existing local branch or remote/branch without creating a new branch.
+    #[arg(long, conflicts_with_all = ["branch", "issue"])]
+    pub existing: Option<String>,
+    /// The forge issue number or URL the agent starts on; a workspace's name
+    /// derives from it. Without a value in plan mode, offers the open issues
+    /// labelled [issue] plan_label.
+    #[arg(long, num_args = 0..=1, value_parser = item_reference)]
+    pub issue: Option<Option<String>>,
+    /// Create this worktree at an exact new directory instead of the repository default.
+    #[arg(long)]
+    pub path: Option<PathBuf>,
+    /// Starting Git ref (defaults to the repository's default branch, refreshed from its upstream;
+    /// a remote branch such as origin/feature is fetched first);
+    /// with --existing, the ref its changes are compared against.
+    #[arg(long, value_name = "REF")]
+    pub base: Option<String>,
+    /// Apply a named Git profile to the new worktree, overriding repository defaults.
+    #[arg(long)]
+    pub git_profile: Option<String>,
+    /// Agent to start, a built-in agent or a configured command; defaults to
+    /// agent.default, otherwise a picker.
+    #[arg(long, value_parser = AgentParser)]
+    pub agent: Option<Agent>,
+    /// Start the agent of the parent workspace from a fork of its session, so
+    /// it begins with the parent's conversation; the parent's session stays
+    /// unchanged.
+    #[arg(long)]
+    pub fork: bool,
+    /// Start the agent now even when max_agents is reached, instead of queuing it.
+    #[arg(long)]
+    pub now: bool,
+    /// Queue the agent until this workspace, queued agent or issue is complete;
+    /// repeat for more. An issue's agent also waits for the issues blocking it.
+    #[arg(long, value_name = "WORK", conflicts_with_all = ["now", "focus"])]
+    pub after: Vec<String>,
+    /// Name of a chat; defaults to <repo>-chat, <workspace>-chat with --in,
+    /// or <repo>-<mode>-<issue number> with --issue, asked for on a terminal.
+    #[arg(long)]
+    pub name: Option<String>,
+    #[command(flatten)]
+    pub creation: CreationArgs,
+    #[command(flatten)]
+    pub model: ModelArgs,
+    /// Agent session the chat continues, which shoal move import passes.
+    #[arg(long, hide = true, requires = "chat")]
+    pub session: Option<String>,
+    /// Stopped chat, by ID, that this start restores under its own name,
+    /// which shoal resume passes.
+    #[arg(long, hide = true, requires_all = ["chat", "name"])]
+    pub restore: Option<String>,
+    /// Handoff of a scoped starter that waits on this background place,
+    /// which shoal start passes.
+    #[arg(long, hide = true, requires_all = ["chat", "here"])]
+    pub handoff: Option<PathBuf>,
+    /// Arguments forwarded to the agent, such as its prompt.
+    #[arg(last = true)]
+    pub args: Vec<OsString>,
 }
 
 // What a new workspace leaves out. A doc comment here would replace the

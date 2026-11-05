@@ -269,7 +269,7 @@ impl Fixture {
         serde_json::from_slice(&output.stdout).unwrap()
     }
     fn add(&self, name: &str) -> Value {
-        self.ok(&["add", self.repo.to_str().unwrap(), name])
+        self.ok(&["start", self.repo.to_str().unwrap(), name])
     }
 
     /// `~/shoal`, the default parent of every repository directory.
@@ -632,7 +632,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     let path = Path::new(workspace["path"].as_str().unwrap());
     let id = workspace["id"].as_str().unwrap();
     fixture.ok(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "dependent",
         "--base",
@@ -715,7 +715,7 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
     fixture.add_github_origin();
     fixture.script_github(&github_issue(34, "Fix API timeout", ""));
     let repo = fixture.repo.to_str().unwrap();
-    let issue = ["add", "34", "--repo", repo, "--agent", "pi"];
+    let issue = ["start", "34", "--repo", repo, "--agent", "pi"];
     let created = fixture.ok(&[&issue[..], &["--base", "HEAD"]].concat());
     let renamed = fixture.ok(&["branch", "rename", "34-fix-api-timeout", "renamed-issue"]);
     let reopened = fixture.ok(&issue);
@@ -799,7 +799,7 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
         }
         fixture.restart();
         assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
-        let rejected = fixture.run(&["add", fixture.repo.to_str().unwrap(), "new-topic"]);
+        let rejected = fixture.run(&["start", fixture.repo.to_str().unwrap(), "new-topic"]);
         assert!(!rejected.status.success());
         if branch == "unrelated" {
             recovery_report(&fixture, &[id, "--repair"]);
@@ -1813,7 +1813,7 @@ fn url_registration_clones_once_and_supports_workspaces() {
     assert_eq!(directory.parent().unwrap(), fixture.shoal_dir());
     assert!(!fixture.root.path().join("state/repositories").exists());
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    let workspace = fixture.ok(&["add", &url, "cloned"]);
+    let workspace = fixture.ok(&["start", &url, "cloned"]);
     assert_eq!(
         Path::new(workspace["path"].as_str().unwrap())
             .parent()
@@ -1823,7 +1823,7 @@ fn url_registration_clones_once_and_supports_workspaces() {
     fixture.ok(&["rm", "cloned"]);
     assert!(clone.is_dir());
     // No workspace name can collide with the clone's directory.
-    let main = fixture.ok(&["add", &url, "main"]);
+    let main = fixture.ok(&["start", &url, "main"]);
     assert_eq!(main["path"], directory.join("main").to_str().unwrap());
     assert_eq!(main["branch"], "main-2");
 }
@@ -1854,7 +1854,7 @@ fn displayed_repository_name_resolves_old_uuid_clones_and_rejects_ambiguity() {
         let destination = fixture.root.path().join(format!("old-uuid-{parent}"));
         clones.push(fixture.ok(&["repo", "add", &url, "--path", destination.to_str().unwrap()]));
         if parent == "one" {
-            fixture.ok(&["add", "saldoir-server", "feature"]);
+            fixture.ok(&["start", "saldoir-server", "feature"]);
         }
     }
     let ambiguous = fixture.run(&["repo", "rm", "saldoir-server", "--yes"]);
@@ -1922,7 +1922,7 @@ fn repository_selectors_preserve_names_and_reject_colliding_registered_paths() {
             "cleanup.done.enabled",
             "false",
         ],
-        vec!["add", "saldoir-server", "collision"],
+        vec!["start", "saldoir-server", "collision"],
     ] {
         let output = command(&args);
         assert!(
@@ -2072,7 +2072,10 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .map(str::to_owned)
             .collect::<Vec<_>>()
     };
-    for args in [vec!["repo", "rm", "pr"], vec!["add", "103", "--repo", "pr"]] {
+    for args in [
+        vec!["repo", "rm", "pr"],
+        vec!["start", "103", "--repo", "pr"],
+    ] {
         assert!(
             complete(&args, fixture.root.path()).contains(&"project".into()),
             "{args:?}"
@@ -2164,7 +2167,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
     let failed = fixture
         .command()
         .args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "broken",
             "--base",
@@ -2617,7 +2620,7 @@ fn local_repository_without_remotes_registers_in_place_and_creates_workspaces() 
     ]);
     assert_eq!(repo["path"], fixture.repo.to_str().unwrap());
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
-    let workspace = fixture.ok(&["add", "local", "offline"]);
+    let workspace = fixture.ok(&["start", "local", "offline"]);
     assert_eq!(
         git(
             Path::new(workspace["path"].as_str().unwrap()),
@@ -3014,7 +3017,7 @@ fn configured_root_directory_affects_new_repositories_and_preserves_existing_pat
     .unwrap();
     fixture.restart();
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    let retained = fixture.ok(&["add", &url, "retained"]);
+    let retained = fixture.ok(&["start", &url, "retained"]);
     assert_eq!(
         Path::new(retained["path"].as_str().unwrap())
             .parent()
@@ -3082,7 +3085,7 @@ fn repository_clone_path_overrides_default_and_resolves_in_callers_directory() {
     assert!(!output.status.success());
     assert!(!mismatch.exists());
     assert_eq!(fixture.ok(&["repo", "add", &url]), repo);
-    fixture.ok(&["add", &url, "custom-clone"]);
+    fixture.ok(&["start", &url, "custom-clone"]);
 }
 
 #[test]
@@ -3147,7 +3150,7 @@ fn registration_reuses_repositories_by_origin_across_paths_and_url_forms() {
     assert_eq!(fixture.ok(&["repo", "add", url]), original);
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
     // This remote tests identity matching only; explicitly use local history.
-    fixture.ok(&["add", ssh_url, "alias", "--base", "HEAD"]);
+    fixture.ok(&["start", ssh_url, "alias", "--base", "HEAD"]);
     fixture.ok(&["rm", "alias"]);
 }
 
@@ -3202,7 +3205,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
     assert!(
         !fixture
             .run(&[
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "broken",
                 "--base",
@@ -3222,7 +3225,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
 fn failed_creation_cannot_adopt_an_unrelated_worktree_at_its_reserved_path() {
     let fixture = Fixture::new();
     let failed = fixture.run(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "reserved",
         "--base",
@@ -3433,7 +3436,7 @@ fn branch_removal_deletes_branches_main_or_a_remote_has() {
 
     // The fake remote above models pushed history, not a fetchable upstream.
     let divergent = fixture.ok(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "divergent",
         "--base",
@@ -3870,7 +3873,7 @@ fn forge_origin(fixture: &Fixture) -> PathBuf {
 }
 
 #[test]
-fn review_refers_issues_to_shoal_plan() {
+fn review_refers_issues_to_plan_mode() {
     let fixture = Fixture::with_config(Some(
         "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
     ));
@@ -3916,7 +3919,7 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
     let add = |cwd: &Path| {
         let output = fixture
             .command()
-            .args(["--json", "add", "--issue", "12", "--agent", "reviewer"])
+            .args(["--json", "start", "--issue", "12", "--agent", "reviewer"])
             .current_dir(cwd)
             .env("PATH", &path)
             .output()
@@ -4071,7 +4074,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         .command()
         .args([
             "--json",
-            "add",
+            "start",
             "https://forge.example/team/project/pulls/7",
         ])
         .env("PATH", &path)
@@ -4083,7 +4086,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     assert_eq!(added["branch"], "stack/top");
     assert_eq!(added["links"]["prs"], serde_json::json!([url]));
     let branch = fixture.ok(&[
-        "add",
+        "start",
         "https://forge.example/team/project/src/branch/stack%2Ftop",
     ]);
     assert_eq!(branch["id"], added["id"]);
@@ -4320,12 +4323,12 @@ fn concurrent_adds_cannot_claim_the_same_name() {
     ] {
         let first = fixture
             .command()
-            .args(["add", fixture.repo.to_str().unwrap(), first_name])
+            .args(["start", fixture.repo.to_str().unwrap(), first_name])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-        let second = fixture.run(&["add", fixture.repo.to_str().unwrap(), second_name]);
+        let second = fixture.run(&["start", fixture.repo.to_str().unwrap(), second_name]);
         let first = first.wait_with_output().unwrap();
         assert_ne!(first.status.success(), second.status.success());
         assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
@@ -4380,20 +4383,25 @@ fn branch_names_are_preserved_with_portable_workspace_names() {
 }
 
 #[test]
-fn split_refuses_a_detached_agent_without_zmx_before_creating_the_child() {
+fn a_scoped_start_refuses_a_detached_agent_without_zmx_before_creating_the_child() {
     let fixture =
         Fixture::with_config(Some("[agents.droid]\ncommand = ['fake-droid', '{args}']\n"));
     let bin = fixture.root.path().join("bin");
     install_test_script_with_mode(bin.join("fake-droid"), "#!/bin/sh\nexit 0\n", 0o700);
     fixture.add("parent");
-    // Outside Herdr the daemon starts the agent in a detached zmx session.
+    // Outside Herdr the daemon starts the parent agent's child agent in a
+    // detached zmx session.
     let output = fixture
         .command()
         .args([
-            "split",
-            "child",
+            "run",
             "--workspace",
             "parent",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "start",
+            fixture.repo.to_str().unwrap(),
+            "child",
             "--agent",
             "droid",
         ])
@@ -4408,13 +4416,14 @@ fn split_refuses_a_detached_agent_without_zmx_before_creating_the_child() {
 }
 
 #[test]
-fn split_refuses_an_unavailable_agent_before_creating_the_child() {
+fn start_refuses_an_unavailable_agent_before_creating_the_child() {
     let fixture = Fixture::new();
     fixture.add("parent");
     let output = fixture.run(&[
-        "split",
+        "start",
+        fixture.repo.to_str().unwrap(),
         "child",
-        "--workspace",
+        "--parent",
         "parent",
         "--agent",
         "droid",
@@ -4424,18 +4433,19 @@ fn split_refuses_an_unavailable_agent_before_creating_the_child() {
 }
 
 #[test]
-fn split_refuses_a_fork_without_a_running_parent_agent_before_creating_the_child() {
+fn start_refuses_a_fork_without_a_running_parent_agent_before_creating_the_child() {
     let fixture = Fixture::new();
     fixture.add("parent");
-    let output = fixture.run(&["split", "child", "--workspace", "parent", "--fork"]);
+    let repo = fixture.repo.to_str().unwrap();
+    let output = fixture.run(&["start", repo, "child", "--parent", "parent", "--fork"]);
     assert!(!output.status.success());
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 }
 
-/// The parent's agent splits a child whose agent starts from a fork of its
+/// The parent's agent starts a child whose agent starts from a fork of its
 /// session, prompted with the arguments after `--`.
 #[test]
-fn split_starts_the_childs_agent_from_a_fork_of_the_parents_session() {
+fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
     let fixture = Fixture::with_config(Some(
         "[machine.overload.disk]\nenabled = false\n[agents.claude]\ncommand = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n",
     ));
@@ -4448,9 +4458,14 @@ fn split_starts_the_childs_agent_from_a_fork_of_the_parents_session() {
         format!(
             "if [ \"$1\" = --resume ]; then printf '%s\\0' \"$@\" > \"$HOME/forked.tmp\"; mv \"$HOME/forked.tmp\" \"$HOME/forked\"; exit 0; fi\n\
              printf '{{\"session_id\":\"parent-session\"}}' | '{shoal}' internal agent-state idle >/dev/null || exit 3\n\
-             '{shoal}' --json split child --fork -- 'Take the child part' > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n",
-            shoal = env!("CARGO_BIN_EXE_shoal")
+             '{shoal}' --json start \"$(cat \"$HOME/repo-path\")\" child --fork -- 'Take the child part' > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n",
+            shoal = env!("CARGO_BIN_EXE_shoal"),
         ),
+    )
+    .unwrap();
+    fs::write(
+        fixture.root.path().join("repo-path"),
+        fixture.repo.to_str().unwrap(),
     )
     .unwrap();
     fixture.add("parent");
@@ -4462,14 +4477,16 @@ fn split_starts_the_childs_agent_from_a_fork_of_the_parents_session() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     let home = fixture.root.path();
-    let split: Value = serde_json::from_str(&fs::read_to_string(home.join("split.json")).unwrap())
+    // It reports the child, then the agent queued there.
+    let started = fs::read_to_string(home.join("split.json")).unwrap();
+    let queued: Value = serde_json::from_str(started.lines().last().unwrap_or_default())
         .unwrap_or_else(|error| {
             panic!(
-                "{error}: {}",
+                "{error}: {started}{}",
                 fs::read_to_string(home.join("split.err")).unwrap()
             )
         });
-    assert_eq!(split["agent"]["agent"], "claude", "{split}");
+    assert_eq!(queued["agent"], "claude", "{queued}");
     let forked = home.join("forked");
     wait_until("the forked agent start", || forked.exists());
     let args = fs::read_to_string(&forked).unwrap();
@@ -4485,7 +4502,7 @@ fn split_starts_the_childs_agent_from_a_fork_of_the_parents_session() {
 /// A child set up for an agent that its own configuration then refuses
 /// stays ready, with nothing queued.
 #[test]
-fn split_reports_an_agent_refused_after_the_childs_setup() {
+fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
     let fixture = Fixture::with_config(Some(
         "[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
@@ -4497,11 +4514,16 @@ fn split_reports_an_agent_refused_after_the_childs_setup() {
     );
     commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     fixture.add("parent");
+    // The parent's agent starts the child's, which its preparation queues.
     let output = fixture.run(&[
-        "split",
-        "child",
+        "run",
         "--workspace",
         "parent",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "child",
         "--agent",
         "waiter",
     ]);
@@ -4543,7 +4565,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
     ] {
         assert!(
             !fixture
-                .run(&["add", fixture.repo.to_str().unwrap(), branch])
+                .run(&["start", fixture.repo.to_str().unwrap(), branch])
                 .status
                 .success(),
             "{branch}"
@@ -4553,7 +4575,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
     git(&fixture.repo, &["branch", "-d", "previous"]);
     let existing = fixture.add("feature/topic");
     for branch in ["feature-topic", "feature.topic"] {
-        let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), branch]);
+        let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), branch]);
         assert!(!output.status.success());
     }
     assert_eq!(fixture.ok(&["work"]), serde_json::json!([existing]));
@@ -4570,7 +4592,7 @@ fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() 
 fn interactive_add_preserves_literal_branch_spelling() {
     let fixture = Fixture::new();
     let (output, transcript) = fixture.interactive(
-        &["add", fixture.repo.to_str().unwrap(), "--base", "main"],
+        &["start", fixture.repo.to_str().unwrap(), "--base", "main"],
         "\u{2003}henrik/topic\u{2003}\n",
     );
     assert!(output.status.success(), "{transcript}");
@@ -4888,7 +4910,7 @@ exit 7
         let output = fixture
             .command()
             .args([
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 name,
                 "--agent",
@@ -4932,7 +4954,7 @@ exit 7
     let output = fixture
         .command()
         .args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "bad-base",
             "--base",
@@ -4955,7 +4977,7 @@ exit 7
         fixture
             .command()
             .args([
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 name,
                 "--agent",
@@ -4985,7 +5007,7 @@ exit 7
     assert_eq!(workspace["executions"], serde_json::json!([]));
     assert!(
         !fixture
-            .run(&["add", "--", "prompt without agent"])
+            .run(&["start", "--", "prompt without agent"])
             .status
             .success()
     );
@@ -5305,7 +5327,15 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
     assert!(!output.status.success(), "{output:?}");
     // An addition refuses it before creating anything.
     let repo = fixture.repo.to_str().unwrap();
-    let output = launch(&["add", repo, "unsupported", "--agent", "pi", "--model", "m1"]);
+    let output = launch(&[
+        "start",
+        repo,
+        "unsupported",
+        "--agent",
+        "pi",
+        "--model",
+        "m1",
+    ]);
     assert!(!output.status.success(), "{output:?}");
     let workspaces = fixture.ok(&["work"]);
     assert!(
@@ -6562,10 +6592,9 @@ fn a_chat_moves_with_its_session_and_continues_it() {
     std::thread::scope(|scope| {
         let chat = scope.spawn(|| {
             fixture.interactive_command(
-                fixture
-                    .command()
-                    .current_dir(&fixture.repo)
-                    .args(["chat", "--here", "--agent", "claude", "--name", "talk"]),
+                fixture.command().current_dir(&fixture.repo).args([
+                    "start", "--chat", "--here", "--agent", "claude", "--name", "talk",
+                ]),
                 "",
             )
         });
@@ -6920,10 +6949,9 @@ fn save_running_chat(fixture: &Fixture, stop: impl FnOnce(&Fixture)) -> Value {
     let chat = std::thread::scope(|scope| {
         let chat = scope.spawn(|| {
             fixture.interactive_command(
-                fixture
-                    .command()
-                    .current_dir(&fixture.repo)
-                    .args(["chat", "--here", "--agent", "claude", "--name", "talk"]),
+                fixture.command().current_dir(&fixture.repo).args([
+                    "start", "--chat", "--here", "--agent", "claude", "--name", "talk",
+                ]),
                 "",
             )
         });
@@ -6991,7 +7019,8 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     // A restore that fails where nobody watches, before it takes the chat
     // over, tells the user.
     let output = fixture.run(&[
-        "chat",
+        "start",
+        "--chat",
         "no-such-repository",
         "--here",
         "--name",
@@ -7386,7 +7415,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         "#!/bin/sh\ntouch \"$HOME/picked\"\nhead -n 1\n",
     );
     for args in [
-        &["add"][..],
+        &["start"][..],
         &["run", "--", "true"],
         &["rm"],
         &["status"],
@@ -7417,10 +7446,10 @@ fn shell_function_navigates_after_add_and_away_after_rm() {
 set -e
 . "$INTEGRATION"
 cd "$REPO"
-shoal add "$REPO" navigate
+shoal start "$REPO" navigate
 test "${PWD##*/}" = navigate
 shoal_repo_dir="$(dirname "$PWD")"
-shoal add "$REPO" other
+shoal start "$REPO" other
 test "${PWD##*/}" = other
 shoal cd navigate
 shoal cd -
@@ -7454,7 +7483,7 @@ if shoal cd -; then
   exit 1
 fi
 test "$PWD" = "$shoal_repo_dir"
-shoal add "$REPO" acknowledged
+shoal start "$REPO" acknowledged
 test "${PWD##*/}" = acknowledged
 printf 'retained' > untracked
 shoal done
@@ -7465,7 +7494,7 @@ shoal done
 until ! shoal status acknowledged >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
-shoal add "$REPO" held
+shoal start "$REPO" held
 shoal acquire hold --workspace held --name review
 shoal done --cleanup
 test "${PWD##*/}" = held
@@ -7473,7 +7502,7 @@ shoal release hold --workspace held --name review
 until ! shoal status held >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
-shoal add "$REPO" completed
+shoal start "$REPO" completed
 printf 'keep me' > untracked
 shoal done --cleanup
 test "${PWD##*/}" = completed
@@ -7915,7 +7944,7 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
     let repo = fixture.repo.to_str().unwrap();
     // The CLI shows what setup writes, as it did when it ran setup itself.
     fs::write(&release, "").unwrap();
-    let output = fixture.run(&["--json", "add", repo, "quick"]);
+    let output = fixture.run(&["--json", "start", repo, "quick"]);
     assert!(output.status.success(), "{output:?}");
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("preparing"),
@@ -7924,7 +7953,7 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
     fs::remove_file(&release).unwrap();
     let mut add = fixture
         .command()
-        .args(["--json", "add", repo, "slow"])
+        .args(["--json", "start", repo, "slow"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -8013,7 +8042,7 @@ fn interrupting_the_cli_during_the_pre_setup_hook_stops_setup_as_it_starts() {
     );
     let mut add = fixture
         .command()
-        .args(["--json", "add", fixture.repo.to_str().unwrap(), "gated"])
+        .args(["--json", "start", fixture.repo.to_str().unwrap(), "gated"])
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
@@ -8051,7 +8080,7 @@ fn interrupting_the_cli_stops_the_post_setup_hook_and_what_ignores_sigterm_below
     commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
     let mut add = fixture
         .command()
-        .args(["--json", "add", fixture.repo.to_str().unwrap(), "hooked"])
+        .args(["--json", "start", fixture.repo.to_str().unwrap(), "hooked"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -9916,7 +9945,7 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
     git(&other, &["init", "-b", "main"]);
     commit_resource_config(&other, "[resources.local]\ncapacity=1\n");
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
-    let second = fixture.ok(&["add", other.to_str().unwrap(), "second"]);
+    let second = fixture.ok(&["start", other.to_str().unwrap(), "second"]);
     let local_first = fixture.ok(&["acquire", "resource", "local", "--workspace", "first"]);
     let local_second = fixture.ok(&["acquire", "resource", "local", "--workspace", "second"]);
     assert_ne!(local_first["scope"], local_second["scope"]);
@@ -10123,7 +10152,13 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
     .enumerate()
     {
         let name = format!("from-base-{index}");
-        let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), &name, "--base", base]);
+        let workspace = fixture.ok(&[
+            "start",
+            fixture.repo.to_str().unwrap(),
+            &name,
+            "--base",
+            base,
+        ]);
         let path = Path::new(workspace["path"].as_str().unwrap());
         assert_eq!(git(path, &["rev-parse", "HEAD"]).trim(), expected);
         assert_eq!(workspace["base_commit"], expected);
@@ -10138,7 +10173,7 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
     // A remote branch base is fetched first, so an unreachable remote stops
     // creation instead of starting from a stale tracking ref.
     let output = fixture.run(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "from-remote",
         "--base",
@@ -10167,7 +10202,7 @@ fn add_fetches_a_remote_branch_base_before_creating_the_worktree() {
         let expected = git(&author, &["rev-parse", "HEAD"]);
         let name = format!("on-api-{index}");
         let workspace = fixture.ok(&[
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             &name,
             "--base",
@@ -11216,14 +11251,14 @@ fn omitted_repositories_come_from_the_current_checkout() {
     };
     let output = run(&["repo", "config"]);
     assert!(output.status.success(), "{output:?}");
-    let output = run(&["--json", "add", "--existing", "topic"]);
+    let output = run(&["--json", "start", "--existing", "topic"]);
     assert!(output.status.success(), "{output:?}");
-    for args in [&["add"][..], &["repo", "rename"]] {
+    for args in [&["start"][..], &["repo", "rename"]] {
         assert!(!run(args).status.success(), "{args:?}");
     }
     // Following the hints passes the branch and the name, not a repository.
     let repo = fixture.repo.to_str().unwrap();
-    let output = run(&["--json", "add", repo, "fresh"]);
+    let output = run(&["--json", "start", repo, "fresh"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
     let output = run(&["repo", "rename", repo, "renamed"]);
@@ -11238,7 +11273,7 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
     fixture.add("upper");
     let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
-    let foreign = fixture.ok(&["add", other.to_str().unwrap(), "foreign"]);
+    let foreign = fixture.ok(&["start", other.to_str().unwrap(), "foreign"]);
     let lower = lower["id"].as_str().unwrap();
     let (output, rows) = fixture.pick(
         &["branch", "base", "set", "--workspace", "upper"],
@@ -11261,7 +11296,7 @@ fn work_lists_only_the_selected_repository() {
     fixture.add("local");
     let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
-    fixture.ok(&["add", other.to_str().unwrap(), "foreign"]);
+    fixture.ok(&["start", other.to_str().unwrap(), "foreign"]);
     let names = |repository: &str| -> Vec<_> {
         fixture
             .ok(&["work", "--repo", repository])
@@ -11529,7 +11564,7 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
     let mut broken = fixture.command();
     let failed = broken
         .args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "missing",
             "--base",
@@ -13337,7 +13372,7 @@ fn repository_removal_retries_partial_file_deletion_after_restart_but_rejects_re
     let identity = format!("{}:{}", metadata.dev(), metadata.ino());
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute("INSERT INTO repository_removals(repository_id,directory_id,deleting_files) VALUES (?1,?2,1)", rusqlite::params![id, identity]).unwrap();
-    let refused = fixture.run(&["add", id, "too-late"]);
+    let refused = fixture.run(&["start", id, "too-late"]);
     assert!(!refused.status.success());
     fs::remove_dir_all(fixture.repo.join(".git")).unwrap();
     fixture.restart();
@@ -13390,7 +13425,7 @@ fn repository_removal_serializes_with_workspace_creation() {
     let id = repo["id"].as_str().unwrap().to_owned();
     let add = fixture
         .command()
-        .args(["add", &id, "racing"])
+        .args(["start", &id, "racing"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -13446,7 +13481,7 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     );
     fixture.restart();
     assert_eq!(fixture.ok(&["repo", "config", id]), saved);
-    assert!(!fixture.run(&["add", id, "blocked"]).status.success());
+    assert!(!fixture.run(&["start", id, "blocked"]).status.success());
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
     fixture.ok(&["repo", "rm", id, "--yes"]);
     assert!(!fixture.repo.exists());
@@ -13495,7 +13530,7 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
         .command()
         .args([
             "--json",
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "prepared",
             "--agent",
@@ -13538,7 +13573,7 @@ fn ignored_files_are_copied_before_setup_unless_turned_off() {
     fs::write(fixture.repo.join(".env"), "TOKEN=1\n").unwrap();
     fs::create_dir(fixture.repo.join("local")).unwrap();
     fs::write(fixture.repo.join("local/signing"), "team\n").unwrap();
-    let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "copied"]);
+    let workspace = fixture.ok(&["start", fixture.repo.to_str().unwrap(), "copied"]);
     assert_eq!(workspace["state"], "ready");
     let path = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(
@@ -13552,7 +13587,7 @@ fn ignored_files_are_copied_before_setup_unless_turned_off() {
     assert_eq!(fs::read_to_string(path.join(".env")).unwrap(), "TOKEN=2\n");
 
     commit_resource_config(&fixture.repo, "setup.copy_ignored = false\n");
-    let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "uncopied"]);
+    let workspace = fixture.ok(&["start", fixture.repo.to_str().unwrap(), "uncopied"]);
     assert_eq!(workspace["state"], "ready");
     let path = Path::new(workspace["path"].as_str().unwrap());
     assert!(!path.join(".env").exists());
@@ -13579,7 +13614,7 @@ fn work_setup_skip_accepts_a_failed_setup() {
     )
     .unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &input);
-    let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "skipped"]);
+    let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "skipped"]);
     assert!(!output.status.success());
     assert_eq!(
         fixture.ok(&["status", "skipped"])["workspace"]["state"],
@@ -13636,7 +13671,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     );
     let output = fixture.run(&[
         "--json",
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "failed-setup",
         "--agent",
@@ -13713,7 +13748,7 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     .unwrap();
     let (ignored, transcript) = fixture.interactive(
         &[
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "ignored",
             "--agent",
@@ -13735,7 +13770,7 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     assert!(Path::new(&ignored_path).join("hook-ran").exists());
     assert!(Path::new(&ignored_path).join("agent-started").exists());
     let (deleted, transcript) = fixture.interactive(
-        &["add", fixture.repo.to_str().unwrap(), "deleted"],
+        &["start", fixture.repo.to_str().unwrap(), "deleted"],
         "d\ny\n",
     );
     assert!(!deleted.status.success(), "{transcript}");
@@ -13751,7 +13786,7 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         "ready"
     );
     let (canceled, transcript) =
-        fixture.interactive(&["add", fixture.repo.to_str().unwrap(), "canceled"], "\n");
+        fixture.interactive(&["start", fixture.repo.to_str().unwrap(), "canceled"], "\n");
     assert!(!canceled.status.success(), "{transcript}");
     assert_eq!(
         fixture.ok(&["status", "canceled"])["workspace"]["state"],
@@ -13785,7 +13820,7 @@ Path('setup-result').write_text('complete')
         );
         let mut command = fixture.command();
         command.args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "survivor",
             "--agent",
@@ -13833,7 +13868,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
         .command()
         .args([
             "--json",
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "interrupted",
         ])
@@ -13925,7 +13960,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     );
     let output = fixture
         .command()
-        .args(["--json", "add", fixture.repo.to_str().unwrap(), "hooked"])
+        .args(["--json", "start", fixture.repo.to_str().unwrap(), "hooked"])
         .env("SHOAL_SHELL_DIRECTIVE", home.join("directive"))
         .output()
         .unwrap();
@@ -13954,7 +13989,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     let output = fixture
         .command()
         .args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "hook-fails",
             "--agent",
@@ -14099,7 +14134,7 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     fixture.add("early");
     git(&fixture.repo, &["branch", "side"]);
     fixture.ok(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "late",
         "--base",
@@ -14367,7 +14402,7 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
             .command()
             .current_dir(&fixture.repo)
             .env("INHERITED_TOKEN", "secret")
-            .args(["chat", "--agent", "claude-chat", "--here"]),
+            .args(["start", "--chat", "--agent", "claude-chat", "--here"]),
         "\n",
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -14478,7 +14513,7 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
     // An explicit path must not make its arbitrary parent a trust root.
     let external = home.join("external/workspace");
     let workspace = fixture.ok(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "trusted",
         "--path",
@@ -14607,7 +14642,7 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
             .command()
             .args([
                 "--json",
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "--base",
                 "HEAD",
@@ -14659,7 +14694,7 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
         .command()
         .args([
             "--json",
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "custom-issue-name",
             "--base",
@@ -14755,7 +14790,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         let url = format!("https://github.com/team/project/issues/{number}");
         let number_input = number.to_string();
         let input = if number >= 45 { &number_input } else { &url };
-        let mut args = vec!["--json", "add", input, "--base", "HEAD"];
+        let mut args = vec!["--json", "start", input, "--base", "HEAD"];
         if number == 47 {
             args.extend(["--repo", fixture.repo.to_str().unwrap()]);
         }
@@ -14828,7 +14863,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             &serde_json::json!([]),
         );
         let mut command = fixture.command();
-        command.args(["--json", "add"]);
+        command.args(["--json", "start"]);
         if let Some(repository) = repository {
             command.arg(repository);
         }
@@ -14852,7 +14887,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         .command()
         .args([
             "--json",
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "plain",
             "--base",
@@ -14900,7 +14935,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         fs::write(fixture.root.path().join("choice"), choice).unwrap();
         let (output, transcript) = fixture.interactive(
             &[
-                "add",
+                "start",
                 "https://github.com/team/project/issues/298",
                 "--base",
                 "HEAD",
@@ -14935,7 +14970,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
     fs::write(fixture.root.path().join("choice"), "codex").unwrap();
     let (output, transcript) = fixture.interactive(
         &[
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "plain",
             "--base",
@@ -14960,7 +14995,7 @@ fn a_picked_agent_without_its_session_host_creates_no_workspace() {
     fs::remove_file(fixture.root.path().join("runner-bin/zmx")).unwrap();
     let (output, transcript) = fixture.terminal_command(
         fixture.command().args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "picked",
             "--base",
@@ -14986,7 +15021,7 @@ fn issue_number_picks_a_repository_before_lookup_interactively() {
     install_fake_agents(&fixture, &["claude"]);
     install_test_script(bin.join("fzf"), "#!/bin/sh\nhead -n 1\n");
     // The scripted forge has no such issue, so the lookup fails after the pick.
-    let (output, transcript) = fixture.interactive(&["add", "103", "--base", "HEAD"], "");
+    let (output, transcript) = fixture.interactive(&["start", "103", "--base", "HEAD"], "");
     assert!(!output.status.success(), "{output:?}\n{transcript}");
     assert!(
         transcript.contains("GET repos/team/project/issues/103"),
@@ -15044,7 +15079,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
         let output = fixture
             .command()
             .args([
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "--base",
                 "HEAD",
@@ -15074,18 +15109,18 @@ esac
     );
     for (args, diagnostic) in [
         (
-            vec!["add", "--issue", "https://github.com/team/other/issues/4"],
+            vec!["start", "--issue", "https://github.com/team/other/issues/4"],
             "shoal repo add",
         ),
-        (vec!["add", "--issue", "4"], "pass --repo"),
+        (vec!["start", "--issue", "4"], "pass --repo"),
         (
-            vec!["add", "https://github.com/team/project/issues/4"],
+            vec!["start", "https://github.com/team/project/issues/4"],
             "no agent selected",
         ),
-        (vec!["add", "4", "--agent", "codex"], "pass --repo"),
+        (vec!["start", "4", "--agent", "codex"], "pass --repo"),
         (
             vec![
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "--issue",
                 "not-an-issue",
@@ -15096,7 +15131,7 @@ esac
         ),
         (
             vec![
-                "add",
+                "start",
                 "0",
                 "--repo",
                 fixture.repo.to_str().unwrap(),
@@ -15106,12 +15141,12 @@ esac
             "must be positive",
         ),
         (
-            vec!["add", "4", "--repo", "unknown", "--agent", "codex"],
+            vec!["start", "4", "--repo", "unknown", "--agent", "codex"],
             "not registered",
         ),
         (
             vec![
-                "add",
+                "start",
                 "https://github.com/team/other/issues/4",
                 "--repo",
                 fixture.repo.to_str().unwrap(),
@@ -15122,7 +15157,7 @@ esac
         ),
         (
             vec![
-                "add",
+                "start",
                 "https://github.com/team/other/issues/4",
                 "--agent",
                 "codex",
@@ -15131,7 +15166,7 @@ esac
         ),
         (
             vec![
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "--issue",
                 "https://github.com/team/project/pull/4",
@@ -15162,7 +15197,7 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
     fixture.add_github_origin();
     fixture.script_github(&github_issue(34, "Fix API timeout", ""));
     let repo = fixture.repo.to_str().unwrap();
-    let issue = ["add", "34", "--repo", repo, "--agent", "pi"];
+    let issue = ["start", "34", "--repo", repo, "--agent", "pi"];
     let branch = "34-fix-api-timeout";
     let branches = |fixture: &Fixture| -> Vec<Value> {
         fixture
@@ -15227,7 +15262,7 @@ fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() 
     );
     git(&fixture.repo, &["branch", "coworker"]);
     let args = [
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "--existing",
         "coworker",
@@ -15253,7 +15288,7 @@ fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() 
         "coworker",
         "--",
         env!("CARGO_BIN_EXE_shoal"),
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "--existing",
         "elsewhere",
@@ -15263,7 +15298,7 @@ fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() 
     assert!(
         !fixture
             .run(&[
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "other",
                 "--existing",
@@ -15276,7 +15311,7 @@ fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() 
         assert!(
             !fixture
                 .run(&[
-                    "add",
+                    "start",
                     fixture.repo.to_str().unwrap(),
                     "--existing",
                     "coworker",
@@ -15305,7 +15340,7 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
             fixture
                 .command()
                 .env("SHOAL_SHELL_DIRECTIVE", &directive)
-                .args(["add", fixture.repo.to_str().unwrap()]),
+                .args(["start", fixture.repo.to_str().unwrap()]),
             "",
         );
         assert!(output.status.success(), "{transcript}");
@@ -15340,7 +15375,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
             fixture
                 .command()
                 .env("SHOAL_SHELL_DIRECTIVE", &directive)
-                .args(["add", fixture.repo.to_str().unwrap()]),
+                .args(["start", fixture.repo.to_str().unwrap()]),
             "",
         )
     };
@@ -17203,7 +17238,7 @@ fn happy_agents_are_refused_until_enabled() {
     let output = fixture
         .command()
         .args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "happy-off",
             "--agent",
@@ -17230,7 +17265,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                 .command()
                 .args([
                     "--json",
-                    "add",
+                    "start",
                     fixture.repo.to_str().unwrap(),
                     &name,
                     "--agent",
@@ -17384,7 +17419,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             .command()
             .args([
                 "--json",
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "--base",
                 "HEAD",
@@ -17946,7 +17981,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     git(&fixture.repo, &["branch", "existing"]);
     let existing = fixture.ok(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "--existing",
         "existing",
@@ -17967,7 +18002,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
         ],
     );
     fixture.ok(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "--existing",
         "existing",
@@ -18002,7 +18037,7 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
         "false"
     );
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
-    let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "unknown"]);
+    let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "unknown"]);
     assert!(!output.status.success());
     let failed = fixture.ok(&["status", "unknown"]);
     assert_eq!(failed["workspace"]["state"], "failed");
@@ -18018,7 +18053,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     git(&fixture.repo, &["branch", "existing-profile"]);
     for (existing, name) in [(false, "new-profile"), (true, "existing-profile")] {
-        let mut args = vec!["add", fixture.repo.to_str().unwrap()];
+        let mut args = vec!["start", fixture.repo.to_str().unwrap()];
         if existing {
             args.push("--existing");
         }
@@ -18030,7 +18065,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
             "manual@example.invalid"
         );
         let output = fixture.run(&[
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "--existing",
             name,
@@ -18045,7 +18080,7 @@ fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     }
     let before = fixture.ok(&["work"]);
     let output = fixture.run(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "bad-profile",
         "--git-profile",
@@ -18061,7 +18096,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
     let fixture = Fixture::with_config(Some(
         "[commands]\ncheck = ['sh', '-c', 'cat; printf \"%s\\n\" \"$SHOAL_WORKSPACE\" \"$@\"; test -n \"$SHOAL_SCOPE_TOKEN\" || exit 99; exit 7', 'check', 'literal $HOME']\n",
     ));
-    let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "custom"]);
+    let workspace = fixture.ok(&["start", fixture.repo.to_str().unwrap(), "custom"]);
     let path = workspace["path"].as_str().unwrap();
     let mut child = fixture
         .command()
@@ -18222,7 +18257,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
 #[test]
 fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     let fixture = Fixture::new();
-    let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "configured-agent"]);
+    let workspace = fixture.ok(&["start", fixture.repo.to_str().unwrap(), "configured-agent"]);
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join(".shoal.toml"),
         "[agents.claude]\ncommand = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}', 'prompt={prompt}']\n[agents.codex]\ncommand = ['printf', '%s\\n', '{args}', 'custom default', 'prompt={prompt}']\n"
@@ -18765,20 +18800,20 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
         .path()
         .join("elsewhere/one off ' {{ branch }} path");
     let path = destination.to_str().unwrap();
-    let workspace = fixture.ok(&["add", repo, "custom/topic", "--path", path]);
+    let workspace = fixture.ok(&["start", repo, "custom/topic", "--path", path]);
     assert_eq!(
         Path::new(workspace["path"].as_str().unwrap()),
         fs::canonicalize(path).unwrap()
     );
     assert_eq!(workspace["name"], "custom-topic");
     assert_eq!(
-        fixture.ok(&["add", repo, "--existing", "custom/topic", "--path", path])["id"],
+        fixture.ok(&["start", repo, "--existing", "custom/topic", "--path", path])["id"],
         workspace["id"]
     );
     assert!(
         !fixture
             .run(&[
-                "add",
+                "start",
                 repo,
                 "--existing",
                 "custom/topic",
@@ -18794,7 +18829,7 @@ fn one_off_workspace_paths_preserve_repository_defaults_and_ownership() {
     assert!(!destination.exists());
     assert!(destination.parent().unwrap().exists());
     git(&fixture.repo, &["branch", "existing-path"]);
-    fixture.ok(&["add", repo, "--existing", "existing-path", "--path", path]);
+    fixture.ok(&["start", repo, "--existing", "existing-path", "--path", path]);
 }
 
 #[test]
@@ -18818,7 +18853,7 @@ fn one_off_workspace_paths_reject_existing_and_protected_directories() {
         owned.parent().unwrap().to_path_buf(),
         fixture.root.path().to_path_buf(),
     ] {
-        let output = fixture.run(&["add", repo, "rejected", "--path", path.to_str().unwrap()]);
+        let output = fixture.run(&["start", repo, "rejected", "--path", path.to_str().unwrap()]);
         assert!(!output.status.success(), "accepted {}", path.display());
     }
     assert_eq!(
@@ -18969,7 +19004,7 @@ fn adopt_copy_rolls_back_when_adoption_name_is_taken() {
     let occupied = fixture.root.path().join("occupied worktree");
     let repo = fixture.repo.to_str().unwrap();
     let occupied_workspace = fixture.ok(&[
-        "add",
+        "start",
         repo,
         "copy-topic-2",
         "--path",
@@ -19192,7 +19227,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
     fs::remove_dir_all(&offline).unwrap();
     let destination = fixture.root.path().join("custom");
     fixture.ok(&[
-        "add",
+        "start",
         repo,
         "custom",
         "--path",
@@ -19217,7 +19252,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
         assert!(
             !fixture
                 .run(&[
-                    "add",
+                    "start",
                     repo,
                     "rejected",
                     "--path",
@@ -19253,7 +19288,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&[
         "--json",
-        "add",
+        "start",
         "37",
         "--repo",
         fixture.repo.to_str().unwrap(),
@@ -19321,7 +19356,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     .unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "custom-add",
         "--base",
@@ -19338,7 +19373,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     );
     let before = fixture.ok(&["work"]);
     let unknown = fixture.run(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "unknown-agent",
         "--agent",
@@ -19346,6 +19381,90 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     ]);
     assert!(!unknown.status.success());
     assert_eq!(fixture.ok(&["work"]), before);
+}
+
+/// A repository's own mode decides the kind of space, its rules and the
+/// instructions after the subject; `--worktree` starts a chat mode in a
+/// workspace; the workspace records the mode of its latest agent.
+#[test]
+fn start_runs_a_repositorys_own_mode_and_records_it() {
+    let fixture = Fixture::with_config(Some(
+        "agent.default = 'helper'\n[agents.helper]\ncommand = ['missing-global-launcher']\n",
+    ));
+    let bin = fixture.root.path().join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    fixture.script_github(&github_issue(37, "Sort the queue", "Body."));
+    install_test_script_with_mode(
+        bin.join("fake-agent"),
+        "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$HOME/agent-args\"\nexit 7\n",
+        0o700,
+    );
+    fixture.add_github_origin();
+    let saved = fixture.root.path().join("saved.toml");
+    fs::write(
+        &saved,
+        "[agents.helper]\ncommand = ['fake-agent', '--prompt={prompt}']\n\
+         [modes.triage]\nrules = ['triage']\ninstructions = 'Label #{issue.number}.'\n\
+         [rules.triage]\ntext = 'Triage {branch}'\n",
+    )
+    .unwrap();
+    let repo = fixture.repo.to_str().unwrap();
+    fixture.save_local_config(repo, &saved);
+    let start = |args: &[&str]| {
+        let output = fixture.run(&[&["--json", "start", "37", "--repo", repo][..], args].concat());
+        assert_eq!(output.status.code(), Some(7), "{output:?}");
+        let workspace: Value =
+            serde_json::from_slice(output.stdout.split(|b| *b == b'\n').next().unwrap()).unwrap();
+        let args = fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
+        let status = fixture.ok(&["status", workspace["name"].as_str().unwrap()]);
+        (workspace, remove_guidance(&args), status)
+    };
+    let (workspace, args, status) = start(&["--mode", "triage", "--base", "HEAD"]);
+    let branch = workspace["branch"].as_str().unwrap();
+    assert_eq!(
+        args,
+        format!(
+            "--prompt=Triage {branch}\n\nIssue #37: Sort the queue\n\
+             https://github.com/team/project/issues/37\n\nIssue description:\nBody.\n\n\
+             `shoal view` shows the issue with its comments and later edits.\n\nLabel #37.\0"
+        )
+    );
+    assert_eq!(status["workspace"]["mode"], "triage", "{status}");
+    // A chat mode in the issue's workspace, reopened, is told the chat rule's
+    // additions and the plan, after the same subject.
+    let (_, args, status) = start(&["--mode", "plan", "--worktree"]);
+    assert!(
+        args.starts_with("--prompt=Issue #37: Sort the queue\n"),
+        "{args}"
+    );
+    assert!(args.ends_with("`shoal start --issue 37`.\0"), "{args}");
+    assert_eq!(status["workspace"]["mode"], "plan", "{status}");
+    // A mode no config defines is refused before anything is created.
+    let output = fixture.run(&["start", "38", "--repo", repo, "--mode", "missing"]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("no mode missing"),
+        "{output:?}"
+    );
+}
+
+/// A chat started with `--parent` goes below that space, named by its
+/// number here, and records its mode.
+#[test]
+fn start_puts_a_chat_below_the_parent_it_names() {
+    let fixture = Fixture::new();
+    let worker = fixture.add("worker");
+    let number = worker["number"].to_string();
+    install_recording_agent(&fixture, "claude");
+    let (output, transcript) = fixture.interactive_command(
+        fixture.command().current_dir(&fixture.repo).args([
+            "start", "--chat", "--parent", &number, "--agent", "claude", "--name", "talk", "--here",
+        ]),
+        "",
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let chats = fixture.ok(&["work", "--chats"]);
+    assert_eq!(chats[0]["parent"]["name"], "worker", "{chats}");
+    assert_eq!(chats[0]["mode"], "chat", "{chats}");
 }
 
 #[test]
@@ -19728,7 +19847,7 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
     commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     let home = fixture.root.path();
     fs::write(home.join("fail-before"), "").unwrap();
-    let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "hooked"]);
+    let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "hooked"]);
     assert!(!output.status.success());
     let inspection = fixture.ok(&["status", "hooked"]);
     assert_eq!(inspection["workspace"]["state"], "failed");
@@ -20496,7 +20615,7 @@ fn completion_cleanup_removes_a_done_chat_with_the_workspaces_below_it() {
     let (mut agent, chat) = start_test_chat(&fixture, "planning");
     let output = fixture
         .command()
-        .args(["--json", "add", fixture.repo.to_str().unwrap(), "opened"])
+        .args(["--json", "start", fixture.repo.to_str().unwrap(), "opened"])
         .env("SHOAL_CHAT", &chat)
         .stdin(Stdio::null())
         .output()
@@ -22660,7 +22779,12 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
         ("--is-ancestor", vec!["merge", "worker"]),
         (
             "show-ref",
-            vec!["add", fixture.repo.to_str().unwrap(), "--existing", "main"],
+            vec![
+                "start",
+                fixture.repo.to_str().unwrap(),
+                "--existing",
+                "main",
+            ],
         ),
         ("--is-ancestor", vec!["rm", "worker", "--yes"]),
         ("show-ref", vec!["rm", "worker", "--yes"]),
@@ -22772,7 +22896,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         ),
     );
     let agent = fixture.run(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "agent-work",
         "--agent",
@@ -22807,7 +22931,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         fixture.repo.to_str().unwrap(),
     ]);
     let agent = fixture.run(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "--existing",
         "agent-work",
@@ -22844,7 +22968,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
         ),
     );
     let agent = fixture.run(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "agent-work",
         "--agent",
@@ -22882,7 +23006,7 @@ fn agent_exit_acknowledgement_does_not_wait_for_the_hook() {
     let mut agent = fixture
         .command()
         .args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "agent-work",
             "--agent",
@@ -23248,7 +23372,7 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
         ));
         let lower = fixture.add("lower");
         let repo = fixture.repo.to_str().unwrap().to_owned();
-        fixture.ok(&["add", &repo, "upper", "--base", "lower"]);
+        fixture.ok(&["start", &repo, "upper", "--base", "lower"]);
         let origin = if github {
             "git@github.com:team/project.git"
         } else {
@@ -23367,7 +23491,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let lower = fixture.add("lower");
     let repo = fixture.repo.to_str().unwrap().to_owned();
-    fixture.ok(&["add", &repo, "upper", "--base", "lower"]);
+    fixture.ok(&["start", &repo, "upper", "--base", "lower"]);
     fixture.add_github_origin();
     let root = fixture.root.path().to_owned();
     // Fail the requests whose URL contains the pattern in ~/fail.
@@ -23490,7 +23614,7 @@ fn issue_fixture(host: &str) -> Fixture {
     }
     write_issue_state(&fixture, "Open");
     fixture.ok(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "issue-work",
         "--issue",
@@ -23514,7 +23638,7 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
         write_issue_state(&fixture, "Closed");
         let before = fixture.ok(&["work"]);
         let output = fixture.run(&[
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "closed-work",
             "--issue",
@@ -23993,7 +24117,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     let directive = fixture.root.path().join("caller-directive");
     fs::write(&directive, "unchanged").unwrap();
     let args = [
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "herdr-agent",
         "--agent",
@@ -24200,7 +24324,7 @@ fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
         fixture.root.path().join("bin/fzf"),
         "#!/bin/sh\necho \"$*\" >&2\nhead -n 1\n",
     );
-    let (caller, transcript) = herdr_call(&fixture, &["add", "34"], "");
+    let (caller, transcript) = herdr_call(&fixture, &["start", "34"], "");
     assert!(!caller.status.success(), "{caller:?} {transcript}");
     assert!(transcript.contains("Repository>"), "{transcript}");
     assert!(transcript.contains("lookup-failed"), "{transcript}");
@@ -24220,7 +24344,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
     for (mut args, initial, renamed, fail_rename) in [
         (
             vec![
-                "add",
+                "start",
                 "34",
                 "--repo",
                 fixture.repo.to_str().unwrap(),
@@ -24233,7 +24357,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
         ),
         (
             vec![
-                "add",
+                "start",
                 url,
                 "--repo",
                 fixture.repo.to_str().unwrap(),
@@ -24246,7 +24370,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
         ),
         (
             vec![
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "fix/short",
                 "--issue",
@@ -24260,7 +24384,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
         ),
         (
             vec![
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "--existing",
                 "fix/short",
@@ -24337,7 +24461,7 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
             fixture.repo.to_str().unwrap(),
         ]);
         let mut args = vec![
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "topic",
             "--base",
@@ -24394,7 +24518,7 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
     ));
     install_fake_herdr(&fixture);
     let args = [
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "topic",
         "--base",
@@ -24452,7 +24576,7 @@ fn herdr_plans_carry_issue_urls_instead_of_bodies() {
     fixture.script_github(&github_issue(34, "Large", &body));
     let repo = fixture.repo.to_str().unwrap();
     let args = [
-        "add", "34", "--repo", repo, "--agent", "codex", "--base", "HEAD",
+        "start", "34", "--repo", repo, "--agent", "codex", "--base", "HEAD",
     ];
     let (caller, transcript) = herdr_call(&fixture, &args, "");
     assert!(caller.status.success(), "{caller:?} {transcript}");
@@ -24480,7 +24604,7 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
         config.push_str("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n");
         let fixture = Fixture::with_config(Some(&config));
         install_fake_herdr(&fixture);
-        let mut args = vec!["add", fixture.repo.to_str().unwrap(), "focus"];
+        let mut args = vec!["start", fixture.repo.to_str().unwrap(), "focus"];
         if let Some(agent) = agent {
             args.extend(["--agent", agent]);
         }
@@ -24502,7 +24626,7 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
     fixture.script_github(&github_issue(34, "Focus", ""));
     let (caller, transcript) = herdr_call(
         &fixture,
-        &["add", "34", "--repo", fixture.repo.to_str().unwrap()],
+        &["start", "34", "--repo", fixture.repo.to_str().unwrap()],
         "",
     );
     assert!(caller.status.success(), "{caller:?} {transcript}");
@@ -24516,7 +24640,13 @@ fn attach_previous_returns_to_the_herdr_tab_a_focused_add_opened() {
     ));
     install_fake_herdr(&fixture);
     let add = |name: &str, focus: bool| {
-        let mut args = vec!["add", fixture.repo.to_str().unwrap(), name, "--agent", "pi"];
+        let mut args = vec![
+            "start",
+            fixture.repo.to_str().unwrap(),
+            name,
+            "--agent",
+            "pi",
+        ];
         if focus {
             args.push("--focus");
         }
@@ -24546,7 +24676,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
         &fixture,
-        &["add", fixture.repo.to_str().unwrap(), "herdr-shell"],
+        &["start", fixture.repo.to_str().unwrap(), "herdr-shell"],
         "",
     );
     assert!(caller.status.success());
@@ -24583,7 +24713,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
         ("outside", "outside"),
     ] {
         let mut command = fixture.command();
-        command.args(["add", fixture.repo.to_str().unwrap(), name]);
+        command.args(["start", fixture.repo.to_str().unwrap(), name]);
         if mode != "outside" {
             command
                 .env("HERDR_ENV", "1")
@@ -24597,7 +24727,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
         };
         assert!(output.status.success(), "{output:?}");
     }
-    let (help, _) = herdr_call(&fixture, &["add", "--help"], "");
+    let (help, _) = herdr_call(&fixture, &["start", "--help"], "");
     assert!(help.status.success());
     assert!(!fixture.root.path().join("herdr-calls").exists());
     for (name, config) in [
@@ -24605,7 +24735,11 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
         ("disabled", "[terminal.herdr]\nenabled = false\n"),
     ] {
         fs::write(fixture.repo.join(".shoal.toml"), config).unwrap();
-        let (output, _) = herdr_call(&fixture, &["add", fixture.repo.to_str().unwrap(), name], "");
+        let (output, _) = herdr_call(
+            &fixture,
+            &["start", fixture.repo.to_str().unwrap(), name],
+            "",
+        );
         assert!(output.status.success(), "{output:?}");
         assert!(!fixture.root.path().join("herdr-calls").exists());
     }
@@ -24620,7 +24754,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     let (caller, _) = herdr_call(
         &fixture,
         &[
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "retain",
             "--agent",
@@ -24666,7 +24800,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     let (caller, _) = herdr_call(
         &fixture,
         &[
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "failed-setup",
             "--agent",
@@ -24689,7 +24823,7 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
     let (caller, _) = herdr_call(
         &fixture,
         &[
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "done-tab",
             "--agent",
@@ -24726,7 +24860,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     let (caller, _) = herdr_call(
         &fixture,
         &[
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "happy-tab",
             "--agent",
@@ -24828,7 +24962,7 @@ fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
     let (caller, _) = herdr_call(
         &fixture,
         &[
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "tabbed",
             "--agent",
@@ -25010,7 +25144,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     }
     // A process with the exported environment opens workspaces only below
     // its own.
-    let below = scoped(&["add", fixture.repo.to_str().unwrap(), "below"]);
+    let below = scoped(&["start", fixture.repo.to_str().unwrap(), "below"]);
     assert!(below.status.success(), "{below:?}");
     let below = fixture.ok(&["status", "below"]);
     assert_eq!(below["workspace"]["parent"]["name"], "external", "{below}");
@@ -25080,7 +25214,7 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
     let removed = inspect(second_token);
     assert!(!removed.status.success());
     // The branch had no commits, so removal deleted it too.
-    fixture.ok(&["add", fixture.repo.to_str().unwrap(), "external"]);
+    fixture.ok(&["start", fixture.repo.to_str().unwrap(), "external"]);
     assert!(!inspect(second_token).status.success());
     assert!(fixture.ok(&["work", "env", "external"])["SHOAL_SCOPE_TOKEN"].is_string());
 }
@@ -25421,7 +25555,8 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     // session's Shoal uses too, since a chat needs text on a terminal.
     let (output, transcript) = launch(fixture.command().env("SHOAL_OUTPUT", "json").args([
         "--text",
-        "chat",
+        "start",
+        "--chat",
         fixture.repo.to_str().unwrap(),
         "--agent",
         "claude",
@@ -25440,12 +25575,13 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     );
     // The session's Shoal records the chat under the name chosen here,
     // labels its session with it and becomes its agent.
-    let chat = calls[1].iter().position(|arg| arg == "chat").unwrap();
+    let chat = calls[1].iter().position(|arg| arg == "start").unwrap();
     assert_eq!(calls[1][chat - 1], "--text");
     assert_eq!(
         calls[1][chat..],
         [
-            "chat", id, "--here", "--name", CHAT_NAME, "--agent", "claude", "--", "--model", "fast"
+            "start", "--chat", "--mode", "chat", id, "--here", "--name", CHAT_NAME, "--agent",
+            "claude", "--", "--model", "fast"
         ]
     );
     let started = journal(&fixture)
@@ -25517,7 +25653,14 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
             .command()
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "outer")
-            .args(["chat", "--agent", "claude", "--name", "outer-chat"]),
+            .args([
+                "start",
+                "--chat",
+                "--agent",
+                "claude",
+                "--name",
+                "outer-chat",
+            ]),
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
@@ -25552,7 +25695,9 @@ fn a_chat_replaces_workspace_ownership_in_a_reused_zmx_session() -> anyhow::Resu
             .command()
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "reused")
-            .args(["chat", "--here", "--name", "new-chat", "--agent", "claude"]),
+            .args([
+                "start", "--chat", "--here", "--name", "new-chat", "--agent", "claude",
+            ]),
         "",
         true,
     );
@@ -25580,7 +25725,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" --text work > \"$HOME/chat-work\"\n\"$shoal\" --json work --chats > \"$HOME/chat-chats\"\nprintf '%s' \"$TMPDIR\" > \"$HOME/chat-tmpdir\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" --text work > \"$HOME/chat-work\"\n\"$shoal\" --json work --chats > \"$HOME/chat-chats\"\nprintf '%s' \"$TMPDIR\" > \"$HOME/chat-tmpdir\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -25594,7 +25739,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
             .env_remove("SHOAL_STATE_DIR")
             .arg("--state-dir")
             .arg(&state)
-            .args(["chat", "--agent", "claude"]),
+            .args(["start", "--chat", "--agent", "claude"]),
         "\n",
         true,
     );
@@ -25653,7 +25798,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     // Opening it outside a chat gives it back to the user, so removing the
     // chat leaves it.
     let reopened = fixture.ok(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "--existing",
         "chat-worker",
@@ -25672,7 +25817,7 @@ fn removing_a_chat_removes_the_workspaces_below_it_and_stops_its_agent() {
     // The chat's agent opens a workspace, and a child is split from it.
     let output = fixture
         .command()
-        .args(["--json", "add", fixture.repo.to_str().unwrap(), "opened"])
+        .args(["--json", "start", fixture.repo.to_str().unwrap(), "opened"])
         .env("SHOAL_CHAT", &chat)
         .stdin(Stdio::null())
         .output()
@@ -25720,7 +25865,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     let add = |repository: &Path, name: &str| {
         fixture
             .command()
-            .args(["--json", "add", repository.to_str().unwrap(), name])
+            .args(["--json", "start", repository.to_str().unwrap(), name])
             .env("SHOAL_CHAT", &chat)
             .stdin(Stdio::null())
             .output()
@@ -25751,7 +25896,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     // Refused before an agent's launch is planned or queued.
     let output = fixture
         .command()
-        .args(["--json", "add", other.to_str().unwrap(), "queued"])
+        .args(["--json", "start", other.to_str().unwrap(), "queued"])
         .args(["--agent", "missing-agent"])
         .env("SHOAL_CHAT", &chat)
         .stdin(Stdio::null())
@@ -25766,7 +25911,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
             .command()
             .args([
                 "--text",
-                "add",
+                "start",
                 unregistered.to_str().unwrap(),
                 "third-work",
             ])
@@ -25794,7 +25939,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker 2>/dev/null; echo $? > \"$HOME/chat-report\"\ntouch \"$HOME/worker-opened\"\nwhile [ ! -e \"$HOME/worker-reported\" ]; do sleep 0.1; done\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" start \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker 2>/dev/null; echo $? > \"$HOME/chat-report\"\ntouch \"$HOME/worker-opened\"\nwhile [ ! -e \"$HOME/worker-reported\" ]; do sleep 0.1; done\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -25805,7 +25950,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
                     .command()
                     .current_dir(&fixture.repo)
                     .env("ZMX_SESSION", "outer")
-                    .args(["chat", "--agent", "claude"]),
+                    .args(["start", "--chat", "--agent", "claude"]),
                 "\n",
                 true,
             )
@@ -25853,13 +25998,13 @@ fn a_chats_agent_is_scoped_to_the_chat_and_the_spaces_below_it() {
             r#"#!/bin/sh
 shoal='{}'
 run() {{ name=$1; shift; "$shoal" "$@" </dev/null >/dev/null 2>"$HOME/$name.err"; echo $? > "$HOME/$name"; }}
-run add add "$PWD" below
+run start start "$PWD" below
 run stop stop --interrupt below
-run rename chat rename renamed
+run rename work rename renamed
 run alerts alerts
 run repo repo add "$HOME"
 run outside messages send --space outside hello
-run takeover add "$PWD" --existing outside
+run takeover start "$PWD" --existing outside
 run remove rm below --yes
 "#,
             env!("CARGO_BIN_EXE_shoal")
@@ -25870,7 +26015,7 @@ run remove rm below --yes
             .command()
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "outer")
-            .args(["chat", "--agent", "claude", "--name", "planning"]),
+            .args(["start", "--chat", "--agent", "claude", "--name", "planning"]),
         "",
         true,
     );
@@ -25881,7 +26026,7 @@ run remove rm below --yes
         (code.trim().to_owned(), error)
     };
     // It opens, stops and removes the workspaces below it and renames itself.
-    for allowed in ["add", "stop", "rename", "remove"] {
+    for allowed in ["start", "stop", "rename", "remove"] {
         let (code, error) = status(allowed);
         assert_eq!(code, "0", "{allowed}: {error}");
     }
@@ -25909,7 +26054,7 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" worker --agent codex -- 'Take the part' > \"$HOME/add.json\" 2> \"$HOME/add.err\"\n\"$shoal\" add \"$PWD\" later --agent codex --after worker 2> \"$HOME/later.err\"\necho $? > \"$HOME/later\"\n\"$shoal\" add \"$PWD\" now --agent codex --now 2> \"$HOME/now.err\"\necho $? > \"$HOME/now\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" worker --agent codex -- 'Take the part' > \"$HOME/add.json\" 2> \"$HOME/add.err\"\n\"$shoal\" start \"$PWD\" later --agent codex --after worker 2> \"$HOME/later.err\"\necho $? > \"$HOME/later\"\n\"$shoal\" start \"$PWD\" now --agent codex --now 2> \"$HOME/now.err\"\necho $? > \"$HOME/now\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -25922,7 +26067,7 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
             .command()
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "outer")
-            .args(["chat", "--agent", "claude", "--name", "planning"]),
+            .args(["start", "--chat", "--agent", "claude", "--name", "planning"]),
         "",
         true,
     );
@@ -25978,7 +26123,7 @@ fn a_chats_agent_adds_a_workspace_for_an_issue_it_reads_in_its_chat() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\n'{}' --json add \"$PWD\" --issue 12 --agent codex > \"$HOME/add.json\" 2> \"$HOME/add.err\"\n",
+            "#!/bin/sh\n'{}' --json start \"$PWD\" --issue 12 --agent codex > \"$HOME/add.json\" 2> \"$HOME/add.err\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -25988,7 +26133,7 @@ fn a_chats_agent_adds_a_workspace_for_an_issue_it_reads_in_its_chat() {
             .command()
             .current_dir(&fixture.repo)
             .env("ZMX_SESSION", "outer")
-            .args(["chat", "--agent", "claude", "--name", "planning"]),
+            .args(["start", "--chat", "--agent", "claude", "--name", "planning"]),
         "",
         true,
     );
@@ -26018,12 +26163,18 @@ fn a_workspaces_agent_reads_the_issue_it_adds_or_plans_in_its_workspace() {
     // The workspace's scope reads the issue and its blockers only in its
     // workspace, never in the repository's registered checkout.
     let repo = fixture.repo.to_str().unwrap();
-    let added = scoped_command(&fixture, "parent", &["add", repo, "--issue", "12"]);
+    let added = scoped_command(&fixture, "parent", &["start", repo, "--issue", "12"]);
     assert!(added.status.success(), "{added:?}");
     let worker = fixture.ok(&["status", "12-clarify-retries"]);
     assert_eq!(worker["workspace"]["parent"]["name"], "parent", "{worker}");
     // Planning the issue reads it there too.
-    let planned = scoped_command(&fixture, "parent", &["plan", "12", "--agent", "claude"]);
+    let planned = scoped_command(
+        &fixture,
+        "parent",
+        &[
+            "start", "--mode", "plan", "--issue", "12", "--agent", "claude",
+        ],
+    );
     assert!(planned.status.success(), "{planned:?}");
 }
 
@@ -26042,7 +26193,7 @@ fn any_space_opens_any_kind_of_child() {
             "shoal='{}'\n\
              if [ ! -e \"$HOME/nested-started\" ]; then\n\
              touch \"$HOME/nested-started\"\n\
-             \"$shoal\" chat --agent claude --name nested </dev/null > \"$HOME/nested-chat\" 2>&1\n\
+             \"$shoal\" start --chat --agent claude --name nested </dev/null > \"$HOME/nested-chat\" 2>&1\n\
              fi\n\
              echo \"$SHOAL_CHAT\" >> \"$HOME/chats-started\"\n\
              trap 'exit 0' TERM\n\
@@ -26054,18 +26205,22 @@ fn any_space_opens_any_kind_of_child() {
     fixture.add("parent");
     // A workspace's agent opens a workspace below its own...
     let repo = fixture.repo.to_str().unwrap();
-    let below = scoped_command(&fixture, "parent", &["add", repo, "below"]);
+    let below = scoped_command(&fixture, "parent", &["start", repo, "below"]);
     assert!(below.status.success(), "{below:?}");
     let parent = |space: &Value| space["parent"]["name"].as_str().map(str::to_owned);
     let status = fixture.ok(&["status", "below"]);
     assert_eq!(parent(&status["workspace"]).as_deref(), Some("parent"));
     // ...but not a chat in its own terminal, whose processes would be its
     // own...
-    let here = scoped_command(&fixture, "parent", &["chat", "--here", "--agent", "claude"]);
+    let here = scoped_command(
+        &fixture,
+        "parent",
+        &["start", "--chat", "--here", "--agent", "claude"],
+    );
     assert!(!here.status.success(), "{here:?}");
     // ...nor one in the worktree of a workspace outside its tree...
     fixture.add("other");
-    let args = ["chat", "--workspace", "other", "--agent", "claude"];
+    let args = ["start", "--in", "other", "--agent", "claude"];
     let outside = scoped_command(&fixture, "parent", &args);
     assert!(!outside.status.success(), "{outside:?}");
     // ...rather a chat below it, which opens in the background, as its agent
@@ -26075,7 +26230,7 @@ fn any_space_opens_any_kind_of_child() {
     let sub = scoped_command(
         &fixture,
         "parent",
-        &["chat", "--agent", "claude", "--name", "sub"],
+        &["start", "--chat", "--agent", "claude", "--name", "sub"],
     );
     assert!(sub.status.success(), "{sub:?}");
     wait_until("both chats started", || {
@@ -26136,7 +26291,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
              while [ ! -e \"$HOME/release\" ]; do sleep 0.1; done\n\
              exit 0\n\
              fi\n\
-             \"$shoal\" add \"$PWD\" deep </dev/null > \"$HOME/deep\" 2>&1\n\
+             \"$shoal\" start \"$PWD\" deep </dev/null > \"$HOME/deep\" 2>&1\n\
              touch \"$HOME/chat-ready\"\n\
              trap 'exit 0' TERM\n\
              while :; do sleep 1; done\n",
@@ -26148,7 +26303,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
     let middle = scoped_command(
         &fixture,
         "top",
-        &["chat", "--agent", "claude", "--name", "middle"],
+        &["start", "--chat", "--agent", "claude", "--name", "middle"],
     );
     assert!(middle.status.success(), "{middle:?}");
     wait_until("the chat's workspace", || home.join("chat-ready").exists());
@@ -26219,7 +26374,7 @@ fn chat_instructions_append_the_chat_rules_to_shoals_description() {
                 .command()
                 .current_dir(&fixture.repo)
                 .env("ZMX_SESSION", "outer")
-                .args(["chat", "--agent", "claude"]),
+                .args(["start", "--chat", "--agent", "claude"]),
             "\n",
             true,
         );
@@ -26279,7 +26434,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
             .env("ZMX_SESSION", "outer")
             .env("SHOAL_WORKSPACE_ID", "worker-id")
             .env("SHOAL_WORKSPACE", "worker")
-            .args(["chat", "--workspace", "--agent", "claude"]),
+            .args(["start", "--in", "--agent", "claude"]),
         "\n",
         true,
     );
@@ -26336,7 +26491,8 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     assert!(!change.status.success(), "{change:?}");
     // A chat in a workspace takes its repository from it.
     let both = fixture.run(&[
-        "chat",
+        "start",
+        "--chat",
         fixture.repo.to_str().unwrap(),
         "--workspace",
         "worker",
@@ -26392,7 +26548,7 @@ fn chat_starts_from_the_checkout_without_syncing() {
                 .command()
                 .current_dir(&fixture.repo)
                 .env("ZMX_SESSION", "outer")
-                .args(["chat", "--agent", "claude"]),
+                .args(["start", "--chat", "--agent", "claude"]),
             "\n",
             true,
         );
@@ -26405,10 +26561,12 @@ fn chat_starts_from_the_checkout_without_syncing() {
     };
     // An agent that cannot run is refused before the chat starts.
     let (output, transcript) = fixture.interactive_command(
-        fixture
-            .command()
-            .current_dir(&fixture.repo)
-            .args(["chat", "--agent", "happy-claude"]),
+        fixture.command().current_dir(&fixture.repo).args([
+            "start",
+            "--chat",
+            "--agent",
+            "happy-claude",
+        ]),
         "",
     );
     assert!(!output.status.success(), "{transcript}");
@@ -26445,7 +26603,8 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     let (caller, transcript) = herdr_call(
         &fixture,
         &[
-            "chat",
+            "start",
+            "--chat",
             fixture.repo.to_str().unwrap(),
             "--agent",
             "codex",
@@ -26465,11 +26624,12 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
     assert_eq!(option("--label"), CHAT_NAME);
     assert!(create.iter().any(|arg| arg == "--focus"));
     let worker = herdr_worker(&fixture);
-    let chat = worker.iter().position(|arg| arg == "chat").unwrap();
+    let chat = worker.iter().position(|arg| arg == "start").unwrap();
     assert_eq!(
         worker[chat..],
         [
-            "chat", id, "--here", "--name", CHAT_NAME, "--agent", "codex", "--", "--search"
+            "start", "--chat", "--mode", "chat", id, "--here", "--name", CHAT_NAME, "--agent",
+            "codex", "--", "--search"
         ]
     );
     // The chat registers only once the tab runs it, so nothing is recorded
@@ -26545,9 +26705,9 @@ fn chat_agents_without_an_instructions_template_get_them_as_their_first_message(
     let chat = |agent: &str| {
         install_recording_agent(&fixture, agent);
         let (output, transcript) = fixture.interactive_command(
-            fixture
-                .command()
-                .args(["chat", repo, "--agent", agent, "--here", "--", "--fast"]),
+            fixture.command().args([
+                "start", "--chat", repo, "--agent", agent, "--here", "--", "--fast",
+            ]),
             "\n",
         );
         assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -26630,7 +26790,7 @@ fn repository_setup_refuses_named_arguments_before_any_picker() {
 }
 
 #[test]
-fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
+fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
     let fixture = Fixture::with_config(Some(
         "[issue]\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n",
     ));
@@ -26660,7 +26820,7 @@ fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
         let (output, transcript) = fixture.interactive_command(
             fixture
                 .command()
-                .arg("plan")
+                .args(["start", "--mode", "plan", "--issue"])
                 .args(args)
                 .args(["--agent", agent, "--here"])
                 .current_dir(&fixture.repo),
@@ -26670,9 +26830,9 @@ fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
         chat_args(&fixture)
     };
 
-    // The oldest labelled issue opens the chat with the chat template and
-    // the planning task, which swaps the configured labels.
-    let args = plan(&["--oldest"], "pi");
+    // The issue opens the chat with the chat rule and the planning task,
+    // which swaps the configured labels.
+    let args = plan(&["9"], "pi");
     assert_eq!(args.len(), 1, "{args:?}");
     let checkout = fs::canonicalize(&fixture.repo).unwrap();
     assert!(args[0].contains(checkout.to_str().unwrap()), "{}", args[0]);
@@ -26685,14 +26845,45 @@ fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
     ] {
         assert!(args[0].contains(expected), "{expected}: {}", args[0]);
     }
-    assert!(plan(&["--newest"], "pi")[0].contains("Clarify retries"));
+    // Without an issue, the open issues labelled as needing a plan are
+    // offered.
+    install_recording_agent(&fixture, "pi");
+    let (output, rows) = fixture.pick_in(
+        &fixture.repo,
+        &[
+            "start", "--mode", "plan", "--issue", "--agent", "pi", "--here",
+        ],
+        "12",
+        "",
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        rows.contains("Clarify retries") && rows.contains("Pick a cache"),
+        "{rows}"
+    );
+    assert!(chat_args(&fixture)[0].contains("Clarify retries"));
+    // Outside plan mode, --issue names one.
+    let output = fixture
+        .command()
+        .args(["start", "--chat", "--issue", "--agent", "pi"])
+        .current_dir(&fixture.repo)
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
 
     // An agent with an instructions template keeps them apart and starts on
     // the task as its prompt.
     // A named agent that cannot start is refused before the issue is chosen.
     let output = fixture
         .command()
-        .args(["plan", "--agent", "missing-agent"])
+        .args([
+            "start",
+            "--mode",
+            "plan",
+            "--issue",
+            "--agent",
+            "missing-agent",
+        ])
         .current_dir(&fixture.repo)
         .output()
         .unwrap();
@@ -26715,7 +26906,7 @@ fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
 }
 
 #[test]
-fn plan_assigns_its_chat_the_issue_it_plans() {
+fn a_chat_on_an_issue_is_assigned_the_issue() {
     let fixture = Fixture::new();
     forge_origin(&fixture);
     // The agents' directory is on the terminal's PATH.
@@ -26738,7 +26929,9 @@ fn plan_assigns_its_chat_the_issue_it_plans() {
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["plan", url, "--agent", "pi", "--here"])
+            .args([
+                "start", "--mode", "plan", "--issue", url, "--agent", "pi", "--here",
+            ])
             .current_dir(&fixture.repo),
         "",
     );
@@ -26770,7 +26963,7 @@ done
         .command()
         .args([
             "--json",
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "concurrent",
         ])
@@ -26786,7 +26979,8 @@ done
         .command()
         .args([
             "--json",
-            "chat",
+            "start",
+            "--chat",
             fixture.repo.to_str().unwrap(),
             "--agent",
             "happy-claude",
@@ -26828,7 +27022,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
         let output = fixture
             .command()
             .args([
-                "--json", "chat", repo, "--agent", agent, "--", "--model", "test",
+                "--json", "start", "--chat", repo, "--agent", agent, "--", "--model", "test",
             ])
             .env("HAPPY_RECORD", &record)
             .env("REX_SESSION", "session:caller")
@@ -26963,7 +27157,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     install_fake_agents(&fixture, &["claude", "happy"]);
     let repo = fixture.repo.to_str().unwrap();
     // Without a default agent a picker offers the installed agents that can run.
-    let (output, rows) = fixture.pick(&["chat", repo], "0", "\n");
+    let (output, rows) = fixture.pick(&["start", "--chat", repo], "0", "\n");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         rows.lines()
@@ -26974,11 +27168,11 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["chat", repo, "--agent", "happy-claude"]),
+            .args(["start", "--chat", repo, "--agent", "happy-claude"]),
         "",
     );
     assert!(!output.status.success(), "{transcript}");
-    let output = fixture.run(&["chat", repo, "--agent", "claude"]);
+    let output = fixture.run(&["start", "--chat", repo, "--agent", "claude"]);
     assert!(!output.status.success());
     // The checkout has no value for a workspace's placeholders.
     fs::write(
@@ -26989,7 +27183,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["chat", repo, "--agent", "claude", "--here"]),
+            .args(["start", "--chat", repo, "--agent", "claude", "--here"]),
         "\n",
     );
     assert!(!output.status.success());
@@ -27010,7 +27204,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
-            .args(["add", repo, "background", "--agent", "pi", "--", "go"]),
+            .args(["start", repo, "background", "--agent", "pi", "--", "go"]),
         "",
         true,
     );
@@ -27064,7 +27258,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         fixture
             .command()
             .env("SHOAL_SHELL_DIRECTIVE", &directive)
-            .args(["add", repo, "focused", "--agent", "pi"]),
+            .args(["start", repo, "focused", "--agent", "pi"]),
         "",
         true,
     );
@@ -27081,7 +27275,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         fixture
             .command()
             .env("SHOAL_SHELL_DIRECTIVE", &directive)
-            .args(["add", repo, "shell-here", "--focus"]),
+            .args(["start", repo, "shell-here", "--focus"]),
         "",
         true,
     );
@@ -27107,7 +27301,7 @@ fn terminal_add_handing_codex_to_its_app_enters_the_workspace() {
             .command()
             .env("SHOAL_SHELL_DIRECTIVE", &directive)
             .args([
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "app",
                 "--agent",
@@ -27152,7 +27346,7 @@ fn terminal_add_decides_where_the_shell_goes_after_the_post_setup_hook() {
             .command()
             .env("SHOAL_SHELL_DIRECTIVE", &directive)
             .args([
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "switched",
                 "--agent",
@@ -27178,7 +27372,7 @@ fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
     install_test_script(&shell, "#!/bin/sh\npwd > \"$HOME/shell-cwd\"\n");
     let (output, transcript) = fixture.terminal_command(
         fixture.command().env("SHELL", &shell).args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "shell-only",
         ]),
@@ -27341,7 +27535,7 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
             .command()
             .env("SHOAL_TEST_BINARY", env!("CARGO_BIN_EXE_shoal"))
             .args([
-                "add",
+                "start",
                 fixture.repo.to_str().unwrap(),
                 "kept",
                 "--agent",
@@ -27372,7 +27566,7 @@ fn a_detached_session_stays_open_without_close_when_done() {
     ));
     let (output, transcript) = fixture.terminal_command(
         fixture.command().args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "open",
             "--agent",
@@ -27402,7 +27596,7 @@ fn a_detached_session_ends_with_its_agent_whatever_its_exit() {
     install_test_script(&shell, "#!/bin/sh\necho \"$@\" >> \"$HOME/login-shells\"\n");
     let (output, transcript) = fixture.terminal_command(
         fixture.command().env("SHELL", &shell).args([
-            "add",
+            "start",
             fixture.repo.to_str().unwrap(),
             "failing",
             "--agent",
@@ -27583,19 +27777,19 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
 
     // By name; the zmx session keeps its name, and attach finds it by the
     // chat's new one.
-    let renamed = fixture.ok(&["chat", "rename", "talk", "topic"]);
+    let renamed = fixture.ok(&["work", "rename", "talk", "topic"]);
     assert_eq!(renamed["id"], talk.as_str());
     assert_eq!(renamed["name"], "topic");
     let (output, transcript) = fixture.interactive(&["attach", "topic"], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let output = fixture.run(&["chat", "rename", "repo-plan-7", "topic"]);
+    let output = fixture.run(&["work", "rename", "repo-plan-7", "topic"]);
     assert!(!output.status.success());
 
     // The chat this runs in, as its agent would.
     let output = fixture
         .command()
         .env("SHOAL_CHAT", &plan)
-        .args(["chat", "rename", "repo-plan-8"])
+        .args(["work", "rename", "repo-plan-8"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -27604,19 +27798,19 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
     let output = fixture
         .command()
         .current_dir(&other)
-        .args(["chat", "rename", "calm"])
+        .args(["work", "rename", "calm"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    // An invalid name is refused before a picker would ask for the chat.
+    // A chat refuses a name a workspace's title could have.
     let output = fixture
         .command()
         .current_dir(&fixture.repo)
-        .args(["chat", "rename", "bad/name"])
+        .args(["work", "rename", "calm", "bad/name"])
         .output()
         .unwrap();
     assert!(!output.status.success());
-    let (output, rows) = fixture.pick_in(&fixture.repo, &["chat", "rename", "picked"], &talk, "");
+    let (output, rows) = fixture.pick_in(&fixture.repo, &["work", "rename", "picked"], &talk, "");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(rows.lines().count(), 3, "{rows}");
     assert_eq!(names(), ["picked", "repo-plan-8", "calm"]);
@@ -27632,7 +27826,7 @@ fn a_name_request_reaches_the_chats_agent() {
         "pid": std::process::id()
     }}));
     let chat = response["data"]["id"].as_str().unwrap().to_owned();
-    let output = fixture.run(&["chat", "rename", "--request", "talk"]);
+    let output = fixture.run(&["work", "rename", "--request", "talk"]);
     assert!(output.status.success(), "{output:?}");
     // The chat's agent reads it as a message from the user, about no
     // workspace.
@@ -27647,7 +27841,7 @@ fn a_name_request_reaches_the_chats_agent() {
     assert_eq!(messages.as_array().map(Vec::len), Some(1), "{messages}");
     // Workspace processes do not reach chats.
     fixture.add("worker");
-    let output = scoped_command(&fixture, "worker", &["chat", "rename", "--request", "talk"]);
+    let output = scoped_command(&fixture, "worker", &["work", "rename", "--request", "talk"]);
     assert!(!output.status.success(), "{output:?}");
 }
 
@@ -27674,8 +27868,8 @@ fn chat_rename_relabels_a_herdr_tab_that_still_shows_the_old_name() {
     )
     .unwrap();
 
-    fixture.ok(&["chat", "rename", "talk", "topic"]);
-    fixture.ok(&["chat", "rename", "mine", "other"]);
+    fixture.ok(&["work", "rename", "talk", "topic"]);
+    fixture.ok(&["work", "rename", "mine", "other"]);
     let renames: Vec<_> = herdr_calls(&fixture)
         .into_iter()
         .filter(|call| call.starts_with(&["tab".to_owned(), "rename".to_owned()]))
@@ -28160,7 +28354,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
-            .args(["add", repo, "no-zmx", "--agent", "claude"]),
+            .args(["start", repo, "no-zmx", "--agent", "claude"]),
         "",
         true,
     );
@@ -28170,7 +28364,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
     // Without a terminal the agent runs in place and needs no zmx.
     let output = fixture
         .command()
-        .args(["add", repo, "no-zmx", "--agent", "claude"])
+        .args(["start", repo, "no-zmx", "--agent", "claude"])
         .env("PATH", path)
         .output()
         .unwrap();
@@ -28185,7 +28379,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
         .command()
-        .args(["add", repo, "first", "--agent", "waiter"])
+        .args(["start", repo, "first", "--agent", "waiter"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -28203,7 +28397,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     };
     wait_until("the first agent start", || started("first"));
 
-    let queued = fixture.ok(&["add", repo, "second", "--agent", "waiter"]);
+    let queued = fixture.ok(&["start", repo, "second", "--agent", "waiter"]);
     assert_eq!(queued["state"], "queued", "{queued}");
     assert_eq!(queued["position"], 1, "{queued}");
     let entries = fixture.ok(&["queue"]);
@@ -28219,7 +28413,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 
     // Entries move to a position and leave the queue when cancelled.
-    fixture.ok(&["add", repo, "third", "--agent", "waiter"]);
+    fixture.ok(&["start", repo, "third", "--agent", "waiter"]);
     let moved = fixture.ok(&["queue", "move", "third", "1"]);
     assert_eq!(moved["entry"]["position"], 1, "{moved}");
     assert_eq!(moved["stopped"], false, "{moved}");
@@ -28242,7 +28436,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(cancelled["name"], "third", "{cancelled}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
     // So does one stopped, having nothing to save.
-    fixture.ok(&["add", repo, "fourth", "--agent", "waiter"]);
+    fixture.ok(&["start", repo, "fourth", "--agent", "waiter"]);
     let stopped = fixture.ok(&["stop", "fourth"]);
     assert_eq!(stopped["name"], "fourth", "{stopped}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
@@ -28254,7 +28448,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     // A focused launch is one the user waits for, so it skips the queue.
     let mut focused = fixture
         .command()
-        .args(["add", repo, "focused", "--agent", "waiter", "--focus"])
+        .args(["start", repo, "focused", "--agent", "waiter", "--focus"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -28266,7 +28460,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     fixture.ok(&["rm", "focused", "--yes"]);
 
     // A queued agent named like a workspace is removed only by its ID.
-    let shared = fixture.ok(&["add", repo, "first", "--agent", "waiter"]);
+    let shared = fixture.ok(&["start", repo, "first", "--agent", "waiter"]);
     assert_eq!(shared["state"], "queued", "{shared}");
     let ambiguous = fixture.run(&["rm", "first", "--yes"]);
     assert!(!ambiguous.status.success());
@@ -28289,7 +28483,7 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
         .command()
-        .args(["add", repo, "first", "--agent", "waiter"])
+        .args(["start", repo, "first", "--agent", "waiter"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -28307,7 +28501,7 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
     let output = fixture
         .command()
         .env("SHOAL_OUTPUT", "text")
-        .args(["--json", "add", repo, "second", "--agent", "recorder"])
+        .args(["--json", "start", repo, "second", "--agent", "recorder"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -28489,7 +28683,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     };
 
     let request = shoal()
-        .args(["--json", "add", repo.to_str().unwrap(), "before"])
+        .args(["--json", "start", repo.to_str().unwrap(), "before"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -28516,7 +28710,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     let status: Value = serde_json::from_slice(&status.stdout).unwrap();
     assert_eq!(status["daemon"]["pid"], daemon.child.id());
     let after = shoal()
-        .args(["--json", "add", repo.to_str().unwrap(), "after"])
+        .args(["--json", "start", repo.to_str().unwrap(), "after"])
         .output()
         .unwrap();
     assert!(after.status.success(), "{after:?}");
@@ -29208,7 +29402,6 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
     for args in [
         &["split", "--no-branch", "child"][..],
         &["split", "--no-branch", "--issue", "4"],
-        &["split", "--no-branch", "--model", "fast"],
     ] {
         assert!(!fixture.run(args).status.success(), "{args:?}");
     }
@@ -29234,7 +29427,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
     );
     let ran = |hook: &str| fs::read_to_string(home.join(format!("{hook}-ran"))).unwrap_or_default();
     let repo = fixture.repo.to_str().unwrap();
-    let skipped = fixture.ok(&["add", repo, "skipped", "--skip-setup"]);
+    let skipped = fixture.ok(&["start", repo, "skipped", "--skip-setup"]);
     assert_eq!(skipped["state"], "ready");
     assert_eq!(skipped["setup_skipped"], true);
     let at_commit = fixture.ok(&[
@@ -29253,7 +29446,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
     assert_eq!(ran("pre-remove"), "");
 
     // Setup run later clears the mark, so the hooks around it run again.
-    fixture.ok(&["add", repo, "later", "--skip-setup"]);
+    fixture.ok(&["start", repo, "later", "--skip-setup"]);
     let set_up = fixture.ok(&["work", "setup", "later"]);
     assert_eq!(set_up["setup_skipped"], false);
     assert_eq!(
@@ -29265,7 +29458,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
     // With only a post-setup hook, setup run later still clears the mark and
     // runs the hook.
     commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
-    fixture.ok(&["add", repo, "hooked", "--skip-setup"]);
+    fixture.ok(&["start", repo, "hooked", "--skip-setup"]);
     let set_up = fixture.ok(&["work", "setup", "hooked"]);
     assert_eq!(set_up["setup_skipped"], false);
     assert!(
@@ -29279,7 +29472,7 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
 fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     let fixture = Fixture::new();
     let repo = fixture.repo.to_str().unwrap();
-    let workspace = fixture.ok(&["add", repo, "scratch", "--disposable"]);
+    let workspace = fixture.ok(&["start", repo, "scratch", "--disposable"]);
     assert_eq!(workspace["disposable"], true);
     let path = PathBuf::from(workspace["path"].as_str().unwrap());
     fs::write(path.join("tracked"), "changed\n").unwrap();
@@ -29316,7 +29509,7 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     // Its removal keeps nothing to export, which refuses a batch before
     // removing any of it.
     fixture.add("kept");
-    fixture.ok(&["add", repo, "scratch-2", "--disposable"]);
+    fixture.ok(&["start", repo, "scratch-2", "--disposable"]);
     let directory = fixture.root.path().join("exports");
     let refused = fixture.run(&[
         "move",
@@ -29474,24 +29667,24 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert_eq!(workspace["links"]["prs"], serde_json::json!([url]));
 
     // Adding the PR reuses its workspace; it holds no agent.
-    let output = run(&["--json", "add", url]);
+    let output = run(&["--json", "start", url]);
     assert!(output.status.success(), "{output:?}");
     let added: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(added["id"], workspace["id"]);
-    let output = run(&["add", url, "--agent", "reviewer"]);
+    let output = run(&["start", url, "--agent", "reviewer"]);
     assert!(!output.status.success());
     // On a terminal too, the PR settles what the addition opens.
     let (output, transcript) = fixture.interactive_command(
         fixture
             .command()
-            .args(["add", url])
+            .args(["start", url])
             .current_dir(&fixture.repo)
             .env("PATH", &path),
         "",
     );
     assert!(output.status.success(), "{output:?} {transcript}");
     assert!(!transcript.contains("Workspace>"), "{transcript}");
-    let output = run(&["add", url, "--git-profile", "work"]);
+    let output = run(&["start", url, "--git-profile", "work"]);
     assert!(!output.status.success());
 
     // A moved head moves the workspace with it.
@@ -29542,7 +29735,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     install_test_script(&hook, "#!/bin/sh\necho ran >> \"$HOME/post-setup-ran\"\n");
     fs::write(&local, format!("hooks.post_setup = '{}'\n", hook.display())).unwrap();
     fixture.save_local_config(fixture.repo.to_str().unwrap(), &local);
-    let output = run(&["add", url]);
+    let output = run(&["start", url]);
     assert!(output.status.success(), "{output:?}");
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
     assert!(output.status.success(), "{output:?}");

@@ -1517,6 +1517,19 @@ pub struct Spaces {
 }
 
 impl Spaces {
+    /// The space `selector` names, by ID or name, else by number.
+    pub fn find_numbered(&self, selector: &str) -> Option<PresentSpace> {
+        self.find(selector).or_else(|| {
+            let number: u32 = selector.parse().ok()?;
+            let workspace = self.workspaces.iter().find(|w| w.number == number);
+            if let Some(workspace) = workspace {
+                return Some(PresentSpace::Workspace(workspace.clone()));
+            }
+            let chat = self.chats.iter().find(|chat| chat.number == number);
+            chat.map(|chat| PresentSpace::Chat(chat.clone()))
+        })
+    }
+
     /// The space `selector` names, by ID or name.
     pub fn find(&self, selector: &str) -> Option<PresentSpace> {
         let named = |id: &str, name: &str| id == selector || name == selector;
@@ -1760,7 +1773,7 @@ pub enum Dependency {
     Issue(String),
 }
 
-/// An agent launch `shoal add` asks the daemon to admit or queue. The plan
+/// An agent launch `shoal start` asks the daemon to admit or queue. The plan
 /// is the CLI's own and stays opaque to the daemon.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueRequest {

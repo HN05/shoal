@@ -1,14 +1,11 @@
 //! `shoal split`: a child workspace on a new branch, which the parent
-//! workspace's agent works on and receives the activity of, or which an agent
-//! of its own works on, which may start from a fork of the parent agent's
-//! session; or a workspace at a commit, with no branch or agent of its own.
-use std::ffi::OsString;
-
+//! workspace's agent works on and receives the activity of, or a workspace
+//! at a commit, with no branch of its own. Neither gets an agent of its own;
+//! `shoal start` starts one.
 use anyhow::Result;
 
 use crate::client::{operations::NewSplit, output::split::Child};
 use crate::{
-    agent::{Agent, ModelChoice},
     cli::{
         client::{self},
         context::Context,
@@ -17,13 +14,13 @@ use crate::{
         ui::{self, Fallback},
     },
     daemon::refusal::{Reason, Refusal},
-    model::{AgentSession, QueueEntry, SpaceRef, Workspace},
+    model::{SpaceRef, Workspace},
     protocol::{
-        CommitStart, ConfigTarget, CreationOptions, ItemContext,
+        CommitStart, CreationOptions, ItemContext,
         operations::{Prepared, QueuedLaunch, StartedWorkspace},
     },
     shell,
-    state::{QueueState, WorkspaceState},
+    state::WorkspaceState,
 };
 
 use super::issues::Issue;
@@ -33,36 +30,19 @@ pub(super) struct Split {
     pub branch: Option<String>,
     pub issue: Option<String>,
     pub base: Option<String>,
-    pub agent: Option<Agent>,
-    /// Whether the child's agent starts from a fork of the parent agent's
-    /// session.
-    pub fork: bool,
-    /// The model and effort requested over the configured ones.
-    pub model: ModelChoice,
     pub options: CreationOptions,
-    pub args: Vec<OsString>,
 }
 
 pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) -> Result<i32> {
-    // A supplied branch, or a model for no agent, fails before the parent
-    // picker opens.
+    // A supplied branch fails before the parent picker opens.
     if let Some(branch) = &split.branch {
         crate::git::check_branch_name(None, branch).await?;
     }
-    anyhow::ensure!(
-        split.agent.is_some() || split.fork || split.model.is_empty(),
-        "--model and --effort need --agent or --fork"
-    );
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let requested = (split.agent, split.fork, split.model, split.args);
-    let mut agent = child_agent(ctx, &parent, requested).await?;
     let issue = match &split.issue {
         Some(input) => Some(load_issue(ctx, &parent, input).await?),
         None => None,
     };
-    if let (Some(agent), Some(issue)) = (&mut agent, &issue) {
-        agent.issue = Some(issue.launch_issue());
-    }
     let name = match (split.branch, &issue) {
         (Some(branch), _) => branch,
         (None, Some(issue)) => issue.branch_name(),
@@ -72,14 +52,13 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
         base: split.base,
         options: split.options,
         issue: issue.as_ref().map(|issue| issue.url.clone()),
-        agent: agent.clone(),
         ..NewSplit::new(parent, name)
     };
     let child = start_child(ctx, start).await?;
-    let Some(child) = follow_queuing(ctx, child, agent).await? else {
+    let Some(child) = follow_preparation(ctx, child).await? else {
         return Ok(1);
     };
-    report(ctx, &child.workspace, child.agent.as_ref())?;
+    report(ctx, &child)?;
     Ok(0)
 }
 
@@ -101,7 +80,7 @@ pub(super) async fn at_commit(
     let Some(child) = prepare(ctx, created).await? else {
         return Ok(1);
     };
-    report(ctx, &child, None)?;
+    report(ctx, &child)?;
     Ok(0)
 }
 
@@ -131,44 +110,6 @@ async fn commit_owner(
         }
         Err(error) => Err(error),
     }
-}
-
-/// The agent the child of `parent` starts with the requested model and
-/// arguments: the named one, or with `fork` the parent's own from a fork of
-/// its session. One that cannot start, or its detached launcher, fails
-/// before any work is created.
-async fn child_agent(
-    ctx: &Context,
-    parent: &str,
-    (agent, fork, model, args): (Option<Agent>, bool, ModelChoice, Vec<OsString>),
-) -> Result<Option<Box<QueuedLaunch>>> {
-    let session = if fork {
-        Some(parent_session(ctx, parent).await?)
-    } else {
-        None
-    };
-    let agent = match (agent, &session) {
-        (Some(agent), _) => agent,
-        (None, Some(session)) => session.agent.parse()?,
-        (None, None) => return Ok(None),
-    };
-    let launch = Box::new(QueuedLaunch {
-        agent: agent.into(),
-        model,
-        args: super::workspaces::launch_args(args)?,
-        fork: session.map(|session| session.session),
-        env: Some(terminal::start_environment()),
-        ..Default::default()
-    });
-    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(parent.to_owned())).await?;
-    super::check_queued_launch(&launch, &settings)?;
-    terminal::ensure_background(&settings)?;
-    Ok(Some(launch))
-}
-
-/// The session of the agent in `parent` that a fork starts from.
-async fn parent_session(ctx: &Context, parent: &str) -> Result<AgentSession> {
-    crate::client::agents::session(&ctx.paths, parent.to_owned()).await
 }
 
 /// Split the child `split` describes and start preparing it.
@@ -213,33 +154,22 @@ async fn follow_queuing(
     }
 }
 
-/// Report the child and its agent, then enter the child when this terminal
-/// follows new workspaces and no agent works there.
-fn report(ctx: &Context, child: &Workspace, agent: Option<&QueueEntry>) -> Result<()> {
+/// Report the child, then enter it when this terminal follows new
+/// workspaces.
+fn report(ctx: &Context, child: &Workspace) -> Result<()> {
     let palette = Palette::stdout(ctx.json);
-    let mut text = format!(
+    let text = format!(
         "Created {} {}",
         palette.paint(Style::Heading, &child.name),
         super::workspaces::location_phrase(child),
     );
-    if let Some(entry) = agent {
-        text.push_str(&match entry.state {
-            QueueState::Queued => format!(
-                "\nQueued {} (position {}); it starts when an agent slot is free",
-                entry.agent,
-                entry.position.unwrap_or(1)
-            ),
-            _ => format!("\nStarting {} in {}", entry.agent, child.name),
-        });
-    }
     ctx.emit(
         &text,
         Child {
             workspace: child.clone(),
-            agent: agent.cloned(),
         },
     )?;
-    if agent.is_none() && terminal::follows_caller(ctx) && !crate::env::is_scoped() {
+    if terminal::follows_caller(ctx) && !crate::env::is_scoped() {
         shell::navigate(&child.path, ctx.json)?;
     }
     Ok(())

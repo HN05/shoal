@@ -1,4 +1,4 @@
-//! `shoal add`: plan a workspace, then open it here or hand it to a terminal host.
+//! `shoal start`: plan a workspace, then open it here or hand it to a terminal host.
 mod agent;
 mod finish;
 mod handoff;
@@ -10,7 +10,6 @@ mod target;
 pub(in crate::cli::commands) use agent::AgentLaunch;
 pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli) use handoff::start_queued;
-pub(in crate::cli::commands) use plan::launch_args;
 pub(in crate::cli) use plan::{AddPlan, Creation};
 pub(crate) use plan::{check_queued_launch, queued_agent_request};
 use std::ffi::OsString;
@@ -31,7 +30,7 @@ use self::{
 };
 use crate::cli::context::Context;
 
-/// How `shoal add` runs once its workspace is planned.
+/// How `shoal start` runs once its workspace is planned.
 #[derive(Debug, Clone, Default)]
 pub(in crate::cli::commands) struct AddOptions {
     /// Run in this terminal instead of a new tab or detached session.
@@ -44,6 +43,13 @@ pub(in crate::cli::commands) struct AddOptions {
     pub after: Vec<String>,
     /// The model and effort requested over the configured ones.
     pub model: crate::agent::ModelChoice,
+    /// The mode the agent starts in; the default mode when `None`.
+    pub mode: Option<String>,
+    /// The space the workspace goes below, instead of the chat this runs in
+    /// or, for a workspace process, its own space.
+    pub parent: Option<String>,
+    /// The session the agent starts from a fork of.
+    pub fork: Option<String>,
 }
 
 impl AddOptions {
@@ -74,7 +80,7 @@ pub(in crate::cli::commands) async fn add(
     // workspace for the user instead of below its own.
     ensure!(
         crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes add workspaces only with their scope token"
+        "workspace processes start agents only with their scope token"
     );
     let mut creation = creation.absolute(ctx)?;
     let target = resolve_add_target(ctx, repository, issue.as_deref()).await?;
@@ -95,6 +101,7 @@ pub(in crate::cli::commands) async fn add(
     check_add_creation(ctx, &target, &creation).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
+    plan.start_as(&options);
     ensure!(
         options.after.is_empty() || plan.agent_name().is_some(),
         "--after queues an agent; name one with --agent"
@@ -103,7 +110,7 @@ pub(in crate::cli::commands) async fn add(
     if crate::env::is_scoped() {
         let queued = plan.agent_name().is_some();
         if queued {
-            ensure_queues_at_once(ctx, &target, issue.as_ref(), &options, after).await?;
+            ensure_queues_at_once(ctx, &target, &settings, issue.as_ref(), &options, after).await?;
         }
         return add_planned(ctx, plan, target, issue, queued).await;
     }

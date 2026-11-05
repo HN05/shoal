@@ -121,16 +121,13 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
         .find(|repo| repo.id == chat.repository_id)
         .with_context(|| format!("the repository of chat {} is missing", chat.name))?;
     let settings = chat::settings(ctx, &repo).await?;
-    let topic = match &chat.workspace {
-        Some(workspace) => {
-            chat::Topic::workspace(chat::hosting_workspace(ctx, &workspace.id).await?)
-        }
-        None => chat::Topic::repository(&repo),
-    };
     // The restored agent keeps its mode's rules; its subject was sent once.
-    let topic = chat::Topic {
-        mode: chat.mode.clone(),
-        ..topic
+    let topic = match &chat.workspace {
+        Some(workspace) => chat::Topic::workspace(
+            chat::hosting_workspace(ctx, &workspace.id).await?,
+            &chat.mode,
+        ),
+        None => chat::Topic::repository(&repo, &chat.mode),
     };
     let options = chat::Options {
         agent: Some(chat.agent.parse()?),
@@ -141,6 +138,7 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
         session: chat.session.clone(),
         restore: Some(chat.id.clone()),
         handoff: None,
+        parent: None,
     };
     chat::launch(ctx, repo, settings, topic, options).await
 }

@@ -125,7 +125,7 @@ impl Fixture {
             web: String::new(),
         };
         fixture.ok(&["repo", "add", fixture.repo.to_str().unwrap()]);
-        fixture.ok(&["add", fixture.repo.to_str().unwrap(), "topic"]);
+        fixture.ok(&["start", fixture.repo.to_str().unwrap(), "topic"]);
         // Every forge request goes through the scripted curl.
         fs::create_dir_all(fixture.root.path().join("bin")).unwrap();
         std::os::unix::fs::symlink(&script, fixture.root.path().join("bin/curl")).unwrap();
@@ -3152,7 +3152,7 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
 
     // Scoped protocol clients cannot select another workspace or repository.
     fixture.ok(&[
-        "add",
+        "start",
         fixture.repo.to_str().unwrap(),
         "other",
         "--base",

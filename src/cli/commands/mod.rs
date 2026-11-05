@@ -33,7 +33,7 @@ mod merge_warning;
 mod messages;
 mod notifications;
 pub(crate) mod operations;
-mod plan;
+
 mod ports;
 mod questions;
 mod queue;
@@ -52,6 +52,7 @@ pub(in crate::cli) mod sessions;
 mod simulators;
 mod skill;
 mod split;
+mod start;
 mod stop;
 mod subagents;
 mod transfer;

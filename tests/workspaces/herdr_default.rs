@@ -37,7 +37,8 @@ fn background_additions_open_tabs_in_the_repository_workspace() {
     install_fake_herdr(&fixture);
     let repo = fixture.repo.to_str().unwrap();
     for name in ["first", "second"] {
-        let (output, transcript) = plain_terminal(&fixture, &["add", repo, name, "--agent", "pi"]);
+        let (output, transcript) =
+            plain_terminal(&fixture, &["start", repo, name, "--agent", "pi"]);
         assert!(output.status.success(), "{output:?} {transcript}");
     }
     // The workspace is created once, then found by its label.
@@ -67,7 +68,7 @@ fn launches_from_a_terminal_need_no_zmx_while_herdr_is_the_default() {
     fixture.interactive_path();
     fs::remove_file(fixture.root.path().join("runner-bin/zmx")).unwrap();
     let repo = fixture.repo.to_str().unwrap();
-    let (output, transcript) = plain_terminal(&fixture, &["add", repo, "first", "--agent", "pi"]);
+    let (output, transcript) = plain_terminal(&fixture, &["start", repo, "first", "--agent", "pi"]);
     assert!(output.status.success(), "{output:?} {transcript}");
     assert_eq!(calls_of(&fixture, &["tab", "create"]).len(), 1);
 }
@@ -84,7 +85,7 @@ fn a_fixed_workspace_name_is_reused_as_herdr_lists_it() {
     )
     .unwrap();
     let repo = fixture.repo.to_str().unwrap();
-    let (output, transcript) = plain_terminal(&fixture, &["add", repo, "fixed", "--agent", "pi"]);
+    let (output, transcript) = plain_terminal(&fixture, &["start", repo, "fixed", "--agent", "pi"]);
     assert!(output.status.success(), "{output:?} {transcript}");
     assert!(calls_of(&fixture, &["workspace", "create"]).is_empty());
     assert_eq!(
@@ -102,8 +103,8 @@ fn focused_starts_attach_the_terminal_to_their_herdr_tab() {
     fixture.add("agent");
     let repo = fixture.repo.to_str().unwrap();
     for args in [
-        vec!["add", repo, "shell"],
-        vec!["chat", repo, "--name", "talk", "--agent", "pi"],
+        vec!["start", repo, "shell"],
+        vec!["start", "--chat", repo, "--name", "talk", "--agent", "pi"],
         vec!["pi", "agent"],
     ] {
         fs::remove_file(fixture.root.path().join("herdr-calls")).unwrap_or_default();
@@ -152,7 +153,7 @@ fn a_herdr_only_herdr_bin_path_names_serves_a_focused_start() {
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
-            .args(["add", repo, "shell"])
+            .args(["start", repo, "shell"])
             .env("HERDR_BIN_PATH", elsewhere.join("herdr")),
         "",
         true,
@@ -174,7 +175,7 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
     // Without a terminal, the first agent runs in place and takes the slot.
     let mut first = fixture
         .command()
-        .args(["add", repo, "first", "--agent", "waiter"])
+        .args(["start", repo, "first", "--agent", "waiter"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -192,7 +193,7 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
     let output = fixture
         .command()
         .env("HERDR_SESSION", "work")
-        .args(["--json", "add", repo, "second", "--agent", "waiter"])
+        .args(["--json", "start", repo, "second", "--agent", "waiter"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -261,7 +262,18 @@ fn a_default_host_config_turns_off_leaves_zmx_alone() {
     assert_eq!(started["host"], "terminal", "{started}");
     fixture.ok(&["demo", "stop", "--workspace", "tried"]);
     // A queued start without a host is refused before the child exists.
-    let refused = fixture.run(&["split", "child", "--workspace", "tried", "--agent", "droid"]);
+    let refused = fixture.run(&[
+        "run",
+        "--workspace",
+        "tried",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "start",
+        fixture.repo.to_str().unwrap(),
+        "child",
+        "--agent",
+        "droid",
+    ]);
     assert!(!refused.status.success());
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
     // The daemon's cleanup sweep may list sessions of every installed host.

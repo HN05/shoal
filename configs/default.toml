@@ -17,7 +17,7 @@
 root_dir = "~/shoal"
 
 # Agents that run at once; by default `dynamic` starts them one at a time while
-# measured load stays below the warning thresholds `load` sets. `shoal add`
+# measured load stays below the warning thresholds `load` sets. `shoal start`
 # queues the rest and starts them as slots free. Set a positive number for a
 # fixed limit or `none` for unlimited admission.
 # max_agents = 3
@@ -126,7 +126,7 @@ allow_any = false
 # runtime = "iOS 26"
 
 [agent]
-# Agent `shoal add <issue-url>` starts when --agent is omitted (no default):
+# Agent `shoal start <issue-url>` starts when --agent is omitted (no default):
 # a built-in AI tool or one defined under [agents].
 # default = "codex"
 # The model and reasoning effort the default agent runs with, over its tool's.
@@ -165,7 +165,7 @@ default_mode = "cli"
 # model = "gpt-5.5"
 # effort = "medium"
 
-# A custom agent: shoal add <repository> <branch> --agent droid. Its resume
+# A custom agent: shoal start <repository> <branch> --agent droid. Its resume
 # command must restore a session rather than repeat the initial prompt.
 # [agents.droid]
 # command = ["droid", "{args}"]
@@ -180,7 +180,7 @@ default_mode = "cli"
 # review = ["tuicr", "-r", "{diff_base}..HEAD"]
 
 [terminal]
-# `shoal add` focuses workspace shells and agents waiting for a prompt, and
+# `shoal start` focuses workspace shells and agents waiting for a prompt, and
 # starts agents with input in the background: a background Herdr tab, or a
 # detached zmx session outside Herdr. Set to always (true) or never (false) focus.
 # focus = true

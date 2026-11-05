@@ -189,7 +189,7 @@ states!(QueueState {
     Starting => "starting",
 });
 states!(QueueKind {
-    /// A new agent that `shoal add` plans.
+    /// A new agent that `shoal start` plans.
     Launch => "launch",
     /// A protection-stopped agent's automatic restore in its own workspace.
     Restore => "restore",

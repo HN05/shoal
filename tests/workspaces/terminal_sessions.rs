@@ -126,7 +126,8 @@ fn assert_failed_labelling_refuses_launches(
         vec!["claude", "new-owner"],
         vec!["resume", "new-owner", "--focus"],
         vec![
-            "chat",
+            "start",
+            "--chat",
             "--here",
             repo,
             "--name",
@@ -134,7 +135,7 @@ fn assert_failed_labelling_refuses_launches(
             "--agent",
             "claude",
         ],
-        vec!["add", repo, "blocked-add", "--here", "--agent", "claude"],
+        vec!["start", repo, "blocked-add", "--here", "--agent", "claude"],
     ] {
         let mut command = fixture.command();
         command.args(&args);
@@ -425,7 +426,7 @@ fn removals_from_a_pane_split_off_a_recorded_pane_go_on() -> anyhow::Result<()> 
     let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     install_fake_herdr(&fixture);
     let repo = fixture.repo.to_str().unwrap_or_default();
-    let (caller, _) = herdr_call(&fixture, &["add", repo, "tabbed", "--agent", "pi"], "");
+    let (caller, _) = herdr_call(&fixture, &["start", repo, "tabbed", "--agent", "pi"], "");
     assert!(caller.status.success());
     // The worker records the pane Shoal opened, which removal closes alone.
     let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");

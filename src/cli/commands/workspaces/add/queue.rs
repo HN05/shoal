@@ -87,11 +87,13 @@ pub(super) async fn admit(
 
 /// Refuse a scoped caller's agent that is not queued as soon as its new
 /// workspace exists: one that starts at once in this terminal, as `--now`
-/// and `--focus` ask, or one that waits for `after` or its issue's blockers,
-/// whose branch a workspace created later would build on.
+/// and `--focus` ask, one that no host could start from the background, or
+/// one that waits for `after` or its issue's blockers, whose branch a
+/// workspace created later would build on.
 pub(super) async fn ensure_queues_at_once(
     ctx: &Context,
     target: &AddTarget,
+    settings: &AddSettings<'_>,
     issue: Option<&issues::Issue>,
     options: &AddOptions,
     after: Vec<Dependency>,
@@ -100,6 +102,9 @@ pub(super) async fn ensure_queues_at_once(
         !options.now && !options.focus,
         "scoped processes start agents when a slot is free; leave out --now and --focus"
     );
+    // The daemon starts the agent from the background, which some host
+    // must take, before any work is created.
+    crate::cli::terminal::ensure_background(settings.get().await?)?;
     let after = launch_dependencies(ctx, target, issue, false, after).await?;
     let waits_for: Vec<_> = (after.iter())
         .map(|dependency| match dependency {

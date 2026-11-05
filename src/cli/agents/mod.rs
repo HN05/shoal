@@ -317,6 +317,8 @@ pub(in crate::cli) struct ChatLaunch {
     pub name: String,
     /// The mode its agent starts in.
     pub mode: String,
+    /// The space it goes below.
+    pub parent: Option<String>,
     pub settings: Effective,
     /// The rendered chat template.
     pub instructions: String,

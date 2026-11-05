@@ -181,7 +181,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_panes() {
             fixture
                 .command()
                 .current_dir(&fixture.repo)
-                .args(["add", repo, "placed", "--agent", "pi"]),
+                .args(["start", repo, "placed", "--agent", "pi"]),
         ),
         "",
     );
@@ -218,7 +218,7 @@ fn split_placement_opens_additions_beside_the_callers_pane() {
             fixture
                 .command()
                 .current_dir(&fixture.repo)
-                .args(["add", repo, "placed", "--agent", "pi"]),
+                .args(["start", repo, "placed", "--agent", "pi"]),
         ),
         "",
     );

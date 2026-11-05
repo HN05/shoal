@@ -329,7 +329,7 @@ take agents down briefly, use `shoal restart` instead. Commands started
 with `run` save their arguments, which `shoal resume` reports and never
 reruns; arguments that are not UTF-8 are not saved. Setup, merges and other internal commands save nothing.
 Agents waiting in the [agent queue](#agent-queue) to start in a stopped workspace, such as
-a `split --agent` launch waiting for a slot, have no session to save, so the stop removes them
+a launch a workspace process started waiting for a slot, have no session to save, so the stop removes them
 from the queue and reports them in `cancelled`; `shoal resume` does not bring them back. One
 already starting is left to its agent. Naming a queued agent of a new workspace instead of a
 workspace removes it from the queue, as `shoal rm` does.
@@ -451,8 +451,8 @@ and whether it was interrupted mid-turn or idle on a terminal; an agent without
 turn reports counts as interrupted. In an
 interactive pane or block of an enabled host other than zmx, such as a Herdr pane with
 `terminal.herdr.enabled`, it restores each agent in the pane or block it
-stopped in once that is back at its prompt. Otherwise it starts each in the background, as `shoal add` does: a tab
-per agent where `terminal.herdr.new_tab` allows, labelled as `shoal add` labels it, or a
+stopped in once that is back at its prompt. Otherwise it starts each in the background, as `shoal start` does: a tab
+per agent where `terminal.herdr.new_tab` allows, labelled as `shoal start` labels it, or a
 detached zmx session per agent on a terminal outside Herdr. Where nothing can
 start in the background, such as without a terminal, it restores a single agent
 here, unless the run also restores a chat or fails for a space, and otherwise lists
@@ -618,13 +618,13 @@ or Rex terminal the command runs in. Scoped callers may title their own workspac
 [agent message](#agent-messages) asking it to choose the title and set it; it is
 refused while no agent runs there.
 
-`shoal add <link>` recognizes issue, PR and branch URLs. Links select the single
+`shoal start <link>` recognizes issue, PR and branch URLs. Links select the single
 registered repository with the same origin; `--repo` selects one explicitly and
 must match the link. An unregistered remote offers interactive registration,
 otherwise lookup fails with the `shoal repo add` command to run. Lookups use your
 [forge login](#forges).
 
-Issue links and `shoal add <number>` require an open issue and derive
+Issue links and `shoal start <number>` require an open issue and derive
 `<number>-<words>` from up to three title words, skipping filler such as “a” and
 “the”, within 32 characters; a title without ASCII words gives `issue-<number>`.
 Numbers use `--repo`, the current registered checkout or workspace, then an
@@ -641,7 +641,7 @@ PR links open their head branch against the refreshed remote base, reusing an
 owned workspace when present, and link the PR once the workspace is ready; a
 refused link only warns. A PR from a fork, which has no branch in the
 repository, opens in a [workspace at a commit](#child-workspaces) at its head,
-below the space running `shoal add` or else top-level, named `pr-<number>`, fetched from the ref the forge serves it under
+below the space running `shoal start` or else top-level, named `pr-<number>`, fetched from the ref the forge serves it under
 (`refs/pull/<number>/head`, or `refs/merge-requests/<number>/head` on GitLab), with
 setup and its diff, `{diff_base}` included, compared with the PR's
 `origin/<base>`; a forge without such a ref refuses it, as does `--agent`, since no agent
@@ -653,7 +653,7 @@ GitHub's `/tree/<branch>`, GitLab's `/-/tree/<branch>`, Bitbucket's
 `/branch/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
 existing-branch ownership checks apply. These forms launch an agent with `--agent`.
-`add [<repository>] --issue <number-or-url>` remains available with an optional
+`start [<repository>] --issue <number-or-url>` remains available with an optional
 branch name, finds the repository of an omitted `<repository>` as numbers and
 links do, and launches an agent only with `--agent`.
 
@@ -663,9 +663,9 @@ shoal repo add /path/to/repo --name my-project
 shoal repo rename my-project new-name
 shoal repo ls
 shoal repo                               # Interactive repository menu
-shoal add my-project fix-login
-shoal add my-project fix-api --agent codex -- "Fix the API timeout"
-shoal add https://forge.example/team/repo/issues/34 -- --model fast
+shoal start my-project fix-login
+shoal start my-project fix-api --agent codex -- "Fix the API timeout"
+shoal start https://forge.example/team/repo/issues/34 -- --model fast
 shoal cd                                 # Fuzzy picker, even inside a workspace
 shoal cd fix-login                       # Enter through the shell function
 shoal cd -                               # Previous directory
@@ -774,8 +774,8 @@ when none is left. Workspaces the command would refuse for their state, or for
 remember, across terminals, the workspaces each acted on, and take `-` as the
 target for the latest one other than the current workspace; `cd` also remembers
 the workspace it leaves, and `attach` the workspace or chat of each agent
-session it or a launch such as `add`, `claude` or `chat` showed here and left
-running, and of each place a focused `add` or `chat` opened; its `-` passes over chats
+session it or a launch such as `start` or `claude` showed here and left
+running, and of each place a focused `start` opened; its `-` passes over chats
 that no longer run as it passes over removed workspaces. Scoped callers keep no such history.
 Invalid explicit targets and other invalid arguments fail without fallback,
 before any prompt for the omitted ones; without a
@@ -793,7 +793,7 @@ all-workspace listings and `--all` retain their scope. A command that accepts
 `--all` lists it as the last picker entry, "All workspaces", and as the first
 completion of its workspace argument. `config show` checks the
 registered checkout before the picker, as described below.
-`shoal add` offers repositories in most-recently-used order, then
+`shoal start` offers repositories in most-recently-used order, then
 a new-branch prompt or a picker of existing branches, open issues or open PRs; a
 chosen issue or PR opens as its link would. Noninteractive and JSON calls never prompt;
 management commands support JSON output, while executed commands keep their
@@ -1055,14 +1055,14 @@ deletes its reviews. Every command takes `--json`.
 the workspace that owns its head branch, fast-forwarded to the pushed head and
 refused when diverged or when the worktree is no longer the recorded one on that
 branch, or in one opened from origin whose base is the PR's `origin/<base>`. Either
-workspace links the PR as `shoal add` does, and the review is stored on it. A
-fork's PR is reviewed in its workspace at a commit, opened or moved as `shoal add`
+workspace links the PR as `shoal start` does, and the review is stored on it. A
+fork's PR is reviewed in its workspace at a commit, opened or moved as `shoal start`
 does but with `--skip-setup`, since the reviewer only reads the checkout; its
 review covers the PR's head against its base, whatever was committed on top there,
 and a manual review, which reads the checkout, refuses a workspace with commits on
 top of the PR's head. `--repo` selects the PR's repository, which otherwise follows
-`shoal add`. An issue URL is refused: `shoal plan` settles an issue before
-implementation. Unless `[review] post` is false, a finished PR review is posted on
+`shoal start`. An issue URL is refused: `shoal start --mode plan --issue` settles an
+issue before implementation. Unless `[review] post` is false, a finished PR review is posted on
 the PR as a comment review by the workspace's agent account, as
 [`shoal pr review --comment`](#issue-and-pr-actions) submits one: findings on lines the
 PR's diff shows become line comments, the rest go in the body with the summary,
@@ -1085,9 +1085,9 @@ post = true # Default: true
 
 ### Agents
 
-Interactive `shoal add` selects an agent using `--agent` or an agent picker;
+Interactive `shoal start` selects an agent using `--agent` or an agent picker;
 choosing “No agent” continues without a launch. Non-interactive additions launch
-only when an agent is named. `add --agent <name>` starts the agent after
+only when an agent is named. `start --agent <name>` starts the agent after
 worktree creation, setup, and
 the post-setup hook succeed; arguments after `--` go to the agent. Shoal refuses
 an agent whose executable is not on PATH before creating anything, and leaves
@@ -1102,7 +1102,7 @@ exits; an agent in a zmx session leaves it where it was.
 `--json` emits the workspace record first, then the agent's unmodified output.
 
 On a terminal, CLI agent launches (`shoal claude`, `shoal codex`, other AI
-tools, `add --agent` and `resume`) run in a [zmx](https://github.com/neurosnap/zmx)
+tools, `start --agent` and `resume`) run in a [zmx](https://github.com/neurosnap/zmx)
 session, so the agent keeps running when you detach with Ctrl-\ or close the
 terminal. zmx passes the agent's output to your terminal unchanged, so images and
 other terminal protocols keep working, and restores the screen when you attach
@@ -1116,13 +1116,13 @@ as a missing agent executable does.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),
 [Rex](#rex), [tmux](#tmux) or [Zellij](#zellij) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.
-`--here` on `shoal add`, `contribute`, `chat`, `plan` and `repo setup --local`
+`--here` on `shoal start`, `contribute` and `repo setup --local`
 runs the launch in this terminal instead of a new tab or detached session,
-whatever the host. An agent that `add` or `contribute` then starts runs as
+whatever the host. An agent that `start` or `contribute` then starts runs as
 these launches do, in a zmx session attached here on a terminal; a chat runs in
 place.
 
-Interactive `shoal add` on a terminal outside Herdr and zmx places its launch
+Interactive `shoal start` on a terminal outside Herdr and zmx places its launch
 as a Herdr tab would be: an agent that starts with input runs setup and the
 agent in a detached zmx session and returns with a `shoal attach` hint, and any
 other launch runs here and attaches its agent's session. `terminal.focus`
@@ -1130,7 +1130,7 @@ overrides the choice, as it does for tabs, and `--here` keeps the launch
 in this terminal. A detached session ends with its agent, whatever its exit
 status; one whose start fails opens your login shell (`$SHELL -l`) there to show
 why, and one without an agent opens the workspace shell there, as a tab does.
-When `done` keeps the workspace, a session Shoal starts for `shoal add`, an
+When `done` keeps the workspace, a session Shoal starts for `shoal start`, an
 attached agent or a background `shoal resume` ends after the agent's final turn,
 unless `[terminal] close_when_done = false` keeps it open.
 
@@ -1165,7 +1165,7 @@ session.
 
 #### Herdr
 
-Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
+Inside Herdr (`HERDR_ENV=1`), interactive `shoal start` looks up
 the issue and resolves repository, branch, and agent choices in the caller's pane,
 then opens a tab in `HERDR_WORKSPACE_ID` and returns once the command is submitted
 there. Setup and agent execution run in that tab, which reads the issue again and
@@ -1180,7 +1180,7 @@ precedence. New tabs stay in the background by default when launching an agent
 with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
 shell or an agent waiting for its first prompt is ready to type into;
 `terminal.focus` overrides this for tabs and zmx sessions alike, and
-`shoal add --focus` focuses one launch and starts it at once, as `--now` does.
+`shoal start --focus` focuses one launch and starts it at once, as `--now` does.
 `enabled` and `new_tab` default to true, and `terminal.herdr.close_when_done`
 overrides `terminal.close_when_done` for tabs; with `enabled = false` Shoal treats
 a Herdr pane as a plain terminal:
@@ -1210,7 +1210,7 @@ removal closes it immediately, regardless of `terminal.close_when_done`, and dae
 startup and `shoal cleanup` close those whose workspace is gone. Shoal closes
 only the pane it opened the tab with, so a pane you split off keeps the tab
 open, and a tab you opened stays open. A background tab `shoal resume` opens
-closes the same way; a pane it reuses keeps its tab's behavior. `add`
+closes the same way; a pane it reuses keeps its tab's behavior. `start`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
 
@@ -1228,7 +1228,7 @@ tab in the workspace it was queued from, then falls back to the
 #### Rex
 
 Inside a [Rex](https://www.superlogical.com/rex) terminal (`REX_SESSION` and
-`REX_BLOCK` are set), `shoal add`, chats, background resumes and demos open a
+`REX_BLOCK` are set), `shoal start`, chats, background resumes and demos open a
 new window in the current Rex session, placed and labelled as a Herdr tab would
 be, and agents run in place in their block. With `placement = "split"`, a start
 from your block other than a demo splits that block instead, opening to its
@@ -1284,7 +1284,7 @@ screen of a full-screen program shows only its current screen.
 #### tmux
 
 [tmux](https://github.com/tmux/tmux) is opt-in. With `terminal.tmux.enabled`,
-inside a tmux pane (`TMUX` and `TMUX_PANE` are set) `shoal add`, chats,
+inside a tmux pane (`TMUX` and `TMUX_PANE` are set) `shoal start`, chats,
 background resumes and demos open a new window in the session the pane started
 in, placed and labelled as a Herdr tab would be, and agents run in place in
 their pane; `placement = "split"` splits your pane instead, as in Rex. The tmux
@@ -1340,7 +1340,7 @@ own screen rather than replaying the output.
 #### Zellij
 
 [Zellij](https://zellij.dev) is opt-in. With `terminal.zellij.enabled`, inside a
-Zellij pane (`ZELLIJ_SESSION_NAME` and `ZELLIJ_PANE_ID` are set) `shoal add`,
+Zellij pane (`ZELLIJ_SESSION_NAME` and `ZELLIJ_PANE_ID` are set) `shoal start`,
 chats, background resumes and demos open a new tab in your session, placed and
 labelled as a Herdr tab would be, and agents run in place in their pane;
 `placement = "split"` splits your pane instead. Each session's server keeps its
@@ -1460,8 +1460,8 @@ effort = "xhigh" # For the default agent only, over [agents.claude] effort
 ```
 
 `model` and `effort` beside `[agent] default` apply to launches of the agent it
-names, over the tool's own. `--model` and `--effort` on `shoal add`,
-`contribute`, `split`, `review run`, `chat`, `plan`, `repo setup`, `shoal claude`
+names, over the tool's own. `--model` and `--effort` on `shoal start`,
+`contribute`, `review run`, `repo setup`, `shoal claude`
 and `shoal codex` override both for that launch. The tool receives the values through
 `model_args` and `effort_args`, which name `{model}` and `{effort}`: Claude Code
 gets `--model` and `--effort`, with `CLAUDE_CODE_EFFORT_LEVEL` set to the same
@@ -1599,7 +1599,7 @@ environment it runs with sets that variable; a lifetime in
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
 `resume` and `resume_latest` restore a stopped agent's session (see `resume_command`);
 `fork` starts a new session from a copy of session `{session}`, which
-[`split --fork`](#child-workspaces) uses and which leaves that session unchanged;
+[`start --fork`](#child-workspaces) uses and which leaves that session unchanged;
 `{directory}` names the workspace it works in, for a tool such as Codex that
 otherwise keeps the forked session's directory.
 `add_dir` gives an agent, fresh or restored, another working directory
@@ -1671,7 +1671,7 @@ Cargo feature (`cargo build --no-default-features --features cli`), which also d
 encryption dependencies. While off, pickers and completion leave Happy out and
 launches are refused before any work starts.
 
-`shoal happy claude|codex [workspace]` and `add --agent happy-claude|happy-codex`
+`shoal happy claude|codex [workspace]` and `start --agent happy-claude|happy-codex`
 start a [Happy](https://github.com/slopus/happy) session as Happy's own daemon
 would (`happy <agent> --happy-starting-mode remote --started-by daemon`, then
 your `--` arguments), so it registers with that daemon and appears in the Happy
@@ -1762,13 +1762,19 @@ other commands do. Failed session closes notify and retry at startup or with
 
 ### Chats
 
-`shoal chat [repository | --workspace [WORKSPACE]] [--agent NAME] [--name NAME] [--here] [-- ARGS]` starts a new chat
-with an agent about a repository, to discuss it, its issues and plans, or to
-coordinate work, without changing code. The repository is the named one, else the
-current checkout's or workspace's, else a picker. The agent is `--agent`, else
-`agent.default`, else a picker of the installed ones. The
-agent's configured launcher runs in the registered checkout with the rendered
-[`chat` mode's rules](#modes-and-rules) as its instructions. An agent with an
+`shoal start --chat [repository | --in [WORKSPACE]] [--mode NAME] [--issue [ISSUE]] [--parent SPACE] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
+starts a new chat with an agent about a repository, to discuss it, its issues
+and plans, or to coordinate work, without changing code; so does `shoal start`
+in a [mode](#modes-and-rules) whose kind is `chat`. Without `--mode`, `--chat`
+and `--in` start in the `chat` mode. The repository is the named one, else the
+issue URL's, else the current checkout's or workspace's, else a picker. The
+agent is `--agent`, else `agent.default`, else a picker of the installed ones.
+The agent's configured launcher runs in the registered checkout with the mode's
+rendered rules as its instructions. With `--issue`, the chat is assigned the
+issue and named `<repo>-<mode>-<number>` without asking, and the agent starts
+on it with the mode's instructions instead of waiting for you; without a value,
+`--issue` in the `plan` mode offers the open issues labelled `[issue]
+plan_label`. An agent with an
 `instructions` template (built in for Claude Code and Codex CLI) takes them
 apart from its first message and waits for yours; another receives them as its
 first message, through `{prompt}` or as its first argument, ending with a
@@ -1778,7 +1784,7 @@ config as workspace launches trust theirs.
 
 Every call starts a new chat and focuses it. Its name is `--name`, else the
 default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it.
-On a terminal, `shoal chat` without `--name` asks `Chat name [<default>]:`,
+On a terminal, a chat without `--name` asks `Chat name [<default>]:`,
 where empty input takes the default and a taken or invalid name is asked for
 again; JSON and Happy launches take the default without asking. Inside Herdr it
 opens a focused tab labelled with the name regardless of `terminal.focus`, unless
@@ -1803,13 +1809,14 @@ rules, without those that need a worktree. It opens workspaces and chats only
 below the chat and in its repository, renames only its own chat, decides the requests
 routed to it only with a grant, and opens issues only where `[permissions]`
 lets agents open them directly. Merging, branch deletion, PR verdicts, CI
-approval, your notifications and administration stay with you. A workspace's
-or a chat's agent that runs `shoal chat` starts the new chat below its own
-space, in the background, and returns once the chat holds its own scope, or
-with the error that stopped it. Such an agent's `--here` is refused, so the
-chat's processes are never the agent's. A workspace process that cleared its
-scope token cannot run `shoal add`, `shoal chat`, `shoal plan` or
-`shoal chat rename --request`.
+approval, your notifications and administration stay with you. `--parent`
+names the space the chat goes below, by name, ID or number; a workspace's or a
+chat's agent that starts a chat starts it below its own space, or below one
+under it that `--parent` names, in the background, and returns once the chat
+holds its own scope, or with the error that stopped it. Such an agent's
+`--here` is refused, so the chat's processes are never the agent's. A
+workspace process that cleared its scope token cannot run `shoal start` or
+`shoal work rename --request`.
 Chats are not tracked executions, so they are never queued or stopped under
 pressure. The daemon records each chat under its
 name, with the session the agent's session-start
@@ -1830,7 +1837,7 @@ repositories: a chat cannot take a workspace's name or a name an unfinished
 rename reserves, and a workspace cannot be created or renamed to a chat's name.
 The name frees once the chat is removed.
 
-`shoal chat --workspace [WORKSPACE]` starts the chat in a ready workspace's
+`shoal start --in [WORKSPACE]` starts the chat in a ready workspace's
 worktree instead of the checkout, to debug, audit or review its work, committed
 and uncommitted: the named workspace, else the current one, else a picker of the
 ready workspaces. The repository is the workspace's, the default name
@@ -1859,26 +1866,26 @@ Shoal, which nothing keeps, removes its chats first and stops their agents;
 `shoal rm` lists them before asking. A chat
 never moves to another directory: one about another workspace is a new chat.
 
-`shoal chat rename [chat] NAME` gives a running chat, `shoal plan` chats
-included, a new name that is free as a new chat's would be, and frees the old
-one. Without a chat it renames the chat it runs in, else the current checkout's
-only running chat, else offers a picker. A Happy chat's log and saved first
+`shoal work rename [chat] NAME` gives a running chat a new name that is free as
+a new chat's would be, and frees the old one. Without a space it renames the
+chat it runs in, else the current checkout's only running chat, else the
+current workspace's title, else offers a picker. A Happy chat's log and saved first
 message move to the new name, so it is refused until its session runs. The zmx session keeps the name it started with,
 since `shoal attach` finds the chat's session where the chat runs. A Herdr tab
 or Rex block the chat runs in takes the new name while it still shows the old
-one; one the user named keeps its label. `shoal chat rename --request [chat]`
+one; one the user named keeps its label. `shoal work rename --request [chat]`
 asks the chat's agent to choose the name and set it instead. Workspace processes
 cannot rename chats.
 
 `shoal work` lists the chat by name with the spaces below it, and
 [workspace events](#workspace-events) report its start, renames, stops,
-restores and removal. A workspace the chat's agent opens with `shoal add` is
+restores and removal. A workspace the chat's agent opens with `shoal start` is
 below the chat, unless it was split from a workspace, below which it stays: its `parent` field and `shoal status` name the chat until the
 workspace is opened outside a chat, which returns it to you. The chat opens
 workspaces only in its own repository; one in another repository is refused.
 With `--agent`, the agent is queued once the workspace is set up, and the
 daemon starts it with the workspace's own scope when a slot is free, as for
-`shoal split --agent`. Since the workspace is created at once, an agent that
+any agent a workspace process starts. Since the workspace is created at once, an agent that
 would wait for `--after` or the issue's open blockers is refused there, as are
 `--now` and `--focus`. While it runs, or waits to come back on its own, the chat
 [coordinates](#child-workspaces) the spaces below it and receives the activity
@@ -1889,20 +1896,14 @@ events gives you the notifications they stand for. The chat's `parent` and
 
 ### Planning issues
 
-`shoal plan [issue] [--repo REPOSITORY] [--oldest | --newest] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
-starts a [chat](#chats) that settles an issue's plan with you before anyone
-implements it. The issue is a number or URL; without one, a picker offers the
-open issues labelled `[issue] plan_label`, and `--oldest` or `--newest` takes
-one from either end instead; `--oldest` is refused when more than 1,000 are open,
-since the forge lists only the newest 1,000. The repository is `--repo`'s, else the
-issue URL's, else the current checkout's or workspace's, and
-the agent, tab and session follow `shoal chat`, except that the chat is named
-`<repo>-plan-<number>` (suffixed while another holds it) without asking. Instead of waiting for you, the agent starts on the
-issue: it checks it against the default branch, talks the open points through
-with you in the chat, then rewrites the issue's body with a Plan section, since
-an implementing agent receives only the body, swaps `plan_label` for
+`shoal start --mode plan --issue [ISSUE]` starts a [chat](#chats) that settles
+an issue's plan with you before anyone implements it. Without an issue, a
+picker offers the open issues labelled `[issue] plan_label`. The agent checks
+the issue against the default branch, talks the open points through with you
+in the chat, then rewrites the issue's body with a Plan section, since an
+implementing agent receives only the body, swaps `plan_label` for
 `planned_label` where they are set, and offers to start an agent on it with
-`shoal add --issue`.
+`shoal start --issue`.
 
 ```toml
 [issue]
@@ -1917,9 +1918,9 @@ shoal config set machine.max_agents dynamic   # Start agents while measured load
 shoal config set machine.max_agents 3         # Fixed machine-wide limit
 shoal config set agent.max_running 2 --repo shoal  # And at most two of them in this repository
 shoal config set agent.max_running none --repo docs # No repository limit
-shoal add <issue-url> --agent claude          # Starts now, or queues when no slot is free
-shoal add <issue-url> --agent claude --now    # Starts now regardless of the limits
-shoal add <issue-url> --agent claude --after api --after 12  # Starts once api and #12 are done
+shoal start <issue-url> --agent claude          # Starts now, or queues when no slot is free
+shoal start <issue-url> --agent claude --now    # Starts now regardless of the limits
+shoal start <issue-url> --agent claude --after api --after 12  # Starts once api and #12 are done
 shoal resume --all                            # Queues the restore of every stopped agent
 shoal queue                                   # Waiting and starting entries; on a terminal, pick one to act on
 shoal queue start api                         # Starts a waiting entry now regardless of the limits
@@ -1957,7 +1958,7 @@ Overload protection stops a running reviewer before any agent, and disk
 protection stops every reviewer; the review is queued again and starts over
 once readings are healthy.
 
-`shoal add` with an agent asks the daemon for a slot after resolving the issue,
+`shoal start` with an agent asks the daemon for a slot after resolving the issue,
 branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
 starts, from the then-current default branch. The daemon starts waiting entries
@@ -2144,8 +2145,11 @@ these modes:
 | `chat` | chat | `chat` | none |
 | `plan` | chat | `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
 
-Workspace agents start in `worker`, `shoal chat` in `chat` and `shoal plan` in
-`plan`. A space records the mode its agent started in, a workspace that of its
+`shoal start` starts every new agent, in the mode `--mode` names, `worker` by
+default, and in the kind of space the mode names unless `--chat`, `--in` or
+`--worktree` says otherwise; `worker` always starts in a workspace, and config
+that gives it another kind is refused. A new agent in an existing space may
+start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 and `shoal work`, `shoal status`, `shoal inbox`, the queue and the menu name a
 mode other than `worker` for a workspace or `chat` for a chat. The built-in rules have no text of their own except `review`, the style
@@ -2194,7 +2198,7 @@ replaces, followed by the `review` rule's text. `{workspace}`, `{branch}`,
 expand in them.
 
 ### Branch and workspace names
-`shoal add <repository> [branch]` creates a literal Git branch;
+`shoal start <repository> [branch]` creates a literal Git branch;
 `--existing <branch|remote/branch>` uses an existing one (incompatible with the
 branch argument and `--issue`); its `--base` is the ref `diff` and `{diff_base}`
 compare against instead of the default branch, for new worktrees only. The picker
@@ -2208,7 +2212,7 @@ The workspace name replaces non-ASCII-alphanumeric/`-_` characters with `-`, dro
 leading `-_`, truncates to 64 characters, and falls back to `workspace`. Globally
 colliding names fail. Commands use this name or ID. Directories default to the repository's
 Shoal workspace directory;
-`add --path <dir>` selects an exact new directory for this workspace only (relative
+`start --path <dir>` selects an exact new directory for this workspace only (relative
 to the current directory; `~/` allowed). Existing paths and overlaps with Shoal
 state, checkouts, workspaces, or another repository's reserved directory are refused.
 Reopening accepts its current path but cannot relocate it. Custom locations have
@@ -2298,9 +2302,9 @@ shoal split fix-typo                 # A child of the current workspace, from th
 shoal split --issue 42               # Branch named after the issue, which it links
 shoal split part-two --base fix-api  # Stacked on the parent's branch
 shoal split fix-typo --workspace fix-api
-shoal split --issue 43 --agent claude                  # A child with an agent of its own
-shoal split api-part --agent codex -- "Move the API client into its own crate"
-shoal split api-part --fork -- "Implement the API part of the plan"  # Forks the parent agent's session
+shoal start --issue 43 --agent claude                  # Inside a workspace: a child with an agent of its own
+shoal start my-project api-part --agent codex -- "Move the API client into its own crate"
+shoal start my-project api-part --fork -- "Implement the API part of the plan"  # Forks the parent agent's session
 shoal split --no-branch                # A child at the default branch, with no branch of its own
 shoal split --no-branch --base v1.4.0  # At a tag or commit
 ```
@@ -2308,13 +2312,17 @@ shoal split --no-branch --base v1.4.0  # At a tag or commit
 `shoal split` creates a workspace on a new branch in the parent's repository,
 runs its setup, and records the parent, so work that needs its own PR gets its
 own branch and worktree. The parent must be ready. `--base` works as for
-`shoal add`; naming the parent's branch also [stacks](#stacked-workspaces) the
+`shoal start`; naming the parent's branch also [stacks](#stacked-workspaces) the
 child on it. Children can be split from children. Workspace processes may split
 from their own workspace, act on every space below it and `shoal rm` one unless
-the user holds it or a workspace below it. Run inside a workspace or a chat,
-`shoal add` and `shoal chat` likewise create a child of that space, in its
-repository, and a chat an agent starts opens in the background; that is the
-only creation and removal scope allows, and the rest stays with the user.
+the user holds it or a workspace below it. A split never starts an agent.
+Run inside a workspace or a chat, `shoal start` likewise creates a child of
+that space, or of a space below it that `--parent` names, in its repository,
+and a chat an agent starts opens in the background; that is the only creation
+and removal scope allows, and the rest stays with the user. `shoal start
+--fork` starts the agent of the workspace `--parent` names, else the current
+one, in the new workspace below it from a fork of the agent's session, which
+stays unchanged, with the arguments after `--` as its task.
 
 `--no-branch` creates a workspace at a commit instead: a worktree at a detached
 HEAD with no branch, nothing to push and no agent of its own, for comparing with
@@ -2496,8 +2504,8 @@ shoal contribute https://github.com/owner/repo fix-typo --agent claude
 
 `shoal contribute <url> [branch]` creates a workspace in a repository you do not
 maintain. The URL names the repository, or an issue, PR or branch in it, which
-opens as `shoal add <link>` does; `--agent`, `--here`, `--focus` and `--now` work
-as for `add`. A repository that is already registered is used as it is.
+opens as `shoal start <link>` does; `--agent`, `--here`, `--focus` and `--now` work
+as for `start`. A repository that is already registered is used as it is.
 Otherwise Shoal clones it as a contribution, first checking whether your forge
 login can push to it. When it cannot, Shoal forks it into your account, reusing
 an existing fork, and the clone gets the fork as its `fork` remote with
@@ -2528,7 +2536,7 @@ commit.gpgsign = true
 ```
 
 Set `git_profile = "work"` at the top level of repository or global config.
-Override it for one creation with `shoal add <repo> --git-profile work`.
+Override it for one creation with `shoal start <repo> --git-profile work`.
 Selection follows the flag, local config, the new worktree's config file,
 then global config. With no selection, Git settings stay unchanged. Profile
 values may be strings, booleans or integers; omitted keys retain Git's normal
@@ -2861,7 +2869,7 @@ the copy, and `[step.copy-ignored] exclude` in `.config/wt.toml` narrows it furt
 your CLI environment. Setup and the post-setup hook, like the push of `shoal pr open`
 and `shoal merge`, run in a process the daemon starts: the command shows their output,
 and interrupting the command interrupts them, while they go on when the command ends
-otherwise, such as when its terminal closes. `shoal add` waits for setup before
+otherwise, such as when its terminal closes. `shoal start` waits for setup before
 entering the worktree or launching an agent; the workspace stays `preparing` until it exits 0 with no
 surviving processes. When that command is interrupted before setup starts,
 `shoal work setup` prepares the workspace and `shoal rm` removes it. On failure, interactive mode asks whether to delete the
@@ -2876,7 +2884,7 @@ shoal work setup fix-login --skip          # Accept the failure after ownership 
 shoal rm fix-login --yes                    # Delete this workspace
 ```
 
-`--skip-setup` on `shoal add` and `shoal split` creates a workspace without
+`--skip-setup` on `shoal start` and `shoal split` creates a workspace without
 setup, for one that only needs a checkout, such as one a CI job or a reviewer
 reads: no `hooks.pre_setup`, ignored-file copy, `setup.command` or
 `hooks.post_setup`, and since they tear down what setup made, no
@@ -2888,7 +2896,7 @@ Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
 without `_cmd`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
 and `SHOAL_STATE_DIR`, without a scope token, port variables or `SHOAL_OUTPUT`, so whatever they leave running (a tmux
 server, say) is not a Shoal execution. `hooks.post_setup` runs without a terminal
-after `add` or `work setup` has a ready workspace and before any `--agent`; a
+after `start` or `work setup` has a ready workspace and before any `--agent`; a
 nonzero exit keeps the workspace, skips the agent, and fails the command.
 `hooks.pre_remove` runs inside the daemon for `rm`, `repo rm`, and automatic cleanup,
 after the removal checks pass and managed commands stop, without a terminal and with
@@ -3180,7 +3188,7 @@ created at never keeps it from cleanup; commits made on top of it and uncommitte
 changes are unsaved work as on a detached HEAD. `shoal work restore` reopens it
 without a branch at the checkpoint's HEAD.
 
-`--disposable` on `shoal add` and `shoal split` creates a workspace that holds
+`--disposable` on `shoal start` and `shoal split` creates a workspace that holds
 nothing worth keeping, such as one a CI job runs in: every removal, `shoal rm`,
 its parent's removal and idle or other cleanup, deletes it without inspecting its
 unsaved work or asking, keeps no checkpoint, and deletes its branch whatever
@@ -3343,7 +3351,7 @@ resume` does, under the importing machine's agent limits. Every reopen, by impor
 without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
 starts a new one, telling it the workspace moved, instead of running
 its `resume_command`. An imported chat starts in the repository's checkout as
-`shoal chat` starts one, under its name or the lowest free `-2`, `-3`, ...
+a chat starts, in the mode it ran in, under its name or the lowest free `-2`, `-3`, ...
 variant, with its agent's `resume` arguments for its session, or as a new
 session for an agent without them or a session not kept. A single chat imported
 on a terminal opens beside it; with `--resume`, without a terminal, or among
@@ -4206,7 +4214,7 @@ completion, an assigned issue or a watched PR keeps it from idle cleanup as they
 keep a workspace, and its assigned PRs name no branch, so they do not keep a done
 chat from completion cleanup; the activity Shoal polls for its items reaches its agent with its
 messages, through the chat's hooks, and wakes it as they do. Its links go with it
-when it is removed. `shoal plan` assigns its chat the issue it plans.
+when it is removed. A chat started on an issue is assigned the issue.
 
 `shoal view` shows linked items as the forge reports them now: title, state,
 author, labels, assignees, milestone, description, comments, and reviews with their inline comments,
@@ -4400,7 +4408,7 @@ shoal internal agent-state working   # Also waiting (for the user mid-turn) or i
 
 Agent hooks report the agent's turn state with this command, and integrations
 read it instead of each inferring it from the terminal. Shoal's terminal
-Claude Code and Codex launches, including `add --agent` and resumed sessions, register
+Claude Code and Codex launches, including `start --agent` and resumed sessions, register
 the hooks with the [message hooks](#agent-messages); Happy sessions do not.
 A session that starts, resumes or clears reports `idle`, so a new agent shows
 `waiting` until its first turn. A turn that ends reports `idle` with
@@ -4721,7 +4729,7 @@ is nothing new; failures go to stderr and never fail the agent. Other agents
 whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can
 run the same command; the rest rely on `shoal messages` and `shoal watch`, which
 Shoal's agent guidance mentions.
-`shoal chat` registers the same message hooks, and for Claude Code the wake
+A chat registers the same message hooks, and for Claude Code the wake
 hook, without turn-state hooks. Under a chat, outside any workspace scope, they
 and `shoal messages` deliver the chat's messages about the workspaces it
 [coordinates](#child-workspaces) and those Shoal sends it for the user; a Codex
@@ -4933,7 +4941,7 @@ false` with exit 2, and `--port <suggested>` or `--on-conflict auto` accepts.
 
 Add `source <(shoal shell init)` to `.bashrc`/`.zshrc` (or `eval "$(shoal shell
 init)"` for Bash without process substitution) and run it in open terminals,
-including after upgrades. The function lets `add` and `cd` enter workspaces
+including after upgrades. The function lets `start` and `cd` enter workspaces
 and moves you out of a removed one. If cleanup removes your directory while an
 agent runs, the shell returns to the nearest surviving parent after exit or at
 the next prompt, preserving the exit status. `shoal cd` always opens fzf, `shoal cd

@@ -54,6 +54,8 @@ struct Settings {
     providers: BTreeSet<String>,
     /// Agents pickers offer, installed or not.
     agents: Vec<String>,
+    /// The modes `shoal start` takes.
+    modes: Vec<String>,
 }
 
 /// Live values an argument can be completed with.
@@ -223,7 +225,15 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                     }
                     values
                 }))
-            } else if (name == "add" || (parent == "review" && name == "run"))
+            } else if name == "start" && arg.get_id() == "mode" {
+                let typed = typed.clone();
+                arg.add(ArgValueCompleter::new(move |current: &OsStr| {
+                    (typed.settings().modes.iter())
+                        .filter(|mode| mode.starts_with(current.to_string_lossy().as_ref()))
+                        .map(CompletionCandidate::new)
+                        .collect::<Vec<_>>()
+                }))
+            } else if (name == "start" || (parent == "review" && name == "run"))
                 && arg.get_id() == "agent"
             {
                 let typed = typed.clone();
@@ -335,6 +345,7 @@ impl Typed {
                     .iter()
                     .map(|provider| provider.name.to_owned())
                     .collect(),
+                modes: crate::config::modes::built_in_modes().into_keys().collect(),
             };
         };
         let global = Config::load(&paths).unwrap_or_default();
@@ -594,7 +605,8 @@ fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
         ("repository" | "repository_override" | "repo", _, _) => Some(Target::Repositories),
         ("workspace" | "space", _, "resume") => Some(Target::ResumeSpaces),
         ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
-        ("workspace", _, _) => Some(Target::Workspaces(need)),
+        ("workspace", _, _) | ("in_workspace", _, "start") => Some(Target::Workspaces(need)),
+        ("parent", _, "start") => Some(Target::Spaces(need)),
         // Only stopping untracked processes takes chats.
         ("space", _, "stop") if need != Need::Untracked => Some(Target::Workspaces(need)),
         ("space", _, _) => Some(Target::Spaces(need)),
@@ -678,6 +690,10 @@ fn layered_settings(global: &Config, layers: &ConfigLayers) -> Settings {
     if let Ok(settings) = &resolved {
         commands.extend(settings.launchers.clone());
     }
+    let modes = match &resolved {
+        Ok(settings) => settings.modes.keys().cloned().collect(),
+        Err(_) => crate::config::modes::built_in_modes().into_keys().collect(),
+    };
     let agents = resolved.map_or_else(
         |_| providers.iter().cloned().collect(),
         |settings| agents::names(&settings),
@@ -686,6 +702,7 @@ fn layered_settings(global: &Config, layers: &ConfigLayers) -> Settings {
         commands,
         providers,
         agents,
+        modes,
     }
 }
 

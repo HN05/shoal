@@ -87,20 +87,25 @@ pub enum WorkCommand {
         #[arg(long)]
         copy: bool,
     },
-    /// Give a workspace a short title, which the tabs Shoal opens for it show.
+    /// Give a workspace a short title, which the tabs Shoal opens for it
+    /// show, or a chat a new name.
     ///
-    /// With --request, asks the workspace's running agent to choose a title
-    /// that fits the work and set it. `shoal branch rename` renames its Git
-    /// branch instead.
+    /// Without a space, renames the chat this runs in, else the current
+    /// workspace, else offers a picker. With --request, asks the space's
+    /// running agent to choose a title or name that fits the work and set
+    /// it. A chat's zmx session keeps its name; `shoal attach` finds it by
+    /// the new one. `shoal branch rename` renames a workspace's Git branch
+    /// instead.
     #[command(allow_missing_positional = true)]
     Rename {
-        workspace: Option<String>,
-        /// Title of at most 40 characters on one line.
+        space: Option<String>,
+        /// A workspace's title of at most 40 characters on one line, or a
+        /// chat's name, free among workspaces and running chats.
         #[arg(required_unless_present = "request")]
         title: Option<String>,
-        /// Ask the workspace's agent to choose the title; a single argument
-        /// then names the workspace.
-        #[arg(long, conflicts_with = "workspace")]
+        /// Ask the space's agent to choose the title or name; a single
+        /// argument then names the space.
+        #[arg(long, conflicts_with = "space")]
         request: bool,
     },
     /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal work restore returns to.

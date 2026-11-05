@@ -724,24 +724,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
 }
 
 fn add() -> Command {
-    Command::Create(CreateCommand::Add {
-        here: false,
-        focus: false,
-        path: None,
-        repository: None,
-        repository_override: None,
-        branch: None,
-        existing: None,
-        issue: None,
-        base: None,
-        git_profile: None,
-        agent: None,
-        now: false,
-        after: vec![],
-        creation: Default::default(),
-        model: Default::default(),
-        args: vec![],
-    })
+    Command::Create(CreateCommand::Start(Box::default()))
 }
 
 /// What `key` does to `workspace`.
