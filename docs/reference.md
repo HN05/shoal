@@ -537,9 +537,10 @@ enabled = false                # Opt in to stop any idle agent once its cache ex
 
 An idle agent keeps its memory while it waits for its next update. Each
 [cleanup sweep](#automatic-cleanup) stops the [idle](#agent-state) agents of
-done workspaces that something keeps from cleanup, such as a
-[hold](#workspace-holds), an open [question](#questions) or a
-[child workspace](#child-workspaces), and with `[idle_stop]` enabled, which a
+done workspaces that something besides their work and PRs keeps from
+[completion cleanup](#assignment-completion), such as a
+[hold](#workspace-holds) or an open [question](#questions), and with
+`[idle_stop]` enabled, which a
 repository may set, any idle agent. Only an agent idle with no processes running
 outside its process group, with a restore command, and whose
 [prompt cache](#agent-state) has expired stops: a resumed agent's first request
