@@ -13,7 +13,7 @@ use crate::{
     git,
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
     process, repository, seed,
-    state::WorkspaceState,
+    state::{QueueKind, QueueState, WorkspaceState},
 };
 use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
@@ -632,8 +632,8 @@ fn utf8(path: &Path) -> Result<String> {
 
 /// Refuse a repository whose records show it in use: a lease that handed its
 /// checkout to a caller, a command or agent unless `running` lets the caller
-/// stop it, a chat or queued launch, or a workspace in another lifecycle
-/// operation. Returns each workspace's state.
+/// stop it, a chat, a queued launch or a starting CI job, or a workspace in
+/// another lifecycle operation. Returns each workspace's state.
 fn movable_records(
     db: &rusqlite::Connection,
     id: &str,
@@ -651,22 +651,20 @@ fn movable_records(
         running == Running::StoppedFirst || !store::repository_has_executions(db, id)?,
         "a command or agent is running in a workspace of the repository; stop it first"
     );
-    for (table, what) in [
-        ("chats", "a chat is running in the repository"),
-        (
-            "agent_queue",
-            "agent launches are queued for the repository",
-        ),
-    ] {
-        ensure!(
-            !store::exists(
-                db,
-                &format!("SELECT 1 FROM {table} WHERE repository_id=?1"),
-                [id]
-            )?,
-            "{what}; wait for it to finish"
-        );
-    }
+    ensure!(
+        !store::exists(db, "SELECT 1 FROM chats WHERE repository_id=?1", [id])?,
+        "a chat is running in the repository; wait for it to finish"
+    );
+    // A job waiting for the runner holds nothing in the directory, and
+    // claiming it creates its workspace under the Git gate a move holds.
+    ensure!(
+        !store::exists(
+            db,
+            "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND NOT (kind=?2 AND state=?3)",
+            params![id, QueueKind::Job, QueueState::Queued]
+        )?,
+        "agent launches are queued for the repository; wait for it to finish"
+    );
     let states = db
         .prepare("SELECT id,state FROM workspaces WHERE repository_id=?1")?
         .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?

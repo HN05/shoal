@@ -680,6 +680,48 @@ async fn a_queued_or_running_review_holds_back_the_move() -> Result<()> {
 }
 
 #[tokio::test]
+async fn a_waiting_ci_job_lets_the_move_go_and_a_starting_one_holds_it_back() -> Result<()> {
+    let (_temp, manager, repo, _workspace, _root) = cloned().await?;
+    let queue = |state: QueueState| {
+        let id = repo.id.clone();
+        manager.store.run(move |db| {
+            db.execute(
+                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,job)
+                 VALUES (?1,?2,?3,'ci-rust-4','',?4,0,'{}')",
+                params![uuid::Uuid::new_v4().to_string(), QueueKind::Job, id, state],
+            )?;
+            Ok(())
+        })
+    };
+    queue(QueueState::Starting).await?;
+    let error = manager
+        .move_repositories(Layout::Regular)
+        .await
+        .err()
+        .context("moved with a CI job starting")?;
+    assert!(
+        format!("{error:#}").contains("agent launches are queued"),
+        "{error:#}"
+    );
+
+    manager
+        .store
+        .run(|db| {
+            db.execute("DELETE FROM agent_queue", [])?;
+            Ok(())
+        })
+        .await?;
+    queue(QueueState::Queued).await?;
+    manager.move_repositories(Layout::Regular).await?;
+    assert!(
+        repo.workspaces_dir
+            .as_ref()
+            .is_some_and(|dir| !dir.exists())
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<()> {
     let (temp, manager, repo, workspace, root) = cloned().await?;
     let file = temp.path().join("notes.md");
