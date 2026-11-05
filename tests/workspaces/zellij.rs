@@ -152,20 +152,7 @@ impl ZellijServer {
         self.drawn = Arc::default();
         let drawn = Arc::clone(&self.drawn);
         let title = format!("({session})");
-        thread::spawn(move || {
-            let mut master = master;
-            let mut buffer = [0; 4096];
-            loop {
-                match std::io::Read::read(&mut master, &mut buffer) {
-                    Ok(0) => break,
-                    Ok(count) => keep_output(&screen, &drawn, &title, &buffer[..count]),
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(20));
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
+        thread::spawn(move || drain(master, &screen, &drawn, &title));
         client
     }
 
@@ -356,12 +343,30 @@ fn reported_missing(output: &std::process::Output) -> bool {
     error.contains("There is no active session") || error.contains("' not found")
 }
 
+/// Read what a client prints on the terminal `master` until it ends,
+/// keeping it as [`keep_output`] does.
+fn drain(mut master: fs::File, screen: &Mutex<Vec<u8>>, drawn: &AtomicBool, title: &str) {
+    let mut buffer = [0; 4096];
+    loop {
+        match std::io::Read::read(&mut master, &mut buffer) {
+            Ok(0) => break,
+            Ok(count) => keep_output(screen, drawn, title, &buffer[..count]),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(20));
+            }
+            Err(_) => break,
+        }
+    }
+}
+
 /// Add `output` to the end of `screen`, the client's, noting in `drawn`
 /// once it shows `title`, before older output makes room for it.
 fn keep_output(screen: &Mutex<Vec<u8>>, drawn: &AtomicBool, title: &str, output: &[u8]) {
     let mut screen = screen.lock().unwrap_or_else(PoisonError::into_inner);
     screen.extend_from_slice(output);
-    if without_escapes(&String::from_utf8_lossy(&screen)).contains(title) {
+    if !drawn.load(Ordering::Relaxed)
+        && without_escapes(&String::from_utf8_lossy(&screen)).contains(title)
+    {
         drawn.store(true, Ordering::Relaxed);
     }
     let excess = screen.len().saturating_sub(SCREEN_TAIL);
