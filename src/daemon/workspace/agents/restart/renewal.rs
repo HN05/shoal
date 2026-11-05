@@ -231,6 +231,22 @@ impl Manager {
         }
     }
 
+    /// The workspaces whose agent a restart starts in a new wrapper that
+    /// has not registered it yet.
+    pub(crate) async fn renewing_workspaces(&self) -> HashSet<String> {
+        self.executions
+            .with_restarts(|_, renewals| {
+                renewals
+                    .values()
+                    .filter_map(|renewal| match renewal {
+                        Renewal::Starting(handover) => Some(handover.workspace_id.clone()),
+                        Renewal::Started(_) => None,
+                    })
+                    .collect()
+            })
+            .await
+    }
+
     /// Cancel the restarts that would start an agent of `workspace_id` in a
     /// new wrapper, leaving its record for `shoal resume`. Requires the
     /// queue gate, which a restart holds while it records its restore.

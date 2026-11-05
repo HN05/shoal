@@ -586,10 +586,17 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
     let begin = || manager.begin_execution(&workspace.id, None, ExecutionKind::Command, None);
-    let (first, second) = (begin().await.unwrap(), begin().await.unwrap());
-    let (before, after) = (first.plan.id.clone(), second.plan.id.clone());
+    let first = begin().await.unwrap();
+    let before = first.plan.id.clone();
 
     let restarting = hand_over(&manager, &workspace, &first).await;
+    // `shoal stop --all` selects the workspace, though no execution or
+    // queue entry runs or starts the agent now.
+    let targets = manager
+        .stop_targets(crate::protocol::QueuedLaunches::Cancel)
+        .await
+        .unwrap();
+    assert!(targets.iter().any(|target| target.id == workspace.id));
     manager
         .cancel_stopped_restores(&workspace.id)
         .await
@@ -601,6 +608,8 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
         .await;
     assert_eq!(restores_of(&manager, &before).await, 0);
 
+    let second = begin().await.unwrap();
+    let after = second.plan.id.clone();
     let restarting = hand_over(&manager, &workspace, &second).await;
     manager
         .restart_in_new_wrapper(&workspace, &after, true)

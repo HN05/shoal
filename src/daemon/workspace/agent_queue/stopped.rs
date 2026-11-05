@@ -414,8 +414,9 @@ impl Manager {
     }
 
     /// The workspaces with a stopped agent whose restore is requested or in
-    /// the queue. Requires the queue gate, which keeps restores in the queue
-    /// until it is released.
+    /// the queue, or that a restart starts in a new wrapper. Requires the
+    /// queue gate, which keeps restores in the queue, and a restart from
+    /// recording its own, until it is released.
     pub(in crate::daemon::workspace) async fn pending_restore_workspaces(
         &self,
     ) -> Result<HashSet<String>> {
@@ -424,6 +425,7 @@ impl Manager {
             .run(|db| Ok((all_workspaces(db)?, restoring_workspaces(db)?)))
             .await?;
         let mut pending = queued;
+        pending.extend(self.renewing_workspaces().await);
         for workspace in workspaces {
             if !recovery::restore_requests(&self.paths, &workspace)?.is_empty() {
                 pending.insert(workspace);
