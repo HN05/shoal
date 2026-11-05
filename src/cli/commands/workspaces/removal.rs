@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::{Result, ensure};
 
 use crate::{
-    cli::{client, context::Context, ui},
+    cli::{context::Context, ui},
     model::Workspace,
     removal::RemovalCheck,
     shell,
@@ -64,7 +64,7 @@ async fn escape_destination(ctx: &Context, workspace: &Workspace) -> Result<Opti
     if !workspace.contains(&cwd) {
         return Ok(None);
     }
-    let repository = client::repositories(&ctx.paths)
+    let repository = crate::client::repositories::list(&ctx.paths)
         .await?
         .into_iter()
         .find(|r| r.id == workspace.repository_id)

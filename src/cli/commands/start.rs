@@ -135,7 +135,7 @@ async fn mode_settings(ctx: &Context, args: &StartArgs) -> Result<Effective> {
 /// names, else of the one an issue or item URL belongs to, else of the
 /// current checkout or workspace, without asking.
 async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<String>> {
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     let named = (args.repository_override.as_deref()).or(args.repository.as_deref());
     if let Some(Ok(selector)) = named.map(|named| ui::repository_selector(named.to_owned()))
         && let Ok(repo) = crate::repository::select(&repos, selector).await

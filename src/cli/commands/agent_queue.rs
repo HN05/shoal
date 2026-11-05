@@ -167,7 +167,7 @@ pub(super) async fn rows(ctx: &Context, entries: &[QueueEntry]) -> Result<Vec<St
     if ctx.json || entries.is_empty() {
         return Ok(Vec::new());
     }
-    let repositories = client::repositories(&ctx.paths).await?;
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
     Ok(ui::queue_rows(
         entries,
         &repositories,

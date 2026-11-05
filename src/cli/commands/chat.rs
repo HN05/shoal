@@ -193,7 +193,7 @@ pub(super) async fn workspace_repository(
     ctx: &Context,
     workspace: &Workspace,
 ) -> Result<Repository> {
-    client::repositories(&ctx.paths)
+    crate::client::repositories::list(&ctx.paths)
         .await?
         .into_iter()
         .find(|repo| repo.id == workspace.repository_id)
@@ -677,7 +677,7 @@ pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<Cha
 
 /// The named repository, else the current checkout's or workspace's, else a picker.
 pub(super) async fn chosen(ctx: &Context, repository: Option<String>) -> Result<Repository> {
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     let selector = match repository {
         Some(repository) => ui::repository_selector(repository)?,
         None => {

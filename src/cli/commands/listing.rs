@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::{
-    cli::{client, context::Context, list_status::ListStatus, ui},
+    cli::{context::Context, list_status::ListStatus, ui},
     model::{Chat, QueueEntry, Workspace},
 };
 
@@ -21,7 +21,7 @@ impl ListFilter {
     ) -> Result<Self> {
         let repository = match repository {
             Some(selector) => {
-                let repos = client::repositories(&ctx.paths).await?;
+                let repos = crate::client::repositories::list(&ctx.paths).await?;
                 let selector = ui::repository_selector(selector)?;
                 Some(
                     crate::repository::select(&repos, selector)

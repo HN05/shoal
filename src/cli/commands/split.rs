@@ -103,7 +103,7 @@ async fn commit_owner(
             Ok((repository.into(), Some(parent)))
         }
         Err(error) if error.is::<ui::NoCurrentWorkspace>() => {
-            let repositories = client::repositories(&ctx.paths).await?;
+            let repositories = crate::client::repositories::list(&ctx.paths).await?;
             let hint = "pass --workspace or run it in a registered checkout";
             let repository = super::issues::current_repository(ctx, repositories, hint).await?;
             Ok((repository.into(), None))

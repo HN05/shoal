@@ -3,7 +3,6 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        client,
         commands::{issues, repositories},
         context::Context,
         ui,
@@ -21,7 +20,7 @@ impl AddTarget {
     pub(super) async fn repository(&self, ctx: &Context) -> Result<&Repository> {
         let repos = self
             .repositories
-            .get_or_try_init(|| client::repositories(&ctx.paths))
+            .get_or_try_init(|| crate::client::repositories::list(&ctx.paths))
             .await?;
         crate::repository::select(repos, &self.selector).await
     }
@@ -46,7 +45,7 @@ pub(super) async fn resolve_add_target(
                 .map_or(selector, |repo| repo.id.into())
         }
         None => {
-            let repos = repositories.insert(client::repositories(&ctx.paths).await?);
+            let repos = repositories.insert(crate::client::repositories::list(&ctx.paths).await?);
             match issue {
                 Some(url) if IssueInput::parse(url) == IssueInput::Url => {
                     issues::repository_for(ctx, repos, url, offer).await?.into()

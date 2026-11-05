@@ -345,7 +345,7 @@ pub(super) async fn add(
         )
         .await;
     }
-    let mut repos = client::repositories(&ctx.paths).await?;
+    let mut repos = crate::client::repositories::list(&ctx.paths).await?;
     let repository = match input.repository {
         Some(repository) => ui::repository_selector(repository)?,
         None => match &link {

@@ -16,10 +16,10 @@ use tokio::{
 
 use crate::{
     client::{paths::Paths, processes::Identity},
-    model::{Inspection, PresentSpace, Repository, Spaces, Workspace},
+    model::{Inspection, PresentSpace, Spaces, Workspace},
     protocol::{
-        self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method, RepositoryMethod, Request,
-        Response, WorkspaceMethod, timing,
+        self, Body, DaemonMethod, DaemonStatus, ErrorCode, Exit, Method, Request, Response,
+        WorkspaceMethod, timing,
     },
 };
 
@@ -363,10 +363,6 @@ pub async fn spaces(daemon: &impl Daemon) -> Result<Spaces> {
     })
 }
 
-pub async fn repositories(daemon: &impl Daemon) -> Result<Vec<Repository>> {
-    request(daemon, RepositoryMethod::ListRepositories).await
-}
-
 /// Close `place`, a place Shoal created for `workspace`, while the daemon
 /// still records it as that workspace's.
 pub async fn close_owned_place(
@@ -430,23 +426,6 @@ pub async fn keep_agent_environment(
         daemon,
         WorkspaceMethod::KeepAgentEnvironment {
             workspace: workspace.to_owned(),
-            environment,
-        },
-    )
-    .await?;
-    Ok(())
-}
-
-/// [`keep_agent_environment`] for a chat agent of `repository`.
-pub async fn keep_repository_agent_environment(
-    daemon: &impl Daemon,
-    repository: &str,
-    environment: std::collections::BTreeMap<String, String>,
-) -> Result<()> {
-    call(
-        daemon,
-        RepositoryMethod::KeepRepositoryAgentEnvironment {
-            repository: repository.to_owned(),
             environment,
         },
     )

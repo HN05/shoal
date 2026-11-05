@@ -3,12 +3,7 @@ use anyhow::Result;
 
 use super::selection::chosen;
 use crate::{
-    cli::{
-        client::{self},
-        context::Context,
-        output::Palette,
-        ui,
-    },
+    cli::{context::Context, output::Palette, ui},
     repository,
 };
 
@@ -39,7 +34,11 @@ async fn new_name(
         Some(name) => Ok(name),
         None => {
             // Refuse an unknown repository before asking for its name.
-            repository::select(&client::repositories(&ctx.paths).await?, repository).await?;
+            repository::select(
+                &crate::client::repositories::list(&ctx.paths).await?,
+                repository,
+            )
+            .await?;
             ui::require_argument(ctx, "new name", "name")?;
             ui::input(ctx, "New name")
         }

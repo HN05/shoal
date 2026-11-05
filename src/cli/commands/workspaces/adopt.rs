@@ -78,7 +78,7 @@ async fn ensure_recorded_repository(
     let Some(selector) = repository else {
         return Ok(());
     };
-    let repositories = client::repositories(&ctx.paths).await?;
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let selected =
         repository::select(&repositories, ui::repository_selector(selector.to_owned())?).await?;
     ensure!(
@@ -120,7 +120,7 @@ async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
 /// otherwise the only one sharing its origin remote, otherwise one chosen
 /// interactively.
 async fn worktree_repository(ctx: &Context, path: &Path) -> Result<String> {
-    let mut repos = client::repositories(&ctx.paths).await?;
+    let mut repos = crate::client::repositories::list(&ctx.paths).await?;
     let common = git::common_dir(path)
         .await
         .with_context(|| format!("{} is not a Git worktree", path.display()))?;

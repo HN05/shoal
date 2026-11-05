@@ -40,7 +40,7 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     let repositories = if ctx.json {
         Vec::new()
     } else {
-        ui::repository_choices(client::repositories(&ctx.paths).await?).await
+        ui::repository_choices(crate::client::repositories::list(&ctx.paths).await?).await
     };
     let rows = inbox.rows(
         &repositories,

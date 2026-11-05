@@ -1,10 +1,10 @@
 //! Render registered repositories.
 use anyhow::Result;
 
-use crate::cli::{client, context::Context, output::Palette, ui};
+use crate::cli::{context::Context, output::Palette, ui};
 
 pub(super) async fn list(ctx: &Context) -> Result<i32> {
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     ctx.show(&repos, |repos| {
         let palette = Palette::stdout(ctx.json);
         for repo in repos {

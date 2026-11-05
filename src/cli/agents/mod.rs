@@ -1197,13 +1197,15 @@ fn agent_dirs(settings: &Effective, home: &Path) -> BTreeSet<PathBuf> {
 /// resolved as agents compare paths; `None`, with a warning when it cannot be
 /// looked up, when there is none.
 async fn workspaces_dir(paths: &crate::paths::Paths, workspace: &Workspace) -> Option<PathBuf> {
-    let directory = client::repositories(paths).await.and_then(|repositories| {
-        repositories
-            .into_iter()
-            .find(|repository| repository.id == workspace.repository_id)
-            .map(|repository| repository.workspaces_dir)
-            .context("workspace repository is missing")
-    });
+    let directory = crate::client::repositories::list(paths)
+        .await
+        .and_then(|repositories| {
+            repositories
+                .into_iter()
+                .find(|repository| repository.id == workspace.repository_id)
+                .map(|repository| repository.workspaces_dir)
+                .context("workspace repository is missing")
+        });
     match directory {
         Ok(directory) => {
             directory.map(|directory| std::fs::canonicalize(&directory).unwrap_or(directory))

@@ -159,9 +159,11 @@ async fn chat_pull(ctx: &Context, chat: &Chat) -> Result<(Repository, String)> {
         [] => bail!("{} links no PR; pass --pr or a PR URL", chat.name),
         _ => bail!("{} links several PRs; pass --pr or a PR URL", chat.name),
     };
-    let repo = (client::repositories(&ctx.paths).await?.into_iter())
-        .find(|repo| repo.id == chat.repository_id)
-        .with_context(|| format!("{}'s repository is not registered", chat.name))?;
+    let repo = (crate::client::repositories::list(&ctx.paths)
+        .await?
+        .into_iter())
+    .find(|repo| repo.id == chat.repository_id)
+    .with_context(|| format!("{}'s repository is not registered", chat.name))?;
     Ok((repo, url))
 }
 

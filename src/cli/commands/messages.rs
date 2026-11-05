@@ -103,7 +103,7 @@ async fn chosen_repository(ctx: &Context, repository: Option<String>) -> Result<
     match repository {
         Some(repository) => ui::repository_selector(repository),
         None => {
-            let repos = client::repositories(&ctx.paths).await?;
+            let repos = crate::client::repositories::list(&ctx.paths).await?;
             Ok(
                 super::issues::current_repository(ctx, repos, "pass --repo <repository>")
                     .await?

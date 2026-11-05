@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use super::chat;
 use crate::{
-    cli::{client, context::Context, ui},
+    cli::{context::Context, ui},
     repository,
 };
 
@@ -21,7 +21,7 @@ pub(super) async fn start(
     // Refuse what the command line names before asking for anything.
     options.check_name(ctx).await?;
     let selector = super::repositories::chosen(ctx, repository).await?;
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     let repo = repository::select(&repos, &selector).await?.clone();
     let settings = chat::settings(ctx, &repo).await?;
     options.agent = chat::named_agent(&settings, options.agent)?;

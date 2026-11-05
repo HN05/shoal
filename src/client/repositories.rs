@@ -18,6 +18,11 @@ use crate::{
     protocol::RepositoryMethod,
 };
 
+/// The registered repositories.
+pub async fn list(daemon: &impl Daemon) -> Result<Vec<Repository>> {
+    request(daemon, RepositoryMethod::ListRepositories).await
+}
+
 /// Register `source`, a path or URL, as `name`, cloning a URL to `path`.
 pub async fn register(
     daemon: &impl Daemon,
@@ -145,6 +150,25 @@ pub async fn forget_agent_environments(daemon: &impl Daemon, repository_id: Stri
     call(
         daemon,
         RepositoryMethod::ForgetAgentEnvironments { repository_id },
+    )
+    .await?;
+    Ok(())
+}
+
+/// Keep where a chat agent of `repository` keeps its configuration for the
+/// repository's removal, as [`crate::client::workspaces::keep_agent_environment`]
+/// does for a workspace's agent.
+pub async fn keep_agent_environment(
+    daemon: &impl Daemon,
+    repository: &str,
+    environment: BTreeMap<String, String>,
+) -> Result<()> {
+    call(
+        daemon,
+        RepositoryMethod::KeepRepositoryAgentEnvironment {
+            repository: repository.to_owned(),
+            environment,
+        },
     )
     .await?;
     Ok(())

@@ -9,7 +9,6 @@ use crate::cli::{
         create::{CreateCommand, StartArgs},
         repository::{RepoCommand, RepositoryCommand},
     },
-    client,
     context::Context,
     ui::{self, KeyBindings},
 };
@@ -36,7 +35,8 @@ const BINDINGS: &[(&str, &str, RepoMenuAction)] = &[
 ];
 
 pub(super) async fn choose(ctx: &Context) -> Result<Command> {
-    let mut entries = ui::repository_choices(client::repositories(&ctx.paths).await?).await;
+    let mut entries =
+        ui::repository_choices(crate::client::repositories::list(&ctx.paths).await?).await;
     entries.push((REGISTER_ENTRY.into(), "+ Register repository".into()));
     let picked = ui::pick_with_keys(ctx, "Repository> ", entries, KeyBindings(BINDINGS))?;
     let action = resolve_action(picked.action, &picked.id)?;

@@ -170,7 +170,7 @@ struct Registrations {
 impl Registrations {
     async fn load(ctx: &Context) -> Result<Self> {
         Ok(Self {
-            repositories: client::repositories(&ctx.paths).await?,
+            repositories: crate::client::repositories::list(&ctx.paths).await?,
             workspaces: client::workspaces(&ctx.paths).await?,
         })
     }

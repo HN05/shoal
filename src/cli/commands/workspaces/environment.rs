@@ -49,7 +49,7 @@ pub(in crate::cli) async fn configured_environment(
 ) -> Result<BTreeMap<String, OsString>> {
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    let repo = client::repositories(&ctx.paths)
+    let repo = crate::client::repositories::list(&ctx.paths)
         .await?
         .into_iter()
         .find(|repo| repo.id == workspace.repository_id)

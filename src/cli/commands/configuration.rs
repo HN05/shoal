@@ -145,7 +145,7 @@ async fn target(ctx: &Context, explicit: Option<String>) -> Result<ConfigTarget>
         return Ok(ConfigTarget::Workspace(workspace.id.clone()));
     }
     let cwd = cwd.context("scoped workspace is unavailable")?;
-    let repositories = client::repositories(&ctx.paths).await?;
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let repository = repositories
         .iter()
         .filter(|repository| {

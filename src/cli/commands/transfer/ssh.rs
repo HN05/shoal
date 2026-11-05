@@ -9,7 +9,7 @@ use serde_json::Value;
 use super::export::{self, ExportDirectory, PlannedExport};
 use crate::client::output::transfer::{Imported, Moves};
 use crate::{
-    cli::{args::transfer::SshArgs, client, context::Context, ui},
+    cli::{args::transfer::SshArgs, context::Context, ui},
     model::Chat,
     subprocess::{Run, diagnostic},
 };
@@ -127,7 +127,9 @@ async fn move_one(
 
 /// How `chat`, which ended here, continues here without its package.
 async fn continues_here(ctx: &Context, chat: &Chat) -> String {
-    let repositories = client::repositories(&ctx.paths).await.unwrap_or_default();
+    let repositories = crate::client::repositories::list(&ctx.paths)
+        .await
+        .unwrap_or_default();
     let repository = repositories
         .iter()
         .find(|repository| repository.id == chat.repository_id)

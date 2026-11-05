@@ -43,7 +43,7 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     if let Some(context) = current_context(ctx).await? {
         return Ok(context);
     }
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     if let Some(url) = item.filter(|item| IssueInput::parse(item) == IssueInput::Url)
         && let Some(repo) = super::super::issues::registered_for_item(&repos, url).await?
     {
@@ -89,7 +89,7 @@ async fn current_or_picked_repository(ctx: &Context) -> Result<ItemContext> {
         return Ok(context);
     }
     ensure!(ctx.interactive(), "{NO_REPOSITORY}");
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     let picked = ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)?;
     Ok(ItemContext::Checkout(picked))
 }
@@ -142,7 +142,7 @@ pub(in crate::cli::commands) async fn current_context(
     if let Some(chat) = ui::current_chat(&None) {
         return Ok(Some(ItemContext::Chat(chat)));
     }
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     let checkout = super::super::issues::current_checkout(&repos).await?;
     Ok(checkout.map(|repo| ItemContext::Checkout(repo.id.clone())))
 }
@@ -151,7 +151,7 @@ pub(in crate::cli::commands) async fn current_context(
 /// directory.
 async fn named(ctx: &Context, repo: &str) -> Result<Repository> {
     let selector = ui::repository_selector(repo.to_owned())?;
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     Ok(repository::select(&repos, selector).await?.clone())
 }
 

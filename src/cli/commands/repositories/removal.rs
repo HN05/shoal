@@ -3,12 +3,7 @@ use anyhow::{Result, ensure};
 
 use super::selection::chosen;
 use crate::{
-    cli::{
-        agents,
-        client::{self},
-        context::Context,
-        ui,
-    },
+    cli::{agents, context::Context, ui},
     model::{Repository, RepositoryRemoval},
     repository,
 };
@@ -19,7 +14,7 @@ pub(super) async fn remove(
     confirmed: bool,
 ) -> Result<i32> {
     let repository = chosen(ctx, repository).await?;
-    let repositories = client::repositories(&ctx.paths).await?;
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let cleanup_repository = repository::select(&repositories, &repository)
         .await?
         .clone();

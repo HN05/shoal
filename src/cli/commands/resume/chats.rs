@@ -117,7 +117,7 @@ async fn restore(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Started
 
 /// [`restore`] without the report of its failure.
 async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Started> {
-    let repo = client::repositories(&ctx.paths)
+    let repo = crate::client::repositories::list(&ctx.paths)
         .await?
         .into_iter()
         .find(|repo| repo.id == chat.repository_id)

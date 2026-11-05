@@ -2,11 +2,7 @@
 use anyhow::Result;
 
 use crate::{
-    cli::{
-        client::{self},
-        context::Context,
-        ui,
-    },
+    cli::{context::Context, ui},
     model::SyncedRepository,
     repository,
 };
@@ -23,7 +19,7 @@ async fn sync_target(ctx: &Context, repository: Option<String>) -> Result<reposi
         Some(repository) => ui::repository_selector(repository)?,
         None => super::super::issues::current_repository(
             ctx,
-            client::repositories(&ctx.paths).await?,
+            crate::client::repositories::list(&ctx.paths).await?,
             "pass a repository",
         )
         .await?

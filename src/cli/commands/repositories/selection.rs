@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 use crate::{
-    cli::{client, commands::issues, context::Context, ui},
+    cli::{commands::issues, context::Context, ui},
     repository,
 };
 
@@ -17,7 +17,7 @@ pub(in crate::cli::commands) async fn chosen(
     match repository {
         Some(repository) => ui::repository_selector(repository),
         None => {
-            let repos = client::repositories(&ctx.paths).await?;
+            let repos = crate::client::repositories::list(&ctx.paths).await?;
             Ok(issues::current_repository(ctx, repos, REPOSITORY)
                 .await?
                 .into())

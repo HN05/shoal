@@ -444,7 +444,7 @@ pub(super) async fn repository_spaces(
     ctx: &Context,
     repository: String,
 ) -> Result<Vec<PresentSpace>> {
-    let repositories = client::repositories(&ctx.paths).await?;
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let repo =
         crate::repository::select(&repositories, ui::repository_selector(repository)?).await?;
     let workspaces = client::workspaces(&ctx.paths)

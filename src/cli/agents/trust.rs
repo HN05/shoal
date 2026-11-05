@@ -90,8 +90,12 @@ impl TrustFile {
                 client::keep_agent_environment(&ctx.paths, &workspace.id, environment).await
             }
             Holder::Repository(repository) => {
-                client::keep_repository_agent_environment(&ctx.paths, &repository.id, environment)
-                    .await
+                crate::client::repositories::keep_agent_environment(
+                    &ctx.paths,
+                    &repository.id,
+                    environment,
+                )
+                .await
             }
         };
         if let Err(error) = kept {
@@ -224,12 +228,14 @@ async fn workspace_trust_paths(
     workspace: &Workspace,
     agent: &str,
 ) -> Vec<std::path::PathBuf> {
-    match client::repositories(&ctx.paths).await.and_then(|repos| {
-        repos
-            .into_iter()
-            .find(|repo| repo.id == workspace.repository_id)
-            .context("workspace repository is missing")
-    }) {
+    match crate::client::repositories::list(&ctx.paths)
+        .await
+        .and_then(|repos| {
+            repos
+                .into_iter()
+                .find(|repo| repo.id == workspace.repository_id)
+                .context("workspace repository is missing")
+        }) {
         Ok(repo) => repository_trust_paths(&repo, &workspace.path),
         Err(error) => {
             eprintln!("warning: could not resolve repository trust paths for {agent}: {error:#}");

@@ -428,7 +428,7 @@ impl Typed {
         let paths = Paths::of_command(state)?;
         if matches!(target, Target::Repositories) {
             return Ok(repository_candidates(
-                &client::repositories(&paths).await?,
+                &crate::client::repositories::list(&paths).await?,
                 current,
             ));
         }

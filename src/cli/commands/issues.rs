@@ -187,7 +187,7 @@ pub(super) async fn item_repository(
     repository: Option<String>,
     retry: &str,
 ) -> Result<Repository> {
-    let mut repos = client::repositories(&ctx.paths).await?;
+    let mut repos = crate::client::repositories::list(&ctx.paths).await?;
     let repository = match repository {
         Some(repository) => {
             let selector = ui::repository_selector(repository)?;

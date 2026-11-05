@@ -7,11 +7,7 @@ use std::path::Path;
 use anyhow::{Context as _, Result};
 
 use super::{Configured, Origin, Places};
-use crate::{
-    cli::{client, context::Context},
-    config::Effective,
-    model::Repository,
-};
+use crate::{cli::context::Context, config::Effective, model::Repository};
 
 /// The repository whose name a configured group's name takes, looked up
 /// only once a name is needed.
@@ -25,7 +21,9 @@ impl Repo<'_> {
     async fn name(&self, ctx: &Context) -> Result<String> {
         let repos = match self {
             Self::Known(repo) => return Ok(crate::repository::name(repo).to_owned()),
-            Self::Selected(_) | Self::Id(_) => client::repositories(&ctx.paths).await?,
+            Self::Selected(_) | Self::Id(_) => {
+                crate::client::repositories::list(&ctx.paths).await?
+            }
         };
         let repo = match self {
             Self::Selected(selector) => crate::repository::select(&repos, selector.clone()).await?,

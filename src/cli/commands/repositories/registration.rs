@@ -5,12 +5,7 @@ use anyhow::Result;
 
 use super::selection::absolute;
 use crate::{
-    cli::{
-        client::{self},
-        context::Context,
-        output::Palette,
-        ui,
-    },
+    cli::{context::Context, output::Palette, ui},
     model::Repository,
     repository,
 };
@@ -72,7 +67,7 @@ pub(in crate::cli::commands) async fn offer_unregistered(
     if !ctx.interactive() || !repository::registrable(selector.source()?) {
         return Ok(None);
     }
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     match repository::select(&repos, selector).await {
         Err(error) if error.is::<repository::NotRegistered>() => {
             match offer_registration(ctx, selector.source()?).await? {

@@ -104,7 +104,7 @@ pub(super) async fn name_plan(
         name.template = Some(template);
         return Ok(());
     }
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     let repo = crate::repository::select(&repos, &plan.repository).await?;
     // A queued start has only the issue's URL; the template may name it.
     let found = match (issue, plan.issue_url()) {
@@ -137,7 +137,7 @@ pub(super) async fn workspace_label(
         return title.clone();
     }
     let labelled = async {
-        let repositories = client::repositories(&ctx.paths).await?;
+        let repositories = crate::client::repositories::list(&ctx.paths).await?;
         let repo = repositories
             .iter()
             .find(|repo| repo.id == workspace.repository_id)

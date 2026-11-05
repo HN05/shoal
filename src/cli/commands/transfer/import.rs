@@ -17,7 +17,6 @@ use crate::client::output::{
 use crate::{
     cli::{
         agents::{self, SessionHome},
-        client::{self},
         context::Context,
         output::{Palette, Style},
         ui,
@@ -179,7 +178,7 @@ impl Package {
         let Space::Chat(packaged) = &self.space else {
             anyhow::bail!("the package holds a workspace, not a chat");
         };
-        let repositories = client::repositories(&ctx.paths).await?;
+        let repositories = crate::client::repositories::list(&ctx.paths).await?;
         let repo = crate::repository::select(&repositories, self.repository.clone())
             .await?
             .clone();

@@ -197,7 +197,7 @@ pub(in crate::cli::commands) async fn checkout_chat(
     ctx: &Context,
     chats: &[Chat],
 ) -> Result<Option<Chat>> {
-    let repos = client::repositories(&ctx.paths).await?;
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
     let Some(repo) = super::issues::current_checkout(&repos).await? else {
         return Ok(None);
     };
