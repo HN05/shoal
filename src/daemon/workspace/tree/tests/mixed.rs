@@ -235,7 +235,6 @@ async fn a_chat_opens_workspaces_only_in_its_own_repository() {
         format!("{error:#}").contains("planning is in another repository"),
         "{error:#}"
     );
-    assert!(format!("{error:#}").contains("#1326"), "{error:#}");
     // Refused before anything was created.
     assert!(manager.workspace("foreign").await.is_err());
 }

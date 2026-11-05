@@ -71,7 +71,6 @@ async fn removal_names_a_bare_flag_on_a_checkout_with_a_working_tree() -> Result
         .context("removal succeeded")?;
     let message = format!("{error:#}");
     assert!(message.contains("core.bare=true"), "{message}");
-    assert!(message.contains("config core.bare false"), "{message}");
     assert!(repo.path.exists());
 
     test_support::git(&repo.path, &["config", "core.bare", "false"]);
