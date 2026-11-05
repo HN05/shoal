@@ -383,3 +383,51 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
         assert!(kept.path.exists());
     }
 }
+
+#[tokio::test]
+async fn a_chat_copy_keeps_the_chat_running() {
+    let (root, manager, pid) = chat("plan-cache").await;
+    let chat = manager.chats().await.unwrap().remove(0);
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+    let refused = manager
+        .copy_space("plan-cache", Some(1), root.path().join("refused.shoal"))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{refused:#}").contains("no checkpoints"),
+        "{refused:#}"
+    );
+    let file = root.path().join("plan-cache.shoal");
+
+    let exported = manager
+        .copy_space("plan-cache", None, file.clone())
+        .await
+        .unwrap();
+    assert!(exported.manifest.copy.is_some());
+    assert_eq!(manager.chats().await.unwrap().len(), 1);
+    assert!(identity::capture(pid).unwrap().is_some());
+    let import = Import::read(&mut &fs::read(&file).unwrap()[..]).unwrap();
+    assert!(matches!(import.manifest.space, Space::Chat(_)));
+    let sessions = import.manifest.sessions.as_ref().unwrap();
+    assert_eq!(sessions.reported().collect::<Vec<_>>(), [("claude", "s1")]);
+    manager.stop_chat(&chat.id).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_chat_without_a_session_has_none_to_fork() {
+    let (root, manager, _pid) = chat("talk").await;
+    let file = root.path().join("talk.shoal");
+
+    assert!(
+        manager
+            .copy_space("talk", None, file.clone())
+            .await
+            .is_err()
+    );
+    assert!(!file.exists());
+    let chat = manager.chats().await.unwrap().remove(0);
+    manager.stop_chat(&chat.id).await.unwrap();
+}

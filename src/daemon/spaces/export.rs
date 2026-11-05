@@ -1,6 +1,6 @@
 //! Packages of spaces for `shoal move`: the daemon removes a space here,
-//! stopping a chat's agent first, and writes what continues it on another
-//! machine.
+//! stopping a chat's agent first, or copies one that keeps running, and
+//! writes what continues it on another machine.
 use anyhow::{Context, Result, ensure};
 
 use crate::{
@@ -12,12 +12,14 @@ use crate::{
     transfer::{ExportedSpace, Manifest, SessionSource, Source},
 };
 
-/// A space ended here for its package: its repository, the package without
-/// its session files, the removal that ended a workspace, the settings
-/// describing its agents when they are not the repository's, and how the
-/// user continues the space here when writing the package fails, unless a
-/// removal record keeps it.
-struct Ended {
+mod copy;
+
+/// A space prepared for its package, ended here or copied: its repository,
+/// the package without its session files, the removal that ended a
+/// workspace, the settings describing its agents when they are not the
+/// repository's, and how the user continues the space here when writing the
+/// package fails, unless a removal record or the space itself keeps it.
+struct Prepared {
     repo: Repository,
     manifest: Manifest,
     removal: Option<RemovalResult>,
@@ -47,21 +49,56 @@ impl Manager {
                     .await?
             }
         };
-        let settings = match ended.settings {
+        self.write_prepared(ended, file).await
+    }
+
+    /// Write a copy of the space `selector` names for another Shoal to the
+    /// new file `file`, leaving the space running here: a workspace at its
+    /// checkpoint `checkpoint`, or at a new one, or a chat with its session.
+    pub async fn copy_space(
+        &self,
+        selector: &str,
+        checkpoint: Option<u64>,
+        file: std::path::PathBuf,
+    ) -> Result<ExportedSpace> {
+        crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
+        let copied = match self.running_space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                self.copy_workspace(workspace, checkpoint).await?
+            }
+            PresentSpace::Chat(chat) => {
+                ensure!(
+                    checkpoint.is_none(),
+                    "chat {} has no checkpoints; export a copy of it without --checkpoint",
+                    chat.name
+                );
+                self.copy_chat(chat).await?
+            }
+        };
+        self.write_prepared(copied, file).await
+    }
+
+    /// Write the package of `prepared` to the new file `file`.
+    async fn write_prepared(
+        &self,
+        prepared: Prepared,
+        file: std::path::PathBuf,
+    ) -> Result<ExportedSpace> {
+        let settings = match prepared.settings {
             Some(settings) => settings,
-            None => self.repository_settings(&ended.repo.id).await,
+            None => self.repository_settings(&prepared.repo.id).await,
         };
         let written = self
-            .write_package(&ended.repo, ended.manifest, settings, file)
+            .write_package(&prepared.repo, prepared.manifest, settings, file)
             .await;
-        let (manifest, warnings) = match (written, ended.continues) {
+        let (manifest, warnings) = match (written, prepared.continues) {
             (Ok(written), _) => written,
             (Err(error), Some(continues)) => return Err(error.context(continues)),
             (Err(error), None) => return Err(error),
         };
         Ok(ExportedSpace {
             manifest,
-            removal: ended.removal,
+            removal: prepared.removal,
             warnings,
         })
     }
@@ -89,7 +126,7 @@ impl Manager {
         selector: &str,
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
-    ) -> Result<Ended> {
+    ) -> Result<Prepared> {
         let (removal, settings) = match self.workspace(selector).await {
             Ok(workspace) => {
                 // The package is built from the removal record, which a
@@ -124,7 +161,7 @@ impl Manager {
             removed.name
         );
         let repo = self.repository(&removed.repository_id).await?;
-        Ok(Ended {
+        Ok(Prepared {
             manifest: Manifest::of(&repo, Source::Workspace(removed)).await?,
             repo,
             removal: removal.map(|(_, removal)| removal),
@@ -165,7 +202,7 @@ impl Manager {
     /// agent has reported the session the package continues and its package
     /// is made, stopping a running one, so the session's files stop changing
     /// and only writing them is left.
-    async fn end_chat_for_export(&self, chat: Chat) -> Result<Ended> {
+    async fn end_chat_for_export(&self, chat: Chat) -> Result<Prepared> {
         if let Some(workspace) = &chat.workspace {
             anyhow::bail!(
                 "chat {} runs in workspace {}, and shoal move does not move a chat in a workspace",
@@ -189,7 +226,7 @@ impl Manager {
         let id = chat.id.clone();
         let manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
         self.remove_chat(&id, Some(Vec::new())).await?;
-        Ok(Ended {
+        Ok(Prepared {
             repo,
             manifest,
             removal: None,

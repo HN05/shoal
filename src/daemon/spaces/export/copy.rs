@@ -1,0 +1,155 @@
+//! Copies of spaces that keep running: a workspace at a checkpoint with its
+//! agents and the sessions they reported, or a chat with its session, which
+//! `shoal move import` opens as a new space whose agents start from forks.
+use anyhow::{Result, ensure};
+
+use super::Prepared;
+use crate::{
+    daemon::{events::EventCause, workspace::Manager},
+    execution::recovery::{self, Copied, LastSession, Record, StoppedAgent},
+    model::{Chat, Execution, PresentSpace, RemovedWorkspace, Workspace},
+    time::unix_seconds,
+    transfer::{Manifest, Source},
+};
+
+impl Manager {
+    /// The workspace or running chat `selector` names, refusing a removed
+    /// workspace, which runs nothing to keep.
+    pub(super) async fn running_space(&self, selector: &str) -> Result<PresentSpace> {
+        let error = match self.present_space(selector).await {
+            Ok(space) => return Ok(space),
+            Err(error) => error,
+        };
+        let removed = self
+            .removed_workspaces()
+            .await?
+            .into_iter()
+            .find(|removed| removed.workspace_id == selector || removed.name == selector);
+        match removed {
+            Some(removed) => anyhow::bail!(
+                "workspace {name} was removed, so nothing runs to keep; export it without --keep, or shoal work restore {name} opens it again",
+                name = removed.name
+            ),
+            None => Err(error),
+        }
+    }
+
+    /// A copy of `workspace` at its checkpoint `number`, or at a new one,
+    /// with its agents, which start from forks of the sessions they
+    /// reported. An earlier checkpoint marks those sessions as newer than
+    /// its files.
+    pub(super) async fn copy_workspace(
+        &self,
+        workspace: Workspace,
+        number: Option<u64>,
+    ) -> Result<Prepared> {
+        let checkpoint = match number {
+            Some(number) => self.numbered_checkpoint(&workspace, number).await?,
+            None => self.take_checkpoint(&workspace.id, None).await?,
+        };
+        ensure!(
+            !checkpoint.files_omitted,
+            "checkpoint {} of {} could not keep the uncommitted files, so a copy of it would lose them",
+            checkpoint.number,
+            workspace.name
+        );
+        let copied = RemovedWorkspace {
+            workspace_id: workspace.id.clone(),
+            repository_id: workspace.repository_id.clone(),
+            name: workspace.name.clone(),
+            expires_at: checkpoint.expires_at,
+            checkpoint,
+            base_ref: workspace.base_ref.clone(),
+            base_commit: workspace.base_commit.clone(),
+            at: workspace.at.clone(),
+            links: workspace.links.clone(),
+            agents: self.copied_agents(&workspace).await?,
+            // An unreadable last session is not worth refusing the copy for.
+            last_sessions: LastSession::all(&self.paths, &workspace.id).unwrap_or_default(),
+            cause: EventCause::Manual,
+            removed_at: unix_seconds(),
+        };
+        let repo = self.repository(&workspace.repository_id).await?;
+        let mut manifest = Manifest::of(&repo, Source::Workspace(copied)).await?;
+        manifest.copy = Some(Copied {
+            earlier_files: number.is_some(),
+        });
+        Ok(Prepared {
+            settings: Some(self.workspace_settings(&workspace).await),
+            repo,
+            manifest,
+            removal: None,
+            continues: None,
+        })
+    }
+
+    /// The agents of `workspace` a copy starts again, each with the session
+    /// it reported last: those stopped, then those its executions run.
+    async fn copied_agents(&self, workspace: &Workspace) -> Result<Vec<StoppedAgent>> {
+        let mut agents = recovery::stopped_agents(&self.paths, &workspace.id)?;
+        let now = unix_seconds();
+        for execution in self.workspace_executions(&workspace.id).await? {
+            if agents.iter().any(|agent| agent.execution == execution.id) {
+                continue;
+            }
+            let session = recovery::reported_session(&self.paths, &workspace.id, &execution.id);
+            let Some(record) = running_record(&execution, session) else {
+                continue;
+            };
+            agents.push(StoppedAgent {
+                execution: execution.id,
+                record,
+                stopped_at: now,
+            });
+        }
+        Ok(agents)
+    }
+
+    /// A copy of `chat`, whose agent starts from a fork of its session.
+    pub(super) async fn copy_chat(&self, chat: Chat) -> Result<Prepared> {
+        if let Some(workspace) = &chat.workspace {
+            anyhow::bail!(
+                "chat {} runs in workspace {}, and shoal move does not copy a chat in a workspace",
+                chat.name,
+                workspace.name
+            );
+        }
+        ensure!(
+            chat.session.is_some(),
+            "the agent of chat {} reported no session to fork",
+            chat.name
+        );
+        let repo = self.repository(&chat.repository_id).await?;
+        let mut manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
+        manifest.copy = Some(Copied::default());
+        Ok(Prepared {
+            repo,
+            manifest,
+            removal: None,
+            settings: None,
+            continues: None,
+        })
+    }
+}
+
+/// The record a copy keeps of the agent `execution` runs, with the `session`
+/// it reported; `None` for an execution without an agent.
+fn running_record(execution: &Execution, session: Option<String>) -> Option<Record> {
+    Some(Record {
+        // Named as recovery records name it.
+        agent: execution.agent.as_ref()?.replace(' ', "-"),
+        stop_reason: None,
+        stage: None,
+        origin: None,
+        waiting: None,
+        session,
+        moved: false,
+        copied: None,
+        turn: None,
+        model: execution.model.clone(),
+        mode: execution
+            .mode
+            .clone()
+            .unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
+    })
+}

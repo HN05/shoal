@@ -179,6 +179,11 @@ pub(super) async fn handle(
         WorkspaceMethod::SpaceSessions { space } => {
             Body::SpaceSessions(manager.space_sessions(&space).await?)
         }
+        WorkspaceMethod::CopySpace {
+            space,
+            checkpoint,
+            file,
+        } => Body::ExportedSpace(manager.copy_space(&space, checkpoint, file).await?),
         WorkspaceMethod::FindSpaces { target } => {
             Body::Spaces(manager.find_visible_spaces(&target, caller).await?)
         }
@@ -307,6 +312,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::RevokeWorkspaceEnv { .. }
             | WorkspaceMethod::UntrackedWorktrees
             | WorkspaceMethod::OwnedPlaces
+            | WorkspaceMethod::CopySpace { .. }
             | WorkspaceMethod::WatchWorkspaceEvents { .. } => return Err(denied()),
         })
     }

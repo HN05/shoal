@@ -12,7 +12,7 @@ use crate::{
         repository::Selector,
     },
     model::{RemovedWorkspace, RestoredWorkspace},
-    protocol::RemovalMethod,
+    protocol::{RemovalMethod, WorkspaceMethod},
 };
 
 /// What a package holds besides its session files and bundle.
@@ -151,6 +151,25 @@ pub async fn export(
         RemovalMethod::ExportSpace {
             space,
             unsaved,
+            file,
+        },
+    )
+    .await
+}
+
+/// Package a copy of `space` into `file`, leaving it running: a workspace
+/// at its checkpoint `checkpoint`, or at a new one.
+pub async fn copy(
+    daemon: &impl Daemon,
+    space: String,
+    checkpoint: Option<u64>,
+    file: PathBuf,
+) -> Result<ExportedSpace> {
+    request(
+        daemon,
+        WorkspaceMethod::CopySpace {
+            space,
+            checkpoint,
             file,
         },
     )

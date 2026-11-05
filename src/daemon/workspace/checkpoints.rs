@@ -183,6 +183,23 @@ impl Manager {
             .map(Some)
     }
 
+    /// Checkpoint `number` of `workspace`, refusing one it lacks.
+    pub(crate) async fn numbered_checkpoint(
+        &self,
+        workspace: &Workspace,
+        number: u64,
+    ) -> Result<Checkpoint> {
+        let (id, name) = (workspace.id.clone(), workspace.name.clone());
+        self.store
+            .run(move |db| find(db, &id, number))
+            .await?
+            .with_context(|| {
+                format!(
+                    "workspace {name} has no checkpoint {number}; shoal work restore {name} lists them"
+                )
+            })
+    }
+
     /// Return the workspace to a checkpoint after keeping its current state
     /// in another. Nothing else may run in it meanwhile, except the caller's
     /// own execution.
@@ -193,16 +210,7 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<RestoredCheckpoint> {
         let workspace = self.workspace(selector).await?;
-        let (id, name) = (workspace.id.clone(), workspace.name.clone());
-        let checkpoint = self
-            .store
-            .run(move |db| find(db, &id, number))
-            .await?
-            .with_context(|| {
-                format!(
-                    "workspace {name} has no checkpoint {number}; shoal work restore {name} lists them"
-                )
-            })?;
+        let checkpoint = self.numbered_checkpoint(&workspace, number).await?;
         let reserved_state = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Restoring)
             .await?;

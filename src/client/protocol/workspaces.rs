@@ -152,6 +152,15 @@ pub enum WorkspaceMethod {
     SpaceSessions {
         space: String,
     },
+    /// Write a copy of a workspace or chat for another Shoal to the new file
+    /// `file`, leaving it running: a workspace at its checkpoint
+    /// `checkpoint`, or at a new one.
+    CopySpace {
+        space: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        checkpoint: Option<u64>,
+        file: std::path::PathBuf,
+    },
     DiffBase {
         workspace: String,
     },
