@@ -173,3 +173,14 @@ async fn a_report_recorded_before_a_restart_still_moves_the_workspace() {
         fixture.topic
     );
 }
+
+#[tokio::test]
+async fn stopping_a_job_before_its_report_is_followed_cancels_the_reported_run() {
+    let fixture = github_fixture().await;
+    let manager = &fixture.manager;
+    fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
+    let (job, _) = report(manager, 2).await;
+    let cancelled = manager.cancel_job_in(&job.workspace_id).await.unwrap();
+    assert!(cancelled.unwrap().ends_with("/actions/runs/2"));
+    assert_eq!(fixture.state.lock().unwrap().cancelled, ["2"]);
+}

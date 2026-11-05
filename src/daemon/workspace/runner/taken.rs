@@ -11,7 +11,7 @@ use crate::{
     daemon::workspace::Manager,
     forge::{
         ForgeRepo,
-        ci::runner::{JobRun, TookRun, answer_took_run, took_run},
+        ci::runner::{JobRun, TookRun, WaitingJob, answer_took_run, took_run},
     },
     model::QueuedJob,
 };
@@ -59,7 +59,10 @@ impl Manager {
             .run_workspace(&forge, &job.repository_id, &taken_run)
             .await?;
         let mut record = QueuedJob {
-            job: job.job.job.clone(),
+            job: WaitingJob {
+                run: took.run,
+                ..job.job.job.clone()
+            },
             run: taken_run,
             workspace_id: linked,
         };
@@ -112,6 +115,19 @@ impl Manager {
         };
         self.record_taken_job(&job.id, &record).await?;
         Err(error)
+    }
+
+    /// The web URL of the run `job`'s runner took a job of: the claim's,
+    /// unless the runner reported another run the daemon has not followed
+    /// yet.
+    pub(super) fn reported_run_url(&self, forge: &ForgeRepo, job: &ClaimedJob) -> String {
+        match took_run(&self.job_directory(&job.id)) {
+            Ok(Some(took)) if took.run != job.job.job.run => forge
+                .run(&took.run.to_string())
+                .map(|(_, url)| url)
+                .unwrap_or_else(|_| job.job.run.url.clone()),
+            _ => job.job.run.url.clone(),
+        }
     }
 
     async fn record_taken_job(&self, id: &str, job: &QueuedJob) -> Result<()> {

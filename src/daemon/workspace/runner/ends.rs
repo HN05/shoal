@@ -164,8 +164,7 @@ impl Manager {
         let Some(job) = self.workspace_claim(&workspace.id).await? else {
             return Ok(None);
         };
-        self.cancel_job_run(&job).await?;
-        Ok(Some(job.job.run.url))
+        Ok(Some(self.cancel_job_run(&job).await?))
     }
 
     /// Cancel on the forge the run of a job still running in the workspace
@@ -208,18 +207,18 @@ impl Manager {
             .find(|job| job.workspace_id == workspace_id))
     }
 
-    /// Cancel `job`'s run on the forge its URL names, also once its runner
-    /// is gone.
-    async fn cancel_job_run(&self, job: &ClaimedJob) -> Result<()> {
+    /// Cancel `job`'s run on the forge its URL names, or the run its
+    /// runner reported taking a job of, also once its runner is gone,
+    /// returning the cancelled run's URL.
+    async fn cancel_job_run(&self, job: &ClaimedJob) -> Result<String> {
         let forge = ForgeRepo::resolve_run_url(&job.job.run.url, &self.forge_hosts()).await?;
         let account = self.user_account();
-        let run = forge
-            .find_run(&account, &job.job.run.url, CiAction::Cancel)
-            .await?;
+        let url = self.reported_run_url(&forge, job);
+        let run = forge.find_run(&account, &url, CiAction::Cancel).await?;
         forge
             .act_on_run(&account, &run, CiAction::Cancel, false)
             .await?;
-        Ok(())
+        Ok(url)
     }
 
     /// Whether the execution `id` of a job in `workspace_id` may still run.

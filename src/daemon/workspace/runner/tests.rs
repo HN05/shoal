@@ -171,6 +171,8 @@ pub(super) struct GitHubState {
     pub labels: Vec<&'static str>,
     /// The runners deleted.
     pub deleted: Vec<String>,
+    /// The runs cancelled.
+    pub cancelled: Vec<String>,
 }
 
 /// A repository whose origin is a GitHub that registers runner 77 for each
@@ -212,6 +214,7 @@ pub(super) async fn github_fixture() -> GitHubFixture {
             let host = named.get().unwrap();
             json!({
                 "id": id, "event": "push", "head_branch": branch, "head_sha": commit,
+                "status": "in_progress", "conclusion": null,
                 "pull_requests": [], "path": ".github/workflows/ci.yml",
                 "html_url": format!("http://{host}/team/repo/actions/runs/{id}"),
             })
@@ -259,6 +262,12 @@ pub(super) async fn github_fixture() -> GitHubFixture {
                 }
                 None => return (404, Vec::new(), b"{}".to_vec()),
             }
+        } else if let Some(run) = line
+            .strip_prefix("POST /api/v3/repos/team/repo/actions/runs/")
+            .and_then(|rest| rest.strip_suffix("/cancel"))
+        {
+            state.cancelled.push(run.to_owned());
+            return (202, Vec::new(), b"{}".to_vec());
         } else if line.starts_with("DELETE /api/v3/repos/team/repo/actions/runners/") {
             state
                 .deleted
