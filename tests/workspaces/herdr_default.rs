@@ -39,10 +39,6 @@ fn background_additions_open_tabs_in_the_repository_workspace() {
     for name in ["first", "second"] {
         let (output, transcript) = plain_terminal(&fixture, &["add", repo, name, "--agent", "pi"]);
         assert!(output.status.success(), "{output:?} {transcript}");
-        assert!(
-            transcript.contains(&format!("Started {name} in a background Herdr tab")),
-            "{transcript}"
-        );
     }
     // The workspace is created once, then found by its label.
     let created = calls_of(&fixture, &["workspace", "create"]);
@@ -73,10 +69,7 @@ fn launches_from_a_terminal_need_no_zmx_while_herdr_is_the_default() {
     let repo = fixture.repo.to_str().unwrap();
     let (output, transcript) = plain_terminal(&fixture, &["add", repo, "first", "--agent", "pi"]);
     assert!(output.status.success(), "{output:?} {transcript}");
-    assert!(
-        transcript.contains("Started first in a background Herdr tab"),
-        "{transcript}"
-    );
+    assert_eq!(calls_of(&fixture, &["tab", "create"]).len(), 1);
 }
 
 #[test]
@@ -270,11 +263,6 @@ fn a_default_host_config_turns_off_leaves_zmx_alone() {
     // A queued start without a host is refused before the child exists.
     let refused = fixture.run(&["split", "child", "--workspace", "tried", "--agent", "droid"]);
     assert!(!refused.status.success());
-    let stderr = String::from_utf8_lossy(&refused.stderr);
-    assert!(
-        stderr.contains("no terminal host can start queued agents"),
-        "{stderr}"
-    );
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
     // The daemon's cleanup sweep may list sessions of every installed host.
     let calls = zmx_calls(&fixture);

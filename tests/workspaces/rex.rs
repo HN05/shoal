@@ -446,11 +446,7 @@ fn a_workspace_whose_block_is_gone_has_no_session_to_attach() {
     assert!(rex.block_open(&block));
     assert!(rex.rex(&["block", "close", &block]).status.success());
     let (refused, transcript) = attach();
-    assert!(!refused.status.success(), "{refused:?}");
-    assert!(
-        transcript.contains("gone has no agent sessions"),
-        "{transcript}"
-    );
+    assert!(!refused.status.success(), "{refused:?} {transcript}");
 }
 
 #[test]

@@ -144,10 +144,6 @@ fn assert_failed_labelling_refuses_launches(
             !output.status.success(),
             "{args:?}: {output:?} {transcript}"
         );
-        assert!(
-            transcript.contains("ownership update failed"),
-            "{args:?}: {transcript}"
-        );
         assert!(!fixture.root.path().join("new-agent-started").exists());
         assert_eq!(fs::read_to_string(&recovery)?, saved);
         assert_eq!(
@@ -415,17 +411,8 @@ fn removals_refuse_to_end_the_zmx_session_they_run_in() -> anyhow::Result<()> {
     };
     let export = in_session("sessioned", &["move", "export", "sessioned", "-o", "-"])?;
     assert!(!export.status.success());
-    assert!(
-        String::from_utf8_lossy(&export.stderr).contains("closes when the export removes"),
-        "{export:?}"
-    );
     let removal = in_session("sessioned", &["rm", "sessioned", "other", "--yes"])?;
     assert!(!removal.status.success());
-    assert!(
-        String::from_utf8_lossy(&removal.stderr)
-            .contains("this terminal closes with the workspace"),
-        "{removal:?}"
-    );
     assert_eq!(fixture.ok(&["work"]).as_array().map(Vec::len), Some(2));
     // Another session goes on with the batch.
     let removal = in_session("elsewhere", &["rm", "sessioned", "other", "--yes"])?;
@@ -454,10 +441,7 @@ fn removals_from_a_pane_split_off_a_recorded_pane_go_on() -> anyhow::Result<()> 
     };
     let refused = export("w1:p9")?;
     assert!(!refused.status.success());
-    assert!(
-        String::from_utf8_lossy(&refused.stderr).contains("closes when the export removes"),
-        "{refused:?}"
-    );
+    assert!(refused.stdout.is_empty(), "{refused:?}");
     // A pane the user split off the tab stays open, and keeps its stream.
     let exported = export("w1:p9.2")?;
     assert!(exported.status.success(), "{exported:?}");

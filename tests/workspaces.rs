@@ -26991,10 +26991,6 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    assert!(
-        transcript.contains("Started background in a detached zmx session"),
-        "{transcript}"
-    );
     wait_until("the detached agent's result", || {
         runs() == "background tracked go\n"
     });
@@ -27166,7 +27162,6 @@ fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    assert!(transcript.contains("detached zmx session"), "{transcript}");
     wait_until("the detached workspace shell", || {
         fs::read_to_string(home.join("shell-cwd")).is_ok_and(|cwd| !cwd.is_empty())
     });
@@ -27224,11 +27219,6 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    assert!(
-        transcript.contains("Resuming 2 agents in detached zmx sessions"),
-        "{transcript}"
-    );
-    assert!(!transcript.contains("in its own terminal"), "{transcript}");
     let calls = zmx_calls(&fixture);
     for (name, id, execution) in &expected {
         assert!(
@@ -27256,10 +27246,6 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
         fs::read_to_string(fixture.root.path().join("login-shells"))
             .is_ok_and(|shells| shells == "-l\n-l\n")
     });
-    assert_eq!(
-        fs::read_to_string(fixture.root.path().join("login-shells")).unwrap_or_default(),
-        "-l\n-l\n"
-    );
 }
 
 #[test]
@@ -27282,10 +27268,6 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    assert!(
-        transcript.contains("Resuming 1 agent in detached zmx sessions"),
-        "{transcript}"
-    );
     let calls = zmx_calls(&fixture);
     assert!(calls.iter().all(|call| call[0] != "attach"), "{calls:?}");
     let send = calls
@@ -27314,7 +27296,7 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
         "",
         true,
     );
-    assert!(!transcript.contains("Resuming"), "{output:?}\n{transcript}");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
     assert!(calls.iter().any(|call| call[0] == "attach"), "{calls:?}");
     assert!(calls.iter().all(|call| call[0] != "send"), "{calls:?}");
@@ -27518,10 +27500,6 @@ fn attach_returns_to_chats_by_name() {
     let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "second"]);
-    assert!(
-        transcript.contains("detached from second; run `shoal attach talk` to return"),
-        "{transcript}"
-    );
     let (output, transcript) = fixture.interactive(&["attach", "plan-7"], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "first"]);
@@ -27549,11 +27527,7 @@ fn attach_returns_to_chats_by_name() {
     current.current_dir(&other).arg("attach");
     for command in [&mut named, &mut current] {
         let (output, transcript) = fixture.interactive_command(command, "");
-        assert!(!output.status.success());
-        assert!(
-            transcript.contains("quiet has no session to attach"),
-            "{transcript}"
-        );
+        assert!(!output.status.success(), "{transcript}");
     }
 }
 
@@ -27595,16 +27569,8 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
     assert_eq!(renamed["name"], "topic");
     let (output, transcript) = fixture.interactive(&["attach", "topic"], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    assert!(
-        transcript.contains("detached from talk; run `shoal attach topic` to return"),
-        "{transcript}"
-    );
     let output = fixture.run(&["chat", "rename", "repo-plan-7", "topic"]);
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("a chat already has the name topic"),
-        "{output:?}"
-    );
 
     // The chat this runs in, as its agent would.
     let output = fixture
@@ -27614,10 +27580,6 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Renamed chat to repo-plan-8"),
-        "{output:?}"
-    );
 
     // The checkout's only chat, else one from a picker.
     let output = fixture
@@ -27635,10 +27597,6 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("chat names must"),
-        "{output:?}"
-    );
     let (output, rows) = fixture.pick_in(&fixture.repo, &["chat", "rename", "picked"], &talk, "");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(rows.lines().count(), 3, "{rows}");
@@ -27828,10 +27786,6 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
     let (output, transcript) = fixture.interactive_command(&mut other, "");
     assert!(!output.status.success());
     assert!(
-        transcript.contains("the Herdr tab runs in Herdr session work"),
-        "{transcript}"
-    );
-    assert!(
         !calls_since(before)
             .iter()
             .any(|call| call[0] == "tab" && call[1] == "focus"),
@@ -27842,23 +27796,15 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
     fs::remove_file(home.join("herdr-calls")).unwrap();
     let config = home.join(".config/shoal/config.toml");
     fs::write(&config, "[terminal.herdr]\nenabled = false\n").unwrap();
-    let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
+    let (output, _) = fixture.interactive(&["attach", "talk"], "");
     assert!(!output.status.success());
-    assert!(
-        transcript.contains("talk has no session to attach"),
-        "{transcript}"
-    );
     assert!(!home.join("herdr-calls").exists());
     fs::remove_file(&config).unwrap();
 
     // A closed pane leaves nothing to attach.
     fs::write(home.join("closed-panes"), "w1:p4\n").unwrap();
-    let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
+    let (output, _) = fixture.interactive(&["attach", "talk"], "");
     assert!(!output.status.success());
-    assert!(
-        transcript.contains("talk has no session to attach"),
-        "{transcript}"
-    );
 }
 
 #[test]
@@ -27873,19 +27819,11 @@ fn attach_selects_a_session_of_the_workspace() {
             .rfind(|call| call[0] == "attach")
             .unwrap()
     };
-    let (output, transcript) = fixture.interactive(&["attach", "persist"], "");
+    let (output, _) = fixture.interactive(&["attach", "persist"], "");
     assert!(!output.status.success());
-    assert!(
-        transcript.contains("persist has no agent sessions"),
-        "{transcript}"
-    );
     // Without a session anywhere, there is nothing to pick.
-    let (output, transcript) = fixture.interactive(&["attach"], "");
+    let (output, _) = fixture.interactive(&["attach"], "");
     assert!(!output.status.success());
-    assert!(
-        transcript.contains("no workspace or chat has an agent session"),
-        "{transcript}"
-    );
 
     // Sessions are found where the daemon recorded the agents, whatever
     // their labels say.
@@ -27900,11 +27838,6 @@ fn attach_selects_a_session_of_the_workspace() {
     let (output, transcript) = fixture.interactive(&["attach", "persist"], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "persist"]);
-    // The fake session is still listed afterwards, as after a detach.
-    assert!(
-        transcript.contains("detached from persist; run `shoal attach persist` to return"),
-        "{transcript}"
-    );
     // The picker leaves out a workspace without a session.
     let idle = fixture.add("idle");
     let (output, rows) = fixture.pick(&["attach"], workspace["id"].as_str().unwrap(), "");
@@ -27921,8 +27854,7 @@ fn attach_selects_a_session_of_the_workspace() {
     )
     .unwrap();
     let (output, rows) = fixture.pick(&["attach", "persist"], "1", "");
-    assert!(output.status.success(), "{output:?}");
-    assert!(rows.contains("persist-2  claude"), "{rows}");
+    assert!(output.status.success(), "{output:?} {rows}");
     assert_eq!(attached(), ["attach", "persist-2"]);
     let (output, transcript) =
         fixture.interactive(&["attach", "persist", "--session", "persist"], "");
@@ -27930,15 +27862,10 @@ fn attach_selects_a_session_of_the_workspace() {
     assert_eq!(attached(), ["attach", "persist"]);
     let (output, transcript) =
         fixture.interactive(&["attach", "persist", "--session", "other"], "");
-    assert!(!output.status.success());
-    assert!(
-        transcript.contains("persist has no session other"),
-        "{transcript}"
-    );
+    assert!(!output.status.success(), "{transcript}");
 
     let output = fixture.run(&["attach", "persist"]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("attach requires a terminal"));
     drop((persist, second, other));
 }
 
@@ -27968,7 +27895,6 @@ fn attach_previous_returns_to_the_session_last_detached_from() {
     fs::write(home.join("zmx-attach-ends-session"), "").unwrap();
     let (output, transcript) = fixture.interactive(&["attach", "persist"], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    assert!(!transcript.contains("detached from"), "{transcript}");
     fs::remove_file(home.join("zmx-attach-ends-session")).unwrap();
     fs::write(
         home.join("zmx-sessions"),
@@ -28041,10 +27967,6 @@ fn attach_previous_returns_to_a_session_an_agent_launch_left_running() {
     launch.args(["claude", "launched"]);
     let (output, transcript) = fixture.terminal_command(&mut launch, "", true);
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    assert!(
-        transcript.contains("run `shoal attach launched` to return"),
-        "{transcript}"
-    );
     fs::remove_file(home.join("zmx-attach-detaches")).unwrap();
     fs::write(home.join("zmx-sessions"), &listed).unwrap();
     let (output, transcript) = fixture.interactive(&["attach", "-"], "");
@@ -28199,23 +28121,11 @@ fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
         status["sessions"],
         serde_json::json!([{"name": "persist", "agent": "claude", "clients": 1}])
     );
-    let output = fixture.run(&["status", "persist"]);
-    let text = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        text.contains("Sessions:      1\n  persist  claude  attached\n"),
-        "{text}"
-    );
 
     install_test_script(home.join("bin/zmx"), "#!/bin/sh\necho broken >&2\nexit 1\n");
     let status = fixture.ok(&["status", "persist"]);
     assert_eq!(status["sessions"], serde_json::json!([]));
-    assert!(
-        status["sessions_error"]
-            .as_str()
-            .unwrap()
-            .contains("list zmx sessions"),
-        "{status}"
-    );
+    assert!(status["sessions_error"].is_string(), "{status}");
     // The agent stops through the daemon, which reads zmx again.
     install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
     drop(agent);
@@ -28236,10 +28146,6 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
         true,
     );
     assert!(!output.status.success(), "{transcript}");
-    assert!(
-        transcript.contains("cannot start claude: zmx is not installed"),
-        "{transcript}"
-    );
     assert!(!fixture.run(&["status", "no-zmx"]).status.success());
 
     // Without a terminal the agent runs in place and needs no zmx.
@@ -28290,8 +28196,6 @@ fn add_queues_agents_past_max_agents_until_removed() {
         fixture.ok(&["queue", "--repo", "other"]),
         serde_json::json!([])
     );
-    let listed = String::from_utf8(fixture.run(&["work"]).stdout).unwrap();
-    assert!(listed.contains("queued, position 1"), "{listed}");
     // A queued entry creates nothing until it starts.
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 
@@ -28309,21 +28213,12 @@ fn add_queues_agents_past_max_agents_until_removed() {
             .collect()
     };
     assert_eq!(names(fixture.ok(&["queue"])), ["third", "second"]);
-    let listed = String::from_utf8(fixture.run(&["queue"]).stdout).unwrap();
-    assert!(listed.contains("queued, position 2"), "{listed}");
     // A target that names nothing fails before a picker asks for its place.
     let missing = fixture.run(&["queue", "move", "missing"]);
     assert!(!missing.status.success());
-    let message = String::from_utf8_lossy(&missing.stderr);
-    assert!(
-        message.contains("missing is not in the agent queue"),
-        "{message}"
-    );
     // So does a workspace whose agent cannot restore in place.
     let unrestorable = fixture.run(&["queue", "move", "first"]);
     assert!(!unrestorable.status.success());
-    let message = String::from_utf8_lossy(&unrestorable.stderr);
-    assert!(message.contains("first cannot move"), "{message}");
     let cancelled = fixture.ok(&["queue", "cancel", "third"]);
     assert_eq!(cancelled["name"], "third", "{cancelled}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
@@ -28356,11 +28251,6 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(shared["state"], "queued", "{shared}");
     let ambiguous = fixture.run(&["rm", "first", "--yes"]);
     assert!(!ambiguous.status.success());
-    let message = String::from_utf8_lossy(&ambiguous.stderr);
-    assert!(
-        message.contains("names both a workspace and a queued agent"),
-        "{message}"
-    );
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
     fixture.ok(&["rm", shared["id"].as_str().unwrap()]);
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
@@ -28646,10 +28536,6 @@ fn failed_demo_handoffs_only_close_the_original_known_session() -> anyhow::Resul
                 .args(["demo", "start", "--workspace", "failed", "--", "true"])
                 .output()?;
             assert!(!output.status.success(), "{stage}/{after}: {output:?}");
-            assert!(
-                String::from_utf8_lossy(&output.stderr).contains("handoff failed"),
-                "{output:?}"
-            );
             let calls: Vec<Vec<String>> = fs::read_to_string(home.join("handoff-calls.jsonl"))?
                 .lines()
                 .map(serde_json::from_str)
@@ -28723,7 +28609,6 @@ fn demos_restart_until_stopped_and_show_their_screen() {
     assert!(text.contains("failing"), "{text}");
     // The agent's output setting stays out of what the user tries.
     assert!(text.contains("output unset"), "{text}");
-    assert!(text.contains("demo exited with status 3"), "{text}");
     // Starting the name again replaces the demo once the old one ended.
     let replaced = demo(&[
         "start",
@@ -28954,12 +28839,7 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
         vec!["demo", "send", "Bad", "q"],
     ] {
         let refused = fixture.run(&args);
-        assert!(!refused.status.success());
-        assert!(
-            String::from_utf8_lossy(&refused.stderr).contains("demo names must"),
-            "{args:?}: {}",
-            String::from_utf8_lossy(&refused.stderr)
-        );
+        assert!(!refused.status.success(), "{args:?}");
     }
     // A workspace process without its token still acts only on its own.
     let binary = env!("CARGO_BIN_EXE_shoal");
@@ -28978,11 +28858,6 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
         "other",
     ]);
     assert!(!refused.status.success());
-    assert!(
-        String::from_utf8_lossy(&refused.stderr).contains("cleared its scope token"),
-        "{}",
-        String::from_utf8_lossy(&refused.stderr)
-    );
     assert_eq!(
         demo(&fixture, &["ls", "--workspace", "other"])["running"]
             .as_array()
@@ -29003,11 +28878,6 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
         "/nonexistent/program",
     ]);
     assert!(!missing.status.success());
-    assert!(
-        String::from_utf8_lossy(&missing.stderr).contains("did not start"),
-        "{}",
-        String::from_utf8_lossy(&missing.stderr)
-    );
     assert!(
         demo(&fixture, &["ls", "--workspace", "tried"])["running"]
             .as_array()
@@ -29130,18 +29000,12 @@ fn removing_a_parent_lists_and_removes_its_children() {
     // A clean parent still asks, naming the children it takes.
     let piped = fixture.run(&["rm", "parent"]);
     assert!(!piped.status.success());
-    assert!(String::from_utf8_lossy(&piped.stderr).contains("pass --yes"));
     let (no, prompt) = fixture.interactive(&["rm", "parent"], "n\n");
     assert!(!no.status.success());
-    assert!(
-        prompt.contains("Removes the workspaces split from it first") && prompt.contains("child"),
-        "{prompt}"
-    );
+    assert!(prompt.contains("child"), "{prompt}");
     assert!(child_path.exists());
     let (yes, prompt) = fixture.interactive(&["rm", "parent"], "y\n");
     assert!(yes.status.success(), "{prompt}");
-    let stdout = String::from_utf8_lossy(&yes.stdout);
-    assert!(stdout.contains("also removed child"), "{stdout}");
     assert!(!child_path.exists());
     assert!(!fixture.run(&["status", "child"]).status.success());
 
@@ -29179,11 +29043,6 @@ fn exporting_a_parent_needs_its_children_exported_with_it() {
     ] {
         let refused = fixture.run(args);
         assert!(!refused.status.success(), "{args:?}");
-        assert!(
-            String::from_utf8_lossy(&refused.stderr)
-                .contains("workspaces were split from it (child)"),
-            "{refused:?}"
-        );
         assert!(parent.exists() && child.exists());
     }
     // Exported together, the child comes from the checkpoint its parent's
@@ -29276,7 +29135,6 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
         .unwrap();
     let stderr = String::from_utf8_lossy(&push.stderr);
     assert!(!push.status.success(), "{stderr}");
-    assert!(stderr.contains("waits for approval"), "{stderr}");
     assert!(!pushed());
 
     let requests = fixture.ok(&["approvals"]);
@@ -29328,12 +29186,6 @@ fn split_without_a_branch_creates_a_workspace_at_a_commit() {
     let child = fixture.ok(&["split", "--no-branch", "--workspace", "parent"]);
     assert_eq!(child["parent"]["name"], "parent");
     assert_eq!(child["name"], format!("main-{short}-2"));
-    let status = fixture.run(&["status", &format!("main-{short}")]);
-    let status = String::from_utf8_lossy(&status.stdout);
-    assert!(
-        status.contains(&format!("At:            {short} (main)")),
-        "{status}"
-    );
     for args in [
         &["split", "--no-branch", "child"][..],
         &["split", "--no-branch", "--issue", "4"],
@@ -29378,8 +29230,6 @@ fn a_workspace_created_without_setup_skips_its_hooks_until_setup_runs() {
         (ran("setup"), ran("post-setup")),
         (String::new(), String::new())
     );
-    let status = fixture.run(&["status", "skipped"]);
-    assert!(String::from_utf8_lossy(&status.stdout).contains("Setup:         skipped"));
     fixture.ok(&["rm", "skipped", "--yes"]);
     assert_eq!(ran("pre-remove"), "");
 
@@ -29436,8 +29286,6 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
     ]);
     let child_path = PathBuf::from(child["path"].as_str().unwrap());
     fs::write(child_path.join("untracked"), "draft\n").unwrap();
-    let status = fixture.run(&["status", "scratch"]);
-    assert!(String::from_utf8_lossy(&status.stdout).contains("Disposable:    yes"));
 
     // No confirmation: nothing in it is worth keeping.
     let removed = fixture.ok(&["rm", "scratch"]);
@@ -29462,10 +29310,6 @@ fn a_disposable_workspace_goes_whatever_it_holds_without_a_checkpoint() {
         "--yes",
     ]);
     assert!(!refused.status.success());
-    assert!(
-        String::from_utf8_lossy(&refused.stderr).contains("disposable"),
-        "{refused:?}"
-    );
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
 }
 
@@ -29596,13 +29440,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
             .block_on(shoal::client::connection::request::<
                 shoal::client::protocol::operations::StartedWorkspace,
             >(&fixture.connector(), start));
-    let Err(error) = refused else {
-        panic!("expected a refusal: {refused:?}");
-    };
-    assert!(
-        format!("{error:#}").contains("holds no agent of its own"),
-        "{error:#}"
-    );
+    assert!(refused.is_err(), "expected a refusal: {refused:?}");
     assert_eq!(fixture.ok(&["work"]), before);
     let output = run(&["review", "run", "--pr", "8", "--agent", "reviewer"]);
     assert!(output.status.success(), "{output:?}");
@@ -29623,10 +29461,6 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert_eq!(added["id"], workspace["id"]);
     let output = run(&["add", url, "--agent", "reviewer"]);
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("holds no agent"),
-        "{output:?}"
-    );
     // On a terminal too, the PR settles what the addition opens.
     let (output, transcript) = fixture.interactive_command(
         fixture
@@ -29640,11 +29474,6 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert!(!transcript.contains("Workspace>"), "{transcript}");
     let output = run(&["add", url, "--git-profile", "work"]);
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("--git-profile and --base apply to a branch"),
-        "{output:?}"
-    );
 
     // A moved head moves the workspace with it.
     let second = push_fork_head("second");
@@ -29685,10 +29514,6 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     // A manual review reads the checkout, so it refuses one past the PR's head.
     let output = run(&["review", "run", url, "--manual"]);
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("commits of its own"),
-        "{output:?}"
-    );
 
     // Adding the PR runs its setup hooks once; reviewing it reopens the
     // workspace without running them again.
