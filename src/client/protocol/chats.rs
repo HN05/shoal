@@ -7,9 +7,11 @@ use super::Lifetime;
 #[serde(rename_all = "snake_case")]
 pub enum ChatMethod {
     /// Record a chat named `name` whose agent replaces process `pid`, in
-    /// the worktree of `workspace` when given, which is in `repository`.
+    /// the worktree of `workspace` when given, which is in `repository`;
+    /// without either, a chat without a repository.
     StartChat {
-        repository: crate::client::repository::Selector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repository: Option<crate::client::repository::Selector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<String>,
         name: String,
@@ -73,10 +75,11 @@ pub enum ChatMethod {
     CheckChatName {
         name: String,
     },
-    /// Refuse a `parent` a new chat in `repository`, in the worktree of
-    /// `workspace` when given, could not go below.
+    /// Refuse a `parent` a new chat in `repository`, or without one, in the
+    /// worktree of `workspace` when given, could not go below.
     CheckChatParent {
-        repository: crate::client::repository::Selector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repository: Option<crate::client::repository::Selector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<String>,
         /// As [`Self::StartChat`]'s parent.

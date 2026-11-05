@@ -33,7 +33,10 @@ impl Manager {
         Ok(SpaceSessions {
             sessions,
             integrations,
-            environments: self.agent_environments(space.repository_id()).await?,
+            environments: match space.repository_id() {
+                Some(repository) => self.agent_environments(repository).await?,
+                None => Vec::new(),
+            },
         })
     }
 

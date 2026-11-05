@@ -148,7 +148,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   only read the default branch use what the checkout has. Syncing never pushes or
   moves workspace branches; agents update their branch from it with plain Git.
 - Cleanup is space cleanup: chats follow the workspace rules below, with their
-  repository's config, meeting every condition on a worktree; a running agent
+  repository's config, or the global config for a chat without one, meeting every condition on a worktree; a running agent
   is use, a restore that waits to run its agent keeps a chat as a queued
   launch keeps a workspace, and a session Shoal saved keeps it from idle
   cleanup as saved stopped work does. Idle cleanup also counts a

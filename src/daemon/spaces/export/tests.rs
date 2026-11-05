@@ -193,8 +193,9 @@ async fn a_chat_ends_without_the_workspace_executions_it_started() {
         .unwrap()
         .expect("the wrapper runs");
     let chat = manager.chats().await.unwrap().remove(0);
+    let repository = chat.repository_id.clone().unwrap();
     let workspace = manager
-        .create_workspace(&chat.repository_id, "worker".into(), None, None, None)
+        .create_workspace(&repository, "worker".into(), None, None, None)
         .await
         .unwrap();
     let recorded = serde_json::to_string(&wrapper).unwrap();

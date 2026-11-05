@@ -1,5 +1,7 @@
 //! Chats: agents the user talks with in a repository's registered checkout,
-//! or in a workspace's worktree, where they are not the workspace's agent.
+//! or in a workspace's worktree, where they are not the workspace's agent,
+//! or without a repository in `root_dir`, managing the spaces of every
+//! repository.
 //! They are records, not tracked executions, so they never queue or stop
 //! under pressure. A chat runs while its process lives; once its agent exits
 //! or Shoal saves it, the chat is stopped until it is restored, and it lasts
@@ -65,7 +67,7 @@ impl Manager {
             hands_over,
             parent: None,
         };
-        self.start_new_chat(repository, None, new).await
+        self.start_new_chat(Some(repository), None, new).await
     }
 
     /// [`Self::start_chat`] in the worktree of the workspace `workspace`
@@ -90,29 +92,30 @@ impl Manager {
             hands_over,
             parent: None,
         };
-        let repository = workspace.repository_id.clone();
+        let repository = Some(workspace.repository_id.clone());
         self.record_new_chat(repository, Some(workspace_ref(&workspace)), new)
             .await
     }
 
-    /// Record the chat `new` in the repository's checkout, or in the
+    /// Record the chat `new` in the checkout of `repository`, in the
     /// worktree of the workspace `workspace` names, which must be ready, in
-    /// the workspace's repository.
+    /// the workspace's repository, or without either in `root_dir`.
     pub async fn start_new_chat(
         &self,
-        repository: crate::repository::Selector,
+        repository: Option<crate::repository::Selector>,
         workspace: Option<&str>,
         new: NewChat,
     ) -> Result<Chat> {
-        let (repository, workspace) = match workspace {
-            Some(selector) => {
+        let (repository, workspace) = match (workspace, repository) {
+            (Some(selector), _) => {
                 let workspace = self.chat_workspace(selector).await?;
                 (
-                    workspace.repository_id.clone(),
+                    Some(workspace.repository_id.clone()),
                     Some(workspace_ref(&workspace)),
                 )
             }
-            None => (self.repository(repository).await?.id, None),
+            (None, Some(repository)) => (Some(self.repository(repository).await?.id), None),
+            (None, None) => (None, None),
         };
         self.record_new_chat(repository, workspace, new).await
     }
@@ -160,12 +163,12 @@ impl Manager {
         Ok(workspace)
     }
 
-    /// Record `new` as a chat of the repository `repository`, in the
-    /// worktree of `workspace` when given, below its parent, which must be
-    /// in the repository, or at the top without one.
+    /// Record `new` as a chat of the repository `repository`, or of none,
+    /// in the worktree of `workspace` when given, below its parent, which
+    /// must take a chat of that repository, or at the top without one.
     async fn record_new_chat(
         &self,
-        repository: String,
+        repository: Option<String>,
         workspace: Option<WorkspaceRef>,
         new: NewChat,
     ) -> Result<Chat> {
@@ -180,7 +183,10 @@ impl Manager {
         } = new;
         crate::validate::name("chat", &name)?;
         // Its temporary directory goes in the repository's directory.
-        let repository = self.reserve_repository_directory(&repository).await?;
+        let repository = match repository {
+            Some(id) => Some(self.reserve_repository_directory(&id).await?),
+            None => None,
+        };
         let process = identity::capture(pid)?.context("the chat process is not running")?;
         // A save under way would miss it, and a shutdown's would not come again.
         let _saving = self.chat_saves.lock().await;
@@ -196,7 +202,7 @@ impl Manager {
         let chat = Chat {
             id: Uuid::new_v4().to_string(),
             number: 0,
-            repository_id: repository.id.clone(),
+            repository_id: repository.as_ref().map(|repository| repository.id.clone()),
             name,
             agent,
             mode,
@@ -220,7 +226,7 @@ impl Manager {
             .store
             .run(move |db| insert(db, chat, &recorded, hands_over, below))
             .await?;
-        self.give_tmp_dir(chat, &repository, process).await
+        self.give_tmp_dir(chat, repository.as_ref(), process).await
     }
 
     /// `chat`, just recorded with `process`, with its temporary directory,
@@ -229,10 +235,10 @@ impl Manager {
     async fn give_tmp_dir(
         &self,
         mut chat: Chat,
-        repository: &Repository,
+        repository: Option<&Repository>,
         process: Identity,
     ) -> Result<Chat> {
-        match tmp_dirs::directory(repository, &chat.id) {
+        match self.chat_tmp_dir(repository, &chat.id) {
             Ok(tmp_dir) => {
                 chat.tmp_dir = tmp_dir;
                 Ok(chat)
@@ -312,7 +318,14 @@ impl Manager {
     /// process exited.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
         self.stop_finished_chats().await?;
-        self.store.run(|db| recorded(db)).await
+        let mut chats = self.store.run(|db| recorded(db)).await?;
+        // A `root_dir` the configuration cannot give leaves them without one.
+        if let Ok(Some(layout)) = self.chat_tmp_layout(None) {
+            for chat in chats.iter_mut().filter(|chat| chat.repository_id.is_none()) {
+                chat.tmp_dir = Some(layout.locate(&chat.id));
+            }
+        }
+        Ok(chats)
     }
 
     /// The agent processes of the running chats.
@@ -499,6 +512,60 @@ impl Manager {
         Ok(())
     }
 
+    /// The settings of `chat`: its repository's, or the global config's
+    /// alone for a chat without a repository.
+    pub(crate) async fn chat_settings(&self, chat: &Chat) -> Result<crate::config::Effective> {
+        match &chat.repository_id {
+            Some(id) => self.repository_settings(id).await,
+            None => self.config().resolve(&Default::default()),
+        }
+    }
+
+    /// The registered checkout of `chat`'s repository; none for a chat
+    /// without a repository.
+    pub(crate) async fn chat_repository(&self, chat: &Chat) -> Result<Option<Repository>> {
+        match &chat.repository_id {
+            Some(id) => Ok(Some(self.repository(id).await?)),
+            None => Ok(None),
+        }
+    }
+
+    /// The directory a chat outside a workspace runs in: its repository's
+    /// registered checkout, or `root_dir` for a chat without a repository.
+    pub(crate) async fn chat_checkout_path(&self, chat: &Chat) -> Result<std::path::PathBuf> {
+        match self.chat_repository(chat).await? {
+            Some(repository) => Ok(repository.path),
+            None => self.config().root_dir(&self.paths),
+        }
+    }
+
+    /// The layout of the temporary directories of the chats of
+    /// `repository`, or of those without one in `root_dir`; none in a
+    /// repository without a directory.
+    pub(crate) fn chat_tmp_layout(
+        &self,
+        repository: Option<&Repository>,
+    ) -> Result<Option<tmp_dirs::Layout>> {
+        match repository {
+            Some(repository) => Ok(tmp_dirs::Layout::of(repository)),
+            None => Ok(Some(tmp_dirs::Layout::outside_repositories(
+                &self.config().root_dir(&self.paths)?,
+            ))),
+        }
+    }
+
+    /// The temporary directory of the chat `id` of `repository`, or of
+    /// none, created when missing.
+    pub(crate) fn chat_tmp_dir(
+        &self,
+        repository: Option<&Repository>,
+        id: &str,
+    ) -> Result<Option<std::path::PathBuf>> {
+        (self.chat_tmp_layout(repository)?)
+            .map(|layout| layout.prepare(id))
+            .transpose()
+    }
+
     /// The scope token the agent of the chat `id` carries.
     pub(crate) async fn chat_scope(&self, id: &str) -> Result<String> {
         let id = id.to_owned();
@@ -545,7 +612,7 @@ fn insert(
         .workspace
         .as_ref()
         .map(|workspace| workspace.id.as_str());
-    ensure_place_free(&tx, &chat.repository_id, workspace)?;
+    ensure_place_free(&tx, chat.repository_id.as_deref(), workspace)?;
     store::ensure_name_available(&tx, &chat.name, None)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
@@ -577,7 +644,7 @@ fn insert(
     // waited finds the chat below the parent or refuses it.
     if let Some((parent, removing)) = &parent {
         ensure!(!removing.reserved(parent), "{parent} is being removed");
-        workspace::ensure_parent(&tx, &chat.repository_id, &chat.id, parent)?;
+        workspace::ensure_parent(&tx, chat.repository_id.as_deref(), &chat.id, parent)?;
         workspace::set_parent(&tx, &chat.id, Some(parent))?;
         chat.parent = workspace::parent(&tx, &chat.id)?;
     }
@@ -611,15 +678,17 @@ pub(super) fn unique_id(process: &Identity) -> Result<Option<String>> {
 /// it is not while it is being removed.
 fn ensure_place_free(
     tx: &rusqlite::Transaction<'_>,
-    repository_id: &str,
+    repository_id: Option<&str>,
     workspace: Option<&str>,
 ) -> Result<()> {
-    ensure!(
-        !store::repository_removing(tx, repository_id)?,
-        "the repository is being removed"
-    );
-    // A chat edits the checkout, which a move may be copying.
-    store::ensure_repository_not_moving(tx, repository_id)?;
+    if let Some(repository_id) = repository_id {
+        ensure!(
+            !store::repository_removing(tx, repository_id)?,
+            "the repository is being removed"
+        );
+        // A chat edits the checkout, which a move may be copying.
+        store::ensure_repository_not_moving(tx, repository_id)?;
+    }
     let Some(workspace) = workspace else {
         return Ok(());
     };
@@ -714,23 +783,27 @@ fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> 
         .context("the chat ended")
 }
 
-/// The running and stopped chats in start order.
+/// The running and stopped chats in start order. A chat without a
+/// repository has its temporary directory in `root_dir`, which only the
+/// configuration names, so it is left out here.
 fn recorded(db: &Connection) -> Result<Vec<Chat>> {
     db.prepare(
         "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
                     chats.restore,chats.completion,
                     workspaces.id,workspaces.name,workspaces.branch,chats.number,chats.mode
-             FROM chats JOIN repositories ON repositories.id=chats.repository_id
+             FROM chats LEFT JOIN repositories ON repositories.id=chats.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
              ORDER BY chats.started_at, chats.rowid",
     )?
     .query_map([], |row| {
         let id: String = row.get(0)?;
-        let repository_id: String = row.get(1)?;
-        let tmp_dir = row.get::<_, Option<String>>(7)?.map(|directory| {
-            tmp_dirs::Layout::new(Path::new(&directory), &repository_id).locate(&id)
-        });
+        let repository_id: Option<String> = row.get(1)?;
+        let tmp_dir = (repository_id.as_deref())
+            .zip(row.get::<_, Option<String>>(7)?)
+            .map(|(repository_id, directory)| {
+                tmp_dirs::Layout::new(Path::new(&directory), repository_id).locate(&id)
+            });
         Ok(Chat {
             id,
             number: row.get(14)?,

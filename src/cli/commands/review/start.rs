@@ -162,7 +162,7 @@ async fn chat_pull(ctx: &Context, chat: &Chat) -> Result<(Repository, String)> {
     let repo = (crate::client::repositories::list(&ctx.paths)
         .await?
         .into_iter())
-    .find(|repo| repo.id == chat.repository_id)
+    .find(|repo| Some(&repo.id) == chat.repository_id.as_ref())
     .with_context(|| format!("{}'s repository is not registered", chat.name))?;
     Ok((repo, url))
 }

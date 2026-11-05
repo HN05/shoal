@@ -122,7 +122,7 @@ async fn check_parent(
     let workspace = workspace.map(|workspace| workspace.id.clone());
     crate::client::chats::check_parent(
         &ctx.paths,
-        repo.id.clone().into(),
+        Some(repo.id.clone().into()),
         workspace,
         parent.to_owned(),
     )
@@ -548,7 +548,7 @@ pub(super) async fn launch(
         return Ok(Started::Background(BackgroundChat {
             chat: name,
             agent: agent.name().to_owned(),
-            repository: repo.id.clone(),
+            repository: Some(repo.id.clone()),
             place: note,
         }));
     }
@@ -891,7 +891,7 @@ fn brief(
     resumes: bool,
 ) -> Result<templates::Brief> {
     let place = templates::Place::Chat {
-        repo: repository::name(repo),
+        repo: Some(repository::name(repo)),
         home: topic.home(repo),
         delivery: agents::chat_delivery(settings, agent.name()),
     };

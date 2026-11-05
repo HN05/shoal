@@ -100,7 +100,7 @@ async fn chat(ctx: &Context, space: Option<&str>) -> Result<Option<Chat>> {
 /// A chat's reviews: those of its linked PRs, which run in the workspaces
 /// that own their head branches, newest first.
 async fn chat_reviews(ctx: &Context, chat: &Chat) -> Result<Vec<Review>> {
-    let repository = Some(chat.repository_id.clone().into());
+    let repository = chat.repository_id.clone().map(Into::into);
     let reviews = crate::client::reviews::list(&ctx.paths, None, repository).await?;
     Ok(reviews
         .into_iter()

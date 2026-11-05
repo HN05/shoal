@@ -666,7 +666,7 @@ impl Manager {
                         !removing.reserved(parent),
                         "the chat the workspace would go below is being removed"
                     );
-                    tree::ensure_parent(&tx, &record.repository_id, &record.id, parent)?;
+                    tree::ensure_parent(&tx, Some(&record.repository_id), &record.id, parent)?;
                     tree::set_parent(&tx, &record.id, Some(parent))?;
                 }
                 tx.execute(

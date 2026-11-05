@@ -80,10 +80,7 @@ async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<terminal::Se
             ConfigTarget::Workspace(status.workspace.id.clone()),
             Recorded::workspace(&status.executions, &status.places),
         ),
-        SpaceDetail::Chat { chat } => (
-            ConfigTarget::Repository(chat.repository_id.clone().into()),
-            Recorded::chat(chat),
-        ),
+        SpaceDetail::Chat { chat } => (ConfigTarget::chat(chat), Recorded::chat(chat)),
     };
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     terminal::sessions(&settings, &places).await

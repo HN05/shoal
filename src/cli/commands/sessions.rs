@@ -135,7 +135,7 @@ impl Target {
     fn config(&self) -> ConfigTarget {
         match self {
             Self::Workspace(inspection) => ConfigTarget::Workspace(inspection.workspace.id.clone()),
-            Self::Chat(chat) => ConfigTarget::Repository(chat.repository_id.clone().into()),
+            Self::Chat(chat) => ConfigTarget::chat(chat),
         }
     }
 
@@ -201,7 +201,7 @@ pub(in crate::cli::commands) async fn checkout_chat(
     let Some(repo) = super::issues::current_checkout(&repos).await? else {
         return Ok(None);
     };
-    let mut running = chats.iter().filter(|chat| chat.repository_id == repo.id);
+    let mut running = (chats.iter()).filter(|chat| chat.repository_id.as_ref() == Some(&repo.id));
     Ok(match (running.next(), running.next()) {
         (Some(only), None) => Some(only.clone()),
         _ => None,

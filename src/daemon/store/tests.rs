@@ -435,6 +435,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 135 {
         db.execute_batch(WORKSPACE_COPIES)?;
     }
+    if version >= 136 {
+        allow_chats_without_repository(&db)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1600,6 +1603,31 @@ fn workspaces_may_have_no_branch_once_migrated_and_keep_what_references_them() -
         .collect::<rusqlite::Result<_>>()?;
     assert_eq!(branches, [None, Some("worker".to_owned())]);
     assert_eq!(executions(&db, "workspace")?.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn chats_may_have_no_repository_once_migrated_and_keep_what_references_them() -> Result<()> {
+    let mut db = historical_database(135)?;
+    db.execute_batch(
+        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+            VALUES ('chat','repo','repo-chat','codex',1,'1',1);
+        INSERT INTO chat_messages(chat_id,created_at,workspace,message)
+            VALUES ('chat',1,'worker','Hello');",
+    )?;
+    migrate(&mut db)?;
+    db.execute(
+        "INSERT INTO chats(id,name,agent,pid,birth,started_at)
+            VALUES ('master','master','codex',2,'2',2)",
+        [],
+    )?;
+    let repositories: Vec<Option<String>> = db
+        .prepare("SELECT repository_id FROM chats ORDER BY name")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(repositories, [None, Some("repo".to_owned())]);
+    let messages: i64 = db.query_row("SELECT count(*) FROM chat_messages", [], |row| row.get(0))?;
+    assert_eq!(messages, 1);
     Ok(())
 }
 

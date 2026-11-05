@@ -15,7 +15,7 @@ fn spaces() -> Spaces {
         mode: "chat".into(),
         number: 1,
         id: id.into(),
-        repository_id: "repo".into(),
+        repository_id: Some("repo".into()),
         name: name.into(),
         agent: "claude".into(),
         workspace: None,

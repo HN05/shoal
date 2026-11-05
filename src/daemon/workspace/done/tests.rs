@@ -873,7 +873,7 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
             parent: Some(above),
         };
         let chat = manager
-            .start_new_chat(parent.repository_id.clone().into(), None, start)
+            .start_new_chat(Some(parent.repository_id.clone().into()), None, start)
             .await
             .unwrap();
         above = chat.id.clone();

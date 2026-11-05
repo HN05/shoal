@@ -137,7 +137,7 @@ impl Manager {
             ItemContext::Chat(selector) => {
                 let chat = (self.running_chat(selector).await?)
                     .with_context(|| format!("no running chat {selector}"))?;
-                let checkout = self.repository(&chat.repository_id).await?;
+                let checkout = self.chat_own_checkout(&chat).await?;
                 Place::Chat {
                     id: chat.id,
                     checkout,

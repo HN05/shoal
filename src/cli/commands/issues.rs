@@ -312,7 +312,7 @@ pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Re
     };
     if let Some(space) = own
         && let Some(space) = crate::client::workspaces::present_space(&ctx.paths, &space).await?
-        && space.repository_id() == repo.id
+        && space.repository_id() == Some(repo.id.as_str())
     {
         return Ok(match space {
             PresentSpace::Workspace(workspace) => ItemContext::Workspace(workspace.id),

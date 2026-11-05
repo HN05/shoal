@@ -18,6 +18,9 @@ const CHECKOUT_CHAT_FACTS: &str = include_str!("templates/facts/checkout_chat.md
 /// space, which [`CHECKOUT_CHAT_FACTS`] would describe as the registered
 /// checkout.
 const WORKSPACE_CHAT_FACTS: &str = include_str!("templates/facts/workspace_chat.md");
+/// What the agent of a chat without a repository, in `root_dir`, is told
+/// about its space.
+const ROOT_CHAT_FACTS: &str = include_str!("templates/facts/root_chat.md");
 /// The practices Shoal's own mechanics depend on, sent to every agent after
 /// its space's facts.
 const SPACE_RULES: &str = include_str!("templates/space_rules.md");
@@ -30,8 +33,13 @@ const REVIEW_BASE_MARKER: &str = "<!-- base -->\n";
 /// copy of an earlier worker template does, although every launch already
 /// receives them.
 pub fn repeats_guidance(template: &str) -> bool {
-    let openings = [WORKSPACE_FACTS, CHECKOUT_CHAT_FACTS, WORKSPACE_CHAT_FACTS]
-        .map(|facts| facts.lines().next().unwrap_or_default());
+    let openings = [
+        WORKSPACE_FACTS,
+        CHECKOUT_CHAT_FACTS,
+        WORKSPACE_CHAT_FACTS,
+        ROOT_CHAT_FACTS,
+    ]
+    .map(|facts| facts.lines().next().unwrap_or_default());
     template.lines().any(|line| openings.contains(&line.trim()))
 }
 
@@ -127,10 +135,10 @@ pub enum Place<'a> {
         workspace: &'a Workspace,
         delivery: Delivery,
     },
-    /// A chat about the repository named `repo`, run in `home`, which
-    /// receives its updates by `delivery`.
+    /// A chat about the repository named `repo`, or without one, run in
+    /// `home`, which receives its updates by `delivery`.
     Chat {
-        repo: &'a str,
+        repo: Option<&'a str>,
         home: ChatHome<'a>,
         delivery: Delivery,
     },
@@ -250,6 +258,7 @@ fn facts(place: Place<'_>) -> &'static str {
         Place::Chat { home, .. } => match home {
             ChatHome::Checkout(_) => CHECKOUT_CHAT_FACTS,
             ChatHome::Workspace(_) => WORKSPACE_CHAT_FACTS,
+            ChatHome::Root(_) => ROOT_CHAT_FACTS,
         },
     }
 }
@@ -285,10 +294,10 @@ impl Fields {
                 delivery,
             } => {
                 let mut fields = vec![
-                    ("{repo}", repo.to_owned()),
                     ("{path}", home.path().to_string_lossy().into_owned()),
                     ("{updates}", delivery.description().to_owned()),
                 ];
+                fields.extend(repo.map(|repo| ("{repo}", repo.to_owned())));
                 if let Some(workspace) = home.workspace() {
                     fields.extend([
                         ("{workspace}", workspace.name.clone()),

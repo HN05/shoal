@@ -863,7 +863,7 @@ async fn a_chat_being_removed_takes_no_new_space() {
         parent: Some(chat.id.clone()),
     };
     manager
-        .start_new_chat(repo.id.clone().into(), None, start)
+        .start_new_chat(Some(repo.id.clone().into()), None, start)
         .await
         .unwrap_err();
     assert!(manager.list_workspaces().await.unwrap().is_empty());
@@ -984,7 +984,10 @@ async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_
         name: workspace.name.clone(),
         branch: workspace.branch.clone(),
     });
-    assert_eq!((&chat.repository_id, &chat.workspace), (&repo.id, &named));
+    assert_eq!(
+        (&chat.repository_id, &chat.workspace),
+        (&Some(repo.id.clone()), &named)
+    );
     // The chat is no child of the workspace, whose agent it is not.
     let recorded = manager.workspace(&workspace.id).await.unwrap();
     assert!(recorded.children.is_empty());
@@ -1161,7 +1164,7 @@ async fn a_chat_records_the_mode_its_agent_started_in() {
         parent: None,
     };
     let chat = manager
-        .start_new_chat(repo.id.clone().into(), None, start)
+        .start_new_chat(Some(repo.id.clone().into()), None, start)
         .await
         .unwrap();
     assert_eq!(chat.mode, "plan");

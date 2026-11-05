@@ -515,7 +515,7 @@ async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts()
         .unwrap();
     let check = |repository: &Repository, workspace: Option<&str>, parent: &str| {
         crate::protocol::ChatMethod::CheckChatParent {
-            repository: repository.id.clone().into(),
+            repository: Some(repository.id.clone().into()),
             workspace: workspace.map(str::to_owned),
             parent: Some(parent.to_owned()),
         }

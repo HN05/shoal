@@ -275,10 +275,10 @@ impl Manager {
             Some(repository) => Some(self.repository(repository.clone()).await?.id),
             None => None,
         };
-        let in_repository = |id: &String| {
+        let in_repository = |id: Option<&String>| {
             repository
                 .as_ref()
-                .is_none_or(|repository| repository == id)
+                .is_none_or(|repository| Some(repository) == id)
         };
         // The subtree lists `below` itself first.
         let below: Option<Vec<String>> = match below {
@@ -291,7 +291,7 @@ impl Manager {
                 continue;
             }
             let workspace = self.workspace(&id).await?;
-            if in_repository(&workspace.repository_id)
+            if in_repository(Some(&workspace.repository_id))
                 && workspace.state != WorkspaceState::Removing
             {
                 workspaces.push(workspace);
@@ -303,7 +303,7 @@ impl Manager {
             None => self.chats().await?,
         };
         chats.retain(|chat| {
-            in_repository(&chat.repository_id)
+            in_repository(chat.repository_id.as_ref())
                 && chat.restore.is_none()
                 && sender_chat.is_none_or(|sender| sender != chat.id && sender != chat.name)
         });

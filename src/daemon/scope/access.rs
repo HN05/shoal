@@ -59,14 +59,15 @@ impl Manager {
     }
 
     /// The repositories `caller` may see: its own space's, or all of them
-    /// for an unscoped caller.
+    /// for an unscoped caller and a chat without a repository.
     pub(in crate::daemon) async fn visible_repositories(
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<Repository>> {
         let mut repositories = self.repositories().await?;
-        if let Some(caller) = caller {
-            let own = self.caller_repository(caller).await?;
+        if let Some(caller) = caller
+            && let Some(own) = self.caller_repository(caller).await?
+        {
             repositories.retain(|repository| repository.id == own);
         }
         Ok(repositories)
@@ -81,13 +82,14 @@ impl Manager {
         Ok(kind == Some(crate::model::SpaceKind::Chat))
     }
 
-    /// The repository of the caller's own space.
-    pub(in crate::daemon) async fn caller_repository(&self, caller: &Caller) -> Result<String> {
-        Ok(self
-            .present_space(&caller.space_id)
-            .await?
-            .repository_id()
-            .to_owned())
+    /// The repository of the caller's own space; none for a chat without
+    /// one.
+    pub(in crate::daemon) async fn caller_repository(
+        &self,
+        caller: &Caller,
+    ) -> Result<Option<String>> {
+        let space = self.present_space(&caller.space_id).await?;
+        Ok(space.repository_id().map(str::to_owned))
     }
 
     /// The spaces `target` finds among those `caller` may see: the ones
@@ -283,16 +285,18 @@ impl Manager {
         Ok(question)
     }
 
-    /// The caller's own repository, which `repository` must select;
-    /// `refusal` says why another is refused.
+    /// The caller's own repository, which `repository` must select, or
+    /// for a chat without a repository, whose own is every registered one,
+    /// the one it selects; `refusal` says why another is refused.
     pub(in crate::daemon) async fn own_repository(
         &self,
         caller: &Caller,
         repository: &Selector,
         refusal: &str,
     ) -> Result<Selector> {
+        let selected = self.repository(repository).await?.id;
         let own = self.caller_repository(caller).await?;
-        ensure!(self.repository(repository).await?.id == own, "{refusal}");
-        Ok(own.into())
+        ensure!(own.is_none_or(|own| own == selected), "{refusal}");
+        Ok(selected.into())
     }
 }

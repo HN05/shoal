@@ -39,9 +39,20 @@ mod tests;
 pub(crate) struct Space {
     pub(crate) id: String,
     pub(crate) name: String,
-    pub(crate) repository_id: String,
+    /// Where its files are kept; none for a chat without a repository,
+    /// which keeps none.
+    pub(crate) repository_id: Option<String>,
     /// The space's parent when it attached the files.
     pub(crate) parent_id: Option<String>,
+}
+
+impl Space {
+    /// The repository whose directory keeps the space's files.
+    pub(crate) fn files_home(&self) -> Result<&str> {
+        self.repository_id
+            .as_deref()
+            .with_context(|| format!("chat {} has no repository, so it keeps no files", self.name))
+    }
 }
 
 impl From<Workspace> for Space {
@@ -49,7 +60,7 @@ impl From<Workspace> for Space {
         Self {
             id: workspace.id,
             name: workspace.name,
-            repository_id: workspace.repository_id,
+            repository_id: Some(workspace.repository_id),
             parent_id: workspace.parent.map(|parent| parent.id),
         }
     }
@@ -301,7 +312,7 @@ impl Manager {
         ids: Vec<i64>,
     ) -> Result<Vec<AttachedFile>> {
         let space = self.file_space(selector).await?;
-        let (repo, _files) = self.lock_repository_files(&space.repository_id).await?;
+        let (repo, _files) = self.lock_repository_files(space.files_home()?).await?;
         let id = space.id.clone();
         let mut files = self.store.run(move |db| records::list(db, &id)).await?;
         if !names.is_empty() || !ids.is_empty() {
@@ -423,7 +434,7 @@ impl Manager {
     /// gate, which is never taken while holding this one.
     pub(crate) async fn lock_files(&self, space: &Space) -> Result<(Layout, OwnedMutexGuard<()>)> {
         let repo = self
-            .reserve_repository_directory(&space.repository_id)
+            .reserve_repository_directory(space.files_home()?)
             .await?;
         let guard = self.gates.lock_message_files(&repo.id).await;
         // A move, removal or end may have finished while this waited.

@@ -52,7 +52,7 @@ async fn relabel(ctx: &Context, renamed: &RenamedChat) -> Result<()> {
     let Some(place) = &chat.origin else {
         return Ok(());
     };
-    let target = ConfigTarget::Repository(chat.repository_id.clone().into());
+    let target = ConfigTarget::chat(chat);
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     let labels = terminal::Labels {
         new: chat.name.clone(),

@@ -210,7 +210,12 @@ impl Manager {
                 workspace.name
             );
         }
-        let repo = self.repository(&chat.repository_id).await?;
+        let Some(repo) = self.chat_repository(&chat).await? else {
+            anyhow::bail!(
+                "chat {} has no repository, and shoal move moves only a chat in one",
+                chat.name
+            );
+        };
         let Some(continues) = crate::transfer::continue_chat(&chat, crate::repository::name(&repo))
         else {
             anyhow::bail!(

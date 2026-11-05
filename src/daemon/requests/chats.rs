@@ -73,7 +73,7 @@ pub(super) async fn handle(
             if caller.is_none() {
                 (manager.ensure_parent_not_host(workspace.as_deref(), parent.as_deref())).await?;
             }
-            (manager.ensure_parent_repository(&repository, parent.as_deref())).await?;
+            (manager.ensure_parent_takes(repository.as_ref(), parent.as_deref())).await?;
             Body::Ok
         }
         ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),

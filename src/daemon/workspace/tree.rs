@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Every space as `id, repository_id, name, kind, branch`; a chat has no
-/// branch.
+/// branch, and may have no repository.
 const SPACES: &str = "(SELECT id,repository_id,name,'workspace' AS kind,branch FROM workspaces
     UNION ALL SELECT id,repository_id,name,'chat' AS kind,NULL AS branch FROM chats)";
 
@@ -302,14 +302,14 @@ pub(crate) fn agent_runs(db: &Connection, id: &str, agents: &TrackedAgents) -> R
 }
 
 /// Check that `parent` may take the new or top-level space `space` of
-/// `repository_id` as its child: a ready workspace or a chat of the same
-/// repository, neither below `space` nor in the worktree of a workspace
-/// there, since removal takes both first. Removal reserves the parent first and
+/// `repository_id`, none for a chat without one, as its child: a ready
+/// workspace or a chat of the same repository, neither below `space` nor in
+/// the worktree of a workspace there, since removal takes both first. Removal reserves the parent first and
 /// rechecks its children afterwards, so a child either precedes that recheck
 /// or is refused here.
 pub(crate) fn ensure_parent(
     db: &Connection,
-    repository_id: &str,
+    repository_id: Option<&str>,
     space: &str,
     parent: &str,
 ) -> Result<()> {
@@ -326,9 +326,13 @@ pub(crate) fn ensure_parent(
     Ok(())
 }
 
-/// The name of the space `parent`, once it is a space of `repository_id`
-/// that takes a child now: a workspace must be ready.
-pub(crate) fn ready_parent(db: &Connection, repository_id: &str, parent: &str) -> Result<String> {
+/// The name of the space `parent`, once it takes a child of
+/// `repository_id` now: a workspace must be ready.
+pub(crate) fn ready_parent(
+    db: &Connection,
+    repository_id: Option<&str>,
+    parent: &str,
+) -> Result<String> {
     let (name, state) = parent_in_repository(db, repository_id, parent)?;
     if let Some(state) = state {
         ensure!(
@@ -340,13 +344,13 @@ pub(crate) fn ready_parent(db: &Connection, repository_id: &str, parent: &str) -
 }
 
 /// The name of the space `parent` and, for a workspace, its state, once it
-/// is a space of `repository_id`, where every child of it must be.
+/// takes a child of `repository_id`: it is a space of that repository.
 pub(crate) fn parent_in_repository(
     db: &Connection,
-    repository_id: &str,
+    repository_id: Option<&str>,
     parent: &str,
 ) -> Result<(String, Option<WorkspaceState>)> {
-    let recorded: Option<(String, String, Option<WorkspaceState>)> = db
+    let recorded: Option<(Option<String>, String, Option<WorkspaceState>)> = db
         .query_row(
             &format!(
                 "SELECT spaces.repository_id,spaces.name,workspaces.state FROM {SPACES} AS spaces
@@ -360,7 +364,7 @@ pub(crate) fn parent_in_repository(
         bail!("parent space {parent} no longer exists");
     };
     ensure!(
-        repository == repository_id,
+        repository.as_deref() == repository_id,
         "{name} is in another repository, and a space's children are in its repository; \
          #1326 tracks spaces across repositories"
     );

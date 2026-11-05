@@ -2191,7 +2191,7 @@ start in another mode; a running agent's mode never changes. A space records the
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 and `shoal work`, `shoal status`, `shoal inbox`, the queue and the menu name a
 mode other than `worker` for a workspace or `chat` for a chat. The built-in rules have no text of their own except `review`, the style
-of a [local review](#local-reviews).
+of a [local review](#local-reviews), and `orchestrate`.
 
 A mode's instructions may also be written as `modes/<name>.md` and a rule's
 text as `rules/<name>.md`, beside `config.toml`, beside the local config, or in
@@ -2214,8 +2214,9 @@ it loads when it needs them; the facts of its space; the space rules; its
 mode's rules; and its subject with its mode's instructions. Every agent's system
 text, in any mode, starts with Shoal's guidance: the facts of the kind of space
 it runs in, a [workspace](../src/client/config/templates/facts/workspace.md), a
-[chat in the checkout](../src/client/config/templates/facts/checkout_chat.md)
-or a [chat in a workspace's worktree](../src/client/config/templates/facts/workspace_chat.md),
+[chat in the checkout](../src/client/config/templates/facts/checkout_chat.md),
+a [chat in a workspace's worktree](../src/client/config/templates/facts/workspace_chat.md)
+or a [chat without a repository](../src/client/config/templates/facts/root_chat.md),
 which describe the space and state no practices; then the
 [space rules](../src/client/config/templates/space_rules.md), to run `shoal done`
 once its work is done and to name its space with `shoal work rename`. Its
@@ -4747,7 +4748,8 @@ A `type: "chat"` line records a chat's start, rename, stop, restore or removal:
 its `id`, `created_at`, `kind` (`chat_started`, `chat_renamed`, `chat_saved`
 when it stops, whether Shoal saved it or its agent exited, `chat_restored`, or
 `chat_ended` when it is removed) and a `chat` object with its `id`,
-`repository_id`, `name` (the new one after a rename), `agent`, `pid` and
+`repository_id` (null for a chat without a repository), `name` (the new one
+after a rename), `agent`, `pid` and
 Unix-seconds `started_at`, and on a stop its `restore`: `automatic` or `resume`.
 
 A `type: "file"` line records a file [attached](#attached-files) to a workspace

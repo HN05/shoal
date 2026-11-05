@@ -155,7 +155,8 @@ async fn revert_workspace(
             start_workspace(ctx, repository, name, base, None).await?
         }
         Reverting::Chat(chat) => {
-            let repository = chat.repository_id.clone();
+            let repository = (chat.repository_id.clone())
+                .with_context(|| format!("chat {} has no repository to revert in", chat.name))?;
             start_workspace(ctx, repository, name, base, Some(chat.id.clone())).await?
         }
     };

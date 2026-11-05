@@ -22,7 +22,6 @@ use crate::{
     process::identity::{self, Identity},
     sessions::Origin,
     state::ChatRestore,
-    tmp_dirs,
 };
 
 impl Manager {
@@ -159,9 +158,10 @@ impl Manager {
         if let Some(workspace) = &saved.workspace {
             self.chat_workspace(&workspace.id).await?;
         }
-        let repository = self
-            .reserve_repository_directory(&saved.repository_id)
-            .await?;
+        let repository = match &saved.repository_id {
+            Some(id) => Some(self.reserve_repository_directory(id).await?),
+            None => None,
+        };
         if let Some(origin) = &origin {
             self.release_place(origin).await?;
         }
@@ -177,7 +177,8 @@ impl Manager {
             hands_over,
         };
         let chat = self.store.run(move |db| restore(db, &restored)).await?;
-        self.give_restored_tmp_dir(chat, &repository, pid).await
+        self.give_restored_tmp_dir(chat, repository.as_ref(), pid)
+            .await
     }
 
     /// `chat`, just restored as process `pid`, with its temporary directory,
@@ -186,10 +187,10 @@ impl Manager {
     async fn give_restored_tmp_dir(
         &self,
         mut chat: Chat,
-        repository: &Repository,
+        repository: Option<&Repository>,
         pid: u32,
     ) -> Result<Chat> {
-        match tmp_dirs::directory(repository, &chat.id) {
+        match self.chat_tmp_dir(repository, &chat.id) {
             Ok(tmp_dir) => {
                 chat.tmp_dir = tmp_dir;
                 Ok(chat)
@@ -350,7 +351,7 @@ pub(super) fn still_runs(db: &Connection, chat: &Chat) -> Result<bool> {
 /// A stopped chat that runs again.
 struct Restored {
     id: String,
-    repository: String,
+    repository: Option<String>,
     /// The workspace whose worktree it runs in.
     workspace: Option<String>,
     /// The process it runs as, or that hands it to a session it starts.
@@ -365,7 +366,8 @@ struct Restored {
 /// they started.
 fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
     let tx = db.transaction()?;
-    ensure_place_free(&tx, &restored.repository, restored.workspace.as_deref())?;
+    let repository = restored.repository.as_deref();
+    ensure_place_free(&tx, repository, restored.workspace.as_deref())?;
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0,
             unique_id=?6

@@ -38,7 +38,7 @@ pub async fn start(
     request(
         daemon,
         ChatMethod::StartChat {
-            repository: home.repository_id().to_owned().into(),
+            repository: home.repository_id().map(|id| id.to_owned().into()),
             workspace: home.workspace().map(|workspace| workspace.id.clone()),
             name: chat.name.to_owned(),
             agent: chat.agent.to_owned(),
@@ -63,11 +63,11 @@ pub async fn check_name(daemon: &impl Daemon, name: &str) -> Result<()> {
     .await
 }
 
-/// Refuse `parent`, a space a new chat in `repository`, in the worktree of
-/// `workspace` when given, could not go below.
+/// Refuse `parent`, a space a new chat in `repository`, or without one, in
+/// the worktree of `workspace` when given, could not go below.
 pub async fn check_parent(
     daemon: &impl Daemon,
-    repository: Selector,
+    repository: Option<Selector>,
     workspace: Option<String>,
     parent: String,
 ) -> Result<()> {

@@ -131,10 +131,10 @@ impl Manager {
     /// What ties processes to `chat`: its identity and its temporary
     /// directory, while that is the one Shoal created.
     pub(crate) async fn chat_space(&self, chat: &Chat) -> Result<Space> {
-        let repo = self.repository(&chat.repository_id).await?;
+        let repo = self.chat_repository(chat).await?;
         Ok(Space {
             id: chat.id.clone(),
-            directories: Layout::of(&repo)
+            directories: (self.chat_tmp_layout(repo.as_ref())?)
                 .and_then(|layout| layout.existing(&chat.id))
                 .into_iter()
                 .collect(),

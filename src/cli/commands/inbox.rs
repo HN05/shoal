@@ -169,7 +169,7 @@ fn repository_of<'a>(workspaces: &'a [Workspace], chats: &'a [Chat], item: &'a I
         .map(|w| w.repository_id.as_str())
         .or_else(|| {
             let chat = chats.iter().find(|chat| chat.id == space);
-            chat.map(|chat| chat.repository_id.as_str())
+            chat.and_then(|chat| chat.repository_id.as_deref())
         })
         .or_else(|| item.repository_id())
         .unwrap_or("")

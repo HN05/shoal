@@ -49,8 +49,14 @@ impl ListFilter {
             && self.keeps_status(ListStatus::of_entry(entry))
     }
 
+    /// A chat without a repository is in none, which a repository filter
+    /// leaves out.
     pub(super) fn keeps_chat(&self, chat: &Chat) -> bool {
-        self.keeps_repository(&chat.repository_id) && self.keeps_status(ListStatus::of_chat(chat))
+        let repository = match &chat.repository_id {
+            Some(id) => self.keeps_repository(id),
+            None => self.repository.is_none(),
+        };
+        repository && self.keeps_status(ListStatus::of_chat(chat))
     }
 
     /// An item of `repository_id` without a workspace, such as an issue

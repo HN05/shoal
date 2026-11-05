@@ -724,15 +724,16 @@ impl Manager {
     }
 
     /// The spaces whose linked items the background poll reads: ready
-    /// workspaces and running chats.
+    /// workspaces and the running chats of a repository.
     async fn polled_spaces(&self) -> Result<Vec<LinkSpace>> {
         let workspaces = self.list_workspaces().await?.into_iter();
         let ready = workspaces.filter(|w| w.state == crate::state::WorkspaceState::Ready);
         let mut spaces: Vec<LinkSpace> = ready.map(LinkSpace::from).collect();
         let chats = self.chats().await?.into_iter();
         for chat in chats.filter(|chat| chat.restore.is_none()) {
-            let checkout = self.repository(&chat.repository_id).await?;
-            spaces.push(LinkSpace::Chat { chat, checkout });
+            if let Some(checkout) = self.chat_repository(&chat).await? {
+                spaces.push(LinkSpace::Chat { chat, checkout });
+            }
         }
         Ok(spaces)
     }

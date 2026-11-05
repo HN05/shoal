@@ -1,7 +1,8 @@
 //! Temporary directories: every workspace and chat of a repository gets its
-//! own in the repository directory's `.tmp`, named by its ID, which its
-//! processes receive as `TMPDIR`. The directory goes with its workspace or
-//! chat, so nothing in it is ever kept.
+//! own in the repository directory's `.tmp`, and every chat without a
+//! repository in `root_dir`'s, named by its ID, which its processes receive
+//! as `TMPDIR`. The directory goes with its workspace or chat, so nothing in
+//! it is ever kept.
 use std::{
     fs,
     io::ErrorKind,
@@ -16,7 +17,12 @@ use crate::{
     model::Repository,
 };
 
-/// The directory of one repository's temporary directories.
+/// The owner `root_dir`'s temporary directories are marked as, which no
+/// repository ID takes.
+const OUTSIDE_REPOSITORIES: &str = "root";
+
+/// The directory of one repository's temporary directories, or of those of
+/// the chats without a repository.
 #[derive(Debug, Clone)]
 pub struct Layout {
     root: PathBuf,
@@ -29,6 +35,12 @@ impl Layout {
             root: workspaces_dir.join(".tmp"),
             owner: repository_id.to_owned(),
         }
+    }
+
+    /// The temporary directories of the chats without a repository, in
+    /// `root_dir`.
+    pub fn outside_repositories(root_dir: &Path) -> Self {
+        Self::new(root_dir, OUTSIDE_REPOSITORIES)
     }
 
     /// The repository's temporary directories; registrations from before the

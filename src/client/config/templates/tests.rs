@@ -109,7 +109,7 @@ fn repository() -> crate::model::Repository {
 
 fn chat(home: ChatHome<'_>, delivery: Delivery) -> Place<'_> {
     Place::Chat {
-        repo: "shoal",
+        repo: Some("shoal"),
         home,
         delivery,
     }
@@ -150,6 +150,21 @@ fn a_chat_mode_without_the_chat_rule_still_gets_the_facts_and_space_rules() {
     let place = chat(ChatHome::Checkout(&repo), Delivery::Pushed);
     let triage = brief(&settings, "triage", place, None).unwrap();
     assert_layers(&triage.system, "checkout at /repo", "\n\nLabel it.");
+}
+
+#[test]
+fn a_chat_without_a_repository_is_told_it_runs_in_root_dir() {
+    let place = Place::Chat {
+        repo: None,
+        home: ChatHome::Root(std::path::Path::new("/home/me/shoal")),
+        delivery: Delivery::Pushed,
+    };
+    let chat = brief(&settings(""), "chat", place, None).unwrap();
+    assert!(
+        chat.system.contains("directory at /home/me/shoal"),
+        "{}",
+        chat.system
+    );
 }
 
 #[test]

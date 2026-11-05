@@ -285,7 +285,10 @@ impl Scoped for WorkspaceMethod {
                 manager.parent_below(caller, parent).await?;
                 None
             }
-            WorkspaceMethod::CheckDependencies { .. } => None,
+            WorkspaceMethod::CheckDependencies { .. }
+            | WorkspaceMethod::LayeredConfig {
+                target: ConfigTarget::Global,
+            } => None,
             WorkspaceMethod::ListWorkspaces | WorkspaceMethod::FindSpaces { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
             | WorkspaceMethod::SetWorkspaceTitle { workspace, .. }

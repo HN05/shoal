@@ -65,7 +65,7 @@ impl Manager {
     /// The turn of `chat`'s agent, with the agent and the settings of its
     /// repository.
     async fn chat_turn(&self, chat: &Chat) -> Result<(Turn, String, crate::config::Effective)> {
-        let settings = self.repository_settings(&chat.repository_id).await?;
+        let settings = self.chat_settings(chat).await?;
         Ok((Turn::Chat(chat.id.clone()), chat.agent.clone(), settings))
     }
 

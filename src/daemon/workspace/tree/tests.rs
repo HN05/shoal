@@ -548,7 +548,7 @@ async fn a_parent_must_be_a_space_of_the_same_repository() {
         .unwrap();
     let ensured = manager
         .store
-        .run(move |db| super::ensure_parent(db, &repos[0].id, "new", &foreign.id))
+        .run(move |db| super::ensure_parent(db, Some(&repos[0].id), "new", &foreign.id))
         .await;
     assert!(ensured.is_err());
 }
@@ -2279,3 +2279,4 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
 }
 
 mod mixed;
+mod outside;

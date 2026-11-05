@@ -219,7 +219,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
         mode: "chat".into(),
         number: 1,
         id: "chat-id".into(),
-        repository_id: "repo".into(),
+        repository_id: Some("repo".into()),
         name: "talk".into(),
         agent: "codex".into(),
         workspace: None,

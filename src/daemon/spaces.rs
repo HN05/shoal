@@ -40,7 +40,7 @@ impl Manager {
     pub(crate) async fn present_space_settings(&self, space: &PresentSpace) -> Result<Effective> {
         match space {
             PresentSpace::Workspace(workspace) => self.workspace_settings(workspace).await,
-            PresentSpace::Chat(chat) => self.repository_settings(&chat.repository_id).await,
+            PresentSpace::Chat(chat) => self.chat_settings(chat).await,
         }
     }
 

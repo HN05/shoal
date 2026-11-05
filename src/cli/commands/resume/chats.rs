@@ -119,7 +119,7 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
     let repo = crate::client::repositories::list(&ctx.paths)
         .await?
         .into_iter()
-        .find(|repo| repo.id == chat.repository_id)
+        .find(|repo| Some(&repo.id) == chat.repository_id.as_ref())
         .with_context(|| format!("the repository of chat {} is missing", chat.name))?;
     let settings = chat::settings(ctx, &repo).await?;
     // The restored agent keeps its mode's rules; its subject was sent once.
