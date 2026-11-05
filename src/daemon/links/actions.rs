@@ -661,7 +661,7 @@ async fn new_pull(
     };
     Ok(NewPull {
         title,
-        body: description(options.body, issue),
+        body: conventions::pull_description(options.body, issue),
         head: workspace.require_branch("shoal pr open")?.to_owned(),
         head_repository: None,
         base,
@@ -672,15 +672,6 @@ async fn new_pull(
         milestone: options.milestone,
         attachments: options.attachments,
     })
-}
-
-/// Use a supplied description verbatim; otherwise close the linked issue.
-fn description(body: Option<String>, issue: Option<u64>) -> String {
-    let Some(number) = issue else {
-        return body.unwrap_or_default();
-    };
-    let closing = format!("Closes #{number}");
-    body.unwrap_or(closing)
 }
 
 /// `owner/repository` of the fork the branch's push remote names, or `None`

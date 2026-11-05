@@ -1,12 +1,5 @@
 use super::*;
 
-#[test]
-fn linked_issue_closes_only_without_a_description() {
-    assert_eq!(description(None, None), "");
-    assert_eq!(description(None, Some(7)), "Closes #7");
-    assert_eq!(description(Some("".into()), Some(7)), "");
-}
-
 #[tokio::test]
 async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head() {
     use crate::test_support::{git, repository};

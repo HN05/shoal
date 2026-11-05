@@ -123,3 +123,10 @@ fn a_template_without_headings_still_takes_precedence() {
     let pr = item(ItemKind::Pr);
     assert_eq!(template_warning(&forgejo, root.path(), &pr, "Fix"), None);
 }
+
+#[test]
+fn linked_issue_closes_only_without_a_description() {
+    assert_eq!(pull_description(None, None), "");
+    assert_eq!(pull_description(None, Some(7)), "Closes #7");
+    assert_eq!(pull_description(Some("".into()), Some(7)), "");
+}

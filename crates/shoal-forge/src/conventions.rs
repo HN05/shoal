@@ -16,6 +16,16 @@ use crate::{
     items::{item::Item, link::ItemKind},
 };
 
+/// A new PR's description: a supplied `body` verbatim, otherwise a line
+/// that closes the linked `issue` when the PR merges.
+pub fn pull_description(body: Option<String>, issue: Option<u64>) -> String {
+    let Some(number) = issue else {
+        return body.unwrap_or_default();
+    };
+    let closing = format!("Closes #{number}");
+    body.unwrap_or(closing)
+}
+
 /// Refuse a new item of `kind` whose labels leave a required entry unmet,
 /// naming the repository's labels that would meet it.
 pub async fn require(
