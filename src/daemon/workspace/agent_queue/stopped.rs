@@ -3,7 +3,8 @@
 //! so does a signal that ended an agent's session, through a request beside
 //! its record. Each is admitted like a launch and leaves the queue once its
 //! agent registers, or while waiting once what it restores is gone, as after
-//! `shoal resume --now` or a discard.
+//! `shoal resume --now` or a discard. A restart's restore starts at once, in
+//! the slot its agent kept.
 use std::{
     collections::{BTreeMap, HashSet},
     path::PathBuf,
@@ -12,10 +13,11 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::{Connection, params};
 
+use super::Start;
 use crate::{
     daemon::workspace::Manager,
     execution::recovery,
-    model::QueueEntry,
+    model::{QueueEntry, Workspace},
     paths::Paths,
     state::{QueueKind, QueueState},
 };
@@ -38,6 +40,8 @@ struct Restore {
     /// Shoal queued it on its own rather than `shoal resume`, so an agent
     /// stopped between turns waits for an update.
     automatic: bool,
+    /// Queued, or starting at once.
+    state: QueueState,
 }
 
 impl Restore {
@@ -55,14 +59,25 @@ impl Restore {
             execution: execution.to_owned(),
             env: serde_json::to_string(env)?,
             automatic,
+            state: QueueState::Queued,
         })
+    }
+
+    /// The restore, admitted as the entry `id` as it is recorded.
+    fn starting(self, id: String) -> Self {
+        Self {
+            id,
+            state: QueueState::Starting,
+            ..self
+        }
     }
 }
 
 /// Record `restore` behind the work already waiting, unless its execution
 /// already has one, which a resume keeps in place and makes no longer
-/// automatic. Its workspace must be ready and its execution ended, since a
-/// recorded one runs, waits for its wrapper's restore or is unresolved.
+/// automatic; one that starts at once refuses it. Its workspace must be
+/// ready and its execution ended, since a recorded one runs, waits for its
+/// wrapper's restore or is unresolved.
 fn insert(db: &mut Connection, restore: &Restore) -> Result<()> {
     let tx = db.transaction()?;
     crate::daemon::store::require_ready(&tx, &restore.target.id)
@@ -75,6 +90,16 @@ fn insert(db: &mut Connection, restore: &Restore) -> Result<()> {
         )?,
         "execution {} has not ended; stop it with shoal stop {} first",
         restore.execution,
+        restore.target.name
+    );
+    ensure!(
+        restore.state == QueueState::Queued
+            || !crate::daemon::store::exists(
+                &tx,
+                "SELECT 1 FROM agent_queue WHERE execution_id=?1",
+                [&restore.execution],
+            )?,
+        "the restore of {} is already in the agent queue",
         restore.target.name
     );
     let now = crate::time::unix_seconds() as i64;
@@ -90,7 +115,7 @@ fn insert(db: &mut Connection, restore: &Restore) -> Result<()> {
             restore.agent,
             restore.env,
             restore.execution,
-            QueueState::Queued,
+            restore.state,
             now,
             restore.target.id,
             restore.automatic,
@@ -235,6 +260,36 @@ impl Manager {
             .into_iter()
             .find(|entry| entry.execution.as_deref() == Some(execution))
             .context("the restore already left the agent queue")
+    }
+
+    /// Record the restore of the agent stopped as `execution` in `workspace`
+    /// as the admitted entry `id`, so it starts at once in the slot the
+    /// agent kept while its record waits, and return its start, where the
+    /// agent ran.
+    pub(crate) async fn admit_stopped_restore(
+        &self,
+        workspace: &Workspace,
+        execution: &str,
+        id: String,
+    ) -> Result<Start> {
+        let path = recovery::record_path(&self.paths, &workspace.id, execution);
+        let record = recovery::Record::load(&path)?
+            .with_context(|| format!("{} has no stopped agent {execution}", workspace.name))?;
+        let env = crate::cli::terminal::detached_start_environment(record.origin.as_ref());
+        let target = Target {
+            id: workspace.id.clone(),
+            repository: workspace.repository_id.clone(),
+            name: workspace.name.clone(),
+        };
+        let restore = Restore::new(target, execution, &record.agent, &env, false)?.starting(id);
+        let start = Start {
+            id: restore.id.clone(),
+            name: restore.target.name.clone(),
+            env,
+        };
+        let _gate = self.agent_queue.lock_admission().await;
+        self.store.run(move |db| insert(db, &restore)).await?;
+        Ok(start)
     }
 
     /// Queue the restore of `agent`, stopped as `execution` in `workspace`,

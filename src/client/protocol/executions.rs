@@ -43,16 +43,19 @@ pub enum ExecutionMethod {
     CheckUnmerge,
     /// Connected agents, and executions whose wrapper is gone, which may run one.
     ListAgents,
-    /// Stop the agent of `execution` and start its session again in its
-    /// terminal, answering once the restarted agent runs. With `join`, only
-    /// wait for that restart the run selected, which may have ended already.
-    /// `run` names the `shoal restart` run that asks.
+    /// Stop the agent of `execution` and start its session again in a new
+    /// wrapper, or in its own terminal when `in_place`, answering once the
+    /// restarted agent runs. With `join`, only wait for that restart the run
+    /// selected, which may have ended already, as it was asked. `run` names
+    /// the `shoal restart` run that asks.
     RestartAgent {
         execution: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         join: Option<crate::model::PendingRestart>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         run: Option<String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        in_place: bool,
     },
 }
 

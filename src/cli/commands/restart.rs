@@ -1,5 +1,5 @@
-//! Restarting agents in place, one at a time, so each runs its agent's
-//! current binary in the terminal it already has.
+//! Restarting agents, each in a new wrapper or in place, together or one at
+//! a time, so each runs its agent's current binary.
 use std::time::Duration;
 
 use futures_util::{StreamExt, stream::FuturesUnordered};
@@ -31,12 +31,22 @@ const PARALLEL_RESTARTS: usize = 16;
 /// How often `--wait` checks whether a turn ended.
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
+/// How a run restarts the agents it selects.
+#[derive(Clone, Copy)]
+pub(super) struct Options {
+    /// Restart each agent only once its turn ends.
+    pub wait: bool,
+    /// Restart one agent at a time.
+    pub sequential: bool,
+    /// Restart each agent in its wrapper rather than a new one.
+    pub in_place: bool,
+}
+
 pub(super) async fn run(
     ctx: &Context,
     targets: WorkspaceTargets,
     agent: Option<Agent>,
-    wait: bool,
-    sequential: bool,
+    options: Options,
 ) -> Result<i32> {
     // A process that cleared its scope token is still the workspace's.
     ensure!(
@@ -67,7 +77,7 @@ pub(super) async fn run(
         progress.skip(ctx, skipped);
     }
     let interrupted = tokio::select! {
-        restarted = restart_all(ctx, &mut progress, plan.restarts, &plan.run, wait, sequential) => {
+        restarted = restart_all(ctx, &mut progress, plan.restarts, &plan.run, options) => {
             restarted?;
             false
         }
@@ -89,22 +99,23 @@ async fn restart_all(
     progress: &mut Progress,
     restarts: Vec<Restart>,
     run: &str,
-    wait: bool,
-    sequential: bool,
+    options: Options,
 ) -> Result<()> {
-    if sequential {
-        restart_in_turn(ctx, progress, restarts, run, wait).await
+    if options.sequential {
+        restart_in_turn(ctx, progress, restarts, run, options).await
     } else {
-        restart_together(ctx, progress, restarts, run, wait).await
+        restart_together(ctx, progress, restarts, run, options).await
     }
 }
 
 impl Restart {
-    /// Restart the agent, or join its restart, as part of `run`.
-    async fn run(&self, ctx: &Context, run: &str) -> Result<()> {
+    /// Restart the agent, in place when `in_place`, or join its restart, as
+    /// part of `run`.
+    async fn run(&self, ctx: &Context, run: &str, in_place: bool) -> Result<()> {
         let execution = self.agent.execution.clone();
         let run = Some(run.to_owned());
-        let restarted = agents::restart(&ctx.paths, execution, self.joins.clone(), run).await;
+        let joins = self.joins.clone();
+        let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place).await;
         restarted.map_err(|error| {
             // A restart that waits still restores the agent itself.
             match recovery::pending(&ctx.paths, &self.workspace.id) {
@@ -135,14 +146,14 @@ async fn restart_in_turn(
     progress: &mut Progress,
     mut restarts: Vec<Restart>,
     run: &str,
-    wait: bool,
+    options: Options,
 ) -> Result<()> {
     let mut previous: Option<Instant> = None;
     while !restarts.is_empty() {
         if let Some(previous) = previous {
             sleep_until(previous + STAGGER).await;
         }
-        let restart = if wait {
+        let restart = if options.wait {
             let Some(restart) = next_idle(ctx, progress, &mut restarts, run).await? else {
                 break;
             };
@@ -150,7 +161,7 @@ async fn restart_in_turn(
         } else {
             restarts.remove(0)
         };
-        let result = restart.run(ctx, run).await;
+        let result = restart.run(ctx, run, options.in_place).await;
         if result.is_ok() {
             previous = Some(Instant::now());
         }
@@ -166,8 +177,9 @@ async fn restart_together(
     progress: &mut Progress,
     mut waiting: Vec<Restart>,
     run: &str,
-    wait: bool,
+    options: Options,
 ) -> Result<()> {
+    let wait = options.wait;
     let mut running = FuturesUnordered::new();
     let mut told = false;
     loop {
@@ -181,7 +193,7 @@ async fn restart_together(
         {
             let restart = waiting.remove(index);
             running.push(async move {
-                let result = restart.run(ctx, run).await;
+                let result = restart.run(ctx, run, options.in_place).await;
                 (restart, result)
             });
         }

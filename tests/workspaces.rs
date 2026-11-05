@@ -16,6 +16,9 @@ mod herdr_default;
 #[path = "workspaces/upgrades.rs"]
 mod upgrades;
 
+#[path = "workspaces/restarts.rs"]
+mod restarts;
+
 #[path = "support/prompt.rs"]
 mod prompt;
 #[path = "support/pty.rs"]

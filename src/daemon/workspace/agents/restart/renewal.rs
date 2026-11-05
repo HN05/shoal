@@ -1,0 +1,216 @@
+//! A restart that leaves its agent to a new wrapper. The old wrapper
+//! finishes with the agent's record, which the agent queue restores at once,
+//! in the slot the agent kept, and the restart follows the agent to the
+//! execution the new wrapper registers, which answers it once the agent runs.
+use std::collections::{HashMap, HashSet};
+
+use anyhow::{Result, anyhow};
+
+use super::{Agent, Manager, Restart, Restarts};
+use crate::model::Workspace;
+
+/// A restart whose agent starts again in a new wrapper, kept by the
+/// execution the agent ran as.
+pub(crate) enum Renewal {
+    /// The new wrapper has not registered the agent yet.
+    Starting(Handover),
+    /// The agent runs as this execution now.
+    Started(String),
+}
+
+/// The restart of an agent whose wrapper finished, until a new one
+/// registers it.
+pub(crate) struct Handover {
+    restarts: Restarts,
+    /// The agent queue entry whose start runs the new wrapper, once recorded.
+    entry: Option<String>,
+}
+
+/// The restarts that start their agent in a new wrapper, by the execution
+/// the agent ran as.
+pub(crate) type Renewals = HashMap<String, Renewal>;
+
+impl Agent {
+    /// The restart a new wrapper continues, which the agent hands over as
+    /// its execution ends.
+    pub(crate) fn hand_over(&mut self) -> Option<Renewal> {
+        let continues = (self.restarts.current.as_ref()).is_some_and(Restart::in_new_wrapper);
+        continues.then(|| {
+            Renewal::Starting(Handover {
+                restarts: std::mem::take(&mut self.restarts),
+                entry: None,
+            })
+        })
+    }
+}
+
+/// Forget what leads to executions that ended without handing their agent
+/// over, which no request can reach anymore.
+pub(crate) fn forget_ended(renewals: &mut Renewals, agents: &HashMap<String, Agent>) {
+    loop {
+        let known: HashSet<String> = renewals.keys().cloned().collect();
+        let before = renewals.len();
+        renewals.retain(|_, renewal| match renewal {
+            Renewal::Starting(_) => true,
+            Renewal::Started(id) => agents.contains_key(id) || known.contains(id),
+        });
+        if renewals.len() == before {
+            return;
+        }
+    }
+}
+
+impl Manager {
+    /// Start the agent of `execution` in `workspace` in a new wrapper for
+    /// the restart its wrapper `finished` with, through the agent queue,
+    /// where the agent ran. A restart that cannot start it fails, leaving
+    /// the record for `shoal resume`; one a stop cancelled starts nothing.
+    pub(crate) async fn restart_in_new_wrapper(
+        &self,
+        workspace: &Workspace,
+        execution: &str,
+        finished: bool,
+    ) {
+        let entry = uuid::Uuid::new_v4().to_string();
+        if !self.follow_start(execution, &entry).await {
+            return;
+        }
+        let started = async {
+            anyhow::ensure!(
+                finished,
+                "the stopped agent's wrapper did not finish; its processes are not proven stopped"
+            );
+            let start = self
+                .admit_stopped_restore(workspace, execution, entry)
+                .await?;
+            if let Err(error) = crate::daemon::agent_queue::spawn_start(&self.paths, &start) {
+                self.fail_queue_entry(&start.id, &format!("{error:#}"))
+                    .await?;
+                return Err(error);
+            }
+            Ok(())
+        };
+        if let Err(error) = started.await {
+            self.fail_renewal(execution, format!("{error:#}")).await;
+        }
+    }
+
+    /// Record that the queue entry `entry` starts the new wrapper of the
+    /// agent that ran as `execution`; false when its restart was cancelled.
+    async fn follow_start(&self, execution: &str, entry: &str) -> bool {
+        self.executions
+            .with_restarts(|_, renewals| match renewals.get_mut(execution) {
+                Some(Renewal::Starting(handover)) => {
+                    handover.entry = Some(entry.to_owned());
+                    true
+                }
+                _ => false,
+            })
+            .await
+    }
+
+    /// The agent of `id`, which the queue entry `entry` started, continues
+    /// the restart whose start that entry is.
+    pub(crate) async fn continue_restart(&self, entry: &str, id: &str) {
+        self.executions
+            .with_restarts(|agents, renewals| {
+                let Some(agent) = agents.get_mut(id) else {
+                    return;
+                };
+                let Some(renewal) = renewals.values_mut().find(|renewal| {
+                    matches!(renewal, Renewal::Starting(handover) if handover.entry.as_deref() == Some(entry))
+                }) else {
+                    return;
+                };
+                let Renewal::Starting(handover) = std::mem::replace(renewal, Renewal::Started(id.to_owned())) else {
+                    return;
+                };
+                agent.restarts = handover.restarts;
+            })
+            .await;
+    }
+
+    /// End the restart of the agent that ran as `execution` without
+    /// starting it again, answering it with `reason`.
+    pub(crate) async fn fail_renewal(&self, execution: &str, reason: String) {
+        let ended = self
+            .executions
+            .with_restarts(|_, renewals| match renewals.remove(execution) {
+                Some(Renewal::Starting(handover)) => Some(handover),
+                other => {
+                    if let Some(other) = other {
+                        renewals.insert(execution.to_owned(), other);
+                    }
+                    None
+                }
+            })
+            .await;
+        let answers = ended
+            .and_then(|handover| handover.restarts.current)
+            .map(|restart| restart.answers)
+            .unwrap_or_default();
+        for done in answers {
+            // The request may have gone with its client.
+            let _ = done.send(Err(anyhow!(reason.clone())));
+        }
+    }
+
+    /// End the restart whose new wrapper the queue entry `entry` started,
+    /// which ended with `reason` before the agent registered.
+    pub(crate) async fn fail_renewal_started_by(&self, entry: &str, reason: &str) {
+        let execution = self
+            .executions
+            .with_restarts(|_, renewals| {
+                renewals
+                    .iter()
+                    .find(|(_, renewal)| {
+                        matches!(renewal, Renewal::Starting(handover) if handover.entry.as_deref() == Some(entry))
+                    })
+                    .map(|(execution, _)| execution.clone())
+            })
+            .await;
+        if let Some(execution) = execution {
+            self.fail_renewal(&execution, reason.to_owned()).await;
+        }
+    }
+
+    /// End the restarts whose new wrapper's start left the agent queue
+    /// before the agent registered, as a stop that cancels it or an expired
+    /// start does. The restarts are read first, so a start recorded since
+    /// is in the queue read after them.
+    pub(crate) async fn fail_lost_renewals(&self) -> Result<()> {
+        let starting: Vec<(String, String)> = self
+            .executions
+            .with_restarts(|_, renewals| {
+                renewals
+                    .iter()
+                    .filter_map(|(execution, renewal)| match renewal {
+                        Renewal::Starting(Handover {
+                            entry: Some(entry), ..
+                        }) => Some((execution.clone(), entry.clone())),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .await;
+        if starting.is_empty() {
+            return Ok(());
+        }
+        let queued = self.store.run(|db| queued_ids(db)).await?;
+        for (execution, entry) in starting {
+            if !queued.contains(&entry) {
+                let reason = "its start from the agent queue ended before the agent ran";
+                self.fail_renewal(&execution, reason.into()).await;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The IDs of every entry in the agent queue.
+fn queued_ids(db: &rusqlite::Connection) -> Result<HashSet<String>> {
+    Ok(db
+        .prepare("SELECT id FROM agent_queue")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}

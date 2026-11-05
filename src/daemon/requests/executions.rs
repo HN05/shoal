@@ -61,11 +61,12 @@ pub(super) async fn handle(
             execution,
             join,
             run,
+            in_place,
         } => {
             if let Some(joined) = join {
                 manager.join_restart(&execution, joined.run, run).await?;
             } else {
-                manager.restart_agent(&execution, run).await?;
+                manager.restart_agent(&execution, run, in_place).await?;
             }
             Body::Ok
         }

@@ -42,7 +42,15 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             agent,
             wait,
             sequential,
-        } => restart::run(&ctx, targets, agent, wait, sequential).await,
+            in_place,
+        } => {
+            let options = restart::Options {
+                wait,
+                sequential,
+                in_place,
+            };
+            restart::run(&ctx, targets, agent, options).await
+        }
         SessionsCommand::Queue {
             command,
             repository,

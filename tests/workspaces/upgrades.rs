@@ -2,7 +2,7 @@
 use super::*;
 
 #[test]
-fn restart_continues_an_upgraded_wrapper_from_the_installed_binary() {
+fn restart_in_place_continues_an_upgraded_wrapper_from_the_installed_binary() {
     let fixture = Fixture::with_config(Some(
         "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n",
     ));
@@ -51,7 +51,7 @@ fn restart_continues_an_upgraded_wrapper_from_the_installed_binary() {
     let upgrade = installed.with_file_name("shoal.new");
     std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_shoal"), &upgrade).unwrap();
     fs::rename(&upgrade, &installed).unwrap();
-    fixture.ok(&["restart", "upgraded"]);
+    fixture.ok(&["restart", "upgraded", "--in-place"]);
     wait_until("agent to restore", || path.join("restored").exists());
     // The wrapper's process runs the installed binary, which registered the
     // execution again and runs the restored agent.

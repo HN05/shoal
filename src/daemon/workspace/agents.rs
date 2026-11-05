@@ -33,6 +33,7 @@ mod interrupts;
 mod queue_move;
 mod restart;
 pub use restart::RestartWaits;
+pub(crate) use restart::{Renewals, forget_ended_renewals};
 
 impl Protection {
     /// Memory or CPU pressure.
@@ -615,12 +616,13 @@ impl Manager {
 
     /// Restore the protection stop of an agent whose wrapper reattached
     /// while waiting for its automatic restore. A restart continues without
-    /// the request that asked for it, which ended with the previous daemon.
+    /// the request that asked for it, which ended with the previous daemon,
+    /// in a new wrapper.
     pub(crate) async fn await_agent_restore(&self, id: &str, protection: Protection) {
         self.executions
             .with_agent(id, |agent| {
                 if protection.is_restart() {
-                    agent.restarts.current = Some(restart::Restart::unanswered(None));
+                    agent.restarts.current = Some(restart::Restart::unanswered(None, false));
                 } else {
                     agent.overload = Some(protection);
                 }

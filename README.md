@@ -199,7 +199,7 @@ shoal stop --all              # Stop every workspace; a reboot saves agents too
 shoal stop --interrupt fix-login  # Cancel its agent's turn; the agent keeps running
 shoal stop --leftovers        # Stop what this workspace's commands left running
 shoal stop --processes fix-login  # Stop its processes Shoal does not track; agents keep running
-shoal restart --all --agent claude  # Restart Claude agents in place, such as after an update
+shoal restart --all --agent claude  # Restart Claude agents in new terminals, such as after an update
 shoal restart --all --sequential    # Restart one at a time, idle agents first
 shoal resume --all            # Queue the restore of stopped agents, restore stopped chats; report stopped commands
 shoal resume fix-login        # Continue its stopped agent, or the turn shoal stop --interrupt ended

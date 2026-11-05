@@ -51,7 +51,7 @@ pub enum SessionsCommand {
         #[arg(long, hide = true, requires_all = ["execution", "focus"])]
         close_in: Option<HostName>,
     },
-    /// Restart running agents in their terminals, resuming their sessions.
+    /// Restart running agents in new terminals, resuming their sessions.
     ///
     /// Agents restart together and run the agent's current binary; commands
     /// keep running.
@@ -67,6 +67,9 @@ pub enum SessionsCommand {
         /// Restart one agent at a time, idle ones first, 10 seconds apart.
         #[arg(long)]
         sequential: bool,
+        /// Restart each agent in the terminal it runs in.
+        #[arg(long)]
+        in_place: bool,
     },
     /// List the agent queue, or start, move or cancel an entry.
     ///

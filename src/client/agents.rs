@@ -85,13 +85,14 @@ pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
     request(daemon, ExecutionMethod::ListAgents).await
 }
 
-/// Restart the agent of `execution` in place as part of the restart `run`,
-/// or join the restart `join` already pending.
+/// Restart the agent of `execution` in a new wrapper, or `in_place`, as
+/// part of the restart `run`, or join the restart `join` already pending.
 pub async fn restart(
     daemon: &impl Daemon,
     execution: String,
     join: Option<PendingRestart>,
     run: Option<String>,
+    in_place: bool,
 ) -> Result<()> {
     request(
         daemon,
@@ -99,6 +100,7 @@ pub async fn restart(
             execution,
             join,
             run,
+            in_place,
         },
     )
     .await

@@ -1,6 +1,7 @@
-//! `shoal restart`: an agent stops and its wrapper starts its session again
-//! in the same terminal, as after a protection stop, but at once and outside
-//! the agent queue, since the agent keeps its slot.
+//! `shoal restart`: an agent stops as after a protection stop, and its session
+//! starts again at once and outside the agent queue, since the agent keeps its
+//! slot: in a new wrapper, which the agent queue starts once the old one
+//! finished, or in place, where the old wrapper starts it.
 use anyhow::{Context, Result, anyhow, ensure};
 use tokio::sync::oneshot;
 
@@ -10,7 +11,9 @@ use crate::{
     state::AgentState,
 };
 
+mod renewal;
 mod state;
+pub(crate) use renewal::{Renewals, forget_ended as forget_ended_renewals};
 use state::restarted;
 pub(crate) use state::{Restart, Restarts};
 
@@ -50,10 +53,16 @@ impl Manager {
             .await)
     }
 
-    /// Restart the agent of `execution`, returning once it runs again.
-    /// `run` names the `shoal restart` run that asks for it.
-    pub(crate) async fn restart_agent(&self, execution: &str, run: Option<String>) -> Result<()> {
-        restarted(self.request_restart(execution, run).await?).await
+    /// Restart the agent of `execution`, `in_place` or in a new wrapper,
+    /// returning once it runs again. `run` names the `shoal restart` run
+    /// that asks for it.
+    pub(crate) async fn restart_agent(
+        &self,
+        execution: &str,
+        run: Option<String>,
+        in_place: bool,
+    ) -> Result<()> {
+        restarted(self.request_restart(execution, run, in_place).await?).await
     }
 
     /// Wait for the restart of `execution` that `of_run` asked for as
@@ -87,19 +96,22 @@ impl Manager {
         &self,
         id: &str,
         run: Option<String>,
+        in_place: bool,
     ) -> Result<oneshot::Receiver<Result<()>>> {
         self.executions
-            .with_agents(|agents| self.stop_for_restart(id, agents.get_mut(id), run))
+            .with_agents(|agents| self.stop_for_restart(id, agents.get_mut(id), run, in_place))
             .await
     }
 
     /// Save the handoff of `agent`, the agent of `id`, then stop it for a
-    /// restart, or join the restart already in progress.
+    /// restart, `in_place` or in a new wrapper, or join the restart already
+    /// in progress as it was asked.
     fn stop_for_restart(
         &self,
         id: &str,
         agent: Option<&mut Agent>,
         run: Option<String>,
+        in_place: bool,
     ) -> Result<oneshot::Receiver<Result<()>>> {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         // Another command continuing the same run restarted it already,
@@ -129,7 +141,7 @@ impl Manager {
             agent.turn,
         )
         .context("save the agent's recovery record")?;
-        let mut restart = Restart::unanswered(run);
+        let mut restart = Restart::unanswered(run, in_place);
         let answer = restart.answer(None);
         agent.restarts.current = Some(restart);
         if agent.stop.send(true).is_err() {
@@ -141,7 +153,7 @@ impl Manager {
     }
 
     /// Whether a restart of `id` has not resumed its agent yet; after the
-    /// resume, a record left behind belongs to the wrapper.
+    /// resume, a record left behind belongs to the wrapper that restores it.
     pub(crate) async fn restart_before_resume(&self, id: &str) -> bool {
         self.executions
             .with_agent(id, |agent| {
@@ -198,15 +210,58 @@ impl Manager {
             .unwrap_or(false)
     }
 
+    /// Whether the restart of `id` was asked to start the agent again in its
+    /// wrapper.
+    pub(crate) async fn restart_in_place(&self, id: &str) -> bool {
+        self.executions
+            .with_agent(id, |agent| {
+                agent
+                    .restarts
+                    .current
+                    .as_ref()
+                    .is_some_and(Restart::in_place)
+            })
+            .await
+            .unwrap_or(false)
+    }
+
+    /// Leave the restart of `id`, whose agent's processes stopped, to a new
+    /// wrapper, which starts the agent once this one finished.
+    pub(crate) async fn hand_over_restart(&self, id: &str) -> Result<()> {
+        self.executions
+            .with_agent(id, |agent| {
+                agent.restarts.current.as_mut().map(Restart::resume)
+            })
+            .await
+            .flatten()
+            .context("the restart was cancelled")
+    }
+
+    /// Whether a new wrapper starts the agent of `id` again for its restart.
+    pub(crate) async fn restart_continues_elsewhere(&self, id: &str) -> bool {
+        self.executions
+            .with_agent(id, |agent| {
+                agent
+                    .restarts
+                    .current
+                    .as_ref()
+                    .is_some_and(Restart::in_new_wrapper)
+            })
+            .await
+            .unwrap_or(false)
+    }
+
     /// The wrapper of `id` started its child: once a restart resumed the
     /// agent, that child is the restarted agent.
     pub(crate) async fn agent_started(&self, id: &str) {
-        self.answer_restart(id, true, Ok(())).await;
+        self.answer_restart(id, Restart::resumed, Ok(())).await;
     }
 
-    /// The restart of `id` ends without the agent running again.
+    /// The restart of `id` ends without the agent running again, unless a
+    /// new wrapper continues it.
     pub(crate) async fn fail_restart(&self, id: &str, reason: String) {
-        self.answer_restart(id, false, Err(reason)).await;
+        let ends = |restart: &Restart| !restart.in_new_wrapper();
+        self.answer_restart(id, ends, Err(reason)).await;
     }
 
     /// The restart of `id` waits for the stopped agent's processes to exit
@@ -235,14 +290,17 @@ impl Manager {
         }
     }
 
-    async fn answer_restart(&self, id: &str, once_resumed: bool, outcome: Result<(), String>) {
+    /// Answer the restart of `id` with `outcome` if `ends` says it ended.
+    async fn answer_restart(
+        &self,
+        id: &str,
+        ends: impl FnOnce(&Restart) -> bool,
+        outcome: Result<(), String>,
+    ) {
         let restart = self
             .executions
             .with_agent(id, |agent| {
-                let restart = agent
-                    .restarts
-                    .current
-                    .take_if(|restart| restart.resumed || !once_resumed)?;
+                let restart = agent.restarts.current.take_if(|restart| ends(restart))?;
                 agent.restarts.end(&restart, &outcome);
                 Some(restart)
             })

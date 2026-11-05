@@ -1,6 +1,10 @@
-//! `shoal restart` stops an agent and its wrapper starts the saved session
-//! again in the same terminal.
+//! `shoal restart` stops an agent and starts the saved session again: in a
+//! new wrapper the agent queue starts, or in place in the same terminal.
 use super::*;
+use crate::{
+    model::{QueueEntry, QueueRequest},
+    state::QueueState,
+};
 
 /// The execution of the workspace's only agent.
 async fn agent_execution(manager: &Manager, workspace: &crate::model::Workspace) -> String {
@@ -15,12 +19,12 @@ async fn agent_execution(manager: &Manager, workspace: &crate::model::Workspace)
 }
 
 #[tokio::test]
-async fn restart_restores_the_agent_in_its_wrapper_without_waiting_for_healthy_readings() {
+async fn restart_in_place_restores_the_agent_in_its_wrapper_without_waiting_for_healthy_readings() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
-    bounded(manager.restart_agent(&execution, None))
+    bounded(manager.restart_agent(&execution, None, true))
         .await
         .unwrap();
     // The same wrapper ran the restore command, which exits at once.
@@ -35,13 +39,13 @@ async fn restart_restores_the_agent_in_its_wrapper_without_waiting_for_healthy_r
 }
 
 #[tokio::test]
-async fn a_restart_that_cannot_start_the_agent_leaves_it_for_shoal_resume() {
+async fn a_restart_in_place_that_cannot_start_the_agent_leaves_it_for_shoal_resume() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
     fs::remove_file(workspace.path.join("resume.sh")).unwrap();
-    let restarted = bounded(manager.restart_agent(&execution, None)).await;
+    let restarted = bounded(manager.restart_agent(&execution, None, true)).await;
     assert!(restarted.is_err());
     bounded(launched).await.unwrap().unwrap();
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
@@ -66,10 +70,164 @@ async fn a_restart_resumes_only_in_a_ready_recorded_workspace() {
         })
         .await
         .unwrap();
-    let restarted = bounded(manager.restart_agent(&execution, None)).await;
+    let restarted = bounded(manager.restart_agent(&execution, None, false)).await;
     assert!(restarted.is_err());
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     serving.abort();
+}
+
+/// The restore of `execution`'s agent once the agent queue started it.
+async fn starting_restore(manager: &Manager, execution: &str) -> QueueEntry {
+    bounded(async {
+        loop {
+            let entries = manager.queue_entries().await.unwrap();
+            if let Some(entry) = entries
+                .into_iter()
+                .find(|entry| entry.execution.as_deref() == Some(execution))
+            {
+                return entry;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+}
+
+/// A launch in the fixture's repository, which waits for a slot.
+fn waiting_launch(workspace: &crate::model::Workspace) -> QueueRequest {
+    QueueRequest {
+        repository: workspace.repository_id.as_str().into(),
+        name: "waiting".into(),
+        agent: "claude".into(),
+        issue_title: None,
+        plan: "{}".into(),
+        env: Default::default(),
+        now: false,
+        workspace: None,
+        after: Vec::new(),
+    }
+}
+
+/// The messages of the agent exits the user was told about.
+async fn exit_notifications(manager: &Manager) -> Vec<String> {
+    manager
+        .notifications(false, 10)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|event| event.kind == NotificationKind::AgentExited)
+        .map(|event| event.message)
+        .collect()
+}
+
+/// The old wrapper cannot start the agent, as one whose process tree lost
+/// access to the workspace cannot; the new wrapper the agent queue starts
+/// does, in the slot the agent kept, while a launch waits for one.
+#[tokio::test]
+async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = agent_execution(&manager, &workspace).await;
+    manager.publish_config(crate::test_support::global_config(
+        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
+    ));
+    let waiting = manager.queue_add(waiting_launch(&workspace)).await.unwrap();
+    let waiting = waiting.entry.unwrap();
+    assert_eq!(waiting.state, QueueState::Queued);
+    fs::remove_file(workspace.path.join("resume.sh")).unwrap();
+    let restarted = tokio::spawn({
+        let (manager, execution) = (manager.clone(), execution.clone());
+        async move { manager.restart_agent(&execution, None, false).await }
+    });
+    // The old wrapper finishes with the agent's record.
+    bounded(launched).await.unwrap().unwrap();
+    let restore = starting_restore(&manager, &execution).await;
+    assert_eq!(restore.state, QueueState::Starting);
+    assert!(
+        crate::daemon::agent_queue::tests::STARTED
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(started, _)| *started == restore.id)
+    );
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    // No wrapper runs the agent now, and its slot stays the restore's.
+    manager.dispatch_queue().await.unwrap();
+    let state = |entries: &[QueueEntry], id: &str| {
+        entries
+            .iter()
+            .find(|entry| entry.id == id)
+            .map(|entry| entry.state)
+    };
+    let entries = manager.queue_entries().await.unwrap();
+    assert_eq!(state(&entries, &waiting.id), Some(QueueState::Queued));
+    assert!(!restarted.is_finished());
+    // The new wrapper takes over the restore's slot and starts the agent.
+    let mut renewed = child_command(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::agent_restart::renewed_agent_child",
+    );
+    renewed.env("SHOAL_TEST_QUEUE_ENTRY", &restore.id);
+    let renewed = run_child(renewed);
+    bounded(restarted).await.unwrap().unwrap();
+    wait_launched(&manager, &workspace, "renewed", 1).await;
+    manager.dispatch_queue().await.unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    assert_eq!(state(&entries, &restore.id), None);
+    assert_eq!(state(&entries, &waiting.id), Some(QueueState::Queued));
+    assert_eq!(exit_notifications(&manager).await, Vec::<String>::new());
+    let agents = manager.running_agents().await.unwrap();
+    let [agent] = agents.as_slice() else {
+        panic!("expected the restarted agent: {agents:?}");
+    };
+    assert_ne!(agent.execution, execution);
+    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
+        .await
+        .unwrap();
+    bounded(renewed).await.unwrap().unwrap();
+    serving.abort();
+}
+
+/// A new wrapper that cannot start answers the restart with why, and leaves
+/// the agent's record for `shoal resume`.
+#[tokio::test]
+async fn a_restart_whose_new_wrapper_fails_to_start_leaves_the_agent_for_shoal_resume() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = agent_execution(&manager, &workspace).await;
+    let restarted = tokio::spawn({
+        let (manager, execution) = (manager.clone(), execution.clone());
+        async move { manager.restart_agent(&execution, None, false).await }
+    });
+    bounded(launched).await.unwrap().unwrap();
+    let restore = starting_restore(&manager, &execution).await;
+    manager
+        .fail_queue_entry(&restore.id, "no terminal host can start queued agents")
+        .await
+        .unwrap();
+    let error = bounded(restarted).await.unwrap().unwrap_err();
+    assert_eq!(
+        format!("{error}"),
+        "no terminal host can start queued agents"
+    );
+    assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    assert!(manager.running_agents().await.unwrap().is_empty());
+    serving.abort();
+}
+
+/// The new wrapper the agent queue starts for a restart: it takes over the
+/// queue entry `SHOAL_TEST_QUEUE_ENTRY` names, and its agent writes `renewed`.
+#[tokio::test]
+#[ignore = "isolated tracked wrapper launched by restart tests"]
+async fn renewed_agent_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    crate::env::launch_queue_entry(&std::env::var("SHOAL_TEST_QUEUE_ENTRY").unwrap());
+    run_tracked_agent("trap 'exit 0' TERM; touch renewed; while :; do sleep 1; done").await;
 }

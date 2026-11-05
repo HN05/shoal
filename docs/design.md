@@ -228,12 +228,24 @@ group may name another's, so the daemon forgets it, keeping its record, or
 else the session its agent reported as a last session. The daemon records each
 execution's agent name for that.
 Agent metadata is transient, so restart cannot select disconnected survivors.
-`shoal restart` restarts agents in place through the same wrapper path, so the
-agent stays in its terminal: the daemon sends the stop protection sends, with
-the reason `restarted by shoal restart` and recovery whatever the overload
-policy, so wrappers of earlier releases restore it too, and resumes the agent
-once its processes are proven stopped, outside the agent queue, since it keeps
-its slot. A restart outlives the requests that asked for it; a request for an
+`shoal restart` starts each agent in a new wrapper: the daemon sends the stop
+protection sends, with the reason `restarted by shoal restart` and recovery
+whatever the overload policy, and once the agent's processes are proven
+stopped, cancels the wrapper's restore, which every release finishes on with
+the agent's record kept. The record becomes no last session, and its end no
+exit notification; the daemon then records the record's restore as admitted
+and starts it through the queue start worker, as `shoal resume --now` does,
+in the terminal host of the agent's recorded place. The new wrapper runs in a
+new process tree, so a restart recovers an agent whose wrapper's tree broke,
+such as one that lost access to an external volume. The record keeps the
+agent's slot until the admitted restore takes it over, so the restart neither
+queues behind launches nor loses the slot to them; a start that fails or
+leaves the queue before the agent registers fails the restart, leaving the
+record for `shoal resume`. The restart, with the runs that asked for it,
+follows the agent to the execution the new wrapper registers, which answers
+it once the agent starts. `--in-place` restarts through the same wrapper,
+which keeps the agent in its terminal: the daemon resumes the agent once its
+processes are proven stopped, outside the agent queue. A restart outlives the requests that asked for it; a request for an
 agent already restarting joins that restart and is answered as the first one
 is. Each `shoal restart` run names itself in its requests, and the daemon
 lists each pending restart with the run that asked for it and each agent with
@@ -241,7 +253,7 @@ the run that last restarted it, so a run that finds restarts in progress
 continues under their run's name and leaves out what that run restarted. The
 restore command resolves the agent again, so an updated agent
 binary runs. A wrapper whose binary an upgrade replaced execs the installed one
-when the daemon resumes its agent, keeping its process, terminal and daemon
+when the daemon resumes its agent in place, keeping its process, terminal and daemon
 connection: the daemon sends nothing until the restored child starts, so no
 control is lost. The resume names the binary the daemon runs, and the wrapper
 continues only when the installed file is that binary, whatever path either

@@ -524,13 +524,14 @@ impl Manager {
     }
 
     /// End abandoned starts and restores and those resolved another way,
-    /// queue the restores stopped agents request, then start the waiting
-    /// entries that fit.
+    /// with the restarts they started, queue the restores stopped agents
+    /// request, then start the waiting entries that fit.
     pub(crate) async fn dispatch_queue(&self) -> Result<()> {
         let _gate = self.agent_queue.lock_admission().await;
         self.expire_starting_entries().await?;
         self.expire_orphaned_restores().await?;
         self.forget_resolved_restores().await?;
+        self.fail_lost_renewals().await?;
         self.queue_requested_restores().await?;
         self.admit_waiting(None).await?;
         Ok(())
@@ -1219,20 +1220,20 @@ impl Manager {
     /// that already ended, such as with its removed workspace, has no slot
     /// left to free.
     pub async fn fail_queue_entry(&self, id: &str, error: &str) -> Result<()> {
-        let id = id.to_owned();
+        let entry_id = id.to_owned();
         let entry = self
             .store
             .run(move |db| {
                 let entry: Option<(String, bool)> = db
                     .query_row(
                         "SELECT name, state=?2 FROM agent_queue WHERE id=?1",
-                        params![id, QueueState::Starting],
+                        params![entry_id, QueueState::Starting],
                         |row| Ok((row.get(0)?, row.get(1)?)),
                     )
                     .optional()?;
                 db.execute(
                     "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
-                    params![id, QueueState::Starting],
+                    params![entry_id, QueueState::Starting],
                 )?;
                 Ok(entry)
             })
@@ -1242,6 +1243,7 @@ impl Manager {
             Some((_, false)) => bail!("queue entry is no longer starting"),
             Some((name, true)) => name,
         };
+        self.fail_renewal_started_by(id, error).await;
         self.notify(
             Some(&name),
             NotificationKind::QueueFailed,

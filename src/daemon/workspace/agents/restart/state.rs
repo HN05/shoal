@@ -18,8 +18,11 @@ pub(crate) struct Restart {
     /// The other runs whose requests joined it, for which it restarts the
     /// agent as well.
     joined: Vec<String>,
-    /// The stopped agent was resumed, so its wrapper's next start is the
-    /// restarted agent rather than the first one.
+    /// The wrapper starts the agent again itself rather than finishing for
+    /// a new wrapper to start it.
+    in_place: bool,
+    /// The stopped agent was resumed, in its wrapper or a new one, so that
+    /// wrapper's next start is the restarted agent rather than the first one.
     pub(super) resumed: bool,
     /// Why the restart waits for the stopped agent's processes, which
     /// answers each request at once.
@@ -27,13 +30,15 @@ pub(crate) struct Restart {
 }
 
 impl Restart {
-    /// A restart for `run` without requests to answer, such as one whose
-    /// request ended with the daemon that took it.
-    pub(crate) fn unanswered(run: Option<String>) -> Self {
+    /// A restart for `run`, `in_place` or in a new wrapper, without requests
+    /// to answer, such as one whose request ended with the daemon that took
+    /// it.
+    pub(crate) fn unanswered(run: Option<String>, in_place: bool) -> Self {
         Self {
             answers: Vec::new(),
             run,
             joined: Vec::new(),
+            in_place,
             resumed: false,
             waits: None,
         }
@@ -61,6 +66,21 @@ impl Restart {
     pub(crate) fn resume(&mut self) {
         self.resumed = true;
         self.waits = None;
+    }
+
+    /// Whether the wrapper starts the agent again itself.
+    pub(super) fn in_place(&self) -> bool {
+        self.in_place
+    }
+
+    /// Whether the agent was resumed.
+    pub(super) fn resumed(&self) -> bool {
+        self.resumed
+    }
+
+    /// Whether a new wrapper starts the stopped agent again.
+    pub(super) fn in_new_wrapper(&self) -> bool {
+        self.resumed && !self.in_place
     }
 
     fn pending(&self) -> PendingRestart {

@@ -169,6 +169,7 @@ pub(super) async fn execute(
             )
             .await;
         if let Some(entry) = takes_entry {
+            manager.continue_restart(entry, &plan.id).await;
             manager.consume_queue_entry(entry, &plan.workspace.id).await;
         }
     }
@@ -659,6 +660,8 @@ fn requested_stop(request: Option<StopRequest>, stopping: Stopping<'_>) -> Contr
 
 /// Record completion, tell the user about agent exits, and acknowledge the
 /// wrapper. `result` is the reported exit code or the connection's failure.
+/// An agent whose restart continues in a new wrapper did not exit: that
+/// wrapper starts once this one is acknowledged.
 async fn finish(
     manager: &Manager,
     execution: Connected,
@@ -687,6 +690,7 @@ async fn finish(
     };
     // A restart whose stop the agent never took saved a handoff for nothing.
     let restarting = agent.is_some() && manager.restart_before_resume(&execution_id).await;
+    let renewed = agent.is_some() && manager.restart_continues_elsewhere(&execution_id).await;
     // Setup instead fails on what it leaves running, and merge runs Git.
     if kind == ExecutionKind::Command && result.is_ok() {
         manager
@@ -733,7 +737,7 @@ async fn finish(
     } else {
         false
     };
-    if let Some(agent) = agent.as_ref().filter(|_| !requeued) {
+    if let Some(agent) = agent.as_ref().filter(|_| !requeued && !renewed) {
         manager
             .notify_agent_exit(
                 &workspace,
@@ -751,8 +755,14 @@ async fn finish(
     } else {
         Ok(())
     };
+    if renewed {
+        let finished = result.is_ok() && complete;
+        manager
+            .restart_in_new_wrapper(&workspace, &execution_id, finished)
+            .await;
+    }
     // A bounded hook can outlast the wrapper's acknowledgement deadline.
-    if let Some(agent) = agent {
+    if let Some(agent) = agent.filter(|_| !renewed) {
         manager
             .post_agent_exit(
                 &workspace,

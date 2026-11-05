@@ -1,11 +1,13 @@
 //! What the daemon keeps in memory about executions while their wrappers are
-//! connected: the channel that stops each, the agents they run, why the
-//! daemon asked them to stop, how far each reported exit has been recorded,
-//! and the scope tokens that act for them.
+//! connected: the channel that stops each, the agents they run, the restarts
+//! that left their agent to a new wrapper, why the daemon asked them to stop,
+//! how far each reported exit has been recorded, and the scope tokens that
+//! act for them.
 //!
-//! Locks are taken in the order connections, agents, stop requests. Agents
-//! and stop requests are reached only through closures, which cannot await
-//! another lock, or through [`Connections`], which already holds the first.
+//! Locks are taken in the order connections, agents, renewals, stop
+//! requests. Agents, renewals and stop requests are reached only through
+//! closures, which cannot await another lock, or through [`Connections`],
+//! which already holds the first.
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::{
@@ -20,7 +22,7 @@ use tokio::sync::{Mutex, MutexGuard, watch};
 use super::{ExecutionKind, StopRequest};
 use crate::daemon::{
     scope::{Caller, ScopedExecution},
-    workspace::agents::Agent,
+    workspace::agents::{Agent, Renewals, forget_ended_renewals},
 };
 
 /// Launches that ended unrun the daemon remembers; a start asks about its
@@ -54,6 +56,9 @@ pub(crate) struct Executions {
     /// Connected executions and the channel that asks their wrapper to stop.
     connections: Mutex<HashMap<String, watch::Sender<bool>>>,
     agents: Mutex<HashMap<String, Agent>>,
+    /// Restarts that start their agent in a new wrapper, by the execution
+    /// the agent ran as, taken only with the agents lock held.
+    renewals: StdMutex<Renewals>,
     /// Why the daemon asked connected executions to stop.
     stop_requests: Mutex<HashMap<String, StopRequest>>,
     /// Connected executions whose wrapper stops instead of reattaching when
@@ -147,6 +152,17 @@ impl Executions {
         f: impl FnOnce(&mut HashMap<String, Agent>) -> R,
     ) -> R {
         f(&mut *self.agents.lock().await)
+    }
+
+    /// Run `f` on every tracked agent and every restart that starts its
+    /// agent in a new wrapper.
+    pub(crate) async fn with_restarts<R>(
+        &self,
+        f: impl FnOnce(&mut HashMap<String, Agent>, &mut Renewals) -> R,
+    ) -> R {
+        let mut agents = self.agents.lock().await;
+        let mut renewals = self.renewals.lock().unwrap_or_else(PoisonError::into_inner);
+        f(&mut agents, &mut renewals)
     }
 
     /// Record that a restart would stop this connected execution.
@@ -354,7 +370,18 @@ impl Connections<'_> {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .remove(id);
-        let agent = executions.agents.lock().await.remove(id).is_some();
+        let agent = executions
+            .with_restarts(|agents, renewals| {
+                let Some(mut agent) = agents.remove(id) else {
+                    return false;
+                };
+                if let Some(renewal) = agent.hand_over() {
+                    renewals.insert(id.to_owned(), renewal);
+                }
+                forget_ended_renewals(renewals, agents);
+                true
+            })
+            .await;
         executions.stop_requests.lock().await.remove(id);
         executions
             .scopes

@@ -163,6 +163,7 @@ fn a_pending_restart_leaves_request_capacity_to_the_wrappers_it_restores() {
         execution: "agent".into(),
         join: None,
         run: None,
+        in_place: false,
     };
     let _restart = capacity.admit(&restart.into()).unwrap();
     // The restored wrapper's own requests still find a slot.

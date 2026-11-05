@@ -1,7 +1,8 @@
 //! A stopped wrapper waits until its processes are proven stopped and the
 //! agent queue admits its restore, or only for the proof when `shoal restart`
-//! stopped it, and finishes normally when recovery is cancelled. Failed
-//! ownership checks never authorize a replacement process.
+//! stopped it, and finishes normally when recovery is cancelled or a restart
+//! leaves the agent to a new wrapper. Failed ownership checks never authorize
+//! a replacement process.
 use anyhow::{Context, Result, ensure};
 use std::time::Duration;
 use tokio::{
@@ -124,7 +125,8 @@ pub(super) async fn pause(
 }
 
 /// Restore an agent `shoal restart` stopped once its processes are proven
-/// stopped, answering the restart when it does not resume.
+/// stopped, here or in a new wrapper, answering the restart when it does
+/// neither.
 async fn restart(
     manager: &Manager,
     execution_id: &str,
@@ -172,10 +174,24 @@ async fn restart_once_stopped(
     let resume = async {
         ready?;
         manager.verify_restore_workspace(workspace_id).await?;
-        resume(manager, execution_id, workspace_id, None).await
+        if manager.restart_in_place(execution_id).await {
+            resume(manager, execution_id, workspace_id, None).await
+        } else {
+            hand_over(manager, execution_id).await
+        }
     }
     .await;
     Ok(resume.unwrap_or_else(restore_failed))
+}
+
+/// Finish the wrapper of a restarted agent, keeping its record, which a new
+/// wrapper restores once this one finished. A wrapper of any release
+/// finishes on the stop that cancels its restore.
+async fn hand_over(manager: &Manager, execution_id: &str) -> Result<Action> {
+    manager.hand_over_restart(execution_id).await?;
+    Ok(Action::Stop(Cancel::because(
+        "the agent restarts in a new terminal",
+    )))
 }
 
 /// Resolves when the wrapper finishes or a stop cancels the restore it waits for.
