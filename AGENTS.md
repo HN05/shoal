@@ -75,8 +75,11 @@ when behavior changes, distinguishing decisions from proposals.
 - Apps use Shoal's protocol through the library's one public module,
   `shoal::client`, with no compatibility promise: the protocol changes freely
   and only the exact version match protects a client. The CLI and apps share
-  that module's connection and client-side logic; what the CLI alone needs
-  stays in `cli`, and the library builds without the default `cli` feature.
+  that module's connection and client-side logic: the CLI sends each daemon
+  request through a named operation of the client module for its subject and
+  never builds one itself. What the CLI alone needs, such as parsing,
+  prompting and printing, stays in `cli`, and the library builds without the
+  default `cli` feature.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. `setup.command` is tracked and gates
   readiness; hooks are untracked user processes with workspace identity and no

@@ -562,8 +562,10 @@ which hold the CLI and the daemon:
 shoal = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<release tag>", default-features = false }
 ```
 
-`shoal::client` holds every request the CLI makes, with its reply's types;
-`connection` sends them to the daemon a `Connector` names, and `subscriptions`
+`shoal::client` holds every request the CLI makes, each a function of the
+module for its subject, such as `questions::ask` or `leases::acquire_port`,
+returning its reply's types; `connection` sends them to the daemon a
+`Connector` names, and `subscriptions`
 follows repositories, workspaces with their agents, linked issues, PRs and CI
 runs, the sessions each space's agents reported, open questions, pending
 approval requests, messages and notifications as they change, subscribing again

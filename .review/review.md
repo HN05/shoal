@@ -17,7 +17,9 @@ instead of the PR delivery guidance below.
   the protocol changes. Only requests a daemon refused unrun are sent again.
 - Apps use the protocol through `shoal::client`, which keeps no compatibility
   promise beyond the exact version match. The CLI and apps share that module's
-  connection and client-side logic; it builds without the `cli` feature.
+  connection and client-side logic; the CLI sends each daemon request through
+  a named client operation and never builds one itself. The module builds
+  without the `cli` feature.
 - The minimum Rust version follows current stable; keep the manifest and CI
   toolchain aligned and validate with locked dependencies.
 - Treat function abstraction as a blocking correctness check. Require every
