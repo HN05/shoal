@@ -64,6 +64,7 @@ pub(super) async fn start(
             Some(input) => issue::repository(ctx, input.as_deref(), repository).await?,
             None => chosen(ctx, repository).await?,
         };
+        check_parent(ctx, &repo, options.parent.as_deref()).await?;
         let settings = settings(ctx, &repo).await?;
         let topic = Topic {
             linked_issue: subject.linked_issue.clone(),
@@ -91,6 +92,7 @@ pub(super) async fn start_in_workspace(
         options.check_name(ctx).await?;
         let workspace = chosen_workspace(ctx, workspace).await?;
         let repo = workspace_repository(ctx, &workspace).await?;
+        check_parent(ctx, &repo, options.parent.as_deref()).await?;
         let settings = settings(ctx, &repo).await?;
         let topic = Topic {
             linked_issue: subject.linked_issue.clone(),
@@ -102,6 +104,17 @@ pub(super) async fn start_in_workspace(
     .await;
     handoff::report(&started);
     client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+}
+
+/// Refuse `parent`, the space a chat in `repo` would go below, as its
+/// registration would, before a picker or prompt asks for the rest.
+async fn check_parent(ctx: &Context, repo: &Repository, parent: Option<&str>) -> Result<()> {
+    match parent {
+        Some(parent) => {
+            client::check_chat_parent(&ctx.paths, repo.id.clone().into(), parent.to_owned()).await
+        }
+        None => Ok(()),
+    }
 }
 
 /// `topic` in `repo` started on the issue `subject` names, if any. The mode
@@ -436,11 +449,6 @@ pub(super) async fn launch(
     } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
-    // A parent the chat cannot go below is refused before anything is asked
-    // or opened, as its registration would.
-    if let Some(parent) = &parent {
-        client::check_chat_parent(&ctx.paths, repo.id.clone().into(), parent.clone()).await?;
-    }
     let topic = match &restore {
         Some(chat) if topic.linked_issue.is_none() => {
             with_saved_issue(topic, &client::recorded_chats(&ctx.paths).await?, chat)

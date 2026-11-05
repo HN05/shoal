@@ -19500,6 +19500,13 @@ fn start_puts_a_chat_below_the_parent_it_names() {
     let chats = fixture.ok(&["work", "--chats"]);
     assert_eq!(chats[0]["parent"]["name"], "worker", "{chats}");
     assert_eq!(chats[0]["mode"], "chat", "{chats}");
+    // A parent in another repository is refused before the agent picker.
+    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    let other = other.to_str().unwrap();
+    let (output, rows) = fixture.pick(&["start", "--chat", other, "--parent", &number], "1", "");
+    assert!(!output.status.success(), "{output:?}");
+    assert!(rows.is_empty(), "the agent picker opened: {rows}");
 }
 
 #[test]
