@@ -48,7 +48,7 @@ pub enum ExecutionMethod {
     ListAgents,
     /// Stop the agent of `execution` and start its session again in a new
     /// wrapper, or in its own terminal when `in_place`, answering once the
-    /// restarted agent runs. With `join`, only wait for that restart the run
+    /// restarted agent runs with the place of the wrapper that runs it. With `join`, only wait for that restart the run
     /// selected, which may have ended already, as it was asked. `run` names
     /// the `shoal restart` run that asks.
     RestartAgent {

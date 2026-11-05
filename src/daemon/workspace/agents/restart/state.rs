@@ -6,13 +6,17 @@ use anyhow::{Result, anyhow};
 use tokio::sync::oneshot;
 
 use super::RestartWaits;
-use crate::model::PendingRestart;
+use crate::{model::PendingRestart, sessions::Origin};
+
+/// How a restart ended: the place of the wrapper that runs the agent again,
+/// when it runs in a terminal host, or why it does not run again.
+pub(crate) type Outcome = Result<Option<Origin>, String>;
 
 /// A restart in progress, which answers each request for it.
 pub(crate) struct Restart {
     /// The requests still to answer; a request for an agent already
     /// restarting joins them.
-    pub(super) answers: Vec<oneshot::Sender<Result<()>>>,
+    pub(super) answers: Vec<oneshot::Sender<Result<Option<Origin>>>>,
     /// The `shoal restart` run that asked for it.
     run: Option<String>,
     /// The other runs whose requests joined it, for which it restarts the
@@ -46,7 +50,10 @@ impl Restart {
 
     /// Answer one more request, of `run`: at once while the restart waits
     /// for the agent's processes, otherwise once it ends.
-    pub(super) fn answer(&mut self, run: Option<String>) -> oneshot::Receiver<Result<()>> {
+    pub(super) fn answer(
+        &mut self,
+        run: Option<String>,
+    ) -> oneshot::Receiver<Result<Option<Origin>>> {
         if let Some(run) = run
             && self.run.as_ref() != Some(&run)
             && !self.joined.contains(&run)
@@ -98,7 +105,7 @@ pub(crate) struct Restarts {
     pub(crate) current: Option<Restart>,
     /// How each of its restarts that ended did, by the run that asked for
     /// it, which answers a request that joins it late.
-    ended: HashMap<Option<String>, Result<(), String>>,
+    ended: HashMap<Option<String>, Outcome>,
 }
 
 impl Restarts {
@@ -107,9 +114,10 @@ impl Restarts {
         self.current.as_ref().map(Restart::pending)
     }
 
-    /// Whether a restart of `run` started the agent again already.
-    pub(super) fn restarted_for(&self, run: &Option<String>) -> bool {
-        run.is_some() && self.ended.get(run) == Some(&Ok(()))
+    /// Where a restart of `run` started the agent again, if it did already.
+    pub(super) fn restarted_for(&self, run: &Option<String>) -> Option<Option<Origin>> {
+        run.as_ref()?;
+        self.ended.get(run)?.clone().ok()
     }
 
     /// Answer a request of `run` that joins the restart `of_run` asked for,
@@ -121,7 +129,7 @@ impl Restarts {
         name: &str,
         of_run: &Option<String>,
         run: Option<String>,
-    ) -> Result<oneshot::Receiver<Result<()>>, Result<(), String>> {
+    ) -> Result<oneshot::Receiver<Result<Option<Origin>>>, Outcome> {
         match &mut self.current {
             Some(restart) if of_run.is_none() || &restart.run == of_run => Ok(restart.answer(run)),
             _ => Err(self.joined_late(name, of_run, run)),
@@ -136,7 +144,7 @@ impl Restarts {
     }
 
     /// Record `outcome` for every run `restart` restarted the agent for.
-    pub(super) fn end(&mut self, restart: &Restart, outcome: &Result<(), String>) {
+    pub(super) fn end(&mut self, restart: &Restart, outcome: &Outcome) {
         for run in restart.runs() {
             self.ended.insert(run, outcome.clone());
         }
@@ -144,12 +152,7 @@ impl Restarts {
 
     /// How the restart of `of_run` that ended did, which also counts for
     /// `run`, joining it late.
-    fn joined_late(
-        &mut self,
-        name: &str,
-        of_run: &Option<String>,
-        run: Option<String>,
-    ) -> Result<(), String> {
+    fn joined_late(&mut self, name: &str, of_run: &Option<String>, run: Option<String>) -> Outcome {
         let outcome = self
             .ended
             .get(of_run)
@@ -175,7 +178,9 @@ impl Restarts {
 }
 
 /// How the restart `answer` answers ended.
-pub(super) async fn restarted(answer: oneshot::Receiver<Result<()>>) -> Result<()> {
+pub(super) async fn restarted(
+    answer: oneshot::Receiver<Result<Option<Origin>>>,
+) -> Result<Option<Origin>> {
     answer
         .await
         .unwrap_or_else(|_| Err(anyhow!("the agent did not start again")))

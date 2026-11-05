@@ -4,6 +4,7 @@ use crate::{
     daemon::workspace::{ExecutionKind, Manager, RestartWaits},
     execution::recovery,
     model::{PendingRestart, RunningAgent, Workspace},
+    sessions::{HostName, Origin},
     state::AgentState,
     test_support::{manager, repository},
 };
@@ -201,8 +202,21 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
 async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
     let (root, manager) = manager().await;
     let workspace = workspace(root.path(), &manager).await;
+    let place = Origin::created(HostName::Zmx, "agents".into());
     let execution = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .begin_execution_placed(
+            &workspace.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            crate::daemon::workspace::ExecutionRequest {
+                place: Some(crate::daemon::workspace::places::ExecutionPlace {
+                    origin: place.clone(),
+                    agent: true,
+                }),
+                ..Default::default()
+            },
+        )
         .await
         .unwrap();
     let id = execution.plan.id.clone();
@@ -235,7 +249,8 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
     assert!(!*stop.borrow_and_update());
     assert!(manager.restart_requested(&id).await);
     manager.agent_started(&id).await;
-    restarting.await.unwrap().unwrap();
+    // It answers with the place of the wrapper that runs the agent.
+    assert_eq!(restarting.await.unwrap().unwrap(), Some(place));
     assert!(!manager.restart_requested(&id).await);
     assert!(manager.notifications(false, 10).await.unwrap().is_empty());
 
@@ -543,7 +558,7 @@ async fn hand_over(
     manager: &std::sync::Arc<Manager>,
     workspace: &Workspace,
     execution: &crate::daemon::workspace::StartedExecution,
-) -> tokio::task::JoinHandle<anyhow::Result<()>> {
+) -> tokio::task::JoinHandle<anyhow::Result<Option<Origin>>> {
     let id = execution.plan.id.as_str();
     track(manager, workspace, id, "claude", true).await;
     let restarting = tokio::spawn({
@@ -565,7 +580,9 @@ async fn hand_over(
 }
 
 /// How the restart `restarting` ended; the limit is a hang guard only.
-async fn answered(restarting: tokio::task::JoinHandle<anyhow::Result<()>>) -> anyhow::Result<()> {
+async fn answered(
+    restarting: tokio::task::JoinHandle<anyhow::Result<Option<Origin>>>,
+) -> anyhow::Result<Option<Origin>> {
     tokio::time::timeout(Duration::from_secs(60), restarting)
         .await
         .expect("the restart was never answered")

@@ -67,14 +67,10 @@ pub(super) async fn handle(
             join,
             run,
             in_place,
-        } => {
-            if let Some(joined) = join {
-                manager.join_restart(&execution, joined.run, run).await?;
-            } else {
-                manager.restart_agent(&execution, run, in_place).await?;
-            }
-            Body::Ok
-        }
+        } => Body::RestartedPlace(match join {
+            Some(joined) => manager.join_restart(&execution, joined.run, run).await?,
+            None => manager.restart_agent(&execution, run, in_place).await?,
+        }),
     }))
 }
 

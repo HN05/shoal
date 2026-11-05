@@ -245,7 +245,8 @@ or completion that cancels the workspace's restores cancels it under the
 queue gate the restart records its start under, leaving the record for
 `shoal resume` either way. The restart, with the runs that asked for it,
 follows the agent to the execution the new wrapper registers, which answers
-it once the agent starts. `--in-place` restarts through the same wrapper,
+it once the agent starts with the place that execution registered, so the run
+can name where the agent runs now. `--in-place` restarts through the same wrapper,
 which keeps the agent in its terminal: the daemon resumes the agent once its
 processes are proven stopped, outside the agent queue. A restart outlives the requests that asked for it; a request for an
 agent already restarting joins that restart and is answered as the first one

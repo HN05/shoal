@@ -11,6 +11,7 @@ use super::{Agent, Manager, Restarts};
 use crate::{
     daemon::workspace::agent_queue::Start,
     model::{RunningAgent, Workspace},
+    sessions::Origin,
 };
 
 /// A restart whose agent starts again in a new wrapper, kept by the
@@ -59,7 +60,10 @@ pub(super) fn starting(renewals: &Renewals, id: &str) -> bool {
 
 impl Handover {
     /// Answer one more request, of `run`, for the restart in progress.
-    pub(super) fn answer(&mut self, run: Option<String>) -> oneshot::Receiver<Result<()>> {
+    pub(super) fn answer(
+        &mut self,
+        run: Option<String>,
+    ) -> oneshot::Receiver<Result<Option<Origin>>> {
         match &mut self.restarts.current {
             Some(restart) => restart.answer(run),
             None => {

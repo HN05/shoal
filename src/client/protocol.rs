@@ -564,6 +564,7 @@ response_bodies! {
     QueueEntries(Vec<crate::model::QueueEntry>),
     StoppedWorkspace(crate::model::StoppedWorkspace),
     RunningAgents(Vec<crate::model::RunningAgent>),
+    RestartedPlace(Option<crate::client::sessions::Origin>),
     OwnedPlaces(Vec<crate::model::OwnedPlace>),
     PlaceClose(crate::client::sessions::PlaceClose),
     PlaceOwnership(crate::client::sessions::PlaceOwnership),

@@ -6,16 +6,17 @@ use anyhow::{Context, Result, anyhow, ensure};
 use tokio::sync::oneshot;
 
 use super::{Agent, Manager};
+use crate::daemon::log;
 use crate::{
     daemon::store, execution::recovery, model::RunningAgent, protocol::Protection,
-    state::AgentState,
+    sessions::Origin, state::AgentState,
 };
 
 mod renewal;
 mod state;
 use renewal::Renewal;
 pub(crate) use renewal::{Renewals, forget_ended as forget_ended_renewals};
-use state::restarted;
+use state::{Outcome, restarted};
 pub(crate) use state::{Restart, Restarts};
 
 impl Manager {
@@ -61,14 +62,15 @@ impl Manager {
     }
 
     /// Restart the agent of `execution`, `in_place` or in a new wrapper,
-    /// returning once it runs again. `run` names the `shoal restart` run
-    /// that asks for it.
+    /// returning once it runs again, with the place of the wrapper that runs
+    /// it when that runs in a terminal host. `run` names the `shoal restart`
+    /// run that asks for it.
     pub(crate) async fn restart_agent(
         &self,
         execution: &str,
         run: Option<String>,
         in_place: bool,
-    ) -> Result<()> {
+    ) -> Result<Option<Origin>> {
         restarted(self.request_restart(execution, run, in_place).await?).await
     }
 
@@ -82,7 +84,7 @@ impl Manager {
         execution: &str,
         of_run: Option<String>,
         run: Option<String>,
-    ) -> Result<()> {
+    ) -> Result<Option<Origin>> {
         let joined = self
             .executions
             .with_restarts(|agents, renewals| {
@@ -113,7 +115,7 @@ impl Manager {
         id: &str,
         run: Option<String>,
         in_place: bool,
-    ) -> Result<oneshot::Receiver<Result<()>>> {
+    ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         self.executions
             .with_restarts(|agents, renewals| {
                 let id = renewal::current(renewals, id);
@@ -134,13 +136,13 @@ impl Manager {
         agent: Option<&mut Agent>,
         run: Option<String>,
         in_place: bool,
-    ) -> Result<oneshot::Receiver<Result<()>>> {
+    ) -> Result<oneshot::Receiver<Result<Option<Origin>>>> {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         // Another command continuing the same run restarted it already,
         // even if another run restarts it since.
-        if agent.restarts.restarted_for(&run) {
+        if let Some(place) = agent.restarts.restarted_for(&run) {
             let (done, answer) = oneshot::channel();
-            let _ = done.send(Ok(()));
+            let _ = done.send(Ok(place));
             return Ok(answer);
         }
         if let Some(restart) = &mut agent.restarts.current {
@@ -270,9 +272,46 @@ impl Manager {
     }
 
     /// The wrapper of `id` started its child: once a restart resumed the
-    /// agent, that child is the restarted agent.
+    /// agent, that child is the restarted agent, which runs in the
+    /// wrapper's place.
     pub(crate) async fn agent_started(&self, id: &str) {
-        self.answer_restart(id, Restart::resumed, Ok(())).await;
+        if !self.restart_resumed(id).await {
+            return;
+        }
+        let place = self.execution_place(id).await;
+        self.answer_restart(id, Restart::resumed, Ok(place)).await;
+    }
+
+    /// Whether a restart of `id` resumed its agent.
+    async fn restart_resumed(&self, id: &str) -> bool {
+        self.executions
+            .with_agent(id, |agent| {
+                agent
+                    .restarts
+                    .current
+                    .as_ref()
+                    .is_some_and(Restart::resumed)
+            })
+            .await
+            .unwrap_or(false)
+    }
+
+    /// The place the wrapper of `id` registered in a terminal host; none
+    /// when it runs outside one or its record cannot be read, which only
+    /// leaves the place out of the restart's report.
+    async fn execution_place(&self, id: &str) -> Option<Origin> {
+        let id = id.to_owned();
+        match self
+            .store
+            .run(move |db| store::find_execution(db, &id))
+            .await
+        {
+            Ok(execution) => execution.and_then(|execution| execution.origin),
+            Err(error) => {
+                log!("place of restarted execution not read: {error:#}");
+                None
+            }
+        }
     }
 
     /// The restart of `id` ends without the agent running again.
@@ -311,7 +350,7 @@ impl Manager {
         &self,
         id: &str,
         ends: impl FnOnce(&Restart) -> bool,
-        outcome: Result<(), String>,
+        outcome: Outcome,
     ) {
         let restart = self
             .executions

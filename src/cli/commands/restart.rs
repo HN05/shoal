@@ -116,7 +116,7 @@ impl Restart {
         let run = Some(run.to_owned());
         let joins = self.joins.clone();
         let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place).await;
-        restarted.map_err(|error| {
+        restarted.map(drop).map_err(|error| {
             // A restart that waits still restores the agent itself.
             match recovery::pending(&ctx.paths, &self.workspace.id) {
                 Ok(true) if waits(&error).is_none() => anyhow::anyhow!(

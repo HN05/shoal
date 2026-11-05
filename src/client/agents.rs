@@ -6,6 +6,7 @@ use crate::{
     client::connection::{Daemon, request},
     model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
     protocol::{AgentMethod, ExecutionMethod, TurnEnd, WokenTurn},
+    sessions::Origin,
     state::{AgentState, TurnFailure},
 };
 
@@ -87,13 +88,15 @@ pub async fn all(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
 
 /// Restart the agent of `execution` in a new wrapper, or `in_place`, as
 /// part of the restart `run`, or join the restart `join` already pending.
+/// Returns the place of the wrapper that runs the agent again, when that
+/// runs in a terminal host.
 pub async fn restart(
     daemon: &impl Daemon,
     execution: String,
     join: Option<PendingRestart>,
     run: Option<String>,
     in_place: bool,
-) -> Result<()> {
+) -> Result<Option<Origin>> {
     request(
         daemon,
         ExecutionMethod::RestartAgent {
