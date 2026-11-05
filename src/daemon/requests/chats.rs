@@ -79,13 +79,13 @@ impl Scoped for ChatMethod {
                     .own_workspace(caller, chat, "chat processes rename only their own chat")
                     .await?,
             ),
-            // A scoped caller starts chats only below its own space, in a
-            // worktree of its tree, and hands each to the session it starts,
-            // with its scope.
+            // A scoped caller starts chats only in its own tree, below its
+            // own space unless it names one below it, in a worktree of its
+            // tree, and hands each to the session it starts, with its scope.
             ChatMethod::StartChat {
                 parent, workspace, ..
             } => {
-                *parent = Some(caller.space_id.clone());
+                manager.parent_below(caller, parent).await?;
                 workspace.as_mut()
             }
             ChatMethod::MoveChat { chat, .. }

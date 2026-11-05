@@ -14,6 +14,28 @@ use crate::{
 };
 
 impl Manager {
+    /// Put a space `caller` starts below the space `parent` names, which
+    /// must be its own or one below it, else below its own space.
+    pub(in crate::daemon) async fn parent_below(
+        &self,
+        caller: &Caller,
+        parent: &mut Option<String>,
+    ) -> Result<()> {
+        let id = match parent.as_deref() {
+            Some(named) => {
+                let id = self.present_space(named).await?.id().to_owned();
+                ensure!(
+                    self.within_subtree(&caller.space_id, &id).await?,
+                    "workspace processes start spaces only below their own space and those below it"
+                );
+                id
+            }
+            None => caller.space_id.clone(),
+        };
+        *parent = Some(id);
+        Ok(())
+    }
+
     /// The repositories `caller` may see: its own space's, or all of them
     /// for an unscoped caller.
     pub(in crate::daemon) async fn visible_repositories(

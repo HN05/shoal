@@ -412,6 +412,37 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         .start_new_chat(repository, workspace.as_deref(), new)
         .await
         .unwrap();
-    assert_eq!(auditing.workspace.map(|home| home.id), Some(worker.id));
+    assert_eq!(
+        auditing.workspace.map(|home| home.id),
+        Some(worker.id.clone())
+    );
     assert_eq!(auditing.parent.map(|parent| parent.id), Some(chat.id));
+    // A chat it starts goes below a space below its own that it names, never
+    // below one outside its tree.
+    let below = |parent: &Workspace| crate::protocol::ChatMethod::StartChat {
+        mode: None,
+        repository: repo.id.clone().into(),
+        workspace: None,
+        name: "nested".into(),
+        agent: "claude".into(),
+        pid: process.id(),
+        origin: None,
+        hands_over: false,
+        parent: Some(parent.name.clone()),
+    };
+    let mut method = below(&worker);
+    crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+        .await
+        .unwrap();
+    let crate::protocol::ChatMethod::StartChat { parent, .. } = method else {
+        unreachable!("the method stays a chat start");
+    };
+    assert_eq!(parent, Some(worker.id));
+    let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut below(&root))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("only below their own space and those below it"),
+        "{error:#}"
+    );
 }

@@ -118,10 +118,11 @@ impl Scoped for OperationMethod {
                 start: WorkspaceStart::Workspace(_),
                 ..
             } => return Err(denied()),
-            // A scoped caller opens workspaces only below its own space,
-            // which must be in their repository.
+            // A scoped caller opens workspaces only in its own tree, below
+            // its own space unless it names one below it, which must be in
+            // their repository.
             OperationMethod::StartWorkspace { parent, .. } => {
-                *parent = Some(caller.space_id.clone());
+                manager.parent_below(caller, parent).await?;
                 None
             }
             OperationMethod::FollowOperation { id, .. }
