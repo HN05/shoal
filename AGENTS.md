@@ -3,6 +3,9 @@
 Read `docs/design.md` for product decisions and the implementation order. Update it
 when behavior changes, distinguishing decisions from proposals.
 
+Read this whole file before you start, in as many reads as it takes: the rules
+for delivering a PR, under Committing near the end, decide when work is done.
+
 ## Implementation
 
 - Shoal is a Rust CLI and local daemon. Keep Superlogical, Macraft, and other
@@ -399,6 +402,9 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   default branch, comment on the issue with the PR or commit that fixed it
   (`shoal issue comment --body-file`), then close it with `shoal issue close`
   and finish with `shoal done`.
+- Before opening a PR, and before each later push, review your own diff against
+  this file, function abstraction first. A review-bot finding that cites a rule
+  stated here is one your own review missed.
 - Deliver completed work as a PR on a topic branch: commit, push, open or update the
   PR with its `area/`, `type/` and `complexity/` labels, then watch CI and the
   review bot. Review findings are claims to verify against the code and its
@@ -410,7 +416,10 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   or adds commits, run `shoal pr edit --add-label review/default`, wait for
   that review, and handle its findings. Run `shoal ready` only once the latest
   review covers the current head and comes back clean; green CI alone is not
-  enough.
+  enough, nor is replying to or resolving every thread. A review covers the
+  head whose SHA is its `commit_id` in
+  `shoal forge api 'repos/{owner}/{repo}/pulls/<number>/reviews'`; check that
+  it matches `git rev-parse HEAD` before `shoal ready`.
 
 ## Shoal feedback
 
