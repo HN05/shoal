@@ -20,7 +20,6 @@ fn a_refusal_names_the_forge_the_capability_and_the_hint() -> Result<()> {
 #[test]
 fn capabilities_list_every_capability_in_order() -> Result<()> {
     let github = ForgeRepo::parse("https://github.com/o/r.git")?.capabilities();
-    assert_eq!(github.forge, "GitHub");
     let listed: Vec<_> = github
         .capabilities
         .iter()

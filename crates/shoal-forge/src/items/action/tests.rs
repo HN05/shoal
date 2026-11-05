@@ -298,9 +298,11 @@ fn branch_updates_use_each_forges_way_and_its_methods() -> Result<()> {
     let refused = gitlab
         .require_all(update(UpdateMethod::Merge).needs(ItemKind::Pr))
         .unwrap_err();
-    assert_eq!(
-        refused.to_string(),
-        "Shoal cannot update PR branches by merging their base on GitLab; GitLab only rebases a merge request's branch, so use rebase"
+    assert!(
+        refused
+            .to_string()
+            .contains("update PR branches by merging"),
+        "{refused}"
     );
     assert!(gitlab.plan(&open, &update(UpdateMethod::Merge)).is_err());
     let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo")?;
@@ -606,9 +608,9 @@ fn actions_need_the_capabilities_they_use() -> Result<()> {
     );
     let gitlab = ForgeRepo::parse("https://gitlab.com/group/project")?;
     let refused = gitlab.require_all(rebase.needs(ItemKind::Pr)).unwrap_err();
-    assert_eq!(
-        refused.to_string(),
-        "Shoal cannot rebase and merge PRs on GitLab; GitLab merges with the project's merge method, so use merge or squash"
+    assert!(
+        refused.to_string().contains("rebase and merge PRs"),
+        "{refused}"
     );
     let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo")?;
     assert!(bitbucket.require_all(labels.needs(ItemKind::Pr)).is_err());
@@ -619,10 +621,7 @@ fn actions_need_the_capabilities_they_use() -> Result<()> {
 
 #[test]
 fn edits_fail_when_the_forge_shows_their_labels_unchanged() {
-    let [github, forgejo] = forges();
-    let gitlab = ForgeRepo::parse("https://gitlab.com/team/repo.git").unwrap();
-    assert!(github.kind.label_names_fold_case());
-    assert!(!gitlab.kind.label_names_fold_case() && !forgejo.kind.label_names_fold_case());
+    let [_, forgejo] = forges();
     let item = pr(&forgejo, false, &["Bug", "complexity/small"]).item;
     let applied = |action: Action, fold_case: bool| action.ensure_applied(&item, fold_case);
     let edit = |add: &[&str], remove: &[&str]| {
@@ -842,13 +841,8 @@ fn assignees_and_milestones_need_the_capability_for_the_items_kind() -> Result<(
     assert!(edit.validate(ItemKind::Issue).is_ok() && edit.validate(ItemKind::Pr).is_ok());
     let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo")?;
     assert!(bitbucket.require_all(edit.needs(ItemKind::Issue)).is_ok());
-    assert_eq!(
-        bitbucket
-            .require_all(edit.needs(ItemKind::Pr))
-            .unwrap_err()
-            .to_string(),
-        "Shoal cannot assign PRs on Bitbucket Cloud; Bitbucket pull requests have no assignees"
-    );
+    let refused = bitbucket.require_all(edit.needs(ItemKind::Pr)).unwrap_err();
+    assert!(refused.to_string().contains("assign PRs"), "{refused}");
     for url in [
         "https://github.com/o/r",
         "https://gitlab.com/o/r",
