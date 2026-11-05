@@ -1,9 +1,15 @@
 //! The workspace and chat event journal, as `shoal events` replays it.
 use std::path::PathBuf;
 
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use tokio::{io::BufReader, net::UnixStream};
 
-use crate::state::states;
+use crate::{
+    client::connection::{Daemon, open_buffered, reconnect, stream_closed},
+    protocol::{self, Body, Response, WorkspaceMethod},
+    state::states,
+};
 
 states!(EventKind {
     Created => "created",
@@ -313,3 +319,59 @@ impl EventItem {
         }
     }
 }
+
+/// The journal of workspace, chat and file events from a cursor: a replay
+/// of the retained events, then with `follow` each new one as it happens,
+/// across daemon restarts.
+pub struct Events {
+    reader: BufReader<UnixStream>,
+    follow: bool,
+    cursor: Option<i64>,
+}
+
+impl Events {
+    /// The events after `since`, or every retained one.
+    pub async fn open(daemon: &impl Daemon, since: Option<i64>, follow: bool) -> Result<Self> {
+        let method = WorkspaceMethod::WatchWorkspaceEvents { since, follow };
+        let (reader, body) = open_buffered(daemon, method).await?;
+        <()>::try_from(body)?;
+        Ok(Self {
+            reader,
+            follow,
+            cursor: since,
+        })
+    }
+
+    /// Where the stream resumes: after the last item it returned.
+    pub fn cursor(&self) -> Option<i64> {
+        self.cursor
+    }
+
+    /// The next item; `None` once a replay without `follow` ends.
+    pub async fn next(&mut self, daemon: &impl Daemon) -> Result<Option<EventItem>> {
+        loop {
+            let response: Response = match protocol::read_buffered(&mut self.reader).await {
+                Ok(response) => response,
+                Err(error) if self.follow && stream_closed(&error) => {
+                    let (since, follow) = (self.cursor, self.follow);
+                    let method = || WorkspaceMethod::WatchWorkspaceEvents { since, follow };
+                    let (reader, body) = reconnect(daemon, method).await?;
+                    <()>::try_from(body)?;
+                    self.reader = reader;
+                    continue;
+                }
+                Err(error) => return Err(error).context("daemon closed the event stream"),
+            };
+            let item = match response.body {
+                Body::Ok if !self.follow => return Ok(None),
+                Body::EventItem(item) => item,
+                body => return Err(body.unexpected("EventItem")),
+            };
+            self.cursor = Some(item.cursor());
+            return Ok(Some(item));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

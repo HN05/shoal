@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    paths::Paths,
+    client::paths::Paths,
     protocol::{Method, Operation, Request},
 };
 use tokio::net::UnixListener;
@@ -67,8 +67,12 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
         .await
         .unwrap();
     });
-    let ctx = Context::new(paths, true);
-    let error = tokio::time::timeout(std::time::Duration::from_secs(60), run(&ctx, true, Some(9)))
+    let follow = async {
+        let mut events = Events::open(&paths, Some(9), true).await?;
+        while events.next(&paths).await?.is_some() {}
+        anyhow::Ok(())
+    };
+    let error = tokio::time::timeout(std::time::Duration::from_secs(60), follow)
         .await
         .unwrap()
         .unwrap_err();
