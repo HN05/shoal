@@ -45,7 +45,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   that lets it act on a chat. Command names stay short: `shoal start` starts
   every agent, in a workspace or a chat, and `shoal work` maintains spaces.
 - Spaces form one tree in `space_parents`: every space has at most one parent,
-  a ready workspace or a chat of its own repository, never one below it; a
+  a ready workspace or a chat of its own repository, or a chat without a
+  repository, which takes children in any, never one below it; any other
   child in another repository is refused. Scope, approvals, coordinator and
   delegated messages, removal and cleanup take one walk up or down that link
   and one check for an agent, with no branch on kind; messages to a space go

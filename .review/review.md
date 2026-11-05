@@ -56,8 +56,9 @@ instead of the PR delivery guidance below.
   a chat in a workspace's worktree the workspace's scope, identity, `[env]` or
   leases, or makes it the workspace's child.
 - Space tree: every space has at most one parent in `space_parents`, a ready
-  workspace or a chat of its own repository and never one below it; flag a
-  write of a parent that skips that check, a child in another repository, and
+  workspace or a chat of its own repository, or a chat without a repository,
+  and never one below it; flag a write of a parent that skips that check, a
+  child in another repository below any other parent, and
   a reader of the tree that branches on kind instead of taking the one walk up
   or down and the one check for an agent.
 - Safety of user work: removal of any space goes through the one shared path,

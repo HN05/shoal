@@ -1,5 +1,6 @@
 //! The tree of spaces. Every space has at most one parent, a workspace or a
-//! chat in its repository, whose agent works on it or coordinates its agent;
+//! chat in its repository, or a chat without a repository, whose agent
+//! works on it or coordinates its agent;
 //! `space_parents` records it. Every reader takes one walk up or one walk
 //! down that link, whatever each space's kind.
 use std::path::PathBuf;
@@ -303,8 +304,9 @@ pub(crate) fn agent_runs(db: &Connection, id: &str, agents: &TrackedAgents) -> R
 
 /// Check that `parent` may take the new or top-level space `space` of
 /// `repository_id`, none for a chat without one, as its child: a ready
-/// workspace or a chat of the same repository, neither below `space` nor in
-/// the worktree of a workspace there, since removal takes both first. Removal reserves the parent first and
+/// workspace or a chat of the same repository, or a chat without a
+/// repository, neither below `space` nor in the worktree of a workspace
+/// there, since removal takes both first. Removal reserves the parent first and
 /// rechecks its children afterwards, so a child either precedes that recheck
 /// or is refused here.
 pub(crate) fn ensure_parent(
@@ -344,7 +346,8 @@ pub(crate) fn ready_parent(
 }
 
 /// The name of the space `parent` and, for a workspace, its state, once it
-/// takes a child of `repository_id`: it is a space of that repository.
+/// takes a child of `repository_id`: it is a space of that repository, or a
+/// chat without a repository, which takes children in any.
 pub(crate) fn parent_in_repository(
     db: &Connection,
     repository_id: Option<&str>,
@@ -364,9 +367,9 @@ pub(crate) fn parent_in_repository(
         bail!("parent space {parent} no longer exists");
     };
     ensure!(
-        repository.as_deref() == repository_id,
-        "{name} is in another repository, and a space's children are in its repository; \
-         #1326 tracks spaces across repositories"
+        repository.is_none() || repository.as_deref() == repository_id,
+        "{name} is in another repository, and only a chat without a repository takes \
+         children in other repositories"
     );
     Ok((name, state))
 }
