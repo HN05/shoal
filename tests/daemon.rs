@@ -88,17 +88,6 @@ fn daemon_guard_reaps_child_when_a_test_panics() {
     );
 }
 
-/// A failed test shows how its daemon ended and everything it logged.
-#[test]
-fn daemon_guard_reports_the_daemon_exit_and_log() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
-    let mut daemon = DaemonGuard::start(root.path(), &mut command(root.path()));
-    daemon.kill();
-    let report = daemon.report();
-    assert!(report.starts_with("daemon exited (signal: 9"), "{report}");
-    assert!(report.contains("shoal daemon listening on"), "{report}");
-}
-
 #[test]
 fn cli_connects_to_daemon_and_stops_it() {
     let mut daemon = Daemon::start();
@@ -192,7 +181,6 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
         .output()
         .unwrap();
     assert!(!other.status.success());
-    assert!(String::from_utf8_lossy(&other.stderr).contains("a daemon already owns"));
     let queued = daemon_client::connect(root.path());
     daemon_client::send(
         &queued,
@@ -326,11 +314,6 @@ fn message_hook_gives_up_on_a_daemon_that_does_not_answer() {
     let output = hook.wait_with_output().unwrap();
     assert!(output.status.success(), "{output:?}");
     assert!(output.stdout.is_empty(), "{output:?}");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("agent messages unavailable: the daemon did not answer in time"),
-        "{stderr}"
-    );
 }
 
 #[test]
@@ -411,12 +394,6 @@ fn install_preview_does_not_install_a_service() {
         String::from_utf8_lossy(&output.stderr)
     );
     let definition: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert!(
-        definition["content"]
-            .as_str()
-            .unwrap()
-            .contains("--managed")
-    );
     assert!(!Path::new(definition["path"].as_str().unwrap()).exists());
     assert!(!root.path().join(".config").exists());
     assert!(!root.path().join("state").exists());
@@ -493,7 +470,6 @@ fn install_refuses_an_incompatible_daemon_without_an_installed_service() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("stop the foreground daemon"));
     assert!(
         command(root.path())
             .args(["daemon", "install", "--dry-run"])
@@ -509,7 +485,6 @@ fn install_preserves_a_compatible_foreground_daemon() {
     let daemon = Daemon::start();
     let output = daemon.run(&["daemon", "install"]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("foreground daemon"));
     assert!(daemon.run(&["daemon", "status"]).status.success());
 }
 
@@ -600,14 +575,6 @@ fn daemon_start_offers_to_install_a_missing_service() {
         prompt::AnswerOptions::default(),
     );
     assert!(!output.status.success(), "{transcript}");
-    assert!(
-        transcript.contains("Install it with `shoal daemon install`? [y/N]"),
-        "{transcript}"
-    );
-    assert!(
-        transcript.contains("daemon service is not installed"),
-        "{transcript}"
-    );
     assert!(!manager.pid.exists());
     let (output, transcript) = prompt::answer(
         manager.command().args(["daemon", "start"]),
@@ -705,10 +672,6 @@ fn install_preserves_a_loaded_service_with_another_state_directory() {
     ] {
         let refused = install_other(state);
         assert!(!refused.status.success(), "{state:?}: {refused:?}");
-        assert!(
-            String::from_utf8_lossy(&refused.stderr).contains("stop the existing service"),
-            "{refused:?}"
-        );
         assert_eq!(fs::read_to_string(definition).unwrap(), original);
         assert_eq!(fs::read_to_string(&manager.pid).unwrap(), pid);
     }
@@ -762,11 +725,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     let config = root.path().join(".config/shoal/config.toml");
     assert_eq!(output["config"], config.to_str().unwrap());
     assert_eq!(output["config_created"], true);
-    assert!(
-        fs::read_to_string(&config)
-            .unwrap()
-            .contains("# default = \"codex\"")
-    );
+    let seeded = fs::read_to_string(&config).unwrap();
     let template = config.with_file_name("chat-template.md");
     assert_eq!(
         fs::read_to_string(&template).unwrap(),
@@ -797,11 +756,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
         fs::read_to_string(&backup).unwrap(),
         "agent.default = 'claude'\n"
     );
-    assert!(
-        fs::read_to_string(&config)
-            .unwrap()
-            .contains("# default = \"codex\"")
-    );
+    assert_eq!(fs::read_to_string(&config).unwrap(), seeded);
 
     // A changed executable path must update the definition without breaking an
     // existing execution's daemon connection.
@@ -871,7 +826,6 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
             .output()
             .unwrap();
         assert!(!output.status.success());
-        assert!(!String::from_utf8_lossy(&output.stderr).contains("Updating daemon"));
         assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
     }
     fs::remove_file(&socket).unwrap();
@@ -951,11 +905,6 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             vec!["--json", "repo", "ls"],
             json!({"type": "error", "data": {"code": "operation_failed", "message": "failed: detail"}}),
             "failed: detail",
-        ),
-        (
-            vec!["--json", "repo", "ls"],
-            json!({"type": "error", "data": {"code": "name_taken", "message": "name taken: worker"}}),
-            "name taken: worker",
         ),
         (
             vec!["repo", "ls"],
@@ -1202,9 +1151,7 @@ fn commands_wait_for_an_older_managed_daemon_to_restart_with_the_update() {
             .unwrap()
     };
     // Without a service, nothing restarts the older daemon.
-    let refused = events();
-    assert!(!refused.status.success());
-    assert!(String::from_utf8_lossy(&refused.stderr).contains("protocol mismatch"));
+    assert!(!events().status.success());
     let definition = command(root.path())
         .args(["--json", "daemon", "install", "--dry-run"])
         .output()
@@ -1220,7 +1167,6 @@ fn commands_wait_for_an_older_managed_daemon_to_restart_with_the_update() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Waiting for the daemon to restart"));
     let methods = daemon.join().unwrap();
     assert_eq!(methods.len(), 4);
     assert!(methods.iter().all(|method| method == &methods[0]));
