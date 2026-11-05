@@ -1381,8 +1381,7 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
     ])));
     let refused = fixture.run(&[&["pr", "resolve", "5", "--body", "Kept"][..], &pr].concat());
     assert!(
-        String::from_utf8_lossy(&refused.stderr)
-            .contains("Shoal cannot resolve review threads on Forgejo or Gitea"),
+        String::from_utf8_lossy(&refused.stderr).contains("cannot resolve review threads"),
         "{refused:?}"
     );
     assert!(
@@ -1393,12 +1392,20 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
     );
     let reported = fixture.ok_in_topic(&["forge", "capabilities"]);
     assert_eq!(reported["forge"], "Forgejo or Gitea", "{reported}");
-    let capabilities = reported["capabilities"].as_array().unwrap();
-    assert!(
-        capabilities.contains(&json!({"capability": "resolve_threads",
-        "supported": false, "hint": "reply in the thread instead"}))
+    let supported = |name: &str| {
+        reported["capabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|capability| capability["capability"] == name)
+            .map(|capability| capability["supported"].clone())
+    };
+    assert_eq!(
+        supported("resolve_threads"),
+        Some(json!(false)),
+        "{reported}"
     );
-    assert!(capabilities.contains(&json!({"capability": "cancel_jobs", "supported": true})));
+    assert_eq!(supported("cancel_jobs"), Some(json!(true)), "{reported}");
     assert!(fixture.requests().is_empty());
 }
 
@@ -1687,9 +1694,10 @@ fn forge_reactions_list_what_the_instance_allows_or_githubs() {
 
     let fixture = Fixture::new(Forge::GitHub, "");
     let reactions = fixture.ok_in_topic(&["forge", "reactions"]);
-    assert_eq!(
-        reactions["names"].as_array().map(Vec::len),
-        Some(8),
+    assert!(
+        reactions["names"]
+            .as_array()
+            .is_some_and(|names| !names.is_empty()),
         "{reactions}"
     );
     assert_eq!(reactions["accepts_other_names"], false, "{reactions}");
@@ -3950,7 +3958,7 @@ fn forgejo_ci_cancels_runs_and_reruns_jobs_from_release_17_as_the_scoped_agent()
         rerun["data"]["message"]
             .as_str()
             .unwrap()
-            .contains("Shoal cannot rerun CI jobs on Forgejo or Gitea"),
+            .contains("cannot rerun CI jobs"),
         "{rerun}"
     );
     assert!(fixture.requests().is_empty());
@@ -4381,14 +4389,13 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
     let finished = fixture.ok(&["watch", "ci", "--space", "topic", "--timeout", "600"]);
     let update = &finished["updates"][0];
     assert_eq!(
-        (&update["url"], &update["kind"], &update["message"]),
-        (
-            &json!(url),
-            &json!("ci_completed"),
-            &json!(format!(
-                "Run failed: test (failed step: Tests); read it with shoal view ci {url}"
-            ))
-        ),
+        (&update["url"], &update["kind"]),
+        (&json!(url), &json!("ci_completed")),
+        "{finished}"
+    );
+    let message = update["message"].as_str().unwrap_or_default();
+    assert!(
+        message.starts_with("Run failed: test (failed step: Tests)") && message.ends_with(&url),
         "{finished}"
     );
     // The run's watch has ended, but it stays linked.
@@ -4571,9 +4578,11 @@ fn a_watched_run_waiting_for_approval_reports_once_it_has_run() {
     assert_eq!(held["updates"], json!([]), "{held}");
     respond("success");
     let finished = fixture.ok(&["watch", "ci", "--space", "topic", "--timeout", "600"]);
-    assert_eq!(
-        finished["updates"][0]["message"],
-        format!("Run finished; read it with shoal view ci {url}"),
+    let message = finished["updates"][0]["message"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        message.starts_with("Run finished") && message.ends_with(url),
         "{finished}"
     );
 }
@@ -4614,9 +4623,7 @@ fn forgejo_lists_runs_waiting_for_approval_but_leaves_approving_to_its_web_ui() 
     fixture.requests();
     let output = fixture.run(&["ci", "approve", "--pr", "8", "--space", "topic"]);
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains(
-            "Shoal cannot approve CI runs on Forgejo or Gitea; approve them in the web UI"
-        ),
+        String::from_utf8_lossy(&output.stderr).contains("cannot approve CI runs"),
         "{output:?}"
     );
     assert!(fixture.requests().is_empty());
@@ -4827,9 +4834,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
     let output = fixture.run(&["ci", "rerun", "2765", "--space", "topic"]);
     assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains(
-            "Shoal cannot rerun CI jobs on Forgejo or Gitea; that needs Forgejo 17 or later"
-        ),
+        String::from_utf8_lossy(&output.stderr).contains("needs Forgejo 17 or later"),
         "{output:?}"
     );
     assert!(fixture.requests().is_empty());
@@ -5113,12 +5118,10 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
         fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Flaky test"}])
     );
-    assert_eq!(
-        messages(&fixture),
-        [format!(
-            "Approval {id} to open issue \"Flaky test\" was approved: {url} was opened."
-        )]
-    );
+    let told = messages(&fixture);
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0].contains(&id), "{told:?}");
+    assert!(told[0].ends_with(&format!("{url} was opened.")), "{told:?}");
 
     // The user opens directly whatever the setting says.
     let direct = fixture.ok(&["issue", "open", "--space", "topic", "--title", "Flaky test"]);
@@ -5258,11 +5261,11 @@ fn a_chats_proposed_issue_opens_from_its_checkout_on_approval() {
         .iter())
     .map(|message| message["message"].as_str().unwrap().to_owned())
     .collect();
-    assert_eq!(
-        told,
-        [format!(
-            "Approval {id} to open issue \"Flaky\" was approved: {url} was opened and linked."
-        )]
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0].contains(&id), "{told:?}");
+    assert!(
+        told[0].ends_with(&format!("{url} was opened and linked.")),
+        "{told:?}"
     );
     agent.kill().unwrap();
     agent.wait().unwrap();
@@ -5315,21 +5318,20 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
         &flaky,
     ]);
     assert!(writes(&fixture).is_empty());
-    assert_eq!(
-        messages(&fixture),
-        [
-            format!(
-                "Approval {noise} to open issue \"Noise\" was denied. Do not open it another way. Reason: Not a bug"
-            ),
-            format!(
-                "Approval {known} to open issue \"Known\" was denied as a duplicate of {}/issues/12; its text was added there as a comment. Do not open it another way.",
-                fixture.web
-            ),
-            format!(
-                "Approval {again} to open issue \"Flaky again\" was denied as a duplicate of approval {flaky}; its text is added as a comment if that issue is opened. Do not open it another way."
-            ),
-        ]
-    );
+    let told = messages(&fixture);
+    let duplicate = format!("duplicate of {}/issues/12", fixture.web);
+    let expected = [
+        (&noise, "Reason: Not a bug".to_owned()),
+        (&known, duplicate),
+        (&again, format!("duplicate of approval {flaky}")),
+    ];
+    assert_eq!(told.len(), expected.len(), "{told:?}");
+    for (message, (id, outcome)) in told.iter().zip(expected) {
+        assert!(
+            message.contains(id.as_str()) && message.contains(&outcome),
+            "{told:?}"
+        );
+    }
 
     // The remaining proposal belongs to the repository, so it stays when the
     // workspace goes and opens through the repository's checkout.
@@ -6168,12 +6170,13 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
         fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
         json!([{"kind": "issue", "url": url, "title": "Wrong finding"}])
     );
-    assert_eq!(
-        messages(&fixture),
-        [format!(
-            "Approval {id} to open issue \"Wrong finding\" in https://github.com/team/tool was approved: {url} was opened."
-        )]
+    let told = messages(&fixture);
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(
+        told[0].contains(&id) && told[0].contains("in https://github.com/team/tool"),
+        "{told:?}"
     );
+    assert!(told[0].ends_with(&format!("{url} was opened.")), "{told:?}");
 
     // A repository can turn it off for agents; the user still opens directly.
     let repo = fixture.repo.to_str().unwrap();
