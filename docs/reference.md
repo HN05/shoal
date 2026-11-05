@@ -4273,8 +4273,10 @@ without linking it or changing completion policy; explicit PR watches also accep
 PRs whose head branch is in a fork. Watches return on comments,
 reviews, edits, completed CI checks, new merge conflicts, closure, reopening, merging,
 or a merged base workspace, except for comments, review thread replies, edits, closing
-and reopening that the workspace itself made through Shoal; the same change made another way, such as
-in the web interface, is reported. An `edited` update names what changed of an
+and reopening that the workspace itself made through Shoal, on its own items or those of
+a space below it whose activity it receives; the agent of a space below with its own agent
+still hears of them, and the same change made another way, such as in the web interface,
+is reported. An `edited` update names what changed of an
 item's title, description, labels, assignees, milestone and, for a PR, its draft
 state and base branch, such as `Labels added: bug; title changed to "Fix"`;
 Shoal's own retargeting of a stacked PR is left to its `base_merged` update. A passing check is held while

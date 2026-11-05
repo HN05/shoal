@@ -136,7 +136,8 @@ and reviews are reported, as are edits to an item's title, description, labels,
 assignees, milestone, draft state or base branch, a failed CI check, the passed
 checks once none on the PR's head is pending, or a merge conflict,
 again after a push or base change that leaves it conflicting, but
-not comments, edits, closing or reopening you did through Shoal;
+not comments, edits, closing or reopening you did through Shoal, also
+on a child's PR, though a child's own agent hears of yours;
 respond to available review findings while other checks run. The first wait
 includes existing activity; later waits share a persistent cursor per workspace.
 Run one wait at a time and read its result: a newer wait in the workspace

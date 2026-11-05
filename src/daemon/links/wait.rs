@@ -1200,13 +1200,17 @@ fn workspace_branch(db: &rusqlite::Connection, id: &str) -> Result<Option<String
 
 /// The IDs of space `id` and of `children`, whose activity its agent
 /// receives: the PR gates a delivery to that agent holds.
-fn receiving<'a>(id: &'a str, children: &'a [SpaceRef]) -> impl Iterator<Item = &'a str> {
+pub(super) fn receiving<'a>(
+    id: &'a str,
+    children: &'a [SpaceRef],
+) -> impl Iterator<Item = &'a str> {
     children.iter().map(|child| child.id.as_str()).chain([id])
 }
 
 /// A change the workspace's agent made to `url` through Shoal, which its
 /// watches do not report back: the comments, replies or reviews it posted,
 /// the state it set and the details it edited.
+#[derive(Clone)]
 pub(crate) struct OwnChange<'a> {
     pub url: &'a str,
     pub authored: Vec<String>,
@@ -1225,6 +1229,32 @@ pub(crate) fn record_own_change(
     let mut record = cursor_record(db, workspace_id, change.url)?.unwrap_or_default();
     record.adopt_own_change(change.authored, change.state, &change.edited);
     save_cursor_record(db, workspace_id, change.url, &record)
+}
+
+/// Record `change`, which the space `id` made, on its cursor and on those of
+/// the spaces below it whose activity its agent receives and that follow the
+/// item, so none of its deliveries reports the change back. A space below
+/// with an agent of its own still hears about it. The caller holds the PR
+/// gates of these spaces from before the change.
+pub(super) fn record_received_change(
+    db: &rusqlite::Connection,
+    id: &str,
+    change: OwnChange<'_>,
+    agents: &crate::daemon::workspace::TrackedAgents,
+) -> Result<()> {
+    for child in crate::daemon::workspace::delegated(db, id, agents)? {
+        if follows(db, &child.id, change.url)? {
+            record_own_change(db, &child.id, change.clone())?;
+        }
+    }
+    record_own_change(db, id, change)
+}
+
+/// Whether the space `id` follows the item at `url`.
+fn follows(db: &rusqlite::Connection, id: &str, url: &str) -> Result<bool> {
+    Ok(followed_items(db, id, None)?
+        .iter()
+        .any(|(followed, _)| followed == url))
 }
 
 /// Queue an update for the workspace's next watch of `update.url`, ahead of

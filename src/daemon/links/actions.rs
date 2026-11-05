@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use super::{
     proposals::OpenOutcome,
     space::LinkSpace,
-    wait::{OwnChange, record_own_change},
+    wait::{OwnChange, receiving, record_received_change},
 };
 use crate::{
     config::{repo::Opening, resolve::Effective},
@@ -80,8 +80,10 @@ impl Manager {
             self.agent_account()
         };
         // Held from before the change, so a poll that observes it records
-        // it after the workspace's cursor knows it as its own.
-        let _gate = self.gates.lock_prs([space.id()]).await;
+        // it after the cursors of the space and of those below it whose
+        // activity it receives know it as its own.
+        let children = self.delegated_spaces(space.id()).await?;
+        let _gate = self.gates.lock_prs(receiving(space.id(), &children)).await;
         let target = Target { kind, number, url };
         let item = self
             .apply_own(space.id(), &forge, &account, target, &action)
@@ -259,8 +261,9 @@ impl Manager {
         }
     }
 
-    /// Journal an applied action and advance the workspace's cursor past it,
-    /// so polling does not report the change back as someone else's.
+    /// Journal an applied action and advance the cursors of the workspace
+    /// and of the spaces below it whose activity it receives past it, so
+    /// polling does not report the change back as someone else's.
     async fn record_own_action(
         &self,
         id: &str,
@@ -269,6 +272,7 @@ impl Manager {
         own: Own,
     ) -> Result<()> {
         let id = id.to_owned();
+        let agents = self.tracked_agents().await;
         let Target { kind, url, .. } = target;
         let Own {
             state,
@@ -285,7 +289,7 @@ impl Manager {
                     state,
                     edited,
                 };
-                record_own_change(&tx, &id, change)?;
+                record_received_change(&tx, &id, change, &agents)?;
                 tx.commit()?;
                 Ok(())
             })

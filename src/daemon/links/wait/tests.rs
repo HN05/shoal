@@ -1328,6 +1328,92 @@ async fn edits_are_reported_except_the_workspaces_own() {
 }
 
 #[tokio::test]
+async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .await
+        .unwrap();
+    register_watch(&manager, &child.id, "child-pr").await;
+    let based = |base: &str| -> Snapshot {
+        serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
+                "state": "open", "errors": {}, "details": {"title": "Fix", "body": "",
+                "labels": [], "assignees": [], "draft": false, "base": base}}))
+        .unwrap()
+    };
+    let observe = |base: &str| {
+        let observation = vec![("child-pr".into(), based(base))];
+        // Each poll starts after the changes before it.
+        let later = crate::time::unix_seconds() + 1;
+        manager.queue_background_updates(&child.id, observation, later)
+    };
+    let retarget = |from: &'static str, to: &'static str| {
+        let manager = &manager;
+        let id = parent.id.clone();
+        async move {
+            let agents = manager.tracked_agents().await;
+            let edited = Edited::retarget(from, to);
+            manager
+                .store
+                .run(move |db| {
+                    let change = OwnChange {
+                        url: "child-pr",
+                        authored: Vec::new(),
+                        state: None,
+                        edited,
+                    };
+                    record_received_change(db, &id, change, &agents)
+                })
+                .await
+                .unwrap();
+        }
+    };
+    let delivered = |id: String| {
+        let manager = &manager;
+        async move { manager.agent_updates(&id).await.unwrap().updates }
+    };
+    observe("main").await.unwrap();
+    let first = delivered(parent.id.clone()).await;
+    manager
+        .acknowledge_pr_updates(
+            &parent.id,
+            first.iter().map(|update| update.delivery.clone()).collect(),
+        )
+        .await
+        .unwrap();
+
+    // The parent retargets the child's PR; the child's activity reaches the
+    // parent, which does not hear its own change back.
+    retarget("main", "feature").await;
+    observe("feature").await.unwrap();
+    assert!(delivered(parent.id.clone()).await.is_empty());
+
+    // Once the child has an agent of its own, that agent hears of it.
+    manager
+        .set_agent_state(&child.id, crate::state::AgentState::Working, None, None)
+        .await
+        .unwrap();
+    retarget("feature", "release").await;
+    observe("release").await.unwrap();
+    assert!(delivered(parent.id.clone()).await.is_empty());
+    let own = delivered(child.id.clone()).await;
+    let [edited] = own.as_slice() else {
+        panic!("{own:?}");
+    };
+    assert_eq!(edited.kind, UpdateKind::Edited);
+    assert!(edited.message.contains("release"), "{}", edited.message);
+}
+
+#[tokio::test]
 async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");

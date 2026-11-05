@@ -2690,7 +2690,9 @@ forge's timeline would, and works the same on every forge; changes no read
 reports, such as requested reviewers, are not followed. A snapshot saved before
 details were recorded takes the next read as its baseline. Edits a workspace
 makes through Shoal, and Shoal's retargeting of a stacked PR, are taken as seen
-on its cursor as its own comments and state changes are: each field the edit
+on its cursor as its own comments and state changes are, and on the cursors of
+the spaces below it whose activity its agent receives, so a coordinator does not
+hear its change to a child's PR back while a child's own agent does: each field the edit
 changed, and of labels and assignees only the names it added or removed, so
 another edit read in the same poll is still reported. Only edits count, since
 what the reads around any other action show changed is someone else's.
