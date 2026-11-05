@@ -1129,8 +1129,8 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
 }
 
-/// Agent limits under which a queued restore starts at once, whatever the
-/// load on the machine running the tests, with the fixture's
+/// Agent limits under which a start or a queued restore runs at once, whatever
+/// the load on the machine running the tests, with the fixture's
 /// [`NO_MEMORY_OVERLOAD`].
 const UNLIMITED_AGENTS: &str =
     "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n";
@@ -27585,9 +27585,9 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
 
 #[test]
 fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
-    let fixture = Fixture::with_config(Some(
-        "[cleanup.done]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done']\n",
-    ));
+    let fixture = Fixture::with_config(Some(&format!(
+        "{UNLIMITED_AGENTS}[cleanup.done]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done']\n"
+    )));
     let home = fixture.root.path();
     // The daemon closes the session, so it needs the fake zmx too.
     install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -27628,9 +27628,9 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
 
 #[test]
 fn a_detached_session_stays_open_without_close_when_done() {
-    let fixture = Fixture::with_config(Some(
-        "terminal.close_when_done = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
-    ));
+    let fixture = Fixture::with_config(Some(&format!(
+        "terminal.close_when_done = false\n{UNLIMITED_AGENTS}[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"
+    )));
     let (output, transcript) = fixture.terminal_command(
         fixture.command().args([
             "start",
