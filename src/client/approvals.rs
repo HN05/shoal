@@ -213,6 +213,9 @@ pub struct MergeSpecification {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UnmergeSpecification {
+    /// The record of the merge it undoes, which tells apart merges of the
+    /// same commit.
+    pub merge: i64,
     pub branch: String,
     pub source: String,
     pub result: String,

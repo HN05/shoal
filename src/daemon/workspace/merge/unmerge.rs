@@ -1,9 +1,7 @@
 //! Unmerge preparation: find a workspace's latest local merge and check that
 //! undoing it changes only what it should before the unmerge worker moves
 //! the default branch back or replays the history after it.
-use std::path::Path;
-
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, bail};
 use rusqlite::OptionalExtension;
 
 use super::{clean_checkout, local_commit, records::RecordedMerge, tracking_ref};
@@ -12,7 +10,9 @@ use crate::{
     git::{
         self,
         default_branch::DefaultBranchLookup,
-        unmerge::{first_parent_chain, holds_commits_of, merge_has_own_changes, merged_parents},
+        unmerge::{
+            first_parent_chain, holds_commits_of, merge_has_own_changes, merged_parents, tip_commit,
+        },
     },
     model::{Repository, UnmergePlan, Workspace},
 };
@@ -55,14 +55,7 @@ impl Manager {
             .await?;
         let checkout = clean_checkout(&repo, &default).await?;
         let tip = local_commit(&repo, &default).await?;
-        if let Some(checkout) = &checkout {
-            ensure_ignored_files_kept(checkout, &default, &merge.merge.previous, &tip).await?;
-        }
         if tip != merge.merge.result {
-            ensure!(
-                checkout.is_some(),
-                "{default} is not checked out; undoing an older merge replays the later commits in its checkout"
-            );
             ensure_replayable(&repo, &tip, merge, later).await?;
         }
         Ok(UnmergePlan {
@@ -78,24 +71,6 @@ impl Manager {
             tip,
         })
     }
-}
-
-/// Refuse when `checkout` has ignored files where the commit before the
-/// merge or the replayed history has files: moving back or replaying writes
-/// those paths, and Git overwrites ignored files without asking.
-async fn ensure_ignored_files_kept(
-    checkout: &Path,
-    default: &str,
-    previous: &str,
-    tip: &str,
-) -> Result<()> {
-    let collisions = git::checkpoint::ignored_collisions(checkout, previous, tip).await?;
-    ensure!(
-        collisions.is_empty(),
-        "undoing the merge would overwrite ignored files in {default}'s checkout: {}; move them away first",
-        collisions.join(", ")
-    );
-    Ok(())
 }
 
 /// The name of the removed workspace `selector` names by name or ID.
@@ -133,13 +108,25 @@ async fn ensure_unpushed(repo: &Repository, default: &str, merge: &RecordedMerge
         git::isolated_command,
     )
     .await?;
-    ensure!(
-        !pushed,
-        "{default} was pushed with the merge of {branch}, so shoal unmerge cannot undo it; undo it with git revert -m 1 {result} and push that. Git then counts {branch}'s commits as merged, so merging it again brings in only newer commits",
-        branch = merge.merge.branch,
-        result = merge.merge.result,
+    if !pushed {
+        return Ok(());
+    }
+    let (branch, previous, result) = (
+        &merge.merge.branch,
+        &merge.merge.previous,
+        &merge.merge.result,
     );
-    Ok(())
+    // A merge commit made on the default branch reverts as one; a
+    // fast-forward, by each commit it brought.
+    let merge_commit = !merged_parents(&repo.path, result).await?.is_empty()
+        && tip_commit(&repo.path, &format!("{result}^1")).await? == *previous;
+    let revert = match merge_commit {
+        true => format!("git revert -m 1 {result}"),
+        false => format!("git revert {previous}..{result}"),
+    };
+    bail!(
+        "{default} was pushed with the merge of {branch}, so shoal unmerge cannot undo it; undo it with {revert} and push that. Git then counts {branch}'s commits as merged, so merging it again brings in only newer commits"
+    )
 }
 
 /// Refuse to replay the history from the merge's result to `tip` when it

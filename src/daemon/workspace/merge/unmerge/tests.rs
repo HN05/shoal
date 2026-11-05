@@ -234,7 +234,7 @@ async fn unmerge_refuses_stacked_conflicting_and_pushed_merges_changing_nothing(
     );
     git(&f.repo, &["push", "-q", "-u", "origin", "main"]);
     let error = f.unmerge("first").await.unwrap_err();
-    assert!(error.to_string().contains("git revert"), "{error:#}");
+    assert!(error.to_string().contains("git revert -m 1"), "{error:#}");
     assert_eq!(f.main(), main);
 }
 
@@ -279,6 +279,23 @@ async fn unmerge_refuses_to_overwrite_an_ignored_file_the_merge_untracked() {
         fs::read_to_string(f.repo.join("notes")).unwrap(),
         "kept locally\n"
     );
+}
+
+#[tokio::test]
+async fn a_commit_made_after_the_unmerge_was_planned_is_kept() {
+    let f = Fixture::new().await;
+    f.add("worker", "feature").await;
+    f.merge("worker").await;
+    let _guard = f.manager.gates.lock_git(&f.repo_id).await;
+    let plan = f.manager.prepare_unmerge("worker").await.unwrap();
+    write_commit(&f.repo, "later", "made meanwhile");
+    let main = f.main();
+    let error = crate::git::unmerge::finish_unmerge(plan).await.unwrap_err();
+    assert!(
+        error.to_string().contains("changed during the unmerge"),
+        "{error:#}"
+    );
+    assert_eq!(f.main(), main);
 }
 
 #[tokio::test]
@@ -331,4 +348,20 @@ async fn an_agents_unmerge_waits_for_approval_of_the_merge_it_undoes() {
         .finish_execution(started.plan.id.clone(), ExecutionKind::Unmerge, Some(1))
         .await
         .unwrap();
+    drop(started);
+
+    // Merging the same commit again is another merge, which the approval of
+    // the first does not cover.
+    f.unmerge("worker").await.unwrap();
+    f.merge("worker").await;
+    assert_eq!(f.main(), result);
+    let error = begin()
+        .await
+        .expect_err("the new merge needs its own decision");
+    let again = error
+        .downcast::<Undecided>()
+        .expect("an approval request")
+        .0;
+    assert_ne!(again.number, pending.number);
+    assert_eq!(again.status, DecisionStatus::Pending);
 }

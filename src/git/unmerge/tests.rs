@@ -82,7 +82,7 @@ async fn a_merge_commit_with_an_edit_of_its_own_is_told_from_a_clean_one() {
 }
 
 #[tokio::test]
-async fn a_replay_stopped_while_merging_is_aborted() {
+async fn a_replay_stopped_while_merging_leaves_only_its_worktree_to_remove() {
     let root = tempfile::tempdir().unwrap();
     let repo = repository(root.path(), "repo");
     let start = rev(&repo, "main");
@@ -98,16 +98,46 @@ async fn a_replay_stopped_while_merging_is_aborted() {
     commit(&repo, "shared");
     git(&repo, &["switch", "-q", "main"]);
     let tip = rev(&repo, "main");
-    // Replaying the merge of side onto onto conflicts in the merge itself.
-    let replay = super::rebase_command(&repo, "onto", "main~1")
+    let worktree = super::add_replay_worktree(&repo, &tip).await.unwrap();
+    // Replaying the merge of side onto onto conflicts in the merge itself,
+    // as a cancelled replay can stop.
+    let replay = super::rebase_command(&worktree, "onto", "main~1")
         .output()
         .await
         .unwrap();
     assert!(!replay.status.success());
-    git(&repo, &["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
+    git(&worktree, &["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
 
-    super::abort_replay(&repo).await.unwrap();
+    super::remove_replay_worktree(&repo).await.unwrap();
+    assert!(!worktree.exists());
+    assert_eq!(
+        git(&repo, &["worktree", "list", "--porcelain"])
+            .matches("worktree ")
+            .count(),
+        1
+    );
     assert_eq!(rev(&repo, "main"), tip);
-    assert!(!repo.join(".git/rebase-merge").exists());
     assert_eq!(git(&repo, &["status", "--porcelain"]), "");
+}
+
+#[tokio::test]
+async fn a_replay_directory_shoal_did_not_create_is_left_alone() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = repository(root.path(), "repo");
+    let directory = super::replay_directory(&repo).await.unwrap();
+    fs::create_dir(&directory).unwrap();
+    fs::write(directory.join("notes"), "someone else's\n").unwrap();
+    for error in [
+        super::remove_replay_worktree(&repo).await.unwrap_err(),
+        super::add_replay_worktree(&repo, "main").await.unwrap_err(),
+    ] {
+        assert!(
+            error.to_string().contains("Shoal did not create it"),
+            "{error:#}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(directory.join("notes")).unwrap(),
+        "someone else's\n"
+    );
 }

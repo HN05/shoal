@@ -131,6 +131,7 @@ fn unmerge_request(plan: &UnmergePlan) -> ApprovalRequest {
         Target::Unmerge,
         MERGE,
         Specification::Unmerge(UnmergeSpecification {
+            merge: plan.merge,
             branch: plan.branch.clone(),
             source: plan.source.clone(),
             result: plan.result.clone(),

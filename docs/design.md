@@ -842,7 +842,8 @@ records the default branch no longer holds or its upstream has. `unmerge` undoes
 the branch's latest recorded merge under the same gate, checks and tracked
 execution: it moves the default branch back when nothing came after the merge, and
 otherwise replays the later history onto the commit before it with
-`--rebase-merges`, rewriting the records of the merges it replays. It refuses a
+`--rebase-merges` in a worktree of its own, then moves the default branch to the
+result in one step, rewriting the records of the merges it replays. It refuses a
 pushed merge, since only a revert undoes that, and a replay that would bring the
 merged commits back through a later merge, drop a later merge commit's own
 changes, or does not apply cleanly, and an undo that would overwrite ignored files
@@ -853,7 +854,7 @@ restored with `shoal work restore` first; records follow the branch, not the
 workspace's ID, so the restored workspace's merge stays undoable.
 After cancellation, the wrapper rolls back incomplete merges after stopping the
 process group, preserving completed merges and reporting unsafe recovery failures;
-an interrupted replay is aborted.
+an interrupted replay's worktree is removed, and the default branch has not moved.
 Refresh fetches use private temporary refs; merges run in the tracked wrapper.
 A fetch of a whole remote also deletes the tracking refs of branches the remote no
 longer has, since cleanup counts commits on a stale ref as pushed.
