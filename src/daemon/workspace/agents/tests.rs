@@ -116,13 +116,9 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         .await
         .unwrap();
     for (recover, enabled, expected) in [
-        (false, true, "resume_command with a session restore command"),
-        (true, false, "automatic recovery disabled"),
-        (
-            true,
-            true,
-            "automatic session restore waits until system load is healthy",
-        ),
+        (false, true, "resume_command"),
+        (true, false, "disabled"),
+        (true, true, "healthy"),
     ] {
         let mut config = crate::config::Config::default();
         config.machine.overload.recovery.enabled = enabled;

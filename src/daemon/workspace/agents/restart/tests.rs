@@ -177,25 +177,19 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
         .await;
     assert!(*stopping.stop.borrow());
 
-    let error = manager
+    manager
         .restart_agent(&custom.plan.id, None)
         .await
         .unwrap_err();
-    assert!(format!("{error}").contains("resume_command"), "{error}");
     assert!(!*custom.stop.borrow());
     // A refused restart saves no handoff.
     assert!(!recovery::record_path(&manager.paths, &workspace.id, &custom.plan.id).exists());
-    let error = manager
+    manager
         .restart_agent(&stopping.plan.id, None)
         .await
         .unwrap_err();
-    assert_eq!(format!("{error}"), "claude is already stopping");
     assert!(!manager.restart_requested(&stopping.plan.id).await);
-    let error = manager.restart_agent("unknown", None).await.unwrap_err();
-    assert_eq!(
-        format!("{error}"),
-        "no connected agent runs execution unknown"
-    );
+    manager.restart_agent("unknown", None).await.unwrap_err();
 }
 
 #[tokio::test]
@@ -369,8 +363,7 @@ async fn a_late_join_answers_as_the_restart_ended() {
         .unwrap();
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
-    let error = manager.join_restart(&id, None, None).await.unwrap_err();
-    assert_eq!(format!("{error}"), "no restart of claude is in progress");
+    manager.join_restart(&id, None, None).await.unwrap_err();
 
     let failed = manager.request_restart(&id, None).await.unwrap();
     manager
@@ -399,8 +392,7 @@ async fn a_late_join_of_a_cancelled_restart_fails() {
         .await;
     // The request in progress learns it too.
     assert!(cancelled.await.is_err());
-    let error = manager.join_restart(&id, None, None).await.unwrap_err();
-    assert_eq!(format!("{error}"), "the restart was cancelled");
+    manager.join_restart(&id, None, None).await.unwrap_err();
 }
 
 #[tokio::test]

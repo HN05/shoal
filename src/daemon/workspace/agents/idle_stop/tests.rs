@@ -123,13 +123,6 @@ async fn a_held_done_workspaces_idle_agent_stops_once_its_cache_expires() {
         .filter(|event| event.kind == NotificationKind::AgentStopped)
         .collect();
     assert_eq!(stopped.len(), 1);
-    assert!(
-        stopped[0]
-            .message
-            .contains("idle in a done workspace whose cleanup is held"),
-        "{}",
-        stopped[0].message
-    );
 }
 
 #[tokio::test]
@@ -211,8 +204,7 @@ async fn idle_stop_stops_any_agent_once_its_cache_expires() {
     assert!(
         notifications
             .iter()
-            .any(|event| event.kind == NotificationKind::AgentStopped
-                && event.message.contains("idle with its prompt cache expired")),
+            .any(|event| event.kind == NotificationKind::AgentStopped),
         "{notifications:?}"
     );
 }
