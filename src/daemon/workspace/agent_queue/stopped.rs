@@ -390,11 +390,14 @@ impl Manager {
     }
 
     /// Cancel the restores of `workspace_id`'s stopped agents, requested,
-    /// waiting or admitted, which stay stopped until `shoal resume`. The queue
-    /// gate keeps dispatch from queueing a request meanwhile, and a restore
-    /// whose agent already registered has left the queue.
+    /// waiting or admitted, and the restarts that would start one in a new
+    /// wrapper, which stay stopped until `shoal resume`. The queue gate keeps
+    /// dispatch from queueing a request meanwhile, and a restart from
+    /// recording its restore, and a restore whose agent already registered
+    /// has left the queue.
     pub(crate) async fn cancel_stopped_restores(&self, workspace_id: &str) -> Result<()> {
         let _gate = self.agent_queue.lock_admission().await;
+        self.cancel_renewals(workspace_id).await;
         self.clear_restore_requests(workspace_id)?;
         let workspace_id = workspace_id.to_owned();
         self.store

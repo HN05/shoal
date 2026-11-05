@@ -226,13 +226,35 @@ impl Manager {
                 }
             })
             .await;
-        let answers = ended
-            .and_then(|handover| handover.restarts.current)
-            .map(|restart| restart.answers)
-            .unwrap_or_default();
-        for done in answers {
-            // The request may have gone with its client.
-            let _ = done.send(Err(anyhow!(reason.clone())));
+        if let Some(handover) = ended {
+            answer_all(handover, &reason);
+        }
+    }
+
+    /// Cancel the restarts that would start an agent of `workspace_id` in a
+    /// new wrapper, leaving its record for `shoal resume`. Requires the
+    /// queue gate, which a restart holds while it records its restore.
+    pub(crate) async fn cancel_renewals(&self, workspace_id: &str) {
+        let cancelled: Vec<Handover> = self
+            .executions
+            .with_restarts(|_, renewals| {
+                let ids: Vec<String> = renewals
+                    .iter()
+                    .filter(|(_, renewal)| {
+                        matches!(renewal, Renewal::Starting(handover) if handover.workspace_id == workspace_id)
+                    })
+                    .map(|(execution, _)| execution.clone())
+                    .collect();
+                ids.iter()
+                    .filter_map(|execution| match renewals.remove(execution) {
+                        Some(Renewal::Starting(handover)) => Some(handover),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .await;
+        for handover in cancelled {
+            answer_all(handover, "the restart was cancelled");
         }
     }
 
@@ -294,4 +316,14 @@ fn queued_ids(db: &rusqlite::Connection) -> Result<HashSet<String>> {
         .prepare("SELECT id FROM agent_queue")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Answer every request for the restart `handover` carries, which ended
+/// without starting the agent again, with `reason`.
+fn answer_all(handover: Handover, reason: &str) {
+    let answers = handover.restarts.current.map(|restart| restart.answers);
+    for done in answers.into_iter().flatten() {
+        // The request may have gone with its client.
+        let _ = done.send(Err(anyhow!(reason.to_owned())));
+    }
 }

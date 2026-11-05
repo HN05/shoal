@@ -240,8 +240,10 @@ new process tree, so a restart recovers an agent whose wrapper's tree broke,
 such as one that lost access to an external volume. The record keeps the
 agent's slot until the admitted restore takes it over, so the restart neither
 queues behind launches nor loses the slot to them; a start that fails or
-leaves the queue before the agent registers fails the restart, leaving the
-record for `shoal resume`. The restart, with the runs that asked for it,
+leaves the queue before the agent registers fails the restart, and a stop
+or completion that cancels the workspace's restores cancels it under the
+queue gate the restart records its start under, leaving the record for
+`shoal resume` either way. The restart, with the runs that asked for it,
 follows the agent to the execution the new wrapper registers, which answers
 it once the agent starts. `--in-place` restarts through the same wrapper,
 which keeps the agent in its terminal: the daemon resumes the agent once its

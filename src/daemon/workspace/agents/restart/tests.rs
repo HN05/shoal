@@ -535,3 +535,86 @@ async fn a_join_counts_the_restart_for_the_run_that_continues() {
     let listed = manager.running_agents().await.unwrap();
     assert_eq!(listed[0].restarted_by, ["a", "b", "c"]);
 }
+
+/// Hand the restart of the agent `id` runs over to a new wrapper, as its
+/// wrapper does once the agent's processes stopped, and end its execution.
+/// Returns the pending restart.
+async fn hand_over(
+    manager: &std::sync::Arc<Manager>,
+    workspace: &Workspace,
+    execution: &crate::daemon::workspace::StartedExecution,
+) -> tokio::task::JoinHandle<anyhow::Result<()>> {
+    let id = execution.plan.id.as_str();
+    track(manager, workspace, id, "claude", true).await;
+    let restarting = tokio::spawn({
+        let (manager, id) = (manager.clone(), id.to_owned());
+        async move { manager.restart_agent(&id, None, false).await }
+    });
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    manager.hand_over_restart(id).await.unwrap();
+    let complete = manager
+        .finish_execution(id.to_owned(), ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
+    assert!(complete);
+    restarting
+}
+
+/// How the restart `restarting` ended; the limit is a hang guard only.
+async fn answered(restarting: tokio::task::JoinHandle<anyhow::Result<()>>) -> anyhow::Result<()> {
+    tokio::time::timeout(Duration::from_secs(60), restarting)
+        .await
+        .expect("the restart was never answered")
+        .unwrap()
+}
+
+/// The restores waiting in the agent queue for `execution`.
+async fn restores_of(manager: &Manager, execution: &str) -> usize {
+    let entries = manager.queue_entries().await.unwrap();
+    entries
+        .iter()
+        .filter(|entry| entry.execution.as_deref() == Some(execution))
+        .count()
+}
+
+/// A stop cancels a restart between its wrappers, whether it comes before
+/// the restart records the new wrapper's start or after, and leaves the
+/// agent's record for `shoal resume`.
+#[tokio::test]
+async fn a_stop_cancels_a_restart_between_its_wrappers() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let begin = || manager.begin_execution(&workspace.id, None, ExecutionKind::Command, None);
+    let (first, second) = (begin().await.unwrap(), begin().await.unwrap());
+    let (before, after) = (first.plan.id.clone(), second.plan.id.clone());
+
+    let restarting = hand_over(&manager, &workspace, &first).await;
+    manager
+        .cancel_stopped_restores(&workspace.id)
+        .await
+        .unwrap();
+    let error = answered(restarting).await.unwrap_err();
+    assert_eq!(format!("{error}"), "the restart was cancelled");
+    manager
+        .restart_in_new_wrapper(&workspace, &before, true)
+        .await;
+    assert_eq!(restores_of(&manager, &before).await, 0);
+
+    let restarting = hand_over(&manager, &workspace, &second).await;
+    manager
+        .restart_in_new_wrapper(&workspace, &after, true)
+        .await;
+    assert_eq!(restores_of(&manager, &after).await, 1);
+    manager
+        .cancel_stopped_restores(&workspace.id)
+        .await
+        .unwrap();
+    let error = answered(restarting).await.unwrap_err();
+    assert_eq!(format!("{error}"), "the restart was cancelled");
+    assert_eq!(restores_of(&manager, &after).await, 0);
+
+    for id in [&before, &after] {
+        assert!(recovery::record_path(&manager.paths, &workspace.id, id).is_file());
+    }
+}
