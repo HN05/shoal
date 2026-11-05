@@ -215,6 +215,7 @@ impl Manifest {
                     name: chat.name,
                     agent: chat.agent,
                     links: chat.links,
+                    mode: chat.mode,
                 };
                 (Space::Chat(packaged), sessions)
             }

@@ -308,7 +308,7 @@ fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
 #[test]
 fn a_chat_package_names_its_kind_and_continues_its_session() {
     let chat = Chat {
-        mode: "chat".into(),
+        mode: "plan".into(),
         number: 1,
         id: "c1".into(),
         repository_id: "r1".into(),
@@ -343,6 +343,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
             name: chat.name.clone(),
             agent: chat.agent.clone(),
             links: chat.links.clone(),
+            mode: chat.mode.clone(),
         }),
         sessions: Some(Sessions {
             machine: Some("m1".into()),
@@ -360,6 +361,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         panic!("expected a chat");
     };
     assert_eq!(packaged.agent, "claude");
+    assert_eq!(packaged.mode, "plan");
     // Its links come back with their relations, for the import to restore.
     let relations: Vec<_> = (packaged.links.relations().into_iter())
         .map(|(relation, item)| (relation, item.url))
@@ -378,13 +380,15 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
             ),
         ]
     );
-    // A package an earlier release wrote names no links.
+    // A package an earlier release wrote names no links, and its chat ran
+    // in the chat mode, whatever its session's record defaults to.
     let mut value = serde_json::to_value(&manifest).unwrap();
     value.as_object_mut().unwrap().remove("links");
+    value.as_object_mut().unwrap().remove("mode");
     let earlier = format!("{}\n{value}\nabc", header(VERSION)).into_bytes();
     let earlier = Import::read(&mut &earlier[..]).unwrap();
     assert!(
-        matches!(&earlier.manifest.space, Space::Chat(chat) if chat.links.relations().is_empty())
+        matches!(&earlier.manifest.space, Space::Chat(chat) if chat.links.relations().is_empty() && chat.mode == "chat")
     );
     let reported: Vec<_> = import
         .manifest
