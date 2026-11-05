@@ -222,20 +222,20 @@ async fn an_item_url_is_refused_as_no_repository_and_names_its_repository() {
         let repositories = &repositories;
         async move { select(repositories, value).await.unwrap_err() }
     };
-    let error = refusal("https://example.test/team/shoal/issues/1211").await;
-    assert!(error.is::<NotRegistered>());
+    let item = |error: anyhow::Error| {
+        let refused = error.downcast::<NotRegistered>().unwrap();
+        refused.item.map(|item| (item.repository, item.registered))
+    };
     assert_eq!(
-        error.to_string(),
-        "https://example.test/team/shoal/issues/1211 is an issue URL, not a repository; \
-         name its repository instead: shoal"
+        item(refusal("https://example.test/team/shoal/issues/1211").await),
+        Some((
+            "https://example.test/team/shoal".to_owned(),
+            Some("shoal".to_owned())
+        ))
     );
     assert_eq!(
-        refusal("https://example.test/team/other/pulls/3")
-            .await
-            .to_string(),
-        "https://example.test/team/other/pulls/3 is a PR URL, not a repository; its repository \
-         https://example.test/team/other is not registered; run \
-         `shoal repo add https://example.test/team/other`"
+        item(refusal("https://example.test/team/other/pulls/3").await),
+        Some(("https://example.test/team/other".to_owned(), None))
     );
     // Registration offers neither, though both are remote URLs.
     assert!(!registrable("https://example.test/team/other/pulls/3"));
@@ -245,15 +245,7 @@ async fn an_item_url_is_refused_as_no_repository_and_names_its_repository() {
     let nested = "https://gitlab.com/team/subgroup/tree/project.git";
     assert!(registrable(nested));
     assert!(item_repository("/work/issues/3").is_none());
-    assert!(
-        refusal(nested)
-            .await
-            .to_string()
-            .starts_with("repository is not registered:")
-    );
+    assert_eq!(item(refusal(nested).await), None);
     // Anything else is still an unregistered repository.
-    assert_eq!(
-        refusal("missing").await.to_string(),
-        "repository is not registered: missing; run `shoal repo add <path-or-url>`"
-    );
+    assert_eq!(item(refusal("missing").await), None);
 }

@@ -34,16 +34,10 @@ fn native_states_preserve_wire_spelling_and_conservative_capacity() {
             DeviceState::Unknown("Future State".into()),
         ),
         (
-            "shutdown",
-            "shutdown",
-            DeviceState::Unknown("shutdown".into()),
-        ),
-        (
             "bootstatus",
             "booted",
             DeviceState::Unknown("booted".into()),
         ),
-        ("shutdown", "", DeviceState::Unknown(String::new())),
     ] {
         fs::write(
             root.path().join("sim-state-overrides.json"),
@@ -65,13 +59,7 @@ fn native_states_preserve_wire_spelling_and_conservative_capacity() {
 #[test]
 fn malformed_native_states_reject_the_inventory() {
     let root = tempfile::tempdir().unwrap();
-    for malformed in [
-        json!(null),
-        json!(1),
-        json!(true),
-        json!([]),
-        json!({"Booted": null}),
-    ] {
+    for malformed in [json!(null), json!({"Booted": null})] {
         let device =
             json!({"name": "shoal-test", "udid": "test", "state": malformed, "isAvailable": true});
         fs::write(

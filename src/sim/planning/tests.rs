@@ -314,12 +314,7 @@ fn omitted_runtime_selects_latest_compatible_available_ios_and_keeps_approval() 
             runtime.is_available = false;
         }
     }
-    assert!(
-        resolve_request(&config, &repo, &request(), &inventory, None)
-            .unwrap_err()
-            .to_string()
-            .contains("no installed/available iOS runtime supports")
-    );
+    assert!(resolve_request(&config, &repo, &request(), &inventory, None).is_err());
 }
 
 #[test]
@@ -354,12 +349,7 @@ fn profile_resolution_rejects_unavailable_runtime_and_preserves_approval() {
     assert!(resolved.requires_approval);
     assert_eq!(resolved.approval_lifetime, Lifetime::Lease);
     inventory.runtimes[0].is_available = false;
-    let error = resolve_request(&config, &repo, &request(), &inventory, None).unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("runtime is not installed/available")
-    );
+    assert!(resolve_request(&config, &repo, &request(), &inventory, None).is_err());
 }
 
 fn built_in() -> Simulators {

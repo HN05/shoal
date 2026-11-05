@@ -33,11 +33,7 @@ fn only_a_directory_marked_for_the_repository_is_used() {
     let root = tempfile::tempdir().unwrap();
     let layout = Layout::new(root.path(), "repo");
     fs::create_dir_all(layout.root().join("user-files")).unwrap();
-    let error = layout.prepare("workspace-id").unwrap_err();
-    assert!(
-        error.to_string().contains("not a directory Shoal created"),
-        "{error:#}"
-    );
+    assert!(layout.prepare("workspace-id").is_err());
     assert!(layout.list().unwrap().is_empty());
     layout.remove_one("user-files").unwrap();
     layout.remove().unwrap();

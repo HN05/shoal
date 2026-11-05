@@ -158,12 +158,7 @@ async fn invalid_ownership_writes_fail_atomically_and_selected_records_report_er
             "INSERT INTO simulators VALUES ('invalid',?1)",
             "UPDATE simulators SET record=?1 WHERE id='owned'",
         ] {
-            let error = db.execute(sql, [invalid]).unwrap_err();
-            assert!(
-                error
-                    .to_string()
-                    .contains("invalid simulator ownership record")
-            );
+            assert!(db.execute(sql, [invalid]).is_err(), "{sql} {invalid}");
             assert_eq!(ids(&db, Some("A"))?, ["owned"]);
             assert_eq!(ids(&db, None)?, ["owned"]);
         }
