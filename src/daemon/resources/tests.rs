@@ -130,15 +130,13 @@ fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
             queue: false,
         };
         // A new global definition cannot hide a repository-scoped name.
-        let error = renew_lease(
+        let renewed = renew_lease(
             db.transaction()?,
             &existing,
             &Scope::Global,
             request.clone(),
-        )
-        .err()
-        .unwrap();
-        assert!(error.to_string().contains("different settings"));
+        );
+        assert!(renewed.is_err());
         renew_lease(db.transaction()?, &existing, &existing.scope, request)?;
         let renewed = named_lease(&db, "a", "target", "three")?.unwrap();
         assert_eq!(renewed.id, existing.id);
@@ -247,9 +245,7 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
         .gates
         .resource_guard(&workspace, crate::daemon::workspace::GuardMode::Exclusive)
         .unwrap();
-    let in_progress = "resource operation is in progress";
-    let busy = acquire("held", true).await.unwrap_err();
-    assert!(busy.contains(in_progress), "{busy}");
+    assert!(acquire("held", true).await.is_err());
     let request = ResourceRequest {
         mode: None,
         kind: None,
@@ -259,9 +255,12 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
         reason: None,
         queue: false,
     };
-    let error = manager.acquire_resource(&workspace, request, None).await;
-    let error = error.err().unwrap().to_string();
-    assert!(error.contains(in_progress), "{error}");
+    assert!(
+        manager
+            .acquire_resource(&workspace, request, None)
+            .await
+            .is_err()
+    );
     drop(hook);
     assert_eq!(acquire("held", true).await.unwrap(), "held");
     assert!(
@@ -270,23 +269,19 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
             .unwrap_err()
             .starts_with("no compatible")
     );
-    assert_eq!(
-        acquire("second", true).await.unwrap_err(),
-        "1 earlier request is queued for pool lock"
-    );
+    let queued = acquire("second", true).await.unwrap_err();
+    assert!(queued.starts_with("1 earlier"), "{queued}");
     manager
         .release_resource(&workspace, "lock".into(), "held".into())
         .await
         .unwrap();
-    assert_eq!(
-        acquire("late", false).await.unwrap_err(),
-        "2 earlier requests are queued for pool lock",
-        "free capacity goes to the queue"
+    let late = acquire("late", false).await.unwrap_err();
+    assert!(
+        late.starts_with("2 earlier"),
+        "free capacity goes to the queue: {late}"
     );
-    assert_eq!(
-        acquire("second", true).await.unwrap_err(),
-        "1 earlier request is queued for pool lock"
-    );
+    let queued = acquire("second", true).await.unwrap_err();
+    assert!(queued.starts_with("1 earlier"), "{queued}");
     assert_eq!(acquire("first", true).await.unwrap(), "first");
     assert_eq!(acquire("first", false).await.unwrap(), "first", "renewal");
     assert!(

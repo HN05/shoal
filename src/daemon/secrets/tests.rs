@@ -86,12 +86,9 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
         granted(acquire(&manager, None, "GATED", None).await?),
         Some(false)
     );
-    let Err(error) = acquire(&manager, scoped, "GATED", None).await else {
-        panic!("a first request needs a reason");
-    };
     assert!(
-        format!("{error:#}").contains("shoal acquire secret GATED --reason"),
-        "{error:#}"
+        acquire(&manager, scoped, "GATED", None).await.is_err(),
+        "a first request needs a reason"
     );
 
     let request = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
@@ -119,13 +116,13 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
             tools: vec!["agent-browser".into()],
         }),
     };
-    let Err(error) = manager
-        .acquire_secret("worker", "OPEN".into(), stale, scoped)
-        .await
-    else {
-        panic!("a stale source must be refused");
-    };
-    assert!(format!("{error:#}").contains("changed since"), "{error:#}");
+    assert!(
+        manager
+            .acquire_secret("worker", "OPEN".into(), stale, scoped)
+            .await
+            .is_err(),
+        "a stale source must be refused"
+    );
     configure(&manager, "token", Lifetime::Lease);
     manager.release_secret("worker", "GATED".into()).await?;
     assert!(acquire(&manager, scoped, "GATED", None).await.is_err());

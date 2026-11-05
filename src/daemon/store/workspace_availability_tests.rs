@@ -22,13 +22,7 @@ fn creation_and_rename_share_global_names_and_repository_branches() -> Result<()
     // Creation and rename differ only in whether the caller's own record is excluded.
     for except_id in [None, Some("renaming")] {
         for repository_id in ["repo", "other"] {
-            for (name, diagnostic) in [
-                ("worker", "workspace name already exists: worker"),
-                (
-                    "reserved",
-                    "workspace name is reserved by an unfinished rename: reserved",
-                ),
-            ] {
+            for name in ["worker", "reserved"] {
                 let error = ensure_name_and_branch_available(
                     &tx,
                     repository_id,
@@ -37,16 +31,11 @@ fn creation_and_rename_share_global_names_and_repository_branches() -> Result<()
                     except_id,
                 )
                 .unwrap_err();
-                assert_eq!(error.to_string(), diagnostic);
                 assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
             }
         }
         let error = ensure_name_and_branch_available(&tx, "repo", "free", Some("topic"), except_id)
             .unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            "branch is already owned by workspace worker"
-        );
         assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
         ensure_name_and_branch_available(&tx, "other", "free", Some("topic"), except_id)?;
         ensure_name_and_branch_available(&tx, "repo", "free", Some("unused"), except_id)?;

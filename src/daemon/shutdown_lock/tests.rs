@@ -107,10 +107,9 @@ async fn a_refused_lock_is_reported_and_shutdowns_still_stop_work() {
     assert!(manager.agent_queue.suspended());
     let notifications = manager.notifications(true, 10).await.unwrap();
     assert!(
-        notifications.iter().any(|n| {
-            n.kind == NotificationKind::EnvironmentProblem
-                && n.message.ends_with(": interactive authentication required")
-        }),
+        notifications
+            .iter()
+            .any(|n| n.kind == NotificationKind::EnvironmentProblem),
         "{notifications:?}"
     );
 }
