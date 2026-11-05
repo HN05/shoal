@@ -195,7 +195,7 @@ shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal alerts send "New layout" --attach shot.png  # Send the user a file with it
 shoal messages send "Stop the dev server" --space fix-login  # Message the agents of a workspace or chat
 shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
-shoal messages send --all "Rebase onto main"  # Message every running agent of the repository
+shoal messages send --all "Network is back"  # Message every running agent
 shoal files fix-login         # The files attached to the workspace
 shoal files my-project-chat   # The files a chat's agent attached
 shoal questions               # Pick a question and answer it

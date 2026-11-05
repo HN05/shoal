@@ -142,11 +142,12 @@ pub enum MessagesCommand {
         /// chat or workspace, or a picker.
         #[arg(long, conflicts_with = "all")]
         space: Option<String>,
-        /// Send to every running agent of the repository's workspaces and
-        /// chats, such as to have them rebase onto a fix on the default branch.
+        /// Send to every running agent of the workspaces and chats, such as
+        /// to tell them the network works again.
         #[arg(long)]
         all: bool,
-        /// Repository whose spaces --all reaches; defaults to the current one.
+        /// Reach only this repository's spaces with --all, such as to have
+        /// them rebase onto a fix on its default branch.
         #[arg(long = "repo", requires = "all")]
         repository: Option<String>,
     },

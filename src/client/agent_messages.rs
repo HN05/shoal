@@ -45,16 +45,16 @@ pub async fn send(
     request(daemon, method).await
 }
 
-/// Queue `message` with `attachments` for every running agent of
-/// `repository`, returning the spaces it reached.
-pub async fn send_to_repository(
+/// Queue `message` with `attachments` for every running agent, of
+/// `repository` when it names one, returning the spaces it reached.
+pub async fn send_to_all(
     daemon: &impl Daemon,
-    repository: Selector,
+    repository: Option<Selector>,
     message: String,
     attachments: Vec<NewFile>,
     sender_chat: Option<String>,
 ) -> Result<Reached> {
-    let method = AgentMethod::SendRepositoryAgentMessage {
+    let method = AgentMethod::SendAllAgentMessage {
         repository,
         message,
         attachments,

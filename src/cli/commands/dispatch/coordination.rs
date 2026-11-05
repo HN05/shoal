@@ -66,7 +66,7 @@ pub(in crate::cli::commands) async fn run(
             ..
         } => {
             let recipients = if all {
-                messages::Recipients::Repository(repository)
+                messages::Recipients::All(repository)
             } else {
                 messages::Recipients::Space(space)
             };

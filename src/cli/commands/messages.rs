@@ -1,5 +1,6 @@
 //! `shoal messages send` queues a message for a space's agents, or with
-//! `--all` for every running agent of a repository's workspaces and chats;
+//! `--all` for every running agent of the workspaces and chats, of one
+//! repository with `--repo`;
 //! `shoal messages` shows the space's undelivered messages once.
 use std::{
     ffi::OsString,
@@ -23,16 +24,15 @@ use crate::{
         links::Updates,
     },
     forge::items::attach::Attachment,
-    repository::Selector,
 };
 
 /// Who `shoal messages send` reaches.
 pub(super) enum Recipients {
     /// The agents of the named space, else the current one or a picked one.
     Space(Option<String>),
-    /// Every running agent of the named repository's workspaces and chats,
-    /// else the current one's.
-    Repository(Option<String>),
+    /// Every running agent of the workspaces and chats, of the named
+    /// repository when there is one.
+    All(Option<String>),
 }
 
 pub(super) async fn send(
@@ -46,9 +46,7 @@ pub(super) async fn send(
     let attachments = attachments(&attach)?;
     match recipients {
         Recipients::Space(space) => send_to_space(ctx, space, message, attachments).await,
-        Recipients::Repository(repository) => {
-            send_to_repository(ctx, repository, message, attachments).await
-        }
+        Recipients::All(repository) => send_to_all(ctx, repository, message, attachments).await,
     }
 }
 
@@ -64,22 +62,17 @@ async fn send_to_space(
     Ok(0)
 }
 
-async fn send_to_repository(
+async fn send_to_all(
     ctx: &Context,
     repository: Option<String>,
     message: String,
     attachments: Vec<NewFile>,
 ) -> Result<i32> {
-    let repository = chosen_repository(ctx, repository).await?;
+    let repository = repository.map(ui::repository_selector).transpose()?;
     let sender_chat = crate::env::chat();
-    let reached = agent_messages::send_to_repository(
-        &ctx.paths,
-        repository,
-        message,
-        attachments,
-        sender_chat,
-    )
-    .await?;
+    let reached =
+        agent_messages::send_to_all(&ctx.paths, repository, message, attachments, sender_chat)
+            .await?;
     ctx.show(&reached, |reached| {
         if reached.workspaces.is_empty() && reached.chats.is_empty() {
             outln!("No workspace or chat has a running agent.");
@@ -94,22 +87,6 @@ async fn send_to_repository(
         }
     })?;
     Ok(0)
-}
-
-/// The repository `--repo` names, else the current checkout's or
-/// workspace's, else a picked one.
-async fn chosen_repository(ctx: &Context, repository: Option<String>) -> Result<Selector> {
-    match repository {
-        Some(repository) => ui::repository_selector(repository),
-        None => {
-            let repos = client::repositories(&ctx.paths).await?;
-            Ok(
-                super::issues::current_repository(ctx, repos, "pass --repo <repository>")
-                    .await?
-                    .into(),
-            )
-        }
-    }
 }
 
 /// The files to attach, given as `PATH` or `PATH#TITLE`, by the absolute
