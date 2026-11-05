@@ -4257,7 +4257,7 @@ errors in `pr_cleanup`. Invalid registrations retain the workspace.
 just that item; unlinking fails when it selects nothing linked. Removing the last
 link does not mark done or undo recorded completion. `[cleanup.pr] enabled = false` pauses PR completion independently of idle
 cleanup, globally on reload or per repository immediately; linking and unlinking
-remain available. Previous PR registration and wait command spellings remain accepted.
+remain available.
 
 ### Ready for review
 
