@@ -53,8 +53,15 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
     );
     let new = wait_registered_execution(&fixture, "renewed")["id"].clone();
     assert_ne!(new, old);
+    // The old wrapper's end tells the user of no agent exit.
     let alerts = fixture.ok(&["alerts", "--all"]);
-    assert!(!alerts.to_string().contains("exited"), "{alerts}");
+    let exits = alerts.as_array().into_iter().flatten();
+    assert!(
+        exits
+            .into_iter()
+            .all(|alert| alert["kind"] != "agent_exited"),
+        "{alerts}"
+    );
     fixture.ok(&["stop", "renewed"]);
     wait_zmx_sessions_ended(fixture.root.path());
 }

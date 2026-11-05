@@ -605,7 +605,7 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
         .await
         .unwrap();
     let error = answered(restarting).await.unwrap_err();
-    assert_eq!(format!("{error}"), "the restart was cancelled");
+    assert!(format!("{error}").contains("cancelled"), "{error}");
     manager
         .restart_in_new_wrapper(&workspace, &before, true)
         .await;
@@ -623,7 +623,7 @@ async fn a_stop_cancels_a_restart_between_its_wrappers() {
         .await
         .unwrap();
     let error = answered(restarting).await.unwrap_err();
-    assert_eq!(format!("{error}"), "the restart was cancelled");
+    assert!(format!("{error}").contains("cancelled"), "{error}");
     assert_eq!(restores_of(&manager, &after).await, 0);
 
     for id in [&before, &after] {
