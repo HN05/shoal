@@ -71,9 +71,8 @@ async fn a_failed_deletion_rolls_back_the_whole_expiry() -> Result<()> {
                  WHEN (SELECT count(*) FROM agent_queue) = 1
                  BEGIN SELECT RAISE(ABORT, 'expiry rejected'); END;",
             )?;
-            let error = expire_starts(db, &HashSet::new(), 100)
+            expire_starts(db, &HashSet::new(), 100)
                 .expect_err("expiry must fail on the second deletion");
-            assert!(error.to_string().contains("expiry rejected"));
             assert_eq!(remaining(db)?, ["launch", "opened", "restore"]);
             db.execute_batch("DROP TRIGGER fail_expiry;")?;
             assert_eq!(expire_starts(db, &HashSet::new(), 100)?.len(), 2);

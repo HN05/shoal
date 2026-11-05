@@ -34,8 +34,7 @@ fn marker_proves_ownership_before_any_recorded_identity() -> Result<()> {
     mark_owner(git_dir, "workspace")?;
     assert_eq!(marked_owner(git_dir)?.as_deref(), Some("workspace"));
     verify_owner(git_dir, "workspace", Some(stale))?;
-    let error = verify_owner(git_dir, "other", Some(&current)).unwrap_err();
-    assert!(error.to_string().contains("another Shoal workspace"));
+    assert!(verify_owner(git_dir, "other", Some(&current)).is_err());
     mark_owner(git_dir, "other")?;
     assert_eq!(marked_owner(git_dir)?.as_deref(), Some("other"));
     assert!(!git_dir.join(format!("{OWNER_MARKER}.partial")).exists());

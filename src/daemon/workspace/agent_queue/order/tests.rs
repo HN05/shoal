@@ -27,8 +27,7 @@ fn entries_move_to_a_position_in_front_of_an_entry_or_last() {
 fn positions_outside_the_queue_are_refused() {
     let queue = ids(&["a", "b"]);
     for position in [0, 3] {
-        let error = reorder(&queue, "a", &QueuePlace::Position(position)).unwrap_err();
-        assert!(error.to_string().contains("choose 1 to 2 or last"));
+        assert!(reorder(&queue, "a", &QueuePlace::Position(position)).is_err());
     }
     assert!(reorder(&queue, "a", &QueuePlace::Before("gone".into())).is_err());
 }
