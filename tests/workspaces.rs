@@ -5122,36 +5122,27 @@ fn claude_app_opens_a_new_session_link_for_the_workspace() {
         "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$@\"\nexit 7\n",
         0o700,
     );
-    let config_dir = fixture.root.path().join(".config/shoal");
-    fs::create_dir_all(&config_dir).unwrap();
-    fs::write(
-        config_dir.join("config.toml"),
-        "[agents.claude]\ndefault_mode = 'app'\n",
-    )
-    .unwrap();
-    for args in [vec!["claude", "--app", "claude-app"], vec!["claude"]] {
-        let output = fixture
-            .command()
-            .current_dir(path)
-            .args(&args)
-            .env("PATH", fixture.restricted_path(&bin))
-            .output()
-            .unwrap();
-        if cfg!(target_os = "macos") {
-            assert_eq!(output.status.code(), Some(7), "{output:?}");
-            let folder = path.replace('/', "%2F");
-            assert_eq!(
-                String::from_utf8(output.stdout).unwrap(),
-                format!("{path}\nclaude://code/new?folder={folder}\n")
-            );
-        } else {
-            assert!(!output.status.success());
-        }
+    let output = fixture
+        .command()
+        .current_dir(path)
+        .args(["open", "--app", "claude"])
+        .env("PATH", fixture.restricted_path(&bin))
+        .output()
+        .unwrap();
+    if cfg!(target_os = "macos") {
+        assert_eq!(output.status.code(), Some(7), "{output:?}");
+        let folder = path.replace('/', "%2F");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            format!("{path}\nclaude://code/new?folder={folder}\n")
+        );
+    } else {
+        assert!(!output.status.success());
     }
     // Arguments the app cannot take are refused before a workspace is picked.
     let output = fixture
         .command()
-        .args(["claude", "--app", "--", "--model", "opus"])
+        .args(["open", "--app", "claude", "--", "--model", "opus"])
         .env("PATH", fixture.restricted_path(&bin))
         .output()
         .unwrap();
@@ -12689,7 +12680,7 @@ time.sleep(30)
 }
 
 #[test]
-fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
+fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records() {
     let fixture = Fixture::new();
     let workspace = fixture.add("desktop");
     let path = workspace["path"].as_str().unwrap();
@@ -12703,10 +12694,7 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
         );
         for explicit in [true, false] {
             let mut command = fixture.command();
-            command.arg(program);
-            if program == "codex" {
-                command.arg("--app");
-            }
+            command.args(["open", "--app", program]);
             if explicit {
                 command.arg("desktop");
             } else {
@@ -12737,7 +12725,7 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
         }
     }
     fixture.add("other");
-    for args in [vec!["codex", "other", "--app"], vec!["t3", "other"]] {
+    for app in ["codex", "t3"] {
         let output = fixture
             .command()
             .args([
@@ -12746,18 +12734,21 @@ fn desktop_shortcuts_open_workspaces_without_cli_flags_or_execution_records() {
                 "desktop",
                 "--",
                 env!("CARGO_BIN_EXE_shoal"),
+                "open",
+                "--app",
+                app,
+                "other",
             ])
-            .args(args)
             .env("PATH", fixture.restricted_path(&bin))
             .output()
             .unwrap();
         assert!(!output.status.success());
     }
-    // Without a Codex on PATH, the shortcut fails instead of reaching the
+    // Without a Codex on PATH, opening fails instead of reaching the
     // runner's own installation.
     let output = fixture
         .command()
-        .args(["codex", "desktop"])
+        .args(["open", "--app", "codex", "desktop"])
         .env("PATH", fixture.system_path())
         .output()
         .unwrap();

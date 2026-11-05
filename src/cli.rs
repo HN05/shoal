@@ -206,6 +206,7 @@ impl Command {
             Command::Sessions(SessionsCommand::Attach { .. }) => recent::ATTACH.into(),
             Command::Sessions(SessionsCommand::Demo { .. }) => "demo".into(),
             Command::Workspace(WorkspaceCommand::Edit { .. }) => "edit".into(),
+            Command::Workspace(WorkspaceCommand::Open { .. }) => "open".into(),
             Command::Changes(ChangesCommand::Diff { .. }) => "diff".into(),
             Command::Workspace(WorkspaceCommand::Status { .. }) => "status".into(),
             Command::Run {

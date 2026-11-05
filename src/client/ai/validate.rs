@@ -183,6 +183,7 @@ pub const BUILT_IN_COMMANDS: &[&str] = &[
     "work",
     "cd",
     "edit",
+    "open",
     "status",
     "messages",
     "files",

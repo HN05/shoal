@@ -678,13 +678,13 @@ shoal cd fix-login                       # Enter through the shell function
 shoal cd -                               # Previous directory
 shoal run --workspace fix-login -- cargo test
 shoal edit fix-login                     # Open in $VISUAL/$EDITOR or the edit command
+shoal open fix-login --app claude        # Claude desktop app (macOS)
+shoal open fix-login --app codex         # Codex desktop app
+shoal open --app t3                      # Running T3 Code desktop app; current workspace or picker
 shoal claude fix-login -- --help
-shoal claude fix-login --app             # Claude desktop app (macOS)
 shoal codex                              # Current workspace or picker; default mode
 shoal codex fix-login --cli -- --help
-shoal codex fix-login --app              # Codex desktop app
 shoal happy codex fix-login              # Detached Happy session for the Happy app
-shoal t3 fix-login                       # Running T3 Code desktop app
 shoal status fix-login                   # Activity, changes, held resources, issue and PR state
 shoal status planning                    # A chat's agent, sessions, issue and PR state
 shoal status pr 12                       # Workspaces and chats that link PR 12
@@ -1666,12 +1666,12 @@ default_mode = "cli" # Or "app"
 default_mode = "cli" # Or "app"
 ```
 
-App launches run `codex app <path>` or `t3 app <path>` with any `--` arguments
-and preserve the launcher's output and exit code. The Claude app opens only on
-macOS, through `open claude://code/new?folder=<path>`, takes no `--` arguments,
-and the menu and completion offer it once `/Applications/Claude.app` is installed. App
-launches add no agent flags and provide no execution tracking, scope token, port
-variables or output default (so automatic cleanup cannot see their activity);
+`shoal open --app codex|t3` runs `codex app <path>` or `t3 app <path>` with any
+`--` arguments and preserves the launcher's output and exit code. `--app claude`
+opens the Claude app only on macOS, through `open claude://code/new?folder=<path>`,
+takes no `--` arguments, and the menu offers it once `/Applications/Claude.app`
+is installed. Desktop apps get no agent flags and provide no execution
+tracking, scope token, port variables or output default (so automatic cleanup cannot see their activity);
 T3's app must already be running.
 
 Happy sessions are an optional integration: off until `terminal.happy.enabled = true` in

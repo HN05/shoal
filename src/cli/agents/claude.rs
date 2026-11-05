@@ -1,16 +1,13 @@
 //! Claude Code: its hooks deliver updates, report its turn state, wake it
 //! when idle and make the worktrees a workspace's agent creates child
-//! workspaces,
-//! `.claude.json` records the directories it trusts, and a `claude://` link
-//! opens a workspace in the Claude app.
-use std::{ffi::OsString, os::unix::ffi::OsStrExt as _, path::Path};
+//! workspaces, and `.claude.json` records the directories it trusts.
+use std::{ffi::OsString, path::Path};
 
-use anyhow::{Result, ensure};
 use serde_json::{Value, json};
 
 use super::{
     AgentEnvironment, AgentSpace, AgentWorkspace, Integration, Wake,
-    desktop::App,
+    desktop::{self, App},
     hooks,
     trust::{CLAUDE_CODE, TrustFile},
 };
@@ -90,7 +87,7 @@ impl Integration for Claude {
     }
 
     fn app(&self) -> Option<&'static App> {
-        Some(&APP)
+        Some(&desktop::CLAUDE)
     }
 
     /// `StopFailure` names Claude Code's error kind; a gateway such as a
@@ -103,47 +100,6 @@ impl Integration for Claude {
             _ => TurnFailure::Other,
         })
     }
-}
-
-/// The Claude app, opened with the link `claude --desktop` opens, which needs
-/// no Claude account sign-in of the CLI.
-pub(in crate::cli) const APP: App = App {
-    name: "Claude app",
-    program: "open",
-    bundle: Some("/Applications/Claude.app"),
-    check: macos_without_arguments,
-    args: new_session,
-};
-
-/// The Claude app opens through `open` on macOS, and its link carries no
-/// arguments.
-fn macos_without_arguments(args: &[OsString]) -> Result<()> {
-    ensure!(
-        cfg!(target_os = "macos"),
-        "the Claude app opens workspaces only on macOS"
-    );
-    ensure!(args.is_empty(), "the Claude app takes no arguments");
-    Ok(())
-}
-
-/// `open`'s argument: the link that starts a Claude Code session in
-/// `directory`.
-fn new_session(directory: &Path, _args: Vec<OsString>) -> Vec<OsString> {
-    let folder = percent_encode(directory.as_os_str().as_bytes());
-    vec![format!("claude://code/new?folder={folder}").into()]
-}
-
-/// `bytes` with every byte but the URL-unreserved ones percent-encoded.
-fn percent_encode(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|&byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                char::from(byte).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect()
 }
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's

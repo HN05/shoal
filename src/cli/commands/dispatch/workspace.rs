@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::cli::{
+    agents,
     args::workspace::WorkspaceCommand,
     commands::{chat, inbox, listing, work, workspaces},
     context::Context,
@@ -35,5 +36,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
         WorkspaceCommand::Status { space, item } => workspaces::status(&ctx, space, item).await,
         WorkspaceCommand::Cd { workspace } => workspaces::cd(&ctx, workspace).await,
         WorkspaceCommand::Edit { workspace, args } => workspaces::edit(&ctx, workspace, args).await,
+        WorkspaceCommand::Open {
+            workspace,
+            app,
+            args,
+        } => agents::open(&ctx, workspace, agents::app(app), args).await,
     }
 }

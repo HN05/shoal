@@ -1,16 +1,10 @@
 //! Tracked terminal launches, the agent's configured command with Shoal's
-//! instructions, hooks and prompt, run through the execution wrapper, and
-//! untracked handoffs to a desktop app.
+//! instructions, hooks and prompt, run through the execution wrapper.
 use std::ffi::{OsStr, OsString};
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
-use super::{
-    AgentEnvironment, Integration, Launch, LaunchOptions, Wake,
-    desktop::{self, App},
-    ensure_available,
-    trust::TrustFile,
-};
+use super::{Integration, Launch, LaunchOptions, Wake, ensure_available};
 use crate::{
     agent::Agent,
     cli::{
@@ -24,7 +18,7 @@ use crate::{
     model::Workspace,
 };
 
-/// The workspace a shortcut such as `shoal codex` names, else the current
+/// The workspace a shortcut such as `shoal codex` or `shoal open` names, else the current
 /// directory's or a picked one.
 pub(super) async fn shortcut_workspace(
     ctx: &Context,
@@ -49,47 +43,6 @@ pub(super) async fn shortcut(
     let workspace = shortcut_workspace(ctx, workspace).await?;
     let opening = super::Opening::worker(subject);
     super::launch_agent(ctx, agent, workspace, opening, args, options).await
-}
-
-/// Hand the workspace a shortcut names to desktop `app`, as [`open_app`]
-/// hands it, refusing what cannot open before a workspace is picked.
-pub(super) async fn app_shortcut(
-    ctx: &Context,
-    workspace: Option<String>,
-    app: &App,
-    trust: Option<&TrustFile>,
-    args: Vec<OsString>,
-) -> Result<i32> {
-    ensure_opens(app, &args)?;
-    let workspace = shortcut_workspace(ctx, workspace).await?;
-    open_app(ctx, &workspace, app, trust, args).await
-}
-
-/// Hand `workspace` to desktop `app` with `args`, untracked, trusting it
-/// first in the app's `trust` file, when it has one.
-pub(super) async fn open_app(
-    ctx: &Context,
-    workspace: &Workspace,
-    app: &App,
-    trust: Option<&TrustFile>,
-    args: Vec<OsString>,
-) -> Result<i32> {
-    ensure_opens(app, &args)?;
-    ensure!(workspace.path.is_dir(), "workspace directory is missing");
-    let args = (app.args)(&workspace.path, args);
-    if let Some(trust) = trust {
-        // The app runs with this process's environment, not the workspace's.
-        let environment = AgentEnvironment::inherited(&ctx.paths.home);
-        trust.trust_workspace(ctx, workspace, &environment).await;
-    }
-    desktop::open(app, &workspace.path, args).await
-}
-
-/// Refuse an `app` that cannot open with `args`: its check refuses them or
-/// its launcher is missing.
-fn ensure_opens(app: &App, args: &[OsString]) -> Result<()> {
-    (app.check)(args)?;
-    super::ensure_program(app.name, app.program)
 }
 
 /// Run `launch` as a tracked agent in its workspace, in a session this

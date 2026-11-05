@@ -1,7 +1,7 @@
 //! Arguments of commands that list, enter, inspect and manage workspaces.
 use std::{ffi::OsString, path::PathBuf};
 
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
 
 use crate::cli::{args::item_reference, list_status};
 
@@ -64,6 +64,30 @@ pub enum WorkspaceCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Open a workspace in a desktop app.
+    ///
+    /// The app runs untracked: Shoal gives it no instructions, scope or
+    /// model, and cleanup does not see its activity.
+    Open {
+        workspace: Option<String>,
+        /// The app to open the workspace in.
+        #[arg(long, value_enum)]
+        app: DesktopApp,
+        /// Arguments forwarded to the app's launcher.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
+}
+
+/// A desktop app `shoal open` hands a workspace to.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum DesktopApp {
+    /// The Claude app, on macOS.
+    Claude,
+    /// The Codex app.
+    Codex,
+    /// The running T3 Code app.
+    T3,
 }
 
 #[derive(Debug, Subcommand)]

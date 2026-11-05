@@ -3,7 +3,11 @@ use anyhow::Result;
 use crate::{
     agent::AgentMode,
     ai::IntegrationKind,
-    cli::{agents, args::agents::AgentsCommand, context::Context},
+    cli::{
+        agents,
+        args::{agents::AgentsCommand, workspace::DesktopApp},
+        context::Context,
+    },
 };
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) -> Result<i32> {
@@ -31,7 +35,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             agents::with_app(&ctx, kind, mode, workspace, model.into(), args).await
         }
         AgentsCommand::T3 { workspace, args } => {
-            agents::open_app(&ctx, workspace, &agents::T3, args).await
+            agents::open(&ctx, workspace, agents::app(DesktopApp::T3), args).await
         }
         #[cfg(feature = "happy")]
         AgentsCommand::Happy {

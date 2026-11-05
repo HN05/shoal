@@ -17,7 +17,6 @@ use crate::{
         Command, agents,
         args::{
             ConfirmationArgs, SpaceTargets,
-            agents::AgentsCommand,
             changes::ChangesCommand,
             coordination::{CoordinationCommand, QuestionsArgs},
             create::CreateCommand,
@@ -26,7 +25,7 @@ use crate::{
             repository::{RepoCommand, RepositoryCommand},
             service::{DaemonCommand, ServiceCommand},
             sessions::SessionsCommand,
-            workspace::{WorkCommand, WorkspaceCommand},
+            workspace::{DesktopApp, WorkCommand, WorkspaceCommand},
         },
         context::Context,
         internal::{self, Worker},
@@ -863,41 +862,16 @@ fn linked_labels(items: &[LinkedItem]) -> Vec<String> {
 enum ExecuteChoice {
     /// An agent, run as `shoal run <name>`.
     Agent(String),
-    /// A desktop app, opened by the command it builds for a workspace.
-    App(OpenApp),
+    /// A desktop app, opened as `shoal open --app <app>`.
+    App(DesktopApp),
     Shell,
 }
 
-/// The command that opens a desktop app in a workspace.
-type OpenApp = fn(Option<String>) -> Command;
-
-/// Desktop handoffs the menu offers beside agents: each label, app and
-/// command that opens the app.
-const APPS: [(&str, &agents::App, OpenApp); 3] = [
-    ("claude app", &agents::CLAUDE_APP, |workspace| {
-        Command::Agents(AgentsCommand::Claude {
-            workspace,
-            cli: false,
-            app: true,
-            model: Default::default(),
-            args: vec![],
-        })
-    }),
-    ("codex app", &agents::CODEX_APP, |workspace| {
-        Command::Agents(AgentsCommand::Codex {
-            workspace,
-            cli: false,
-            app: true,
-            model: Default::default(),
-            args: vec![],
-        })
-    }),
-    ("t3", &agents::T3, |workspace| {
-        Command::Agents(AgentsCommand::T3 {
-            workspace,
-            args: vec![],
-        })
-    }),
+/// Desktop apps the menu offers beside agents, each with its label.
+const APPS: [(&str, DesktopApp); 3] = [
+    ("claude app", DesktopApp::Claude),
+    ("codex app", DesktopApp::Codex),
+    ("t3", DesktopApp::T3),
 ];
 
 async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
@@ -913,8 +887,8 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
         .map(|name| (ExecuteChoice::Agent(name.clone()), name));
     let apps = APPS
         .into_iter()
-        .filter(|(_, app, _)| app.available(&search_path))
-        .map(|(label, _, command)| (ExecuteChoice::App(command), label.to_owned()));
+        .filter(|(_, app)| agents::app(*app).available(&search_path))
+        .map(|(label, app)| (ExecuteChoice::App(app), label.to_owned()));
     let choices: Vec<_> = agents
         .chain(apps)
         .chain([(ExecuteChoice::Shell, "custom shell command".into())])
@@ -930,7 +904,11 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
             workspace,
             args: vec![],
         },
-        ExecuteChoice::App(command) => command(workspace),
+        ExecuteChoice::App(app) => Command::Workspace(WorkspaceCommand::Open {
+            workspace,
+            app,
+            args: vec![],
+        }),
         ExecuteChoice::Shell => Command::Run {
             name: None,
             workspace,

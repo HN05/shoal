@@ -177,8 +177,8 @@ shoal edit fix-login           # Open in $VISUAL/$EDITOR, or [commands] edit = [
 shoal run check --workspace fix-login      # With [commands] check = ["cargo", "test"] in config
 shoal run                     # List configured commands, arguments, and source layers
 shoal claude fix-login         # Run Claude Code
-shoal claude fix-login --app   # Open in the Claude desktop app (macOS)
-shoal codex fix-login --app    # Open in the Codex desktop app
+shoal open fix-login --app claude  # Open in the Claude desktop app (macOS)
+shoal open fix-login --app codex   # Open in the Codex desktop app
 shoal attach fix-login         # Reattach to the workspace's agent session; Ctrl-\ detaches
 shoal demo                     # Pick a running demo an agent started and open it
 shoal demo start web           # Start the configured demo `web` for the user to try

@@ -28,8 +28,7 @@ pub(in crate::cli) async fn with_app(
     let integration = super::integration(kind);
     // Explicit desktop handoffs read no settings, so no prompt template.
     if let Some(app) = integration.app().filter(|_| mode == Some(AgentMode::App)) {
-        let trust = integration.trust_file();
-        return super::launch::app_shortcut(ctx, workspace, app, trust, args).await;
+        return super::desktop::open(ctx, workspace, app, args).await;
     }
     let options = LaunchOptions {
         tracked: mode == Some(AgentMode::Cli),
@@ -44,16 +43,6 @@ pub(in crate::cli) async fn with_app(
 /// desktop `app` its `--app` opens.
 fn with_app_available(name: &str, app: &App, installed: &Installed) -> bool {
     installed.agent(name) || app_available(app, installed)
-}
-
-/// `shoal t3` and other shortcuts that only open an app.
-pub(in crate::cli) async fn open_app(
-    ctx: &Context,
-    workspace: Option<String>,
-    app: &App,
-    args: Vec<OsString>,
-) -> Result<i32> {
-    super::launch::app_shortcut(ctx, workspace, app, None, args).await
 }
 
 /// Whether the desktop shortcut that opens `app` can start: it starts no
@@ -112,11 +101,11 @@ pub(in crate::cli) fn shortcuts(installed: &Installed) -> Vec<(&'static str, boo
     vec![
         (
             "claude",
-            with_app_available("claude", &super::CLAUDE_APP, installed),
+            with_app_available("claude", &super::desktop::CLAUDE, installed),
         ),
         (
             "codex",
-            with_app_available("codex", &super::CODEX_APP, installed),
+            with_app_available("codex", &super::desktop::CODEX_APP, installed),
         ),
         ("happy", !happy_agents(installed).is_empty()),
         ("t3", app_available(&super::desktop::T3, installed)),

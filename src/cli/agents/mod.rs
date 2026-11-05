@@ -40,15 +40,13 @@ use crate::{
 };
 
 pub(in crate::cli) use crate::client::transcripts::AgentEnvironment;
-pub(in crate::cli) use claude::APP as CLAUDE_APP;
-pub(in crate::cli) use codex::APP as CODEX_APP;
-pub(in crate::cli) use desktop::{App, T3};
+pub(in crate::cli) use desktop::{app, open};
 pub(in crate::cli) use launch::input;
 pub(in crate::cli) use sessions::{Existing, SessionHome, install_session_files};
 #[cfg(feature = "happy")]
 pub(super) use shortcuts::happy;
+pub(super) use shortcuts::with_app;
 pub(in crate::cli) use shortcuts::{Installed, happy_agents, shortcuts};
-pub(super) use shortcuts::{open_app, with_app};
 
 /// What an agent needs beyond its configured command and described
 /// arguments. Each default adds nothing.
@@ -176,7 +174,7 @@ pub(in crate::cli) enum Wake {
 
 /// What config sets for an integration, from the section of its own it may
 /// have.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 pub(in crate::cli) struct Options {
     /// Why config turns the integration off, if it does; pickers and
     /// completion leave its agents out.
@@ -500,8 +498,7 @@ pub(super) async fn launch_agent(
     let code = match (app, integration.detached()) {
         (Some(app), _) => {
             warn_app_model(app, &launch.model);
-            let trust = integration.trust_file();
-            launch::open_app(ctx, &launch.workspace, app, trust, launch.args).await?
+            desktop::hand_off(ctx, &launch.workspace, app, launch.args).await?
         }
         (None, Some(detached)) => detached::start(ctx, integration, detached, launch).await?,
         (None, None) => return launch::tracked(ctx, integration, launch).await,

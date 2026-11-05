@@ -1,7 +1,6 @@
 //! Codex: its hooks deliver updates and report its turn state, its wrapper
-//! wakes it by typing a prompt into its session, `config.toml` records the
-//! directories it trusts, and `codex app` opens a workspace in the Codex
-//! app.
+//! wakes it by typing a prompt into its session, and `config.toml` records
+//! the directories it trusts.
 use std::ffi::OsString;
 
 use anyhow::Result;
@@ -14,15 +13,6 @@ use super::{
     trust::{CODEX, TrustFile},
 };
 use crate::{ai::IntegrationKind, state::AgentState};
-
-/// The Codex app, which `codex app` offers to install when it is missing.
-pub(in crate::cli) const APP: App = App {
-    name: "codex app",
-    program: "codex",
-    bundle: None,
-    check: desktop::any_arguments,
-    args: desktop::app_subcommand,
-};
 
 pub(super) struct Codex;
 
@@ -75,7 +65,7 @@ impl Integration for Codex {
     }
 
     fn app(&self) -> Option<&'static App> {
-        Some(&APP)
+        Some(&desktop::CODEX_APP)
     }
 }
 
