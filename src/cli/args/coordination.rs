@@ -148,9 +148,10 @@ pub enum MessagesCommand {
         all: bool,
         /// Send to every running agent of this repository's workspaces and
         /// chats, such as to have them rebase onto a fix on its default
-        /// branch.
-        #[arg(long = "repo")]
-        repository: Option<String>,
+        /// branch; without a value, the current repository, else a picker.
+        /// Put the message before a --repo without a value.
+        #[arg(long = "repo", num_args = 0..=1, value_name = "REPOSITORY")]
+        repository: Option<Option<String>>,
     },
 }
 

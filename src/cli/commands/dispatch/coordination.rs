@@ -65,10 +65,10 @@ pub(in crate::cli::commands) async fn run(
                 }),
             ..
         } => {
-            let recipients = if all || repository.is_some() {
-                messages::Recipients::All(repository)
-            } else {
-                messages::Recipients::Space(space)
+            let recipients = match repository {
+                Some(repository) => messages::Recipients::Repository(repository),
+                None if all => messages::Recipients::All,
+                None => messages::Recipients::Space(space),
             };
             messages::send(&ctx, recipients, message, body_file, attach).await
         }

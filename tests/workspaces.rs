@@ -20147,6 +20147,19 @@ fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() 
         sent,
         serde_json::json!({"workspaces": [], "chats": ["planning"]})
     );
+    // A --repo without a value means the current repository.
+    let output = fixture
+        .command()
+        .args(["--json", "messages", "send", "Pull main", "--repo"])
+        .current_dir(&fixture.repo)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let sent: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        sent,
+        serde_json::json!({"workspaces": [], "chats": ["planning"]})
+    );
     // --all reaches every repository, from outside any of them.
     let sent = fixture.ok(&["messages", "send", "--all", "The network works again"]);
     assert_eq!(
