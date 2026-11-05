@@ -320,6 +320,17 @@ impl Topic {
     }
 }
 
+/// `topic` with the issue the saved chat `restore` among `chats` is linked
+/// to, for its restored agent's rules; a restore relaunched in a new tab
+/// names only the chat.
+fn with_saved_issue(topic: Topic, chats: &[Chat], restore: &str) -> Topic {
+    let saved = chats.iter().find(|chat| chat.id == restore);
+    Topic {
+        linked_issue: saved.and_then(|chat| templates::IssueFields::linked(&chat.links)),
+        ..topic
+    }
+}
+
 /// The `shoal` arguments that start a chat in `mode`.
 fn start_args(mode: &str) -> Vec<OsString> {
     ["start", "--chat", "--mode", mode]
@@ -396,6 +407,12 @@ pub(super) async fn launch(
     } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
+    let topic = match &restore {
+        Some(chat) if topic.linked_issue.is_none() => {
+            with_saved_issue(topic, &client::recorded_chats(&ctx.paths).await?, chat)
+        }
+        _ => topic,
+    };
     let asks_name = topic.asks_name && requested.is_none();
     let name = initial_name(ctx, &topic, requested).await?;
     let settings = self::settings(ctx, &repo).await?;

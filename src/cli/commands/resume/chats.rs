@@ -121,18 +121,13 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
         .find(|repo| repo.id == chat.repository_id)
         .with_context(|| format!("the repository of chat {} is missing", chat.name))?;
     let settings = chat::settings(ctx, &repo).await?;
-    // The restored agent keeps its mode's rules, on the issue the chat is
-    // linked to; its subject was sent once.
+    // The restored agent keeps its mode's rules; its subject was sent once.
     let topic = match &chat.workspace {
         Some(workspace) => chat::Topic::workspace(
             chat::hosting_workspace(ctx, &workspace.id).await?,
             &chat.mode,
         ),
         None => chat::Topic::repository(&repo, &chat.mode),
-    };
-    let topic = chat::Topic {
-        linked_issue: crate::config::templates::IssueFields::linked(&chat.links),
-        ..topic
     };
     let options = chat::Options {
         agent: Some(chat.agent.parse()?),
