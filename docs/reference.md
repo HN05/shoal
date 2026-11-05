@@ -3485,7 +3485,7 @@ Bitbucket repositories live under a workspace and its PR URLs use
 `/pull-requests/`. It reports no merge conflicts. Reviewers are Atlassian
 account IDs, declining a PR closes it, and `--method rebase` rebases and
 fast-forwards. CI checks are the builds reported on the PR, and reviews are
-participants' approvals and change requests. Agents' changes use your Bitbucket credentials.
+participants' approvals and change requests.
 
 ### Issue and PR actions
 
