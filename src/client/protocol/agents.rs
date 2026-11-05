@@ -104,10 +104,12 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         sender_chat: Option<String>,
     },
-    /// [`Self::SendAgentMessage`] to every workspace of the repository with
-    /// a running agent, answered with the workspaces it reached.
-    SendRepositoryAgentMessage {
-        repository: crate::client::repository::Selector,
+    /// [`Self::SendAgentMessage`] to every workspace and chat with a running
+    /// agent, of one repository when it names one, answered with the spaces
+    /// it reached.
+    SendAllAgentMessage {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        repository: Option<crate::client::repository::Selector>,
         message: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::client::files::NewFile>,

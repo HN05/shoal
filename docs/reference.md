@@ -4639,8 +4639,8 @@ lists each copy's path as an `Attached file:` line, or in `attachments` with
 `shoal messages` or `shoal watch`, which delete each message once they have
 printed it.
 
-`--all` queues the message for every running agent of the current repository,
-or the one `--repo` names: each running chat but the one sending, and each
+`--all` queues the message for every running agent, of every repository or
+only the one `--repo` names: each running chat but the one sending, and each
 workspace with an agent Shoal tracks, working or idle, that is connected and
 not being stopped; stopped and queued agents do not count. It lists the spaces
 it reached, in `workspaces` and `chats` with `--json`; a workspace process

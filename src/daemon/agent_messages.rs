@@ -221,15 +221,15 @@ impl Manager {
         }
     }
 
-    /// [`Self::send_space_message`] to every workspace of `repository` with
-    /// a running agent and each of its running chats but the sending chat
-    /// `sender_chat`, or only to the workspaces below `below`, the sender's
-    /// own workspace; the spaces it reached. Identical unread messages collapse, so sending
+    /// [`Self::send_space_message`] to every workspace with a running agent
+    /// and each running chat but the sending chat `sender_chat`, of
+    /// `repository` when it names one, or only to the workspaces below
+    /// `below`, the sender's own workspace; the spaces it reached. Identical unread messages collapse, so sending
     /// again after a failure does not repeat it to recipients that have not
     /// read it yet.
-    pub async fn send_repository_message(
+    pub async fn send_all_message(
         &self,
-        repository: &Selector,
+        repository: Option<&Selector>,
         message: String,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
@@ -261,16 +261,25 @@ impl Manager {
         })
     }
 
-    /// The workspaces of `repository` with a running agent, by name, except
-    /// those being removed, and its running chats but `sender_chat`; only
-    /// the workspaces below `below` when it names one.
+    /// The workspaces with a running agent, by name, except those being
+    /// removed, and the running chats but `sender_chat`, of `repository`
+    /// when it names one; only the workspaces below `below` when it names
+    /// one.
     async fn recipients(
         &self,
-        repository: &Selector,
+        repository: Option<&Selector>,
         below: Option<&str>,
         sender_chat: Option<&str>,
     ) -> Result<(Vec<Workspace>, Vec<Chat>)> {
-        let repository = self.repository(repository.clone()).await?.id;
+        let repository = match repository {
+            Some(repository) => Some(self.repository(repository.clone()).await?.id),
+            None => None,
+        };
+        let in_repository = |id: &String| {
+            repository
+                .as_ref()
+                .is_none_or(|repository| repository == id)
+        };
         // The subtree lists `below` itself first.
         let below: Option<Vec<String>> = match below {
             Some(below) => Some(self.subtree(below).await?.into_iter().skip(1).collect()),
@@ -282,7 +291,8 @@ impl Manager {
                 continue;
             }
             let workspace = self.workspace(&id).await?;
-            if workspace.repository_id == repository && workspace.state != WorkspaceState::Removing
+            if in_repository(&workspace.repository_id)
+                && workspace.state != WorkspaceState::Removing
             {
                 workspaces.push(workspace);
             }
@@ -293,7 +303,7 @@ impl Manager {
             None => self.chats().await?,
         };
         chats.retain(|chat| {
-            chat.repository_id == repository
+            in_repository(&chat.repository_id)
                 && chat.restore.is_none()
                 && sender_chat.is_none_or(|sender| sender != chat.id && sender != chat.name)
         });

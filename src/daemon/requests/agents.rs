@@ -147,7 +147,7 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
-        AgentMethod::SendRepositoryAgentMessage {
+        AgentMethod::SendAllAgentMessage {
             repository,
             message,
             attachments,
@@ -157,8 +157,8 @@ pub(super) async fn handle(
             let below = caller.map(|caller| caller.space_id.as_str());
             Body::Reached(
                 manager
-                    .send_repository_message(
-                        &repository,
+                    .send_all_message(
+                        repository.as_ref(),
                         message,
                         attachments,
                         &attacher,
@@ -239,7 +239,10 @@ impl Scoped for AgentMethod {
             ),
             // The handler narrows the recipients to the workspaces below
             // the caller's.
-            AgentMethod::SendRepositoryAgentMessage { repository, .. } => {
+            AgentMethod::SendAllAgentMessage {
+                repository: Some(repository),
+                ..
+            } => {
                 *repository = manager
                     .own_repository(
                         caller,
@@ -249,6 +252,9 @@ impl Scoped for AgentMethod {
                     .await?;
                 None
             }
+            AgentMethod::SendAllAgentMessage {
+                repository: None, ..
+            } => None,
         })
     }
 }
