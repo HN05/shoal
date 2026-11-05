@@ -309,3 +309,24 @@ fn a_reviewer_needs_only_its_review_command_installed() {
     );
     assert!(ensure_reviewer_available("unknown", &settings).is_err());
 }
+
+#[test]
+fn a_restored_agent_whose_mode_is_gone_gets_the_default_rules() {
+    let settings = crate::config::Config::default()
+        .resolve(&Default::default())
+        .unwrap();
+    let workspace: crate::model::Workspace = serde_json::from_value(serde_json::json!({
+        "id": "id", "repository_id": "repo", "name": "topic", "branch": "topic",
+        "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
+    }))
+    .unwrap();
+    let told = |mode| restored_instruction_args(&settings, "claude", &workspace, mode);
+    let kept = told(modes::DEFAULT);
+    assert!(
+        kept.iter().any(|arg| arg
+            .to_string_lossy()
+            .contains("You are working in Shoal workspace topic")),
+        "{kept:?}"
+    );
+    assert_eq!(told("removed"), kept);
+}

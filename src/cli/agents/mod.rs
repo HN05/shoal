@@ -1067,8 +1067,8 @@ pub(crate) fn with_proxy_args(settings: &Effective, name: &str, command: &mut Ve
 /// The arguments that give agent `name`, restored in `workspace`, the
 /// system text of `mode` again, which a restored session started without;
 /// none for an agent that takes it only in its first message, which its
-/// session already has. A mode no config defines anymore gives none, with a
-/// warning, so a restore never waits on config.
+/// session already has. A mode no config defines anymore gives the default
+/// mode's, with a warning, so a restore never waits on config.
 pub(crate) fn restored_instruction_args(
     settings: &Effective,
     name: &str,
@@ -1080,7 +1080,14 @@ pub(crate) fn restored_instruction_args(
         delivery: launch::delivery(agent_integration(settings, name), settings),
     };
     let issue = templates::IssueFields::linked(&workspace.links);
-    match templates::system(settings, mode, place, issue.as_ref()) {
+    let system = templates::system(settings, mode, place, issue.as_ref()).or_else(|error| {
+        eprintln!(
+            "warning: the restored agent is told the rules of mode {} instead: {error:#}",
+            modes::DEFAULT
+        );
+        templates::system(settings, modes::DEFAULT, place, issue.as_ref())
+    });
+    match system {
         Ok(system) => (settings.launch(name).arguments)
             .instruction_args(&system)
             .unwrap_or_default(),
