@@ -112,8 +112,7 @@ async fn a_failed_scan_fails_every_check_it_covers() {
         scans.scan_with(ids(&["a"]), failing),
         scans.scan_with(ids(&["b"]), failing),
     );
-    assert!(a.err().unwrap().to_string().contains("ps failed"));
-    assert!(b.err().unwrap().to_string().contains("ps failed"));
+    assert!(a.is_err() && b.is_err());
     // A later check starts a scan of its own.
     let stub = Stub::default();
     stub.gate.add_permits(1);

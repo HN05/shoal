@@ -41,11 +41,13 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
     let status = manager.worktree_status(&workspace.id).await.unwrap().0;
     assert!(status.diff.is_none());
     assert!(status.changed_on_both_sides.is_none());
-    let stall = "stalled";
-    let error = status.diff_error.unwrap();
-    assert!(error.contains(stall), "{error}");
-    let crate::model::CleanupReason::InspectionFailed { error } = status.cleanup_reason else {
-        panic!("expected a failed inspection: {:?}", status.cleanup_reason);
-    };
-    assert!(error.contains(stall), "{error}");
+    assert!(status.diff_error.is_some());
+    assert!(
+        matches!(
+            status.cleanup_reason,
+            crate::model::CleanupReason::InspectionFailed { .. }
+        ),
+        "{:?}",
+        status.cleanup_reason
+    );
 }

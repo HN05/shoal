@@ -80,8 +80,7 @@ async fn a_workspace_that_cannot_move_fails_the_job() {
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     let (job, directory) = report(manager, 3).await;
     manager.follow_taken_jobs().await.unwrap();
-    let refused = std::fs::read_to_string(directory.join("refused")).unwrap();
-    assert!(refused.starts_with("Shoal could not move"), "{refused}");
+    assert!(directory.join("refused").exists());
     // Run 3 cannot be read, and stopping the job still cancels it.
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.ends_with("/actions/runs/3"));

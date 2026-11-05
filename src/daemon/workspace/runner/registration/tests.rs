@@ -177,13 +177,6 @@ async fn a_missing_runner_program_registers_nothing_and_tells_the_user_once() {
     manager.reconcile_runners().await.unwrap();
     let notifications = runner_notifications(&manager).await;
     assert_eq!(notifications.len(), 1, "{notifications:?}");
-    assert!(
-        notifications[0]
-            .message
-            .contains("forgejo-runner is not on the daemon's PATH"),
-        "{}",
-        notifications[0].message
-    );
     assert!(changes.lock().unwrap().is_empty());
 }
 

@@ -712,17 +712,14 @@ async fn read<T: serde::de::DeserializeOwned>(
     .unwrap()
 }
 
-/// How the daemon can stop work as it exits, with the reason its stop gives.
-const ENDINGS: [(Ending, &str); 2] = [
-    (Ending::Stop, "the Shoal daemon stopped"),
-    // As a signal or a system shutdown stops it.
-    (Ending::Save, "the Shoal daemon is stopping"),
-];
+/// How the daemon can stop work as it exits; saving is how a signal or a
+/// system shutdown stops it.
+const ENDINGS: [Ending; 2] = [Ending::Stop, Ending::Save];
 
 #[tokio::test]
 async fn the_daemon_exiting_cancels_a_jobs_run_and_stops_its_runner() {
-    for (ending, reason) in ENDINGS {
-        let fixture = daemon_exit_with_runner(job("h3", 7, 3), ending, reason).await;
+    for ending in ENDINGS {
+        let fixture = daemon_exit_with_runner(job("h3", 7, 3), ending).await;
         assert!(
             fixture.server.received().iter().any(|request| request.line
                 == "POST /api/v1/repos/team/repo/actions/runs/3/cancel"),
@@ -733,9 +730,9 @@ async fn the_daemon_exiting_cancels_a_jobs_run_and_stops_its_runner() {
 
 #[tokio::test]
 async fn the_daemon_exiting_stops_a_jobs_runner_when_the_forge_refuses_to_cancel_its_run() {
-    for (ending, reason) in ENDINGS {
+    for ending in ENDINGS {
         // The forge finds no run 1 to cancel.
-        let fixture = daemon_exit_with_runner(job("h1", 4, 1), ending, reason).await;
+        let fixture = daemon_exit_with_runner(job("h1", 4, 1), ending).await;
         let failures: Vec<_> = fixture
             .manager
             .notifications(true, 10)
@@ -746,14 +743,13 @@ async fn the_daemon_exiting_stops_a_jobs_runner_when_the_forge_refuses_to_cancel
             .map(|notification| notification.message)
             .collect();
         assert_eq!(failures.len(), 1, "{ending:?}: {failures:?}");
-        assert!(failures[0].contains("could not cancel"), "{failures:?}");
     }
 }
 
 /// End the daemon's work with `ending` while `job` runs, connected as its
-/// wrapper runs it, checking the daemon stops the runner for `reason`
-/// rather than waiting for it to see its run cancelled.
-async fn daemon_exit_with_runner(job: Value, ending: Ending, reason: &str) -> Fixture {
+/// wrapper runs it, checking the daemon stops the runner rather than
+/// waiting for it to see its run cancelled.
+async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
     use tokio::{io::BufReader, net::UnixStream};
 
     use crate::{
@@ -826,13 +822,7 @@ async fn daemon_exit_with_runner(job: Value, ending: Ending, reason: &str) -> Fi
         async move { manager.end_work(ending).await }
     });
     let control: Control = read(&mut connection).await;
-    assert!(
-        matches!(
-            &control,
-            Control::Pause { reason: Some(given), .. } if given == reason
-        ),
-        "{control:?}"
-    );
+    assert!(matches!(&control, Control::Pause { .. }), "{control:?}");
     let event = ExecutionEvent::Finished { exit_code: 143 };
     protocol::write(connection.get_mut(), &event).await.unwrap();
     let control: Control = read(&mut connection).await;

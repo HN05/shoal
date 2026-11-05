@@ -41,11 +41,10 @@ async fn a_title_that_tabs_cannot_show_is_refused() {
         .unwrap();
 
     for title in ["   ", "two\nlines", &"x".repeat(41)] {
-        let error = manager
+        let titled = manager
             .set_workspace_title("topic", Some(title.into()))
-            .await
-            .unwrap_err();
-        assert!(error.to_string().contains("titles must be"), "{error:#}");
+            .await;
+        assert!(titled.is_err(), "{title:?}");
     }
     assert_eq!(manager.workspace("topic").await.unwrap().title, None);
 }

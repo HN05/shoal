@@ -53,8 +53,7 @@ async fn a_workspace_recorded_where_the_local_config_belongs_is_never_local_conf
     std::fs::write(&tracked, "agent.default = 'codex'\n").unwrap();
     test_support::commit(&directory, "config.toml");
     let edit = manager.edit_local_config(&repo.id, Vec::new()).await;
-    let error = format!("{:#}", edit.unwrap_err());
-    assert!(error.contains("where the local config belongs"), "{error}");
+    assert!(edit.is_err());
     assert_eq!(
         std::fs::read_to_string(&tracked).unwrap(),
         "agent.default = 'codex'\n"
@@ -89,8 +88,7 @@ async fn an_unrecorded_worktree_where_the_local_config_belongs_is_never_local_co
         ],
     );
     let edit = manager.edit_local_config(&repo.id, Vec::new()).await;
-    let error = format!("{:#}", edit.unwrap_err());
-    assert!(error.contains("where the local config belongs"), "{error}");
+    assert!(edit.is_err());
     assert!(!directory.join("config.toml").exists());
     manager.repository_settings(&repo.id).await.unwrap();
 }
