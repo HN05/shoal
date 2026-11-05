@@ -52,7 +52,7 @@ mod workspaces;
 pub use agents::{AgentMethod, TurnEnd, WokenTurn};
 pub use approvals::ApprovalMethod;
 pub use assignments::AssignmentMethod;
-pub use chats::{ChatMethod, ScopeToken};
+pub use chats::{ChatMethod, ChatRoot, ScopeToken};
 pub use ci::CiMethod;
 pub use daemon::{DaemonMethod, Exit, ExitRequest};
 pub use demos::DemoMethod;
@@ -567,6 +567,7 @@ response_bodies! {
     Repositories(Vec<Repository>),
     Repository(Repository),
     LocalConfigPath(std::path::PathBuf),
+    ChatRoot(chats::ChatRoot),
     LocalConfigEdit(crate::model::LocalConfigEdit),
     RepositoryRemoved(RepositoryRemoval),
     RepositoryMoves(crate::model::RepositoryMoves),

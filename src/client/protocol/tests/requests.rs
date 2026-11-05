@@ -120,6 +120,7 @@ const REQUESTS: &[&str] = &[
     r#"{"chat_scope":{"chat":"chat-id"}}"#,
     r#""chat_agents""#,
     r#"{"restart_chat":{"chat":"c1","run":"r1"}}"#,
+    r#""chat_root""#,
     // The agent queue.
     r#"{"queue_add":{"request":{"repository":"app","name":"fix","agent":"claude","issue_title":null,"plan":"{}","env":{},"now":false,"workspace":null,"after":[]}}}"#,
     r#"{"queue_agent":{"workspace":"fix","agent":"claude","prompt":"Fix the build"}}"#,

@@ -77,6 +77,9 @@ pub(super) async fn handle(
             Body::Ok
         }
         ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),
+        ChatMethod::ChatRoot => Body::ChatRoot(crate::protocol::ChatRoot {
+            path: manager.prepare_chat_root().await?,
+        }),
         ChatMethod::ChatScope { chat } => Body::ScopeToken(crate::protocol::ScopeToken {
             token: manager.chat_scope(&chat).await?,
         }),
@@ -138,7 +141,9 @@ impl Scoped for ChatMethod {
                     )
                     .await?,
             ),
-            ChatMethod::CheckChatName { .. } | ChatMethod::FreeChatName { .. } => None,
+            ChatMethod::CheckChatName { .. }
+            | ChatMethod::FreeChatName { .. }
+            | ChatMethod::ChatRoot => None,
             ChatMethod::RestoreChat { .. }
             | ChatMethod::ChatAgents
             | ChatMethod::RestartChat { .. } => return Err(denied()),

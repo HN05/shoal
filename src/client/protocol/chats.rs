@@ -111,6 +111,9 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         run: Option<String>,
     },
+    /// `root_dir`, where a chat without a repository runs, prepared as
+    /// registering a repository prepares it.
+    ChatRoot,
 }
 
 /// The scope token a chat's agent carries.
@@ -127,4 +130,10 @@ impl ChatMethod {
             _ => Lifetime::Reply,
         }
     }
+}
+
+/// The answer to [`ChatMethod::ChatRoot`].
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChatRoot {
+    pub path: std::path::PathBuf,
 }

@@ -917,8 +917,9 @@ Every Codex launch, chats included, adds
 sandbox otherwise blocks the daemon's socket and allows a single socket only
 along with the network.
 Claude and Codex launches, including Happy's, trust the repository's checkout and
-shared Shoal workspaces directory before launch, creating the agent's user config if
-needed and preserving other settings. Claude Code looks up a worktree's trust under
+shared Shoal workspaces directory before launch, or for a chat without a repository
+`root_dir`, whose entry stays, creating the agent's user config if needed and
+preserving other settings. Claude Code looks up a worktree's trust under
 the checkout, not under parent directories above the worktree. An explicitly placed
 workspace outside the workspaces directory gets its own trust entry.
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
@@ -1913,6 +1914,35 @@ of those without an agent of their own; while it is otherwise stopped, their
 events go on up, to you at the top, and one removed before receiving their
 events gives you the notifications they stand for. The chat's `parent` and
 `children` fields name the spaces above and below it.
+
+### Master session
+
+`shoal start --mode orchestrate [--parent SPACE] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
+starts a chat without a repository, a master session whose agent manages the
+spaces of every registered repository; any mode with `repository = false`
+starts its chat the same way. It runs in `root_dir`, with its `TMPDIR` in
+`root_dir`'s `.tmp`, and its settings come from the global config alone; a
+repository, `--repo` or `--issue` is refused, and `--in` starts the mode's
+chat in that workspace's worktree, in its repository, instead. The agent waits for you
+to speak first, as in any chat. `shoal work` and `--json` list it with a null
+`repository_id`, and it is stopped, resumed and removed like any other chat;
+removing it first removes every space below it, in every repository.
+
+`shoal start` run from it starts workspaces and chats below it in any
+registered repository, whose messages, questions, completion, approval
+requests and activity reach it first, as they reach any parent; spaces you
+start stay top-level and report to you, and several master sessions may run at
+once. A space without a repository is the only parent of a space in another
+repository. Its scope reaches every space on the machine: it lists and reads
+them, messages their agents, answers their questions, holds them, stops and
+queues their agents, resumes the ones it or the spaces below it stopped, and
+removes those you hold nothing in, under the
+[scoped workspace commands](#scoped-workspace-commands) rules. It decides only
+the requests routed to it, with a grant; merging, PR verdicts, CI approval and
+your notifications stay with you. It keeps no attached files, acts on no
+repository's issues or PRs, and [`shoal move`](#move-a-space-to-another-machine)
+refuses it. The [`shoal-orchestrator`](../skills/shoal-orchestrator/SKILL.md)
+skill is its unscoped counterpart, for an agent in your own terminal.
 
 ### Planning issues
 

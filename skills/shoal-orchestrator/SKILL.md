@@ -7,7 +7,10 @@ description: Use outside any Shoal workspace to coordinate work for the user —
 
 You run on the user's machine outside any managed workspace and hand work to
 agents that each own a workspace. Name every workspace explicitly: outside a
-workspace, commands without a target open an interactive picker.
+workspace, commands without a target open an interactive picker. The
+`orchestrate` mode is your scoped counterpart: `shoal start --mode orchestrate`
+starts a master session, a chat without a repository that Shoal tracks, whose
+own rules replace this skill.
 
 Commands print JSON and never prompt when `SHOAL_OUTPUT=json`, which Shoal sets
 for the chats it starts. Without it, as in a session Shoal did not start or a
@@ -20,8 +23,8 @@ below it, such as child workspaces they split from it with `shoal split`, which
 they work on themselves; `shoal start` run there creates children of their space
 too, or of a space below it that `--parent` names, and nothing else. A chat is
 scoped the same way, to the chat and the spaces below it: the workspaces and
-chats it starts go below it; only the user's own terminal is unscoped and
-creates top-level spaces. Unscoped commands also
+chats it starts go below it, and a master session's scope reaches every space;
+only the user's own terminal is unscoped and creates top-level spaces. Unscoped commands also
 decide approval requests, so act on those only as the user directs.
 
 ## Start work

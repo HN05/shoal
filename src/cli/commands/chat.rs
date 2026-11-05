@@ -1,7 +1,8 @@
 //! Chats, which `shoal start` starts for a mode of their kind: an agent the
-//! user talks with about a repository in its registered checkout, or about a
-//! workspace's work in its worktree. A chat is no workspace's agent, so it
-//! is not a tracked execution; the daemon records it while its agent runs.
+//! user talks with about a repository in its registered checkout, about a
+//! workspace's work in its worktree, or without a repository in `root_dir`.
+//! A chat is no workspace's agent, so it is not a tracked execution; the
+//! daemon records it while its agent runs.
 //! Every start makes a new chat and gives it focus.
 use std::{
     ffi::{OsStr, OsString},
@@ -16,7 +17,7 @@ use crate::client::output::chat::BackgroundChat;
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
-        agents,
+        agents::{self, ChatRepository},
         context::Context,
         output::{self, Palette},
         recent, terminal, ui,
@@ -64,18 +65,54 @@ pub(super) async fn start(
             Some(input) => issue::repository(ctx, input.as_deref(), repository).await?,
             None => chosen(ctx, repository).await?,
         };
-        check_parent(ctx, &repo, None, options.parent.as_deref()).await?;
+        check_parent(ctx, Some(&repo), None, options.parent.as_deref()).await?;
         let settings = settings(ctx, &repo).await?;
         let topic = Topic {
             linked_issue: subject.linked_issue.clone(),
             ..Topic::repository(&repo, &subject.mode)
         };
         let topic = on_issue(ctx, &repo, &settings, topic, subject, &mut options).await?;
-        begin(ctx, repo, settings, topic, options).await
+        begin(
+            ctx,
+            ChatRepository::Registered(repo),
+            settings,
+            topic,
+            options,
+        )
+        .await
     }
     .await;
     handoff::report(&started);
     crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+}
+
+/// Start a chat in `mode` without a repository, in `root_dir`, which
+/// manages the spaces of every repository.
+pub(super) async fn start_outside_repositories(
+    ctx: &Context,
+    mode: String,
+    options: Options,
+) -> Result<i32> {
+    let restores = options.restore.clone();
+    let started = async {
+        let options = options.for_caller(ctx)?;
+        options.check_name(ctx).await?;
+        check_parent(ctx, None, None, options.parent.as_deref()).await?;
+        let repository = ChatRepository::Outside(root_dir(ctx).await?);
+        let settings = crate::client::workspaces::settings(&ctx.paths, repository.config()).await?;
+        crate::config::modes::get(&settings.modes, &mode)?;
+        let topic = Topic::outside_repositories(&mode);
+        begin(ctx, repository, settings, topic, options).await
+    }
+    .await;
+    handoff::report(&started);
+    crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
+}
+
+/// `root_dir`, where a chat without a repository runs, which the daemon
+/// prepares as registering a repository does.
+pub(super) async fn root_dir(ctx: &Context) -> Result<PathBuf> {
+    crate::client::chats::root(&ctx.paths).await
 }
 
 /// Start a chat in the worktree of the workspace `workspace` names, else
@@ -93,26 +130,33 @@ pub(super) async fn start_in_workspace(
         let workspace = chosen_workspace(ctx, workspace).await?;
         let repo = workspace_repository(ctx, &workspace).await?;
         let parent = options.parent.as_deref();
-        check_parent(ctx, &repo, Some(&workspace), parent).await?;
+        check_parent(ctx, Some(&repo), Some(&workspace), parent).await?;
         let settings = settings(ctx, &repo).await?;
         let topic = Topic {
             linked_issue: subject.linked_issue.clone(),
             ..Topic::workspace(workspace, &subject.mode)
         };
         let topic = on_issue(ctx, &repo, &settings, topic, subject, &mut options).await?;
-        begin(ctx, repo, settings, topic, options).await
+        begin(
+            ctx,
+            ChatRepository::Registered(repo),
+            settings,
+            topic,
+            options,
+        )
+        .await
     }
     .await;
     handoff::report(&started);
     crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
 }
 
-/// Refuse `parent`, the space a chat in `repo`, in the worktree of
-/// `workspace` when given, would go below, as its registration would, before
-/// a picker or prompt asks for the rest.
+/// Refuse `parent`, the space a chat in `repo`, or without one, in the
+/// worktree of `workspace` when given, would go below, as its registration
+/// would, before a picker or prompt asks for the rest.
 async fn check_parent(
     ctx: &Context,
-    repo: &Repository,
+    repo: Option<&Repository>,
     workspace: Option<&Workspace>,
     parent: Option<&str>,
 ) -> Result<()> {
@@ -120,13 +164,8 @@ async fn check_parent(
         return Ok(());
     };
     let workspace = workspace.map(|workspace| workspace.id.clone());
-    crate::client::chats::check_parent(
-        &ctx.paths,
-        Some(repo.id.clone().into()),
-        workspace,
-        parent.to_owned(),
-    )
-    .await
+    let repository = repo.map(|repo| repo.id.clone().into());
+    crate::client::chats::check_parent(&ctx.paths, repository, workspace, parent.to_owned()).await
 }
 
 /// `topic` in `repo` started on the issue `subject` names, if any. The mode
@@ -331,6 +370,21 @@ impl Topic {
         }
     }
 
+    /// A chat in `mode` without a repository, in `root_dir`.
+    pub(super) fn outside_repositories(mode: &str) -> Self {
+        Self {
+            relaunch: start_args(mode),
+            name: mode.to_owned(),
+            asks_name: true,
+            mode: mode.to_owned(),
+            subject: None,
+            linked_issue: None,
+            directories: Vec::new(),
+            links: Vec::new(),
+            workspace: None,
+        }
+    }
+
     /// A chat in `mode` in the worktree of `workspace`.
     pub(super) fn workspace(workspace: Workspace, mode: &str) -> Self {
         let place = vec!["--in".into(), workspace.id.clone().into()];
@@ -369,11 +423,8 @@ impl Topic {
     }
 
     /// Where the chat about this topic in `repo` runs.
-    fn home<'a>(&'a self, repo: &'a Repository) -> ChatHome<'a> {
-        match &self.workspace {
-            Some(workspace) => ChatHome::Workspace(workspace),
-            None => ChatHome::Checkout(repo),
-        }
+    fn home<'a>(&'a self, repo: &'a ChatRepository) -> ChatHome<'a> {
+        repo.home(self.workspace.as_ref())
     }
 }
 
@@ -422,7 +473,7 @@ pub(super) async fn settings(ctx: &Context, repo: &Repository) -> Result<Effecti
 /// receives it as `--name`.
 pub(super) async fn begin(
     ctx: &Context,
-    repo: Repository,
+    repo: ChatRepository,
     settings: Effective,
     topic: Topic,
     options: Options,
@@ -449,7 +500,7 @@ pub(super) enum Started {
 /// to the caller.
 pub(super) async fn launch(
     ctx: &Context,
-    repo: Repository,
+    repo: ChatRepository,
     settings: Effective,
     topic: Topic,
     options: Options,
@@ -479,7 +530,7 @@ pub(super) async fn launch(
     };
     let asks_name = topic.asks_name && requested.is_none();
     let name = initial_name(ctx, &topic, requested).await?;
-    let settings = self::settings(ctx, &repo).await?;
+    let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
     let session_args = SessionArgs {
         session: session.as_deref(),
         fork,
@@ -538,7 +589,7 @@ pub(super) async fn launch(
         let note = terminal::start_chat_in_background(
             ctx,
             &settings,
-            &repo,
+            repo.registered(),
             home.path(),
             &name,
             &relaunch,
@@ -548,7 +599,7 @@ pub(super) async fn launch(
         return Ok(Started::Background(BackgroundChat {
             chat: name,
             agent: agent.name().to_owned(),
-            repository: Some(repo.id.clone()),
+            repository: repo.registered().map(|repo| repo.id.clone()),
             place: note,
         }));
     }
@@ -562,7 +613,7 @@ pub(super) async fn launch(
     if place == ChatPlace::Beside && start_beside(ctx, &settings, &repo, beside(&name)).await? {
         return Ok(Started::Exited(0));
     }
-    agents::trust_chat(ctx, &settings, agent.name(), &repo, home).await;
+    agents::trust_chat(ctx, &settings, agent.name(), repo.registered(), home).await;
     let new = crate::client::chats::NewChat {
         name: &name,
         agent: agent.name(),
@@ -827,12 +878,12 @@ impl Beside<'_> {
 async fn start_beside(
     ctx: &Context,
     settings: &Effective,
-    repo: &Repository,
+    repo: &ChatRepository,
     beside: Beside<'_>,
 ) -> Result<bool> {
     let chat = beside.relaunch(None);
     let cwd = beside.topic.home(repo).path();
-    terminal::start_chat(ctx, settings, repo, cwd, beside.name, &chat).await
+    terminal::start_chat(ctx, settings, repo.registered(), cwd, beside.name, &chat).await
 }
 
 /// The agent's configured launcher with the chat instructions, its opening
@@ -886,12 +937,12 @@ fn command(
 fn brief(
     settings: &Effective,
     agent: &Agent,
-    repo: &Repository,
+    repo: &ChatRepository,
     topic: &Topic,
     resumes: bool,
 ) -> Result<templates::Brief> {
     let place = templates::Place::Chat {
-        repo: Some(repository::name(repo)),
+        repo: repo.registered().map(repository::name),
         home: topic.home(repo),
         delivery: agents::chat_delivery(settings, agent.name()),
     };

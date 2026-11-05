@@ -113,23 +113,27 @@ impl TrustFile {
 
     /// Trust the directory of a chat at `home`, which runs with this
     /// process's environment changed by `profile`, as workspace launches
-    /// trust theirs; repository removal clears the entries.
+    /// trust theirs; repository removal clears the entries. The `root_dir`
+    /// of a chat without a repository stays trusted.
     pub(super) async fn trust_chat(
         &self,
         ctx: &Context,
-        repository: &Repository,
+        repository: Option<&Repository>,
         home: ChatHome<'_>,
         profile: &crate::ai::Environment,
     ) {
         let mut configured = std::collections::BTreeMap::new();
         profile.layer(&mut configured, &ctx.paths.home);
-        self.keep_config_location(ctx, Holder::Repository(repository), &configured)
-            .await;
+        if let Some(repository) = repository {
+            self.keep_config_location(ctx, Holder::Repository(repository), &configured)
+                .await;
+        }
         let environment = AgentEnvironment::new(&ctx.paths.home, &configured);
-        self.trust(
-            &environment,
-            &repository_trust_paths(repository, home.path()),
-        );
+        let paths = match repository {
+            Some(repository) => repository_trust_paths(repository, home.path()),
+            None => vec![home.path().to_owned()],
+        };
+        self.trust(&environment, &paths);
     }
 
     fn trust(&self, environment: &AgentEnvironment, paths: &[std::path::PathBuf]) {

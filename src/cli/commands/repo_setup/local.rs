@@ -33,6 +33,7 @@ pub(super) async fn start(
     );
     let config = config_file(ctx, repo.id.clone().into()).await?;
     let topic = topic(&repo, &config);
+    let repo = crate::cli::agents::ChatRepository::Registered(repo);
     chat::begin(ctx, repo, settings, topic, options).await
 }
 

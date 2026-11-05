@@ -79,6 +79,13 @@ pub async fn check_parent(
     request::<()>(daemon, method).await
 }
 
+/// `root_dir`, where a chat without a repository runs, prepared as
+/// registering a repository prepares it.
+pub async fn root(daemon: &impl Daemon) -> Result<std::path::PathBuf> {
+    let root: crate::protocol::ChatRoot = request(daemon, ChatMethod::ChatRoot).await?;
+    Ok(root.path)
+}
+
 /// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could take now.
 pub async fn free_name(daemon: &impl Daemon, name: String) -> Result<String> {
     request(daemon, ChatMethod::FreeChatName { name }).await

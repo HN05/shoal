@@ -219,6 +219,7 @@ impl Package {
         let settings = chat::settings(ctx, &repo).await?;
         let topic = chat::Topic::imported(&repo, &packaged.mode, &packaged.links);
         let options = self.chat_options(ctx, packaged, place).await?;
+        let repo = crate::cli::agents::ChatRepository::Registered(repo);
         chat::launch(ctx, repo, settings, topic, options).await
     }
 

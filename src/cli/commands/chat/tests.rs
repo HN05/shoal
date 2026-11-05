@@ -129,6 +129,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         workspaces_dir: None,
         contribution: false,
     };
+    let repo = ChatRepository::Registered(repo);
     assert_eq!(topic.home(&repo).path(), Path::new("/work/worker"));
     let settings = crate::config::Config::default()
         .resolve(&Default::default())

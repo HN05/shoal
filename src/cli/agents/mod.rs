@@ -262,10 +262,46 @@ pub(in crate::cli) struct Launch {
     pub replaces: Vec<PathBuf>,
 }
 
+/// The repository a chat belongs to, or none, with `root_dir`, where a chat
+/// without one runs.
+#[derive(Debug, Clone)]
+pub(in crate::cli) enum ChatRepository {
+    Registered(Repository),
+    Outside(PathBuf),
+}
+
+impl ChatRepository {
+    /// The registered repository; none for a chat without one.
+    pub fn registered(&self) -> Option<&Repository> {
+        match self {
+            Self::Registered(repository) => Some(repository),
+            Self::Outside(_) => None,
+        }
+    }
+
+    /// Where a chat runs: the worktree of `workspace` when given, else the
+    /// repository's checkout, or `root_dir`.
+    pub fn home<'a>(&'a self, workspace: Option<&'a Workspace>) -> ChatHome<'a> {
+        match (workspace, self) {
+            (Some(workspace), _) => ChatHome::Workspace(workspace),
+            (None, Self::Registered(repository)) => ChatHome::Checkout(repository),
+            (None, Self::Outside(root)) => ChatHome::Root(root),
+        }
+    }
+
+    /// The config a chat's settings come from.
+    pub fn config(&self) -> ConfigTarget {
+        match self {
+            Self::Registered(repository) => ConfigTarget::Repository(repository.id.clone().into()),
+            Self::Outside(_) => ConfigTarget::Global,
+        }
+    }
+}
+
 /// One chat about a repository in its registered checkout, or in a
-/// workspace's worktree.
+/// workspace's worktree, or without a repository in `root_dir`.
 pub(in crate::cli) struct ChatLaunch {
-    pub repository: Repository,
+    pub repository: ChatRepository,
     /// The workspace whose worktree the chat runs in, instead of the
     /// repository's checkout.
     pub workspace: Option<Workspace>,
@@ -294,10 +330,7 @@ pub(in crate::cli) struct ChatLaunch {
 impl ChatLaunch {
     /// Where the chat runs.
     pub fn home(&self) -> ChatHome<'_> {
-        match &self.workspace {
-            Some(workspace) => ChatHome::Workspace(workspace),
-            None => ChatHome::Checkout(&self.repository),
-        }
+        self.repository.home(self.workspace.as_ref())
     }
 }
 
@@ -1301,13 +1334,14 @@ async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<String>) {
     }
 }
 
-/// Trust the directory of a chat of agent `name` in `repository` at `home`
-/// as workspace launches trust theirs. Failure only warns.
+/// Trust the directory of a chat of agent `name` in `repository`, or
+/// without one, at `home` as workspace launches trust theirs. Failure only
+/// warns.
 pub(in crate::cli) async fn trust_chat(
     ctx: &Context,
     settings: &Effective,
     name: &str,
-    repository: &Repository,
+    repository: Option<&Repository>,
     home: ChatHome<'_>,
 ) {
     if let Some(trust) = agent_integration(settings, name).trust_file() {

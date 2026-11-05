@@ -2062,7 +2062,8 @@ issue from the chat's checkout and records it as the chat's. It starts at once f
 background sync keeps current, so an offline or diverged checkout still gets its
 chat. Its
 instructions describe the discussion only, from the `chat` rule that
-repositories can extend like the other rules; the orchestrator skill is available when the user asks for coordination. Belonging
+repositories can extend like the other rules; the orchestrator skill is available when the user asks for coordination.
+Belonging
 to no workspace, a chat is not a tracked execution: queuing and overload stops
 serve unattended agents, while the user attends a chat. It is still a
 daemon record, so lists and integrations can follow it: the agent replaces Shoal's
@@ -2156,6 +2157,15 @@ can move. A chat has no tracked execution whose end clears its state, so its
 state ends when the chat stops or is restored. Keep-awake reads it as a
 workspace agent's; overload protection, turn retries and interrupts act on
 tracked executions, which a chat's agent is not.
+
+A chat may also belong to no repository: a mode with `repository = false`,
+such as the built-in `orchestrate`, starts it in `root_dir`, with the global
+config alone, as a master session whose scope reaches every space on the
+machine. It starts work below itself in any repository, receives what its
+subtree reports as any parent does, and acts on other spaces as a coordinator
+acts below it, while what the scope keeps from every agent stays the user's,
+so the user can hand coordination to a tracked, scoped agent. The orchestrator
+skill stays for an unscoped agent the user runs in their own terminal.
 
 Issues split by whether their plan is settled: `[issue] plan_label` marks one
 that needs the owner's choices and `planned_label` one whose body holds a plan

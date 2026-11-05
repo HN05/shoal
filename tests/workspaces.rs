@@ -19,6 +19,9 @@ mod upgrades;
 #[path = "workspaces/restarts.rs"]
 mod restarts;
 
+#[path = "workspaces/master.rs"]
+mod master;
+
 #[path = "support/prompt.rs"]
 mod prompt;
 #[path = "support/pty.rs"]

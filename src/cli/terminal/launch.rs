@@ -423,20 +423,20 @@ async fn start_in_background(
     open_in_background(ctx, places, beside, &workspace.path, &label, &argv).await
 }
 
-/// Run Shoal with `args` for the chat `name` of `repository` in `cwd`, its
-/// checkout or worktree, in a new background place, of the first host that
-/// would start a queued agent, for the user to attach to. Returns how that
-/// host reports it.
+/// Run Shoal with `args` for the chat `name` of `repository`, or of none,
+/// in `cwd`, its checkout, worktree or `root_dir`, in a new background
+/// place, of the first host that would start a queued agent, for the user
+/// to attach to. Returns how that host reports it.
 pub(in crate::cli) async fn start_chat_in_background(
     ctx: &Context,
     settings: &Effective,
-    repository: &Repository,
+    repository: Option<&Repository>,
     cwd: &Path,
     name: &str,
     args: &[OsString],
 ) -> Result<String> {
     let origin = queued_origin()?;
-    let repo = groups::Repo::Known(repository);
+    let repo = groups::Repo::of_chat(repository, cwd);
     let argv = shoal_command(ctx, args)?;
     groups::first_queued(
         ctx,
@@ -581,15 +581,16 @@ fn agent_worker(
     )
 }
 
-/// Run Shoal with `args` for the chat `name` of `repository` in `cwd`, its
-/// checkout or worktree: in a new session this terminal attaches to, as
+/// Run Shoal with `args` for the chat `name` of `repository`, or of none,
+/// in `cwd`, its checkout, worktree or `root_dir`: in a new session this
+/// terminal attaches to, as
 /// `run_agent` does for tracked agents, otherwise in a new focused place,
 /// shown here when its host does not serve this terminal. Returns whether
 /// it ran there; `false` means the chat runs in place.
 pub(in crate::cli) async fn start_chat(
     ctx: &Context,
     settings: &Effective,
-    repository: &Repository,
+    repository: Option<&Repository>,
     cwd: &Path,
     name: &str,
     args: &[OsString],
@@ -598,7 +599,7 @@ pub(in crate::cli) async fn start_chat(
     let Some(places) = host.places() else {
         return Ok(false);
     };
-    let repo = groups::Repo::Known(repository);
+    let repo = groups::Repo::of_chat(repository, cwd);
     let origin = groups::beside(ctx, &host, &repo, cwd).await?;
     let beside = host.beside(origin.as_ref());
     let attaches = host.host.attaches();
