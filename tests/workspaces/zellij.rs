@@ -88,20 +88,32 @@ impl ZellijServer {
     /// tabs in only while a client shows it: Zellij lists the client, and
     /// the client drew the session. Under load Zellij can list a client
     /// that then exits, telling it the session is missing: another one
-    /// attaches instead.
+    /// attaches instead. A timeout reports what Zellij last listed and how
+    /// often a client attached again.
     fn show(&mut self) {
-        wait_until("a client to show the user's session", || {
+        let mut listed = None;
+        let mut reattached = 0;
+        let shown = try_wait_for(|| {
             if let Some(status) = self.client.try_wait().unwrap() {
                 eprintln!(
                     "the client exited: {status}; it showed:\n{}",
                     self.client_screen()
                 );
                 self.client = self.attach("caller");
+                reattached += 1;
             }
-            self.clients("caller")
-                .is_some_and(|clients| clients.len() == 1)
-                && self.drawn.load(Ordering::Relaxed)
+            listed = self.clients("caller");
+            (listed.as_ref().is_some_and(|clients| clients.len() == 1)
+                && self.drawn.load(Ordering::Relaxed))
+            .then_some(())
         });
+        let drawn = self.drawn.load(Ordering::Relaxed);
+        assert!(
+            shown.is_some(),
+            "timed out waiting for a client to show the user's session; \
+             clients listed (None: session reported missing): {listed:?}; \
+             the client drew the session: {drawn}; clients attached again: {reattached}"
+        );
     }
 
     /// `command` reaching the test's sessions.
