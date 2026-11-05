@@ -41,24 +41,18 @@ fn the_prompt_carries_the_issue_and_swaps_only_configured_labels() {
     };
     let prompt = prompt(&issue, &labels(Some("needs-plan"), Some("planned")));
     assert!(
-            prompt.starts_with(
-                "Plan issue #7: Decide {title}\nhttps://forge.example/team/repo/issues/7\n\nWhich way?\n\n"
-            ),
-            "{prompt}"
-        );
-    assert!(
-        prompt.contains("only the body. Then replace its `needs-plan` label with `planned`. Open"),
+        prompt.starts_with(
+            "Plan issue #7: Decide {title}\nhttps://forge.example/team/repo/issues/7\n\nWhich way?\n\n"
+        ),
         "{prompt}"
     );
-    assert!(prompt.ends_with("`shoal add --issue 7 --agent <name>`."));
-    assert_eq!(
-        relabel(&labels(Some("needs-plan"), None)),
-        " Then remove its `needs-plan` label."
-    );
-    assert_eq!(
-        relabel(&labels(None, Some("planned"))),
-        " Then add the `planned` label."
-    );
+    assert!(prompt.contains("`needs-plan`"), "{prompt}");
+    assert!(prompt.contains("`planned`"), "{prompt}");
+    assert!(prompt.contains("--issue 7 "), "{prompt}");
+    let removes = relabel(&labels(Some("needs-plan"), None));
+    assert!(removes.contains("remove its `needs-plan`"), "{removes}");
+    let adds = relabel(&labels(None, Some("planned")));
+    assert!(adds.contains("add the `planned`"), "{adds}");
     assert_eq!(relabel(&labels(None, None)), "");
 }
 

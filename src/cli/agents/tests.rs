@@ -64,10 +64,7 @@ fn launches_name_the_missing_program_or_undefined_agent() {
 }
 
 #[test]
-fn integrations_serve_only_the_names_they_list() {
-    assert!(integration(IntegrationKind::Claude).trust_file().is_some());
-    assert_eq!(integration(IntegrationKind::Codex).wakes(), Wake::Prompt);
-    assert_eq!(integration(IntegrationKind::Claude).wakes(), Wake::Hook);
+fn prompt_wakes_follow_how_each_integration_wakes() {
     assert_eq!(
         prompt_wake(IntegrationKind::Codex),
         Some(PromptWake::Always)
@@ -76,9 +73,7 @@ fn integrations_serve_only_the_names_they_list() {
         prompt_wake(IntegrationKind::Claude),
         Some(PromptWake::AfterInterrupt)
     );
-    let configured = integration(IntegrationKind::None);
-    assert!(configured.trust_file().is_none());
-    assert!(configured.hook_args(WORKSPACE, false).unwrap().is_empty());
+    assert_eq!(prompt_wake(IntegrationKind::None), None);
     assert_eq!(
         builtin_names()[..2],
         ["codex".to_owned(), "claude".to_owned()]

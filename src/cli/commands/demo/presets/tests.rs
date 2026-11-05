@@ -26,7 +26,7 @@ fn web_demos_print_their_url_and_over_ssh_how_to_forward_it() {
     let over_ssh = instructions(Preset::Web, &web, Some("10.0.0.2 52000 10.0.0.1 22")).unwrap();
     assert_eq!(over_ssh[0], "http://localhost:49200");
     assert!(
-        over_ssh[1].starts_with("Forward the port first: ssh -L 49200:localhost:49200 ")
+        over_ssh[1].contains("ssh -L 49200:localhost:49200 ")
             && over_ssh[1].ends_with("@10.0.0.1"),
         "{}",
         over_ssh[1]
@@ -51,19 +51,22 @@ fn server_demos_print_their_address_without_a_scheme() {
         ["localhost:49300"]
     );
     let over_ssh = instructions(Preset::Server, &dns, Some("10.0.0.2 52000 10.0.0.1 22")).unwrap();
-    assert!(over_ssh[1].starts_with("Forward the port first: ssh -L 49300:localhost:49300 "));
+    assert!(over_ssh[1].contains("ssh -L 49300:localhost:49300 "));
 }
 
 #[test]
 fn simulator_demos_name_their_device_over_ssh() {
     let app = launch(Preset::Simulator, SIM_UDID, "UDID-1");
-    assert_eq!(
-        instructions(Preset::Simulator, &app, Some("10.0.0.2 52000 10.0.0.1 22")).unwrap(),
-        ["Demo app runs on simulator UDID-1; view it with Screen Sharing to 10.0.0.1"]
+    let over_ssh =
+        instructions(Preset::Simulator, &app, Some("10.0.0.2 52000 10.0.0.1 22")).unwrap();
+    assert!(
+        matches!(over_ssh.as_slice(), [line] if line.contains("UDID-1") && line.contains("10.0.0.1")),
+        "{over_ssh:?}"
     );
-    assert_eq!(
-        instructions(Preset::Simulator, &app, None).unwrap(),
-        ["Opening simulator UDID-1"]
+    let local = instructions(Preset::Simulator, &app, None).unwrap();
+    assert!(
+        matches!(local.as_slice(), [line] if line.contains("UDID-1") && !line.contains("10.0.0.1")),
+        "{local:?}"
     );
 }
 

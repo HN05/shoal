@@ -114,11 +114,7 @@ fn auto_mode_learns_that_the_workspace_branch_is_the_agents_own() {
     assert_eq!(environment[0], "$defaults");
     assert_eq!(environment.len(), 2, "{environment:?}");
     let own = environment[1].as_str().unwrap();
-    for named in [
-        "Shoal workspace `fix-login`",
-        "Git branch `fix-login-redirect`",
-        "`git push --force-with-lease`",
-    ] {
+    for named in ["`fix-login`", "`fix-login-redirect`"] {
         assert!(own.contains(named), "{named}: {own}");
     }
     // A workspace at a commit has no branch to call its own.

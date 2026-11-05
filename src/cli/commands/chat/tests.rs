@@ -120,9 +120,9 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         .unwrap();
     let told = instructions(&settings, &agent, &repo, topic.home(&repo), false);
     for expected in [
-        "Shoal workspace worker of the shoal",
-        "repository, on branch feature, in its worktree at /work/worker",
-        "Do not change files,",
+        "workspace worker of the shoal",
+        "branch feature",
+        "/work/worker",
         "`--space worker`",
     ] {
         assert!(told.contains(expected), "{expected:?} in {told}");

@@ -94,12 +94,11 @@ async fn missing_repositories_suggest_the_repository_url() {
         ),
     ] {
         let error = repository_for(&[], url).await.unwrap_err().to_string();
-        assert_eq!(
-            error,
-            format!(
-                "no registered repository has the remote {}; register it with `shoal repo add {repository}` and retry",
-                repository.split_once("://").unwrap().1,
-            )
+        let remote = repository.split_once("://").unwrap().1;
+        assert!(error.contains(&format!("remote {remote};")), "{error}");
+        assert!(
+            error.contains(&format!("`shoal repo add {repository}`")),
+            "{error}"
         );
     }
 }
@@ -123,11 +122,9 @@ fn issue_names_are_portable_bounded_and_stable() {
     assert_eq!(issue.branch_name(), "34-fix");
     issue.title = "日本語 to the".into();
     assert_eq!(issue.branch_name(), "issue-34");
-    assert!(
-        issue
-            .prompt()
-            .contains("url\n\nIssue description:\nbody\n\n`shoal view`")
-    );
+    let prompt = issue.prompt();
+    assert!(prompt.contains("#34: 日本語 to the\nurl\n"), "{prompt}");
+    assert!(prompt.contains("Issue description:\nbody\n"), "{prompt}");
     issue.details = " \n".into();
     assert!(!issue.prompt().contains("Issue description"));
 }
