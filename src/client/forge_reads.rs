@@ -16,11 +16,12 @@ use crate::{
             link::{ItemKind, LinkKind, Selection},
             list::Search,
             reaction::allowed::AllowedReactions,
+            revert::MergedPull,
         },
         raw::RawRequest,
         review::{reviewers::Reviewer, thread::Thread},
     },
-    model::{Dependency, Selected},
+    model::{Dependency, MergeWarning, Selected},
     protocol::{DownloadPiece, ItemContext, ItemMethod, ViewPiece},
 };
 
@@ -201,4 +202,25 @@ pub async fn review_thread(
         comment,
     };
     request(daemon, method).await
+}
+
+/// The sensitive files merging the PR `item`, by default the linked one,
+/// brings to a target that changed them too, for the caller to confirm;
+/// `None` when it brings none.
+pub async fn merge_warning(
+    daemon: &impl Daemon,
+    context: ItemContext,
+    item: Option<String>,
+) -> Result<Option<MergeWarning>> {
+    request(daemon, ItemMethod::MergeWarning { context, item }).await
+}
+
+/// The merged PR `item`, by default `space`'s linked one, with what
+/// reverting its merge needs.
+pub async fn merged_pull(
+    daemon: &impl Daemon,
+    space: String,
+    item: Option<String>,
+) -> Result<MergedPull> {
+    request(daemon, ItemMethod::MergedPull { space, item }).await
 }

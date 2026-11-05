@@ -3,11 +3,10 @@ use anyhow::Result;
 
 use crate::{
     cli::{
-        client::{self, request},
+        client::{self},
         context::Context,
     },
     model::Workspace,
-    protocol::ItemMethod,
 };
 
 /// Link the PR a workspace was opened on and return the workspace with that
@@ -26,16 +25,7 @@ pub(in crate::cli::commands) async fn link_pull(
 /// Link PR `url` as the one workspace `id` was opened on; whether it did,
 /// a refused link having warned.
 pub(super) async fn link_or_warn(ctx: &Context, id: &str, url: &str) -> bool {
-    let linked = request::<()>(
-        &ctx.paths,
-        ItemMethod::SetPr {
-            space: id.to_owned(),
-            action: crate::client::links::pr::Action::Watch {
-                url: url.to_owned(),
-            },
-        },
-    )
-    .await;
+    let linked = crate::client::items::watch_pr(&ctx.paths, id.to_owned(), url.to_owned()).await;
     if let Err(error) = &linked {
         eprintln!("warning: cannot link PR {url}: {error:#}");
     }

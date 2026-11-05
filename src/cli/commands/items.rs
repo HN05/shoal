@@ -6,16 +6,15 @@ use anyhow::Result;
 use crate::{
     cli::{
         args::changes::{IssueCommand, ItemSelector, PrCommand},
-        client,
         context::Context,
     },
     forge::items::{
         action::{Action, MergeMethod},
         create::NewIssue,
-        item::{Item, ItemState},
+        item::ItemState,
         link::ItemKind,
     },
-    protocol::{ItemContext, ItemMethod},
+    protocol::ItemContext,
 };
 
 mod content;
@@ -190,11 +189,9 @@ async fn merge_pr(
     let context = item_context(ctx, &selector).await?;
     let mut item = selector.item;
     if !confirmed && !matches!(action, Action::CancelAutoMerge) {
-        let warning = ItemMethod::MergeWarning {
-            context: context.clone(),
-            item: item.clone(),
-        };
-        let warning = client::request(&ctx.paths, warning).await?;
+        let warning =
+            crate::client::forge_reads::merge_warning(&ctx.paths, context.clone(), item.clone())
+                .await?;
         // The merge is of the PR the user confirmed, even if the space's
         // link changed meanwhile.
         if let Some(confirmed) = super::merge_warning::confirm(ctx, warning)? {
@@ -234,16 +231,7 @@ async fn act_in(
 ) -> Result<i32> {
     // The forge merges now a PR whose checks already pass.
     let auto_merge = matches!(action, Action::AutoMerge { .. });
-    let item: Item = client::request(
-        &ctx.paths,
-        ItemMethod::ItemAction {
-            context,
-            kind,
-            item,
-            action,
-        },
-    )
-    .await?;
+    let item = crate::client::items::act(&ctx.paths, context, kind, item, action).await?;
     let outcome = if auto_merge && item.state == ItemState::Merged {
         "PR merged"
     } else {

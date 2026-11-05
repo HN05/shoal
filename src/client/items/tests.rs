@@ -7,9 +7,7 @@ fn deadline(seconds: u64) -> tokio::time::Instant {
 #[tokio::test]
 async fn item_wait_continues_on_the_replacement_daemon() {
     use crate::{
-        cli::context::Context,
-        client::links::Updates,
-        paths::Paths,
+        client::{links::Updates, paths::Paths},
         protocol::{self, Body, ErrorCode, ItemMethod, Method, Operation, Request, Response},
     };
     let root = tempfile::tempdir_in("/tmp").unwrap();
@@ -67,24 +65,27 @@ async fn item_wait_continues_on_the_replacement_daemon() {
         .await
         .unwrap();
     });
-    let ctx = Context::new(paths, true);
-    let body = tokio::time::timeout(
+    let updates = tokio::time::timeout(
         Duration::from_secs(60),
-        super::wait_for_items(&ctx, "work", Default::default(), Some(deadline(600)), false),
+        super::await_updates(
+            &paths,
+            "work",
+            Default::default(),
+            Some(deadline(600)),
+            false,
+        ),
     )
     .await
     .unwrap()
     .unwrap();
-    assert!(Updates::try_from(body).unwrap().timed_out);
+    assert!(updates.timed_out);
     server.await.unwrap();
 }
 
 #[tokio::test(start_paused = true)]
 async fn item_wait_ends_at_its_deadline_while_the_daemon_is_away() {
     use crate::{
-        cli::context::Context,
-        client::links::Updates,
-        paths::Paths,
+        client::paths::Paths,
         protocol::{self, ItemMethod, Method, Operation, Request},
     };
     let root = tempfile::tempdir_in("/tmp").unwrap();
@@ -98,13 +99,18 @@ async fn item_wait_ends_at_its_deadline_while_the_daemon_is_away() {
         drop(stream);
         anyhow::Ok((request, listener))
     });
-    let ctx = Context::new(paths, true);
     let started = tokio::time::Instant::now();
     // The paused clock reaches the deadline only once nothing else can run.
-    let body = super::wait_for_items(&ctx, "work", Default::default(), Some(deadline(600)), false)
-        .await
-        .unwrap();
-    assert!(Updates::try_from(body).unwrap().timed_out);
+    let updates = super::await_updates(
+        &paths,
+        "work",
+        Default::default(),
+        Some(deadline(600)),
+        false,
+    )
+    .await
+    .unwrap();
+    assert!(updates.timed_out);
     assert!(started.elapsed() >= Duration::from_secs(600));
     let (request, _listener) = server.await.unwrap().unwrap();
     assert!(matches!(

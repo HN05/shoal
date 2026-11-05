@@ -20,6 +20,7 @@ pub mod files;
 pub mod forge_reads;
 pub(crate) mod fsutil;
 pub mod item_numbers;
+pub mod items;
 pub mod leases;
 pub mod links;
 pub mod list_status;

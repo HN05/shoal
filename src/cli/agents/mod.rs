@@ -345,7 +345,8 @@ pub(in crate::cli) async fn link_chat(
     links: &[(Relation, LinkedItem)],
 ) {
     for (relation, item) in links {
-        if let Err(error) = client::link_item(&ctx.paths, &chat.id, *relation, item).await {
+        if let Err(error) = crate::client::items::link(&ctx.paths, &chat.id, *relation, item).await
+        {
             eprintln!("shoal: {} was not linked to the chat: {error:#}", item.url);
         }
     }

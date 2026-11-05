@@ -5,13 +5,12 @@ use anyhow::Result;
 use super::context::select_repo_context;
 
 use crate::{
-    cli::{args::changes::ListArgs, client, context::Context},
+    cli::{args::changes::ListArgs, context::Context},
     forge::items::{
         item::{Item, ItemState},
         link::ItemKind,
         list::Search,
     },
-    protocol::ItemMethod,
 };
 
 pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Result<i32> {
@@ -26,15 +25,9 @@ pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Resul
     // Refuse a bad filter before the picker asks for anything.
     search.check()?;
     let (context, repository) = select_repo_context(ctx, args.repo).await?;
-    let method = ItemMethod::ListItems {
-        context,
-        kind,
-        search,
-        repository,
-    };
-    let items = ctx
-        .progress("Searching", client::pages::<Item>(&ctx.paths, method))
-        .await?;
+    let listed =
+        crate::client::forge_reads::list_items(&ctx.paths, context, kind, search, repository);
+    let items = ctx.progress("Searching", listed).await?;
     ctx.show(&items, |items| render_list(kind, items))?;
     Ok(0)
 }

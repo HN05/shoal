@@ -9,6 +9,7 @@ use super::{
 };
 use crate::client::operations::{self, NewWorkspace};
 use crate::client::output::items::Revert;
+use crate::client::{forge_reads, items};
 use crate::{
     cli::{
         args::changes::{RevertArgs, RevertedPr},
@@ -29,7 +30,7 @@ use crate::{
     git::revert::{self as git_revert, Merge, Merged, Reverted},
     model::{Chat, PresentSpace, Workspace},
     protocol::{
-        ItemContext, ItemMethod, RemovalMethod, WorkspaceMethod,
+        ItemContext, RemovalMethod, WorkspaceMethod,
         operations::{StartedWorkspace, WorkspaceStart},
     },
     removal::{RemovalResult, UnsavedWork},
@@ -41,18 +42,11 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
     let space = ui::select_space(ctx, selector.space, ui::Fallback::CurrentDirectory).await?;
     let from = Reverting::of(ctx, space).await?;
     if from.forge_reverts(ctx).await? {
-        let method = ItemMethod::RevertPull {
-            space: from.id().to_owned(),
-            item: selector.item,
-            options,
-        };
-        return report(ctx, request(&ctx.paths, method).await?, None);
+        let space = from.id().to_owned();
+        let outcome = items::revert_pull(&ctx.paths, space, selector.item, options).await?;
+        return report(ctx, outcome, None);
     }
-    let method = ItemMethod::MergedPull {
-        space: from.id().to_owned(),
-        item: selector.item,
-    };
-    let merged: MergedPull = request(&ctx.paths, method).await?;
+    let merged = forge_reads::merged_pull(&ctx.paths, from.id().to_owned(), selector.item).await?;
     let Some(reverting) = revert_workspace(ctx, &from, &merged).await? else {
         return Ok(1);
     };

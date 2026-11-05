@@ -22,7 +22,7 @@ use crate::{
     git,
     model::Workspace,
     protocol::{
-        ItemMethod, WorkspaceMethod,
+        WorkspaceMethod,
         operations::{Failure, OperationSpec, Step},
     },
 };
@@ -91,15 +91,7 @@ pub(in crate::cli::commands) async fn push_and_open(
         push(ctx, &workspace).await?;
         reporter.step(Step::Pushed).await?;
     }
-    client::request(
-        &ctx.paths,
-        ItemMethod::OpenPull {
-            workspace: workspace.id,
-            options,
-            push_held: held,
-        },
-    )
-    .await
+    crate::client::items::open_pull(&ctx.paths, workspace.id, options, held).await
 }
 
 /// Push to the branch's push remote as a tracked command under the agent
@@ -128,16 +120,8 @@ pub(super) async fn open_issue(
     link: bool,
 ) -> Result<i32> {
     let (context, repository) = select_open_context(ctx, space, repository).await?;
-    let outcome: OpenOutcome = client::request(
-        &ctx.paths,
-        ItemMethod::OpenIssue {
-            context,
-            issue,
-            repository,
-            link,
-        },
-    )
-    .await?;
+    let outcome =
+        crate::client::items::open_issue(&ctx.paths, context, issue, repository, link).await?;
     let opened = match outcome {
         OpenOutcome::Opened(opened) => *opened,
         OpenOutcome::Proposed(proposed) => return report_proposed(ctx, "Issue", &proposed),

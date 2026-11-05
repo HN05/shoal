@@ -23,7 +23,7 @@ use crate::{
     },
     git,
     model::{ReadyMarks, Relation, Repository, ReviewMark},
-    protocol::{ItemContext, ItemMethod, PullHead},
+    protocol::{ItemContext, PullHead},
 };
 
 /// The space and the items selected in it, with the kind of a bare number
@@ -108,17 +108,12 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         LinkKind::Issue => issue_title(ctx, context, &input).await,
         LinkKind::Pr | LinkKind::Ci => None,
     };
-    client::request::<()>(
-        &ctx.paths,
-        ItemMethod::LinkItem {
-            space,
-            kind,
-            url: input,
-            relation,
-            title,
-        },
-    )
-    .await?;
+    let item = crate::model::LinkedItem {
+        kind,
+        url: input,
+        title,
+    };
+    crate::client::items::link(&ctx.paths, &space, relation, &item).await?;
     ctx.emit(
         &link_outcome(kind, relation),
         Registered {
@@ -189,16 +184,8 @@ async fn pick_open_item(
 pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let (items, relation) = items.split()?;
     let (space, selected) = select(ctx, items).await?;
-    client::request::<()>(
-        &ctx.paths,
-        ItemMethod::UnlinkItems {
-            space,
-            relation,
-            kind: selected.kind,
-            url: selected.input,
-        },
-    )
-    .await?;
+    crate::client::items::unlink(&ctx.paths, space, relation, selected.kind, selected.input)
+        .await?;
     let unlinked = Registered {
         registered: false,
         relation: None,
