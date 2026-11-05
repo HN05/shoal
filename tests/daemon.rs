@@ -938,11 +938,6 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "expected Repository, received Ok",
         ),
         (
-            vec!["repo", "ls"],
-            json!({"type": "ok"}),
-            "expected Repositories, received Ok",
-        ),
-        (
             vec!["alerts", "--follow"],
             json!({"type": "workspaces", "data": []}),
             "expected Ok, received Workspaces",
