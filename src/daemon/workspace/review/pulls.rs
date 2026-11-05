@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use super::super::Manager;
 use crate::{
     daemon::links::{space::LinkSpace, wait::linked_items},
-    forge::items::{item::ItemState, link::ItemKind},
+    forge::items::{item::unmarkable_reason, link::ItemKind},
     model::SkippedPr,
 };
 
@@ -50,7 +50,7 @@ impl Manager {
             let pull = (forge.read(&account, ItemKind::Pr, number).await)
                 .with_context(|| format!("could not read {url}"))?;
             let state = pull.item.state;
-            match unmarkable(state, pull.head_sha.as_deref(), head) {
+            match unmarkable_reason(state, pull.head_sha.as_deref(), head) {
                 Some(reason) => pulls.skipped.push(SkippedPr { url, reason }),
                 None => {
                     let head = pull.head_sha.context("PR has no head commit")?;
@@ -84,28 +84,3 @@ impl Manager {
         Ok(urls)
     }
 }
-
-/// Why a PR in `state` at `pull_head` on the forge cannot be marked at the
-/// workspace's `head`, if one is given.
-fn unmarkable(state: ItemState, pull_head: Option<&str>, head: Option<&str>) -> Option<String> {
-    if state != ItemState::Open {
-        return Some(format!("the PR is {state}"));
-    }
-    match (pull_head, head) {
-        (None, _) => Some("the forge reports no head commit".into()),
-        (Some(pull), Some(head)) if pull != head => Some(format!(
-            "its head on the forge is {}, not HEAD {}",
-            short(pull),
-            short(head)
-        )),
-        _ => None,
-    }
-}
-
-/// A commit's abbreviated name.
-fn short(commit: &str) -> &str {
-    commit.get(..12).unwrap_or(commit)
-}
-
-#[cfg(test)]
-mod tests;

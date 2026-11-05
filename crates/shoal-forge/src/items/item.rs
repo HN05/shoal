@@ -158,5 +158,32 @@ pub(crate) fn user_names(users: &Value, field: &str) -> Vec<String> {
         .collect()
 }
 
+/// Why a PR in `state` at `pull_head` on the forge cannot be marked ready
+/// for review at the local `head`, if one is given: it is not open, or the
+/// forge reports another head commit.
+pub fn unmarkable_reason(
+    state: ItemState,
+    pull_head: Option<&str>,
+    head: Option<&str>,
+) -> Option<String> {
+    if state != ItemState::Open {
+        return Some(format!("the PR is {state}"));
+    }
+    match (pull_head, head) {
+        (None, _) => Some("the forge reports no head commit".into()),
+        (Some(pull), Some(head)) if pull != head => Some(format!(
+            "its head on the forge is {}, not HEAD {}",
+            short(pull),
+            short(head)
+        )),
+        _ => None,
+    }
+}
+
+/// A commit's abbreviated name.
+fn short(commit: &str) -> &str {
+    commit.get(..12).unwrap_or(commit)
+}
+
 #[cfg(test)]
 mod tests;

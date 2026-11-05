@@ -103,9 +103,7 @@ impl Manager {
             Ok(taken) => return Ok(taken),
             Err(error) => error,
         };
-        // A forge whose runner takes another run's job serves a run's page
-        // under its API ID.
-        let (_, url) = forge.run(&run.to_string())?;
+        let url = forge.run_page(run)?;
         let record = QueuedJob {
             run: JobRun {
                 url,
@@ -123,8 +121,7 @@ impl Manager {
     pub(super) fn reported_run_url(&self, forge: &ForgeRepo, job: &ClaimedJob) -> String {
         match reported_run(&self.job_directory(&job.id)) {
             Ok(Some(took)) if took.run != job.job.job.run => forge
-                .run(&took.run.to_string())
-                .map(|(_, url)| url)
+                .run_page(took.run)
                 .unwrap_or_else(|_| job.job.run.url.clone()),
             _ => job.job.run.url.clone(),
         }

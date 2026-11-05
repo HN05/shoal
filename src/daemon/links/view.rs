@@ -9,7 +9,6 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
-        capability::Capability,
         items::link::{ItemKind, Selection},
         review::view::ItemView,
     },
@@ -44,7 +43,8 @@ impl Manager {
         // one's for a scoped caller and the user's without one of its own.
         let own_token = !scoped && self.config().machine.forges.has_agent_token(&own.host);
         let agent = own_token.then(|| self.agent_account());
-        read_failed_logs(&own, agent.as_ref().unwrap_or(&account), &mut views).await;
+        own.read_failed_logs(agent.as_ref().unwrap_or(&account), &mut views)
+            .await;
         Ok(Viewed { items, views })
     }
 
@@ -125,35 +125,6 @@ impl Manager {
             ItemKind::Issue if own.issue(url).is_err() => self.issue_url_forge(url).await,
             ItemKind::Pr if own.pull(url).is_err() => self.pull_forge(url).await,
             _ => Ok(own.clone()),
-        }
-    }
-}
-
-/// Add the logs of the failed checks of the PRs among `views` in `own`'s
-/// repository, read as `account`, recording those it cannot read.
-async fn read_failed_logs(own: &ForgeRepo, account: &Account, views: &mut [ItemView]) {
-    if !own.supports(Capability::ReadJobLogs) {
-        return;
-    }
-    for view in views {
-        if own.pull(&view.url).is_err() {
-            continue;
-        }
-        let failed: Vec<String> = view
-            .details
-            .iter()
-            .filter_map(|details| details.pr.as_ref())
-            .flat_map(|pr| &pr.checks)
-            .filter(|check| check.failed())
-            .map(|check| check.name.clone())
-            .collect();
-        for name in failed {
-            match own.failed_check_log(account, &view.url, &name).await {
-                Ok(log) => view.check_logs.push(log),
-                Err(error) => view
-                    .errors
-                    .push(format!("{name}: log unavailable: {error:#}")),
-            }
         }
     }
 }

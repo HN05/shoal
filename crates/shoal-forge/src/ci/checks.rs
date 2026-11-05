@@ -11,6 +11,7 @@ use crate::{
     capability::Capability,
     ci::{CiCheck, JobState, Location},
     items::link::ItemKind,
+    review::view::ItemView,
     transport::api::Request,
 };
 
@@ -54,6 +55,29 @@ impl std::fmt::Display for NoJobLog {
 
 impl std::error::Error for NoJobLog {}
 
+/// The characters of a log read's error an update about the failed check keeps.
+const MAX_LOG_ERROR: usize = 512;
+
+/// What an update about a failed check adds about its log `read`: the step
+/// that failed, or why the log could not be read; `None` for a check with
+/// no CI job, which has no log to point to.
+pub fn failed_log_summary(read: Result<CheckLog>) -> Option<String> {
+    Some(match read {
+        Ok(log) => log
+            .failed_step
+            .map(|step| format!("; failed step: {step}"))
+            .unwrap_or_default(),
+        Err(error) if error.downcast_ref::<NoJobLog>().is_some() => return None,
+        Err(error) => format!(
+            "; log unavailable: {}",
+            format!("{error:#}")
+                .chars()
+                .take(MAX_LOG_ERROR)
+                .collect::<String>()
+        ),
+    })
+}
+
 /// Refuse a check name no forge shows, before any lookup.
 pub fn validate_check_name(name: &str) -> Result<()> {
     ensure!(
@@ -72,6 +96,35 @@ impl ForgeRepo {
     ) -> Result<CheckLog> {
         self.require(Capability::ReadJobLogs)?;
         self.kind.failed_check_log(self, account, url, name).await
+    }
+
+    /// Add the logs of the failed checks of the PRs among `views` in this
+    /// repository, read as `account`, recording those it cannot read.
+    pub async fn read_failed_logs(&self, account: &Account, views: &mut [ItemView]) {
+        if !self.supports(Capability::ReadJobLogs) {
+            return;
+        }
+        for view in views {
+            if self.pull(&view.url).is_err() {
+                continue;
+            }
+            let failed: Vec<String> = view
+                .details
+                .iter()
+                .filter_map(|details| details.pr.as_ref())
+                .flat_map(|pr| &pr.checks)
+                .filter(|check| check.failed())
+                .map(|check| check.name.clone())
+                .collect();
+            for name in failed {
+                match self.failed_check_log(account, &view.url, &name).await {
+                    Ok(log) => view.check_logs.push(log),
+                    Err(error) => view
+                        .errors
+                        .push(format!("{name}: log unavailable: {error:#}")),
+                }
+            }
+        }
     }
 
     /// The log of the CI job the failed check `name` on the current head of

@@ -74,6 +74,23 @@ impl ForgeRepo {
         Ok(run.url)
     }
 
+    /// Approve each of the `waiting` runs in turn, stopping at the first
+    /// that fails: the URLs of those approved, and the failure, if any.
+    pub async fn approve_runs(
+        &self,
+        account: &Account,
+        waiting: &[WaitingRun],
+    ) -> (Vec<String>, Result<()>) {
+        let mut approved = Vec::new();
+        for run in waiting {
+            match self.approve_run(account, &run.url).await {
+                Ok(url) => approved.push(url),
+                Err(error) => return (approved, Err(error)),
+            }
+        }
+        (approved, Ok(()))
+    }
+
     /// The runs on the head of the open PR numbered `number` that wait for
     /// approval, of which there must be one.
     pub async fn pr_waiting_runs(&self, account: &Account, number: u64) -> Result<Vec<WaitingRun>> {

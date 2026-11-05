@@ -58,29 +58,19 @@ impl Manager {
             .pr_waiting_runs(account, number)
             .await
             .with_context(|| format!("could not approve the CI runs of {url}"))?;
-        let mut approved = Vec::new();
-        let mut failure = None;
-        for run in &waiting {
-            match forge.approve_run(account, &run.url).await {
-                Ok(run) => approved.push(run),
-                Err(error) => {
-                    failure = Some(error);
-                    break;
-                }
-            }
-        }
+        let (approved, result) = forge.approve_runs(account, &waiting).await;
         if !approved.is_empty() {
             self.record_approval(place.workspace(), LinkKind::Pr, &url)
                 .await?;
         }
-        match failure {
-            Some(error) => Err(error.context(format!(
+        result.with_context(|| {
+            format!(
                 "could not approve every waiting CI run of {url}; {} of {} approved",
                 approved.len(),
                 waiting.len()
-            ))),
-            None => Ok(approved),
-        }
+            )
+        })?;
+        Ok(approved)
     }
 
     /// Record the approval as a change of the workspace to the run or PR, as

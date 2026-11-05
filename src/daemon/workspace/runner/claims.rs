@@ -22,7 +22,7 @@ use crate::{
     daemon::{allocation::Allocation, notifications::NotificationKind, workspace::Manager},
     forge::{
         ForgeRepo,
-        ci::runner::{Installation, JobCommand, JobLaunch, Trigger},
+        ci::runner::{Installation, JobCommand, JobLaunch},
     },
     model::{QueueEntry, QueuedJob, Workspace},
     removal::InspectionPolicy,
@@ -114,7 +114,7 @@ impl Manager {
             .await?
             .context("the repository's runner is no longer registered")?;
         let forge = ForgeRepo::resolve(&registration.forge_repository, &self.forge_hosts()).await?;
-        if self.superseded(&forge, job).await? {
+        if forge.run_superseded(&self.user_account(), &job.run).await? {
             return Ok(Claim::Superseded);
         }
         let workspace = self
@@ -148,15 +148,6 @@ impl Manager {
             crate::daemon::log!("runner: {error:#}");
         }
         started
-    }
-
-    /// Whether `job`'s run is for a PR whose head moved past its commit.
-    async fn superseded(&self, forge: &ForgeRepo, job: &QueuedJob) -> Result<bool> {
-        let Trigger::Pull { number } = job.run.trigger else {
-            return Ok(false);
-        };
-        let (_, url) = forge.pull(&number.to_string())?;
-        Ok(forge.pull_head(&self.user_account(), &url).await? != job.run.commit)
     }
 
     /// Start `claim`'s job in its workspace once it holds its permit.

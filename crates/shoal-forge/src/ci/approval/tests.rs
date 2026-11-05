@@ -47,3 +47,40 @@ fn a_run_waits_where_its_forge_says() -> Result<()> {
     assert!(!forgejo.kind.run_item(&forgejo, &run(false))?.waiting);
     Ok(())
 }
+
+#[tokio::test]
+async fn approving_runs_stops_at_the_first_that_fails() {
+    use crate::{
+        backends::ForgeKind,
+        test_support::{Server, agent_on, repo_on},
+    };
+    let server = Server::start(|request| {
+        if request.line.starts_with("POST") {
+            let status = if request.line.contains("/runs/2/") {
+                500
+            } else {
+                201
+            };
+            return (status, Vec::new(), b"{}".to_vec());
+        }
+        let id: u64 = request.line.rsplit('/').next().unwrap().parse().unwrap();
+        let run = json!({"id": id, "html_url": format!("https://github.com/team/repo/actions/runs/{id}"),
+            "status": "completed", "conclusion": "action_required"});
+        (200, Vec::new(), run.to_string().into())
+    });
+    let github = repo_on(&server, ForgeKind::GitHub, "team/repo");
+    let account = agent_on(&server, "user");
+    let waiting = [1, 2, 3].map(|id| WaitingRun {
+        url: format!("http://{}/team/repo/actions/runs/{id}", server.host),
+        workflow: None,
+    });
+    let (approved, result) = github.approve_runs(&account, &waiting).await;
+    assert_eq!(approved, ["https://github.com/team/repo/actions/runs/1"]);
+    assert!(result.is_err());
+    let posts = server
+        .received()
+        .into_iter()
+        .filter(|request| request.line.starts_with("POST"))
+        .count();
+    assert_eq!(posts, 2);
+}

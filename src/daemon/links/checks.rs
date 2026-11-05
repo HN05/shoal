@@ -7,7 +7,7 @@ use crate::{
     forge::{
         ForgeRepo,
         capability::Capability,
-        ci::checks::{CheckLog, NoJobLog, validate_check_name},
+        ci::checks::{CheckLog, failed_log_summary, validate_check_name},
         items::link::{LinkKind, Selection},
         updates::Update,
     },
@@ -40,16 +40,8 @@ impl Manager {
                 input: Some(update.url.clone()),
             };
             let log = self.check_log(&context, &selection, &check.name).await;
-            let summary = match log {
-                Ok(log) => log
-                    .failed_step
-                    .map(|step| format!("; failed step: {step}"))
-                    .unwrap_or_default(),
-                Err(error) if error.downcast_ref::<NoJobLog>().is_some() => continue,
-                Err(error) => format!(
-                    "; log unavailable: {}",
-                    format!("{error:#}").chars().take(512).collect::<String>()
-                ),
+            let Some(summary) = failed_log_summary(log) else {
+                continue;
             };
             let message = format!(
                 "{}{summary}; read the log with shoal view {} --check '{}'",

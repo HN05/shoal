@@ -53,3 +53,21 @@ fn tails_are_bounded_and_keep_the_failed_step() {
     assert!(job(JOB_URL_BYTES).job_url.is_some());
     assert!(job(JOB_URL_BYTES + 1).job_url.is_none());
 }
+
+#[test]
+fn a_failed_check_update_names_the_failed_step_or_why_its_log_is_unavailable() {
+    let log = |step: Option<&str>| Ok(CheckLog::from_text("pr", "rust", "", step.map(Into::into)));
+    assert!(
+        failed_log_summary(log(Some("Test")))
+            .unwrap()
+            .contains("Test")
+    );
+    assert_eq!(failed_log_summary(log(None)).as_deref(), Some(""));
+    let external = anyhow::Error::new(NoJobLog {
+        name: "coverage".into(),
+    });
+    assert_eq!(failed_log_summary(Err(external)), None);
+    let summary = failed_log_summary(Err(anyhow::anyhow!("{}", "x".repeat(1000)))).unwrap();
+    assert!(summary.contains(&"x".repeat(MAX_LOG_ERROR)));
+    assert!(!summary.contains(&"x".repeat(MAX_LOG_ERROR + 1)));
+}

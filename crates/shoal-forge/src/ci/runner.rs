@@ -159,6 +159,21 @@ impl ForgeRepo {
         self.kind.job_run(self, &value)
     }
 
+    /// The web URL of the run with API ID `id`, which a forge whose runner
+    /// takes another run's job serves the run's page under.
+    pub fn run_page(&self, id: u64) -> Result<String> {
+        Ok(self.run(&id.to_string())?.1)
+    }
+
+    /// Whether `run` is for a PR whose head moved past its commit.
+    pub async fn run_superseded(&self, account: &Account, run: &JobRun) -> Result<bool> {
+        let Trigger::Pull { number } = run.trigger else {
+            return Ok(false);
+        };
+        let (_, url) = self.pull(&number.to_string())?;
+        Ok(self.pull_head(account, &url).await? != run.commit)
+    }
+
     /// Register a runner named `name` for this repository alone, or, on a
     /// forge that registers one per job, check that `account` may.
     pub async fn register_runner(

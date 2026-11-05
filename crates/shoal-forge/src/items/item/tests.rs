@@ -84,3 +84,16 @@ fn issue_reads_tell_issues_from_prs() {
     assert_eq!(issue_read_kind(4, &pull).unwrap(), ItemKind::Pr);
     assert!(issue_read_kind(5, &pull).is_err());
 }
+
+#[test]
+fn only_open_prs_at_the_local_head_can_be_marked() {
+    const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
+    const OTHER: &str = "fedcba9876543210fedcba9876543210fedcba98";
+    let unmarkable = unmarkable_reason;
+    assert_eq!(unmarkable(ItemState::Open, Some(HEAD), Some(HEAD)), None);
+    assert!(unmarkable(ItemState::Merged, Some(HEAD), Some(HEAD)).is_some());
+    assert!(unmarkable(ItemState::Open, Some(OTHER), Some(HEAD)).is_some());
+    // A chat marks a PR at whatever head the forge reports.
+    assert_eq!(unmarkable(ItemState::Open, Some(OTHER), None), None);
+    assert!(unmarkable(ItemState::Open, None, None).is_some());
+}
