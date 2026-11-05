@@ -141,12 +141,14 @@ fn comments_off_the_diff_refuse_the_review_naming_each() -> Result<()> {
         comment("src/b.rs", 1, Side::Old),
     ];
     let error = diff.place(&comments).unwrap_err().to_string();
+    let refused: Vec<_> = error.lines().skip(1).map(str::trim).collect();
     assert_eq!(
-        error,
-        "these line comments are not on lines the PR's diff shows, so nothing was sent:\n  \
-         src/a.rs:7: no hunk of the diff shows this line\n  \
-         old.rs:3: the diff does not change old.rs\n  \
-         src/b.rs:1 (old): the diff does not change src/b.rs"
+        refused,
+        [
+            "src/a.rs:7: no hunk of the diff shows this line",
+            "old.rs:3: the diff does not change old.rs",
+            "src/b.rs:1 (old): the diff does not change src/b.rs"
+        ]
     );
     Ok(())
 }

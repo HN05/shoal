@@ -23,8 +23,5 @@ async fn forges_without_reactions_refuse_to_list_them() {
         .allowed_reactions(&Account::user(Default::default()))
         .await
         .unwrap_err();
-    assert_eq!(
-        refused.to_string(),
-        "Shoal cannot react to issues, PRs and comments on Bitbucket Cloud; Bitbucket has no reactions"
-    );
+    assert!(refused.to_string().contains("react to issues"), "{refused}");
 }

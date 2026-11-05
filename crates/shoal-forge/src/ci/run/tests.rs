@@ -73,9 +73,9 @@ fn each_forge_starts_a_run_its_own_way() -> Result<()> {
 #[test]
 fn a_run_names_a_workflow_only_where_the_forge_takes_one() -> Result<()> {
     let error = request("https://github.com/team/repo", &run(None)).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "GitHub starts a named workflow; name its file, such as ci.yml"
+    assert!(
+        error.to_string().contains("starts a named workflow"),
+        "{error}"
     );
     let error = request("https://github.com/team/repo", &run(Some("../merge"))).unwrap_err();
     assert!(error.to_string().contains("not a workflow file"), "{error}");

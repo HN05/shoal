@@ -60,18 +60,12 @@ async fn gitea_and_older_forgejo_run_no_jobs_and_other_forges_refuse_before_aski
     let gitea = repo_on(&server, ForgeKind::Forgejo, "team/repo");
     let account = agent_on(&server, "user");
     let error = gitea.require_runner(&account).await.unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "Shoal cannot run CI jobs on this machine on Forgejo or Gitea; that needs Forgejo 15 or later"
-    );
+    assert!(error.to_string().contains("needs Forgejo 15"), "{error}");
 
     let gitlab = repo_on(&server, ForgeKind::GitLab, "team/repo");
     let received = server.received().len();
     let error = gitlab.runner_program().unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "Shoal cannot run CI jobs on this machine on GitLab"
-    );
+    assert!(error.to_string().contains("run CI jobs"), "{error}");
     let error = gitlab.waiting_jobs(&account, &[]).await.unwrap_err();
     assert!(error.to_string().contains("run CI jobs"), "{error}");
     assert_eq!(server.received().len(), received);

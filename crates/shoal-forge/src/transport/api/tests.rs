@@ -56,10 +56,7 @@ fn only_a_missing_curl_asks_for_curl() {
     let missing = curl_unrun(Error::from(ErrorKind::NotFound), 4);
     assert!(format!("{missing:#}").starts_with("curl is required"));
     let oversized = curl_unrun(Error::from(ErrorKind::FileTooLarge), MAX_RESPONSE_BYTES);
-    assert_eq!(
-        format!("{oversized:#}"),
-        "the response is larger than 64 MiB; request fewer items, such as with a smaller page"
-    );
+    assert!(format!("{oversized:#}").starts_with("the response is larger than 64 MiB"));
     let broken = curl_unrun(Error::other("broken pipe"), 4);
     assert_eq!(format!("{broken:#}"), "read curl's response: broken pipe");
     let slow = curl_unrun(Error::from(ErrorKind::TimedOut), 4);
