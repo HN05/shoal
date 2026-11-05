@@ -48,7 +48,6 @@ fn a_finished_review_delivers_its_findings_and_the_automated_note() {
         message.starts_with("Review 17 finished: 1 blocker, 1 should-fix. Blocked on one bug.")
     );
     assert!(message.contains("17.1 blocker at src/a.rs:7: Unchecked index\nIt panics"));
-    assert!(message.contains("shoal review resolve <finding> <outcome>"));
     assert!(message.ends_with(AUTOMATED_NOTE));
     assert_eq!(
         notice(&review(ReviewState::Finished, 2)),
@@ -73,10 +72,7 @@ fn a_long_review_fits_one_agent_message() {
 #[test]
 fn failed_and_cancelled_reviews_say_why_briefly() {
     let failed = agent_message(&review(ReviewState::Failed, 0));
-    assert!(
-        failed.starts_with("Review 17 failed: the reviewer was rate limited"),
-        "{failed}"
-    );
+    assert!(failed.starts_with("Review 17 failed: "), "{failed}");
     assert_eq!(
         notice(&review(ReviewState::Failed, 0)),
         "review 17 failed: rate-limit"

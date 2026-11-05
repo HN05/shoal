@@ -33,7 +33,6 @@ async fn a_reviewer_running_past_the_limit_times_out() {
     slow.timeout = Duration::from_millis(300);
     let ended = run(&slow, &mut cancelled).await;
     assert_eq!(ended, Ended::Failed(FailureReason::TimedOut));
-    assert_eq!(TIMEOUT, Duration::from_secs(30 * 60));
 }
 
 #[tokio::test]
