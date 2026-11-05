@@ -116,6 +116,11 @@ pub(super) async fn planned_workspace_name(
 /// off or missing, a fork it cannot start from, or a model its launch
 /// cannot pass on.
 pub(crate) fn check_queued_launch(launch: &QueuedLaunch, settings: &Effective) -> Result<()> {
+    let mode = launch
+        .mode
+        .as_deref()
+        .unwrap_or(crate::config::modes::DEFAULT);
+    crate::config::modes::get(&settings.modes, mode)?;
     let agent: Agent = launch.agent.parse()?;
     agents::ensure_available(agent.name(), settings)?;
     if launch.fork.is_some() {

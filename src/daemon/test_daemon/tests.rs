@@ -423,7 +423,14 @@ async fn only_the_user_reopens_a_recorded_workspace_for_a_launch() {
 async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     let daemon = TestDaemon::start().await;
     let app = daemon.connector();
-    let create = |issue: Option<&str>, agent: Option<&str>| {
+    let launch = |agent: &str, mode: Option<&str>| {
+        Box::new(QueuedLaunch {
+            agent: agent.into(),
+            mode: mode.map(Into::into),
+            ..Default::default()
+        })
+    };
+    let create = |issue: Option<&str>, agent: Option<Box<QueuedLaunch>>| {
         let mut create = start_workspace(&daemon, WorkspaceStart::Name("api".into()));
         if let OperationMethod::StartWorkspace {
             issue: requested,
@@ -432,17 +439,13 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         } = &mut create
         {
             *requested = issue.map(Into::into);
-            *queued = agent.map(|agent| {
-                Box::new(QueuedLaunch {
-                    agent: agent.into(),
-                    ..Default::default()
-                })
-            });
+            *queued = agent;
         }
         create
     };
     for refused in [
-        create(None, Some("undefined")),
+        create(None, Some(launch("undefined", None))),
+        create(None, Some(launch("claude", Some("triage")))),
         create(Some("not an issue"), None),
     ] {
         assert!(
@@ -452,6 +455,15 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         );
     }
     assert_eq!(code(inspect(&app, "api").await), ErrorCode::NotFound);
+    let split = |agent| OperationMethod::StartSplit {
+        workspace: "parent".into(),
+        name: "child".into(),
+        base: Some("HEAD".into()),
+        options: Default::default(),
+        issue: None,
+        agent,
+        env: None,
+    };
     // A workspace's agent starts workspaces below its own.
     let parent = daemon.workspace("parent").await;
     let agent = daemon.scoped(&parent).await;
@@ -461,16 +473,13 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     let below = started.workspace.parent.as_ref().map(|space| &space.id);
     assert_eq!(below, Some(&parent.id));
     fake::take(&started.operation).exit(1);
-    let split = OperationMethod::StartSplit {
-        workspace: "parent".into(),
-        name: "child".into(),
-        base: Some("HEAD".into()),
-        options: Default::default(),
-        issue: None,
-        agent: None,
-        env: None,
-    };
-    let started: StartedWorkspace = connection::request(&agent, split).await.unwrap();
+    let undefined_mode = split(Some(launch("claude", Some("triage"))));
+    let error = connection::request::<StartedWorkspace>(&agent, undefined_mode)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("no mode triage"), "{error:#}");
+    assert_eq!(code(inspect(&app, "child").await), ErrorCode::NotFound);
+    let started: StartedWorkspace = connection::request(&agent, split(None)).await.unwrap();
     let worker = fake::take(&started.operation);
     assert!(
         worker.token.is_some(),
