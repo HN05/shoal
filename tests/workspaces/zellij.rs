@@ -21,7 +21,7 @@ struct ZellijServer {
     root: PathBuf,
     sockets: TempDir,
     client: Child,
-    /// The end of what the client's terminal showed.
+    /// The end of what the current client's terminal showed.
     screen: Arc<Mutex<Vec<u8>>>,
     /// Whether the client drew its session, which later output can push out
     /// of `screen`.
@@ -116,8 +116,9 @@ impl ZellijServer {
     }
 
     /// A client attached to `session` on a terminal of its own, whose
-    /// output a thread drains into `screen`, noting in `drawn` when it draws
-    /// the session.
+    /// output a thread drains into a new `screen`, noting in a new `drawn`
+    /// when it draws the session, so nothing an earlier client showed
+    /// counts for it.
     fn attach(&mut self, session: &str) -> Child {
         let (master, slave) = pty::open();
         let size = libc::winsize {
@@ -148,6 +149,7 @@ impl ZellijServer {
             });
         }
         let client = attach.spawn().unwrap();
+        self.screen = Arc::default();
         let screen = Arc::clone(&self.screen);
         self.drawn = Arc::default();
         let drawn = Arc::clone(&self.drawn);
