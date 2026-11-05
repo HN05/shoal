@@ -1,5 +1,11 @@
 use super::*;
-use crate::{cli::context::Context, model::Workspace, paths::Paths, state::WorkspaceState};
+use crate::{
+    cli::context::Context,
+    model::Workspace,
+    paths::Paths,
+    sessions::{HostName, Origin},
+    state::WorkspaceState,
+};
 
 fn restart(name: &str) -> Restart {
     let workspace = Workspace::new_record(
@@ -43,6 +49,18 @@ fn every_agent_takes_a_place_among_all_the_run_selected() {
     );
     progress.ended(&ctx, &api, Err(anyhow::anyhow!("claude disconnected")));
     assert_eq!(progress.next(), "(3/3)");
+}
+
+#[test]
+fn a_restart_names_the_place_its_agent_moved_to() {
+    let session = Origin::created(HostName::Zmx, "api".into());
+    let moved = restarted("api", "(1/2)", None, Some(&session));
+    assert!(moved.contains("shoal attach api"), "{moved}");
+    // An agent in its earlier place, or outside a terminal host, is
+    // reported without one.
+    let kept = restarted("api", "(1/2)", Some(&session), Some(&session));
+    assert_eq!(kept, "Restarted api (1/2)");
+    assert_eq!(restarted("api", "(1/2)", None, None), kept);
 }
 
 #[test]

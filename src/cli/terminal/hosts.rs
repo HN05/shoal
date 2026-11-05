@@ -291,6 +291,14 @@ pub(super) fn names_places(host: &dyn Host) -> bool {
     host.places().is_some_and(Places::names_places)
 }
 
+/// Where `place`, a place its host opened for `name`, runs and how to reach
+/// it, as a background start reports it; `None` for a host without places.
+pub(in crate::cli) fn background_place(place: &Origin, name: &str) -> Option<String> {
+    named(place.host)
+        .places()
+        .map(|places| places.background_place(name))
+}
+
 /// The host named `name`, or the plain terminal, which keeps places no
 /// host does.
 pub(super) fn named(name: HostName) -> &'static dyn Host {

@@ -11,9 +11,10 @@ use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
-        ui,
+        terminal, ui,
     },
     model::RunningAgent,
+    sessions::Origin,
 };
 
 pub(super) struct Progress {
@@ -60,23 +61,35 @@ impl Progress {
         self.skipped.push(skipped);
     }
 
-    /// Report how the restart of `restart` ended.
-    pub(super) fn ended(&mut self, ctx: &Context, restart: &Restart, result: Result<()>) {
-        let place = self.next();
+    /// Report how the restart of `restart` ended, with the place its agent
+    /// runs in now when it runs again.
+    pub(super) fn ended(
+        &mut self,
+        ctx: &Context,
+        restart: &Restart,
+        result: Result<Option<Origin>>,
+    ) {
+        let position = self.next();
         let name = &restart.workspace.name;
         match result {
-            Ok(()) => self.report.done(
+            Ok(place) => self.report.done(
                 ctx,
-                &format!("Restarted {name} {place}"),
+                &restarted(
+                    name,
+                    &position,
+                    restart.agent.origin.as_ref(),
+                    place.as_ref(),
+                ),
                 RestartedAgent {
                     workspace: name.clone(),
                     agent: restart.agent.agent.clone(),
+                    place,
                 },
             ),
             Err(error) => {
                 let message = match super::waits(&error) {
-                    Some(waits) => format!("Pending {name} {place}: {waits}"),
-                    None => format!("Failed {name} {place}: {error:#}"),
+                    Some(waits) => format!("Pending {name} {position}: {waits}"),
+                    None => format!("Failed {name} {position}: {error:#}"),
                 };
                 self.report.failed_saying(ctx, &message, name, &error);
             }
@@ -127,6 +140,24 @@ impl Progress {
             interrupted,
             pending,
         })
+    }
+}
+
+/// The line for the agent of `name`, `position` in the run, which ran in
+/// `before` and runs in `place` now: it names that place as a background
+/// start does when the agent moved there.
+fn restarted(
+    name: &str,
+    position: &str,
+    before: Option<&Origin>,
+    place: Option<&Origin>,
+) -> String {
+    let moved = place
+        .filter(|place| before.is_none_or(|before| !before.same_place(place)))
+        .and_then(|place| terminal::background_place(place, name));
+    match moved {
+        Some(place) => format!("Restarted {name} {position} {place}"),
+        None => format!("Restarted {name} {position}"),
     }
 }
 

@@ -15,6 +15,7 @@ use crate::{
     execution::recovery,
     model::RunningAgent,
     protocol::{ErrorCode, RemoteError},
+    sessions::Origin,
 };
 
 mod plan;
@@ -110,13 +111,13 @@ async fn restart_all(
 
 impl Restart {
     /// Restart the agent, in place when `in_place`, or join its restart, as
-    /// part of `run`.
-    async fn run(&self, ctx: &Context, run: &str, in_place: bool) -> Result<()> {
+    /// part of `run`, returning the place it runs in now.
+    async fn run(&self, ctx: &Context, run: &str, in_place: bool) -> Result<Option<Origin>> {
         let execution = self.agent.execution.clone();
         let run = Some(run.to_owned());
         let joins = self.joins.clone();
         let restarted = agents::restart(&ctx.paths, execution, joins, run, in_place).await;
-        restarted.map(drop).map_err(|error| {
+        restarted.map_err(|error| {
             // A restart that waits still restores the agent itself.
             match recovery::pending(&ctx.paths, &self.workspace.id) {
                 Ok(true) if waits(&error).is_none() => anyhow::anyhow!(

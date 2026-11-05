@@ -398,7 +398,9 @@ own.
 stops the agent, its wrapper finishes and its terminal closes, and the agent
 queue starts the saved session again at once with the continuation prompt in a
 new place, where it ran when that place is free, as `shoal resume --now` does;
-`shoal attach` reaches it there. The new wrapper runs the installed Shoal in a
+`shoal attach` reaches it there. The run names that place when it differs from
+where the agent ran, as a background start does, and `--json` gives each
+restarted agent's `place`. The new wrapper runs the installed Shoal in a
 new process tree, so an agent whose terminal lost access to the workspace, such
 as to an external volume, starts again. `--in-place` instead has the wrapper
 start the agent again in the same terminal, as an automatic restore does; a

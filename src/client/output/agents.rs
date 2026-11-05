@@ -97,6 +97,9 @@ pub struct Restarted {
 pub struct RestartedAgent {
     pub workspace: String,
     pub agent: Option<String>,
+    /// Where it runs now, when its wrapper runs in a terminal host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<crate::client::sessions::Origin>,
 }
 
 /// An agent a restart leaves out, and why.

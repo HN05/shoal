@@ -4,7 +4,8 @@ use super::*;
 
 /// The old wrapper's process tree cannot start the agent, as one that lost
 /// access to the workspace's volume cannot. The new wrapper, which the agent
-/// queue starts in a detached zmx session, can, and the old one finishes.
+/// queue starts in a detached zmx session, can, the old one finishes, and the
+/// run names that session.
 #[test]
 fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
     let fixture = Fixture::with_config(Some(&format!(
@@ -40,11 +41,13 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
     let old = wait_registered_execution(&fixture, "renewed")["id"].clone();
 
     let restarted = fixture.ok(&["restart", "renewed"]);
-    assert_eq!(
-        restarted["restarted"],
-        serde_json::json!([{"workspace": "renewed", "agent": "claude"}]),
-        "{restarted}"
-    );
+    let [agent_restarted] = restarted["restarted"].as_array().unwrap().as_slice() else {
+        panic!("expected one restarted agent: {restarted}");
+    };
+    assert_eq!(agent_restarted["workspace"], "renewed", "{restarted}");
+    assert_eq!(agent_restarted["agent"], "claude", "{restarted}");
+    // The answer names the detached session the new wrapper runs in.
+    assert_eq!(agent_restarted["place"]["host"], "zmx", "{restarted}");
     wait_until("agent to restore", || path.join("restored").exists());
     // The old wrapper finished, and a new one runs the agent.
     assert!(
