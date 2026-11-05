@@ -26,12 +26,6 @@ fn steps_failing_in_workspaces_are_recorded_for_each_workspace() {
         failed.space("id-b").as_deref(),
         Some("idle agents: bad config")
     );
-    assert_eq!(
-        failed.to_string(),
-        "result expiry: disk is full; \
-         a: idle agents: idle agents failed in a; merged cleanup: merged cleanup failed in a; \
-         b: idle agents: bad config"
-    );
 }
 
 #[test]

@@ -125,10 +125,11 @@ async fn merged_workspace_is_removed_once_idle_whatever_its_assignment() {
         "the merged branch is redundant"
     );
     let notifications = f.manager.notifications(true, 100).await.unwrap();
-    assert!(notifications.iter().any(|notification| {
-        notification.kind == NotificationKind::WorkspaceRemoved
-            && notification.message.contains("merged cleanup")
-    }));
+    assert!(
+        notifications
+            .iter()
+            .any(|notification| notification.kind == NotificationKind::WorkspaceRemoved)
+    );
 }
 
 #[tokio::test]

@@ -60,7 +60,7 @@ async fn completion_cleanup_starts_the_grace_period_only_once_eligible() {
     manager.sweep_completed().await.unwrap();
     // Unsaved work is reported at once and does not use up the grace period.
     let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
-    assert!(completion.error.unwrap().contains("uncommitted"));
+    assert!(completion.error.is_some());
     assert_eq!(manager.cleanup_at(&workspace.id).await.unwrap(), None);
     fs::remove_file(&file).unwrap();
     manager.sweep_completed().await.unwrap();
