@@ -24,3 +24,21 @@ fn unknown_hosts_are_rejected() {
     assert!(serde_json::from_value::<Origin>(serde_json::json!({"host": "screen"})).is_err());
     assert!("screen".parse::<HostName>().is_err());
 }
+
+#[test]
+fn a_place_on_another_server_is_another_place() {
+    let block = |server: &str| Origin {
+        host: HostName::Rex,
+        group: Some("session:1".into()),
+        place: Some("block:2".into()),
+        data: BTreeMap::from([("server".into(), server.into())]),
+        owned: false,
+        instance: None,
+    };
+    let here = block("unix:///a.sock");
+    assert!(here.same_place(&Origin {
+        owned: true,
+        ..here.clone()
+    }));
+    assert!(!here.same_place(&block("unix:///b.sock")));
+}
