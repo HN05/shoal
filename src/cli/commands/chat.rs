@@ -267,6 +267,9 @@ pub(super) struct Topic {
     pub mode: String,
     /// What the agent starts on, or `None` to wait for the user.
     pub subject: Option<templates::Subject>,
+    /// The issue the chat is linked to, whose fields the rules of a chat
+    /// restored without its subject take.
+    pub linked_issue: Option<templates::IssueFields>,
     /// Other working directories the task needs, beside the chat's own.
     pub directories: Vec<PathBuf>,
     /// What the chat is linked to once recorded, such as the issue it plans.
@@ -285,6 +288,7 @@ impl Topic {
             asks_name: true,
             mode: mode.to_owned(),
             subject: None,
+            linked_issue: None,
             directories: Vec::new(),
             links: Vec::new(),
             workspace: None,
@@ -300,6 +304,7 @@ impl Topic {
             asks_name: true,
             mode: mode.to_owned(),
             subject: None,
+            linked_issue: None,
             directories: Vec::new(),
             links: Vec::new(),
             workspace: Some(workspace),
@@ -780,8 +785,18 @@ fn brief(
         repo: repository::name(repo),
         home: topic.home(repo),
     };
-    let subject = topic.subject.as_ref().filter(|_| !resumes);
-    let mut brief = templates::brief(settings, &topic.mode, place, subject)?;
+    let mut brief = match topic.subject.as_ref().filter(|_| !resumes) {
+        Some(subject) => templates::brief(settings, &topic.mode, place, Some(subject))?,
+        None => {
+            let issue = (topic.subject.as_ref())
+                .and_then(|subject| subject.issue.as_ref())
+                .or(topic.linked_issue.as_ref());
+            templates::Brief {
+                system: templates::system(settings, &topic.mode, place, issue)?,
+                first_message: None,
+            }
+        }
+    };
     let in_first_message = settings
         .launch(agent.name())
         .arguments

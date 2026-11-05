@@ -395,10 +395,21 @@ impl Opening {
                 templates::brief(settings, mode, place, subject.as_ref())
             }
             Self::Told { mode, message } => Ok(templates::Brief {
+                system: templates::system(settings, mode, place, linked_issue(place).as_ref())?,
                 first_message: Some(message.clone()),
-                ..templates::brief(settings, mode, place, None)?
             }),
         }
+    }
+}
+
+/// The issue the workspace at `place` is linked to, for the rules of an
+/// agent that starts without its subject.
+fn linked_issue(place: templates::Place<'_>) -> Option<templates::IssueFields> {
+    match place {
+        templates::Place::Workspace { workspace, .. } => {
+            templates::IssueFields::linked(&workspace.links)
+        }
+        templates::Place::Chat { .. } => None,
     }
 }
 
@@ -1068,9 +1079,10 @@ pub(crate) fn restored_instruction_args(
         workspace,
         delivery: launch::delivery(agent_integration(settings, name), settings),
     };
-    match templates::brief(settings, mode, place, None) {
-        Ok(brief) => (settings.launch(name).arguments)
-            .instruction_args(&brief.system)
+    let issue = templates::IssueFields::linked(&workspace.links);
+    match templates::system(settings, mode, place, issue.as_ref()) {
+        Ok(system) => (settings.launch(name).arguments)
+            .instruction_args(&system)
             .unwrap_or_default(),
         Err(error) => {
             eprintln!("warning: the restored agent is not told its rules: {error:#}");

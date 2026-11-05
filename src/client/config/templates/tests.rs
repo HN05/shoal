@@ -168,6 +168,28 @@ fn workspace() -> crate::model::Workspace {
 }
 
 #[test]
+fn restored_rules_name_the_issue_the_space_links() {
+    let settings =
+        settings("[rules.worker]\ntext = 'On #{issue.number}, {issue.title}: {issue.url}'\n");
+    let mut linked = workspace();
+    let url = "https://forge.example/team/repo/issues/7";
+    linked.links.issue = Some(url.into());
+    linked.links.issue_title = Some("Decide".into());
+    let issue = IssueFields::linked(&linked.links);
+    let place = Place::Workspace {
+        workspace: &linked,
+        delivery: Delivery::Watched,
+    };
+    let system = system(&settings, "worker", place, issue.as_ref()).unwrap();
+    assert!(
+        system.ends_with(&format!("On #7, Decide: {url}")),
+        "{system}"
+    );
+    linked.links.issue = None;
+    assert!(IssueFields::linked(&linked.links).is_none());
+}
+
+#[test]
 fn review_instructions_keep_their_fixed_part_before_any_template() {
     let fields = ReviewFields {
         workspace: "fix-login",

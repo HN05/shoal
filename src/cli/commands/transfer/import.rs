@@ -195,6 +195,7 @@ impl Package {
             .map_or_else(crate::model::chat_mode, |last| last.mode.clone());
         let topic = chat::Topic {
             links: packaged.links.relations(),
+            linked_issue: crate::config::templates::IssueFields::linked(&packaged.links),
             ..chat::Topic::repository(&repo, &mode)
         };
         let options = self.chat_options(ctx, packaged, place).await?;

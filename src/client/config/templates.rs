@@ -3,7 +3,8 @@ use anyhow::{Context, Result};
 
 use crate::{
     config::{Settings, modes},
-    model::{ChatHome, Workspace},
+    forge::items::link::LinkKind,
+    model::{ChatHome, SpaceLinks, Workspace},
 };
 
 pub use super::placeholders::render;
@@ -148,6 +149,20 @@ pub struct IssueFields {
     pub url: String,
 }
 
+impl IssueFields {
+    /// The fields of the issue `links` assign, for an agent restored
+    /// without its subject; none for an issue URL Shoal cannot read.
+    pub fn linked(links: &SpaceLinks) -> Option<Self> {
+        let url = links.issue.as_ref()?;
+        let (_, number) = crate::forge::items::link::item(LinkKind::Issue, url).ok()?;
+        Some(Self {
+            number,
+            title: links.issue_title.clone().unwrap_or_default(),
+            url: url.clone(),
+        })
+    }
+}
+
 /// An agent's system text and its first message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Brief {
@@ -166,6 +181,41 @@ pub fn brief(
     subject: Option<&Subject>,
 ) -> Result<Brief> {
     let resolved = modes::get(&settings.modes, mode)?;
+    let fields = Fields::new(
+        settings,
+        place,
+        subject.and_then(|subject| subject.issue.as_ref()),
+    );
+    // The subject's text is the forge's or the user's, never a template.
+    let first_message =
+        subject.map(|subject| join([subject.text.clone(), fields.render(&resolved.instructions)]));
+    Ok(Brief {
+        system: system_text(settings, mode, place, &fields)?,
+        first_message,
+    })
+}
+
+/// The system text of an agent in `mode` at `place` on `issue`, as an
+/// agent that already has its first message, such as a restored one, takes
+/// it again.
+pub fn system(
+    settings: &Settings,
+    mode: &str,
+    place: Place<'_>,
+    issue: Option<&IssueFields>,
+) -> Result<String> {
+    system_text(settings, mode, place, &Fields::new(settings, place, issue))
+}
+
+/// Shoal's guidance for a workspace's agent, then the rules of `mode`, with
+/// `fields` filled in.
+fn system_text(
+    settings: &Settings,
+    mode: &str,
+    place: Place<'_>,
+    fields: &Fields,
+) -> Result<String> {
+    let resolved = modes::get(&settings.modes, mode)?;
     let mut system = Vec::new();
     if let Place::Workspace { .. } = place {
         system.push(AGENT_GUIDANCE.trim_end().to_owned());
@@ -177,14 +227,7 @@ pub fn brief(
             .with_context(|| format!("modes.{mode} names rule {name}, which no config defines"))?;
         system.push(rule_text(name, &rule.text, place));
     }
-    let fields = Fields::new(settings, place, subject);
-    // The subject's text is the forge's or the user's, never a template.
-    let first_message =
-        subject.map(|subject| join([subject.text.clone(), fields.render(&resolved.instructions)]));
-    Ok(Brief {
-        system: fields.render(&join(system)),
-        first_message,
-    })
+    Ok(fields.render(&join(system)))
 }
 
 /// A rule's configured `text`, after Shoal's description of a chat's place
@@ -214,7 +257,7 @@ fn join(parts: impl IntoIterator<Item = String>) -> String {
 struct Fields(Vec<(&'static str, String)>);
 
 impl Fields {
-    fn new(settings: &Settings, place: Place<'_>, subject: Option<&Subject>) -> Self {
+    fn new(settings: &Settings, place: Place<'_>, issue: Option<&IssueFields>) -> Self {
         let mut fields = match place {
             Place::Workspace {
                 workspace,
@@ -240,7 +283,7 @@ impl Fields {
                 fields
             }
         };
-        if let Some(issue) = subject.and_then(|subject| subject.issue.as_ref()) {
+        if let Some(issue) = issue {
             fields.extend([
                 ("{issue.number}", issue.number.to_string()),
                 ("{issue.title}", issue.title.clone()),
