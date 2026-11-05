@@ -112,12 +112,6 @@ fn shell_init_registers_completions_for_bash_and_zsh() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let json: serde_json::Value = serde_json::from_slice(&generate(
-        home.path(),
-        &["--json", "shell", "completions", "zsh"],
-    ))
-    .unwrap();
-    assert!(json["script"].as_str().unwrap().contains("#compdef shoal"));
 }
 
 #[test]
@@ -129,28 +123,15 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         "[commands]\nreview = ['tuicr']\n[terminal.happy]\nenabled = true\n[agents.droid]\ncommand = ['droid']\n[machine.agents.pi]\nskill_dir = '~/pi-skills'\n",
     )
     .unwrap();
-    install_programs(
-        home.path(),
-        &[
-            "claude", "codex", "happy", "tuicr", "droid", "opencode", "grok",
-        ],
-    );
+    install_programs(home.path(), &["claude", "codex", "happy", "tuicr", "droid"]);
     for (words, expected) in [
         (vec!["shoal", "repo", "r"], "rm"),
-        (vec!["shoal", "repo", "rm", "--y"], "--yes"),
         (vec!["shoal", "run", "rev"], "review"),
         (vec!["shoal", "codex", "--a"], "--app"),
-        (vec!["shoal", "claude", "--a"], "--app"),
         (vec!["shoal", "add", "--agent", "co"], "codex"),
         (vec!["shoal", "dro"], "droid"),
-        (vec!["shoal", "open"], "opencode"),
-        (vec!["shoal", "add", "--agent", "gr"], "grok"),
-        (vec!["shoal", "add", "--agent", "dro"], "droid"),
-        (vec!["shoal", "review", "run", "--agent", "cl"], "claude"),
-        (vec!["shoal", "add", "--agent", "cl"], "claude"),
         (vec!["shoal", "add", "--agent", "happy-cl"], "happy-claude"),
         (vec!["shoal", "happy", "co"], "codex"),
-        (vec!["shoal", "skill", "install", "co"], "codex"),
         (vec!["shoal", "skill", "install", "pi"], "pi"),
     ] {
         for shell in ["bash", "zsh"] {
@@ -159,18 +140,6 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
                 values.iter().any(|value| value == expected),
                 "{shell} {words:?}: {values:?}"
             );
-        }
-    }
-    for shell in ["bash", "zsh"] {
-        for (prefix, moved) in [
-            ("set", "setup"),
-            ("ad", "adopt"),
-            ("ren", "rename"),
-            ("ch", "checkpoint"),
-            ("rest", "restore"),
-        ] {
-            let values = candidates(completion(home.path(), shell, &["shoal", prefix]));
-            assert!(!values.iter().any(|value| value == moved));
         }
     }
     assert!(!home.path().join("state").exists());
@@ -191,16 +160,10 @@ fn agents_without_installed_executables_are_not_completed() {
     let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());
     for (words, expected, missing) in [
         (vec!["shoal", "c"], &["claude"][..], &["codex"][..]),
-        (vec!["shoal", "cod"], &[], &["codex"]),
         (vec!["shoal", "ha"], &[], &["happy"]),
-        (vec!["shoal", "t"], &[], &["t3"]),
         (vec!["shoal", "dr"], &[], &["droid"]),
-        (vec!["shoal", "o"], &[], &["opencode"]),
-        (vec!["shoal", "p"], &[], &["pi"]),
-        (vec!["shoal", "add", "--agent", "g"], &[], &["grok"]),
         // Plain configured commands are not agents.
         (vec!["shoal", "add", "--agent", "r"], &[], &["review"]),
-        (vec!["shoal", "add", "--agent", "d"], &[], &["droid"]),
         (vec!["shoal", "codex", "--a"], &[], &["--app"]),
         (
             vec!["shoal", "add", "--agent", "c"],

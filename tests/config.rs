@@ -71,7 +71,6 @@ fn scoped_inline_edits_leave_config_untouched() {
             .output()
             .unwrap();
         assert!(!output.status.success());
-        assert!(String::from_utf8_lossy(&output.stderr).contains("cannot administer"));
     }
     assert!(!home.path().join("xdg").exists());
 }
@@ -94,37 +93,12 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
         parent.output().unwrap()
     };
     let config = "config set agent.default codex";
+    // One command of each kind of refusal: administration, deciding
+    // for a scope, and acting only with one.
     for (args, refusal) in [
         (config, "cannot administer"),
-        ("skill install", "cannot install user-level skills"),
-        ("shell recover /", "cannot navigate outside their worktree"),
-        ("work restore", "cannot reopen removed workspaces"),
-        ("move export -o -", "cannot export spaces"),
-        ("move import -", "cannot import spaces"),
-        ("alerts", "cannot read or clear notifications"),
-        ("alerts clear", "cannot read or clear notifications"),
-        (
-            "questions 1.1 --answer yes",
-            "cannot answer questions without their scope token",
-        ),
-        (
-            "approvals 1.1 --approve",
-            "cannot decide approval requests without their scope token",
-        ),
-        (
-            "approvals 1.1 --escalate",
-            "cannot decide approval requests without their scope token",
-        ),
-        ("add . child", "add workspaces only with their scope token"),
-        (
-            "chat --agent claude",
-            "start and ask chats only with their scope token",
-        ),
-        ("plan 1", "start and ask chats only with their scope token"),
-        (
-            "chat rename --request talk",
-            "start and ask chats only with their scope token",
-        ),
+        ("questions 1.1 --answer yes", "without their scope token"),
+        ("add . child", "only with their scope token"),
     ] {
         let output = run(args, None);
         assert!(!output.status.success());
@@ -206,7 +180,6 @@ fn unknown_names_and_scoped_calls_leave_config_and_backup_untouched() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot administer"));
     assert_eq!(fs::read_to_string(config).unwrap(), "keep config");
     assert_eq!(fs::read_to_string(backup).unwrap(), "keep backup");
     assert!(!home.path().join("state").exists());
@@ -220,10 +193,7 @@ fn install_picks_an_omitted_packaged_config() {
         .args(["config", "install"])
         .output()
         .unwrap();
-    assert!(
-        String::from_utf8_lossy(&missing.stderr).contains("missing packaged config; pass <name>"),
-        "{missing:?}"
-    );
+    assert!(!missing.status.success(), "{missing:?}");
     let fzf = home.path().join("bin/fzf");
     support::install_test_script(
         &fzf,

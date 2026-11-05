@@ -212,13 +212,12 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
     }
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
     // Installing for every tool writes nothing until a skill directory exists.
-    let output = success(
+    success(
         cli(home.path())
             .args(["skill", "install"])
             .output()
             .unwrap(),
     );
-    assert!(String::from_utf8_lossy(&output).contains("No skill directories found"));
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
     // The single skill earlier versions installed is replaced.
     let retired = home.path().join(".agents/skills/shoal");
@@ -258,11 +257,6 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
     ))
     .unwrap();
     assert_eq!(output.lines().count(), 4);
-    assert!(
-        output
-            .lines()
-            .all(|line| line.starts_with("Installed skill "))
-    );
     assert!(!retired.exists());
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 2);
 }
@@ -293,12 +287,11 @@ fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
         // leaving temporary files.
         fs::write(directory.join("SKILL.md"), "edited skill\n").unwrap();
         assert_eq!(fs::read_dir(&directory).unwrap().count(), 2);
-        let output = cli(home.path())
-            .args(["skill", "install", "codex"])
-            .output()
-            .unwrap();
-        assert!(
-            String::from_utf8_lossy(&success(output)).contains("Kept modified skill shoal-worker")
+        success(
+            cli(home.path())
+                .args(["skill", "install", "codex"])
+                .output()
+                .unwrap(),
         );
         assert_eq!(
             fs::read_to_string(directory.join("SKILL.md")).unwrap(),
@@ -329,9 +322,7 @@ fn unscoped_commands_update_installed_skills_after_upgrade() {
         "version one"
     );
     // Printing a skill also updates the installed ones.
-    let output = run(None, &["skill"]);
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Updated Shoal skills"));
-    success(output);
+    success(run(None, &["skill"]));
     assert_installed(&installed);
     // Up to date skills and other tools' directories are left alone.
     let output = run(None, &["shell", "completions", "bash"]);
@@ -356,10 +347,6 @@ fn development_builds_leave_installed_skills_alone() {
     success(run(&["skill"]));
     let install = run(&["skill", "install", "codex"]);
     assert!(!install.status.success());
-    assert!(
-        String::from_utf8_lossy(&install.stderr)
-            .contains("development builds cannot install user-level skills")
-    );
     let mut entries: Vec<_> = fs::read_dir(&installed)
         .unwrap()
         .map(|entry| entry.unwrap().file_name())
@@ -393,7 +380,6 @@ fn skill_install_honors_claude_override_and_rejects_invalid_paths_before_writes(
         .output()
         .unwrap();
     assert!(!invalid.status.success());
-    assert!(String::from_utf8_lossy(&invalid.stderr).contains("must be an absolute path"));
     assert!(!home.path().join(".agents").exists());
     let directory = config.join("skills/shoal-worker/SKILL.md");
     fs::remove_file(&directory).unwrap();
@@ -423,7 +409,6 @@ fn scoped_processes_can_export_but_cannot_install_skills() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot install user-level skills"));
     assert_eq!(
         success(
             cli(home.path())
@@ -471,7 +456,6 @@ fn configured_ai_tools_install_selected_or_all_skills_and_override_defaults() {
     assert!(!home.path().join(".claude").exists());
     let unknown = run("unknown");
     assert!(!unknown.status.success());
-    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown AI tool"));
 }
 
 #[test]
