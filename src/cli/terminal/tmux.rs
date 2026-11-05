@@ -104,8 +104,8 @@ impl Places for Tmux {
         "tmux windows"
     }
 
-    fn background_note(&self, name: &str) -> String {
-        format!("Started {name} in a background tmux window")
+    fn background_place(&self, _name: &str) -> String {
+        "in a background tmux window".into()
     }
 
     fn origin(&self) -> Option<Origin> {

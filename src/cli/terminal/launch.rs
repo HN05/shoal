@@ -62,7 +62,7 @@ pub(in crate::cli) async fn start_add(
     let beside = host.beside(origin.as_ref());
     let started = run_add(ctx, &host, places, beside, plan, name, placement).await?;
     if started && placement == Placement::Background {
-        outln!("{}", places.background_note(name));
+        outln!("Started {name} {}", places.background_place(name));
     }
     Ok(started)
 }
@@ -450,7 +450,10 @@ pub(in crate::cli) async fn start_chat_in_background(
             };
             let beside = Beside::opening(group);
             open_in_background(ctx, places, beside, cwd, name, &argv).await?;
-            Ok(Some(places.background_note(name)))
+            Ok(Some(format!(
+                "Started {name} {}",
+                places.background_place(name)
+            )))
         },
     )
     .await?

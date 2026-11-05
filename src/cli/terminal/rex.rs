@@ -101,8 +101,8 @@ impl Places for Rex {
         "Rex blocks"
     }
 
-    fn background_note(&self, name: &str) -> String {
-        format!("Started {name} in a background Rex block")
+    fn background_place(&self, _name: &str) -> String {
+        "in a background Rex block".into()
     }
 
     fn origin(&self) -> Option<Origin> {

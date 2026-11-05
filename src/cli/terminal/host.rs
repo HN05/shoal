@@ -79,9 +79,10 @@ pub(in crate::cli) trait Places: Sync {
     /// What several background starts run in.
     fn background_places(&self) -> &'static str;
 
-    /// How a background start of `name` is reported: where it runs and how
-    /// to reach it.
-    fn background_note(&self, name: &str) -> String;
+    /// Where a background start of `name` runs and how to reach it, as the
+    /// words after the verb that reports it, such as `in a background tmux
+    /// window`.
+    fn background_place(&self, name: &str) -> String;
 
     /// The place this process runs in, under the one ID [`Watches`] and
     /// [`Closes`] name it by, with what a later start needs to open a place

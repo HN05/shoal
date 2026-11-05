@@ -110,8 +110,8 @@ impl Places for Herdr {
         "Herdr tabs"
     }
 
-    fn background_note(&self, name: &str) -> String {
-        format!("Started {name} in a background Herdr tab")
+    fn background_place(&self, _name: &str) -> String {
+        "in a background Herdr tab".into()
     }
 
     fn origin(&self) -> Option<Origin> {
