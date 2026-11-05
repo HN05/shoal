@@ -72,7 +72,7 @@ pub struct StartArgs {
         long = "in",
         num_args = 0..=1,
         value_name = "WORKSPACE",
-        conflicts_with_all = ["repository", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable"]
+        conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable"]
     )]
     pub in_workspace: Option<Option<String>>,
     /// The space the new one goes below, by name or number; defaults to the
