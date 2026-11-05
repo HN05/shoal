@@ -41,6 +41,12 @@ fn queue_status_names_the_work_a_launch_waits_for() {
         queue_status_cell(&entry).0,
         "queued, position 2, after api, https://forge.example/o/r/issues/7"
     );
+    entry.waiting_for.clear();
+    entry.mode = Some("review".into());
+    assert_eq!(
+        queue_status_cell(&entry).0,
+        "queued, review mode, position 2"
+    );
 }
 
 #[test]
@@ -434,5 +440,27 @@ fn a_chat_in_a_workspace_shows_the_workspace() {
     assert_eq!(
         rows,
         ["◆ 4  worker-chat  in worker  process running  claude"]
+    );
+}
+
+#[test]
+fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
+    let chat: Chat = serde_json::from_value(serde_json::json!({
+        "id": "c", "number": 4, "repository_id": "a", "name": "repo-plan-7", "agent": "claude",
+        "mode": "plan", "pid": 1, "started_at": 0,
+        "workspace": {"id": "w", "name": "worker", "branch": "worker"},
+    }))
+    .unwrap();
+    let plain = Palette::stdout(true);
+    let rows = workspace_tree_rows(&[], &[chat], &HashSet::new(), plain, None);
+    assert_eq!(
+        rows,
+        ["◆ 4  repo-plan-7  in worker  process running, plan mode  claude"]
+    );
+    assert_eq!(with_mode("running", Some("worker"), "worker"), "running");
+    assert_eq!(with_mode("running", None, "worker"), "running");
+    assert_eq!(
+        with_mode("running", Some("chat"), "worker"),
+        "running, chat mode"
     );
 }

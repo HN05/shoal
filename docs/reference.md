@@ -2145,7 +2145,10 @@ these modes:
 | `plan` | chat | `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
 
 Workspace agents start in `worker`, `shoal chat` in `chat` and `shoal plan` in
-`plan`. The built-in rules have no text of their own except `review`, the style
+`plan`. A space records the mode its agent started in, a workspace that of its
+latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
+and `shoal work`, `shoal status`, `shoal inbox`, the queue and the menu name a
+mode other than `worker` for a workspace or `chat` for a chat. The built-in rules have no text of their own except `review`, the style
 of a [local review](#local-reviews). The `chat` rule of a chat starts with
 Shoal's [description of a chat in the checkout](../src/client/config/templates/chat.md)
 or [in a workspace's worktree](../src/client/config/templates/workspace_chat.md),

@@ -323,10 +323,15 @@ impl Item {
             Self::Approval { request } => {
                 return (format!("approval {}", request.number), Some(Style::Warning));
             }
-            Self::NeedsInput { .. } => ("needs input", Style::Warning),
-            Self::Failed { .. } => ("failed", Style::Error),
-            Self::Ready { .. } | Self::ChatReady { .. } => ("ready", Style::Success),
-            Self::ChatDone { .. } => ("finished", Style::Success),
+            Self::NeedsInput { workspace } => {
+                return workspace_kind(workspace, "needs input", Style::Warning);
+            }
+            Self::Failed { workspace } => return workspace_kind(workspace, "failed", Style::Error),
+            Self::Ready { workspace, .. } => {
+                return workspace_kind(workspace, "ready", Style::Success);
+            }
+            Self::ChatReady { chat, .. } => return chat_kind(chat, "ready"),
+            Self::ChatDone { chat } => return chat_kind(chat, "finished"),
             Self::Demo { .. } => ("demo", Style::Success),
             Self::Untracked { .. } => ("untracked", Style::Warning),
             Self::Cleanup { .. } => ("cleanup", Style::Error),
@@ -376,6 +381,19 @@ impl Item {
             _ => String::new(),
         }
     }
+}
+
+/// The kind `label` of an item about `workspace`, with its mode.
+fn workspace_kind(workspace: &Workspace, label: &str, style: Style) -> Cell {
+    let usual = crate::config::modes::DEFAULT;
+    let label = ui::with_mode(label, workspace.mode.as_deref(), usual);
+    (label, Some(style))
+}
+
+/// The kind `label` of a finished item about `chat`, with its mode.
+fn chat_kind(chat: &Chat, label: &str) -> Cell {
+    let label = ui::with_mode(label, Some(&chat.mode), &crate::model::chat_mode());
+    (label, Some(Style::Success))
 }
 
 /// The question's recommendation and the names of the files sent with it.

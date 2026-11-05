@@ -50,6 +50,8 @@ pub(super) fn status_cell(status: ListStatus) -> Cell {
 /// `waiting, review 17 finished: 1 blocker`.
 fn workspace_status_cell(workspace: &Workspace, status: ListStatus) -> Cell {
     let (label, style) = status_cell(status);
+    let usual = crate::config::modes::DEFAULT;
+    let label = with_mode(&label, workspace.mode.as_deref(), usual);
     match &workspace.latest_review {
         Some(review) => (
             format!("{label}, review {} {}", review.id, review.status),
@@ -271,10 +273,11 @@ pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> E
 }
 
 /// A chat's row: its number, its name, the workspace it runs in, its
-/// status and agent.
+/// status with its mode and agent.
 fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 6]) {
     let status = ListStatus::of_chat(chat);
     let place = chat.workspace.as_ref();
+    let label = with_mode(status.label(), Some(&chat.mode), &crate::model::chat_mode());
     (
         palette.paint(Style::Heading, "◆"),
         [
@@ -284,7 +287,7 @@ fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 6]) 
                 place.map_or_else(String::new, |workspace| format!("in {}", workspace.name)),
                 None,
             ),
-            (status.label().into(), Some(status.style())),
+            (label, Some(status.style())),
             (String::new(), None),
             (chat.agent.clone(), None),
         ],
@@ -335,6 +338,15 @@ pub(super) fn rows_with_status(
         .collect()
 }
 
+/// A space's status `label` with its `mode`, which rows leave out when it
+/// is the kind's `usual` mode or none.
+pub fn with_mode(label: &str, mode: Option<&str>, usual: &str) -> String {
+    match mode.filter(|mode| *mode != usual) {
+        Some(mode) => format!("{label}, {mode} mode"),
+        None => label.to_owned(),
+    }
+}
+
 /// A space's number, as the first cell of its row.
 fn number_cell(number: u32) -> Cell {
     (number.to_string(), Some(Style::Muted))
@@ -350,9 +362,14 @@ fn title_limit(width: Option<usize>) -> Option<WidthLimit> {
 
 fn queue_status_cell(entry: &QueueEntry) -> Cell {
     let status = ListStatus::of_entry(entry);
+    let label = with_mode(
+        status.label(),
+        entry.mode.as_deref(),
+        crate::config::modes::DEFAULT,
+    );
     let mut text = match entry.position {
-        Some(position) => format!("{}, position {position}", status.label()),
-        None => status.label().into(),
+        Some(position) => format!("{label}, position {position}"),
+        None => label,
     };
     if !entry.waiting_for.is_empty() {
         text += &format!(", after {}", entry.waiting_for.join(", "));
