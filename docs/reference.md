@@ -725,7 +725,7 @@ Ctrl-D deletes. Each action returns to your shell.
 prints the list instead: your own workspaces first, then each running [chat](#chats)
 marked ◆ with its agent, followed by the workspaces it opened; `work --chats`
 lists only the chats. `work --repo <repository>`, with or without
-`--queue` or `--chats`, lists only that registered repository's workspaces,
+`--chats` or `--status`, lists only that registered repository's workspaces,
 chats and queued agents. `work --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
 in kebab case (`needs-input`, `ready-outdated`, `queued`);
