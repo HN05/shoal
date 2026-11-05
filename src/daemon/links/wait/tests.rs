@@ -1392,7 +1392,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         .unwrap();
 
     // A change of the parent's keeps the child's polls out until its
-    // cursors know it.
+    // cursors know it, whether or not the child has an agent by then.
     let child_gate_held = || async {
         let _gate = manager.lock_change_gates(&parent.id, &[]).await.unwrap();
         manager.gates.try_lock_prs([&child.id]).is_none()
@@ -1409,7 +1409,7 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         .set_agent_state(&child.id, crate::state::AgentState::Working, None, None)
         .await
         .unwrap();
-    assert!(!child_gate_held().await);
+    assert!(child_gate_held().await);
     retarget("feature", "release").await;
     observe("release").await.unwrap();
     assert!(delivered(parent.id.clone()).await.is_empty());

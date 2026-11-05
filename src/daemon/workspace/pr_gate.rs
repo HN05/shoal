@@ -13,14 +13,18 @@ impl Manager {
         Ok((self.workspace(&id).await?, guard))
     }
 
-    /// Hold the PR gates of the space `id`, of the spaces below it whose
-    /// activity its agent receives and of `others`. A change the space makes
-    /// through Shoal is recorded on the cursors of the first two, so holding
-    /// them from before the change keeps a poll from recording it first.
+    /// Hold the PR gates of the space `id`, of every space below it and of
+    /// `others`. A change the space makes through Shoal is recorded on its
+    /// cursor and on those of the spaces below it whose activity it receives
+    /// when the change is recorded, so holding them all from before the
+    /// change keeps a poll from recording it first, whichever agents start
+    /// or stop meanwhile.
     pub(crate) async fn lock_change_gates(&self, id: &str, others: &[&str]) -> Result<PrGuard> {
-        let children = self.delegated_spaces(id).await?;
-        let receiving = children.iter().map(|child| child.id.as_str());
-        let ids = receiving.chain([id]).chain(others.iter().copied());
+        let subtree = self.subtree(id).await?;
+        let ids = subtree
+            .iter()
+            .map(String::as_str)
+            .chain(others.iter().copied());
         Ok(self.gates.lock_prs(ids).await)
     }
 }
