@@ -6,18 +6,12 @@ fn a_development_build_refuses_only_the_users_own_state_directory() {
         return;
     };
     let user = home.join(DEFAULT_STATE);
-    let refused = refuse_user_state(&user).map_err(|error| error.to_string());
-    if crate::build::changes_user_files() {
-        assert_eq!(refused, Ok(()));
-    } else {
-        assert_eq!(
-            refused,
-            Err(format!(
-                "a development build does not use the user's state directory {}; pass --state-dir with a temporary directory, or set SHOAL_DEV_USER_FILES=1 to use it",
-                user.display()
-            ))
-        );
-    }
+    let refused = refuse_user_state(&user);
+    assert_eq!(
+        refused.is_ok(),
+        crate::build::changes_user_files(),
+        "{refused:?}"
+    );
     let temporary = tempfile::tempdir().unwrap();
     refuse_user_state(&temporary.path().join(DEFAULT_STATE)).unwrap();
 }

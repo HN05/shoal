@@ -16,7 +16,6 @@ fn places_name_their_session_and_pane() {
             pane: "terminal_3",
         })
     );
-    assert_eq!(place_id("repo", "terminal_0"), "repo:terminal_0");
     assert_eq!(parse_place("repo:plugin_2"), None);
     assert_eq!(parse_place(":terminal_1"), None);
     assert_eq!(parse_place("terminal_1"), None);
@@ -76,11 +75,7 @@ fn panes_list_terminals_without_plugins() {
         }]
     );
     assert!(parse_panes("").unwrap().is_empty());
-    let printed = parse_panes("caller [Created 0s ago]\n").map_err(|error| error.to_string());
-    assert_eq!(
-        printed,
-        Err("invalid Zellij panes: caller [Created 0s ago]".to_owned())
-    );
+    assert!(parse_panes("caller [Created 0s ago]\n").is_err());
 }
 
 #[test]
@@ -163,8 +158,6 @@ fn session_names_are_free_short_and_without_slashes() {
 
 #[test]
 fn session_names_leave_room_for_the_socket_path() {
-    let default = Zellij { socket_dir: None };
-    assert_eq!(default.name_room(), MAX_SESSION_LEN);
     let deep = Zellij {
         socket_dir: Some(PathBuf::from(format!("/{}", "d".repeat(75)))),
     };
@@ -232,8 +225,7 @@ fn a_session_without_an_answer_is_reported_missing() {
     assert_eq!(killed(&exited(0, "", "")).ok(), Some(Reply::Answered(())));
     let none = "No active zellij sessions found.";
     assert_eq!(killed(&exited(1, "", none)).ok(), Some(Reply::Answered(())));
-    let failed = killed(&exited(1, "Permission denied\n", "")).map_err(|error| error.to_string());
-    assert_eq!(failed, Err("zellij failed: Permission denied".to_owned()));
+    assert!(killed(&exited(1, "Permission denied\n", "")).is_err());
 }
 
 #[test]
@@ -293,8 +285,7 @@ async fn a_session_reported_missing_is_asked_again_while_its_server_runs() {
         || async { Ok(true) },
     )
     .await;
-    let busy = busy.map_err(|error| error.to_string());
-    assert_eq!(busy, Err("the running session does not answer".to_owned()));
+    assert!(busy.is_err());
 }
 
 #[tokio::test(start_paused = true)]

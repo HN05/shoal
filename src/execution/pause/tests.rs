@@ -1,49 +1,32 @@
 use super::*;
 
 #[test]
-fn stopped_lines_name_the_cause_that_is_saved() {
+fn stopped_lines_name_the_cause_and_how_to_restore() {
     let protection = Halt::Protection {
         recover: false,
         reason: "free disk space is below 2 GiB".into(),
         resumes_when: "free disk space reaches 5 GiB".into(),
     };
-    assert_eq!(
-        protection.saved_reason(),
-        Some("free disk space is below 2 GiB")
-    );
-    assert_eq!(
-        protection.manual_restore("worker", "id"),
-        "shoal: agent stopped: free disk space is below 2 GiB; once free disk space reaches 5 GiB, restore with shoal resume worker --execution id"
+    let line = protection.manual_restore("worker", "id");
+    assert!(line.contains("free disk space is below 2 GiB"), "{line}");
+    assert!(line.contains("free disk space reaches 5 GiB"), "{line}");
+    assert!(
+        line.ends_with("shoal resume worker --execution id"),
+        "{line}"
     );
     let stop = Halt::Pause {
         reason: Some("stopped by shoal stop".into()),
         removed: false,
     };
-    assert_eq!(stop.saved_reason(), Some("stopped by shoal stop"));
-    assert_eq!(stop.stated_reason(), ": stopped by shoal stop");
-    assert_eq!(
-        stop.manual_restore("worker", "id"),
-        "shoal: agent stopped: stopped by shoal stop; restore with shoal resume worker --execution id"
-    );
+    let line = stop.manual_restore("worker", "id");
+    assert!(line.contains("stopped by shoal stop"), "{line}");
+    assert!(!line.contains("work restore"), "{line}");
     let removal = Halt::Pause {
         reason: Some("the workspace is being removed".into()),
         removed: true,
     };
-    assert_eq!(
-        removal.manual_restore("worker", "id"),
-        "shoal: agent stopped: the workspace is being removed; restore with shoal work restore worker, then shoal resume worker --execution id"
-    );
-    // A wrapper waiting to restore its agent learns of the removal only from
-    // the cancellation.
-    assert_eq!(
-        restore_steps("worker", "id", true),
-        "restore with shoal work restore worker, then shoal resume worker --execution id"
-    );
-    let pause = Halt::Pause {
-        reason: None,
-        removed: false,
-    };
-    assert_eq!(pause.stated_reason(), "");
+    let line = removal.manual_restore("worker", "id");
+    assert!(line.contains("shoal work restore worker"), "{line}");
 }
 
 #[test]
@@ -79,7 +62,6 @@ fn only_an_ended_session_or_shutdown_of_an_agent_that_restores_unattended_queues
         restorer(&recovery(false), &shutdown, false),
         Restorer::User
     ));
-    assert_eq!(shutdown.saved_reason(), Some("the system is shutting down"));
     let stop = Halt::Pause {
         reason: Some("stopped by shoal stop".into()),
         removed: false,

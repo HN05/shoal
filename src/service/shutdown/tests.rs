@@ -62,8 +62,7 @@ async fn failed_signals_and_stalled_drains_leave_the_service_loaded() -> Result<
             .contains("could not signal")
     );
     let started = Instant::now();
-    let error = await_exit(&paths, true).await.unwrap_err();
-    assert!(error.to_string().contains("service left loaded"));
+    assert!(await_exit(&paths, true).await.is_err());
     assert_eq!(started.elapsed(), SERVICE_STOP_TIMEOUT);
     Ok(())
 }

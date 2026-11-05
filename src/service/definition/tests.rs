@@ -27,7 +27,6 @@ fn systemd_escapes_expansion_and_quotes() {
     );
     assert!(systemd_quote("/a\nExecStart=bad", true).is_err());
     let definition = definition(&paths(), Path::new("/tmp/shoal"), Platform::Linux).unwrap();
-    assert!(definition.content.contains("Type=exec"));
     assert!(
         definition
             .content

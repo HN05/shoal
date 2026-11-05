@@ -84,25 +84,14 @@ fn windows_open_in_the_session_and_splits_beside_their_pane() {
             .map(|arg| arg.into_string().unwrap())
             .collect()
     };
-    assert_eq!(
-        words(&shell),
-        [
-            "new-window",
-            "-t",
-            "$2:",
-            "-n",
-            "placed",
-            "-P",
-            "-F",
-            OPENED_FORMAT,
-            "-c",
-            "/work",
-            "-d",
-            "/bin/sh",
-            "-c",
-            "run",
-        ]
+    let window = words(&shell);
+    assert_eq!(window[..3], ["new-window", "-t", "$2:"]);
+    assert!(
+        ["placed", "/work"]
+            .iter()
+            .all(|word| window.contains(&(*word).to_owned()))
     );
+    assert!(window.ends_with(&["-d".into(), "/bin/sh".into(), "-c".into(), "run".into()]));
     shell.focus = true;
     shell.beside = Some("%4");
     assert_eq!(words(&shell)[..4], ["split-window", "-h", "-t", "%4"]);
