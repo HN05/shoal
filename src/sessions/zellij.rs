@@ -46,6 +46,11 @@ const PANE_WAIT: Duration = Duration::from_secs(30);
 /// since Zellij finds the session once its server answers in time.
 const UNANSWERED_RETRY: Duration = Duration::from_millis(100);
 const UNANSWERED_ATTEMPTS: u32 = 100;
+/// How many times, `UNANSWERED_RETRY` apart, Shoal asks which clients show
+/// a session before it takes the session as shown by none: under load
+/// Zellij can list none of the clients that show a session. Few enough
+/// that a session no client shows costs no noticeable wait.
+const CLIENTLESS_ASKS: u32 = 3;
 
 /// How long a `zellij` command may run before it is stopped; only a hang
 /// guard, since each one answers at once.
@@ -407,6 +412,12 @@ impl Zellij {
             .session_listing(session, None, &["list-clients"], lists_clients)
             .await?;
         Ok(parse_clients(&listed))
+    }
+
+    /// Whether a client shows `session`, asked again while Zellij lists
+    /// none; see [`CLIENTLESS_ASKS`].
+    pub async fn shown(&self, session: &str) -> Result<bool> {
+        shown_in_any(|| async { Ok(!self.clients(session).await?.is_empty()) }).await
     }
 
     /// Every session's name, exited ones included, which Zellij would
@@ -785,6 +796,23 @@ where
         }
     }
     bail!("the running session does not answer")
+}
+
+/// Whether any of `CLIENTLESS_ASKS` asks, `UNANSWERED_RETRY` apart, finds
+/// a client showing a session; the first that does ends them.
+async fn shown_in_any<Asked>(mut ask: impl FnMut() -> Asked) -> Result<bool>
+where
+    Asked: Future<Output = Result<bool>>,
+{
+    for asked in 1..=CLIENTLESS_ASKS {
+        if ask().await? {
+            return Ok(true);
+        }
+        if asked < CLIENTLESS_ASKS {
+            tokio::time::sleep(UNANSWERED_RETRY).await;
+        }
+    }
+    Ok(false)
 }
 
 /// The arguments that run `shell`'s command in a new pane, which closes

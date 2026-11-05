@@ -1144,7 +1144,9 @@ a background start would otherwise lose, so a place for a session without a
 client, or for a terminal outside Zellij, opens as the first pane of a session
 of its own. Zellij keeps no configured group: generic code then hands the
 host no origin, and the host decides between the origin's session and a new
-one, since only it can tell whether a client shows a session. Zellij runs a
+one, since only it can tell whether a client shows a session. Under load
+Zellij can list none of the clients that show a session, so the host asks a
+few times, briefly, before it takes a session as shown by none. Zellij runs a
 server per session and numbers panes per server, so a place's ID names its
 session and pane, it records the socket directory, and its instance is the
 server's process and birth; Zellij takes no condition with a command, so the
@@ -1156,8 +1158,8 @@ the session's server process still runs, the recorded instance for a recorded
 pane, and takes a session as ended only once it does not. Under load Zellij
 can also let a command return before its answer and hand that answer to the
 next command, so the host takes a tab or pane a command printed only when the
-session listed no such one before, and asks a pane listing or screen dump
-again when it holds another command's answer or none.
+session listed no such one before, and asks a pane or client listing or
+screen dump again when it holds another command's answer or none.
 Zellij closes a tab or session with its last pane only while a client shows the
 session, so a close ends either along with the last pane there, as an attached
 client would see it, leaving no empty tab or session. A session's last pane

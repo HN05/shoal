@@ -344,8 +344,7 @@ async fn shown_session<'a>(server: &Server, origin: Option<&'a Origin>) -> Resul
     let Some(session) = origin.and_then(|origin| origin.group.as_deref()) else {
         return Ok(None);
     };
-    let shown = !server.clients(session).await?.is_empty();
-    Ok(shown.then_some(session))
+    Ok(server.shown(session).await?.then_some(session))
 }
 
 /// The place `opened` is, owned by Shoal, in its session.

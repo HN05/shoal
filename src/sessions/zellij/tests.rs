@@ -298,6 +298,30 @@ async fn a_session_reported_missing_is_asked_again_while_its_server_runs() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_session_listed_without_clients_is_asked_again_before_it_counts_as_unshown() {
+    let mut listings = vec![false, true].into_iter();
+    let mut asked = 0;
+    let shown = shown_in_any(|| {
+        asked += 1;
+        std::future::ready(Ok(listings.next().unwrap_or(false)))
+    })
+    .await;
+    assert_eq!(shown.ok(), Some(true));
+    assert_eq!(asked, 2);
+
+    let mut asked = 0;
+    let started = tokio::time::Instant::now();
+    let shown = shown_in_any(|| {
+        asked += 1;
+        std::future::ready(Ok(false))
+    })
+    .await;
+    assert_eq!(shown.ok(), Some(false));
+    assert_eq!(asked, CLIENTLESS_ASKS);
+    assert_eq!(started.elapsed(), UNANSWERED_RETRY * (CLIENTLESS_ASKS - 1));
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_session_restarted_while_shoal_waits_is_not_asked_again() {
     let mut asked = 0;
     let mut checks = vec![true, false].into_iter();
