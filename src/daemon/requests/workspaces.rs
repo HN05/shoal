@@ -263,9 +263,14 @@ impl Scoped for WorkspaceMethod {
                 parent: parent @ None,
                 ..
             }
-            | WorkspaceMethod::OpenPullHead { parent, .. }
-            | WorkspaceMethod::CheckCreation { parent, .. } => {
+            | WorkspaceMethod::OpenPullHead { parent, .. } => {
                 *parent = Some(caller.space_id.clone());
+                None
+            }
+            // A start it checks goes where the start would: below its own
+            // space unless it names one below it.
+            WorkspaceMethod::CheckCreation { parent, .. } => {
+                manager.parent_below(caller, parent).await?;
                 None
             }
             WorkspaceMethod::CheckDependencies { .. } => None,

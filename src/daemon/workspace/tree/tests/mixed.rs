@@ -437,12 +437,36 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     let crate::protocol::ChatMethod::StartChat { parent, .. } = method else {
         unreachable!("the method stays a chat start");
     };
-    assert_eq!(parent, Some(worker.id));
+    assert_eq!(parent, Some(worker.id.clone()));
     let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut below(&root))
         .await
         .unwrap_err();
     assert!(
         format!("{error:#}").contains("only below their own space and those below it"),
         "{error:#}"
+    );
+    // The check before a workspace start takes the parent the same way.
+    let check = |parent: &Workspace| crate::protocol::WorkspaceMethod::CheckCreation {
+        repository: repo.id.clone().into(),
+        branch: Some("nested".into()),
+        existing: None,
+        base: None,
+        git_profile: None,
+        path: None,
+        options: Default::default(),
+        parent: Some(parent.name.clone()),
+    };
+    let mut method = check(&worker);
+    crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+        .await
+        .unwrap();
+    let crate::protocol::WorkspaceMethod::CheckCreation { parent, .. } = method else {
+        unreachable!("the method stays a creation check");
+    };
+    assert_eq!(parent, Some(worker.id));
+    assert!(
+        crate::daemon::scope::authorize(&manager, Some("scope"), &mut check(&root))
+            .await
+            .is_err()
     );
 }

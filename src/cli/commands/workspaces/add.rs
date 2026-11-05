@@ -84,7 +84,7 @@ pub(in crate::cli::commands) async fn add(
     );
     let mut creation = creation.absolute(ctx)?;
     let target = resolve_add_target(ctx, repository, issue.as_deref()).await?;
-    check_add_creation(ctx, &target, &creation).await?;
+    check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
     let after = after_dependencies(ctx, &target, &options.after).await?;
     let settings = AddSettings::new(ctx, &target.selector);
     let agent = choose_add_agent(&settings, agent).await?;
@@ -98,7 +98,7 @@ pub(in crate::cli::commands) async fn add(
     let issue = load_add_issue(ctx, &target, issue.or(picked)).await?;
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
     // An issue or a typed name settles the branch; check it before the agent picker.
-    check_add_creation(ctx, &target, &creation).await?;
+    check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
     plan.start_as(&options);

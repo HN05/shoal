@@ -308,14 +308,16 @@ impl AddPlan {
 /// Refuse what creation would refuse in the given repository, branch and
 /// options before a prompt asks for the rest of the addition. Only a terminal
 /// prompts; without one, creation refuses the arguments itself, except that
-/// a repository other than the chat's is refused before a launch is queued.
+/// a `parent`, else the chat this runs in, that the workspace cannot go below
+/// is refused before a launch is queued.
 pub(super) async fn check_add_creation(
     ctx: &Context,
     target: &AddTarget,
     creation: &Creation,
+    parent: Option<&str>,
 ) -> Result<()> {
-    let chat = env::in_chat();
-    if !ctx.interactive() && chat.is_none() {
+    let parent = parent.map(str::to_owned).or_else(env::in_chat);
+    if !ctx.interactive() && parent.is_none() {
         return Ok(());
     }
     let planned = crate::client::workspaces::PlannedWorkspace {
@@ -325,7 +327,7 @@ pub(super) async fn check_add_creation(
         base: creation.base.clone(),
         git_profile: creation.git_profile.clone(),
         path: creation.path.clone(),
-        parent: chat,
+        parent,
         options: creation.options,
     };
     crate::client::workspaces::check_creation(&ctx.paths, planned).await
