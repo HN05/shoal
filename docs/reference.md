@@ -2896,7 +2896,7 @@ command = "scripts/seed.sh"  # In the worktree; builds the default branch and mu
 paths = ["target"]       # Optional build outputs, relative to the worktree, new workspaces start with
 ```
 
-[Presets](#build-tool-presets) add their builds and outputs to the seed; `cmd`
+[Presets](#build-tool-presets) add their builds and outputs to the seed; `command`
 replaces the presets' commands and `paths` their outputs.
 
 The daemon keeps a locked, detached worktree at the local default branch's tip in
