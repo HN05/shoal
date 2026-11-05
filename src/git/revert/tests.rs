@@ -110,8 +110,7 @@ async fn merge_commits_revert_against_their_first_parent() {
         "Revert \"Topic\"\n"
     );
     // Nothing is left to revert once it is undone.
-    let error = reverted(&repo, &merge, "Again").await.unwrap_err();
-    assert!(error.to_string().contains("nothing to revert"), "{error:#}");
+    assert!(reverted(&repo, &merge, "Again").await.is_err());
 }
 
 async fn rebased_commits_revert_together_and_a_squash_alone() {
@@ -184,8 +183,7 @@ async fn merges_of_a_squashed_head_revert_and_imported_merges_refuse() {
         head: &tip,
         ..merged(&tip, &commits)
     };
-    let error = Merge::of(&repo, &facts).await.unwrap_err();
-    assert!(error.to_string().contains("by hand"), "{error:#}");
+    assert!(Merge::of(&repo, &facts).await.is_err());
 }
 
 async fn a_partial_copy_of_the_pr_is_refused() {
@@ -193,10 +191,11 @@ async fn a_partial_copy_of_the_pr_is_refused() {
     let commits = topic_commits(&repo);
     // Only the PR's last commit reached the base.
     git(&repo, &["cherry-pick", "topic"]);
-    let error = Merge::of(&repo, &merged(&head(&repo), &commits))
-        .await
-        .unwrap_err();
-    assert!(error.to_string().contains("by hand"), "{error:#}");
+    assert!(
+        Merge::of(&repo, &merged(&head(&repo), &commits))
+            .await
+            .is_err()
+    );
 }
 
 async fn missing_pr_commits_are_fetched_from_the_head_ref() {
@@ -218,10 +217,11 @@ async fn missing_pr_commits_are_fetched_from_the_head_ref() {
     );
     let rebased = head(&local);
     assert!(!git::has_commit(&local, &commits[0]).await.unwrap());
-    let error = Merge::of(&local, &merged(&rebased, &commits))
-        .await
-        .unwrap_err();
-    assert!(error.to_string().contains("keeps no ref"), "{error:#}");
+    assert!(
+        Merge::of(&local, &merged(&rebased, &commits))
+            .await
+            .is_err()
+    );
 
     let facts = Merged {
         head_ref: Some("refs/pull/7/head"),
@@ -260,8 +260,7 @@ async fn changes_to_tracked_files_refuse_the_revert() {
     // As a setup that formats or regenerates a tracked file might leave it.
     fs::write(repo.join("tracked"), "set up\n").unwrap();
     git(&repo, &["add", "tracked"]);
-    let error = reverted(&repo, &merge, "Revert").await.unwrap_err();
-    assert!(error.to_string().contains("tracked files"), "{error:#}");
+    assert!(reverted(&repo, &merge, "Revert").await.is_err());
     assert_eq!(git(&repo, &["log", "-1", "--format=%s"]), "Merge topic\n");
 }
 

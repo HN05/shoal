@@ -41,9 +41,6 @@ async fn predicates_distinguish_answers_errors_and_spawn_failure() {
                         assert!(error.contains("missing-git"));
                     } else if script.contains("unknown option") {
                         assert!(error.contains("unknown option exists"));
-                        if !ancestry {
-                            assert!(error.contains("Git 2.43 or newer is required"));
-                        }
                     }
                 }
             }

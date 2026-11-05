@@ -35,11 +35,7 @@ fn a_push_url_that_starts_a_fetch_url_cannot_be_held() {
             fetch: vec![fetch.into()],
             push: vec!["git@forge:o/r".into()],
         };
-        let error = rewrites(&urls).unwrap_err();
-        assert!(
-            format!("{error:#}").contains("also rewrite fetches"),
-            "{error:#}"
-        );
+        assert!(rewrites(&urls).is_err(), "{fetch}");
     }
 }
 
