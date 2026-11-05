@@ -1624,7 +1624,14 @@ remain literal. Claude and Codex, and their launch profiles, also get Shoal's
 hooks and trust entries, which other tools do without. A workspace's Claude Code agent is also allowed to run the
 `shoal` commands that report on and finish its assignment, and `shoal stop
 --processes` and `--leftovers`, with or without `--json`;
-the daemon still limits them to its scope. `shoal run <name>` for a `[commands]`
+the daemon still limits them to its scope. Its settings also add an
+`autoMode.environment` entry, after Claude Code's own (`"$defaults"`), that
+names the workspace's branch, its commits and its PR as the agent's own work,
+so auto mode lets it push the rebased branch with `git push --force-with-lease`.
+Auto mode still judges every command, including other pushes. A workspace at a
+commit has no branch and gets no entry, and neither does a chat. A branch
+renamed while the agent runs keeps its old name in the entry until the agent's
+next launch. `shoal run <name>` for a `[commands]`
 shortcut remains a plain command invocation without agent prompts or exit
 notifications, expanding `{prompt}` to an empty string.
 

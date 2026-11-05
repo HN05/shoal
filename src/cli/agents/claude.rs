@@ -8,7 +8,7 @@ use anyhow::{Result, ensure};
 use serde_json::{Value, json};
 
 use super::{
-    AgentEnvironment, Integration, Wake,
+    AgentEnvironment, AgentWorkspace, Integration, Wake,
     desktop::App,
     hooks,
     trust::{CLAUDE_CODE, TrustFile},
@@ -23,12 +23,16 @@ pub(super) struct Claude;
 impl Integration for Claude {
     /// Its settings carry the proxy's URL once the wrapper merges them, so
     /// a proxied launch's hooks are its plain ones.
-    fn hook_args(&self, _proxied: bool) -> std::io::Result<Vec<OsString>> {
-        settings(true)
+    fn hook_args(
+        &self,
+        workspace: AgentWorkspace,
+        _proxied: bool,
+    ) -> std::io::Result<Vec<OsString>> {
+        settings(Some(workspace))
     }
 
     fn chat_hook_args(&self) -> std::io::Result<Vec<OsString>> {
-        settings(false)
+        settings(None)
     }
 
     /// Every `--settings` becomes one with the proxy's URL, since Claude
@@ -150,14 +154,16 @@ fn percent_encode(bytes: &[u8]) -> String {
 }
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's
-/// own settings, and a later `--settings` would replace it. A `workspace`
-/// agent also reports its turn's state and may run the commands that finish
-/// its assignment; a chat's agent reports only its session. For a proxied agent the wrapper merges these with any
-/// others into the one that names the proxy's URL, since these settings win
-/// over the user's own `env` and the inherited environment.
-fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
+/// own settings, and a later `--settings` would replace it. A `workspace`'s
+/// agent also reports its turn's state, may run the commands that finish
+/// its assignment and tells auto mode that its branch is its own; a chat's
+/// agent, with no `workspace`, reports only its session. For a proxied agent
+/// the wrapper merges these with any others into the one that names the
+/// proxy's URL, since these settings win over the user's own `env` and the
+/// inherited environment.
+fn settings(workspace: Option<AgentWorkspace>) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
-    let (state, subagents, allow) = if workspace {
+    let (state, subagents, allow) = if workspace.is_some() {
         (
             state_hooks(&shoal),
             subagent_hooks(&shoal),
@@ -174,7 +180,26 @@ fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
     if !allow.is_empty() {
         settings["permissions"] = json!({"allow": allow});
     }
+    if let Some(own) = workspace.and_then(own_branch) {
+        settings["autoMode"] = json!({"environment": ["$defaults", own]});
+    }
     Ok(vec!["--settings".into(), settings.to_string().into()])
+}
+
+/// The auto-mode environment entry that names `workspace`'s branch as its
+/// agent's own work, so that Claude Code's classifier, which reads settings
+/// but not the agent's instructions, lets it push the rebased branch with
+/// `--force-with-lease`; `None` for a workspace without a branch. The list
+/// it joins starts with `$defaults`, which keeps Claude Code's own entries.
+fn own_branch(workspace: AgentWorkspace) -> Option<String> {
+    let branch = workspace.branch?;
+    Some(format!(
+        "**Shoal workspace**: this session is the agent of Shoal workspace `{}`, \
+         working on Git branch `{branch}`. That branch, its commits and its pull \
+         request are this agent's own work. Rebasing the branch and pushing it \
+         with `git push --force-with-lease` is the normal workflow.",
+        workspace.name
+    ))
 }
 
 /// The Shoal commands with which a workspace's agent reports on and finishes

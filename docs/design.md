@@ -1506,7 +1506,13 @@ workspace-write sandbox's network access, which reaching the daemon's socket nee
 Codex allows a single socket only along with the network, whatever the configured
 command. A workspace's Claude agent gets permission to run the Shoal commands that
 finish its assignment, so completion never
-depends on Claude Code's auto-mode check. Every agent, chats included, gets the
+depends on Claude Code's auto-mode check. Its settings also tell auto mode, in
+an `autoMode.environment` entry after Claude Code's own, that the workspace's
+branch, commits and PR are the agent's own work, since the classifier reads
+settings but not the agent's instructions; it then allows the
+`--force-with-lease` push of the rebased branch that the worker skill
+prescribes. The classifier still judges each command, rather than an allow rule
+passing every push. Every agent, chats included, gets the
 configured `agent.dirs`, `/tmp` by default, as working directories, so it reads what the
 tools it runs leave there without a permission prompt. A workspace's agent also
 gets the repository's workspaces directory as one, so it works in the children it

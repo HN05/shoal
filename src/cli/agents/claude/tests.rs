@@ -1,10 +1,15 @@
 use super::*;
+use crate::cli::agents::tests::WORKSPACE;
+
+/// The settings `args` pass, given as JSON.
+fn settings_of(args: &[OsString]) -> Value {
+    assert_eq!(args[0], "--settings");
+    serde_json::from_str(args[1].to_str().unwrap()).unwrap()
+}
 
 #[test]
 fn settings_deliver_messages_report_state_and_wake_the_idle_agent() {
-    let args = Claude.hook_args(false).unwrap();
-    assert_eq!(args[0], "--settings");
-    let settings: Value = serde_json::from_str(args[1].to_str().unwrap()).unwrap();
+    let settings = settings_of(&Claude.hook_args(WORKSPACE, false).unwrap());
     for event in hooks::MESSAGE_EVENTS {
         let command = settings["hooks"][event][0]["hooks"][0]["command"]
             .as_str()
@@ -102,6 +107,30 @@ fn settings_deliver_messages_report_state_and_wake_the_idle_agent() {
 }
 
 #[test]
+fn auto_mode_learns_that_the_workspace_branch_is_the_agents_own() {
+    let settings = settings_of(&Claude.hook_args(WORKSPACE, false).unwrap());
+    let environment = settings["autoMode"]["environment"].as_array().unwrap();
+    // Claude Code keeps its own entries.
+    assert_eq!(environment[0], "$defaults");
+    assert_eq!(environment.len(), 2, "{environment:?}");
+    let own = environment[1].as_str().unwrap();
+    for named in [
+        "Shoal workspace `fix-login`",
+        "Git branch `fix-login-redirect`",
+        "`git push --force-with-lease`",
+    ] {
+        assert!(own.contains(named), "{named}: {own}");
+    }
+    // A workspace at a commit has no branch to call its own.
+    let detached = AgentWorkspace {
+        branch: None,
+        ..WORKSPACE
+    };
+    let settings = settings_of(&Claude.hook_args(detached, false).unwrap());
+    assert!(settings.get("autoMode").is_none(), "{settings}");
+}
+
+#[test]
 fn stop_failure_errors_name_the_turn_failure() {
     for (error, failure) in [
         ("rate_limit", Some(TurnFailure::RateLimited)),
@@ -120,8 +149,7 @@ fn stop_failure_errors_name_the_turn_failure() {
 
 #[test]
 fn chat_settings_deliver_messages_report_the_session_and_wake_without_turn_state() {
-    let args = Claude.chat_hook_args().unwrap();
-    let settings: Value = serde_json::from_str(args[1].to_str().unwrap()).unwrap();
+    let settings = settings_of(&Claude.chat_hook_args().unwrap());
     // Only the session start reports, for the chat's session.
     let start = &settings["hooks"]["SessionStart"][0];
     assert_eq!(start["matcher"].as_str(), Some(hooks::SESSION_START));
@@ -133,6 +161,7 @@ fn chat_settings_deliver_messages_report_the_session_and_wake_without_turn_state
     }
     // A chat belongs to no workspace and finishes no assignment.
     assert!(settings.get("permissions").is_none(), "{settings}");
+    assert!(settings.get("autoMode").is_none(), "{settings}");
     assert!(
         settings["hooks"].get("WorktreeCreate").is_none(),
         "{settings}"
@@ -150,10 +179,17 @@ fn chat_settings_deliver_messages_report_the_session_and_wake_without_turn_state
 fn proxied_settings_send_api_requests_to_the_proxy() {
     // The hooks are the same; the wrapper's merge adds the proxy's URL.
     assert_eq!(
-        Claude.hook_args(true).unwrap(),
-        Claude.hook_args(false).unwrap()
+        Claude.hook_args(WORKSPACE, true).unwrap(),
+        Claude.hook_args(WORKSPACE, false).unwrap()
     );
-    let mut args = Claude.hook_args(true).unwrap();
+    let mut args = Claude.hook_args(WORKSPACE, true).unwrap();
+    // The user's own auto-mode entries stay beside Shoal's.
+    args.extend([
+        "--settings".into(),
+        json!({"autoMode": {"environment": ["$defaults", "mine"]}})
+            .to_string()
+            .into(),
+    ]);
     let home = tempfile::tempdir().unwrap();
     let environment = AgentEnvironment {
         home: home.path(),
@@ -174,6 +210,16 @@ fn proxied_settings_send_api_requests_to_the_proxy() {
         settings["env"]["ANTHROPIC_BASE_URL"],
         "http://127.0.0.1:4000"
     );
+    let environment = settings["autoMode"]["environment"].as_array().unwrap();
+    assert_eq!(environment.len(), 4, "{environment:?}");
+    assert_eq!(environment[0], "$defaults");
+    assert!(
+        environment[1]
+            .as_str()
+            .unwrap()
+            .contains("Git branch `fix-login-redirect`")
+    );
+    assert_eq!(environment[2..], [json!("$defaults"), json!("mine")]);
 }
 
 #[test]

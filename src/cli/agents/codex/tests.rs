@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
 
 use super::*;
+use crate::cli::agents::tests::WORKSPACE;
 
 #[test]
 fn config_overrides_deliver_messages_and_report_state() {
     let hooks: BTreeMap<_, _> = Codex
-        .hook_args(false)
+        .hook_args(WORKSPACE, false)
         .unwrap()
         .chunks(2)
         .map(|flag| {
@@ -83,7 +84,7 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
             Some(config) => std::fs::write(codex.join("config.toml"), config).unwrap(),
             None => drop(std::fs::remove_file(codex.join("config.toml"))),
         }
-        let mut args = Codex.hook_args(true).unwrap();
+        let mut args = Codex.hook_args(WORKSPACE, true).unwrap();
         assert_eq!(args.last().unwrap(), PROVIDER);
         let placeholder = args.len() - 1;
         let configured = BTreeMap::from([("CODEX_HOME".to_owned(), codex.clone().into())]);
@@ -137,7 +138,7 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
     // Without a proxy the hooks name no provider.
     assert!(
         !Codex
-            .hook_args(false)
+            .hook_args(WORKSPACE, false)
             .unwrap()
             .iter()
             .any(|arg| arg == PROVIDER)

@@ -27,7 +27,11 @@ pub(in crate::cli) const APP: App = App {
 pub(super) struct Codex;
 
 impl Integration for Codex {
-    fn hook_args(&self, proxied: bool) -> std::io::Result<Vec<OsString>> {
+    fn hook_args(
+        &self,
+        _workspace: super::AgentWorkspace,
+        proxied: bool,
+    ) -> std::io::Result<Vec<OsString>> {
         let mut args = shoal_overrides(true)?;
         if proxied {
             args.push(PROVIDER.into());

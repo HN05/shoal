@@ -192,14 +192,15 @@ async fn built_in_restore_child() {
         let tools = crate::ai::tools(&Default::default());
         let tool = &tools[agent];
         let directories = [fs::canonicalize("/tmp").unwrap(), directory.to_path_buf()];
-        let launch_args = crate::cli::agents::hook_args(tool.integration, false)
-            .unwrap()
-            .into_iter()
-            .chain(
-                directories
-                    .iter()
-                    .flat_map(|directory| tool.launch.arguments.add_dir_args(directory)),
-            );
+        let launch_args =
+            crate::cli::agents::hook_args(tool.integration, (&workspace).into(), false)
+                .unwrap()
+                .into_iter()
+                .chain(
+                    directories
+                        .iter()
+                        .flat_map(|directory| tool.launch.arguments.add_dir_args(directory)),
+                );
         let mut prompt = String::from(
             "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
         );

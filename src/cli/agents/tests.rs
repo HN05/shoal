@@ -3,6 +3,12 @@ use std::fs;
 use super::*;
 use crate::{config::named_commands, test_support::install_test_script};
 
+/// A workspace on its own branch, whose agent the integrations' tests launch.
+pub(super) const WORKSPACE: AgentWorkspace = AgentWorkspace {
+    name: "fix-login",
+    branch: Some("fix-login-redirect"),
+};
+
 #[test]
 fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
     let bin = tempfile::tempdir().unwrap();
@@ -72,7 +78,7 @@ fn integrations_serve_only_the_names_they_list() {
     );
     let configured = integration(IntegrationKind::None);
     assert!(configured.trust_file().is_none());
-    assert!(configured.hook_args(false).unwrap().is_empty());
+    assert!(configured.hook_args(WORKSPACE, false).unwrap().is_empty());
     assert_eq!(
         builtin_names()[..2],
         ["codex".to_owned(), "claude".to_owned()]
