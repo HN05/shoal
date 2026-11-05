@@ -99,6 +99,7 @@ pub(super) async fn handle(
             bundle,
             prerequisite,
             workspace,
+            copy,
         } => Body::RestoredWorkspace(Box::new(
             manager
                 .import_workspace(
@@ -106,6 +107,7 @@ pub(super) async fn handle(
                     bundle.as_deref(),
                     prerequisite.as_deref(),
                     *workspace,
+                    copy,
                 )
                 .await?,
         )),

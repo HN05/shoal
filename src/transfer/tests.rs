@@ -100,12 +100,38 @@ async fn import(
 ) -> crate::model::RestoredWorkspace {
     let import = Import::read(&mut &file[..]).unwrap();
     let packaged = packaged_workspace(&import.manifest);
+    import_record(manager, repo, &import, packaged.workspace.clone()).await
+}
+
+/// Import the workspace `import` packages as `workspace` says, as `shoal
+/// move import` does, which keeps the sessions on the exporting machine.
+async fn import_here(
+    manager: &Manager,
+    repo: &Repository,
+    file: &[u8],
+) -> crate::model::RestoredWorkspace {
+    let import = Import::read(&mut &file[..]).unwrap();
+    let sessions = import
+        .manifest
+        .sessions_on(crate::process::machine::id().as_deref(), None);
+    let workspace = packaged_workspace(&import.manifest).workspace_with(sessions);
+    import_record(manager, repo, &import, workspace).await
+}
+
+async fn import_record(
+    manager: &Manager,
+    repo: &Repository,
+    import: &Import,
+    workspace: RemovedWorkspace,
+) -> crate::model::RestoredWorkspace {
+    let packaged = packaged_workspace(&import.manifest);
     manager
         .import_workspace(
             &repo.id.as_str().into(),
             import.bundle.as_ref().map(|bundle| bundle.path()),
             packaged.prerequisite.as_deref(),
-            packaged.workspace.clone(),
+            workspace,
+            import.manifest.copy.is_some(),
         )
         .await
         .unwrap()
@@ -217,6 +243,7 @@ async fn import_writes_nothing_while_the_repository_moves() {
             import.bundle.as_ref().map(|bundle| bundle.path()),
             packaged.prerequisite.as_deref(),
             packaged.workspace.clone(),
+            false,
         )
         .await;
     assert!(imported.is_err());
@@ -667,4 +694,145 @@ fn a_copy_forks_its_agents_sessions_in_no_place_of_the_original() {
     assert_eq!(new.agents[0].record.session, None);
     assert_eq!(new.agents[0].record.copied, Some(copied));
     assert_eq!(new.last_sessions[0].copied, Some(copied));
+}
+
+#[tokio::test]
+async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
+    use crate::{
+        forge::items::link::LinkKind,
+        model::{LinkedItem, Relation},
+    };
+    let (_source, manager, repo, _origin) = exporter().await;
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("work"), "work\n").unwrap();
+    commit(&workspace.path, "work");
+    let head = git(&workspace.path, &["rev-parse", "HEAD"]);
+    fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
+    let item = |kind, url: &str| LinkedItem {
+        kind,
+        url: url.into(),
+        title: None,
+    };
+    let pr = item(LinkKind::Pr, "https://forge.test/o/r/pulls/2");
+    let issue = item(LinkKind::Issue, "https://forge.test/o/r/issues/3");
+    manager
+        .record_items(
+            &workspace.id,
+            vec![(Relation::Opened, pr), (Relation::Related, issue.clone())],
+        )
+        .await
+        .unwrap();
+    recovery::save_session(&manager.paths, &workspace.id, "stopped-agent", "s1").unwrap();
+    recovery::save_record(
+        &manager.paths,
+        &workspace.id,
+        "stopped-agent",
+        &crate::execution::TrackedAgent::named("claude"),
+        None,
+        None,
+    )
+    .unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("topic.shoal");
+
+    let exported = manager
+        .copy_space(&workspace.name, None, file.clone())
+        .await
+        .unwrap();
+    assert!(exported.removal.is_none());
+    assert_eq!(exported.manifest.copy, Some(Copied::default()));
+    let kept = manager.workspace(&workspace.id).await.unwrap();
+    assert_eq!(kept.path, workspace.path);
+    assert_eq!(
+        recovery::Saved::load(&manager.paths, &workspace.id)
+            .unwrap()
+            .agents
+            .len(),
+        1
+    );
+    let bytes = fs::read(&file).unwrap();
+    assert!(bytes.starts_with(header(5).as_bytes()));
+    let restored = import_here(&manager, &repo, &bytes).await;
+
+    let copy = &restored.opened.workspace;
+    assert_ne!(copy.id, workspace.id);
+    assert_eq!(copy.branch.as_deref(), Some("topic-2"));
+    assert_eq!(git(&copy.path, &["rev-parse", "HEAD"]), head);
+    assert_eq!(
+        fs::read_to_string(copy.path.join("scratch")).unwrap(),
+        "notes\n"
+    );
+    let links = manager.workspace(&copy.id).await.unwrap().links;
+    assert!(links.opened.is_empty(), "{links:?}");
+    assert_eq!(links.related, [issue]);
+    // Its agent starts from a fork of the session it reported here.
+    let saved = recovery::Saved::load(&manager.paths, &copy.id).unwrap();
+    let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
+    assert_eq!(record.session.as_deref(), Some("s1"));
+    assert_eq!(record.copied, Some(Copied::default()));
+    assert!(!record.moved);
+    // The original keeps its branch, files and agent.
+    assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), head);
+    assert!(workspace.path.join("scratch").exists());
+}
+
+#[tokio::test]
+async fn a_copy_of_an_earlier_checkpoint_marks_its_sessions_newer() {
+    let (_source, manager, repo, _origin) = exporter().await;
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let first = manager.take_checkpoint(&workspace.id, None).await.unwrap();
+    fs::write(workspace.path.join("later"), "later\n").unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("topic.shoal");
+
+    let exported = manager
+        .copy_space(&workspace.name, Some(first.number), file.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        exported.manifest.copy,
+        Some(Copied {
+            earlier_files: true
+        })
+    );
+    let restored = import(&manager, &repo, &fs::read(&file).unwrap()).await;
+    assert!(!restored.opened.workspace.path.join("later").exists());
+    assert!(
+        manager
+            .copy_space(
+                &workspace.name,
+                Some(99),
+                directory.path().join("missing.shoal")
+            )
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn a_removed_workspace_has_nothing_to_copy() {
+    let (_source, manager, repo, _origin) = exporter().await;
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let refused = manager
+        .copy_space("topic", None, directory.path().join("topic.shoal"))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{refused:#}").contains("was removed"),
+        "{refused:#}"
+    );
 }

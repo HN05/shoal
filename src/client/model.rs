@@ -238,6 +238,24 @@ pub struct SpaceLinks {
 }
 
 impl SpaceLinks {
+    /// The links a copy of the space keeps: its issues, without the PRs and
+    /// CI runs of the original's branch.
+    pub fn copied(self) -> Self {
+        use crate::forge::items::link::LinkKind;
+        let issues = |items: Vec<LinkedItem>| {
+            items
+                .into_iter()
+                .filter(|item| item.kind == LinkKind::Issue)
+                .collect()
+        };
+        Self {
+            prs: Vec::new(),
+            opened: issues(self.opened),
+            related: issues(self.related),
+            ..self
+        }
+    }
+
     /// Every linked item once: the assigned issue and PRs, then those opened
     /// and related.
     /// Every link with its relation: the assigned issue and PRs, then the

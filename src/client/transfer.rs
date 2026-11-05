@@ -177,19 +177,22 @@ pub async fn copy(
 }
 
 /// Record the packaged `workspace` of `repository` as removed and open it
-/// again, fetching its commits from `bundle`, which needs `prerequisite`.
+/// again, fetching its commits from `bundle`, which needs `prerequisite`;
+/// a `copy` opens as a new workspace on a branch of its own.
 pub async fn import(
     daemon: &impl Daemon,
     repository: Selector,
     bundle: Option<PathBuf>,
     prerequisite: Option<String>,
     workspace: RemovedWorkspace,
+    copy: bool,
 ) -> Result<Box<RestoredWorkspace>> {
     let method = RemovalMethod::ImportWorkspace {
         repository,
         bundle,
         prerequisite,
         workspace: Box::new(workspace),
+        copy,
     };
     request(daemon, method).await
 }

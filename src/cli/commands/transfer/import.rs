@@ -21,6 +21,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
+    execution::recovery::Copied,
     model::RestoredWorkspace,
     transfer::{
         Import, ImportedSessionFile, Manifest, PackagedChat, PackagedWorkspace, Sessions, Space,
@@ -100,6 +101,8 @@ fn chat_message(chat: &BackgroundChat) -> String {
 /// its agents as they continue here and the session files they keep.
 struct Package {
     space: Space,
+    /// Set for a copy, which opens as a new space.
+    copy: Option<Copied>,
     repository: crate::repository::Selector,
     sessions: Sessions,
     carried: Vec<ImportedSessionFile>,
@@ -128,6 +131,7 @@ impl Package {
             .collect();
         Ok(Self {
             space: manifest.space,
+            copy: manifest.copy,
             repository: ui::repository_selector(repository)?,
             sessions,
             carried,
@@ -167,6 +171,7 @@ impl Package {
             self.bundle.as_ref().map(|bundle| bundle.path().to_owned()),
             packaged.prerequisite.clone(),
             packaged.workspace_with(self.sessions.clone()),
+            self.copy.is_some(),
         )
         .await
     }

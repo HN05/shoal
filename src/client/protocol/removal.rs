@@ -70,11 +70,14 @@ pub enum RemovalMethod {
         file: std::path::PathBuf,
     },
     /// Record a workspace another Shoal exported as removed here, with its
-    /// checkpoint fetched from `bundle`, and open it again.
+    /// checkpoint fetched from `bundle`, and open it again; a `copy` as a
+    /// new workspace on a branch of its own.
     ImportWorkspace {
         repository: crate::client::repository::Selector,
         bundle: Option<std::path::PathBuf>,
         prerequisite: Option<String>,
         workspace: Box<crate::model::RemovedWorkspace>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        copy: bool,
     },
 }

@@ -173,14 +173,15 @@ impl Manager {
 
     /// Open a workspace another Shoal exported: record it as removed here
     /// with its checkpoint, fetched from `bundle` or else on the default
-    /// branch, and restore it. A failed restore leaves the record for
-    /// `shoal work restore`.
+    /// branch, and restore it; a `copy` as a new workspace of its own. A
+    /// failed restore leaves the record for `shoal work restore`.
     pub async fn import_workspace(
         &self,
         selector: &crate::repository::Selector,
         bundle: Option<&Path>,
         prerequisite: Option<&str>,
         removed: RemovedWorkspace,
+        copy: bool,
     ) -> Result<RestoredWorkspace> {
         let repo = self.repository(selector).await?;
         ensure!(
@@ -190,7 +191,10 @@ impl Manager {
         if let Some(commit) = prerequisite {
             self.fetch_missing(&repo, commit).await?;
         }
-        let removed = self.imported_record(&repo, removed).await?;
+        let mut removed = self.imported_record(&repo, removed).await?;
+        if copy {
+            removed = self.copied_record(&repo, removed).await?;
+        }
         {
             // A repository move holds this gate; the checkout may have moved.
             let (repo, _git) = self.lock_repository(&repo.id).await?;
@@ -240,6 +244,36 @@ impl Manager {
         removed.checkpoint.repository_id = repo.id.clone();
         removed.checkpoint.expires_at = expires_at;
         Ok(removed)
+    }
+
+    /// The exported `removed` as a new workspace of `repo` that copies it:
+    /// with its own ID, on a branch of its own named after the original's,
+    /// and without the PRs and CI runs, which stay with the original's
+    /// branch.
+    async fn copied_record(
+        &self,
+        repo: &Repository,
+        removed: RemovedWorkspace,
+    ) -> Result<RemovedWorkspace> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let mut checkpoint = removed.checkpoint;
+        checkpoint.workspace_id = id.clone();
+        let name = match &checkpoint.branch {
+            Some(branch) => {
+                let (repo, _git) = self.lock_repository(&repo.id).await?;
+                let branch = self.copy_branch(&repo, branch).await?;
+                checkpoint.branch = Some(branch.clone());
+                crate::validate::derive_workspace_name(&branch)
+            }
+            None => removed.name,
+        };
+        Ok(RemovedWorkspace {
+            workspace_id: id,
+            name,
+            checkpoint,
+            links: removed.links.copied(),
+            ..removed
+        })
     }
 
     /// Point the checkpoint's ref at its commit, then record the checkpoint

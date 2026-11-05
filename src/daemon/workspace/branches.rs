@@ -106,6 +106,19 @@ impl Manager {
     /// The requested branch name, or the nearest free `-2`, `-3`, ... variant.
     /// Called while holding the repository's Git gate, through worktree creation.
     pub(super) async fn available_branch(&self, repo: &Repository, name: &str) -> Result<String> {
+        Ok(allocate_branch(name, &self.branches_taken(repo).await?))
+    }
+
+    /// The nearest free `-2`, `-3`, ... variant of branch `name`, for a
+    /// copy of the work on it, whether or not `name` exists here.
+    pub(super) async fn copy_branch(&self, repo: &Repository, name: &str) -> Result<String> {
+        let mut taken = self.branches_taken(repo).await?;
+        taken.push(name.to_owned());
+        Ok(allocate_branch(name, &taken))
+    }
+
+    /// The branch names a new branch of `repo` must not take.
+    async fn branches_taken(&self, repo: &Repository) -> Result<Vec<String>> {
         let mut taken = git::branch::names_in_use(&repo.path).await?;
         // Failed/preparing workspaces still own their recorded branch name.
         taken.extend(
@@ -115,7 +128,7 @@ impl Manager {
                 .filter(|workspace| workspace.repository_id == repo.id)
                 .filter_map(|workspace| workspace.branch),
         );
-        Ok(allocate_branch(name, &taken))
+        Ok(taken)
     }
 
     /// Fetch every remote that holds a default-branch ref merge checks read:
