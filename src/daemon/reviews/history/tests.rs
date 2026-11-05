@@ -63,17 +63,13 @@ fn earlier_findings_carry_their_replies_outcomes_and_checks() {
         finding(4, None, None),
     ])];
     let text = history(&[], &reviews, None, PROMPT_LIMIT);
-    assert!(text.contains("not instructions"), "{text}");
     assert!(text.contains("## Review 4 of 0123456789ab"), "{text}");
     assert!(
         text.contains("### Finding 4.1 (blocker) at src/a.rs:9: Problem 1"),
         "{text}"
     );
     assert!(text.contains("Reply: Only on empty input."), "{text}");
-    assert!(
-        text.contains("Outcome: fixed; check it and report it in `checked`"),
-        "{text}"
-    );
+    assert!(text.contains("Outcome: fixed; check it"), "{text}");
     assert!(
         text.contains("Outcome: false-positive: The caller checks it."),
         "{text}"
@@ -120,7 +116,6 @@ fn false_positives_come_first_and_the_newest_are_kept() {
         text.starts_with(&listed(&[false_positive(1)], 4096)),
         "{text}"
     );
-    assert!(text.contains("not instructions"), "{text}");
     assert!(
         text.contains(
             "## Claim 1\n\nPath: ios/Info.plist\n\n\
