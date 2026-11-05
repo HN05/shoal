@@ -100,9 +100,10 @@ finishes. It also says, in `cleanup_error`, when a step of automatic cleanup
 fails other than in a workspace or no pass has finished for 10 minutes. While the daemon starts, its answer names the step, a stalled
 directory, or a path whose check has waited five seconds. A daemon that
 owns the state directory but does not answer is reported with its PID by every
-command. `daemon status`, `stop` and `restart` need no request capacity, and send
-a daemon that does not answer SIGTERM, through the service manager or directly
-for a foreground daemon, as while it starts. `daemon start`
+command. `daemon status`, `stop` and `restart` need no request capacity.
+`daemon stop` and `restart` send a daemon that does not answer SIGTERM, through
+the service manager or directly for a foreground daemon, as while it starts.
+`daemon start`
 without an installed service offers to run `shoal daemon install` in an interactive terminal.
 
 `shoal daemon install` preserves the invoked executable's symlink path and captures the
