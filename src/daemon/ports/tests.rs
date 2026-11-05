@@ -1,5 +1,4 @@
 use super::*;
-use std::{hint::black_box, ops::RangeInclusive, time::Instant};
 
 fn reservations(ports: impl IntoIterator<Item = u16>) -> Vec<PortReservation> {
     ports
@@ -78,82 +77,5 @@ fn probe_errors_propagate_during_scans_and_bitmap_search() {
             first_available(&reservations, range, |_| Err::<bool, _>("probe failed")),
             Err("probe failed")
         );
-    }
-}
-
-fn scan(reservations: &[PortReservation], range: RangeInclusive<u16>) -> Option<u16> {
-    range
-        .into_iter()
-        .find(|port| !reservations.iter().any(|p| p.port == *port))
-}
-
-fn indexed(reservations: &[PortReservation], range: RangeInclusive<u16>) -> Option<u16> {
-    first_available(reservations, range, |_| Ok::<_, ()>(true)).unwrap()
-}
-
-/// Includes construction and destruction per allocation; excludes SQL and TCP.
-/// Run: cargo test --release benchmark_port_membership -- --ignored --nocapture
-#[test]
-#[ignore = "focused membership benchmark"]
-fn benchmark_port_membership() {
-    fn measure(mut operation: impl FnMut() -> Option<u16>, iterations: u32) -> f64 {
-        let start = Instant::now();
-        for _ in 0..iterations {
-            black_box(operation());
-        }
-        start.elapsed().as_nanos() as f64 / f64::from(iterations)
-    }
-    outln!("reservations,case,scan_ns,lazy_bitmap_ns");
-    for count in [0, 16, 32, 33, 100, 1000, 10000] {
-        for case in ["dense", "first-free", "sparse", "exhausted"] {
-            let ports: Vec<u16> = match case {
-                "first-free" => (20000..20000 + count).collect(),
-                "sparse" => (1000..1000 + 2 * count).step_by(2).collect(),
-                _ => (1000..1000 + count).collect(),
-            };
-            let reservations = reservations(ports);
-            let end = if case == "exhausted" && count > 0 {
-                999 + count
-            } else {
-                1000 + count
-            };
-            let range = 1000..=end;
-            assert_eq!(
-                scan(&reservations, range.clone()),
-                indexed(&reservations, range.clone())
-            );
-            let iterations = if count >= 1000 && matches!(case, "dense" | "exhausted") {
-                10
-            } else {
-                10000
-            };
-            let mut scans = Vec::new();
-            let mut indexed_samples = Vec::new();
-            for sample in 0..9 {
-                let baseline = || {
-                    measure(
-                        || scan(black_box(&reservations), black_box(range.clone())),
-                        iterations,
-                    )
-                };
-                let bitmap = || {
-                    measure(
-                        || indexed(black_box(&reservations), black_box(range.clone())),
-                        iterations,
-                    )
-                };
-                let (a, b) = if sample % 2 == 0 {
-                    (baseline(), bitmap())
-                } else {
-                    let b = bitmap();
-                    (baseline(), b)
-                };
-                scans.push(a);
-                indexed_samples.push(b);
-            }
-            scans.sort_by(f64::total_cmp);
-            indexed_samples.sort_by(f64::total_cmp);
-            outln!("{count},{case},{:.1},{:.1}", scans[4], indexed_samples[4]);
-        }
     }
 }
