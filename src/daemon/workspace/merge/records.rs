@@ -10,7 +10,10 @@ use rusqlite::{Connection, params};
 use super::tracking_ref;
 use crate::{
     daemon::{log, workspace::Manager},
-    git::{self, unmerge::first_parent_chain},
+    git::{
+        self,
+        unmerge::{first_parent_chain, holds_commits_of, merge_result, replay_identity},
+    },
     model::{ExecutionPlan, MergePlan, Repository, UnmergePlan},
 };
 
@@ -69,22 +72,20 @@ impl Manager {
         }
     }
 
-    /// Record the merge `plan` made, if the default branch now holds it: a
-    /// failed, rolled back or empty merge records nothing. Records the
+    /// Record the merge `plan` made, as the default branch's first-parent
+    /// history shows it, so a commit made after it is not taken for part of
+    /// it: a failed, rolled back or empty merge records nothing. Records the
     /// upstream now has go, since they can no longer be undone.
     pub(crate) async fn record_merge(&self, plan: &MergePlan) -> Result<()> {
         let repo = &plan.repo.path;
         let default = &plan.default_refresh.branch;
         let previous = &plan.default_refresh.commit;
-        let Some(result) = git::status::local_branch_commit(repo, default).await? else {
+        let Some(tip) = git::status::local_branch_commit(repo, default).await? else {
             return Ok(());
         };
-        let merged = result != *previous
-            && git::is_ancestor(repo, previous, &result, git::isolated_command).await?
-            && git::is_ancestor(repo, &plan.source, &result, git::isolated_command).await?;
-        if !merged {
+        let Some(result) = merge_result(repo, &tip, previous, &plan.source).await? else {
             return Ok(());
-        }
+        };
         let merge = LocalMerge {
             repository_id: plan.repo.id.clone(),
             default_branch: default.clone(),
@@ -186,8 +187,9 @@ impl Manager {
 
 /// Each commit a replay recreated, and the merge's result, mapped to the
 /// commit that took its place now that the default branch is at `now`;
-/// `None` when the replayed history does not match the history it replaced
-/// commit for commit.
+/// `None` unless `now` is that replay: the merged branch's commits gone, and
+/// each commit in place of one before with the same author, date and
+/// message, so other changes to the default branch rewrite no record.
 async fn replayed_commits(
     plan: &UnmergePlan,
     now: &str,
@@ -199,8 +201,15 @@ async fn replayed_commits(
     ) else {
         return Ok(None);
     };
-    if replayed.len() != replays.len() {
+    if replayed.len() != replays.len()
+        || holds_commits_of(repo, now, &plan.source, &plan.previous).await?
+    {
         return Ok(None);
+    }
+    for (old, new) in replayed.iter().zip(&replays) {
+        if replay_identity(repo, old).await? != replay_identity(repo, new).await? {
+            return Ok(None);
+        }
     }
     let mut rewritten: HashMap<String, String> = replayed.into_iter().zip(replays).collect();
     rewritten.insert(plan.result.clone(), plan.previous.clone());

@@ -16,6 +16,7 @@ use crate::{
     git::{
         self,
         default_branch::DefaultBranchLookup,
+        existing_branch::tracking_ref,
         repo::{clean_branch, merge_temporaries, unfinished_operation, upstream},
         run_isolated as git_run,
     },
@@ -315,22 +316,6 @@ async fn unpushed(path: &Path, default: &str, default_commit: &str) -> Result<u6
         Some(tracking) => git::status::commits_between(path, &tracking, default_commit).await,
         None => git::status::commits_of(path, default_commit).await,
     }
-}
-
-/// The remote-tracking ref of `default`'s upstream as its remote's fetch
-/// refspec maps it, when a fetch has stored it.
-async fn tracking_ref(path: &Path, default: &str) -> Result<Option<String>> {
-    let tracking = git::existing_branch::upstream_ref(path, default).await?;
-    let tracking = tracking.trim();
-    if tracking.is_empty() {
-        return Ok(None);
-    }
-    Ok(
-        match git::ref_exists(path, tracking, git::isolated_command).await? {
-            true => Some(tracking.to_owned()),
-            false => None,
-        },
-    )
 }
 
 /// The commit of `repo`'s local `branch`.

@@ -4,14 +4,15 @@
 use anyhow::{Context, Result, bail};
 use rusqlite::OptionalExtension;
 
-use super::{clean_checkout, local_commit, records::RecordedMerge, tracking_ref};
+use super::{clean_checkout, local_commit, records::RecordedMerge};
 use crate::{
     daemon::workspace::Manager,
     git::{
         self,
         default_branch::DefaultBranchLookup,
         unmerge::{
-            first_parent_chain, holds_commits_of, merge_has_own_changes, merged_parents, tip_commit,
+            first_parent_chain, holds_commits_of, merge_has_own_changes, merged_parents,
+            merges_between, pushed, tip_commit,
         },
     },
     model::{Repository, UnmergePlan, Workspace},
@@ -98,17 +99,7 @@ fn latest_merge_of<'a>(
 /// Refuse to undo a merge whose result the default branch's upstream holds,
 /// as the last fetch saw it: others may have its commits.
 async fn ensure_unpushed(repo: &Repository, default: &str, merge: &RecordedMerge) -> Result<()> {
-    let Some(tracking) = tracking_ref(&repo.path, default).await? else {
-        return Ok(());
-    };
-    let pushed = git::is_ancestor(
-        &repo.path,
-        &merge.merge.result,
-        &tracking,
-        git::isolated_command,
-    )
-    .await?;
-    if !pushed {
+    if !pushed(&repo.path, default, &merge.merge.result).await? {
         return Ok(());
     }
     let (branch, previous, result) = (
@@ -117,12 +108,16 @@ async fn ensure_unpushed(repo: &Repository, default: &str, merge: &RecordedMerge
         &merge.merge.result,
     );
     // A merge commit made on the default branch reverts as one; a
-    // fast-forward, by each commit it brought.
+    // fast-forward, by each commit it brought, unless merges among them,
+    // which git revert takes only one at a time, need the inverse diff.
     let merge_commit = !merged_parents(&repo.path, result).await?.is_empty()
         && tip_commit(&repo.path, &format!("{result}^1")).await? == *previous;
-    let revert = match merge_commit {
-        true => format!("git revert -m 1 {result}"),
-        false => format!("git revert {previous}..{result}"),
+    let revert = if merge_commit {
+        format!("git revert -m 1 {result}")
+    } else if merges_between(&repo.path, previous, result).await? {
+        format!("git diff {result} {previous} | git apply --index, then a commit,")
+    } else {
+        format!("git revert {previous}..{result}")
     };
     bail!(
         "{default} was pushed with the merge of {branch}, so shoal unmerge cannot undo it; undo it with {revert} and push that. Git then counts {branch}'s commits as merged, so merging it again brings in only newer commits"

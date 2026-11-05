@@ -79,8 +79,34 @@ async fn a_merge_is_recorded_from_what_the_default_branch_holds() {
     merge().await;
     let result = git(&repo, &["rev-parse", "main"]).trim().to_owned();
     assert_eq!(git(&repo, &["rev-parse", "main^2"]).trim(), head);
+    let merge_commit = ["worker".to_owned(), head, main, result.clone()];
     assert_eq!(
         manager.store.run(|db| recorded(db)).await.unwrap(),
-        [fast_forward, ["worker".to_owned(), head, main, result]]
+        [fast_forward.clone(), merge_commit.clone()]
+    );
+
+    // A commit made on main before the record is not part of the merge.
+    fs::write(workspace.path.join("feature"), "last\n").unwrap();
+    commit(&workspace.path, "feature");
+    let head = git(&workspace.path, &["rev-parse", "HEAD"])
+        .trim()
+        .to_owned();
+    let _guard = manager.gates.lock_git(&repo_id).await;
+    let plan = manager
+        .prepare_merge("worker", &MergeOptions::default())
+        .await
+        .unwrap();
+    crate::git::repo::finish_merge(plan.clone()).await.unwrap();
+    let merged = git(&repo, &["rev-parse", "main"]).trim().to_owned();
+    fs::write(repo.join("later"), "after the merge\n").unwrap();
+    commit(&repo, "later");
+    manager.record_merge(&plan).await.unwrap();
+    assert_eq!(
+        manager.store.run(|db| recorded(db)).await.unwrap(),
+        [
+            fast_forward,
+            merge_commit,
+            ["worker".to_owned(), head, result, merged]
+        ]
     );
 }

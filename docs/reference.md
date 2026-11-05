@@ -2716,8 +2716,9 @@ merge commit and can be unmerged in turn. `unmerge` changes nothing and says why
 when:
 
 - the default branch's upstream has the merge's result, as the last fetch saw it.
-  The refusal gives the revert that undoes it, `git revert -m 1 <commit>` for a
-  merge commit or `git revert <before>..<commit>` for a fast-forward, to push;
+  The refusal gives the revert that undoes it, to push: `git revert -m 1 <commit>`
+  for a merge commit, `git revert <before>..<commit>` for a fast-forward, or, when
+  that fast-forward brought merge commits, the inverse diff applied and committed;
   Git then counts the branch's commits as merged, so merging the branch again
   brings in only newer commits;
 - a later merge's branch contains the unmerged branch's commits, as a stacked

@@ -123,6 +123,15 @@ async fn the_latest_merge_moves_main_back_whether_it_fast_forwarded_or_not() {
     f.unmerge("worker").await.unwrap();
     assert_eq!(f.main(), before);
     assert!(!f.repo.join("feature").exists());
+
+    // A branch that merged main in fast-forwards main, whose commit before
+    // the merge is then a second parent.
+    git(&worker.path, &["merge", "-q", "--no-edit", "main"]);
+    f.merge("worker").await;
+    assert_eq!(f.main(), rev(&worker.path, "HEAD"));
+    assert_eq!(rev(&f.repo, "main^2"), before);
+    f.unmerge("worker").await.unwrap();
+    assert_eq!(f.main(), before);
 }
 
 #[tokio::test]
@@ -296,6 +305,134 @@ async fn a_commit_made_after_the_unmerge_was_planned_is_kept() {
         "{error:#}"
     );
     assert_eq!(f.main(), main);
+}
+
+#[tokio::test]
+async fn a_merge_pushed_after_the_unmerge_was_planned_is_kept() {
+    let f = Fixture::new().await;
+    let origin = f.root.path().join("origin.git");
+    let origin = origin.to_str().unwrap();
+    git(&f.repo, &["init", "-q", "--bare", "-b", "main", origin]);
+    git(&f.repo, &["remote", "add", "origin", origin]);
+    git(&f.repo, &["push", "-q", "-u", "origin", "main"]);
+    f.add("worker", "feature").await;
+    f.merge("worker").await;
+    let _guard = f.manager.gates.lock_git(&f.repo_id).await;
+    let plan = f.manager.prepare_unmerge("worker").await.unwrap();
+    git(&f.repo, &["push", "-q", "origin", "main"]);
+    let main = f.main();
+    let error = crate::git::unmerge::finish_unmerge(plan).await.unwrap_err();
+    assert!(
+        error.to_string().contains("upstream got the merge"),
+        "{error:#}"
+    );
+    assert_eq!(f.main(), main);
+}
+
+#[tokio::test]
+async fn a_pushed_fast_forward_with_merges_is_reverted_by_its_inverse_diff() {
+    let f = Fixture::new().await;
+    let origin = f.root.path().join("origin.git");
+    let origin = origin.to_str().unwrap();
+    git(&f.repo, &["init", "-q", "--bare", "-b", "main", origin]);
+    git(&f.repo, &["remote", "add", "origin", origin]);
+    git(&f.repo, &["push", "-q", "-u", "origin", "main"]);
+    let worker = f.add("worker", "feature").await;
+    write_commit(&f.repo, "tracked", "main side");
+    let before = f.main();
+    git(&worker.path, &["merge", "-q", "--no-edit", "main"]);
+    f.merge("worker").await;
+    git(&f.repo, &["push", "-q", "origin", "main"]);
+    let error = f.unmerge("worker").await.unwrap_err();
+    let result = f.main();
+    assert!(
+        error
+            .to_string()
+            .contains(&format!("git diff {result} {before} | git apply --index")),
+        "{error:#}"
+    );
+}
+
+#[tokio::test]
+async fn a_default_branch_checked_out_during_the_unmerge_is_left_as_it_is() {
+    let f = Fixture::new().await;
+    // The remote names main the default branch while it is not checked out.
+    let origin = f.root.path().join("origin.git");
+    let origin = origin.to_str().unwrap();
+    git(&f.repo, &["init", "-q", "--bare", "-b", "main", origin]);
+    git(&f.repo, &["remote", "add", "origin", origin]);
+    git(&f.repo, &["push", "-q", "-u", "origin", "main"]);
+    git(&f.repo, &["remote", "set-head", "origin", "main"]);
+    f.add("worker", "feature").await;
+    f.merge("worker").await;
+    git(&f.repo, &["switch", "-q", "-c", "elsewhere"]);
+    let _guard = f.manager.gates.lock_git(&f.repo_id).await;
+    let plan = f.manager.prepare_unmerge("worker").await.unwrap();
+    assert!(plan.checkout.is_none());
+    git(&f.repo, &["switch", "-q", "main"]);
+    let main = f.main();
+    let error = crate::git::unmerge::finish_unmerge(plan).await.unwrap_err();
+    assert!(
+        error.to_string().contains("checked out during the unmerge"),
+        "{error:#}"
+    );
+    assert_eq!(f.main(), main);
+    assert_eq!(git(&f.repo, &["status", "--porcelain"]), "");
+}
+
+#[tokio::test]
+async fn other_changes_to_main_after_a_refused_replay_rewrite_no_record() {
+    let f = Fixture::new().await;
+    f.add("first", "first").await;
+    f.add("second", "second").await;
+    let before = f.main();
+    f.merge("first").await;
+    f.merge("second").await;
+    let plan = {
+        let _guard = f.manager.gates.lock_git(&f.repo_id).await;
+        f.manager.prepare_unmerge("first").await.unwrap()
+    };
+    // The worker refused; main then went back to before both merges and
+    // gained one unrelated commit, as long as the history it replaced and
+    // with the second merge's author, date and message.
+    let second = f.main();
+    git(&f.repo, &["reset", "-q", "--hard", &before]);
+    fs::write(f.repo.join("unrelated"), "unrelated\n").unwrap();
+    git(&f.repo, &["add", "unrelated"]);
+    git(&f.repo, &["commit", "-q", "-C", &second]);
+    let unrelated = f.main();
+    f.manager
+        .update_merge_records(&RecordChange::Unmerge(Box::new(plan)))
+        .await;
+    let error = f.unmerge("second").await.unwrap_err();
+    assert!(
+        error.to_string().contains("no local merge of second"),
+        "{error:#}"
+    );
+    assert_eq!(f.main(), unrelated);
+}
+
+#[tokio::test]
+async fn a_later_merge_editing_nearby_lines_stays_undoable_after_a_replay() {
+    let f = Fixture::new().await;
+    write_commit(&f.repo, "shared", "one\ntwo\nthree\nfour\nfive");
+    let before = f.main();
+    for (name, edited) in [
+        ("first", "ONE\ntwo\nthree\nfour\nfive"),
+        ("second", "one\ntwo\nTHREE\nfour\nfive"),
+    ] {
+        let workspace = f.add(name, name).await;
+        write_commit(&workspace.path, "shared", edited);
+    }
+    f.merge("first").await;
+    f.merge("second").await;
+    f.unmerge("first").await.unwrap();
+    assert_eq!(
+        fs::read_to_string(f.repo.join("shared")).unwrap(),
+        "one\ntwo\nTHREE\nfour\nfive\n"
+    );
+    f.unmerge("second").await.unwrap();
+    assert_eq!(f.main(), before);
 }
 
 #[tokio::test]

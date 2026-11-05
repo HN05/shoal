@@ -68,6 +68,22 @@ pub async fn upstream_ref(repo: &Path, name: &str) -> Result<String> {
     .await
 }
 
+/// The remote-tracking ref of `default`'s upstream as its remote's fetch
+/// refspec maps it, when a fetch has stored it.
+pub async fn tracking_ref(path: &Path, default: &str) -> Result<Option<String>> {
+    let tracking = upstream_ref(path, default).await?;
+    let tracking = tracking.trim();
+    if tracking.is_empty() {
+        return Ok(None);
+    }
+    Ok(
+        match git::ref_exists(path, tracking, git::isolated_command).await? {
+            true => Some(tracking.to_owned()),
+            false => None,
+        },
+    )
+}
+
 pub async fn track(repo: &Path, branch: &str, tracking: &str) -> Result<String> {
     git::run_isolated(repo, &["branch", "--track", "--", branch, tracking]).await
 }

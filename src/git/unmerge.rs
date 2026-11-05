@@ -69,6 +69,47 @@ pub async fn merge_has_own_changes(repo: &Path, commit: &str) -> Result<bool> {
     Ok(recorded.trim() != merged)
 }
 
+/// The commit a merge of `source` onto `previous` left the default branch
+/// at, found in `tip`'s first-parent history: `source` itself after a
+/// fast-forward, else the merge commit of the two. `None` when that history
+/// shows no such merge, as after one that merged nothing.
+pub async fn merge_result(
+    repo: &Path,
+    tip: &str,
+    previous: &str,
+    source: &str,
+) -> Result<Option<String>> {
+    // A fast-forward needs `source` on the tip's first-parent history and
+    // `previous` among its ancestors, though not on its first parents: a
+    // branch that merged the default branch in holds it as a second parent.
+    let fast_forward = source != previous
+        && git::is_ancestor(repo, previous, source, git::isolated_command).await?
+        && first_parent_chain(repo, tip, source).await?.is_some();
+    if fast_forward {
+        return Ok(Some(source.to_owned()));
+    }
+    let Some(chain) = first_parent_chain(repo, tip, previous).await? else {
+        return Ok(None);
+    };
+    let Some(first) = chain.last() else {
+        return Ok(None);
+    };
+    let merged = merged_parents(repo, first).await?;
+    Ok(merged
+        .iter()
+        .any(|parent| parent == source)
+        .then(|| first.clone()))
+}
+
+/// Whether the upstream of `default`, as the last fetch saw it, holds
+/// `commit`, so others may have it.
+pub async fn pushed(repo: &Path, default: &str, commit: &str) -> Result<bool> {
+    let Some(tracking) = git::existing_branch::tracking_ref(repo, default).await? else {
+        return Ok(false);
+    };
+    git::is_ancestor(repo, commit, &tracking, git::isolated_command).await
+}
+
 /// Whether `candidate` holds any commit of the branch merged at `source`
 /// onto `previous`: a common ancestor of `candidate` and `source` that
 /// `previous` lacks belongs to that branch.
@@ -103,7 +144,7 @@ pub async fn holds_commits_of(
 /// after it onto that commit, then recreate the merged branch if it is gone.
 pub async fn finish_unmerge(plan: UnmergePlan) -> Result<Unmerged> {
     let default = &plan.default_branch;
-    ensure_unmoved(&plan).await?;
+    ensure_unchanged(&plan).await?;
     let replayed = match plan.tip == plan.result {
         true => {
             move_default(&plan, &plan.previous).await?;
@@ -127,16 +168,78 @@ pub async fn finish_unmerge(plan: UnmergePlan) -> Result<Unmerged> {
 }
 
 /// Refuse once the default branch is no longer at the tip the unmerge
-/// planned for, as when a commit was made in its checkout meanwhile: moving
-/// it would drop that commit.
-async fn ensure_unmoved(plan: &UnmergePlan) -> Result<()> {
-    let default = &plan.default_branch;
-    let current = tip_commit(&plan.repo.path, &git::local_ref(default)).await?;
+/// planned for, as when a commit was made in its checkout meanwhile, which
+/// moving it would drop, or once its upstream has the merge, as after a
+/// push or fetch meanwhile, since only a revert undoes that.
+async fn ensure_unchanged(plan: &UnmergePlan) -> Result<()> {
+    let (repo, default) = (&plan.repo.path, &plan.default_branch);
+    ensure!(
+        !pushed(repo, default, &plan.result).await?,
+        "{default}'s upstream got the merge of {} during the unmerge, so nothing changed; retry to see how to revert it",
+        plan.branch
+    );
+    let current = tip_commit(repo, &git::local_ref(default)).await?;
     ensure!(
         current == plan.tip,
         "{default} changed during the unmerge, so nothing changed; retry"
     );
     Ok(())
+}
+
+/// Whether `checkout` is on `branch` at `commit`, read last before moving
+/// it: a commit made or a branch switched there meanwhile would otherwise
+/// be dropped or rewound.
+pub(crate) async fn checkout_at(checkout: &Path, branch: &str, commit: &str) -> Result<bool> {
+    let head = git::head_branch(checkout, true, git_run)
+        .await
+        .unwrap_or_default();
+    Ok(head.as_deref() == Some(branch) && tip_commit(checkout, "HEAD").await? == commit)
+}
+
+/// What a replay keeps of `commit`, which a rebase carries over to the
+/// commit it makes in its place: its author, author date and message, the
+/// commits it merged, and the lines it changes from its first parent, by
+/// the patch ID of a diff without context, which taking out an earlier
+/// merge's nearby changes leaves as it was.
+pub async fn replay_identity(repo: &Path, commit: &str) -> Result<String> {
+    let metadata = git_run(
+        repo,
+        &[
+            "show",
+            "-s",
+            "--format=%an%x00%ae%x00%ad%x00%B",
+            commit,
+            "--",
+        ],
+    )
+    .await?;
+    let merged = merged_parents(repo, commit).await?.join(" ");
+    let mut show = git::isolated_command(repo);
+    show.args([
+        "show",
+        "--no-color",
+        "--no-ext-diff",
+        "--patch",
+        "--unified=0",
+        "--diff-merges=first-parent",
+        "--format=commit %H",
+        commit,
+        "--",
+    ]);
+    let patch = git::bounded(show).output().await?;
+    let mut patch_id = git::isolated_command(repo);
+    patch_id.args(["patch-id", "--stable"]);
+    let id = git::bounded(patch_id).input(patch).output().await?;
+    let id = id.split_whitespace().next().unwrap_or_default();
+    Ok(format!("{metadata}\0{merged}\0{id}"))
+}
+
+/// Whether `base..tip` holds a merge commit, which `git revert` takes only
+/// with a mainline.
+pub async fn merges_between(repo: &Path, base: &str, tip: &str) -> Result<bool> {
+    let range = format!("{base}..{tip}");
+    let count = git_run(repo, &["rev-list", "--count", "--merges", &range, "--"]).await?;
+    Ok(count.trim() != "0")
 }
 
 /// Move the default branch from the tip the unmerge planned for to `target`:
@@ -145,6 +248,14 @@ async fn ensure_unmoved(plan: &UnmergePlan) -> Result<()> {
 async fn move_default(plan: &UnmergePlan, target: &str) -> Result<()> {
     let default = &plan.default_branch;
     let Some(checkout) = &plan.checkout else {
+        ensure_unchanged(plan).await?;
+        // Moving the ref under a checkout would leave its files behind.
+        ensure!(
+            git::checkout_of(&plan.repo.path, default, git_run)
+                .await?
+                .is_none(),
+            "{default} was checked out during the unmerge, so nothing changed; retry"
+        );
         let reference = git::local_ref(default);
         let args = [
             "update-ref",
@@ -160,12 +271,16 @@ async fn move_default(plan: &UnmergePlan, target: &str) -> Result<()> {
         return Ok(());
     };
     clean_branch(checkout, default).await?;
-    ensure_unmoved(plan).await?;
     let collisions = git::checkpoint::ignored_collisions(checkout, target, target).await?;
     ensure!(
         collisions.is_empty(),
         "undoing the merge would overwrite ignored files in {default}'s checkout: {}; move them away first, nothing changed",
         collisions.join(", ")
+    );
+    ensure_unchanged(plan).await?;
+    ensure!(
+        checkout_at(checkout, default, &plan.tip).await?,
+        "{default}'s checkout changed during the unmerge, so nothing changed; retry"
     );
     git_run(checkout, &["reset", "--keep", target])
         .await
