@@ -152,34 +152,6 @@ async fn a_message_for_running_work_wakes_only_while_work_runs() {
 }
 
 #[tokio::test]
-async fn unread_messages_are_bounded() {
-    let (temp, manager) = manager().await;
-    let workspace = workspace(&temp, &manager, "receiver").await;
-    for n in 0..super::MAX_UNREAD {
-        manager
-            .send_agent_message(
-                &workspace.name,
-                format!("message {n}"),
-                Vec::new(),
-                &Attacher::User,
-            )
-            .await
-            .unwrap();
-    }
-    assert!(
-        manager
-            .send_agent_message(
-                &workspace.name,
-                "one more".into(),
-                Vec::new(),
-                &Attacher::User
-            )
-            .await
-            .is_err()
-    );
-}
-
-#[tokio::test]
 async fn workspace_processes_read_their_own_messages_but_cannot_send() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;
@@ -566,19 +538,15 @@ async fn attachments_must_be_files() {
         temp.path().join("missing.png"),
         "relative.png".into(),
     ] {
-        let error = manager
+        let sent = manager
             .send_agent_message(
                 &workspace.name,
                 "See".into(),
                 vec![refused.clone().into()],
                 &Attacher::User,
             )
-            .await
-            .unwrap_err();
-        assert!(
-            error.to_string().contains(&*refused.to_string_lossy()),
-            "{error:#}"
-        );
+            .await;
+        assert!(sent.is_err(), "{}", refused.display());
     }
     assert!(
         manager

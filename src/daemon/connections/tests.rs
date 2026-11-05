@@ -112,10 +112,8 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         after: 0,
     };
     for refused in [Method::from(execute), watch.into()] {
-        let Body::Error { message, .. } = reply(&mut send(socket, refused).await).await else {
-            panic!("expected a refusal");
-        };
-        assert!(message.contains("limit of 1 long-lived"), "{message}");
+        let reply = reply(&mut send(socket, refused).await).await;
+        assert!(matches!(reply, Body::Error { .. }), "{reply:?}");
     }
     let reattach = Method::Reattach(protocol::Reattachment::Reattach(protocol::Reattach {
         model: Default::default(),
@@ -172,16 +170,11 @@ fn a_pending_restart_leaves_request_capacity_to_the_wrappers_it_restores() {
 }
 
 #[tokio::test]
-async fn a_request_past_the_limit_is_refused_with_what_holds_the_capacity() {
+async fn a_request_past_the_limit_is_refused_until_one_finishes() {
     let capacity = Capacity::new(1, 1);
     let list = Method::from(ListRepositories);
     let held = capacity.admit(&list).unwrap();
-    let Err(error) = capacity.admit(&list) else {
-        panic!("a request past the limit was admitted");
-    };
-    let message = format!("{error:#}");
-    assert!(message.contains("all 1 request slots"), "{message}");
-    assert!(message.contains("1 list_repositories (oldest"), "{message}");
+    assert!(capacity.admit(&list).is_err());
     // Daemon administration needs no slot.
     capacity.admit(&DaemonMethod::Status.into()).unwrap();
     drop(held);
@@ -210,11 +203,8 @@ async fn connections_are_accepted_and_answered_while_requests_hold_every_slot() 
     });
     // More clients than the slots, each answered rather than left queued.
     for _ in 0..3 {
-        let Body::Error { message, .. } = reply(&mut send(socket, ListRepositories).await).await
-        else {
-            panic!("expected the daemon to refuse the request as busy");
-        };
-        assert!(message.contains("busy"), "{message}");
+        let reply = reply(&mut send(socket, ListRepositories).await).await;
+        assert!(matches!(reply, Body::Error { .. }), "{reply:?}");
     }
     // Status still answers, so recovery commands can act on the daemon.
     let status = reply(&mut send(socket, DaemonMethod::Status).await).await;

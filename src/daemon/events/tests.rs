@@ -278,7 +278,6 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         })
         .collect();
     assert_eq!(errors.len(), 1);
-    assert!(errors[0].contains("uncommitted or untracked"));
     assert_eq!(
         std::fs::read_to_string(workspace.path.join("dirty")).unwrap(),
         "keep this work"

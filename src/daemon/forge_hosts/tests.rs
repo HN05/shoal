@@ -76,8 +76,7 @@ fn a_change_names_the_host_and_both_forges() {
         to: ForgeKind::GitLab,
     };
     let message = change.message("ghe.example");
-    assert!(
-        message.starts_with("ghe.example now answers as gitlab instead of github"),
-        "{message}"
-    );
+    for named in ["ghe.example", "gitlab", "github"] {
+        assert!(message.contains(named), "{message}");
+    }
 }

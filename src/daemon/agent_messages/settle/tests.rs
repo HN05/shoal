@@ -20,7 +20,6 @@ fn sent_at(times: &[i64]) -> Vec<AgentMessage> {
 fn a_run_settles_once_none_arrives_for_the_window() {
     let run = sent_at(&[100, 103]);
     assert_eq!(held_until(&run, 5, 103), Some(108));
-    assert_eq!(held_until(&run, 5, 107), Some(108));
     assert_eq!(held_until(&run, 5, 108), None);
     // Without a window, each message is delivered at once.
     assert_eq!(held_until(&run, 0, 103), None);

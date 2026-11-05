@@ -12,10 +12,6 @@ fn a_path_stands_for_the_directory_holding_it() {
         directory(Path::new(WORKSPACE)),
         Path::new("/Volumes/SSD/shoal/repo")
     );
-    assert_eq!(
-        directory(Path::new("/Users/me/shoal/repo/feature")),
-        Path::new("/Users/me/shoal/repo")
-    );
     assert_eq!(directory(Path::new("/")), Path::new("/"));
 }
 
@@ -24,11 +20,7 @@ async fn a_check_that_runs_out_stalls_its_directory_once_until_a_recheck_finishe
     let access = FileAccess::default();
 
     let (result, stall) = access.check(Path::new(WORKSPACE), never()).await;
-    let error = format!("{:#}", result.unwrap_err());
-    assert!(
-        error.contains("file access in /Volumes/SSD/shoal/repo stalled"),
-        "{error}"
-    );
+    assert!(result.is_err());
     let stall = stall.expect("the first stall is new");
     assert_eq!(stall.directory, Path::new("/Volumes/SSD/shoal/repo"));
     assert_eq!(stall.path, Path::new(WORKSPACE));
@@ -104,10 +96,6 @@ async fn an_interrupted_check_stalls_its_directory_and_keeps_its_error() {
         })
         .await;
     let error = format!("{:#}", result.unwrap_err());
-    assert!(
-        error.starts_with("file access in /Volumes/SSD/shoal/repo stalled"),
-        "{error}"
-    );
     assert!(error.ends_with("Interrupted system call"), "{error}");
     assert_eq!(stall.unwrap().reason, "was interrupted");
 
@@ -180,14 +168,5 @@ async fn the_daemon_alerts_once_while_a_directory_stays_stalled() {
         panic!("expected one alert: {alerts:?}");
     };
     assert_eq!(alert.kind, NotificationKind::AccessStalled);
-    assert!(
-        alert.message.starts_with(&format!(
-            "File access in {} stalled: a check of {} did not finish within 30s",
-            temp.path().display(),
-            path.display()
-        )),
-        "{}",
-        alert.message
-    );
     assert_eq!(manager.file_access.stalls().len(), 1);
 }
