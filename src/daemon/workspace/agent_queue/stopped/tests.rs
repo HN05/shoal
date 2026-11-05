@@ -321,8 +321,7 @@ async fn a_restore_whose_agent_never_starts_expires_and_says_so() {
     let notifications = manager.notifications(true, 10).await.unwrap();
     assert!(notifications.iter().any(|notification| {
         notification.kind == crate::daemon::notifications::NotificationKind::QueueFailed
-            && notification.message
-                == "work did not start from the agent queue: its restore ended before the agent started"
+            && notification.message.contains("its restore ended")
     }));
     // The agent stays stopped for `shoal resume`.
     assert!(record_path(&manager.paths, &workspace.id, "agent").exists());

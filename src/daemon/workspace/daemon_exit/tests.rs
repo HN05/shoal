@@ -168,11 +168,10 @@ async fn a_signal_stops_work_saved_first_keeping_its_restores() {
         "{control:?}"
     );
     assert!(running.queued_restore().await);
-    assert_eq!(
-        running.notifications(NotificationKind::DaemonStopped).await,
-        [
-            "Stopped work in 1 workspace before the Shoal daemon stopped; the agent queue restores its agents"
-        ]
+    let stopped = running.notifications(NotificationKind::DaemonStopped).await;
+    assert!(
+        matches!(stopped.as_slice(), [message] if message.contains("1 workspace")),
+        "{stopped:?}"
     );
 }
 

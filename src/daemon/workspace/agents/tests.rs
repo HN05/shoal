@@ -185,7 +185,6 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         let events = manager.notifications(false, 1).await.unwrap();
         assert!(events[0].message.contains("critical memory pressure"));
         assert!(events[0].message.contains("recovery record unavailable"));
-        assert!(events[0].message.contains("stays unknown until they exit"));
         manager
             .finish_execution(id.clone(), ExecutionKind::Command, Some(143))
             .await

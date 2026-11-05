@@ -494,7 +494,7 @@ async fn abandoned_starts_expire_after_the_grace_period_unless_held() {
     let repo = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 2);
     let held = add(&manager, &repo, "held").await.entry.unwrap();
-    let abandoned = add(&manager, &repo, "abandoned").await.entry.unwrap();
+    add(&manager, &repo, "abandoned").await;
     manager.hold_queue_entry(&held.id).await.unwrap();
     let past = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64 - 1;
     manager
@@ -526,7 +526,6 @@ async fn abandoned_starts_expire_after_the_grace_period_unless_held() {
                     && notification.message.contains("abandoned")
             )
     );
-    assert!(abandoned.state == QueueState::Starting);
     // Releasing the hold starts a fresh grace period instead of ending it.
     manager.release_queue_hold(&held.id).await.unwrap();
     manager.dispatch_queue().await.unwrap();

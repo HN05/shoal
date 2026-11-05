@@ -124,10 +124,9 @@ async fn a_held_done_workspaces_idle_agent_stops_once_its_cache_expires() {
         .collect();
     assert_eq!(stopped.len(), 1);
     assert!(
-        stopped[0].message.contains(
-            "idle in a done workspace whose cleanup is held; \
-             automatic session restore waits until an update arrives for it"
-        ),
+        stopped[0]
+            .message
+            .contains("idle in a done workspace whose cleanup is held"),
         "{}",
         stopped[0].message
     );

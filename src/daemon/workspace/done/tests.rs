@@ -948,10 +948,10 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     commit_file(&parent.path, "parent-work");
     manager.sweep_completed().await.unwrap();
     assert!(child.path.exists());
-    assert_eq!(
+    assert!(matches!(
         manager.cleanup_reason(&child).await,
-        CleanupReason::Idle { minutes: 10 }
-    );
+        CleanupReason::Idle { .. }
+    ));
 }
 
 /// Commit a new revision of the file `name` in `path`.

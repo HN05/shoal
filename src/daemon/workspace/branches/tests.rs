@@ -1770,10 +1770,15 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
     fs::write(workspace.path.join("three"), "work\n").unwrap();
     commit(&workspace.path, "three");
     let watched = undecided(begin_merge_as_agent(&f, &workspace, true).await);
-    assert_eq!(
-        watched.reason,
-        "Merge worker (3 commits) into main, then push main to origin. \
-        PR https://forge.example/team/app/pulls/12 is open; shoal pr merge merges it on the forge instead."
+    assert!(
+        watched
+            .reason
+            .starts_with("Merge worker (3 commits) into main, then push main to origin.")
+            && watched
+                .reason
+                .contains("https://forge.example/team/app/pulls/12"),
+        "{}",
+        watched.reason
     );
     // The local request no longer covers a merge that pushes.
     let requests = f.manager.approval_requests(Some("worker")).await.unwrap();

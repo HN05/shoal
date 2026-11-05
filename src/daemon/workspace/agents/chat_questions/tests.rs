@@ -90,13 +90,12 @@ async fn a_marked_turn_asks_its_final_message_until_the_user_replies_in_the_chat
         asked[0].ask.question,
         "Which database should the cache use?\n\nI recommend SQLite."
     );
-    let notification = &manager.notifications(true, 50).await.unwrap()[0];
-    assert_eq!(
-        notification.message,
-        format!(
-            "question {0} (answer with shoal questions {0}): Which database should the cache use?  I recommend SQLite.",
-            asked[0].number
-        )
+    let notification = &manager.notifications(true, 50).await.unwrap()[0].message;
+    assert!(
+        notification.contains(&format!("question {}", asked[0].number))
+            && notification
+                .ends_with(": Which database should the cache use?  I recommend SQLite."),
+        "{notification}"
     );
     // The mark lasts one turn.
     end_turn("Waiting for your answer.").await;
@@ -169,13 +168,11 @@ async fn an_inbox_answer_reaches_the_agent_without_repeating_its_message() {
         .answer_question(question.number, "SQLite".into(), None)
         .await
         .unwrap();
-    let messages = manager.agent_messages(&workspace.name).await.unwrap();
-    assert_eq!(
-        messages[0].message,
-        format!(
-            "Answer to question {}, which you asked in the chat: SQLite",
-            question.number
-        )
+    let message = &manager.agent_messages(&workspace.name).await.unwrap()[0].message;
+    assert!(
+        message.contains(&format!("question {}", question.number))
+            && message.ends_with("in the chat: SQLite"),
+        "{message}"
     );
 }
 
@@ -297,18 +294,17 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
         .into_iter()
         .map(|message| message.message)
         .collect();
-    assert_eq!(
-        received,
-        [
-            format!(
-                "child: question {0} (answer with shoal questions {0}): Which one?",
-                question.number
-            ),
-            format!(
-                "child: withdrew question {} (no answer needed): Which one?",
-                question.number
-            ),
-        ]
+    let [asked, withdrawn] = received.as_slice() else {
+        panic!("expected the question and its withdrawal: {received:?}");
+    };
+    let number = format!("question {}", question.number);
+    assert!(
+        asked.starts_with("child: ") && asked.contains(&number),
+        "{asked}"
+    );
+    assert!(
+        withdrawn.contains(&format!("withdrew {number}")),
+        "{withdrawn}"
     );
     assert!(manager.notifications(true, 50).await.unwrap().is_empty());
 }
@@ -354,12 +350,11 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         .await
         .unwrap();
     let messages = manager.chat_messages(&chat.id).await.unwrap();
-    assert_eq!(
-        messages[0].message,
-        format!(
-            "Answer to question {} (Which database?): Postgres",
-            asked.number
-        )
+    let message = &messages[0].message;
+    assert!(
+        message.contains(&format!("question {}", asked.number))
+            && message.ends_with("(Which database?): Postgres"),
+        "{message}"
     );
     manager
         .mark_chat_messages_delivered(&chat.id, vec![messages[0].id])

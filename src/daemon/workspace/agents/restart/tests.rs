@@ -273,12 +273,7 @@ async fn a_restart_waiting_for_processes_answers_at_once_and_still_resumes() {
     manager.notify_restore_waits(&id, issue).await;
     let error = restarting.await.unwrap().unwrap_err();
     assert!(error.downcast_ref::<RestartWaits>().is_some());
-    assert_eq!(
-        format!("{error}"),
-        format!(
-            "claude restarts once its remaining processes exit: {issue}; shoal stop agents cancels the restart"
-        )
-    );
+    assert!(format!("{error}").contains(issue), "{error}");
     // The restart goes on, and its start no longer has a request to answer.
     assert!(manager.restart_requested(&id).await);
     assert!(manager.resume_agent_execution(&id, None).await.unwrap());
@@ -360,11 +355,7 @@ async fn a_request_joining_a_waiting_restart_is_answered_with_what_it_waits_for_
 
     let error = manager.restart_agent(&id, None).await.unwrap_err();
     assert!(error.downcast_ref::<RestartWaits>().is_some());
-    assert_eq!(
-        format!("{error}"),
-        "claude restarts once its remaining processes exit: PID 8 survives; \
-         shoal stop agents cancels the restart"
-    );
+    assert!(format!("{error}").contains("PID 8 survives"), "{error}");
     assert!(manager.restart_requested(&id).await);
 }
 

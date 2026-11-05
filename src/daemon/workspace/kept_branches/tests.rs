@@ -217,7 +217,6 @@ async fn listing_shows_every_kept_branch_with_its_unpushed_commits() {
         .iter()
         .find(|branch| branch.branch == "topic")
         .expect("topic is listed");
-    assert_eq!(topic.branch, "topic");
     assert_eq!(topic.repository_id, repo.id);
     assert_eq!(topic.head, head);
     assert_eq!(topic.unpushed_commits, 1);

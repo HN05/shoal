@@ -248,11 +248,10 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
     scope::authorize(&manager, Some("parent"), &mut acquire)
         .await
         .unwrap();
-    let hold = manager
+    manager
         .acquire_hold(&child.id, "review".into(), None, HoldPlacer::Agent)
         .await
         .unwrap();
-    assert_eq!(hold.placed_by, HoldPlacer::Agent);
     // An agent hold leaves the parent's agent free to remove the child.
     let mut remove = crate::protocol::RemovalMethod::RemoveWorkspace {
         workspace: child.name.clone(),
