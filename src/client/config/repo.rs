@@ -173,8 +173,6 @@ pub struct TerminalConfig {
     pub tmux: TmuxConfig,
     #[option(section)]
     pub zellij: ZellijConfig,
-    #[option(section)]
-    pub happy: HappyConfig,
 }
 
 /// How a new worktree is prepared.
@@ -815,15 +813,6 @@ fn validate_caches(caches: &BTreeMap<String, Cache>) -> Result<()> {
 
 #[cfg(test)]
 mod tests;
-
-/// Happy sessions are an optional integration, off until enabled.
-#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
-#[serde(default, deny_unknown_fields)]
-#[options(resolved = Happy)]
-pub struct HappyConfig {
-    #[option(default = false)]
-    pub enabled: Option<bool>,
-}
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]

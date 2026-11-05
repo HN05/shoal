@@ -17120,7 +17120,7 @@ fn wait_for_busy(fixture: &Fixture, workspace: &str) {
     });
 }
 
-const HAPPY_ENABLED: &str = "[terminal.happy]\nenabled = true\n";
+const HAPPY_ENABLED: &str = "[agents.happy]\nenabled = true\n";
 
 #[test]
 fn happy_agents_are_refused_until_enabled() {
@@ -17212,7 +17212,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
             fs::write(&claude_config, "{}").unwrap();
             let output = fixture
                 .command()
-                .args(["--json", "happy", "claude", &name, "--", "--model", "test"])
+                .args(["--json", "happy-claude", &name, "--", "--model", "test"])
                 .env("HAPPY_RECORD", &record)
                 .output()
                 .unwrap();
@@ -17457,7 +17457,6 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     .unwrap();
     fs::write(happy_home.join("daemon.state.json"), "{}").unwrap();
     let key = base64.encode([7u8; 32]);
-    let prompt = "Fix the login bug; keep the API stable.";
     for (variant, credentials) in [
         (
             "dataKey",
@@ -17473,9 +17472,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         fixture.add(&name);
         let output = fixture
             .command()
-            .args([
-                "--json", "happy", "codex", &name, "--prompt", prompt, "--", "--yolo",
-            ])
+            .args(["--json", "happy-codex", &name, "--", "--yolo"])
             .env("HAPPY_RECORD", &record)
             .env("HAPPY_SERVER_URL", &server.url)
             .output()
@@ -17486,12 +17483,8 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         let session_id = launch["happy_session_id"].as_str().unwrap().to_owned();
         assert!(session_id.starts_with("session-"));
         let message = fs::read_to_string(launch["prompt_file"].as_str().unwrap()).unwrap();
-        // The prompt is the subject, which the worker mode's instructions
-        // follow.
-        assert_eq!(
-            after_guidance(&message),
-            format!("{prompt}\n\nImplement this, open a PR for it, and finish with `shoal done`.")
-        );
+        // Happy's Codex takes Shoal's guidance as its first message.
+        assert!(message.starts_with(GUIDANCE_START), "{message}");
         let plaintext = serde_json::json!({
             "role": "user",
             "content": {"type": "text", "text": message},
@@ -17570,7 +17563,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
         fs::remove_file(&record).unwrap();
     }
 
-    // Without a prompt nothing is seeded; a wrong token fails delivery softly.
+    // A wrong token fails delivery softly.
     fs::write(
         happy_home.join("access.key"),
         r#"{"token": "wrong", "secret": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}"#,
@@ -17579,7 +17572,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     fixture.add("unseeded");
     let output = fixture
         .command()
-        .args(["--json", "happy", "codex", "unseeded", "--prompt", "hello"])
+        .args(["--json", "happy-codex", "unseeded"])
         .env("HAPPY_RECORD", &record)
         .env("HAPPY_SERVER_URL", &server.url)
         // Launched from inside another seeded session: its attachment must not leak.
@@ -17609,7 +17602,7 @@ fn happy_codex_prompts_are_delivered_through_a_seeded_session() {
     let launch_orphan = || {
         fixture
             .command()
-            .args(["--json", "happy", "codex", "orphan", "--prompt", "hello"])
+            .args(["--json", "happy-codex", "orphan"])
             .env("HAPPY_SERVER_URL", &server.url)
             // Only the fixture directory and system tools: a real happy must not be found.
             .env(
@@ -24855,7 +24848,7 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
 #[test]
 fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     let mut fixture = Fixture::with_config(Some(
-        "[cleanup.done]\nenabled = false\n[terminal.happy]\nenabled = true\n",
+        "[cleanup.done]\nenabled = false\n[agents.happy]\nenabled = true\n",
     ));
     install_fake_herdr(&fixture);
     install_fake_agents(&fixture, &["claude"]);

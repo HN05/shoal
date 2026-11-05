@@ -29,7 +29,7 @@ const GROUPS: &[(&str, &[&str])] = &[
     (
         "Run commands and agents",
         &[
-            "run", "happy", "attach", "demo", "stop", "restart", "resume", "queue",
+            "run", "attach", "demo", "stop", "restart", "resume", "queue",
         ],
     ),
     (

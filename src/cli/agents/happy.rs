@@ -96,10 +96,12 @@ impl App for Happy {
     }
 }
 
-/// Why Happy sessions are off: `terminal.happy.enabled` turns them on.
-pub(super) fn off(config: &config::Happy) -> Option<&'static str> {
-    (!config.enabled).then_some(
-        "Happy sessions are off; set terminal.happy.enabled = true in the repository or global config",
+/// Why Happy sessions are off under `settings`: they are until
+/// `agents.happy.enabled` turns them on.
+pub(super) fn off(settings: &config::Effective) -> Option<&'static str> {
+    let enabled = settings.agents.get("happy").and_then(|agent| agent.enabled);
+    (enabled != Some(true)).then_some(
+        "Happy sessions are off; set agents.happy.enabled = true in the repository or global config",
     )
 }
 

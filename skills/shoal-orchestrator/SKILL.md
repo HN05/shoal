@@ -32,7 +32,7 @@ shoal start https://github.com/owner/repo/issues/34 --agent happy-codex
 shoal start my-project fix-login --agent happy-claude
 shoal start my-project fix-ui --base fix-login --agent happy-claude
 shoal start my-project --mode plan --issue 42 --agent claude
-shoal happy codex fix-login --prompt "Fix the login bug" -- --yolo
+shoal happy-codex fix-login -- --yolo
 shoal contribute https://github.com/other/repo/issues/12 --agent happy-claude
 ```
 

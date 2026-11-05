@@ -14,7 +14,6 @@ mod happy;
 pub(in crate::cli) mod hooks;
 mod launch;
 mod sessions;
-mod shortcuts;
 mod trust;
 
 use std::{
@@ -43,9 +42,6 @@ pub(in crate::cli) use crate::client::transcripts::AgentEnvironment;
 pub(in crate::cli) use desktop::{app, open};
 pub(in crate::cli) use launch::input;
 pub(in crate::cli) use sessions::{Existing, SessionHome, install_session_files};
-#[cfg(feature = "happy")]
-pub(super) use shortcuts::happy;
-pub(in crate::cli) use shortcuts::{Installed, happy_agents, shortcuts};
 
 /// What an agent needs beyond its configured command and described
 /// arguments. Each default adds nothing.
@@ -194,12 +190,12 @@ const ADDED: &[Added] = &[
     Added {
         name: "happy-claude",
         integration: &happy::CLAUDE,
-        off: |settings| happy::off(&settings.terminal.happy),
+        off: happy::off,
     },
     Added {
         name: "happy-codex",
         integration: &happy::CODEX,
-        off: |settings| happy::off(&settings.terminal.happy),
+        off: happy::off,
     },
 ];
 #[cfg(not(feature = "happy"))]
@@ -226,9 +222,12 @@ fn agent_integration(settings: &Effective, name: &str) -> &'static dyn Integrati
     }
 }
 
-/// Why `settings` turn off the integration agent `name` runs with, if they
-/// do.
+/// Why `settings` turn agent `name` off, if they do: its own `enabled =
+/// false`, or what turns off the integration that adds it.
 fn agent_off(settings: &Effective, name: &str) -> Option<&'static str> {
+    if settings.agents.get(name).and_then(|agent| agent.enabled) == Some(false) {
+        return Some("its [agents] entry sets enabled = false");
+    }
     match (settings.integration(name), added(name)) {
         (IntegrationKind::None, Some(added)) => (added.off)(settings),
         _ => None,
@@ -699,7 +698,7 @@ fn pick_agent(
 }
 
 /// The agents pickers and completion offer under `settings`, built-in
-/// providers first.
+/// providers first, leaving out those `settings` turn off.
 pub(in crate::cli) fn names(settings: &Effective) -> Vec<String> {
     let mut names: Vec<String> = crate::ai::PROVIDERS
         .iter()
@@ -710,15 +709,12 @@ pub(in crate::cli) fn names(settings: &Effective) -> Vec<String> {
             names.push(name.to_owned());
         }
     }
-    names.extend(
-        ADDED
-            .iter()
-            .filter(|added| {
-                !names.iter().any(|known| known == added.name) && (added.off)(settings).is_none()
-            })
-            .map(|added| added.name.to_owned())
-            .collect::<Vec<_>>(),
-    );
+    for Added { name, .. } in ADDED {
+        if !names.iter().any(|known| known == name) {
+            names.push((*name).to_owned());
+        }
+    }
+    names.retain(|name| agent_off(settings, name).is_none());
     names
 }
 

@@ -17,8 +17,8 @@ Caller-specific integration stays outside the daemon core: Superlogical owns ter
 Macraft owns VM/container provisioning. Shoal does not provision tools, manage
 browsers, schedule work beyond the agent queue, which also admits registered
 repositories' CI jobs, or store conversations. Agent shortcuts
-(`shoal <agent>`, `happy`) and `shoal open` are thin launchers around the generic
-execution path; CLI launcher argument arrays are configurable defaults; session and desktop
+(`shoal <agent>`) and `shoal open` are thin launchers around the generic execution
+path; CLI launcher argument arrays are configurable defaults; session and desktop
 adapters retain their tool-specific setup. Shoal does not switch the user's or
 daemon's login. `[secrets]` names
 user commands that fetch values in the CLI, for an agent's environment at launch
@@ -1633,8 +1633,9 @@ not a host and reads and acts on Shoal's state through `shoal::client`. It holds
 a workspace while it shows it and queues agents, which the daemon starts
 detached in `terminal.default_host`, which never names an external app.
 Happy sessions are an optional integration behind a default Cargo feature and
-the `terminal.happy.enabled` setting, off by default, so its encrypted client stays out of
-core. They are the phone-driven flow: a console session that
+the `agents.happy.enabled` setting, off by default, so its encrypted client stays out of
+core. Happy is an agent backend like any other: its agents start with `shoal start
+--agent happy-claude|happy-codex` and have no command of their own. They are the phone-driven flow: a console session that
 Happy's daemon started in a non-workspace directory creates workspaces and starts
 sessions in them. Shoal launches `happy <agent>` with the daemon's own flags so
 the session registers with Happy and appears in the app, detached from the

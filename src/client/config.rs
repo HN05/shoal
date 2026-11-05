@@ -30,8 +30,8 @@ use std::{
 use crate::client::paths::Paths;
 pub use machine::Machine;
 pub use repo::{
-    AutoCleanup, Cleanup, Happy, Herdr, Issue, MergedCleanup, Ports, Restore, Rex, Runner,
-    Settings, Simulators, Tmux, Zellij,
+    AutoCleanup, Cleanup, Herdr, Issue, MergedCleanup, Ports, Restore, Rex, Runner, Settings,
+    Simulators, Tmux, Zellij,
 };
 use repo::{ConfigLayers, RepoConfig};
 pub use resolve::Effective;

@@ -683,7 +683,7 @@ shoal open fix-login --app codex         # Codex desktop app
 shoal open --app t3                      # Running T3 Code desktop app; current workspace or picker
 shoal claude fix-login -- --help
 shoal codex                              # Current workspace or picker
-shoal happy codex fix-login              # Detached Happy session for the Happy app
+shoal happy-codex fix-login              # Detached Happy session for the Happy app
 shoal status fix-login                   # Activity, changes, held resources, issue and PR state
 shoal status planning                    # A chat's agent, sessions, issue and PR state
 shoal status pr 12                       # Workspaces and chats that link PR 12
@@ -1434,7 +1434,8 @@ workspace the way `shoal claude` does, and `--agent droid` selects it. A tool is
 an agent when it is built in or has a `command` or `base`. Each option merges on
 its own across layers, so a repository can replace `command` and keep the global
 `resume`. Names that collide with built-in commands are rejected. The picker and
-completion offer AI tools only. What a tool needs of this machine, its
+completion offer AI tools only, and `enabled = false` turns a tool's agents
+off: pickers and completion leave them out and launches are refused. What a tool needs of this machine, its
 [skill directory](#agent-skill-outside-project-repositories) and proxy, goes
 under `[machine.agents.<name>]` in the global config.
 
@@ -1658,13 +1659,13 @@ is installed. Desktop apps get no agent flags and provide no execution
 tracking, scope token, port variables or output default (so automatic cleanup cannot see their activity);
 T3's app must already be running.
 
-Happy sessions are an optional integration: off until `terminal.happy.enabled = true` in
+Happy sessions are an optional integration: off until `agents.happy.enabled = true` in
 global or repository config, and absent from builds without the default `happy`
 Cargo feature (`cargo build --no-default-features --features cli`), which also drops its
 encryption dependencies. While off, pickers and completion leave Happy out and
 launches are refused before any work starts.
 
-`shoal happy claude|codex [workspace]` and `start --agent happy-claude|happy-codex`
+`shoal happy-claude|happy-codex [workspace]` and `start --agent happy-claude|happy-codex`
 start a [Happy](https://github.com/slopus/happy) session as Happy's own daemon
 would (`happy <agent> --happy-starting-mode remote --started-by daemon`, then
 your `--` arguments), so it registers with that daemon and appears in the Happy
@@ -1679,9 +1680,8 @@ and log (`--json` adds `prompt_file`, `prompt_delivered`, `happy_session_id` and
 overrides `~/.happy`) Shoal warns that the session will not appear in the app
 until `happy daemon start` runs, and launches anyway.
 
-An `--issue` prompt, or `shoal happy … --prompt <text>`, reaches Claude as an
-argument. `happy codex` takes none, so Shoal delivers it the way the app does:
-with the login in `~/.happy/access.key` it creates the session on Happy's server
+An `--issue` prompt reaches Claude as an argument. `happy codex` takes none, so
+Shoal delivers it the way the app does: with the login in `~/.happy/access.key` it creates the session on Happy's server
 (`$HAPPY_SERVER_URL`, the settings file, or Happy's default), encrypted as
 happy-cli would encrypt it, starts `happy codex` attached to that session through
 Happy's own `HAPPY_RECONNECT_*` variables, waits up to 90 seconds for the session
@@ -1787,7 +1787,7 @@ session named after the chat, which [`shoal attach <name>`](#agents)
 returns to; inside a zmx session or a Herdr pane it runs in place. `--here` runs
 it in place in this terminal. A Happy chat
 (`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it
-starts detached in the checkout as `shoal happy` starts a workspace session, and
+starts detached in the checkout as `shoal happy-codex` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
 arguments, and Happy's Codex receives them as its first message the way its
 prompts are delivered. Its output and any saved first message replace those of

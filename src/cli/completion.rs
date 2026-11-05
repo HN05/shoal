@@ -159,27 +159,9 @@ pub fn command() -> Command {
                 .arg(clap::Arg::new("args").last(true).num_args(0..)),
         );
     }
-    for (name, available) in agents::shortcuts(&typed.installed(&search_path)) {
-        if !available {
-            command = withdraw(command, name);
-        }
-    }
     // Decoration reads every command's arguments, which are deferred until built.
     command.build();
     decorate(command, &[], Arc::new(typed))
-}
-
-/// Keep a launcher whose executable is missing out of completion. Hidden
-/// subcommands still complete as the only match, so the name also changes to
-/// one no typed word can start. A launcher this build leaves out has nothing
-/// to withdraw.
-fn withdraw(command: Command, name: &str) -> Command {
-    if command.find_subcommand(name).is_none() {
-        return command;
-    }
-    command.mut_subcommand(name, |subcommand| {
-        subcommand.name(format!("\0{name}")).hide(true)
-    })
 }
 
 fn value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
@@ -254,16 +236,6 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                         .map(CompletionCandidate::new)
                         .collect::<Vec<_>>()
                 }))
-            } else if name == "happy" && arg.get_id() == "agent" {
-                let typed = typed.clone();
-                arg.add(ArgValueCompleter::new(move |current: &OsStr| {
-                    let search_path = std::env::var_os("PATH").unwrap_or_default();
-                    agents::happy_agents(&typed.installed(&search_path))
-                        .into_iter()
-                        .filter(|agent| agent.starts_with(current.to_string_lossy().as_ref()))
-                        .map(CompletionCandidate::new)
-                        .collect::<Vec<_>>()
-                }))
             } else if parent == "skill" && name == "install" && arg.get_id() == "agent" {
                 arg.add(ArgValueCompleter::new(|current: &OsStr| {
                     let mut names = vec!["all".to_owned()];
@@ -318,15 +290,6 @@ impl Typed {
     /// Whether `name` is an agent whose programs are on `search_path`.
     fn launchable(&self, name: &str, search_path: &OsStr) -> bool {
         agents::installed(name, self.commands(), search_path)
-    }
-
-    /// The offered agents and commands, judged against `search_path`.
-    fn installed<'a>(&'a self, search_path: &'a OsStr) -> agents::Installed<'a> {
-        agents::Installed {
-            agents: &self.settings().agents,
-            commands: self.commands(),
-            search_path,
-        }
     }
 
     fn settings(&self) -> &Settings {

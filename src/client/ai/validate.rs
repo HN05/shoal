@@ -194,7 +194,6 @@ pub const BUILT_IN_COMMANDS: &[&str] = &[
     "cleanup",
     "move",
     "run",
-    "happy",
     "attach",
     "demo",
     "stop",

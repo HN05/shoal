@@ -247,6 +247,24 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
     );
 }
 
+#[test]
+fn enabled_turns_an_agent_off_and_happys_agents_on() {
+    let settings = |text: &str| {
+        let config = crate::config::Config::from_toml(text).unwrap();
+        config.resolve(&Default::default()).unwrap()
+    };
+    let off = settings("[agents.claude]\nenabled = false\n");
+    assert!(agent_off(&off, "claude").is_some());
+    assert!(agent_off(&off, "codex").is_none());
+    assert!(!names(&off).contains(&"claude".to_owned()));
+    #[cfg(feature = "happy")]
+    {
+        assert!(agent_off(&off, "happy-codex").is_some());
+        let on = settings("[agents.happy]\nenabled = true\n");
+        assert!(agent_off(&on, "happy-codex").is_none());
+    }
+}
+
 #[cfg(feature = "happy")]
 #[test]
 fn an_app_run_agent_takes_the_model_of_the_agent_it_starts() {

@@ -1,6 +1,5 @@
 //! Clap definitions of the commands' arguments, one module per command
 //! group, and the argument types several groups share.
-pub mod agents;
 pub mod approvals;
 pub mod changes;
 pub mod ci;

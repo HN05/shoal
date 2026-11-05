@@ -311,7 +311,6 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Command::Resources(command) => dispatch::resources::run(ctx, command).await,
         Command::Diagnostics(command) => dispatch::diagnostics::run(ctx, command).await,
         Command::Lifecycle(command) => dispatch::lifecycle::run(ctx, command).await,
-        Command::Agents(command) => dispatch::agents::run(ctx, command).await,
         Command::Service(command) => dispatch::service::run(ctx, command, cli.daemon_handoff).await,
     }
 }

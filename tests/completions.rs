@@ -120,7 +120,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
-        "[commands]\nreview = ['tuicr']\n[terminal.happy]\nenabled = true\n[agents.droid]\ncommand = ['droid']\n[machine.agents.pi]\nskill_dir = '~/pi-skills'\n",
+        "[commands]\nreview = ['tuicr']\n[agents.happy]\nenabled = true\n[agents.droid]\ncommand = ['droid']\n[machine.agents.pi]\nskill_dir = '~/pi-skills'\n",
     )
     .unwrap();
     // A mode only its file beside the config defines.
@@ -142,7 +142,6 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
             vec!["shoal", "start", "--agent", "happy-cl"],
             "happy-claude",
         ),
-        (vec!["shoal", "happy", "co"], "codex"),
         (vec!["shoal", "skill", "install", "pi"], "pi"),
         (vec!["shoal", "start", "--mode", "tri"], "triage"),
     ] {
@@ -214,47 +213,28 @@ fn agents_without_installed_executables_are_not_completed() {
 }
 
 #[test]
-fn happy_completes_only_with_an_installed_agent_to_run() {
+fn agents_complete_only_when_enabled_and_installed() {
     let home = tempfile::tempdir().unwrap();
-    fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
-    fs::write(
-        home.path().join(".config/shoal/config.toml"),
-        "[terminal.happy]\nenabled = true\n",
-    )
-    .unwrap();
+    let config = home.path().join(".config/shoal/config.toml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
     let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());
-    // Happy alone runs no agent, so neither it nor its agents complete. An
-    // installed Claude app completes `shoal claude` on its own.
-    let claude_app = cfg!(target_os = "macos") && Path::new("/Applications/Claude.app").exists();
+    let agents = |prefix: &str| {
+        let words = vec!["shoal", "start", "--agent", prefix];
+        let mut command = completion(home.path(), "bash", &words);
+        command.env("PATH", &path);
+        candidates(command)
+    };
+    fs::write(&config, "[agents.happy]\nenabled = true\n").unwrap();
+    // Happy alone runs no agent, so none of its agents complete.
     install_programs(home.path(), &["happy"]);
-    for words in [vec!["shoal", "ha"], vec!["shoal", "happy", "c"]] {
-        let mut command = completion(home.path(), "bash", &words);
-        command.env("PATH", &path);
-        let values = candidates(command);
-        assert!(
-            !values
-                .iter()
-                .any(|value| value == "happy" || (value == "claude" && !claude_app)),
-            "{words:?}: {values:?}"
-        );
-    }
+    assert_eq!(agents("happy-"), Vec::<String>::new());
     install_programs(home.path(), &["claude"]);
-    for (words, expected) in [
-        (vec!["shoal", "ha"], "happy"),
-        (vec!["shoal", "happy", "c"], "claude"),
-    ] {
-        let mut command = completion(home.path(), "bash", &words);
-        command.env("PATH", &path);
-        let values = candidates(command);
-        assert!(
-            values.iter().any(|value| value == expected),
-            "{words:?}: {values:?}"
-        );
-        assert!(
-            !values.iter().any(|value| value == "codex"),
-            "{words:?}: {values:?}"
-        );
-    }
+    assert_eq!(agents("happy-"), ["happy-claude"]);
+    assert_eq!(agents("cl"), ["claude"]);
+    // Happy's agents are off until enabled, and any agent can be turned off.
+    fs::write(&config, "[agents.claude]\nenabled = false\n").unwrap();
+    assert_eq!(agents("happy-"), Vec::<String>::new());
+    assert_eq!(agents("cl"), Vec::<String>::new());
 }
 
 #[test]

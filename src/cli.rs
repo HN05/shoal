@@ -23,7 +23,6 @@ use std::{ffi::OsString, path::PathBuf};
 use clap::{Parser, Subcommand};
 
 use crate::cli::args::{
-    agents::AgentsCommand,
     approvals::{ApprovalsArgs, ApprovalsCommand},
     changes::ChangesCommand,
     coordination::CoordinationCommand,
@@ -135,8 +134,6 @@ pub enum Command {
     #[command(flatten)]
     Lifecycle(LifecycleCommand),
     #[command(flatten)]
-    Agents(AgentsCommand),
-    #[command(flatten)]
     Service(ServiceCommand),
 }
 
@@ -212,8 +209,6 @@ impl Command {
             Command::Run {
                 name: None, args, ..
             } if !args.is_empty() => "run".into(),
-            #[cfg(feature = "happy")]
-            Command::Agents(AgentsCommand::Happy { .. }) => "happy".into(),
             Command::Run {
                 name: Some(name), ..
             } => name.clone(),

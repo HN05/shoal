@@ -182,7 +182,7 @@ shoal open fix-login --app codex   # Open in the Codex desktop app
 shoal attach fix-login         # Reattach to the workspace's agent session; Ctrl-\ detaches
 shoal demo                     # Pick a running demo an agent started and open it
 shoal demo start web           # Start the configured demo `web` for the user to try
-shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
+shoal happy-claude fix-login   # Detached Happy session, visible in the Happy app
 shoal start my-project --mode chat  # Discuss the repository with an agent in its checkout
 shoal start --in fix-login     # Review a workspace's live work in a chat in its worktree, beside its agent
 shoal start --mode plan --issue  # Settle the plan of an issue that needs one, in a chat

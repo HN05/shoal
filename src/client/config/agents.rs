@@ -16,6 +16,10 @@ pub struct AgentToolConfig {
     pub command: Option<Vec<String>>,
     /// Restores a session; it must not repeat the initial prompt.
     pub resume_command: Option<Vec<String>>,
+    /// Whether the tool's agents can start: `false` turns them off, and
+    /// pickers and completion leave them out. `[agents.happy]` turns on
+    /// Happy's agents, which are off until it is `true`.
+    pub enabled: Option<bool>,
     /// The AI tool this one is a launch profile of: it inherits that tool's
     /// integration, launcher and arguments, each replaced by its own.
     pub base: Option<String>,

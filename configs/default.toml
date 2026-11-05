@@ -160,6 +160,11 @@ command = ["codex", "{args}"]
 # override them for one launch. Without them the tool uses its own defaults.
 # model = "gpt-5.5"
 # effort = "medium"
+# enabled = false   # Turn the tool's agents off
+
+[agents.happy]
+# Offer happy-claude and happy-codex, which start detached Happy sessions.
+enabled = false
 
 # A custom agent: shoal start <repository> <branch> --agent droid. Its resume
 # command must restore a session rather than repeat the initial prompt.
@@ -241,10 +246,6 @@ placement = "tab"
 # Override [terminal] close_when_done for Zellij tabs.
 # close_when_done = true
 # tab_name = "{repo}: {branch}"
-
-[terminal.happy]
-# Offer happy-claude and happy-codex, which start detached Happy sessions.
-enabled = false
 
 [setup]
 # Copy the main checkout's ignored files into the worktree before setup.

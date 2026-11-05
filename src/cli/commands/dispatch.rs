@@ -1,5 +1,4 @@
 //! Routes each command group to the handlers of its commands.
-pub(super) mod agents;
 pub(super) mod approvals;
 pub(super) mod changes;
 pub(super) mod coordination;
