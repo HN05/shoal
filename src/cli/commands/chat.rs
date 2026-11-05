@@ -22,7 +22,7 @@ use crate::{
         recent, terminal, ui,
     },
     config::{Effective, templates},
-    model::{Chat, ChatHome, LinkedItem, Relation, Repository, Workspace},
+    model::{Chat, ChatHome, LinkedItem, Relation, Repository, SpaceLinks, Workspace},
     protocol::ConfigTarget,
     repository,
 };
@@ -308,6 +308,21 @@ impl Topic {
             directories: Vec::new(),
             links: Vec::new(),
             workspace: Some(workspace),
+        }
+    }
+
+    /// A chat in `mode` in the checkout of `repo` with `links`, imported
+    /// from another machine. One linked to an issue reopens in a new tab on
+    /// that issue, which the new process reads again for its rules.
+    pub(super) fn imported(repo: &Repository, mode: &str, links: &SpaceLinks) -> Self {
+        let mut topic = Self::repository(repo, mode);
+        if let Some(url) = &links.issue {
+            topic.relaunch.extend(["--issue".into(), url.into()]);
+        }
+        Self {
+            links: links.relations(),
+            linked_issue: templates::IssueFields::linked(links),
+            ..topic
         }
     }
 

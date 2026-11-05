@@ -200,3 +200,28 @@ fn a_restored_chat_takes_the_issue_its_saved_chat_is_linked_to() {
     let other = with_saved_issue(Topic::repository(&repo, "plan"), &chats, "d");
     assert!(other.linked_issue.is_none());
 }
+
+#[test]
+fn an_imported_chat_reopens_on_its_issue() {
+    let repo = Repository {
+        id: "repo".into(),
+        path: "/repos/shoal".into(),
+        source: "/repos/shoal".into(),
+        last_used: 0,
+        name: Some("shoal".into()),
+        workspaces_dir: None,
+        contribution: false,
+    };
+    let url = "https://forge.example/team/repo/issues/7";
+    let links: SpaceLinks =
+        serde_json::from_value(serde_json::json!({"issue": url, "prs": []})).unwrap();
+    let topic = Topic::imported(&repo, "plan", &links);
+    assert!(
+        (topic.relaunch.windows(2)).any(|pair| pair == [OsString::from("--issue"), url.into()]),
+        "{:?}",
+        topic.relaunch
+    );
+    assert_eq!(topic.linked_issue.map(|issue| issue.number), Some(7));
+    let unlinked = Topic::imported(&repo, "plan", &SpaceLinks::default());
+    assert!(!unlinked.relaunch.contains(&OsString::from("--issue")));
+}
