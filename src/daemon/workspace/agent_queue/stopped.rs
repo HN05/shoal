@@ -265,7 +265,7 @@ impl Manager {
     /// Record the restore of the agent stopped as `execution` in `workspace`
     /// as the admitted entry `id`, so it starts at once in the slot the
     /// agent kept while its record waits, and return its start, where the
-    /// agent ran.
+    /// agent ran. Requires the queue gate.
     pub(crate) async fn admit_stopped_restore(
         &self,
         workspace: &Workspace,
@@ -287,7 +287,6 @@ impl Manager {
             name: restore.target.name.clone(),
             env,
         };
-        let _gate = self.agent_queue.lock_admission().await;
         self.store.run(move |db| insert(db, &restore)).await?;
         Ok(start)
     }

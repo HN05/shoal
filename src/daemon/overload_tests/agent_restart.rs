@@ -142,17 +142,26 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
         let (manager, execution) = (manager.clone(), execution.clone());
         async move { manager.restart_agent(&execution, None, false).await }
     });
-    // The old wrapper finishes with the agent's record.
+    // The old wrapper finishes with the agent's record. Dispatch, which
+    // ends restarts whose start left the queue, waits while the restore is
+    // recorded.
+    let gate = manager.agent_queue.lock_admission().await;
     bounded(launched).await.unwrap().unwrap();
+    manager.fail_lost_renewals().await.unwrap();
+    drop(gate);
     let restore = starting_restore(&manager, &execution).await;
     assert_eq!(restore.state, QueueState::Starting);
-    assert!(
-        crate::daemon::agent_queue::tests::STARTED
+    bounded(async {
+        while !crate::daemon::agent_queue::tests::STARTED
             .lock()
             .unwrap()
             .iter()
             .any(|(started, _)| *started == restore.id)
-    );
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     // No wrapper runs the agent now, and its slot stays the restore's.
     manager.dispatch_queue().await.unwrap();

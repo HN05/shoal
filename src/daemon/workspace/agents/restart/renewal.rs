@@ -8,7 +8,10 @@ use anyhow::{Result, anyhow};
 use tokio::sync::oneshot;
 
 use super::{Agent, Manager, Restart, Restarts};
-use crate::model::{RunningAgent, Workspace};
+use crate::{
+    daemon::workspace::agent_queue::Start,
+    model::{RunningAgent, Workspace},
+};
 
 /// A restart whose agent starts again in a new wrapper, kept by the
 /// execution the agent ran as.
@@ -136,28 +139,41 @@ impl Manager {
         execution: &str,
         finished: bool,
     ) {
+        if !finished {
+            let reason =
+                "the stopped agent's wrapper did not finish; its processes are not proven stopped";
+            self.fail_renewal(execution, reason.into()).await;
+            return;
+        }
         let entry = uuid::Uuid::new_v4().to_string();
+        // The queue gate keeps dispatch from reading the entry as lost
+        // between its publication here and its insertion.
+        let gate = self.agent_queue.lock_admission().await;
         if !self.follow_start(execution, &entry).await {
             return;
         }
-        let started = async {
-            anyhow::ensure!(
-                finished,
-                "the stopped agent's wrapper did not finish; its processes are not proven stopped"
-            );
-            let start = self
-                .admit_stopped_restore(workspace, execution, entry)
-                .await?;
-            if let Err(error) = crate::daemon::agent_queue::spawn_start(&self.paths, &start) {
-                self.fail_queue_entry(&start.id, &format!("{error:#}"))
-                    .await?;
-                return Err(error);
-            }
-            Ok(())
+        let admitted = self
+            .admit_stopped_restore(workspace, execution, entry)
+            .await;
+        drop(gate);
+        let started = match admitted {
+            Ok(start) => self.spawn_restore(&start).await,
+            Err(error) => Err(error),
         };
-        if let Err(error) = started.await {
+        if let Err(error) = started {
             self.fail_renewal(execution, format!("{error:#}")).await;
         }
+    }
+
+    /// Run the queue start worker for the admitted restore `start`, ending
+    /// its entry when it cannot.
+    async fn spawn_restore(&self, start: &Start) -> Result<()> {
+        let Err(error) = crate::daemon::agent_queue::spawn_start(&self.paths, start) else {
+            return Ok(());
+        };
+        self.fail_queue_entry(&start.id, &format!("{error:#}"))
+            .await?;
+        Err(error)
     }
 
     /// Record that the queue entry `entry` starts the new wrapper of the
