@@ -479,7 +479,15 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
         .unwrap_err();
     assert!(format!("{error:#}").contains("no mode triage"), "{error:#}");
     assert_eq!(code(inspect(&app, "child").await), ErrorCode::NotFound);
-    let started: StartedWorkspace = connection::request(&agent, split(None)).await.unwrap();
+    // A mode only a file beside the global config defines is one.
+    let global = crate::config::Config::path(&daemon.manager.paths);
+    let modes = global.parent().unwrap().join("modes");
+    std::fs::create_dir_all(&modes).unwrap();
+    std::fs::write(&global, "[agents.fake]\ncommand = ['sh']\n").unwrap();
+    std::fs::write(modes.join("triage.md"), "Label it.").unwrap();
+    daemon.manager.reload_config().await.unwrap();
+    let in_file_mode = split(Some(launch("fake", Some("triage"))));
+    let started: StartedWorkspace = connection::request(&agent, in_file_mode).await.unwrap();
     let worker = fake::take(&started.operation);
     assert!(
         worker.token.is_some(),

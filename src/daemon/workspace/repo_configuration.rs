@@ -101,9 +101,9 @@ impl Manager {
         ))
     }
 
-    /// [`Self::workspace_settings`] with the template files beside the global
-    /// config, which a review's instructions read, over the daemon's current
-    /// global config.
+    /// [`Self::workspace_settings`] with the mode and rule files beside the
+    /// global config, which a review's instructions and a launch's mode read,
+    /// over the daemon's current global config.
     pub(crate) async fn workspace_settings_with_templates(
         &self,
         workspace: &Workspace,
@@ -253,6 +253,19 @@ impl Manager {
     pub(crate) async fn repository_settings(&self, selector: &str) -> Result<Effective> {
         self.repository_settings_from(&self.config(), selector)
             .await
+    }
+
+    /// [`Self::repository_settings`] with the mode and rule files beside the
+    /// global config, which a launch's mode may come from.
+    pub(crate) async fn repository_settings_with_templates(
+        &self,
+        selector: &str,
+    ) -> Result<Effective> {
+        let layers = self
+            .config_layers_for(ConfigTarget::Repository(selector.to_owned().into()))
+            .await?;
+        self.config()
+            .resolve_with_template_files(&layers, &self.paths)
     }
 
     /// [`Self::repository_settings`] over a global snapshot the caller also

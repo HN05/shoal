@@ -59,7 +59,8 @@ impl Manager {
                 !matches!(opening.start, WorkspaceStart::PullHead { .. }),
                 "a PR's head opens in a workspace at a commit, which holds no agent of its own"
             );
-            check_queued_launch(agent, &self.repository_settings(&repo.id).await?)?;
+            let settings = self.repository_settings_with_templates(&repo.id).await?;
+            check_queued_launch(agent, &settings)?;
         }
         let issue = match &preparing.issue {
             Some(input) => Some(self.read_open_issue(&repo.path, input).await?),
@@ -82,7 +83,8 @@ impl Manager {
     ) -> Result<StartedWorkspace> {
         let parent = self.workspace(parent).await?;
         if let Some(agent) = &preparing.agent {
-            check_queued_launch(agent, &self.workspace_settings(&parent).await?)?;
+            let settings = self.workspace_settings_with_templates(&parent).await?;
+            check_queued_launch(agent, &settings)?;
         }
         let issue = match &preparing.issue {
             Some(input) => Some(self.read_open_issue(&parent.path, input).await?),
