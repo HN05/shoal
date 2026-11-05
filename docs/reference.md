@@ -4668,7 +4668,7 @@ shoal messages send "Stop the dev server" [--space S]  # Queue one for a workspa
 shoal messages send --body-file plan.md [--space S]    # Queue a file's text as one message
 shoal messages send "Crash on launch" --attach shot.png    # Attach files; repeat --attach for more
 shoal messages send --all "Network is back"    # Queue one for every running agent
-shoal messages send --repo R "Rebase onto main"    # Queue one for every running agent of R
+shoal messages send "Rebase onto main" --repo [R]  # Every running agent of R or the current one
 shoal messages [space]     # New messages, oldest first, shown once
 ```
 
@@ -4685,7 +4685,8 @@ lists each copy's path as an `Attached file:` line, or in `attachments` with
 printed it.
 
 `--all` queues the message for every running agent, and `--repo` for every
-running agent of the repository it names: each running chat but the one sending, and each
+running agent of the repository it names, or without a value the current
+checkout's or workspace's, else a picked one: each running chat but the one sending, and each
 workspace with an agent Shoal tracks, working or idle, that is connected and
 not being stopped; stopped and queued agents do not count. It lists the spaces
 it reached, in `workspaces` and `chats` with `--json`; a workspace process
