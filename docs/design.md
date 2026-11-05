@@ -2760,7 +2760,13 @@ the spaces below it whose activity its agent receives, so a coordinator does not
 hear its change to a child's PR back while a child's own agent does: each field the edit
 changed, and of labels and assignees only the names it added or removed, so
 another edit read in the same poll is still reported. Only edits count, since
-what the reads around any other action show changed is someone else's.
+what the reads around any other action show changed is someone else's. A space
+that comes below the acting space during or after a change has no record of it:
+its cursor holds the change as someone else's once its own poll reads it, so its
+new coordinator can hear the change back once. Shoal accepts that echo. Holding
+the gates of the spaces above for every move into a subtree would make each move
+wait for their forge requests and still miss what the joining space polled
+earlier, and a cursor records what changed, not who changed it.
 Passing checks wait on the cursor while another check on the PR's head commit is
 pending, since a pass asks nothing of the agent until the rest finish and each
 wake costs it a turn: a check that does not pass delivers them at once, the last
