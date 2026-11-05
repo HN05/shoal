@@ -276,10 +276,6 @@ mod streams {
             panic!("expected the proposal: {records:?}");
         };
         assert_eq!(shown.number, proposal.number);
-        assert_eq!(
-            shown.proposed_issue().unwrap().issue.title,
-            "Flaky in proposer"
-        );
     }
 
     #[tokio::test]

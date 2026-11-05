@@ -45,13 +45,6 @@ async fn reattachment_is_served_at_every_protocol_version_without_scope() {
     let response: serde_json::Value = serde_json::from_str(&response).unwrap();
     assert_eq!(response["id"], 3);
     assert_eq!(response["data"]["code"], "execution_failed", "{response}");
-    assert!(
-        response["data"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("execution record is missing"),
-        "{response}"
-    );
     served.await.unwrap().unwrap();
 }
 

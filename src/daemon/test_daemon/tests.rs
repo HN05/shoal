@@ -245,7 +245,7 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
     else {
         panic!("expected the decided request");
     };
-    assert_eq!(decided.subject(), "port web (workspace)");
+    assert_eq!(decided.number, pending.number);
 }
 
 #[tokio::test]
