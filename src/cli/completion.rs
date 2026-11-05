@@ -348,7 +348,8 @@ impl Typed {
                 modes: crate::config::modes::built_in_modes().into_keys().collect(),
             };
         };
-        let global = Config::load(&paths).unwrap_or_default();
+        // Modes and rules may be defined only by the files beside it.
+        let global = Config::load_with_templates(&paths).unwrap_or_default();
         let mut layers = ConfigLayers::default();
         if let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
             .enable_all()

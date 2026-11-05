@@ -123,6 +123,13 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         "[commands]\nreview = ['tuicr']\n[terminal.happy]\nenabled = true\n[agents.droid]\ncommand = ['droid']\n[machine.agents.pi]\nskill_dir = '~/pi-skills'\n",
     )
     .unwrap();
+    // A mode only its file beside the config defines.
+    fs::create_dir_all(home.path().join(".config/shoal/modes")).unwrap();
+    fs::write(
+        home.path().join(".config/shoal/modes/triage.md"),
+        "Label it.",
+    )
+    .unwrap();
     install_programs(home.path(), &["claude", "codex", "happy", "tuicr", "droid"]);
     for (words, expected) in [
         (vec!["shoal", "repo", "r"], "rm"),
@@ -136,6 +143,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         ),
         (vec!["shoal", "happy", "co"], "codex"),
         (vec!["shoal", "skill", "install", "pi"], "pi"),
+        (vec!["shoal", "start", "--mode", "tri"], "triage"),
     ] {
         for shell in ["bash", "zsh"] {
             let values = candidates(completion(home.path(), shell, &words));
