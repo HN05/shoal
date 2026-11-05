@@ -10,8 +10,11 @@ instead of the PR delivery guidance below.
 
 ## What matters most
 
-- Managed daemon updates wait for tracked execution records and daemon operations
-  to finish; write replies only while holding an operation. Preserve the socket
+- Managed daemon updates wait for daemon operations, including an execution's
+  state change, and for connected executions whose wrappers cannot reattach.
+  Other running and unknown execution records do not block an update: their
+  wrappers keep the command running and reconnect to the new daemon. Write
+  replies only while holding an operation. Preserve the socket
   backlog and ownership lock across exec; read-only streams reconnect after the
   handoff, preserving event cursors, and continue in the installed release when
   the protocol changes. Only requests a daemon refused unrun are sent again.
