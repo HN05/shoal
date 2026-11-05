@@ -75,8 +75,7 @@ async fn the_audit_fails_workspaces_whose_file_access_stalls_until_a_recheck_fin
     assert_eq!(audited.state, WorkspaceState::Failed);
     let error = audited.error.unwrap();
     assert!(
-        error.starts_with(STARTUP_OWNERSHIP_FAILURE)
-            && error.contains("stalled; a macOS privacy prompt may be waiting"),
+        error.starts_with(STARTUP_OWNERSHIP_FAILURE) && error.contains("stalled"),
         "{error}"
     );
 

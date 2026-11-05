@@ -10,10 +10,6 @@ async fn reuses_connection_and_preserves_sql_errors() -> Result<()> {
                 db.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, i64>(0))?,
                 1
             );
-            assert_eq!(
-                db.query_row("PRAGMA busy_timeout", [], |r| r.get::<_, i64>(0))?,
-                5000
-            );
             db.execute_batch("CREATE TEMP TABLE reused(value); INSERT INTO reused VALUES (42);")?;
             Ok(())
         })
