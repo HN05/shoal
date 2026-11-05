@@ -74,9 +74,10 @@ fn a_rule_repeating_the_guidance_warns() {
 
 #[test]
 fn a_mode_naming_an_undefined_rule_is_refused() {
-    let error = stack("", "[modes.triage]\nrules = ['triage']\n", "")
+    let undefined = stack("", "[modes.triage]\nrules = ['triage']\n", "")
         .resolve()
-        .unwrap_err();
+        .unwrap();
+    let error = modes::check(&undefined.modes, &undefined.rules).unwrap_err();
     assert!(error.to_string().contains("names rule triage"), "{error}");
     let settings = stack(
         "[rules.triage]\ntext = 'Label it.'\n",

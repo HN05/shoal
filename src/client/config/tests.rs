@@ -542,6 +542,29 @@ fn a_launch_model_comes_from_the_request_then_the_choosing_setting_then_the_tool
 }
 
 #[test]
+fn a_global_mode_may_name_a_rule_only_its_file_defines() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(home.path());
+    let file = Config::path(&paths);
+    let rules = file.parent().unwrap().join("rules");
+    std::fs::create_dir_all(&rules).unwrap();
+    std::fs::write(&file, "[modes.triage]\nrules = ['triage']\n").unwrap();
+    std::fs::write(rules.join("triage.md"), "Label it.").unwrap();
+    // The file's text stays out of the config `config set` writes back.
+    let written = Config::load(&paths).unwrap();
+    assert!(!written.repository.rules.contains_key("triage"));
+    // What resolves it without the files, such as the agents' tools, works.
+    written.tools().unwrap();
+    let settings = Config::load_with_templates(&paths)
+        .unwrap()
+        .resolve(&Default::default())
+        .unwrap();
+    assert_eq!(settings.rules["triage"].text, "Label it.");
+    std::fs::remove_file(rules.join("triage.md")).unwrap();
+    assert!(Config::load(&paths).is_err());
+}
+
+#[test]
 fn a_snapshot_resolves_with_the_template_files_beside_its_file() {
     let home = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(home.path());

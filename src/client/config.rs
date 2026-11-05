@@ -283,10 +283,17 @@ impl Config {
             overload.unwrap_or(&toml::Table::new()),
         );
         config.validate(paths)?;
-        // A global file is complete on its own: its bounds must combine with
-        // the built-in defaults, so `config set ports.end 4000` is refused
-        // rather than failing every later command.
-        config.resolve(&ConfigLayers::default())?;
+        // A global file is complete with the mode and rule files beside it:
+        // its bounds must combine with the built-in defaults, so
+        // `config set ports.end 4000` is refused rather than failing every
+        // later command, and its modes may name rules only a file defines.
+        // The config keeps what it says itself, as `config set` writes it.
+        let written = config.repository.clone();
+        read_template_files(&mut config.repository, paths)?;
+        let resolved = config.resolve(&ConfigLayers::default());
+        config.repository = written;
+        let resolved = resolved?;
+        modes::check(&resolved.modes, &resolved.rules)?;
         Ok(config)
     }
 
@@ -335,7 +342,9 @@ impl Config {
     ) -> Result<Effective> {
         let mut global = self.repository_layer();
         let files = read_template_files(&mut global, paths)?;
-        self.resolve_over(global, files, layers)
+        let settings = self.resolve_over(global, files, layers)?;
+        modes::check(&settings.modes, &settings.rules)?;
+        Ok(settings)
     }
 
     /// The settings of `global`, this config's repository layer with its

@@ -115,7 +115,6 @@ impl Stack {
         base.merge(repository, Merge::RepositoryOverGlobal);
         let settings = base.resolve("")?;
         settings.ports.validate()?;
-        modes::check(&settings.modes, &settings.rules)?;
         Ok(settings)
     }
 
