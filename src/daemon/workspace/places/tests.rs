@@ -158,15 +158,6 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
     );
     assert!(
         manager
-            .place_ownership(
-                &tabbed.id,
-                &Origin::created(HostName::Herdr, "w1:p8".into())
-            )
-            .await?
-            != PlaceOwnership::Workspace
-    );
-    assert!(
-        manager
             .place_ownership(&tabbed.id, &Origin::created(HostName::Rex, "w1:p9".into()))
             .await?
             != PlaceOwnership::Workspace

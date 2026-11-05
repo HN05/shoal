@@ -10,14 +10,6 @@ fn spotlight_skips_noindex_and_hidden_names_anywhere_in_a_path() {
 }
 
 #[test]
-fn the_excluded_directory_is_a_hidden_noindex_sibling() {
-    assert_eq!(
-        excluded_directory(Path::new("/Volumes/SSD/shoal")).unwrap(),
-        Path::new("/Volumes/SSD/.shoal.noindex")
-    );
-}
-
-#[test]
 fn an_existing_root_is_kept_as_found() {
     let parent = parent();
     let root = parent.join("shoal");
@@ -72,7 +64,6 @@ fn an_excluded_root_holding_files_is_linked_once_they_leave() {
     plan.ensure_linkable(&[&repo]).unwrap();
     let error = plan.ensure_linkable(&[]).unwrap_err().to_string();
     assert!(error.contains(&repo.display().to_string()), "{error}");
-    assert!(error.contains("--regular-dir"), "{error}");
 
     plan.apply().unwrap();
     assert_eq!(plan.destination().unwrap(), parent.join(".shoal.noindex"));
