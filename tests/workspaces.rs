@@ -28791,6 +28791,16 @@ fn a_start_without_a_terminal_admits_an_app_agent_before_it_opens_here() {
     let entry: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     assert_eq!(entry["state"], "queued", "{stdout}");
     assert!(!fixture.root.path().join("codex-args").exists());
+    // It waits as a launch in the workspace it set up, which it keeps.
+    let status = fixture.ok(&["status", "app"]);
+    assert_eq!(
+        fixture.ok(&["queue"])[0]["opens"],
+        status["workspace"]["id"]
+    );
+    assert_eq!(
+        status["cleanup_reason"]["reason"], "queued_agent",
+        "{status}"
+    );
     fixture.ok(&["queue", "cancel", entry["id"].as_str().unwrap()]);
     fixture.ok(&["stop", "first"]);
     first.wait().unwrap();

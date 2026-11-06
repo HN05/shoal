@@ -83,7 +83,8 @@ pub(super) fn starts_when(entry: &QueueEntry) -> String {
     }
 }
 
-/// Record the workspace a starting entry opened.
+/// Record the workspace a starting entry opened, or the existing one a
+/// waiting launch opens.
 pub(super) async fn attach(ctx: &Context, entry: &str, workspace: &Workspace) -> Result<()> {
     queue::attach(&ctx.paths, entry.to_owned(), workspace.id.clone()).await
 }

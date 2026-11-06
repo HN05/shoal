@@ -49,9 +49,9 @@ pub(super) async fn place(
 }
 
 /// Admit `launch`, which starts here, as a terminal's start is admitted: at
-/// once when a slot is free or `now` says so, its entry recording
-/// `workspace`, otherwise waiting for the daemon to start it as the launch
-/// it plans there.
+/// once when a slot is free or `now` says so, otherwise waiting for the
+/// daemon to start it as the launch it plans there. Either way its entry
+/// records `workspace`.
 async fn admit_here(
     ctx: &Context,
     workspace: &Workspace,
@@ -72,6 +72,9 @@ async fn admit_here(
             }
             Ok(Placement::Here(entry))
         }
-        agent_queue::Admission::Queued(entry, waiting) => Ok(Placement::Waiting(entry, waiting)),
+        agent_queue::Admission::Queued(entry, waiting) => {
+            agent_queue::attach(ctx, &entry.id, workspace).await?;
+            Ok(Placement::Waiting(entry, waiting))
+        }
     }
 }

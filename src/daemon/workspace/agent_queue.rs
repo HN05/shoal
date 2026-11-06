@@ -1163,28 +1163,47 @@ impl Manager {
             .await
     }
 
+    /// Record the workspace a starting entry opened, or the existing one a
+    /// waiting launch opens once admitted, which the daemon then starts as
+    /// it starts any launch in an existing workspace.
     pub async fn queue_attach(&self, id: &str, workspace: &str) -> Result<()> {
         let workspace = self.workspace(workspace).await?;
+        let opens = Self::ensure_holds_agents(&workspace).is_ok();
         let id = id.to_owned();
         let attached = self
             .store
             .run(move |db| {
                 let tx = db.transaction()?;
-                let attached = tx.execute(
+                let started = tx.execute(
                     "UPDATE agent_queue SET workspace_id=?2
                      WHERE id=?1 AND state=?3 AND (opens_workspace_id IS NULL OR opens_workspace_id=?2)",
                     params![id, workspace.id, QueueState::Starting],
                 )?;
-                if attached == 1 {
+                if started == 1 {
                     dependencies::replace_launch(&tx, &id, &workspace.id)?;
                 }
+                let waiting = match opens && started == 0 {
+                    true => tx.execute(
+                        "UPDATE agent_queue SET opens_workspace_id=?2
+                         WHERE id=?1 AND state=?3 AND kind=?4 AND repository_id=?5
+                         AND workspace_id IS NULL AND opens_workspace_id IS NULL",
+                        params![
+                            id,
+                            workspace.id,
+                            QueueState::Queued,
+                            QueueKind::Launch,
+                            workspace.repository_id
+                        ],
+                    )?,
+                    false => 0,
+                };
                 tx.commit()?;
-                Ok(attached)
+                Ok(started + waiting)
             })
             .await?;
         ensure!(
             attached == 1,
-            "queue entry is no longer starting, or starts its agent in another workspace"
+            "queue entry no longer starts or waits, or starts its agent in another workspace"
         );
         Ok(())
     }

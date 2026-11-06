@@ -1211,6 +1211,29 @@ async fn a_launch_in_an_existing_workspace_started_now_starts_beyond_the_limit()
 }
 
 #[tokio::test]
+async fn a_waiting_launch_attached_to_an_existing_workspace_opens_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    let other = register(&manager, &temp, "other").await;
+    limit_globally(&manager, 1);
+    let set_up = create(&manager, &repo, "set-up").await;
+    let foreign = create(&manager, &other, "foreign").await;
+    assert!(add(&manager, &repo, "busy").await.start);
+    let entry = add(&manager, &repo, "set-up").await.entry.unwrap();
+    assert_eq!(entry.state, QueueState::Queued);
+    // Only a workspace of the launch's repository takes it.
+    manager
+        .queue_attach(&entry.id, &foreign.id)
+        .await
+        .unwrap_err();
+    manager.queue_attach(&entry.id, &set_up.id).await.unwrap();
+    let entries = manager.queue_entries().await.unwrap();
+    let waiting = entries.iter().find(|queued| queued.id == entry.id).unwrap();
+    assert_eq!(waiting.opens.as_deref(), Some(set_up.id.as_str()));
+    assert!(manager.has_queued_launch(&set_up.id).await.unwrap());
+}
+
+#[tokio::test]
 async fn workspace_processes_start_agents_only_below_their_workspace() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

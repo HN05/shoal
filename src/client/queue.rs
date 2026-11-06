@@ -51,7 +51,8 @@ pub async fn move_entry(
     request(daemon, QueueMethod::QueueMove { entry, place }).await
 }
 
-/// Record `workspace` as the one the starting `entry` opened.
+/// Record `workspace` as the one the starting `entry` opened, or the
+/// existing one the waiting launch `entry` opens.
 pub async fn attach(daemon: &impl Daemon, entry: String, workspace: String) -> Result<()> {
     request(daemon, QueueMethod::QueueAttach { entry, workspace }).await
 }

@@ -42,7 +42,8 @@ pub enum QueueMethod {
     QueueHold {
         entry: String,
     },
-    /// Record the workspace a starting entry opened.
+    /// Record the workspace a starting entry opened, or the existing one a
+    /// waiting launch opens.
     QueueAttach {
         entry: String,
         workspace: String,
