@@ -39,7 +39,7 @@ use crate::{
 };
 
 pub(in crate::cli) use crate::client::transcripts::AgentEnvironment;
-pub(in crate::cli) use desktop::{app, open};
+pub(in crate::cli) use desktop::{app, ensure_opens, hand_off};
 pub(in crate::cli) use launch::input;
 pub(in crate::cli) use sessions::{Existing, SessionHome, install_session_files};
 
