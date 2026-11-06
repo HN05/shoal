@@ -1,4 +1,4 @@
-use crate::test_support::{manager, repository};
+use crate::daemon::test_support::{manager, repository};
 
 #[tokio::test]
 async fn a_contribution_clones_a_url_and_keeps_an_existing_registration() {
@@ -96,7 +96,7 @@ async fn registration_keeps_a_checkout_in_a_root_spotlight_indexes() {
 
 #[tokio::test]
 async fn an_excluded_root_refuses_a_workspace_at_its_excluded_directory() {
-    let (temp, manager) = crate::test_support::indexed_manager().await;
+    let (temp, manager) = crate::daemon::test_support::indexed_manager().await;
     let origin = repository(temp.path(), "origin");
     let repo = manager
         .register_repository(format!("file://{}", origin.display()).into(), None, None)
@@ -132,12 +132,12 @@ fn nothing() -> super::Recorded<'static> {
 
 #[tokio::test]
 async fn a_checkout_where_the_local_config_belongs_gets_its_own_directory() {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let root = crate::config::Config::default()
         .root_dir(&manager.paths)
         .unwrap();
     std::fs::create_dir_all(root.join("project")).unwrap();
-    let checkout = crate::test_support::repository(&root.join("project"), ".shoal");
+    let checkout = crate::daemon::test_support::repository(&root.join("project"), ".shoal");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
@@ -149,8 +149,8 @@ async fn a_checkout_where_the_local_config_belongs_gets_its_own_directory() {
 
 #[tokio::test]
 async fn no_checkout_registers_where_another_repositorys_local_config_belongs() {
-    let (root, manager) = crate::test_support::manager().await;
-    let checkout = crate::test_support::repository(root.path(), "project");
+    let (root, manager) = crate::daemon::test_support::manager().await;
+    let checkout = crate::daemon::test_support::repository(root.path(), "project");
     let project = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
@@ -158,7 +158,7 @@ async fn no_checkout_registers_where_another_repositorys_local_config_belongs() 
     let local = manager.local_config_path(&project.id).await.unwrap();
     let directory = local.parent().unwrap();
     std::fs::create_dir_all(directory).unwrap();
-    let other = crate::test_support::repository(directory, "other");
+    let other = crate::daemon::test_support::repository(directory, "other");
     let registered = manager
         .register_repository(other.to_str().unwrap().into(), None, None)
         .await;
@@ -176,7 +176,7 @@ async fn no_checkout_registers_where_another_repositorys_local_config_belongs() 
 
 #[tokio::test]
 async fn no_clone_lands_where_its_own_local_config_belongs() {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let root = crate::config::Config::default()
         .root_dir(&manager.paths)
         .unwrap();

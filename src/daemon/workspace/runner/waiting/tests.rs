@@ -4,9 +4,9 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::{
+    daemon::test_support::{configure, git, manager, repository},
     forge::{backends::ForgeKind, test_support::Server},
     model::QueueEntry,
-    test_support::{configure, git, manager, repository},
 };
 
 /// A Forgejo whose waiting jobs are `jobs`, each in the run its `run_id`

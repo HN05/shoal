@@ -3,12 +3,12 @@ use std::{fs, path::PathBuf, sync::Arc};
 use crate::{
     daemon::{
         scope,
+        test_support::{commit, git, install_test_script, manager, repository},
         workspace::{ExecutionKind, Manager, NewWorktreeOptions},
     },
     paths::Paths,
     protocol::{DaemonMethod, ExecutionMethod, Operation, RemovalMethod, WorkspaceMethod},
     removal::InspectionPolicy,
-    test_support::{commit, git, install_test_script, manager, repository},
 };
 
 struct Fixture {

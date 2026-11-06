@@ -1,12 +1,12 @@
 use serde_json::json;
 
 use crate::{
+    daemon::test_support::{configure, git, manager, repository},
     forge::{
         raw::{HttpMethod, RawRequest},
         test_support::Server,
     },
     protocol::ItemContext,
-    test_support::{configure, git, manager, repository},
 };
 
 #[tokio::test]

@@ -83,7 +83,7 @@ fn sample(owner: &str, target: Target) -> ApprovalRequest {
 
 #[tokio::test]
 async fn current_lookup_isolates_names_and_ignores_unrelated_history() -> Result<()> {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     manager.store.run(|db| {
             owners(db)?;
             let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };
@@ -118,7 +118,7 @@ async fn current_lookup_isolates_names_and_ignores_unrelated_history() -> Result
 
 #[tokio::test]
 async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result<()> {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     manager.store.run(|db| {
             owners(db)?;
             for key in ["approve", "deny"] {
@@ -211,7 +211,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
 
 #[tokio::test]
 async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Result<()> {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     manager
         .store
         .run(|db| {
@@ -251,7 +251,7 @@ async fn replaced_merge_requests_keep_their_numbers_and_refuse_decisions() -> Re
 
 #[tokio::test]
 async fn a_merge_retried_with_other_wording_keeps_its_request_and_approval() -> Result<()> {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     manager
         .store
         .run(|db| {
@@ -291,8 +291,8 @@ async fn a_merge_retried_with_other_wording_keeps_its_request_and_approval() -> 
 
 #[tokio::test]
 async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications() {
-    let (root, manager) = crate::test_support::manager().await;
-    let path = crate::test_support::repository(root.path(), "repo");
+    let (root, manager) = crate::daemon::test_support::manager().await;
+    let path = crate::daemon::test_support::repository(root.path(), "repo");
     let repo = manager
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
@@ -372,8 +372,8 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
 
 #[tokio::test]
 async fn a_chat_withdraws_only_its_own_requests() {
-    let (root, manager) = crate::test_support::manager().await;
-    let path = crate::test_support::repository(root.path(), "repo");
+    let (root, manager) = crate::daemon::test_support::manager().await;
+    let path = crate::daemon::test_support::repository(root.path(), "repo");
     let repo = manager
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
@@ -410,8 +410,8 @@ async fn a_chat_withdraws_only_its_own_requests() {
 
 #[tokio::test]
 async fn a_withdrawn_request_is_never_announced_afterwards() {
-    let (root, manager) = crate::test_support::manager().await;
-    let path = crate::test_support::repository(root.path(), "repo");
+    let (root, manager) = crate::daemon::test_support::manager().await;
+    let path = crate::daemon::test_support::repository(root.path(), "repo");
     let repo = manager
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
@@ -442,7 +442,7 @@ async fn a_withdrawn_request_is_never_announced_afterwards() {
 
 #[tokio::test]
 async fn withdrawal_never_reaches_a_request_that_took_the_number_meanwhile() -> Result<()> {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     manager
         .store
         .run(|db| {
@@ -479,7 +479,7 @@ fn decision_messages_name_the_request_target_and_next_step() {
 
 #[tokio::test]
 async fn resource_release_targets_both_scopes_and_rolls_back_invalid_candidates() -> Result<()> {
-    let (root, manager) = crate::test_support::manager().await;
+    let (root, manager) = crate::daemon::test_support::manager().await;
     let path = root.path().to_owned();
     manager.store.run(move |db| {
             owners(db)?;
@@ -547,7 +547,7 @@ fn unrelated_history(db: &Connection, count: i64) -> Result<()> {
 
 #[tokio::test]
 async fn reuse_validates_all_candidates_but_not_unrelated_history() -> Result<()> {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     manager
         .store
         .run(|db| {
@@ -643,7 +643,7 @@ fn query_work(db: &Connection, sql: &str, params: impl Params) -> Result<(usize,
 
 #[tokio::test]
 async fn bundled_planner_bounds_lookups_and_limits_candidate_decoding() -> Result<()> {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     manager.store.run(|db| {
             owners(db)?;
             let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };

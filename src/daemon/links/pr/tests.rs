@@ -3,7 +3,7 @@ use serde_json::json;
 
 #[tokio::test]
 async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
-    use crate::test_support::{git, manager, repository};
+    use crate::daemon::test_support::{git, manager, repository};
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -128,7 +128,7 @@ fn registration_rejects_ambiguous_records() {
 
 #[tokio::test]
 async fn a_failed_branch_check_does_not_claim_another_branch() {
-    use crate::test_support::{manager, repository};
+    use crate::daemon::test_support::{manager, repository};
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -146,7 +146,7 @@ async fn a_failed_branch_check_does_not_claim_another_branch() {
 
 #[tokio::test]
 async fn a_chat_removed_before_its_pr_link_is_written_keeps_none() {
-    let (_temp, manager) = crate::test_support::manager().await;
+    let (_temp, manager) = crate::daemon::test_support::manager().await;
     let url = "https://forge.example/team/repo/pulls/8".to_owned();
     let change = RegistrationChange::new(
         None,

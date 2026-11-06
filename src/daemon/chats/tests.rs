@@ -1,8 +1,10 @@
 use super::*;
 use crate::{
-    daemon::events::{ChatEventKind, EventItem, EventKind},
+    daemon::{
+        events::{ChatEventKind, EventItem, EventKind},
+        test_support::{manager, repository},
+    },
     model::{SpaceKind, SpaceRef},
-    test_support::{manager, repository},
 };
 
 /// Chat starts, stops and removals, and workspace parent changes, in
@@ -36,8 +38,9 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         .create_workspace(&repo.id, "worker".into(), None, None, None)
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let ending = manager
         .start_chat(
             repo.id.clone().into(),
@@ -225,8 +228,9 @@ async fn a_chat_shows_its_agents_turn_state_until_it_stops() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             repo.id.into(),
@@ -275,8 +279,9 @@ async fn a_moved_chat_runs_while_its_new_process_runs() {
         )
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let moved = manager.move_chat(&chat.id, process.id()).await.unwrap();
     assert_eq!(
         moved,
@@ -320,8 +325,9 @@ async fn a_chat_handoff_waits_for_a_process_stop_in_progress() {
         )
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let stopping = manager.chat_handoffs.read().await;
 
     let handoff = tokio::spawn({
@@ -350,8 +356,9 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let recording =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let recording = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             repo.id.into(),
@@ -412,8 +419,9 @@ async fn chats_and_workspaces_share_one_namespace() {
     // A chat takes neither a workspace's name nor an invalid one.
     assert!(start("worker", std::process::id()).await.is_err());
     assert!(start("-talk", std::process::id()).await.is_err());
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     start("talk", process.id()).await.unwrap();
     assert!(start("talk", std::process::id()).await.is_err());
     assert!(manager.check_chat_name("talk".into()).await.is_err());
@@ -650,8 +658,9 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
@@ -707,8 +716,9 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
@@ -760,7 +770,9 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
 }
 
 /// How `process` exited.
-fn process_wait(mut process: crate::test_support::ProcessGroup) -> std::process::ExitStatus {
+fn process_wait(
+    mut process: crate::daemon::test_support::ProcessGroup,
+) -> std::process::ExitStatus {
     process.wait().unwrap()
 }
 
@@ -885,8 +897,8 @@ async fn the_diff_base_names_only_the_workspaces_own_worktree() {
     // tells it apart.
     std::fs::rename(&workspace.path, temp.path().join("moved")).unwrap();
     let clone = [repo.path.as_os_str(), workspace.path.as_os_str()].map(|p| p.to_str().unwrap());
-    crate::test_support::git(temp.path(), &["clone", "-q", clone[0], clone[1]]);
-    crate::test_support::git(&workspace.path, &["checkout", "-q", "-b", "worker"]);
+    crate::daemon::test_support::git(temp.path(), &["clone", "-q", clone[0], clone[1]]);
+    crate::daemon::test_support::git(&workspace.path, &["checkout", "-q", "-b", "worker"]);
     assert!(manager.diff_base(&workspace.name).await.is_err());
 }
 
@@ -953,8 +965,9 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
 async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_there() {
     let (temp, manager) = manager().await;
     let (repo, workspace) = workspace(temp.path(), &manager).await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat_in_workspace(
             &workspace.name,
@@ -1017,7 +1030,7 @@ async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
     assert!(start("missing").await.is_err());
     // Another directory at its path is not its worktree.
     std::fs::create_dir(&workspace.path).unwrap();
-    crate::test_support::git(&workspace.path, &["init", "-q"]);
+    crate::daemon::test_support::git(&workspace.path, &["init", "-q"]);
     assert!(start("replaced").await.is_err());
     std::fs::remove_dir_all(&workspace.path).unwrap();
     std::fs::rename(&moved, &workspace.path).unwrap();

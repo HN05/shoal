@@ -1,8 +1,10 @@
 use crate::{
-    daemon::events::{EventCause, EventItem, EventKind},
+    daemon::{
+        events::{EventCause, EventItem, EventKind},
+        test_support::{manager, repository},
+    },
     model::WorkspaceRef,
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{manager, repository},
 };
 
 fn reference(workspace: &crate::model::Workspace) -> WorkspaceRef {

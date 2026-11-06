@@ -1,7 +1,7 @@
 use crate::{
+    daemon::test_support::{commit, configure, manager, repository},
     presets::{self, derived_data, xcode},
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{commit, configure, manager, repository},
 };
 use std::{fs, time::SystemTime};
 

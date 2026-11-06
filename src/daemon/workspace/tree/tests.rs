@@ -2,6 +2,7 @@ use crate::{
     daemon::{
         events::{EventCause, EventItem, EventKind},
         scope::{Caller, ScopedExecution},
+        test_support::{manager, repository},
         workspace_files::Attacher,
     },
     model::{CleanupReason, SpaceKind, SpaceRef, Workspace, WorkspaceRef},
@@ -10,7 +11,6 @@ use crate::{
         RemovalMethod, WorkspaceMethod,
     },
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{manager, repository},
 };
 
 fn space(workspace: &Workspace) -> SpaceRef {
@@ -587,7 +587,7 @@ async fn a_parent_reserved_for_removal_refuses_splits() {
 #[tokio::test]
 async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
     let (temp, manager) = manager().await;
-    crate::test_support::configure(&manager, "[resources.lock]\ncapacity = 2\n").await;
+    crate::daemon::test_support::configure(&manager, "[resources.lock]\ncapacity = 2\n").await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
@@ -1471,8 +1471,9 @@ async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
@@ -1552,8 +1553,9 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),

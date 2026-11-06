@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::{install_test_script, manager, repository};
+use crate::daemon::test_support::{install_test_script, manager, repository};
 use std::{fs, future::Future, sync::Arc};
 
 async fn fixture(hook: &str) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
@@ -239,12 +239,12 @@ fn waiting_process(directory: &Path, execution: Option<&str>) -> tokio::process:
 /// given. It runs this test binary, whose environment the scan can read where
 /// a system binary's may be hidden.
 fn background_process(execution: Option<&str>) -> tokio::process::Child {
-    let mut command = crate::test_support::marked_child();
+    let mut command = crate::daemon::test_support::marked_child();
     command.env_clear().env("SHOAL_TEST_PROCESS", "1");
     if let Some(execution) = execution {
         command.env(crate::env::EXECUTION_ID, execution);
     }
-    crate::test_support::spawn_marked_child(command.process_group(0))
+    crate::daemon::test_support::spawn_marked_child(command.process_group(0))
 }
 
 #[tokio::test]

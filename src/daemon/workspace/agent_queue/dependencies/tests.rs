@@ -1,12 +1,12 @@
 use super::*;
 use crate::{
     daemon::{
+        test_support::{commit, global_config, manager},
         workspace::agent_queue::tests::{create, register, request, started},
         workspace_files::Attacher,
     },
     model::{QueueEntry, QueueRequest, Repository},
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{commit, global_config, manager},
 };
 
 /// Queue `name` after `after` in a repository without agent limits.

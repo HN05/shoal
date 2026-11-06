@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::test_support::{manager, repository};
+use crate::daemon::test_support::{manager, repository};
 
 fn queued(workflow: &str, name: &str) -> QueuedJob {
     serde_json::from_value(json!({

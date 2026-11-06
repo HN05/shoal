@@ -4,10 +4,10 @@ use crate::{
     daemon::{
         approvals::{DecisionStatus, Specification, Undecided},
         scope,
+        test_support::{commit, git, manager, repository},
         workspace::{ExecutionKind, ExecutionRequest, Manager, RecordChange},
     },
     model::{MergeOptions, Unmerged, Workspace},
-    test_support::{commit, git, manager, repository},
 };
 
 struct Fixture {

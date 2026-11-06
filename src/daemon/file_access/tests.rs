@@ -153,7 +153,7 @@ async fn waiting_names_the_check_that_has_run_longest() {
 
 #[tokio::test]
 async fn the_daemon_alerts_once_while_a_directory_stays_stalled() {
-    let (temp, manager) = crate::test_support::manager().await;
+    let (temp, manager) = crate::daemon::test_support::manager().await;
     let path = temp.path().join("workspace");
     tokio::time::pause();
     for _ in 0..2 {

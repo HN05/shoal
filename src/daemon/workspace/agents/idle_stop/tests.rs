@@ -2,12 +2,12 @@ use super::*;
 use crate::{
     daemon::{
         notifications::NotificationKind,
+        test_support::{manager, repository},
         workspace::{ExecutionKind, StartedExecution},
         workspace_files::Attacher,
     },
     execution::recovery::Record,
     model::Workspace,
-    test_support::{manager, repository},
 };
 
 /// How a test workspace keeps its agent.

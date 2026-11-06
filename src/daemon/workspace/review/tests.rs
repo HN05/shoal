@@ -3,10 +3,10 @@ use crate::{
     daemon::{
         events::{EventItem, EventKind},
         scope::{self, Caller},
+        test_support::{commit, configure, git, install_test_script, manager, repository},
     },
     forge::{ForgeRepo, test_support::Server},
     protocol::AssignmentMethod,
-    test_support::{commit, configure, git, install_test_script, manager, repository},
 };
 use std::sync::{
     Arc, Mutex,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::{manager, repository};
+use crate::daemon::test_support::{manager, repository};
 use tokio::io::BufReader;
 
 async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {

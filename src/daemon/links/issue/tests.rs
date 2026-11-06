@@ -1,6 +1,6 @@
 use super::*;
-use crate::{
-    daemon::events::{EventItem, EventKind},
+use crate::daemon::{
+    events::{EventItem, EventKind},
     test_support::{git, manager, repository},
 };
 

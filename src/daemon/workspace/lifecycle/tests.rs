@@ -1,10 +1,12 @@
 use super::*;
 use crate::{
-    daemon::workspace_files::Attacher,
+    daemon::{
+        test_support::{git, install_test_script, manager, repository},
+        workspace_files::Attacher,
+    },
     model::Workspace,
     process::identity,
     protocol::QueuedLaunches,
-    test_support::{git, install_test_script, manager, repository},
 };
 use std::{fs, sync::Arc};
 
@@ -43,7 +45,7 @@ async fn fixture_with_hook(
     .unwrap();
     fs::write(path.join(".gitignore"), "ignored/\n").unwrap();
     git(&path, &["add", ".gitignore"]);
-    crate::test_support::commit(&path, ".shoal.toml");
+    crate::daemon::test_support::commit(&path, ".shoal.toml");
     let repo = manager
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
@@ -438,7 +440,7 @@ async fn removal_needs_consent_to_delete_commits_on_a_detached_head() {
     let (_root, manager, workspace) = fixture().await;
     git(&workspace.path, &["switch", "--detach"]);
     fs::write(workspace.path.join("detached-work"), "work to keep\n").unwrap();
-    crate::test_support::commit(&workspace.path, "detached-work");
+    crate::daemon::test_support::commit(&workspace.path, "detached-work");
     let head = git(&workspace.path, &["rev-parse", "HEAD"]);
 
     let removed = manager
@@ -477,7 +479,7 @@ async fn consent_covers_only_the_unsaved_work_it_saw() {
     // Commits on a detached HEAD appear after the user confirmed.
     git(&workspace.path, &["switch", "--detach"]);
     fs::write(workspace.path.join("later"), "later\n").unwrap();
-    crate::test_support::commit(&workspace.path, "later");
+    crate::daemon::test_support::commit(&workspace.path, "later");
 
     let removed = manager
         .remove_workspace(&workspace.id, files_only, InspectionPolicy::GitOnly)
@@ -511,7 +513,8 @@ async fn removal_keeps_files_it_promised_to_restore_when_the_checkpoint_cannot()
         children: None,
     };
     // The files grew past the archive limit after the user confirmed.
-    crate::test_support::configure(&manager, "[cleanup.restore]\narchive_max_mb = 0\n").await;
+    crate::daemon::test_support::configure(&manager, "[cleanup.restore]\narchive_max_mb = 0\n")
+        .await;
 
     let removed = manager
         .remove_workspace(&workspace.id, promised(true), InspectionPolicy::GitOnly)
@@ -851,8 +854,8 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
 /// Start a process outside any execution that carries `workspace` as its
 /// identity, as hooks and processes started with `shoal work env` do.
 fn workspace_process(root: &std::path::Path, workspace: &str) -> tokio::process::Child {
-    crate::test_support::spawn_marked_child(
-        crate::test_support::marked_child()
+    crate::daemon::test_support::spawn_marked_child(
+        crate::daemon::test_support::marked_child()
             .env_clear()
             .env(crate::env::WORKSPACE_ID, workspace)
             .current_dir(root)
@@ -933,7 +936,7 @@ async fn removal_deletes_a_branch_a_remote_has_and_keeps_unpushed_work() {
     git(&repo.path, &["remote", "set-head", "origin", "main"]);
     for workspace in [&unpushed, &pushed] {
         fs::write(workspace.path.join("work"), workspace.branch_or_name()).unwrap();
-        crate::test_support::commit(&workspace.path, "work");
+        crate::daemon::test_support::commit(&workspace.path, "work");
     }
     // Pushed without an upstream and never merged.
     git(&pushed.path, &["push", "-q", "origin", "pushed"]);
@@ -1042,8 +1045,9 @@ async fn automatic_removal_keeps_branch_when_default_branch_is_unknown() {
 async fn removal_stops_detached_processes_running_from_the_worktree() {
     let (root, manager, workspace) = fixture().await;
     let detached =
-        crate::test_support::Detached::start(&workspace.path, &root.path().join("pids")).await;
-    let mut attached = crate::test_support::isolated_command("sleep", &workspace.path)
+        crate::daemon::test_support::Detached::start(&workspace.path, &root.path().join("pids"))
+            .await;
+    let mut attached = crate::daemon::test_support::isolated_command("sleep", &workspace.path)
         .arg("300")
         .spawn()
         .unwrap();
@@ -1072,12 +1076,12 @@ async fn removal_stops_detached_processes_running_from_the_worktree() {
 async fn removal_stops_detached_programs_built_in_the_worktree() {
     let (root, manager, workspace) = fixture().await;
     let built = workspace.path.join("built");
-    crate::test_support::copy_test_binary(&built).await;
+    crate::daemon::test_support::copy_test_binary(&built).await;
     let elsewhere = root.path().join("elsewhere");
     fs::create_dir(&elsewhere).unwrap();
-    let detached = crate::test_support::Adopted::start(
+    let detached = crate::daemon::test_support::Adopted::start(
         &elsewhere,
-        &crate::test_support::runs_until_stopped(&built),
+        &crate::daemon::test_support::runs_until_stopped(&built),
         &[],
         &root.path().join("pid"),
     )
@@ -1102,12 +1106,12 @@ async fn automatic_removal_stops_detached_programs_built_in_the_worktree() {
     fs::create_dir_all(exclude.parent().unwrap()).unwrap();
     fs::write(&exclude, "built\n").unwrap();
     let built = workspace.path.join("built");
-    crate::test_support::copy_test_binary(&built).await;
+    crate::daemon::test_support::copy_test_binary(&built).await;
     let elsewhere = root.path().join("elsewhere");
     fs::create_dir(&elsewhere).unwrap();
-    let detached = crate::test_support::Adopted::start(
+    let detached = crate::daemon::test_support::Adopted::start(
         &elsewhere,
-        &crate::test_support::runs_until_stopped(&built),
+        &crate::daemon::test_support::runs_until_stopped(&built),
         &[],
         &root.path().join("pid"),
     )
@@ -1151,7 +1155,7 @@ while [ ! -e '{pids}' ]; do sleep 1; done"#,
         )
         .await;
 
-    let detached = crate::test_support::Detached::recorded(&root.path().join("pids")).await;
+    let detached = crate::daemon::test_support::Detached::recorded(&root.path().join("pids")).await;
     assert!(removed.is_err());
     assert!(identity::alive(&detached.shell).unwrap());
     assert!(identity::alive(&detached.child).unwrap());

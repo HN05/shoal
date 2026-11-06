@@ -1,7 +1,9 @@
 use super::*;
-use crate::{
-    daemon::{ports::PortRequest, workspace::ExecutionKind, workspace_files::Attacher},
+use crate::daemon::{
+    ports::PortRequest,
     test_support::{install_test_script, manager, repository},
+    workspace::ExecutionKind,
+    workspace_files::Attacher,
 };
 use futures_util::FutureExt;
 

@@ -7,8 +7,8 @@ use crate::{daemon::workspace_files::Attacher, protocol::Response};
 #[tokio::test]
 async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
     use tokio::io::AsyncReadExt;
-    let (root, manager) = crate::test_support::manager().await;
-    let path = crate::test_support::repository(root.path(), "repo");
+    let (root, manager) = crate::daemon::test_support::manager().await;
+    let path = crate::daemon::test_support::repository(root.path(), "repo");
     let repo = manager
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await

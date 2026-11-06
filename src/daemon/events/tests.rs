@@ -1,10 +1,12 @@
 use super::*;
 use crate::{
     daemon::{
-        notifications::NotificationKind, workspace::ExecutionKind, workspace_files::Attacher,
+        notifications::NotificationKind,
+        test_support::{git, manager, repository},
+        workspace::ExecutionKind,
+        workspace_files::Attacher,
     },
     protocol::{self, Body, Response, WorkspaceMethod},
-    test_support::{git, manager, repository},
 };
 use std::{sync::Arc, time::Duration};
 use tokio::{io::BufReader, net::UnixStream, task::JoinHandle};

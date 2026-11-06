@@ -3,13 +3,13 @@
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},
+        test_support::{ProcessGroup, manager, repository},
         workspace::Manager,
         workspace_files::Attacher,
     },
     model::{Chat, SpaceKind, Workspace},
     removal::{InspectionPolicy, UnsavedWork},
     state::AgentState,
-    test_support::{ProcessGroup, manager, repository},
 };
 
 /// A workspace `root` with an agent, a chat below it running as the

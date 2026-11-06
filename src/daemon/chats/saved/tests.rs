@@ -1,11 +1,11 @@
 use crate::{
     daemon::{
         events::EventItem,
+        test_support::{ProcessGroup, manager, repository},
         workspace::{Ending, Manager},
     },
     model::{Chat, Repository},
     state::ChatRestore,
-    test_support::{ProcessGroup, manager, repository},
 };
 
 /// A registered repository and the chat `talk` running in it as a process

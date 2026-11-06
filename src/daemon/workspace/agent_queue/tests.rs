@@ -1,8 +1,11 @@
 use super::*;
 use crate::{
-    daemon::{agent_queue::tests::STARTED, workspace_files::Attacher},
+    daemon::{
+        agent_queue::tests::STARTED,
+        test_support::{global_config, manager, repository},
+        workspace_files::Attacher,
+    },
     model::Repository,
-    test_support::{global_config, manager, repository},
 };
 
 fn limits(global: Option<u32>, repositories: &[(&str, Option<u32>)]) -> Limits {
@@ -1528,7 +1531,7 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
         .agent_queue
         .request_oneshot(repo.id.as_str(), true, || {});
     manager.dispatch_queue().await.unwrap();
-    crate::test_support::assert_pending(again.admitted()).await;
+    crate::daemon::test_support::assert_pending(again.admitted()).await;
     publish_recovery(&manager);
     manager.dispatch_queue().await.unwrap();
     tokio::time::timeout(Duration::from_secs(5), again.admitted())

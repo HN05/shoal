@@ -7,9 +7,11 @@ use serde_json::json;
 
 use super::*;
 use crate::{
-    daemon::notifications::Notification,
+    daemon::{
+        notifications::Notification,
+        test_support::{configure, git, manager, repository},
+    },
     forge::{backends::ForgeKind, test_support::Server},
-    test_support::{configure, git, manager, repository},
 };
 
 /// A Forgejo that registers runner 5 as `u` and deletes it, and the

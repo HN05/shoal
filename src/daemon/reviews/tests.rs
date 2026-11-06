@@ -3,8 +3,8 @@ use std::sync::Arc;
 use super::*;
 use crate::model::Workspace;
 use crate::{
+    daemon::test_support::{configure, install_test_script, manager, repository, until_tests_end},
     reviews::{FailureReason, ReviewState, Severity},
-    test_support::{configure, install_test_script, manager, repository, until_tests_end},
 };
 
 const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","checked":[],
@@ -412,8 +412,8 @@ async fn a_replaced_checkout_is_not_reviewed() {
         .unwrap();
     // Another worktree on the same branch at the workspace's path.
     let path = fixture.workspace.path.to_str().unwrap();
-    crate::test_support::git(&repository.path, &["worktree", "remove", "--force", path]);
-    crate::test_support::git(
+    crate::daemon::test_support::git(&repository.path, &["worktree", "remove", "--force", path]);
+    crate::daemon::test_support::git(
         &repository.path,
         &[
             "worktree",
@@ -1128,7 +1128,7 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
     )
     .await;
     let path = repository(root.path(), "repo");
-    crate::test_support::git(&path, &["update-ref", "refs/remotes/origin/main", "main"]);
+    crate::daemon::test_support::git(&path, &["update-ref", "refs/remotes/origin/main", "main"]);
     let repo = manager
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await
@@ -1164,8 +1164,8 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
     }
     // Meanwhile the PR's head moves, and its workspace with it.
     std::fs::write(workspace.path.join("moved"), "moved\n").unwrap();
-    crate::test_support::commit(&workspace.path, "moved");
-    let moved = crate::test_support::git(&workspace.path, &["rev-parse", "HEAD"])
+    crate::daemon::test_support::commit(&workspace.path, "moved");
+    let moved = crate::daemon::test_support::git(&workspace.path, &["rev-parse", "HEAD"])
         .trim()
         .to_owned();
     let (id, commit) = (workspace.id.clone(), moved.clone());

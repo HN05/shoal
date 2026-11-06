@@ -1,8 +1,10 @@
 use super::*;
 use crate::{
-    daemon::workspace::identity::OWNER_MARKER,
+    daemon::{
+        test_support::{manager, repository},
+        workspace::identity::OWNER_MARKER,
+    },
     state::WorkspaceState,
-    test_support::{manager, repository},
 };
 
 fn workspace() -> Workspace {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::{manager, repository};
+use crate::daemon::test_support::{manager, repository};
 
 async fn has_work(manager: &Manager) -> bool {
     manager.agents_have_work().await.unwrap()

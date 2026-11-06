@@ -5,11 +5,11 @@ use crate::{
     daemon::{
         chats::saved::tests::{named_chat, running_chat},
         notifications::NotificationKind,
+        test_support::manager,
         workspace::Manager,
     },
     model::Chat,
     state::ChatRestore,
-    test_support::manager,
 };
 
 /// The chats the daemon ran `shoal resume` for, by ID.

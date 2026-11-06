@@ -2,13 +2,15 @@ use std::time::Duration;
 
 use super::{Entry, RETAIN, fake};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{
+        test_support::{manager, repository},
+        workspace::Manager,
+    },
     model::{Repository, Workspace},
     protocol::operations::{
         Ended, Failure, OperationSpec, Outcome, Preparation, Prepared, Progress, Report, Step,
         Stream,
     },
-    test_support::{manager, repository},
 };
 
 /// A generous guard against a hang; no test waits this long when it passes.

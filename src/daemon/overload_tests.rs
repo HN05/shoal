@@ -2,11 +2,11 @@ use super::notifications::NotificationKind;
 use super::*;
 use crate::{
     daemon::{
+        test_support::{install_test_script, manager, repository},
         workspace::{ExecutionKind, StopRequest},
         workspace_files::Attacher,
     },
     protocol::RemovalMethod,
-    test_support::{install_test_script, manager, repository},
 };
 use std::{
     fs::{self, OpenOptions},
@@ -137,7 +137,7 @@ fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
 #[tokio::test]
 async fn built_in_agents_resume_without_configuration_or_a_session_picker() {
     let root = tempfile::tempdir().unwrap();
-    let mut command = crate::test_support::isolated_test(
+    let mut command = crate::daemon::test_support::isolated_test(
         root.path(),
         "daemon::overload_tests::built_in_restore_child",
     );
@@ -553,7 +553,7 @@ fn child_command(
     workspace: &crate::model::Workspace,
     test: &str,
 ) -> tokio::process::Command {
-    let mut command = crate::test_support::isolated_test(&manager.paths.home, test);
+    let mut command = crate::daemon::test_support::isolated_test(&manager.paths.home, test);
     command.env("SHOAL_TEST_WORKSPACE", &workspace.id);
     command
 }
@@ -570,7 +570,7 @@ fn isolated_operation(
     workspace: &crate::model::Workspace,
     test: &str,
 ) -> tokio::process::Command {
-    let mut command = crate::test_support::isolated_test(&manager.paths.home, test);
+    let mut command = crate::daemon::test_support::isolated_test(&manager.paths.home, test);
     command
         .env("SHOAL_TEST_ROOT", &manager.paths.home)
         .env("SHOAL_TEST_WORKSPACE", &workspace.id);
@@ -717,7 +717,7 @@ async fn tracked_command_child() {
 // so a tracked test runner cannot lend its scope to the fixture daemon.
 async fn run_isolated_overload_test(name: &str) {
     let root = tempfile::tempdir().unwrap();
-    let mut command = crate::test_support::isolated_test(
+    let mut command = crate::daemon::test_support::isolated_test(
         root.path(),
         "daemon::overload_tests::isolated_overload_test",
     );
@@ -1710,7 +1710,7 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
 }
 
 async fn set_recovery(manager: &Manager, enabled: bool) {
-    crate::test_support::configure(
+    crate::daemon::test_support::configure(
         manager,
         &format!("[machine.overload.recovery]\nenabled = {enabled}\n"),
     )

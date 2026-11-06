@@ -1,6 +1,6 @@
 use super::*;
+use crate::daemon::test_support;
 use crate::daemon::workspace::WorkspaceSource;
-use crate::test_support;
 use std::os::unix::fs::MetadataExt;
 
 #[tokio::test]

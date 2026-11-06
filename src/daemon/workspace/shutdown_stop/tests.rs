@@ -4,9 +4,11 @@ use tokio::{io::BufReader, net::UnixStream};
 
 use super::{super::ExecutionKind, *};
 use crate::{
-    daemon::execution_connection::{ExecutionContext, execute},
+    daemon::{
+        execution_connection::{ExecutionContext, execute},
+        test_support::{manager, repository},
+    },
     protocol::{self, Body, Control, ExecutionEvent, Response},
-    test_support::{manager, repository},
 };
 
 async fn bounded<T>(future: impl Future<Output = T>) -> T {

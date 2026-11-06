@@ -2,12 +2,12 @@ use super::*;
 use crate::{
     daemon::{
         scope::{self, Caller},
+        test_support::{manager, repository},
         workspace_files::Attacher,
     },
     model::{CleanupReason, Workspace},
     protocol::QuestionMethod,
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{manager, repository},
 };
 use std::sync::Arc;
 

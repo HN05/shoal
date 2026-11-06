@@ -2,12 +2,12 @@ use std::{sync::Arc, time::Duration};
 
 use crate::{
     daemon::{
+        test_support::{manager, repository},
         workspace::{ExecutionKind, Manager},
         workspace_files::Attacher,
     },
     model::Workspace,
     protocol::TurnEnd,
-    test_support::{manager, repository},
 };
 
 /// A workspace with a tracked agent, its execution's ID, and another
@@ -294,8 +294,9 @@ async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conver
         .register_repository(repo.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),

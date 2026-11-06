@@ -1,15 +1,17 @@
 use super::*;
 use crate::{
-    daemon::workspace::agent_queue::tests::{
-        add, connected_agent, create, limit_globally, queue, register, started,
+    daemon::{
+        test_support::{global_config, manager},
+        workspace::agent_queue::tests::{
+            add, connected_agent, create, limit_globally, queue, register, started,
+        },
+        workspace_files::Attacher,
     },
-    daemon::workspace_files::Attacher,
     execution::recovery::record_path,
     model::Workspace,
     protocol::QueuedLaunches,
     state::QueueKind::Restore,
     state::QueueState::{Queued, Starting},
-    test_support::{global_config, manager},
 };
 
 /// The variables the restores of these tests start with.

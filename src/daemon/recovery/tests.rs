@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::{git, manager, repository};
+use crate::daemon::test_support::{git, manager, repository};
 use anyhow::Context;
 use std::{sync::Arc, time::Duration};
 use tokio::time::timeout;

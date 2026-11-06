@@ -1,8 +1,10 @@
 use super::*;
 use crate::{
-    daemon::workspace_files::Attacher,
+    daemon::{
+        test_support::{manager, repository},
+        workspace_files::Attacher,
+    },
     forge::updates::UpdateKind,
-    test_support::{manager, repository},
 };
 use serde_json::{Value, json};
 
@@ -2023,7 +2025,7 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
     assert!(poll().await.unwrap().is_empty());
     for (repo, content) in [(&workspace.path, "workspace\n"), (&repo_path, "main\n")] {
         std::fs::write(repo.join("tracked"), content).unwrap();
-        crate::test_support::commit(repo, "tracked");
+        crate::daemon::test_support::commit(repo, "tracked");
     }
     let updates = poll().await.unwrap();
     assert_eq!(updates.len(), 1);
@@ -2069,9 +2071,9 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         .unwrap();
     assert!(poll().await.is_err());
     std::fs::write(repo_path.join("other"), "main\n").unwrap();
-    crate::test_support::commit(&repo_path, "other");
+    crate::daemon::test_support::commit(&repo_path, "other");
     std::fs::write(workspace.path.join("other"), "workspace\n").unwrap();
-    crate::test_support::commit(&workspace.path, "other");
+    crate::daemon::test_support::commit(&workspace.path, "other");
     let previous = manager.record_activity(
         &workspace.id,
         vec![(
@@ -2096,7 +2098,7 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
         "[conflicts]\nsensitive = ['version']\n",
     )
     .unwrap();
-    crate::test_support::commit(&repo_path, ".shoal.toml");
+    crate::daemon::test_support::commit(&repo_path, ".shoal.toml");
     let repo = manager
         .register_repository(repo_path.to_str().unwrap().into(), None, None)
         .await
@@ -2110,13 +2112,13 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
         for (file, content) in [("version", "2\n"), ("tracked", "workspace\n")] {
             std::fs::write(workspace.path.join(file), content).unwrap();
         }
-        crate::test_support::commit(&workspace.path, ".");
+        crate::daemon::test_support::commit(&workspace.path, ".");
         workspaces.push(workspace);
     }
     for (file, content) in [("version", "2\n"), ("tracked", "main\n")] {
         std::fs::write(repo_path.join(file), content).unwrap();
     }
-    crate::test_support::commit(&repo_path, ".");
+    crate::daemon::test_support::commit(&repo_path, ".");
     let all = Selection::default();
 
     let updates = manager.poll_item_activity(&workspaces[0].id, &all).await;
@@ -2195,11 +2197,11 @@ async fn branch_conflicts_with_a_target_that_has_heads_changes_are_not_reported(
         .await
         .unwrap();
     std::fs::write(workspace.path.join("tracked"), "workspace\n").unwrap();
-    crate::test_support::commit(&workspace.path, "tracked");
+    crate::daemon::test_support::commit(&workspace.path, "tracked");
     // The default branch takes the commit under a new SHA, then edits it.
     std::fs::write(repo_path.join("other"), "main\n").unwrap();
-    crate::test_support::commit(&repo_path, "other");
-    crate::test_support::git(
+    crate::daemon::test_support::commit(&repo_path, "other");
+    crate::daemon::test_support::git(
         &repo_path,
         &[
             "-c",
@@ -2211,7 +2213,7 @@ async fn branch_conflicts_with_a_target_that_has_heads_changes_are_not_reported(
         ],
     );
     std::fs::write(repo_path.join("tracked"), "main\n").unwrap();
-    crate::test_support::commit(&repo_path, "tracked");
+    crate::daemon::test_support::commit(&repo_path, "tracked");
     assert!(
         manager
             .check_conflicts(&workspace.id, None)
@@ -2247,7 +2249,7 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
         .unwrap();
     for (repo, content) in [(&workspace.path, "workspace\n"), (&repo_path, "main\n")] {
         std::fs::write(repo.join("tracked"), content).unwrap();
-        crate::test_support::commit(repo, "tracked");
+        crate::daemon::test_support::commit(repo, "tracked");
     }
     manager
         .mark_done(&workspace.id, false, true, vec![], &Attacher::User)
@@ -2568,7 +2570,7 @@ async fn the_background_poll_reads_spaces_together() {
     let host = &server.host;
     // Pins are this process's, which parallel tests replace; an answer stays.
     crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::Forgejo);
-    crate::test_support::configure(
+    crate::daemon::test_support::configure(
         &manager,
         &format!("[machine.forges.\"{host}\"]\ntype = \"forgejo\"\ntoken = \"user\"\n"),
     )
@@ -2580,7 +2582,7 @@ async fn the_background_poll_reads_spaces_together() {
         workspaces.push((number, created.await.unwrap()));
     }
     let origin = format!("http://{host}/team/repo");
-    crate::test_support::git(&path, &["remote", "add", "origin", &origin]);
+    crate::daemon::test_support::git(&path, &["remote", "add", "origin", &origin]);
     for (number, workspace) in workspaces {
         let issue = format!("http://{host}/team/repo/issues/{number}");
         manager

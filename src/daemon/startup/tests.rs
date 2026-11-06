@@ -7,8 +7,8 @@ use tokio::{
 
 use super::*;
 use crate::{
+    daemon::test_support::manager,
     protocol::{AgentMethod, Request, WorkspaceMethod},
-    test_support::manager,
 };
 
 /// A hang guard, not the behavior under test.

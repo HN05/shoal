@@ -5,8 +5,8 @@ use crate::daemon::approvals::{
 
 #[tokio::test]
 async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let path = crate::test_support::repository(temp.path(), "repo");
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let path = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
         .register_repository(path.to_str().unwrap().into(), None, None)
         .await

@@ -1,4 +1,5 @@
 use crate::{
+    daemon::test_support::{configure, git, manager, repository},
     forge::{
         items::{
             link::ItemKind,
@@ -7,7 +8,6 @@ use crate::{
         test_support::Server,
     },
     protocol::ItemContext,
-    test_support::{configure, git, manager, repository},
 };
 
 #[tokio::test]

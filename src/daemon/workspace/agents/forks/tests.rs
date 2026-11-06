@@ -1,10 +1,12 @@
 use std::time::Duration;
 
 use crate::{
-    daemon::workspace::{ExecutionKind, Manager},
+    daemon::{
+        test_support::{manager, repository},
+        workspace::{ExecutionKind, Manager},
+    },
     execution::recovery,
     model::{AgentSession, Workspace},
-    test_support::{manager, repository},
 };
 
 /// A tracked agent `name` in `workspace`, reporting `session` when given.

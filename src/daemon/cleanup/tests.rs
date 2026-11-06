@@ -56,15 +56,16 @@ fn fingerprint_sees_rewrites_that_restore_the_modification_time() {
 
 #[tokio::test]
 async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
-    use crate::{
-        daemon::{ports::PortRequest, resources::ResourceRequest},
+    use crate::daemon::{
+        ports::PortRequest,
+        resources::ResourceRequest,
         test_support::{git, manager, repository},
     };
     for pending_rename in [false, true] {
         let (temp, manager) = manager().await;
         let checkout = repository(temp.path(), "repo");
         fs::write(checkout.join(".shoal.toml"), "[resources.lock]\n").unwrap();
-        crate::test_support::commit(&checkout, ".shoal.toml");
+        crate::daemon::test_support::commit(&checkout, ".shoal.toml");
         let repo = manager
             .register_repository(checkout.to_str().unwrap().into(), None, None)
             .await
@@ -95,7 +96,7 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
             .unwrap();
         // A commit only the branch has keeps it after the sweep.
         fs::write(workspace.path.join("work"), "work\n").unwrap();
-        crate::test_support::commit(&workspace.path, "work");
+        crate::daemon::test_support::commit(&workspace.path, "work");
         if pending_rename {
             git(&workspace.path, &["branch", "-m", "new/topic"]);
             let id = workspace.id.clone();
@@ -139,7 +140,7 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
 
 #[tokio::test]
 async fn failed_step_does_not_skip_later_steps() {
-    use crate::test_support::{manager, repository};
+    use crate::daemon::test_support::{manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -188,8 +189,8 @@ async fn failed_step_does_not_skip_later_steps() {
 
 #[tokio::test]
 async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
-    use crate::{
-        daemon::links::pr::Action,
+    use crate::daemon::{
+        links::pr::Action,
         test_support::{manager, repository},
     };
     let (temp, manager) = manager().await;
@@ -271,7 +272,7 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
 
 #[tokio::test]
 async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
-    use crate::test_support::{commit, git, manager, repository};
+    use crate::daemon::test_support::{commit, git, manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -345,15 +346,18 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
 #[tokio::test]
 async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     use crate::{
-        daemon::{ports::PortRequest, resources::ResourceRequest},
+        daemon::{
+            ports::PortRequest,
+            resources::ResourceRequest,
+            test_support::{commit, git as git_in, manager, repository},
+        },
         git,
-        test_support::{commit, git as git_in, manager, repository},
     };
     let (temp, manager) = manager().await;
     let repository_dir = repository(temp.path(), "repo");
     fs::write(repository_dir.join(".gitignore"), "ignored/\n").unwrap();
     commit(&repository_dir, ".gitignore");
-    crate::test_support::configure(
+    crate::daemon::test_support::configure(
         &manager,
         "[cleanup]\ngrace_minutes = 0\n[resources.test-lock]\n",
     )
@@ -509,7 +513,7 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
 
 #[tokio::test]
 async fn requested_cleanup_removes_candidates_without_idle_delay() {
-    use crate::test_support::{manager, repository};
+    use crate::daemon::test_support::{manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -619,7 +623,7 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
 
 #[tokio::test]
 async fn holds_block_idle_sweeps_and_release_restores_eligibility() {
-    use crate::test_support::{git, manager, repository};
+    use crate::daemon::test_support::{git, manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -702,7 +706,7 @@ async fn holds_block_idle_sweeps_and_release_restores_eligibility() {
 
 #[tokio::test]
 async fn ignored_changes_during_idle_delay_restart_timer_at_expiry() {
-    use crate::test_support::{commit, manager, repository};
+    use crate::daemon::test_support::{commit, manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     fs::write(checkout.join(".gitignore"), "ignored/\n").unwrap();
@@ -740,7 +744,7 @@ async fn ignored_changes_during_idle_delay_restart_timer_at_expiry() {
 
 #[tokio::test]
 async fn git_state_is_inspected_when_the_idle_timer_starts_and_expires() {
-    use crate::test_support::{commit, git, manager, repository};
+    use crate::daemon::test_support::{commit, git, manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     fs::write(checkout.join("second"), "second\n").unwrap();
@@ -773,7 +777,7 @@ async fn git_state_is_inspected_when_the_idle_timer_starts_and_expires() {
 
 #[tokio::test]
 async fn a_process_in_the_worktree_stops_a_running_idle_timer() {
-    use crate::test_support::{manager, repository};
+    use crate::daemon::test_support::{manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -800,8 +804,8 @@ async fn a_process_in_the_worktree_stops_a_running_idle_timer() {
 
 #[tokio::test]
 async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_others() {
-    use crate::{
-        daemon::links::pr::Action,
+    use crate::daemon::{
+        links::pr::Action,
         test_support::{manager, repository},
     };
     let (temp, manager) = manager().await;
@@ -883,7 +887,7 @@ async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_ot
 
 #[tokio::test]
 async fn a_sweep_rechecks_a_stalled_worktree_deleted_since_and_forgets_it() {
-    use crate::test_support::{manager, repository};
+    use crate::daemon::test_support::{manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -914,7 +918,7 @@ async fn a_sweep_rechecks_a_stalled_worktree_deleted_since_and_forgets_it() {
 
 #[tokio::test]
 async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
-    use crate::test_support::{manager, repository};
+    use crate::daemon::test_support::{manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -963,7 +967,7 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
 async fn split_across_directories(
     base: bool,
 ) -> (tempfile::TempDir, Arc<Manager>, Workspace, Workspace) {
-    use crate::test_support::{manager, repository};
+    use crate::daemon::test_support::{manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -1062,8 +1066,8 @@ async fn a_child_keeps_while_its_completed_parent_elsewhere_stalled() {
 
 #[tokio::test]
 async fn pr_cleanup_passes_over_a_stacked_workspace_it_removed_earlier() {
-    use crate::{
-        daemon::links::pr::Action,
+    use crate::daemon::{
+        links::pr::Action,
         test_support::{manager, repository},
     };
     let (temp, manager) = manager().await;
@@ -1102,9 +1106,9 @@ async fn pr_cleanup_passes_over_a_stacked_workspace_it_removed_earlier() {
 async fn chat_with_workspace(
     temp: &tempfile::TempDir,
     manager: &Manager,
-    process: &crate::test_support::ProcessGroup,
+    process: &crate::daemon::test_support::ProcessGroup,
 ) -> (crate::model::Chat, Workspace) {
-    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
@@ -1135,9 +1139,10 @@ async fn chat_with_workspace(
 
 #[tokio::test]
 async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     // A running chat is in use.
     assert_eq!(
@@ -1186,9 +1191,10 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
 
 #[tokio::test]
 async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let (chat, _) = chat_with_workspace(&temp, &manager, &process).await;
     manager
         .mark_chat_done(&chat.id, false, Vec::new(), &Attacher::User)
@@ -1248,9 +1254,10 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
 
 #[tokio::test]
 async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     let record = serde_json::json!({
         "kind": "watch",
@@ -1283,15 +1290,18 @@ async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
 }
 
 /// How `process` exited.
-fn process_wait(mut process: crate::test_support::ProcessGroup) -> std::process::ExitStatus {
+fn process_wait(
+    mut process: crate::daemon::test_support::ProcessGroup,
+) -> std::process::ExitStatus {
     process.wait().unwrap()
 }
 
 #[tokio::test]
 async fn a_stopped_chat_whose_processes_run_on_starts_no_grace_period() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     // As a stop that never ended the agent left it.
     let id = chat.id.clone();
@@ -1321,9 +1331,10 @@ async fn a_stopped_chat_whose_processes_run_on_starts_no_grace_period() {
 
 #[tokio::test]
 async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     manager
         .write_local_config(
@@ -1355,9 +1366,10 @@ async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
 
 #[tokio::test]
 async fn a_stopped_chat_withdraws_its_completion_and_stays() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     manager
         .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
@@ -1376,9 +1388,10 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
 
 #[tokio::test]
 async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     manager
         .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
@@ -1404,9 +1417,10 @@ async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
 
 #[tokio::test]
 async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let (chat, _) = chat_with_workspace(&temp, &manager, &process).await;
     let ask = crate::daemon::questions::Ask {
         question: "Which database?".into(),
@@ -1433,9 +1447,10 @@ async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
 
 #[tokio::test]
 async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     process.kill();
     let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
@@ -1471,8 +1486,8 @@ async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces
 
 #[tokio::test]
 async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_while_saved() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
@@ -1484,8 +1499,9 @@ async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_whil
     let reason = || async { manager.cleanup_reason(&workspace).await };
     let merged = || async { manager.merged_snapshot(&workspace.id).await.unwrap() };
     assert!(merged().await.is_some());
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat_in_workspace(
             &workspace.id,

@@ -2,9 +2,9 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use super::*;
 use crate::{
+    daemon::test_support::{commit, git, manager, repository},
     model::{BranchTarget, Repository},
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{commit, git, manager, repository},
 };
 
 /// A registered repository whose `origin` has its main branch, and a clone

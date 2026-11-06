@@ -4,7 +4,7 @@ use anyhow::bail;
 use tokio::sync::{mpsc, watch};
 
 use super::*;
-use crate::test_support::manager;
+use crate::daemon::test_support::manager;
 
 /// A login manager whose announcements the test sends, counting held locks.
 struct Fake {

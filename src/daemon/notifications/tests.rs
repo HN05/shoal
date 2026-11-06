@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::manager;
+use crate::daemon::test_support::manager;
 
 #[tokio::test]
 async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() {
@@ -87,9 +87,11 @@ async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() 
 #[tokio::test]
 async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace() {
     use crate::{
-        daemon::scope::{self, Caller},
+        daemon::{
+            scope::{self, Caller},
+            test_support::repository,
+        },
         protocol::NotificationMethod,
-        test_support::repository,
     };
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -178,7 +180,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
 
 #[tokio::test]
 async fn senders_withdraw_their_own_messages_until_shown() {
-    use crate::test_support::repository;
+    use crate::daemon::test_support::repository;
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -259,7 +261,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
 
 #[tokio::test]
 async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
-    use crate::test_support::repository;
+    use crate::daemon::test_support::repository;
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -323,7 +325,7 @@ async fn pruning_keeps_unread_and_the_newest_read_notifications() {
 
 #[tokio::test]
 async fn a_failed_state_report_alerts_one_line_that_fits() {
-    use crate::test_support::repository;
+    use crate::daemon::test_support::repository;
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -353,7 +355,7 @@ async fn a_failed_state_report_alerts_one_line_that_fits() {
 
 #[tokio::test]
 async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
-    use crate::{state::AgentState, test_support::repository};
+    use crate::{daemon::test_support::repository, state::AgentState};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -448,7 +450,7 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
 
 #[tokio::test]
 async fn a_message_to_the_user_sends_a_limited_number_of_files() {
-    use crate::test_support::repository;
+    use crate::daemon::test_support::repository;
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager

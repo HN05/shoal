@@ -57,6 +57,8 @@ pub mod store;
 mod subscriptions;
 #[cfg(test)]
 pub(crate) mod test_daemon;
+#[cfg(test)]
+pub(crate) mod test_support;
 mod tmp_dirs;
 mod untracked;
 mod warnings;

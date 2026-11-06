@@ -141,7 +141,7 @@ mod streams {
         assert!(kinds.contains(&RecordKind::Workspace), "{kinds:?}");
 
         let manager = &daemon.manager;
-        let other = crate::test_support::repository(&manager.paths.home, "other");
+        let other = crate::daemon::test_support::repository(&manager.paths.home, "other");
         manager
             .register_repository(other.to_str().unwrap().into(), None, None)
             .await
@@ -418,7 +418,8 @@ mod streams {
             .ask_question(&other.id, ask(), Vec::new(), &Attacher::User)
             .await
             .unwrap();
-        let elsewhere = crate::test_support::repository(&daemon.manager.paths.home, "elsewhere");
+        let elsewhere =
+            crate::daemon::test_support::repository(&daemon.manager.paths.home, "elsewhere");
         daemon
             .manager
             .register_repository(elsewhere.to_str().unwrap().into(), None, None)

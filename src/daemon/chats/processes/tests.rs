@@ -2,8 +2,8 @@ use std::sync::Mutex;
 
 use super::stop_in_rounds;
 use crate::{
+    daemon::test_support::ProcessGroup,
     process::identity::{self, Identity},
-    test_support::ProcessGroup,
 };
 
 #[tokio::test]

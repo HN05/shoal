@@ -2,13 +2,13 @@ use std::time::Duration;
 
 use crate::{
     daemon::{
+        test_support::{manager, repository},
         workspace::{ExecutionKind, Manager},
         workspace_files::Attacher,
     },
     model::Workspace,
     protocol::TurnEnd,
     state::AgentState,
-    test_support::{manager, repository},
 };
 
 /// A tracked agent `name` in `workspace`.

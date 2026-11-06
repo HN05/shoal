@@ -1,8 +1,8 @@
 use std::fs;
 
 use crate::{
+    daemon::test_support::{commit, git, manager, repository},
     model::MergeOptions,
-    test_support::{commit, git, manager, repository},
 };
 
 /// The recorded merges of the repository, oldest first, as

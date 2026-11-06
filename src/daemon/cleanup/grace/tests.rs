@@ -1,9 +1,12 @@
 use std::{fs, sync::Arc};
 
 use crate::{
-    daemon::{workspace::Manager, workspace_files::Attacher},
+    daemon::{
+        test_support::{manager, repository},
+        workspace::Manager,
+        workspace_files::Attacher,
+    },
     model::Workspace,
-    test_support::{manager, repository},
     time::unix_seconds,
 };
 

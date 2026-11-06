@@ -1,8 +1,10 @@
 use super::*;
 use crate::{
     config::repo::{Cache, CacheScope},
-    daemon::workspace::ExecutionKind,
-    test_support::{manager, repository},
+    daemon::{
+        test_support::{manager, repository},
+        workspace::ExecutionKind,
+    },
 };
 use std::collections::BTreeMap;
 

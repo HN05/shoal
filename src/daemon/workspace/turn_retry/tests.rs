@@ -4,9 +4,12 @@ use anyhow::Context;
 
 use super::*;
 use crate::{
-    daemon::{notifications::NotificationKind, workspace_files::Attacher},
+    daemon::{
+        notifications::NotificationKind,
+        test_support::{global_config, manager, repository},
+        workspace_files::Attacher,
+    },
     model::Workspace,
-    test_support::{global_config, manager, repository},
 };
 
 #[test]

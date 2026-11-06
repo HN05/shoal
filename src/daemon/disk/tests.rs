@@ -1,14 +1,14 @@
 use super::*;
-use crate::{
-    daemon::workspace_files::Attacher,
+use crate::daemon::{
     test_support::{manager, repository},
+    workspace_files::Attacher,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[tokio::test]
 async fn cleanup_deletes_xcode_data_of_removed_workspaces_first() {
     let (root, manager) = manager().await;
-    crate::test_support::configure(
+    crate::daemon::test_support::configure(
         &manager,
         "setup.presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
     )
@@ -179,7 +179,8 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
     manager
         .config_state
         .publish_disk_reading(Some(manager.config_state.generation()));
-    crate::test_support::configure(&manager, "[machine.overload.disk]\nenabled = false\n").await;
+    crate::daemon::test_support::configure(&manager, "[machine.overload.disk]\nenabled = false\n")
+        .await;
     Monitor::default()
         .check(&manager, start, |_: &Path| -> io::Result<u64> {
             panic!("disabled disk protection sampled free space")

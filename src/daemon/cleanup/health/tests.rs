@@ -93,7 +93,7 @@ fn health_keeps_workspace_failures_to_their_workspace() {
 
 #[tokio::test]
 async fn failing_passes_notify_once_and_show_where_they_belong() {
-    use crate::test_support::{manager, repository};
+    use crate::daemon::test_support::{manager, repository};
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager

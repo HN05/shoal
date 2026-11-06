@@ -15,7 +15,7 @@ async fn background_loops_restart_after_a_panic() {
 #[tokio::test]
 async fn reattachment_is_served_at_every_protocol_version_without_scope() {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let wrapper = crate::process::identity::capture(std::process::id())
         .unwrap()
         .unwrap();
@@ -51,7 +51,7 @@ async fn reattachment_is_served_at_every_protocol_version_without_scope() {
 #[tokio::test]
 async fn an_exit_request_is_served_at_every_protocol_version_except_to_scopes() {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let (exit, mut requested) = tokio::sync::mpsc::channel(1);
     let server = Server {
         exit,

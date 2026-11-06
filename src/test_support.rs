@@ -3,11 +3,9 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
-    sync::Arc,
 };
 
 use crate::{
-    daemon::workspace::Manager,
     paths::Paths,
     process::identity::{self, Identity},
 };
@@ -69,37 +67,8 @@ pub fn repository(root: &Path, name: &str) -> PathBuf {
     repo
 }
 
-/// Keep the temporary root alive until all manager operations have finished.
-/// Its global config removes eligible workspaces on their first sweep, as
-/// reopened managers also read; grace period tests set their own.
-pub async fn manager() -> (tempfile::TempDir, Arc<Manager>) {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
-    let paths = Paths::for_test(root.path());
-    write_global_config(&paths, "[cleanup]\ngrace_minutes = 0\n");
-    let manager = Manager::open(paths).await.unwrap();
-    (root, manager)
-}
-
-/// [`manager`] in a home whose name Spotlight indexes, unlike `tempfile`'s
-/// `.tmp` directories, so the excluded root layout has something to change.
-pub async fn indexed_manager() -> (tempfile::TempDir, Arc<Manager>) {
-    let root = tempfile::Builder::new()
-        .prefix("indexed")
-        .tempdir_in("/tmp")
-        .unwrap();
-    let paths = Paths::for_test(root.path());
-    write_global_config(&paths, "[cleanup]\ngrace_minutes = 0\n");
-    let manager = Manager::open(paths).await.unwrap();
-    (root, manager)
-}
-
-/// Replace the global config with `text` and reload it.
-pub async fn configure(manager: &Manager, text: &str) {
-    write_global_config(&manager.paths, text);
-    manager.reload_config().await.unwrap();
-}
-
-/// Global config `text` as a published config, read like [`configure`]'s.
+/// Global config `text` as a published config, read like the one
+/// [`write_global_config`] writes.
 pub fn global_config(text: &str) -> crate::config::Config {
     crate::config::Config::from_toml(&format!("{BASE_CONFIG}{text}")).unwrap()
 }
@@ -110,7 +79,8 @@ pub fn global_config(text: &str) -> crate::config::Config {
 /// for a run of them to settle.
 const BASE_CONFIG: &str = "setup.copy_ignored = false\nmessages.settle_seconds = 0\n";
 
-fn write_global_config(paths: &Paths, text: &str) {
+/// Write global config `text` after [`BASE_CONFIG`] for the state of `paths`.
+pub fn write_global_config(paths: &Paths, text: &str) {
     let config = crate::config::Config::path(paths);
     fs::create_dir_all(config.parent().unwrap()).unwrap();
     fs::write(&config, format!("{BASE_CONFIG}{text}")).unwrap();
@@ -494,46 +464,4 @@ pub fn isolated_command(program: &str, dir: &Path) -> tokio::process::Command {
         .stdin(std::process::Stdio::null())
         .kill_on_drop(true);
     command
-}
-
-impl Manager {
-    /// Move the repository's checkout to `path` and record it there, as an
-    /// earlier version may have registered it.
-    pub async fn move_checkout(&self, id: &str, path: &Path) -> anyhow::Result<()> {
-        let repo = self.repository(id).await?;
-        fs::rename(&repo.path, path)?;
-        let (id, path) = (repo.id, path.to_path_buf());
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE repositories SET path=?2 WHERE id=?1",
-                    rusqlite::params![id, path.to_str()],
-                )?;
-                Ok(())
-            })
-            .await
-    }
-
-    /// Write the repository's local config file, or remove it for `None`.
-    pub async fn write_local_config(
-        &self,
-        selector: &str,
-        toml: Option<String>,
-    ) -> anyhow::Result<std::path::PathBuf> {
-        let path = self.local_config_path(selector).await?;
-        match toml {
-            Some(text) => {
-                crate::config::repo::parse(&text)?;
-                fs::create_dir_all(path.parent().unwrap())?;
-                fs::write(&path, text)?;
-            }
-            None => match fs::remove_file(&path) {
-                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                    return Err(error.into());
-                }
-                _ => {}
-            },
-        }
-        Ok(path)
-    }
 }

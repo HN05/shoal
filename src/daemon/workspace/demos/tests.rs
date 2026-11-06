@@ -5,11 +5,11 @@ use crate::{
     daemon::{
         events::{EventItem, EventKind},
         scope::{self, Caller, ScopedExecution},
+        test_support::{manager, repository},
         workspace::ExecutionKind,
     },
     model::Workspace,
     protocol::DemoMethod,
-    test_support::{manager, repository},
 };
 
 fn launch(name: &str) -> Launch {
@@ -254,8 +254,9 @@ async fn a_demo_registers_its_next_run_once_the_exited_one_is_released() {
         .unwrap();
     let id = started.plan.id.clone();
     let run = || {
-        let child =
-            crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("30"));
+        let child = crate::daemon::test_support::ProcessGroup::spawn(
+            std::process::Command::new("sleep").arg("30"),
+        );
         let identity = crate::process::identity::capture(child.id())
             .unwrap()
             .unwrap();
@@ -292,8 +293,9 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
     let (temp, manager) = manager().await;
     let (first, _) = workspaces(&manager, temp.path()).await;
     let ended = || {
-        let process =
-            crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("30"));
+        let process = crate::daemon::test_support::ProcessGroup::spawn(
+            std::process::Command::new("sleep").arg("30"),
+        );
         let identity = crate::process::identity::capture(process.id())
             .unwrap()
             .unwrap();
@@ -301,8 +303,9 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
         identity
     };
     // The wrapper still runs, away from the daemon.
-    let mut away =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let mut away = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let wrapper = crate::process::identity::capture(away.id()).unwrap();
     let child = ended();
     let started = manager
@@ -332,8 +335,9 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
 async fn stopping_an_away_demo_between_runs_ends_its_record() {
     let (temp, manager) = manager().await;
     let (first, _) = workspaces(&manager, temp.path()).await;
-    let mut away =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let mut away = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let wrapper = crate::process::identity::capture(away.id()).unwrap();
     let started = manager
         .begin_execution_running(

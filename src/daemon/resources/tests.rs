@@ -204,9 +204,9 @@ fn repository_resources_validate_and_layer_by_name() -> Result<()> {
 
 #[tokio::test]
 async fn queued_requests_take_freed_capacity_in_arrival_order() {
-    use crate::test_support::{manager, repository};
+    use crate::daemon::test_support::{manager, repository};
     let (temp, manager) = manager().await;
-    crate::test_support::configure(&manager, "[resources.lock]\n").await;
+    crate::daemon::test_support::configure(&manager, "[resources.lock]\n").await;
     let repository_dir = repository(temp.path(), "repo");
     let repo = manager
         .register_repository(repository_dir.to_str().unwrap().into(), None, None)

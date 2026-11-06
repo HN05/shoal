@@ -1,8 +1,10 @@
 use super::*;
 use crate::{
-    daemon::approvals::proposals::PR,
+    daemon::{
+        approvals::proposals::PR,
+        test_support::{commit, manager, repository},
+    },
     forge::items::create::NewPull,
-    test_support::{commit, manager, repository},
 };
 
 /// A workspace whose repository holds its agents' pushes back, and its
@@ -242,8 +244,8 @@ async fn approving_a_push_of_a_branch_that_moved_outdates_it() {
 async fn deny_refuses_scoped_pushes_and_lets_the_user_push() {
     let (root, manager, workspace, caller) = setup_with("deny").await;
     let remote = root.path().join("remote.git");
-    crate::test_support::git(root.path(), &["init", "-q", "--bare", "remote.git"]);
-    crate::test_support::git(
+    crate::daemon::test_support::git(root.path(), &["init", "-q", "--bare", "remote.git"]);
+    crate::daemon::test_support::git(
         &workspace.path,
         &["remote", "add", "origin", remote.to_str().unwrap()],
     );

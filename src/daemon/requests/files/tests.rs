@@ -1,7 +1,7 @@
 use super::*;
-use crate::{
-    daemon::workspace_files::Attacher,
+use crate::daemon::{
     test_support::{manager, repository},
+    workspace_files::Attacher,
 };
 
 #[tokio::test]

@@ -1,10 +1,8 @@
 use super::*;
-use crate::{
-    daemon::{
-        workspace::{ExecutionKind, identity},
-        workspace_files::Attacher,
-    },
+use crate::daemon::{
     test_support,
+    workspace::{ExecutionKind, identity},
+    workspace_files::Attacher,
 };
 use std::sync::Arc;
 

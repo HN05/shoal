@@ -10,8 +10,8 @@ async fn wait_published(ready: &mut tokio::sync::watch::Receiver<Option<u64>>) {
 
 #[tokio::test]
 async fn recovery_progresses_after_every_protection_is_disabled() {
-    let (_root, manager) = crate::test_support::manager().await;
-    crate::test_support::configure(
+    let (_root, manager) = crate::daemon::test_support::manager().await;
+    crate::daemon::test_support::configure(
         &manager,
         "[machine.overload.memory]\nenabled = false\n[machine.overload.disk]\nenabled = false\n",
     )
@@ -27,7 +27,7 @@ async fn recovery_progresses_after_every_protection_is_disabled() {
 
 #[tokio::test]
 async fn recovery_waits_for_free_disk_space() {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let mut config = crate::config::Config::default();
     config.machine.overload.memory.enabled = false;
     manager.publish_config(config);
@@ -47,7 +47,7 @@ async fn recovery_waits_for_free_disk_space() {
 
 #[tokio::test]
 async fn unsafe_readings_revoke_the_recovery_epoch() {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let mut config = crate::config::Config::default();
     config.machine.overload.memory.enabled = false;
     manager.publish_config(config);
@@ -76,7 +76,7 @@ async fn unsafe_readings_revoke_the_recovery_epoch() {
 
 #[tokio::test]
 async fn changed_thresholds_restart_the_recovery_window() {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let config = |sustained_seconds| {
         let mut config = crate::config::Config::default();
         config.machine.overload.memory.enabled = false;
@@ -101,7 +101,7 @@ async fn changed_thresholds_restart_the_recovery_window() {
 
 #[tokio::test]
 async fn a_reload_withdraws_published_readiness_until_a_new_window() {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let config = |memory_used_percent| {
         let mut config = crate::config::Config::default();
         config.machine.overload.memory.enabled = false;
