@@ -17832,12 +17832,10 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
 
     let status = fixture.ok(&["daemon", "status"]);
     assert_eq!(status["daemon"]["unread_notifications"], 3);
+    // The listing leaves the count to alerts and status.
     let list = fixture.run(&["work"]);
     assert!(list.status.success());
-    assert!(
-        String::from_utf8_lossy(&list.stderr).starts_with("3 new"),
-        "{list:?}"
-    );
+    assert!(list.stderr.is_empty(), "{list:?}");
     let scoped = fixture
         .command()
         .args([
