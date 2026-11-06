@@ -28844,6 +28844,39 @@ fn resume_now_without_a_terminal_has_the_daemon_start_its_restores() {
     fixture.ok(&["stop", "second"]);
 }
 
+/// Without a terminal, a resume the daemon would start from the background
+/// is refused before anything is queued when no host can take it, naming
+/// the restore in place.
+#[test]
+fn resume_without_a_terminal_or_host_is_refused_before_queuing() {
+    let fixture = Fixture::with_config(Some("[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n"));
+    let workspace = fixture.add("stopped");
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(workspace["id"].as_str().unwrap());
+    fs::create_dir_all(&state).unwrap();
+    let record = state.join("stopped-agent.recovery.json");
+    fs::write(&record, r#"{"agent":"waiter"}"#).unwrap();
+    let bin = fixture.root.path().join("no-host-bin");
+    fs::create_dir(&bin).unwrap();
+    let output = fixture
+        .command()
+        .args(["resume", "stopped", "--now"])
+        .env("PATH", fixture.restricted_path(&bin))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("--focus"),
+        "{output:?}"
+    );
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
+    assert!(record.exists());
+}
+
 /// `shoal resume` queues restores, which the daemon starts in detached
 /// sessions as `max_agents` allows, leaving out done workspaces.
 #[test]

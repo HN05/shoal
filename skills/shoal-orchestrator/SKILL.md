@@ -57,8 +57,9 @@ text reaches the agent as its first message (Codex through Happy's server, which
 needs this machine's Happy login). Check `prompt_delivered`; when false, the text
 is in `prompt_file` and the user must send it from the app.
 
-`start` returns once the workspace is set up, emitting it and then the agent's
-queue entry; the daemon starts the agent, at once or, with `max_agents`
+`start` returns once the workspace is set up, emitting it and then, for a CLI
+agent, its queue entry; a Happy agent the limits admit starts at once and
+reports its launch as above. The daemon starts a queued agent, at once or, with `max_agents`
 configured (the default starts agents one at a time while measured load
 allows), when a slot frees (`state: queued`, `position`). `shoal queue` lists
 entries, and `--now` starts one regardless only when the user asks.

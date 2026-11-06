@@ -176,7 +176,10 @@ async fn resume_each(
             run_all(ctx, stopped, resumed).await
         }
         Queuing::Here { now: false } => queue::queue_all(ctx, stopped, chats, failed, false).await,
-        Queuing::Daemon { now } => queue::queue_all(ctx, stopped, chats, failed, now).await,
+        Queuing::Daemon { now } => {
+            ensure_daemon_starts(ctx, &stopped).await?;
+            queue::queue_all(ctx, stopped, chats, failed, now).await
+        }
     }
 }
 
@@ -273,7 +276,32 @@ async fn queue_workspace(
         Queuing::Daemon { now } => now || last_session,
     };
     let stopped = vec![(workspace, saved)];
+    if matches!(queuing, Queuing::Daemon { .. }) {
+        ensure_daemon_starts(ctx, &stopped).await?;
+    }
     queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), now).await
+}
+
+/// Refuse, before any is queued, the restores of `stopped` agents that the
+/// daemon would start from the background when no host can take them there.
+async fn ensure_daemon_starts(ctx: &Context, stopped: &[(Workspace, Saved)]) -> Result<()> {
+    for (workspace, saved) in stopped {
+        if saved.agents.is_empty() && saved.sessions.is_empty() {
+            continue;
+        }
+        let settings = crate::client::workspaces::settings(
+            &ctx.paths,
+            ConfigTarget::Workspace(workspace.id.clone()),
+        )
+        .await?;
+        terminal::ensure_background(&settings).with_context(|| {
+            format!(
+                "cannot restore the agents of {} in the background; pass --focus to restore one here",
+                workspace.name
+            )
+        })?;
+    }
+    Ok(())
 }
 
 /// Restore the stopped agent `execution` of the one workspace `targets`
