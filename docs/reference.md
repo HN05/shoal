@@ -4798,8 +4798,7 @@ with its record's `id`, `name`, `title` and `path`, when there are any. On a ter
 Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 `allow-passthrough`); other terminals ignore it. Repeated
 identical conflicts, cleanup failures and messages collapse into one entry until read;
-every agent exit is listed. `shoal work` and `daemon status` mention pending
-ones. Arbitrary `run` commands and manual `rm` are your own and record nothing.
+every agent exit is listed. `daemon status` mentions pending ones. Arbitrary `run` commands and manual `rm` are your own and record nothing.
 Scoped commands cannot read or clear notifications but may notify about their own
 workspace and withdraw those messages. Read entries older than the newest
 500 are dropped; unread ones stay.
