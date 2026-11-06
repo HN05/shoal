@@ -2245,7 +2245,7 @@ only the addition. Repository Markdown files, at the root or in `.shoal/` like t
 repository config and refused in both, and global files beside `config.toml` sit
 below inline TOML values at each level; provenance names the highest configured
 layer and the file it read, and reports the combined text.
-What an agent is told comes in five layers, in the order it receives them:
+What an agent is told comes in layers, in the order it receives them:
 the skill, which says how each command works and is loaded on demand; the
 facts of its space; the space rules; the user rules its mode chains; and the
 task, its subject and mode's instructions in the first message. The facts and
@@ -2254,13 +2254,11 @@ agent's rules, in a workspace or a chat and in any mode, so adding rules never
 freezes or replaces it. They depend on the kind of space, a workspace, a chat
 in the checkout or a chat in a workspace's worktree, never on the rules a mode
 lists, so a custom chat mode is told what a built-in one is. The facts state
-only what is true of the space (where it runs, which skill describes Shoal's
-commands, how activity and messages reach it, who reports to it, and that
-`$TMPDIR` goes with it) and hold no practices. The space rules are the
-practices Shoal's own mechanics depend on, running `shoal done` once the work
-is done and naming the space, sent to every agent and kept as two vague
-sentences: what `done` does and when work counts as done belong in the skill
-and the user rules, so a rule never has conditions to keep in step with them.
+only what is true of the space and hold no practices. The space rules are the
+practices Shoal's own mechanics depend on, sent to every agent and kept minimal
+and vague: what a command does and when its conditions hold belong in the skill
+and the user rules, so a space rule never has conditions to keep in step with
+them.
 Practices beyond these belong in user rules, which a mode chains and a user
 or repository may replace. Nothing is
 seeded into the config directory: a seeded copy froze the default for whoever

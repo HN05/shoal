@@ -2208,8 +2208,7 @@ text, in any mode, starts with Shoal's guidance: the facts of the kind of space
 it runs in, a [workspace](../src/client/config/templates/facts/workspace.md), a
 [chat in the checkout](../src/client/config/templates/facts/checkout_chat.md)
 or a [chat in a workspace's worktree](../src/client/config/templates/facts/workspace_chat.md),
-which state where it runs, which skill describes Shoal's commands, how
-activity and messages reach it and who reports to it; then the two
+which describe the space and state no practices; then the
 [space rules](../src/client/config/templates/space_rules.md), to run `shoal done`
 once its work is done and to name its space with `shoal work rename`. Its
 mode's rules follow. No layer replaces or suppresses the guidance. A launch's first
