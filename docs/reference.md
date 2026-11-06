@@ -1873,7 +1873,7 @@ scope also reads the workspace, such as its status, diff, links and CI runs,
 but refuses changes to it. Its facts
 describe a chat in a worktree instead of the checkout: they name the workspace,
 its branch or commit and its path, and tell the agent that the workspace's own
-agent may be editing there and makes its code changes; nothing enforces it. Its record, and
+agent may be editing there and makes its code changes. Its record, and
 `--json`, name the `workspace`, and `shoal resume` restores it there. In the
 chat, commands that act only on workspaces, such as `shoal diff`,
 `shoal conflicts` and `shoal branch base`, act on the workspace, and so does
