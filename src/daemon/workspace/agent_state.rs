@@ -254,9 +254,6 @@ impl Manager {
                 .await?;
         }
         let now = i64::try_from(crate::time::unix_seconds())?;
-        if stopped_chat(&space) {
-            return Ok(unrecorded(state, now));
-        }
         let report = Report {
             space: space.id().to_owned(),
             state,
@@ -265,7 +262,10 @@ impl Manager {
             prompt_cache_expires_at: expiry(now, ending.prompt_cache)?,
             failed: ending.failed,
         };
-        let (status, changed) = self.store.run(move |db| save(db, &report)).await?;
+        let saved = self.store.run(move |db| save(db, &report)).await?;
+        let Some((status, changed)) = saved else {
+            return Ok(unrecorded(state, now));
+        };
         if changed {
             self.signals.agent_changed();
         }
@@ -354,14 +354,8 @@ impl TurnEnding {
     }
 }
 
-/// Whether `space` is a chat whose agent stopped, which records no turn
-/// state until it is restored.
-fn stopped_chat(space: &PresentSpace) -> bool {
-    matches!(space, PresentSpace::Chat(chat) if chat.restore.is_some())
-}
-
-/// The status of a report from the agent of a stopped chat, which arrived
-/// after the stop that ended the agent's turns and is not recorded.
+/// The status of a report for a space that takes none, such as a chat
+/// whose agent stopped before the report arrived, which is not recorded.
 fn unrecorded(state: AgentState, now: i64) -> AgentStatus {
     AgentStatus {
         state,
@@ -390,9 +384,13 @@ fn expiry(now: i64, lifetime: Option<Duration>) -> Result<Option<i64>> {
 }
 
 /// Record `report` with the turn retries it settles, in one transaction:
-/// the state it leaves and whether it changed it.
-fn save(db: &mut Connection, report: &Report) -> Result<(AgentStatus, bool)> {
+/// the state it leaves and whether it changed it, or `None` when its space
+/// takes no report by then.
+fn save(db: &mut Connection, report: &Report) -> Result<Option<(AgentStatus, bool)>> {
     let tx = db.transaction()?;
+    if !takes_report(&tx, &report.space)? {
+        return Ok(None);
+    }
     let previous = get(&tx, &report.space)?.map(|status| status.state);
     let changed = write_state(&tx, report)?;
     super::turn_retry::follow_state(&tx, &report.space, report.state)?;
@@ -402,7 +400,19 @@ fn save(db: &mut Connection, report: &Report) -> Result<(AgentStatus, bool)> {
     }
     let status = get(&tx, &report.space)?.expect("agent state was just recorded");
     tx.commit()?;
-    Ok((status, changed))
+    Ok(Some((status, changed)))
+}
+
+/// Whether the space `id` takes a state report: a workspace, or a chat
+/// whose agent runs. A chat's stop or removal clears its state, so a report
+/// checked against the chat before either would otherwise outlive it.
+fn takes_report(db: &Connection, id: &str) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT EXISTS (SELECT 1 FROM workspaces WHERE id=?1)
+            OR EXISTS (SELECT 1 FROM chats WHERE id=?1 AND restore IS NULL)",
+        [id],
+        |row| row.get(0),
+    )?)
 }
 
 /// Write `report` over the space's last one, keeping a repeated state's

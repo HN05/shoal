@@ -492,7 +492,7 @@ pub struct SkippedPr {
     pub reason: String,
 }
 
-/// The turn state a workspace's agent last reported, and since when.
+/// The turn state a space's agent last reported, and since when.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentStatus {
     pub state: AgentState,

@@ -364,3 +364,49 @@ async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
         .unwrap();
     assert_eq!(ended.prompt_cache_expires_at, Some(ended.since + 300));
 }
+
+#[tokio::test]
+async fn a_chat_stopped_or_removed_before_the_write_takes_no_report() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    // The report was checked against the running chat; the stop, then the
+    // removal, commit before it is written.
+    for ended in [
+        "UPDATE chats SET restore='resume' WHERE id=?1",
+        "DELETE FROM chats WHERE id=?1",
+    ] {
+        let id = chat.id.clone();
+        let saved = manager
+            .store
+            .run(move |db| {
+                db.execute(ended, [&id])?;
+                let report = Report {
+                    space: id.clone(),
+                    state: AgentState::Working,
+                    execution: None,
+                    at: 1,
+                    prompt_cache_expires_at: None,
+                    failed: false,
+                };
+                Ok((save(db, &report)?, get(db, &id)?))
+            })
+            .await
+            .unwrap();
+        assert_eq!(saved, (None, None), "{ended}");
+    }
+}
