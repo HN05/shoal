@@ -2164,6 +2164,43 @@ fn watches_deliver_item_activity_while_git_fails_in_the_worktree() {
 }
 
 #[test]
+fn watches_report_a_failed_item_lookup_without_failing() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    let issue = json!({"body": {"number": 8, "title": "Issue", "state": "open", "body": "",
+        "labels": [], "pull_request": null}});
+    let comments = "GET repos/team/project/issues/8/comments?limit=50&page=1";
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": issue,
+        comments: {"body": [{"id": 1, "body": "Hello?"}]},
+    }));
+    fixture.ok(&["link", "issue", "8", "assigned", "--space", "topic"]);
+    let first = fixture.ok(&["watch", "issue", "--space", "topic", "--timeout", "600"]);
+    assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
+
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": {"status": 404, "body": {"message": "gone"}},
+    }));
+    let failed = fixture.ok(&["watch", "issue", "--space", "topic", "--timeout", "600"]);
+    let updates = failed["updates"].as_array().unwrap();
+    assert_eq!(updates.len(), 1, "{failed}");
+    assert_eq!(updates[0]["kind"], "lookup_failed", "{failed}");
+    let message = updates[0]["message"].as_str().unwrap();
+    assert!(message.starts_with("issue lookup failed: "), "{message}");
+    // The failure persists without being reported again or failing the watch.
+    let quiet = fixture.ok(&["watch", "issue", "--space", "topic", "--timeout", "1"]);
+    assert_eq!(quiet["timed_out"], true, "{quiet}");
+
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": issue,
+        comments: {"body": [{"id": 1, "body": "Hello?"}, {"id": 2, "body": "Back"}]},
+    }));
+    let recovered = fixture.ok(&["watch", "issue", "--space", "topic", "--timeout", "600"]);
+    let updates = recovered["updates"].as_array().unwrap();
+    assert_eq!(updates.len(), 1, "{recovered}");
+    assert_eq!(updates[0]["kind"], "comment", "{recovered}");
+}
+
+#[test]
 fn watches_do_not_report_the_agents_own_comments_back() {
     let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
     let issue = |state: &str| {

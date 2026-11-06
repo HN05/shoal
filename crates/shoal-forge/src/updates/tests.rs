@@ -124,6 +124,34 @@ fn a_sources_failures_are_reported_once_per_interval() {
 }
 
 #[test]
+fn an_unread_item_keeps_its_activity_and_reports_its_failure_once() {
+    let mut seen = Snapshot::new("open");
+    seen.comments.insert("discussion:1".into(), "hello".into());
+    let poll = |previous: &Snapshot, now| {
+        let refused = anyhow::anyhow!("connection refused");
+        let mut next = Snapshot::unread_item("issue", &refused);
+        next.normalize(previous, now);
+        let updates = previous.changes(&next, "issue");
+        (next, updates)
+    };
+    let (unread, updates) = poll(&seen, 1000);
+    assert_eq!(updates.len(), 1, "{updates:?}");
+    assert_eq!(updates[0].kind, UpdateKind::LookupFailed);
+    assert_eq!(
+        updates[0].message,
+        "issue lookup failed: connection refused"
+    );
+    assert_eq!(unread.state, "open");
+    assert_eq!(unread.comments, seen.comments);
+    let (still, updates) = poll(&unread, 1001);
+    assert!(updates.is_empty(), "{updates:?}");
+    // Reading the item again reports nothing it already showed.
+    let mut read = seen.clone();
+    read.normalize(&still, 1002);
+    assert!(still.changes(&read, "issue").is_empty());
+}
+
+#[test]
 fn deleting_one_of_several_comments_is_reported() {
     let mut both = Snapshot::default();
     both.record_comments(

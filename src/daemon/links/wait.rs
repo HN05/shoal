@@ -874,6 +874,10 @@ impl Manager {
                     let previous: Option<Snapshot> = previous
                         .map(|text| serde_json::from_str(&text))
                         .transpose()?;
+                    // The first item read establishes the baseline.
+                    if previous.is_none() && snapshot.unread() {
+                        continue;
+                    }
                     snapshot.normalize(
                         previous.as_ref().unwrap_or(&Snapshot::default()),
                         crate::time::unix_seconds(),

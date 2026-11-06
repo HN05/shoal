@@ -4503,7 +4503,9 @@ seen merged is not looked up again, nor, once the assignment is done, an item se
 closed. Linked items are read
 from the forge their URLs name, so Git failing in the worktree holds back only the
 branch conflict check; a watch of an item named on the command line still reads
-the origin remote with Git. Lookup failures report errors or `lookup_failed` updates; each
+the origin remote with Git. A failed lookup of a linked item, or of one of its
+sources such as CI, reports a `lookup_failed` update instead of failing the watch,
+and the item's last observation stands until a lookup succeeds; each
 source's failures are reported at most once every 10 minutes, whatever the error
 and however often a poll in between succeeds. A
 forge that refuses a request for its rate limit (`429`, or `403` with

@@ -123,6 +123,10 @@ pub struct Snapshot {
     /// incomplete without that source having failed.
     #[serde(skip)]
     pub(crate) limited: Option<RateLimited>,
+    /// Whether the lookup read nothing of the item, so the previous
+    /// observation stands beside the failure in `errors`.
+    #[serde(skip)]
+    pub(crate) unread: bool,
 }
 
 /// A failed job of a run, with the step that failed where its log names one.
@@ -160,9 +164,22 @@ impl Snapshot {
     /// Retain unavailable activity and schedule reports against the preceding
     /// observation. `now` is the current time in Unix seconds.
     pub fn normalize(&mut self, previous: &Self, now: u64) {
-        self.retain_failed_checks(previous);
-        self.schedule_conflict_reports(previous);
+        if self.unread {
+            *self = Self {
+                errors: std::mem::take(&mut self.errors),
+                unread: true,
+                ..previous.clone()
+            };
+        } else {
+            self.retain_failed_checks(previous);
+            self.schedule_conflict_reports(previous);
+        }
         self.schedule_failure_reports(previous, now);
+    }
+
+    /// Whether the lookup read nothing of the item, only its failure.
+    pub fn unread(&self) -> bool {
+        self.unread
     }
 
     /// A local merge check, observed like PR mergeability.
@@ -526,10 +543,18 @@ impl ForgeRepo {
         branch: Option<&str>,
     ) -> Result<Snapshot> {
         let (number, _) = self.item(kind, url)?;
-        match kind {
+        let read = match kind {
             LinkKind::Issue => self.issue_activity(account, number).await,
             LinkKind::Pr => self.activity(account, number, branch).await,
             LinkKind::Ci => self.run_activity(account, url).await,
+        };
+        // A forge that cannot be reached fails the item's lookup as it fails
+        // one of its sources, which a watch reports without failing.
+        match read {
+            Err(error) if rate_limited(&error).is_none() => {
+                Ok(Snapshot::unread_item(kind.noun(), &error))
+            }
+            read => read,
         }
     }
 
@@ -558,6 +583,16 @@ impl Snapshot {
     pub(crate) fn new(state: &str) -> Self {
         Self {
             state: state.into(),
+            ..Self::default()
+        }
+    }
+
+    /// A snapshot of an item whose lookup failed with `error`, recorded
+    /// under `source`.
+    fn unread_item(source: &str, error: &anyhow::Error) -> Self {
+        Self {
+            errors: BTreeMap::from([(source.into(), format!("{error:#}"))]),
+            unread: true,
             ..Self::default()
         }
     }
