@@ -1,5 +1,5 @@
-# PR and main checks on Shoal runners; the rust job is intended as the
-# required check on the `main` protection rule.
+# PR and main checks; the rust job, which runs on Shoal runners, is intended
+# as the required check on the `main` protection rule.
 #
 # A PR whose only `area/` label is `area/docs` runs no checks: the gate job
 # reads the labels and the rust job's check steps skip themselves, which still
