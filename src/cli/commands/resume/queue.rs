@@ -1,5 +1,6 @@
-//! `shoal resume` without `--now`: queue each stopped agent's restore, which
-//! the daemon starts as the agent limits allow.
+//! `shoal resume` without `--now`, or from a caller without a terminal:
+//! queue each stopped agent's restore, which the daemon starts as the agent
+//! limits allow, or at once with `--now`.
 use anyhow::Result;
 
 use super::{claim_commands, reconcile_stale_execution, report_commands};
@@ -11,18 +12,21 @@ use crate::{
     cli::{context::Context, terminal, ui},
     execution::recovery::Saved,
     model::{QueueEntry, Workspace},
+    state::QueueState,
 };
 
-/// Queue the restore of every agent and last session `stopped` saves, and
-/// report the commands of workspaces without one, going on after one fails,
-/// with the stopped `chats` restored and the resumes already `failed`.
+/// Queue the restore of every agent and last session `stopped` saves,
+/// starting each at once regardless of the limits when `now`, and report
+/// the commands of workspaces without one, going on after one fails, with
+/// the stopped `chats` restored and the resumes already `failed`.
 pub(super) async fn queue_all(
     ctx: &Context,
     stopped: Vec<(Workspace, Saved)>,
     chats: Vec<RestoredChat>,
     mut failed: Vec<Failure>,
+    now: bool,
 ) -> Result<i32> {
-    let mut queued = queue_each(ctx, stopped).await;
+    let mut queued = queue_each(ctx, stopped, now).await;
     queued.chats = chats;
     failed.append(&mut queued.failed);
     queued.failed = failed;
@@ -37,14 +41,19 @@ pub(super) async fn queue_all(
 impl Queued {
     /// What the user reads once restores are queued, `None` without any.
     pub(in crate::cli::commands) fn summary(&self) -> Option<String> {
-        (!self.queued.is_empty()).then(|| summary(self.queued.len()))
+        let starting = (self.queued.iter()).all(|entry| entry.state == QueueState::Starting);
+        (!self.queued.is_empty()).then(|| summary(self.queued.len(), starting))
     }
 }
 
-/// Queue the restore of every agent and last session `stopped` saves, and
-/// report the commands of workspaces without one, going on after one fails,
-/// which it reports.
-pub(super) async fn queue_each(ctx: &Context, stopped: Vec<(Workspace, Saved)>) -> Queued {
+/// Queue the restore of every agent and last session `stopped` saves,
+/// starting each at once when `now`, and report the commands of workspaces
+/// without one, going on after one fails, which it reports.
+pub(super) async fn queue_each(
+    ctx: &Context,
+    stopped: Vec<(Workspace, Saved)>,
+    now: bool,
+) -> Queued {
     let mut queued = Vec::new();
     let mut commands = Vec::new();
     let mut failed = Vec::new();
@@ -57,7 +66,7 @@ pub(super) async fn queue_each(ctx: &Context, stopped: Vec<(Workspace, Saved)>) 
             }
         }
         for (execution, _) in saved.agents.iter().chain(&saved.sessions) {
-            match queue(ctx, &workspace, execution).await {
+            match queue(ctx, &workspace, execution, now).await {
                 Ok(entry) => queued.push(entry),
                 Err(error) => failed.push(ui::failure(ctx, "resume", &workspace.name, &error)),
             }
@@ -71,15 +80,22 @@ pub(super) async fn queue_each(ctx: &Context, stopped: Vec<(Workspace, Saved)>) 
     }
 }
 
-/// What the user reads once `count` restores are queued.
-fn summary(count: usize) -> String {
+/// What the user reads once `count` restores are queued, or `starting`.
+fn summary(count: usize, starting: bool) -> String {
     let agents = if count == 1 { "agent" } else { "agents" };
-    format!("Queued {count} {agents}; shoal queue shows them")
+    let done = if starting { "Starting" } else { "Queued" };
+    format!("{done} {count} {agents}; shoal queue shows them")
 }
 
 /// Queue the restore of the agent stopped as `execution` in `workspace`,
-/// once an execution a daemon restart left unknown is proven ended.
-async fn queue(ctx: &Context, workspace: &Workspace, execution: &str) -> Result<QueueEntry> {
+/// once an execution a daemon restart left unknown is proven ended,
+/// starting it at once when `now`.
+async fn queue(
+    ctx: &Context,
+    workspace: &Workspace,
+    execution: &str,
+    now: bool,
+) -> Result<QueueEntry> {
     let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone()).await?;
     reconcile_stale_execution(ctx, &inspection, Some(execution)).await?;
     let (workspace, execution) = (workspace.id.clone(), execution.to_owned());
@@ -88,7 +104,7 @@ async fn queue(ctx: &Context, workspace: &Workspace, execution: &str) -> Result<
         workspace,
         execution,
         terminal::start_environment(),
-        false,
+        now,
     )
     .await
 }

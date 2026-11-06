@@ -438,7 +438,7 @@ otherwise a picker listing every workspace with what it would restore, stopped
 work first, and the stopped chats; with nothing to resume anywhere it reports that without a picker.
 Completion describes each workspace the same way.
 A workspace without stopped agents continues one of its last sessions at once,
-placed as `--now` places an agent, when resumed by itself, left by `shoal stop`
+placed as `--now` places an agent, or without a terminal through the queue, when resumed by itself, left by `shoal stop`
 or by an agent that exited on its own, such as one the user quit, picked as
 stopped agents are, or the `--execution` one. A workspace keeps one per agent; the next new agent started
 there or `shoal done` replaces them. Unlike stopped work they use no agent slot and never delay
@@ -460,9 +460,13 @@ interactive pane or block of an enabled host other than zmx, such as a Herdr pan
 stopped in once that is back at its prompt. Otherwise it starts each in the background, as `shoal start` does: a tab
 per agent where `terminal.herdr.new_tab` allows, labelled as `shoal start` labels it, or a
 detached zmx session per agent on a terminal outside Herdr. Where nothing can
-start in the background, such as without a terminal, it restores a single agent
+start in the background, it restores a single agent
 here, unless the run also restores a chat or fails for a space, and otherwise lists
-the agents as `shoal resume --focus` commands to run in separate terminals. `--focus` restores one agent in the current terminal at once,
+the agents as `shoal resume --focus` commands to run in separate terminals.
+Without a terminal, such as from another agent's tool call, `--now` queues every
+restore instead, a workspace's last session included, and the daemon starts each
+at once regardless of the limits; resume reports the entries as a resume without
+`--now` does, and `--json` emits them. `--focus` restores one agent in the current terminal at once,
 regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
@@ -1119,9 +1123,16 @@ other terminal protocols keep working, and restores the screen when you attach
 again. The tracked wrapper runs inside the session, so stop, resume, scope and
 cleanup treat the agent as before. When the session returns control, Shoal resets
 emulator input modes on the caller's terminal. zmx reports no exit status: these launches
-exit 0 once the agent exits or you detach. A launch without a terminal, inside a
+exit 0 once the agent exits or you detach. A launch inside a
 zmx session (`ZMX_SESSION` is set), or in a pane or block of another enabled host, such
-as a Herdr pane with `terminal.herdr.enabled`, runs in place. A launch that would start a zmx session refuses the agent when zmx is missing,
+as a Herdr pane with `terminal.herdr.enabled`, runs in place, as does an agent
+shortcut such as `shoal claude` without a terminal. Scoped callers, and callers
+whose standard input or output is not a terminal, such as another agent's tool
+call, start the agents of `start`, `contribute` and `resume --now` detached
+through the daemon instead (see [Agent queue](#agent-queue) and `shoal resume`),
+so the call returns without running the agent and interrupting it leaves the
+agent running. For callers outside Shoal, `start --here` and `resume --focus`
+run the agent in place, returning its exit code. A launch that would start a zmx session refuses the agent when zmx is missing,
 as a missing agent executable does.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),
 [Rex](#rex), [tmux](#tmux) or [Zellij](#zellij) instead. With that host turned off they run in place, a queued

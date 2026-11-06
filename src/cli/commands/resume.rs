@@ -27,7 +27,8 @@ use targets::Selected;
 /// `shoal resume`: the selected spaces, or every one for `--all` or when no
 /// space has anything to resume. Stopped chats restore at once; workspaces'
 /// restores queue unless `now`, or `focus`, which restores one agent or
-/// chat in this terminal.
+/// chat in this terminal. Without a terminal every restore queues, which
+/// `now` starts at once, since this process can start none of them.
 pub async fn select(
     ctx: &Context,
     targets: SpaceTargets,
@@ -53,11 +54,14 @@ pub async fn select(
         let workspaces = selected.workspaces.unwrap_or_default();
         return queue_below(ctx, workspaces, execution).await;
     }
+    let queuing = Queuing::of(now);
     match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
-        ([], Some([workspace])) if discard || now || focus => {
+        ([], Some([workspace])) if discard || focus || queuing == Queuing::Here { now: true } => {
             run(ctx, workspace.clone(), execution, discard, focus).await
         }
-        ([], Some([workspace])) => queue_workspace(ctx, workspace.clone(), execution).await,
+        ([], Some([workspace])) => {
+            queue_workspace(ctx, workspace.clone(), execution, queuing).await
+        }
         ([chat], Some([])) if focus && execution.is_none() => chats::restore_here(ctx, chat).await,
         _ => {
             ensure!(
@@ -68,7 +72,29 @@ pub async fn select(
                 !focus,
                 "--focus restores the agent of one workspace or chat"
             );
-            resume_each(ctx, selected, discard, now).await
+            resume_each(ctx, selected, discard, queuing).await
+        }
+    }
+}
+
+/// How a resume starts the restores it does not run in this terminal.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Queuing {
+    /// Queued as the limits allow, except a workspace's last session, or
+    /// for `now` started by this process where each stopped or in the
+    /// background.
+    Here { now: bool },
+    /// Queued for the daemon to start, which a process without a terminal
+    /// needs, at once regardless of the limits for `now`.
+    Daemon { now: bool },
+}
+
+impl Queuing {
+    /// How this process starts restores.
+    fn of(now: bool) -> Self {
+        match terminal::on_terminal() {
+            true => Self::Here { now },
+            false => Self::Daemon { now },
         }
     }
 }
@@ -120,29 +146,37 @@ fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
 
 /// Resume the `selected` spaces together, reporting them at once: restore
 /// the stopped chats, or remove them for `discard`, and queue the restores of
-/// the workspaces' stopped agents, start them for `now`, or forget the
-/// stopped work for `discard`.
-async fn resume_each(ctx: &Context, selected: Selected, discard: bool, now: bool) -> Result<i32> {
+/// the workspaces' stopped agents, start them as `queuing` says, or forget
+/// the stopped work for `discard`.
+async fn resume_each(
+    ctx: &Context,
+    selected: Selected,
+    discard: bool,
+    queuing: Queuing,
+) -> Result<i32> {
     let stopped = match &selected.workspaces {
         None => stopped_work(ctx, discard).await?,
         Some(workspaces) => stopped_in(ctx, workspaces).await?,
     };
     if stopped.is_empty() && selected.chats.is_empty() {
-        return report_nothing(ctx, discard || now);
+        return report_nothing(ctx, discard || queuing == Queuing::Here { now: true });
     }
     if discard {
         return discard_each(ctx, &stopped, &selected.chats).await;
     }
     let (chats, failed) = chats::restore_each(ctx, &selected.chats).await;
-    if now {
-        let resumed = Resumed {
-            chats,
-            failed,
-            ..Default::default()
-        };
-        return run_all(ctx, stopped, resumed).await;
+    match queuing {
+        Queuing::Here { now: true } => {
+            let resumed = Resumed {
+                chats,
+                failed,
+                ..Default::default()
+            };
+            run_all(ctx, stopped, resumed).await
+        }
+        Queuing::Here { now: false } => queue::queue_all(ctx, stopped, chats, failed, false).await,
+        Queuing::Daemon { now } => queue::queue_all(ctx, stopped, chats, failed, now).await,
     }
-    queue::queue_all(ctx, stopped, chats, failed).await
 }
 
 /// Queue the restores of the stopped agents and last sessions of the
@@ -158,7 +192,7 @@ async fn queue_below(
     for selector in selectors {
         stopped.push(stopped_agents(ctx, selector, execution.as_deref()).await?);
     }
-    queue::queue_all(ctx, stopped, Vec::new(), Vec::new()).await
+    queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), false).await
 }
 
 /// Executions stopped so their workspaces could move, by workspace.
@@ -179,7 +213,7 @@ pub(super) async fn queue_stopped(ctx: &Context, stopped: &Stopped) -> Result<Qu
             queued.push((workspace, saved));
         }
     }
-    Ok(queue::queue_each(ctx, queued).await)
+    Ok(queue::queue_each(ctx, queued, false).await)
 }
 
 /// The stopped agents and last sessions of the workspace `selector` names,
@@ -208,13 +242,15 @@ async fn stopped_agents(
 }
 
 /// Queue the restores of `workspace`'s stopped agents, only `execution`'s
-/// when given. Without stopped agents, a last session continues at once, as
-/// resuming the workspace by itself does not wait for a slot it never held,
-/// where it stopped or in the background.
+/// when given, to start as `queuing` says. Without stopped agents, a last
+/// session this process can start continues at once, as resuming the
+/// workspace by itself does not wait for a slot it never held, where it
+/// stopped or in the background.
 async fn queue_workspace(
     ctx: &Context,
     workspace: String,
     execution: Option<String>,
+    queuing: Queuing,
 ) -> Result<i32> {
     let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
         .await?
@@ -227,10 +263,15 @@ async fn queue_workspace(
         !saved.is_empty(),
         "no stopped agents or commands for this workspace"
     );
-    if saved.agents.is_empty() && !saved.sessions.is_empty() {
-        return continue_last_session(ctx, &workspace, saved, false).await;
-    }
-    queue::queue_all(ctx, vec![(workspace, saved)], Vec::new(), Vec::new()).await
+    let now = match queuing {
+        Queuing::Here { .. } if saved.agents.is_empty() && !saved.sessions.is_empty() => {
+            return continue_last_session(ctx, &workspace, saved, false).await;
+        }
+        Queuing::Here { .. } => false,
+        Queuing::Daemon { now } => now,
+    };
+    let stopped = vec![(workspace, saved)];
+    queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), now).await
 }
 
 /// Restore the stopped agent `execution` of the one workspace `targets`

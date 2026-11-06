@@ -1067,7 +1067,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert!(record.exists());
     let resumed = fixture
         .command()
-        .args(["resume", "moving", "--now"])
+        .args(["resume", "moving", "--focus"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -1757,7 +1757,7 @@ fn resume_continues_the_agent_a_removal_stopped_once_restored() {
         .filter(|name| name.ends_with(".recovery.json") || name.ends_with(".command.json"))
         .collect::<Vec<_>>();
     assert_eq!(saved, [format!("{execution}.recovery.json")]);
-    let resumed = fixture.run(&["resume", "removed", "--now"]);
+    let resumed = fixture.run(&["resume", "removed", "--focus"]);
     assert!(resumed.status.success(), "{resumed:?}");
     assert!(path.join("resumed").exists());
     assert!(!state.join(format!("{execution}.recovery.json")).exists());
@@ -5769,10 +5769,12 @@ fn resume_all_skips_the_agents_of_done_workspaces() {
         .unwrap();
     }
     fixture.ok(&["done", "finished"]);
+    // Without a terminal the daemon starts the restore at once.
     let all = fixture.ok(&["resume", "--all", "--now"]);
-    let agents = all["agents"].as_array().unwrap();
-    assert_eq!(agents.len(), 1, "{all}");
-    assert_eq!(agents[0]["workspace"], "active", "{all}");
+    let queued = all["queued"].as_array().unwrap();
+    assert_eq!(queued.len(), 1, "{all}");
+    assert_eq!(queued[0]["name"], "active", "{all}");
+    assert_eq!(queued[0]["state"], "starting", "{all}");
     // Discarding still forgets the done workspace's stopped agent.
     let discarded = fixture.ok(&["resume", "--all", "--discard"]);
     assert_eq!(
@@ -5804,9 +5806,20 @@ fn resuming_several_goes_on_after_one_fails() {
             fs::write(path.join(".shoal.toml"), "not toml [").unwrap();
         }
     }
-    let output = fixture.run(&["--json", "resume", "broken", "good", "--now"]);
-    assert!(!output.status.success(), "{output:?}");
-    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    // On a terminal this process starts each restore, which reads its
+    // workspace's settings.
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .args(["--json", "resume", "broken", "good", "--now"]),
+        "",
+        true,
+    );
+    assert!(!output.status.success(), "{output:?}\n{transcript}");
+    let report = (transcript.lines())
+        .filter(|line| line.trim_start().starts_with('{'))
+        .find_map(|line| serde_json::from_str::<Value>(line.trim()).ok())
+        .unwrap_or_else(|| panic!("{transcript}"));
     assert_eq!(report["agents"].as_array().unwrap().len(), 1, "{report}");
     assert_eq!(report["agents"][0]["workspace"], "good", "{report}");
     assert_eq!(report["failed"][0]["workspace"], "broken", "{report}");
@@ -6224,22 +6237,17 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         })
         .count();
     assert_eq!(commands, 1);
-    // Several agents without a terminal are listed for separate resumes.
-    let all = fixture.ok(&["resume", "--all", "--now"]);
-    let agents = all["agents"].as_array().unwrap();
-    assert_eq!(agents.len(), 2, "{all}");
-    assert!(agents.iter().all(|agent| agent["background"] == false));
-    assert!(all["commands"].as_array().unwrap().is_empty());
+    // Several agents restore here one at a time.
     assert!(
         !fixture
-            .run(&["resume", "stopped", "--now"])
+            .run(&["resume", "stopped", "--focus"])
             .status
             .success()
     );
     for id in &ids {
         assert!(
             fixture
-                .run(&["resume", "stopped", "--execution", id, "--now"])
+                .run(&["resume", "stopped", "--execution", id, "--focus"])
                 .status
                 .success()
         );
@@ -6366,7 +6374,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
     let output = fixture
         .command()
         .current_dir(path)
-        .arg("resume")
+        .args(["resume", "--focus"])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -6408,7 +6416,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
         let output = fixture
             .command()
             .current_dir(path)
-            .arg("resume")
+            .args(["resume", "--focus"])
             .stdin(Stdio::null())
             .output()
             .unwrap();
@@ -6548,7 +6556,7 @@ fn export_carries_session_files_that_import_puts_back() {
     let output = fixture
         .command()
         .current_dir(path)
-        .arg("resume")
+        .args(["resume", "--focus"])
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -6728,7 +6736,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     )
     .unwrap();
 
-    let output = fixture.run(&["resume", "quarantined", "--execution", execution, "--now"]);
+    let output = fixture.run(&["resume", "quarantined", "--execution", execution, "--focus"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         fs::read_to_string(path.join("restored")).unwrap(),
@@ -28655,6 +28663,42 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
             .is_some_and(|executions| !executions.is_empty())
     });
     fixture.ok(&["stop", "detached"]);
+}
+
+/// Without a terminal, as from another agent's tool call, `shoal resume
+/// --now` has the daemon start each restore at once, whatever the limit,
+/// a last session's too, instead of naming commands to run them here.
+#[test]
+fn resume_now_without_a_terminal_has_the_daemon_start_its_restores() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'trap \"exit 0\" TERM; touch restored; while :; do sleep 1; done']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let mut paths = Vec::new();
+    for (name, record) in [("first", "recovery"), ("second", "last-session")] {
+        let workspace = fixture.add(name);
+        let state = fixture
+            .root
+            .path()
+            .join("state/workspaces")
+            .join(workspace["id"].as_str().unwrap());
+        fs::create_dir_all(&state).unwrap();
+        fs::write(
+            state.join(format!("{name}-agent.{record}.json")),
+            r#"{"agent":"waiter"}"#,
+        )
+        .unwrap();
+        paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
+    }
+    for (name, path) in ["first", "second"].iter().zip(&paths) {
+        let resumed = fixture.ok(&["resume", name, "--now"]);
+        let queued = resumed["queued"].as_array().unwrap();
+        assert_eq!(queued.len(), 1, "{resumed}");
+        assert_eq!(queued[0]["state"], "starting", "{resumed}");
+        wait_until("the restore", || path.join("restored").exists());
+    }
+    fixture.ok(&["stop", "first"]);
+    fixture.ok(&["stop", "second"]);
 }
 
 /// `shoal resume` queues restores, which the daemon starts in detached

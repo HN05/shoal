@@ -1263,9 +1263,16 @@ the shell the user left. Sessions are named
 after their workspace and labelled with its ID and canonical state-directory identity,
 so daemons sharing zmx can distinguish their sessions. A detached session that Shoal
 starts labels itself once its workspace exists. A start queued from a zmx
-session joins no group, so it goes to `terminal.default_host`. Launches without a terminal, inside a zmx session, or in
-a Herdr pane with the integration enabled run in place, since Herdr reads agent
-state from the pane's process. zmx reports no exit status, so a session launch
+session joins no group, so it goes to `terminal.default_host`. Launches inside a zmx session, or in
+a Herdr pane with the integration enabled, run in place, since Herdr reads agent
+state from the pane's process. A caller without a terminal, such as an
+orchestrating agent's tool call, starts the agents of `start` and `resume --now`
+detached through the daemon, as a scoped caller does: run in place, the agent
+would hold the call until it exits and die with an interrupt of the caller.
+`start --here` and `resume --focus` keep the in-place launch for callers outside
+Shoal, for a script that waits on the agent's exit code, while a scoped
+caller's `--here` with an agent is refused. Agent shortcuts such as `shoal
+claude` are the user's commands and still run in place without a terminal. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.
 
 Demos let the user try a change where the agent's windows are out of sight,

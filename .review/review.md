@@ -387,7 +387,10 @@ instead of the PR delivery guidance below.
   or forwarded arguments stay in the background, tabs waiting for input receive
   focus, and explicit focus settings override either default. `--focus` also
   starts the agent past `max_agents`, as `--now` does; the `focus` setting does not.
-  JSON, help, noninteractive and `--here` calls run in place. Shell and untracked
+  JSON, help, noninteractive and `--here` calls run in place, except that a
+  scoped caller's agent, and an agent of `start` or `resume --now` from a caller
+  without a terminal, start detached through the daemon unless `--here` or
+  `--focus` keeps an unscoped caller's in place. Shell and untracked
   desktop handoffs retain the tab.
 - Each command, flag and value has one name; flag a clap alias, including an
   old name kept after a rename.
@@ -534,8 +537,9 @@ configured command for another agent, plus proven child
   best-effort cleanup to the terminal rather than redirected output; stop requests
   give the entire command process group a shared grace period, even after its leader exits.
   Terminal agent launches put the tracked wrapper inside a zmx session, never a
-  terminal emulator between agent and terminal; launches without a terminal, inside
-  zmx, or in an enabled Herdr pane, Rex block, tmux pane or Zellij pane run in place. Shoal closes only zmx sessions
+  terminal emulator between agent and terminal; agent shortcuts without a terminal
+  and launches inside zmx, or in an enabled Herdr pane, Rex block, tmux pane or
+  Zellij pane run in place. Shoal closes only zmx sessions
   it created, labelled `shoal.created=1` at creation and never by relabelling;
   sessions the user opened stay theirs even after an agent ran in them, and
   sessions without the label have unknown origin and are never closed. Removal
