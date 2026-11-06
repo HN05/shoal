@@ -1131,7 +1131,8 @@ without a terminal or with `--json`, such as another agent's tool call, start th
 through the daemon instead (see [Agent queue](#agent-queue) and `shoal resume`),
 so the call returns without running the agent and interrupting it leaves the
 agent running. An agent Happy runs leaves the call at once anyway, so a
-caller outside Shoal launches it as before. For callers outside Shoal, `start --here` and `resume --focus`
+caller outside Shoal launches it as before; the new workspace's own settings
+decide, once it is set up. For callers outside Shoal, `start --here` and `resume --focus`
 run the agent in place, returning its exit code. A launch that would start a zmx session refuses the agent when zmx is missing,
 as a missing agent executable does.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),

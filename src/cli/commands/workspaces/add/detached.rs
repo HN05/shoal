@@ -26,29 +26,23 @@ use crate::{
 /// Whether the plan's agent starts detached: always for a scoped caller,
 /// which `--here` cannot keep in place, and for a noninteractive one, which
 /// has no terminal to start it beside, unless `--here` asks to run it in
-/// place or the agent leaves the caller at once anyway, as one Happy runs
-/// does.
-pub(super) async fn starts_detached(
-    ctx: &Context,
-    settings: &AddSettings<'_>,
-    plan: &AddPlan,
-    options: &AddOptions,
-) -> Result<bool> {
-    let agent = plan.agent.agent.as_ref();
+/// place.
+pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOptions) -> Result<bool> {
+    let agent = plan.agent_name().is_some();
     if crate::env::is_scoped() {
         ensure!(
-            !(agent.is_some() && options.here),
+            !(agent && options.here),
             "scoped processes start agents detached; leave out --here"
         );
         return Ok(true);
     }
-    let Some(agent) = agent.filter(|_| !options.here && !ctx.interactive()) else {
-        return Ok(false);
-    };
-    Ok(!agents::runs_its_own_way(agent, settings.get().await?))
+    Ok(agent && !options.here && !ctx.interactive())
 }
 
-/// Open the planned workspace and have its preparation queue the agent. A
+/// Open the planned workspace and have its preparation queue the agent, or
+/// for the user's, queue it once the workspace is set up unless its
+/// settings have it run its own way, as an agent a desktop app or Happy runs
+/// does, which then starts here since it leaves this process at once. A
 /// launch of the user's that waits for other work queues whole instead, as
 /// from a terminal, and starts in the background once that work is
 /// complete, or now when it already is.
@@ -65,7 +59,10 @@ pub(super) async fn add_detached(
     }
     let after = launch_dependencies(ctx, &target, issue.as_ref(), options.now, after).await?;
     if after.is_empty() {
-        let start = AgentStart::Queued { now: options.now };
+        let start = match crate::env::is_scoped() {
+            true => AgentStart::Queued { now: options.now },
+            false => AgentStart::Placed { now: options.now },
+        };
         return add_planned(ctx, plan, target, issue, start).await;
     }
     ensure!(
@@ -85,7 +82,7 @@ pub(super) async fn add_detached(
 /// agent that `options` ask to start differently: one a scoped caller
 /// starts regardless of the limits or any that `--focus` focuses, which
 /// nothing shows. The daemon starts the agent from the background, which
-/// some host must take.
+/// some host must take, unless the user's agent runs its own way.
 pub(super) async fn ensure_detachable(
     settings: &AddSettings<'_>,
     plan: &AddPlan,
@@ -104,7 +101,15 @@ pub(super) async fn ensure_detachable(
         !options.focus,
         "without a terminal the agent starts detached, with nothing to focus; leave out --focus, or pass --here to run it in place"
     );
-    terminal::ensure_background(settings.get().await?)
+    let settings = settings.get().await?;
+    // The check reads the checkout's settings; the set-up workspace's decide.
+    if let Some(agent) = &plan.agent.agent
+        && !crate::env::is_scoped()
+        && agents::runs_its_own_way(agent, settings)
+    {
+        return Ok(());
+    }
+    terminal::ensure_background(settings)
 }
 
 /// The names of the work `after` lists.

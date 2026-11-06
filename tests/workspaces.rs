@@ -28652,6 +28652,65 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     fixture.ok(&["stop", "detached"]);
 }
 
+/// Without a terminal, where the agent starts follows the set-up
+/// workspace's own settings, which can differ from the checkout's: an agent
+/// its branch hands to an app launches here, since the app takes it at
+/// once, and one its branch runs as the CLI goes to the daemon.
+#[test]
+fn a_start_without_a_terminal_places_its_agent_by_the_workspaces_settings() {
+    let fixture = Fixture::with_config(Some("[machine.overload.disk]\nenabled = false\n"));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    install_test_script(
+        fixture.root.path().join("bin/codex"),
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/codex-$(basename \"$PWD\")\"\n[ \"$1\" = app ] && exit 0\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+    );
+    let repo = fixture.repo.to_str().unwrap();
+    let mode = |mode: &str| format!("[agents.codex]\ndefault_mode = '{mode}'\n");
+    let branch = |name: &str, config: &str| {
+        git(&fixture.repo, &["switch", "-q", "-c", name]);
+        commit_resource_config(&fixture.repo, config);
+        git(&fixture.repo, &["switch", "-q", "main"]);
+    };
+    let start = |name: &str| {
+        let output = fixture
+            .command()
+            .args([
+                "--json",
+                "start",
+                repo,
+                "--existing",
+                name,
+                "--agent",
+                "codex",
+            ])
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let recorded = |name: &str| fixture.root.path().join(format!("codex-{name}"));
+
+    // The checkout runs Codex's CLI; the branch hands it to the app.
+    branch("apped", &mode("app"));
+    let stdout = start("apped");
+    assert_eq!(stdout.lines().count(), 1, "{stdout}");
+    let args = fs::read_to_string(recorded("apped")).unwrap();
+    assert_eq!(args.lines().next(), Some("app"), "{args}");
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
+
+    // The checkout hands Codex to the app; the branch runs its CLI.
+    commit_resource_config(&fixture.repo, &mode("app"));
+    branch("clied", &mode("cli"));
+    let stdout = start("clied");
+    let entry: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
+    assert_eq!(entry["agent"], "codex", "{stdout}");
+    wait_until("the queued agent start", || recorded("clied").exists());
+    let args = fs::read_to_string(recorded("clied")).unwrap();
+    assert_ne!(args.lines().next(), Some("app"), "{args}");
+    fixture.ok(&["stop", "clied"]);
+}
+
 /// Without a terminal, as from another agent's tool call, `shoal resume
 /// --now` has the daemon start each restore at once, whatever the limit,
 /// a last session's too, instead of naming commands to run them here.

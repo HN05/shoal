@@ -66,6 +66,10 @@ pub(super) enum AgentStart {
     /// Queued by the workspace's preparation, which the daemon starts
     /// detached, at once regardless of the limits when `now`.
     Queued { now: bool },
+    /// Where the set-up workspace's settings put it: in this process when the
+    /// agent runs its own way there, which leaves this process at once,
+    /// otherwise queued as `Queued` once setup is done.
+    Placed { now: bool },
 }
 
 /// Open the planned workspace and launch its agent where `start` says.
@@ -94,12 +98,17 @@ pub(super) async fn add_planned(
     let pr = creation.pr.clone();
     // A queued agent starts detached, so the caller's terminal, such as a
     // chat's session, stays its own.
-    let launch = match start {
-        AgentStart::Queued { now } => {
-            let told = (&prompt, args.as_slice(), &fork);
-            queued_launch(&agent, issue.as_ref(), &mode, told, now)?
-        }
-        AgentStart::Here => None,
+    let told = (&prompt, args.as_slice(), &fork);
+    let (launch, placed) = match start {
+        AgentStart::Queued { now } => (
+            queued_launch(&agent, issue.as_ref(), &mode, told, now)?,
+            None,
+        ),
+        AgentStart::Placed { now } => (
+            None,
+            queued_launch(&agent, issue.as_ref(), &mode, told, now)?,
+        ),
+        AgentStart::Here => (None, None),
     };
     let start = AddStart {
         creation,
@@ -150,6 +159,11 @@ pub(super) async fn add_planned(
         let entry = entry.context("preparation queued no agent")?;
         return report_queued_in(ctx, &workspace, &entry);
     }
+    if let Some(launch) = placed
+        && let Some(entry) = queue_unless_own_way(ctx, &workspace, launch).await?
+    {
+        return report_queued_in(ctx, &workspace, &entry);
+    }
     let opening = agents::Opening::New {
         mode: mode.unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
         subject,
@@ -183,6 +197,32 @@ fn queued_launch(
         env: Some(terminal::start_environment()),
         now,
     })))
+}
+
+/// Queue `launch` in the set-up `workspace`, as its preparation would,
+/// unless the workspace's settings have the agent run its own way, which
+/// leaves this process at once, so it starts here; `None` then.
+async fn queue_unless_own_way(
+    ctx: &Context,
+    workspace: &Workspace,
+    launch: Box<QueuedLaunch>,
+) -> Result<Option<QueueEntry>> {
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(workspace.id.clone()),
+    )
+    .await?;
+    let agent: crate::agent::Agent = launch.agent.parse()?;
+    if agents::runs_its_own_way(&agent, &settings) {
+        return Ok(None);
+    }
+    super::plan::check_queued_launch(&launch, &settings)?;
+    let request = super::plan::queued_agent_request(workspace, *launch)?;
+    let admission = crate::client::queue::add(&ctx.paths, request).await?;
+    let entry = admission
+        .entry
+        .context("the daemon queued the agent without an entry")?;
+    Ok(Some(entry))
 }
 
 /// Report the agent queued in the added `workspace`.
