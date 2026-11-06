@@ -144,10 +144,13 @@ pub(super) async fn resume(
 ) -> Result<Result<(), String>> {
     tests::RESUMED.lock().unwrap().push(chat.id.clone());
     anyhow::ensure!(
-        !tests::UNRESUMABLE.lock().unwrap().contains(&chat.name),
+        !tests::UNRESUMABLE
+            .lock()
+            .unwrap()
+            .contains(&chat.name.to_string()),
         "no terminal host"
     );
-    while tests::HELD.lock().unwrap().contains(&chat.name) {
+    while tests::HELD.lock().unwrap().contains(&chat.name.to_string()) {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
     Ok(Ok(()))

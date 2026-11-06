@@ -58,7 +58,7 @@ impl Manager {
         run: Option<String>,
     ) -> Result<Option<Origin>> {
         let name = match self.recorded_chat(id).await? {
-            Some(chat) => chat.name,
+            Some(chat) => chat.name.into(),
             None => id.to_owned(),
         };
         match self.chat_agents.join(id, &name, &of_run, run) {

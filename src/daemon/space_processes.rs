@@ -66,7 +66,7 @@ impl Manager {
                     .stop_untracked(self.chat_space(&chat).await?, selection, requester)
                     .await?;
                 return Ok(Stopped {
-                    space: chat.name,
+                    space: chat.name.into(),
                     processes,
                 });
             }
@@ -75,7 +75,7 @@ impl Manager {
             .stop_workspace_untracked(&workspace, selection, requester)
             .await?;
         Ok(Stopped {
-            space: workspace.name,
+            space: workspace.name.into(),
             processes,
         })
     }

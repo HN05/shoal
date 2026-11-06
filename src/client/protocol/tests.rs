@@ -529,7 +529,7 @@ async fn found_spaces_too_large_for_a_frame_arrive_in_pages() {
         .map(|n| {
             PresentSpace::Workspace(Workspace::new_record(
                 "repo".into(),
-                format!("workspace-{n}"),
+                format!("workspace-{n}").as_str().into(),
                 format!("/work/workspace-{n}").into(),
                 Some(format!("branch-{n}")),
                 WorkspaceState::Ready,

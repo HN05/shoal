@@ -10,7 +10,7 @@ use crate::{
 fn reference(workspace: &crate::model::Workspace) -> WorkspaceRef {
     WorkspaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.clone(),
+        name: workspace.name.to_string(),
         branch: workspace.branch.clone(),
     }
 }
@@ -150,8 +150,8 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
         .await;
     for (target, allowed) in [(&upper.name, true), (&lower.name, false)] {
         let mut method = crate::protocol::WorkspaceMethod::SetBaseWorkspace {
-            workspace: target.clone(),
-            base: Some(lower.name.clone()),
+            workspace: target.to_string(),
+            base: Some(lower.name.to_string()),
         };
         let authorized =
             crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;

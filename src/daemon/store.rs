@@ -7,7 +7,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
-    client::sim::CleanRequestStatus,
+    client::{sim::CleanRequestStatus, space_names::SpaceName},
     model::{Execution, LinkedItem, PortReservation, Relation, Repository, SpaceLinks, Workspace},
     state::{ExecutionState, WorkspaceState},
 };
@@ -20,6 +20,7 @@ mod event_tests;
 mod item_numbers;
 mod migrations;
 mod place_servers;
+mod space_names;
 mod worker;
 #[cfg(test)]
 mod workspace_availability_tests;
@@ -153,7 +154,11 @@ enum NameHolder {
 /// What holds `name`, other than the workspace `except_id`. A chat holds
 /// its name while it runs or waits saved, as far as the caller ended
 /// finished ones first.
-fn name_holder(db: &Connection, name: &str, except_id: Option<&str>) -> Result<Option<NameHolder>> {
+fn name_holder(
+    db: &Connection,
+    name: &SpaceName,
+    except_id: Option<&str>,
+) -> Result<Option<NameHolder>> {
     if exists(
         db,
         "SELECT 1 FROM workspaces WHERE name=?1 AND (?2 IS NULL OR id!=?2)",
@@ -172,7 +177,11 @@ fn name_holder(db: &Connection, name: &str, except_id: Option<&str>) -> Result<O
 
 /// Refuse a name another workspace, an unfinished rename or a chat, running
 /// or saved, holds.
-pub fn ensure_name_available(db: &Connection, name: &str, except_id: Option<&str>) -> Result<()> {
+pub fn ensure_name_available(
+    db: &Connection,
+    name: &SpaceName,
+    except_id: Option<&str>,
+) -> Result<()> {
     match name_holder(db, name, except_id)? {
         None => Ok(()),
         Some(NameHolder::Workspace) => Err(Refusal::new(
@@ -195,15 +204,15 @@ pub fn ensure_name_available(db: &Connection, name: &str, except_id: Option<&str
 
 /// Whether a workspace, an unfinished rename or a chat, running or saved,
 /// holds `name`.
-pub fn name_taken(db: &Connection, name: &str) -> Result<bool> {
+pub fn name_taken(db: &Connection, name: &SpaceName) -> Result<bool> {
     Ok(name_holder(db, name, None)?.is_some())
 }
 
 /// The first of `base`, `base-2`, `base-3`, ... that nothing holds, each cut
 /// to the longest name allowed.
-pub fn free_name(db: &Connection, base: &str) -> Result<String> {
+pub fn free_name(db: &Connection, base: &SpaceName) -> Result<SpaceName> {
     for suffix in 1_u64.. {
-        let candidate = crate::daemon::chats::suffixed(base, suffix);
+        let candidate = base.suffixed(suffix);
         if !name_taken(db, &candidate)? {
             return Ok(candidate);
         }
@@ -216,7 +225,7 @@ pub fn free_name(db: &Connection, base: &str) -> Result<String> {
 pub fn ensure_name_and_branch_available(
     db: &Connection,
     repository_id: &str,
-    name: &str,
+    name: &SpaceName,
     branch: Option<&str>,
     except_id: Option<&str>,
 ) -> Result<()> {

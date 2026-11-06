@@ -50,7 +50,7 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
         .record_chat_session(&chat.id, "s1".into())
         .await
         .unwrap();
-    UNRESUMABLE.lock().unwrap().push(chat.name.clone());
+    UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
 
     let coordinator = Some("coordinator".to_owned());
     let error = (manager.restart_chat(&chat.id, run("a"), coordinator.clone()))
@@ -81,7 +81,7 @@ async fn an_exit_after_a_restore_leaves_the_chat_to_the_user() {
         .record_chat_session(&chat.id, "s1".into())
         .await
         .unwrap();
-    UNRESUMABLE.lock().unwrap().push(chat.name.clone());
+    UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
     let coordinator = Some("coordinator".to_owned());
     let restart = manager.restart_chat(&chat.id, run("a"), coordinator);
     assert!(restart.await.is_err());
@@ -109,7 +109,7 @@ async fn a_failed_restore_stops_the_chat_for_its_restorer() {
         .record_chat_session(&chat.id, "s1".into())
         .await
         .unwrap();
-    UNRESUMABLE.lock().unwrap().push(chat.name.clone());
+    UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
     let coordinator = Some("coordinator");
     let restart = manager.restart_chat(&chat.id, run("a"), coordinator.map(str::to_owned));
     assert!(restart.await.is_err());
@@ -144,7 +144,7 @@ async fn a_restore_failing_for_a_restart_stops_the_chat_for_its_requester() {
         .record_chat_session(&chat.id, "s1".into())
         .await
         .unwrap();
-    HELD.lock().unwrap().push(chat.name.clone());
+    HELD.lock().unwrap().push(chat.name.to_string());
     let restart = tokio::spawn({
         let (manager, id) = (manager.clone(), chat.id.clone());
         async move {
@@ -221,7 +221,7 @@ async fn a_daemon_update_waits_for_a_chat_restart() {
         .record_chat_session(&chat.id, "s1".into())
         .await
         .unwrap();
-    HELD.lock().unwrap().push(chat.name.clone());
+    HELD.lock().unwrap().push(chat.name.to_string());
     let restart = tokio::spawn({
         let (manager, id) = (manager.clone(), chat.id.clone());
         async move { manager.restart_chat(&id, run("a"), None).await }

@@ -22,7 +22,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
     let args = [OsString::from("--search")];
     let beside = Beside {
         topic: &topic,
-        name: "named",
+        name: &"named".into(),
         agent: &agent,
         model: &model,
         args: &args,
@@ -93,7 +93,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
     let agent: Agent = "claude".parse().unwrap();
     let beside = Beside {
         topic: &topic,
-        name: "worker-chat",
+        name: &"worker-chat".into(),
         agent: &agent,
         model: &ModelChoice::default(),
         args: &[],
@@ -225,7 +225,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     let topic = Topic::imported(&repo, "plan", &links);
     let beside = Beside {
         topic: &topic,
-        name: "shoal-plan-7",
+        name: &"shoal-plan-7".into(),
         agent: &agent,
         model: &ModelChoice::default(),
         args: &[],

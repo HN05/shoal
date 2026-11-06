@@ -444,6 +444,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 138 {
         db.execute_batch(CHAT_STOPPERS)?;
     }
+    if version >= 139 {
+        super::space_names::rename_invalid_names(&db)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -673,6 +676,51 @@ fn migration_numbers_recorded_spaces_workspaces_first() -> Result<()> {
             ("worker".into(), 1)
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn migration_renames_names_a_number_could_be_read_as() -> Result<()> {
+    let mut db = historical_database(138)?;
+    db.execute_batch(
+        r#"INSERT INTO workspaces(id,repository_id,name,path,branch,state)
+             VALUES ('digits','repo','123','/123','123','ready'),
+                ('taken','repo','workspace-7','/taken','taken','ready'),
+                ('seven','repo','7','/7','7','ready');
+         INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at)
+             VALUES ('chat','repo','42','claude',1,'b',1);
+         INSERT INTO removed_workspaces(workspace_id,repository_id,name,expires_at,record)
+             VALUES ('removed','repo','9',9,'{"name":"9"}');
+         INSERT INTO agent_queue(seq,id,kind,repository_id,name,agent,plan,env,state,created_at)
+             VALUES (1,'launch','launch','repo','5','claude','{}','{}','queued',1);"#,
+    )?;
+    let events = |db: &Connection| -> Result<i64> {
+        Ok(db.query_row("SELECT COUNT(*) FROM workspace_events", [], |r| r.get(0))?)
+    };
+    let before = events(&db)?;
+    migrate(&mut db)?;
+    let name = |sql: &str| -> Result<String> { Ok(db.query_row(sql, [], |r| r.get(0))?) };
+    assert_eq!(
+        name("SELECT name FROM workspaces WHERE id='digits'")?,
+        "workspace-123"
+    );
+    assert_eq!(
+        name("SELECT name FROM workspaces WHERE id='seven'")?,
+        "workspace-7-2"
+    );
+    assert_eq!(
+        name("SELECT name FROM workspaces WHERE id='workspace'")?,
+        "worker"
+    );
+    assert_eq!(name("SELECT name FROM chats")?, "chat-42");
+    assert_eq!(
+        name("SELECT name || ' ' || json_extract(record,'$.name') FROM removed_workspaces")?,
+        "workspace-9 workspace-9"
+    );
+    assert_eq!(name("SELECT name FROM agent_queue")?, "workspace-5");
+    assert_eq!(events(&db)?, before);
+    db.execute("UPDATE chats SET name='renamed'", [])?;
+    assert_eq!(events(&db)?, before + 1);
     Ok(())
 }
 

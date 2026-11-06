@@ -57,8 +57,8 @@ async fn copy_one(
 /// there gave it another name.
 fn copied_message(name: &str, host: &str, imported: &Imported) -> String {
     let copy = match imported {
-        Imported::Workspace(reopened) => &reopened.workspace.name,
-        Imported::Chat(chat) => &chat.chat,
+        Imported::Workspace(reopened) => reopened.workspace.name.as_str(),
+        Imported::Chat(chat) => chat.chat.as_str(),
     };
     match copy == name {
         true => format!("Copied {name} to {}", arrived(host, imported)),

@@ -317,7 +317,7 @@ pub(super) fn rows_with_status(
         .map(|((w, repository), status)| {
             [
                 number_cell(w.number),
-                (w.name.clone(), Some(Style::Heading)),
+                (w.name.to_string(), Some(Style::Heading)),
                 (repository, None),
                 status,
                 usage_cell(w),

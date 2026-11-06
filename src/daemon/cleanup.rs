@@ -623,36 +623,40 @@ async fn remove_on_request(
         }
         if workspace.state != WorkspaceState::Ready {
             let state = workspace.state;
-            report.keep(workspace.name, CleanupReason::NotReady { state }, named);
+            report.keep(
+                workspace.name.into(),
+                CleanupReason::NotReady { state },
+                named,
+            );
             continue;
         }
         let snapshot = match requested_candidacy(manager, &workspace).await {
             Ok(Ok(snapshot)) => snapshot,
             Ok(Err(reason)) => {
-                report.keep(workspace.name, reason, named);
+                report.keep(workspace.name.into(), reason, named);
                 continue;
             }
             Err(error) => {
                 log!("manual cleanup skipped {}: {error:#}", workspace.name);
-                report.retain(workspace.name, &error);
+                report.retain(workspace.name.into(), &error);
                 continue;
             }
         };
         if report.dry_run {
-            report.removed.push(workspace.name);
+            report.removed.push(workspace.name.into());
             continue;
         }
         match manager.remove_on_request(&workspace.id, snapshot).await {
             Ok(()) => {
                 log!("manual cleanup removed {}", workspace.name);
-                report.removed.push(workspace.name);
+                report.removed.push(workspace.name.into());
             }
             Err(error) => {
                 manager
                     .record_retained(&workspace.id, EventCause::Manual, &error)
                     .await?;
                 log!("manual cleanup retained {}: {error:#}", workspace.name);
-                report.retain(workspace.name, &error);
+                report.retain(workspace.name.into(), &error);
             }
         }
     }
@@ -674,27 +678,27 @@ async fn remove_chats_on_request(
         let snapshot = match manager.requested_chat_candidacy(&chat).await {
             Ok(Ok(snapshot)) => snapshot,
             Ok(Err(reason)) => {
-                report.keep(chat.name, reason, named);
+                report.keep(chat.name.into(), reason, named);
                 continue;
             }
             Err(error) => {
                 log!("manual cleanup skipped chat {}: {error:#}", chat.name);
-                report.retain(chat.name, &error);
+                report.retain(chat.name.into(), &error);
                 continue;
             }
         };
         if report.dry_run {
-            report.removed.push(chat.name);
+            report.removed.push(chat.name.into());
             continue;
         }
         match (manager.remove_unused_chat(&chat, snapshot, EventCause::Manual)).await {
             Ok(_) => {
                 log!("manual cleanup removed chat {}", chat.name);
-                report.removed.push(chat.name);
+                report.removed.push(chat.name.into());
             }
             Err(error) => {
                 log!("manual cleanup retained chat {}: {error:#}", chat.name);
-                report.retain(chat.name, &error);
+                report.retain(chat.name.into(), &error);
             }
         }
     }

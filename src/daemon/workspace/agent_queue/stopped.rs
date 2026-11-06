@@ -274,7 +274,7 @@ impl Manager {
         let target = Target {
             id: workspace.id,
             repository: workspace.repository_id,
-            name: workspace.name,
+            name: workspace.name.into(),
         };
         let restore = Restore::new(target, execution, &agent, &env, false)?;
         // Read the entry before dispatch can start it and its agent take it.
@@ -309,7 +309,7 @@ impl Manager {
         let target = Target {
             id: workspace.id.clone(),
             repository: workspace.repository_id.clone(),
-            name: workspace.name.clone(),
+            name: workspace.name.to_string(),
         };
         let restore = Restore::new(target, execution, &record.agent, &env, false)?.starting(id);
         let start = Start {
@@ -342,7 +342,7 @@ impl Manager {
         let target = Target {
             id: workspace.id.clone(),
             repository: workspace.repository_id.clone(),
-            name: workspace.name.clone(),
+            name: workspace.name.to_string(),
         };
         let queued = async {
             let restore = Restore::new(target, execution, agent, &env, true)?;

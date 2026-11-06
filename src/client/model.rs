@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::{
-    client::{processes::Identity, resources::ResourceLease, sim::Simulator},
+    client::{
+        processes::Identity, resources::ResourceLease, sim::Simulator, space_names::SpaceName,
+    },
     config::repo::{ConflictPolicy, PortDefinition},
     state::{AgentState, ExecutionState, QueueKind, QueueState, WorkspaceState},
 };
@@ -74,7 +76,7 @@ pub struct Workspace {
     #[serde(default)]
     pub number: u32,
     pub repository_id: String,
-    pub name: String,
+    pub name: SpaceName,
     /// What its agent calls the work, which its tabs show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
@@ -448,7 +450,7 @@ pub struct BranchTarget {
 pub struct RemovedWorkspace {
     pub workspace_id: String,
     pub repository_id: String,
-    pub name: String,
+    pub name: SpaceName,
     /// The checkpoint taken at removal.
     pub checkpoint: Checkpoint,
     pub base_ref: Option<String>,
@@ -586,7 +588,7 @@ crate::state::states!(
 impl Workspace {
     pub fn new_record(
         repository_id: String,
-        name: String,
+        name: SpaceName,
         path: PathBuf,
         branch: Option<String>,
         state: WorkspaceState,
@@ -1425,7 +1427,7 @@ pub struct Chat {
     /// spaces of every repository.
     pub repository_id: Option<String>,
     /// Unique among workspace names and the names of other chats.
-    pub name: String,
+    pub name: SpaceName,
     pub agent: String,
     /// The mode its agent started in, which its restores keep.
     #[serde(default = "chat_mode")]
@@ -1659,7 +1661,7 @@ impl Spaces {
                 .filter(|chat| chat.workspace.as_ref().is_some_and(|w| w.id == id))
                 .map(|chat| SpaceRef {
                     id: chat.id.clone(),
-                    name: chat.name.clone(),
+                    name: chat.name.to_string(),
                     kind: SpaceKind::Chat,
                     branch: None,
                 })
@@ -1866,7 +1868,7 @@ pub enum Dependency {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueRequest {
     pub repository: crate::client::repository::Selector,
-    pub name: String,
+    pub name: SpaceName,
     pub agent: String,
     /// The mode the agent starts in; the default mode when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]

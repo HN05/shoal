@@ -119,9 +119,9 @@ async fn remove_each(
     spaces: &Spaces,
 ) -> Result<i32> {
     let mut removed_chats = ui::Report::new("remove");
-    let mut taken = Vec::new();
+    let mut taken: Vec<String> = Vec::new();
     for chat in chats {
-        if taken.contains(&chat.name) {
+        if taken.iter().any(|taken| chat.name == *taken) {
             continue;
         }
         match chats::remove(ctx, chat, spaces).await {
@@ -137,7 +137,7 @@ async fn remove_each(
     let mut report = ui::Report::new("remove");
     for check in checks {
         let name = &check.workspace.name;
-        if taken.contains(name) {
+        if taken.iter().any(|taken| *name == *taken) {
             continue;
         }
         match remove_checked(ctx, &check).await {
@@ -196,12 +196,12 @@ fn confirm_removals(
 ) -> Result<()> {
     let chat_losses = chats
         .iter()
-        .map(|chat| (chat.name.clone(), chats::losses(chat, spaces)));
+        .map(|chat| (chat.name.to_string(), chats::losses(chat, spaces)));
     let losses: Vec<(String, Vec<String>)> = chat_losses
         .chain(
             checks
                 .iter()
-                .map(|check| (check.workspace.name.clone(), removal_losses(ctx, check))),
+                .map(|check| (check.workspace.name.to_string(), removal_losses(ctx, check))),
         )
         .collect();
     if losses.iter().all(|(_, lines)| lines.is_empty()) {

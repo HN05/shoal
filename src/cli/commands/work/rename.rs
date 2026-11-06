@@ -8,6 +8,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
+    client::space_names::SpaceName,
     model::PresentSpace,
 };
 
@@ -17,10 +18,10 @@ pub(super) async fn rename(ctx: &Context, space: Option<String>, title: String) 
     // Refuse what neither a title nor a chat's name may be before a picker
     // asks for the space.
     if let Err(error) = crate::validate::title(title.trim()) {
-        crate::validate::name("chat", &title).map_err(|_| error)?;
+        SpaceName::parse(&title).map_err(|_| error)?;
     }
     match chosen_chat(ctx, space).await? {
-        Ok(chat) => chat::rename(ctx, chat, title).await,
+        Ok(chat) => chat::rename(ctx, chat, SpaceName::parse(&title)?).await,
         Err(workspace) => workspaces::title(ctx, Some(workspace), title).await,
     }
 }

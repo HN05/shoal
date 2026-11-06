@@ -90,7 +90,7 @@ impl Manager {
             repository_id: plan.repo.id.clone(),
             default_branch: default.clone(),
             workspace_id: plan.workspace.id.clone(),
-            workspace: plan.workspace.name.clone(),
+            workspace: plan.workspace.name.to_string(),
             branch: plan.branch.clone(),
             source: plan.source.clone(),
             previous: previous.clone(),

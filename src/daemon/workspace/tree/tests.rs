@@ -16,7 +16,7 @@ use crate::{
 fn space(workspace: &Workspace) -> SpaceRef {
     SpaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.clone(),
+        name: workspace.name.to_string(),
         kind: SpaceKind::Workspace,
         branch: workspace.branch.clone(),
     }
@@ -25,7 +25,7 @@ fn space(workspace: &Workspace) -> SpaceRef {
 fn reference(workspace: &Workspace) -> WorkspaceRef {
     WorkspaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.clone(),
+        name: workspace.name.to_string(),
         branch: workspace.branch.clone(),
     }
 }
@@ -211,7 +211,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         .await
         .unwrap();
     let mut done = AssignmentMethod::MarkDone {
-        space: grandchild.name.clone(),
+        space: grandchild.name.to_string(),
         cleanup: false,
         integrated: false,
         results: vec![],
@@ -641,7 +641,7 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
                     mode: None,
                     kind: None,
                     pool: "lock".into(),
-                    name: workspace.name.clone(),
+                    name: workspace.name.to_string(),
                     resource: None,
                     reason: None,
                     queue: false,
@@ -828,14 +828,16 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         // its agents are listed.
         let methods = [
             AgentMethod::SendAgentMessage {
-                space: name(),
+                space: name().into(),
                 message: "Rebase onto main".into(),
                 attachments: Vec::new(),
                 sender_chat: None,
             },
-            AgentMethod::WorkspaceAgents { workspace: name() },
+            AgentMethod::WorkspaceAgents {
+                workspace: name().into(),
+            },
             AgentMethod::InterruptTurn {
-                workspace: name(),
+                workspace: name().into(),
                 execution: "e1".into(),
             },
         ];
@@ -2105,7 +2107,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         manager
             .executions
             .issue_scope(
-                workspace.name.clone(),
+                workspace.name.to_string(),
                 Caller {
                     space_id: workspace.id.clone(),
                     execution: None,
@@ -2114,7 +2116,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
             .await;
     }
     let mut acquire = Operation::Hold(HoldMethod::HoldAcquire {
-        workspace: child.name.clone(),
+        workspace: child.name.to_string(),
         name: "review".into(),
         reason: None,
     });

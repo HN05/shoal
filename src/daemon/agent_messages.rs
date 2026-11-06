@@ -255,9 +255,9 @@ impl Manager {
         Ok(Reached {
             workspaces: workspaces
                 .into_iter()
-                .map(|workspace| workspace.name)
+                .map(|workspace| workspace.name.into())
                 .collect(),
-            chats: chats.into_iter().map(|chat| chat.name).collect(),
+            chats: chats.into_iter().map(|chat| chat.name.into()).collect(),
         })
     }
 
@@ -305,7 +305,7 @@ impl Manager {
         chats.retain(|chat| {
             in_repository(chat.repository_id.as_ref())
                 && chat.restore.is_none()
-                && sender_chat.is_none_or(|sender| sender != chat.id && sender != chat.name)
+                && sender_chat.is_none_or(|sender| sender != chat.id && chat.name != sender)
         });
         chats.sort_by(|a, b| a.name.cmp(&b.name));
         Ok((workspaces, chats))

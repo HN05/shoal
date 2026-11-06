@@ -3,6 +3,7 @@ mod intent;
 
 use super::Manager;
 use crate::refusal::{Reason, Refusal};
+use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{daemon::store, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Result, bail, ensure};
 use intent::RenameIntent;
@@ -116,7 +117,7 @@ impl Manager {
     ) -> Result<()> {
         let workspace = workspace.clone();
         let intent = RenameIntent {
-            name: super::derive_workspace_name(branch),
+            name: SpaceName::derive(SpaceKind::Workspace, branch),
             branch: branch.to_owned(),
         };
         let caller_execution = caller_execution.map(str::to_owned);

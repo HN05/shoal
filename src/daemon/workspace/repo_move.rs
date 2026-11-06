@@ -142,7 +142,7 @@ impl Manager {
     async fn ensure_root_dir_unused(&self) -> Result<()> {
         let rootless: Vec<_> = (self.chats().await?.into_iter())
             .filter(|chat| chat.repository_id.is_none())
-            .map(|chat| chat.name)
+            .map(|chat| chat.name.to_string())
             .collect();
         ensure!(
             rootless.is_empty(),

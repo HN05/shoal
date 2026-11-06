@@ -39,7 +39,7 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
         .unwrap();
     let launch = manager
         .queue_add(QueueRequest {
-            workspace: Some(child.name.clone()),
+            workspace: Some(child.name.to_string()),
             ..request(&repo, "child", false)
         })
         .await

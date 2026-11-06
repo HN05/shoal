@@ -84,7 +84,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         }
     });
     let await_answer = || QuestionMethod::AwaitAnswer {
-        space: workspace.name.clone(),
+        space: workspace.name.to_string(),
         item: question.number.item,
         ask: ask.clone(),
     };
@@ -102,7 +102,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     let execute = ExecutionMethod::Execute {
         mode: None,
         model: Default::default(),
-        workspace: workspace.name.clone(),
+        workspace: workspace.name.to_string(),
         wrapper: wrapper.clone(),
         kind: crate::daemon::workspace::ExecutionKind::Command,
         agent: None,

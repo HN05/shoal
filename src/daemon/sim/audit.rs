@@ -111,7 +111,7 @@ impl Manager {
         } else {
             CleanRequest {
                 workspace_id: workspace.id.clone(),
-                workspace_name: workspace.name.clone(),
+                workspace_name: workspace.name.to_string(),
                 repository_id: workspace.repository_id.clone(),
                 execution_id,
                 requested_at: unix_seconds(),

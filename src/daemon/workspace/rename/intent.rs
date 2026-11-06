@@ -3,11 +3,11 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
-use crate::{git, model::Workspace};
+use crate::{client::space_names::SpaceName, git, model::Workspace};
 
 /// The identity a workspace takes once Git has renamed its branch.
 pub(super) struct RenameIntent {
-    pub name: String,
+    pub name: SpaceName,
     pub branch: String,
 }
 

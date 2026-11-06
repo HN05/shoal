@@ -609,7 +609,7 @@ async fn chat_name(ctx: &Context, id: Option<&str>) -> Result<Option<String>> {
     };
     Ok(
         match crate::client::workspaces::present_space(&ctx.paths, id).await? {
-            Some(PresentSpace::Chat(chat)) => Some(chat.name),
+            Some(PresentSpace::Chat(chat)) => Some(chat.name.into()),
             _ => None,
         },
     )

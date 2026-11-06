@@ -6,8 +6,7 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use crate::{
-    daemon::{chats::suffixed, workspace::derive_workspace_name},
-    forge::repo::remote_url::source_name,
+    client::space_names::SpaceName, forge::repo::remote_url::source_name, model::SpaceKind,
 };
 
 /// Name each recorded chat, and the chats of journal events, after its
@@ -20,7 +19,7 @@ pub(super) fn name_chats(db: &Connection) -> Result<()> {
 }
 
 /// Each repository's `<repo>-chat`, as a valid name.
-struct ChatBases(HashMap<String, String>);
+struct ChatBases(HashMap<String, SpaceName>);
 
 impl ChatBases {
     fn load(db: &Connection) -> Result<Self> {
@@ -30,7 +29,10 @@ impl ChatBases {
                 let (id, name, source): (String, Option<String>, String) =
                     (row.get(0)?, row.get(1)?, row.get(2)?);
                 let name = name.unwrap_or_else(|| source_name(&source).to_owned());
-                Ok((id, derive_workspace_name(&format!("{name}-chat"))))
+                Ok((
+                    id,
+                    SpaceName::derive(SpaceKind::Chat, &format!("{name}-chat")),
+                ))
             })?
             .collect::<rusqlite::Result<_>>()?;
         Ok(Self(bases))
@@ -39,8 +41,9 @@ impl ChatBases {
     /// The name of chat `number` of `repository`; a removed repository's
     /// chats are plain `chat`.
     fn name(&self, repository: &str, number: u32) -> String {
-        let base = self.0.get(repository).map_or("chat", String::as_str);
-        suffixed(base, u64::from(number))
+        let base = (self.0.get(repository).cloned())
+            .unwrap_or_else(|| SpaceName::derive(SpaceKind::Chat, ""));
+        base.suffixed(u64::from(number)).into()
     }
 }
 

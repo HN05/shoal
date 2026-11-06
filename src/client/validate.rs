@@ -113,23 +113,3 @@ pub fn file_title(value: &str) -> Result<()> {
     );
     Ok(())
 }
-
-/// Keep directory/selector names portable without restricting Git branch syntax.
-pub fn derive_workspace_name(branch: &str) -> String {
-    let name: String = branch
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
-                c
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    let name = name.trim_start_matches(['-', '_']);
-    if name.is_empty() {
-        "workspace".into()
-    } else {
-        name.chars().take(MAX_NAME_LEN).collect()
-    }
-}

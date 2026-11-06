@@ -562,7 +562,7 @@ async fn stop_all_selects_running_agents_and_pending_restores() {
         .await
         .unwrap()
         .into_iter()
-        .map(|workspace| workspace.name)
+        .map(|workspace| workspace.name.into())
         .collect();
     targets.sort();
     assert_eq!(targets, ["queued", "requested", "running"]);

@@ -52,6 +52,19 @@ fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
 }
 
 #[test]
+fn an_earlier_package_of_an_all_digit_workspace_imports_under_its_derived_name() {
+    let manifest = manifest_with_sessions();
+    let mut value = serde_json::to_value(&manifest).unwrap();
+    value["workspace"]["name"] = "123".into();
+    let bytes = format!("{}\n{value}\n", header(2)).into_bytes();
+    let import = Import::read(&mut &bytes[..]).unwrap();
+    let Space::Workspace(packaged) = &import.manifest.space else {
+        panic!("a chat package: {:?}", import.manifest);
+    };
+    assert_eq!(packaged.workspace.name, "workspace-123");
+}
+
+#[test]
 fn a_chat_package_names_its_kind_and_continues_its_session() {
     let chat = Chat {
         mode: "plan".into(),
@@ -88,7 +101,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
     let mut manifest = Manifest {
         remote_url: None,
         space: Space::Chat(PackagedChat {
-            name: chat.name.clone(),
+            name: chat.name.to_string(),
             agent: chat.agent.clone(),
             links: chat.links.clone(),
             mode: chat.mode.clone(),

@@ -83,7 +83,7 @@ impl Manager {
         // The saved sessions are files, so no stored change announces it.
         self.signals.agent_changed();
         Ok(Discarded {
-            workspace: workspace.name,
+            workspace: workspace.name.into(),
             executions,
         })
     }

@@ -176,7 +176,7 @@ impl Target {
             )
         })?;
         Ok(Self {
-            workspace: workspace.name.clone(),
+            workspace: workspace.name.to_string(),
             agent: name,
             workspace_id: workspace.id.clone(),
             execution: agent.execution,

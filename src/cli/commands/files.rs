@@ -143,13 +143,13 @@ async fn running_space(ctx: &Context, selector: &str) -> Result<Option<String>> 
         .iter()
         .find(|listed| listed.id == selector || listed.name == selector)
     {
-        return Ok(listed.running.then(|| listed.name.clone()));
+        return Ok(listed.running.then(|| listed.name.to_string()));
     }
     Ok(crate::client::chats::list(&ctx.paths)
         .await?
         .into_iter()
         .find(|chat| chat.id == selector || chat.name == selector)
-        .map(|chat| chat.name))
+        .map(|chat| chat.name.into()))
 }
 
 /// The file's name, title, size, how it came, when, read at `now`, when a

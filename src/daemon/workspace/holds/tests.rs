@@ -62,8 +62,8 @@ async fn holds_are_idempotent_persistent_and_scoped() {
         .await;
     // Workspace processes list, ask for and release their own holds, but
     // never reach outside their tree.
-    for target in [&workspace.name, &other.id] {
-        let own = target == &workspace.name;
+    for target in [&workspace.name.to_string(), &other.id] {
+        let own = workspace.name == *target;
         let mut list = HoldMethod::HoldList {
             workspace: target.clone(),
         };
@@ -242,7 +242,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
             .await;
     }
     let mut acquire = HoldMethod::HoldAcquire {
-        workspace: child.name.clone(),
+        workspace: child.name.to_string(),
         name: "review".into(),
         reason: Some("Waiting for the parent's merge".into()),
     };
@@ -255,7 +255,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .unwrap();
     // An agent hold leaves the parent's agent free to remove the child.
     let mut remove = crate::protocol::RemovalMethod::RemoveWorkspace {
-        workspace: child.name.clone(),
+        workspace: child.name.to_string(),
         unsaved: Default::default(),
     };
     scope::authorize(&manager, Some("parent"), &mut remove)
@@ -268,7 +268,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .unwrap();
     for name in ["review", "editor"] {
         let mut release = HoldMethod::HoldRelease {
-            workspace: child.name.clone(),
+            workspace: child.name.to_string(),
             name: name.into(),
         };
         scope::authorize(&manager, Some("child"), &mut release)

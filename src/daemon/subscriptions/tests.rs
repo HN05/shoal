@@ -477,7 +477,7 @@ mod streams {
                 Record::Question(question) => assert_eq!(question.space_id, own.id),
                 Record::Message(message) => {
                     assert_eq!(message.workspace_id.as_ref(), Some(&own.id));
-                    assert_eq!(message.workspace.as_ref(), Some(&own.name));
+                    assert_eq!(message.workspace.as_deref(), Some(own.name.as_str()));
                 }
                 other => panic!("unexpected record: {other:?}"),
             }

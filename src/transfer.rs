@@ -204,7 +204,7 @@ impl Manifest {
                     last_sessions: vec![chat_session(&chat)],
                 };
                 let packaged = PackagedChat {
-                    name: chat.name,
+                    name: chat.name.into(),
                     agent: chat.agent,
                     links: chat.links,
                     mode: chat.mode,
@@ -464,6 +464,7 @@ impl Import {
         {
             manifest.insert("kind".into(), "workspace".into());
         }
+        rename_invalid_workspace(&mut manifest);
         let mut manifest: Manifest =
             serde_json::from_value(manifest).context("read the export's manifest")?;
         if version == 1 {
@@ -577,6 +578,23 @@ fn moved_agent(agent: StoppedAgent) -> StoppedAgent {
     StoppedAgent {
         record: agent.record.moved(),
         ..agent
+    }
+}
+
+/// Give the workspace of a package an earlier Shoal wrote the name its
+/// derivation gives now, when its own breaks the space name rule, as an
+/// all-digit one does.
+fn rename_invalid_workspace(manifest: &mut serde_json::Value) {
+    use crate::{client::space_names::SpaceName, model::SpaceKind};
+    let Some(name) = manifest.pointer_mut("/workspace/name") else {
+        return;
+    };
+    if let Some(text) = name.as_str()
+        && SpaceName::parse(text).is_err()
+    {
+        *name = SpaceName::derive(SpaceKind::Workspace, text)
+            .as_str()
+            .into();
     }
 }
 

@@ -138,7 +138,7 @@ pub struct StartArgs {
     /// Name of a chat; defaults to <repo>-chat, <workspace>-chat with --in,
     /// or <repo>-<mode>-<issue number> with --issue, asked for on a terminal.
     #[arg(long)]
-    pub name: Option<String>,
+    pub name: Option<crate::client::space_names::SpaceName>,
     #[command(flatten)]
     pub copy: CopyArgs,
     #[command(flatten)]

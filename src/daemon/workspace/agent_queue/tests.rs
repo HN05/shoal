@@ -1158,7 +1158,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     // Without a limit the daemon still starts it rather than the caller.
     let admission = manager
         .queue_add(QueueRequest {
-            workspace: Some(child.name.clone()),
+            workspace: Some(child.name.to_string()),
             ..request(&repo, "child", false)
         })
         .await
@@ -1183,7 +1183,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
 
     manager
         .queue_add(QueueRequest {
-            workspace: Some(child.name.clone()),
+            workspace: Some(child.name.to_string()),
             ..request(&other, "foreign", false)
         })
         .await
@@ -1265,7 +1265,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     ] {
         let mut method = crate::protocol::QueueMethod::QueueAdd {
             request: QueueRequest {
-                workspace: workspace.cloned(),
+                workspace: workspace.map(ToString::to_string),
                 ..request(&repo, "launch", false)
             },
         };
@@ -1275,7 +1275,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     } // Only the user starts one regardless of the limits.
     let mut method = crate::protocol::QueueMethod::QueueAdd {
         request: QueueRequest {
-            workspace: Some(child.name.clone()),
+            workspace: Some(child.name.to_string()),
             ..request(&repo, "launch", true)
         },
     };

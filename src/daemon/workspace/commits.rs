@@ -4,7 +4,8 @@
 //! Worktrunk like any workspace's.
 use anyhow::{Context, Result};
 
-use super::{Manager, derive_workspace_name, restore::RestoredFiles};
+use super::{Manager, restore::RestoredFiles};
+use crate::client::space_names::SpaceName;
 use crate::{
     git,
     model::{
@@ -417,8 +418,8 @@ impl Manager {
     }
 
     /// `name`, or the first of `name-2`, `name-3`, ... that nothing holds.
-    pub(super) async fn free_workspace_name(&self, name: &str) -> Result<String> {
-        let name = derive_workspace_name(name);
+    pub(super) async fn free_workspace_name(&self, name: &str) -> Result<SpaceName> {
+        let name = SpaceName::derive(SpaceKind::Workspace, name);
         self.store
             .run(move |db| crate::daemon::store::free_name(db, &name))
             .await

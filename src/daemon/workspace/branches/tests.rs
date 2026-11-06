@@ -1226,7 +1226,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                 let mut method = ExecutionMethod::Execute {
                     mode: None,
                     model: Default::default(),
-                    workspace: target.name.clone(),
+                    workspace: target.name.to_string(),
                     kind: requested,
                     agent: None,
                     recover: false,

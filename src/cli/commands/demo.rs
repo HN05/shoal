@@ -363,7 +363,9 @@ async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
         None => BTreeMap::new(),
     };
     let listing = Listing {
-        workspace: workspace.as_ref().map(|workspace| workspace.name.clone()),
+        workspace: workspace
+            .as_ref()
+            .map(|workspace| workspace.name.to_string()),
         running: running(ctx, workspace.as_ref()).await?,
         configured,
     };

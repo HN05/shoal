@@ -83,7 +83,7 @@ pub struct ConfigSetupArgs {
     /// Name of the chat; defaults to setup. A chat that reopens in a new tab
     /// or a restore passes it.
     #[arg(long, hide = true)]
-    pub name: Option<String>,
+    pub name: Option<crate::client::space_names::SpaceName>,
     /// Agent session the chat continues, which shoal resume passes.
     #[arg(long, hide = true)]
     pub session: Option<String>,

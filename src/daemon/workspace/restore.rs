@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
+use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{
     daemon::events::EventCause,
     git,
@@ -265,7 +266,7 @@ impl Manager {
                 let branch = self.copy_branch(repo, branch).await?;
                 git::branch::create(&repo.path, &branch, &checkpoint.head).await?;
                 checkpoint.branch = Some(branch.clone());
-                crate::validate::derive_workspace_name(&branch)
+                SpaceName::derive(SpaceKind::Workspace, &branch)
             }
             None => removed.name,
         };
@@ -358,7 +359,7 @@ impl Manager {
         let branch = checkpoint
             .branch
             .clone()
-            .unwrap_or_else(|| removed.name.clone());
+            .unwrap_or_else(|| removed.name.to_string());
         if let Some(workspace) = self.list_workspaces().await?.into_iter().find(|workspace| {
             workspace.repository_id == repo.id && workspace.branch.as_ref() == Some(&branch)
         }) {

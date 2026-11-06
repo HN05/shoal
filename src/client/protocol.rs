@@ -596,7 +596,7 @@ response_bodies! {
     RetitledWorkspace(crate::model::RetitledWorkspace),
     Chats(Vec<crate::model::Chat>),
     RemovedChat(crate::client::output::chat::RemovedChat),
-    ChatName(String),
+    ChatName(crate::client::space_names::SpaceName),
     ScopeToken(ScopeToken),
     Branches(Vec<crate::model::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),

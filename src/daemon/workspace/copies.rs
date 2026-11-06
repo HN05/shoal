@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{Manager, NewWorkspace, derive_workspace_name, restore::RestoredFiles};
+use super::{Manager, NewWorkspace, restore::RestoredFiles};
+use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{
     git::{self, worktrunk},
     model::{
@@ -163,7 +164,7 @@ impl Manager {
         Ok(Source {
             workspace_id: removed.workspace_id,
             repository_id: removed.repository_id,
-            name: removed.name,
+            name: removed.name.into(),
             branch: checkpoint.branch,
             base_ref: removed.base_ref,
             base_commit: removed.base_commit,
@@ -208,12 +209,15 @@ impl Manager {
         let (name, branch) = match place {
             CopyPlace::Branch(Some(branch)) => {
                 git::check_branch_name(Some(&repo.path), &branch).await?;
-                let name = derive_workspace_name(&branch);
+                let name = SpaceName::derive(SpaceKind::Workspace, &branch);
                 (name, Some(self.available_branch(repo, &branch).await?))
             }
             CopyPlace::Branch(None) => {
                 let branch = self.free_copy_branch(repo, &source.copy_name()).await?;
-                (derive_workspace_name(&branch), Some(branch))
+                (
+                    SpaceName::derive(SpaceKind::Workspace, &branch),
+                    Some(branch),
+                )
             }
             CopyPlace::Commit => {
                 let name = self.free_workspace_name(&source.copy_name()).await?;
@@ -260,7 +264,7 @@ impl Manager {
             // The branch may take its suffix on another component than the
             // last, when that one names a branch too.
             let branch = self.available_branch(repo, &candidate).await?;
-            let derived = derive_workspace_name(&branch);
+            let derived = SpaceName::derive(SpaceKind::Workspace, &branch);
             if self.free_workspace_name(&derived).await? == derived {
                 return Ok(branch);
             }
@@ -377,7 +381,7 @@ fn live_source(workspace: Workspace, head: String, files: SourceFiles) -> Source
     Source {
         workspace_id: workspace.id,
         repository_id: workspace.repository_id,
-        name: workspace.name,
+        name: workspace.name.into(),
         branch: workspace.branch,
         base_ref: workspace.base_ref,
         base_commit: workspace.base_commit,

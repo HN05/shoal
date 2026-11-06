@@ -2,6 +2,8 @@
 //! parents and scope, listing them and removing them.
 use anyhow::Result;
 
+use crate::client::space_names::SpaceName;
+
 use crate::{
     client::{
         connection::{Daemon, request},
@@ -17,7 +19,7 @@ use crate::{
 /// starts in and the space it goes below.
 #[derive(Clone, Copy)]
 pub struct NewChat<'a> {
-    pub name: &'a str,
+    pub name: &'a SpaceName,
     pub agent: &'a str,
     pub mode: &'a str,
     /// The space it goes below; a scoped caller's daemon puts it below the
@@ -40,7 +42,7 @@ pub async fn start(
         ChatMethod::StartChat {
             repository: home.repository_id().map(|id| id.to_owned().into()),
             workspace: home.workspace().map(|workspace| workspace.id.clone()),
-            name: chat.name.to_owned(),
+            name: chat.name.clone(),
             agent: chat.agent.to_owned(),
             mode: Some(chat.mode.to_owned()),
             pid: std::process::id(),
@@ -53,14 +55,9 @@ pub async fn start(
 }
 
 /// Refuse a name a new chat could not take now.
-pub async fn check_name(daemon: &impl Daemon, name: &str) -> Result<()> {
-    request::<()>(
-        daemon,
-        ChatMethod::CheckChatName {
-            name: name.to_owned(),
-        },
-    )
-    .await
+pub async fn check_name(daemon: &impl Daemon, name: &SpaceName) -> Result<()> {
+    let name = name.clone();
+    request::<()>(daemon, ChatMethod::CheckChatName { name }).await
 }
 
 /// Refuse `parent`, a space a new chat in `repository`, or without one, in
@@ -93,7 +90,7 @@ pub async fn root(daemon: &impl Daemon) -> Result<std::path::PathBuf> {
 }
 
 /// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could take now.
-pub async fn free_name(daemon: &impl Daemon, name: String) -> Result<String> {
+pub async fn free_name(daemon: &impl Daemon, name: String) -> Result<SpaceName> {
     request(daemon, ChatMethod::FreeChatName { name }).await
 }
 
@@ -117,7 +114,7 @@ pub async fn move_to(daemon: &impl Daemon, chat: &Chat, pid: u32) -> Result<Chat
 }
 
 /// Rename `chat` to `name`.
-pub async fn rename(daemon: &impl Daemon, chat: String, name: String) -> Result<RenamedChat> {
+pub async fn rename(daemon: &impl Daemon, chat: String, name: SpaceName) -> Result<RenamedChat> {
     request(daemon, ChatMethod::RenameChat { chat, name }).await
 }
 

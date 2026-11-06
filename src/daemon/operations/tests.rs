@@ -33,7 +33,7 @@ async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
 
 fn setup(workspace: &Workspace) -> OperationSpec {
     OperationSpec::Prepare {
-        workspace: workspace.name.clone(),
+        workspace: workspace.name.to_string(),
         steps: Preparation {
             setup: true,
             ..Default::default()

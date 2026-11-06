@@ -376,7 +376,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     let start = |workspace: &Workspace| crate::protocol::ChatMethod::StartChat {
         mode: None,
         repository: Some(repo.id.clone().into()),
-        workspace: Some(workspace.name.clone()),
+        workspace: Some(workspace.name.to_string()),
         name: "auditing".into(),
         agent: "claude".into(),
         pid: process.id(),
@@ -432,7 +432,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         pid: process.id(),
         origin: None,
         hands_over: false,
-        parent: Some(parent.name.clone()),
+        parent: Some(parent.name.to_string()),
     };
     let mut method = below(&worker);
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
@@ -458,7 +458,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         git_profile: None,
         path: None,
         options: Default::default(),
-        parent: Some(parent.name.clone()),
+        parent: Some(parent.name.to_string()),
     };
     let mut method = check(&worker);
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)

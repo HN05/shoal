@@ -8,6 +8,7 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use super::{Registration, runner_labels};
+use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
@@ -164,10 +165,10 @@ fn forget_unlisted_jobs(
 fn queue_job(db: &mut Connection, repository_id: &str, job: &QueuedJob) -> Result<()> {
     let tx = db.transaction()?;
     let id = uuid::Uuid::new_v4().to_string();
-    let name = crate::daemon::workspace::derive_workspace_name(&format!(
-        "ci-{}-{}",
-        job.job.name, job.job.id
-    ));
+    let name = SpaceName::derive(
+        SpaceKind::Workspace,
+        &format!("ci-{}-{}", job.job.name, job.job.id),
+    );
     tx.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,job)
          VALUES (?1,?2,?3,?4,'',?5,?6,?7)",

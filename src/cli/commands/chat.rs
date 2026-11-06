@@ -13,7 +13,7 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use super::{configured, listing::ListFilter};
-use crate::client::output::chat::BackgroundChat;
+use crate::client::{output::chat::BackgroundChat, space_names::SpaceName};
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
@@ -246,7 +246,7 @@ pub(super) struct Options {
     /// Where the chat runs.
     pub place: ChatPlace,
     /// The chat's name; defaults to the topic's.
-    pub name: Option<String>,
+    pub name: Option<SpaceName>,
     /// The model and effort requested over the configured ones.
     pub model: ModelChoice,
     /// Arguments forwarded to the agent.
@@ -597,7 +597,7 @@ pub(super) async fn launch(
         .await?;
         handoff.wait().await?;
         return Ok(Started::Background(BackgroundChat {
-            chat: name,
+            chat: name.into(),
             agent: agent.name().to_owned(),
             repository: repo.registered().map(|repo| repo.id.clone()),
             place: note,
@@ -709,7 +709,11 @@ fn resumed_args(settings: &Effective, agent: &Agent, session: &str) -> Vec<OsStr
 
 /// `--name`, which [`Options::check_name`] checked, else the topic's name
 /// or its lowest free variant.
-async fn initial_name(ctx: &Context, topic: &Topic, requested: Option<String>) -> Result<String> {
+async fn initial_name(
+    ctx: &Context,
+    topic: &Topic,
+    requested: Option<SpaceName>,
+) -> Result<SpaceName> {
     match requested {
         Some(name) => Ok(name),
         None => crate::client::chats::free_name(&ctx.paths, topic.name.clone()).await,
@@ -717,11 +721,15 @@ async fn initial_name(ctx: &Context, topic: &Topic, requested: Option<String>) -
 }
 
 /// Ask for the chat's name, offering `default`, until the daemon accepts one.
-async fn ask_name(ctx: &Context, default: &str) -> Result<String> {
+async fn ask_name(ctx: &Context, default: &str) -> Result<SpaceName> {
     loop {
         let name = ui::input_with_default(ctx, "Chat name", default)?;
-        match crate::client::chats::check_name(&ctx.paths, &name).await {
-            Ok(()) => return Ok(name),
+        let checked = match SpaceName::parse(&name) {
+            Ok(name) => (crate::client::chats::check_name(&ctx.paths, &name).await).map(|()| name),
+            Err(error) => Err(error),
+        };
+        match checked {
+            Ok(name) => return Ok(name),
             Err(error) => eprintln!("{error:#}"),
         }
     }
@@ -830,7 +838,7 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
 /// chat it restores.
 struct Beside<'a> {
     topic: &'a Topic,
-    name: &'a str,
+    name: &'a SpaceName,
     agent: &'a Agent,
     model: &'a ModelChoice,
     args: &'a [OsString],
@@ -848,7 +856,7 @@ impl Beside<'_> {
         chat.extend([
             "--here".into(),
             "--name".into(),
-            self.name.into(),
+            self.name.as_str().into(),
             "--agent".into(),
             self.agent.name().into(),
         ]);

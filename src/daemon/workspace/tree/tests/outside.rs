@@ -252,9 +252,9 @@ async fn a_broadcast_with_files_reaches_a_chat_without_a_repository() {
         )
     };
     let reached = send(vec![report.into()]).await.unwrap();
-    assert_eq!(reached.chats, ["master".to_owned(), talk.name.clone()]);
+    assert_eq!(reached.chats, ["master".to_owned(), talk.name.to_string()]);
     let reached = send(Vec::new()).await.unwrap();
-    assert_eq!(reached.chats, ["master".to_owned(), talk.name]);
+    assert_eq!(reached.chats, ["master".to_owned(), talk.name.into()]);
 }
 
 #[tokio::test]
@@ -268,7 +268,7 @@ async fn a_chat_without_a_repository_copies_a_workspace_of_any_repository() {
         execution: None,
     };
     let mut source = crate::protocol::CopySource {
-        workspace: user.name.clone(),
+        workspace: user.name.to_string(),
         checkpoint: None,
     };
     manager.copy_within(&caller, &mut source).await.unwrap();

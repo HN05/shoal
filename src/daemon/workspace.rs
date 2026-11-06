@@ -70,13 +70,13 @@ pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use restore::removal_notice;
 pub(crate) use stack::record_base_changed;
 
-pub(crate) use crate::validate::derive_workspace_name;
 pub(crate) use tree::{
     Source, TrackedAgents, children, deciders, delegated, ensure_parent, parent, receiving_paths,
     set_parent, spaces_above,
 };
 
 use crate::refusal::{Reason, Refusal};
+use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{
     config::Config,
     daemon::store::{self, Store},
@@ -518,7 +518,7 @@ impl Manager {
             };
             check_base(&repo, base, source).await?;
         }
-        let name = name.map(|name| derive_workspace_name(&name));
+        let name = name.map(|name| SpaceName::derive(SpaceKind::Workspace, &name));
         if let Some(name) = name.clone() {
             self.store
                 .run(move |db| store::ensure_name_available(db, &name, None))
@@ -564,7 +564,7 @@ impl Manager {
             WorkspaceSource::Existing { .. } => None,
         }
         .or(below);
-        let name = derive_workspace_name(&name);
+        let name = SpaceName::derive(SpaceKind::Workspace, &name);
         let path = self.new_workspace_path(repo, &name, path).await?;
         let workspace = Workspace {
             setup_skipped: options.skip_setup,

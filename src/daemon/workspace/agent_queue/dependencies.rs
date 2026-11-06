@@ -237,16 +237,16 @@ impl Manager {
             self.completion(&workspace.id).await?,
             workspace.branch.clone(),
         ) else {
-            return Ok(Progress::Waiting(workspace.name));
+            return Ok(Progress::Waiting(workspace.name.into()));
         };
         match current_head(&workspace).await {
             Ok(head) if head == completion.head => Ok(Progress::Done(Done {
-                name: workspace.name,
+                name: workspace.name.into(),
                 branch,
                 path: workspace.path,
                 head,
             })),
-            _ => Ok(Progress::Waiting(workspace.name)),
+            _ => Ok(Progress::Waiting(workspace.name.into())),
         }
     }
 

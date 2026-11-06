@@ -211,7 +211,7 @@ impl Manager {
             Ok(workspaces
                 .into_iter()
                 .find(|w| std::fs::canonicalize(&w.path).is_ok_and(|managed| managed == path))
-                .map(|w| w.name))
+                .map(|w| w.name.into()))
         })
         .await
     }

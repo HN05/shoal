@@ -246,7 +246,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
     ] {
         let mut request = WorkspaceMethod::CreateCommitWorkspace {
             repository: repo.id.as_str().into(),
-            parent: parent.clone(),
+            parent: parent.as_ref().map(ToString::to_string),
             start: CommitStart::Revision(None),
             options: Default::default(),
         };
@@ -458,7 +458,7 @@ async fn a_workspace_at_a_commit_goes_below_the_chat_or_workspace_it_names() {
         below_chat.parent.map(|parent| parent.id),
         Some(chat.id.clone())
     );
-    let child = create(Some(parent.name.clone())).await.unwrap();
+    let child = create(Some(parent.name.to_string())).await.unwrap();
     assert_eq!(
         child.parent.map(|parent| parent.id),
         Some(parent.id.clone())
@@ -706,11 +706,11 @@ async fn a_workspace_at_a_commit_takes_no_part_in_a_stack() {
         .await
         .unwrap();
     let as_base = manager
-        .set_base_workspace(&branch.id, Some(detached.name.clone()))
+        .set_base_workspace(&branch.id, Some(detached.name.to_string()))
         .await;
     assert!(as_base.is_err());
     let stacked = manager
-        .set_base_workspace(&detached.id, Some(branch.name.clone()))
+        .set_base_workspace(&detached.id, Some(branch.name.to_string()))
         .await;
     assert!(stacked.is_err());
 }

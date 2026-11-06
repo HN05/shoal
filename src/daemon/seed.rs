@@ -9,6 +9,7 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use tokio::{process::Command, sync::watch};
 
+use crate::client::space_names::SpaceName;
 use crate::{
     config::Effective,
     daemon::{
@@ -57,7 +58,7 @@ impl Plan {
         // Builds see the workspaces' [env], so their outputs stay reusable.
         let identity = Workspace::new_record(
             repo.id.clone(),
-            ".seed".into(),
+            SpaceName::seed(),
             layout.worktree(),
             Some(branch.clone()),
             WorkspaceState::Ready,

@@ -50,7 +50,7 @@ impl Fixture {
 
     async fn copy(&self, checkpoint: Option<u64>, place: CopyPlace) -> Result<Workspace> {
         let source = CopySource {
-            workspace: self.source.name.clone(),
+            workspace: self.source.name.to_string(),
             checkpoint,
         };
         let repository = self.source.repository_id.as_str().into();
@@ -139,7 +139,7 @@ async fn a_copy_takes_the_suffix_its_branch_takes_on_a_parent_component() {
         &["update-ref", "refs/remotes/origin/fix", head.trim()],
     );
     let request = CopySource {
-        workspace: source.name.clone(),
+        workspace: source.name.to_string(),
         checkpoint: None,
     };
     let copy = f.manager.create_copy(
@@ -312,7 +312,7 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
     };
     for (workspace, allowed) in [(&f.source, true), (&child, true), (&other, false)] {
         let mut source = CopySource {
-            workspace: workspace.name.clone(),
+            workspace: workspace.name.to_string(),
             checkpoint: None,
         };
         let result = manager.copy_within(&caller, &mut source).await;
@@ -327,7 +327,7 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
         .await
         .unwrap();
     let mut removed = CopySource {
-        workspace: other.name.clone(),
+        workspace: other.name.to_string(),
         checkpoint: Some(checkpoint.number),
     };
     assert!(manager.copy_within(&caller, &mut removed).await.is_err());

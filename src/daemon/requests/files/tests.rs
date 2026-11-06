@@ -36,7 +36,7 @@ async fn long_file_listings_go_in_pages() {
     let answer = handle(
         &manager,
         FileMethod::ListFiles {
-            space: workspace.name.clone(),
+            space: workspace.name.to_string(),
         },
         None,
     )

@@ -117,7 +117,7 @@ impl Visible {
             let workspaces = manager.list_workspaces_within(root).await?;
             let names = workspaces
                 .iter()
-                .map(|workspace| (workspace.id.clone(), workspace.name.clone()))
+                .map(|workspace| (workspace.id.clone(), workspace.name.to_string()))
                 .collect();
             return Ok(Self { workspaces, names });
         }

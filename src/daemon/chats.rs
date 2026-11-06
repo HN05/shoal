@@ -12,11 +12,12 @@ use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use uuid::Uuid;
 
+use crate::client::space_names::SpaceName;
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, release_decided_by},
         log, store,
-        workspace::{self, Manager, derive_workspace_name},
+        workspace::{self, Manager},
     },
     fsutil::off_runtime,
     model::{
@@ -52,7 +53,7 @@ impl Manager {
     pub async fn start_chat(
         &self,
         repository: crate::repository::Selector,
-        name: String,
+        name: SpaceName,
         agent: String,
         pid: u32,
         origin: Option<crate::sessions::Origin>,
@@ -76,7 +77,7 @@ impl Manager {
     pub async fn start_chat_in_workspace(
         &self,
         workspace: &str,
-        name: String,
+        name: SpaceName,
         agent: String,
         pid: u32,
         origin: Option<crate::sessions::Origin>,
@@ -181,7 +182,6 @@ impl Manager {
             hands_over,
             parent,
         } = new;
-        crate::validate::name("chat", &name)?;
         let home = self.reserve_chat_home(repository).await?;
         let process = identity::capture(pid)?.context("the chat process is not running")?;
         // A save under way would miss it, and a shutdown's would not come again.
@@ -272,8 +272,7 @@ impl Manager {
     }
 
     /// Refuse a name a new chat could not take now.
-    pub async fn check_chat_name(&self, name: String) -> Result<()> {
-        crate::validate::name("chat", &name)?;
+    pub async fn check_chat_name(&self, name: SpaceName) -> Result<()> {
         self.store
             .run(move |db| store::ensure_name_available(db, &name, None))
             .await
@@ -281,15 +280,14 @@ impl Manager {
 
     /// `name`, made a valid name, or its lowest `-2`, `-3`, ... variant
     /// that a new chat could take now.
-    pub async fn free_chat_name(&self, name: String) -> Result<String> {
-        let base = derive_workspace_name(&name);
+    pub async fn free_chat_name(&self, name: String) -> Result<SpaceName> {
+        let base = SpaceName::derive(SpaceKind::Chat, &name);
         self.store.run(move |db| store::free_name(db, &base)).await
     }
 
     /// Give the chat `chat`, by ID or name, the name `name`, which must be
     /// free as a new chat's, and move its files to that name.
-    pub async fn rename_chat(&self, chat: String, name: String) -> Result<RenamedChat> {
-        crate::validate::name("chat", &name)?;
+    pub async fn rename_chat(&self, chat: String, name: SpaceName) -> Result<RenamedChat> {
         let (paths, owner) = (self.paths.clone(), self.root_dir_owner());
         // The store's one thread moves the files after the rename commits,
         // so no other rename or chat start reaches either name in between.
@@ -304,7 +302,7 @@ impl Manager {
                 }
                 Ok(RenamedChat {
                     chat: renamed,
-                    previous_name: old.name,
+                    previous_name: old.name.into(),
                 })
             })
             .await
@@ -613,7 +611,7 @@ impl Manager {
 /// agent and mode, where it runs in a terminal host, whether it `hands_over` to a
 /// session it starts, and the space it goes below.
 pub struct NewChat {
-    pub name: String,
+    pub name: SpaceName,
     pub agent: String,
     pub mode: String,
     pub pid: u32,
@@ -626,7 +624,7 @@ pub struct NewChat {
 fn workspace_ref(workspace: &Workspace) -> WorkspaceRef {
     WorkspaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.clone(),
+        name: workspace.name.to_string(),
         branch: workspace.branch.clone(),
     }
 }
@@ -752,27 +750,15 @@ fn ensure_place_free(
     }
 }
 
-/// `base`, or `base-<suffix>` from 2 on, shortened to fit the name limit.
-pub(crate) fn suffixed(base: &str, suffix: u64) -> String {
-    let suffix = match suffix {
-        1 => String::new(),
-        n => format!("-{n}"),
-    };
-    let kept = crate::validate::MAX_NAME_LEN.saturating_sub(suffix.len());
-    let mut name: String = base.chars().take(kept).collect();
-    name.push_str(&suffix);
-    name
-}
-
 /// Rename the running or stopped chat `chat`, by ID or name, to `name` unless
 /// another holds it. Returns the chat before and after.
-fn rename(db: &mut Connection, owner: &Path, chat: &str, name: &str) -> Result<(Chat, Chat)> {
+fn rename(db: &mut Connection, owner: &Path, chat: &str, name: &SpaceName) -> Result<(Chat, Chat)> {
     let tx = db.transaction()?;
     let old = recorded(&tx, owner)?
         .into_iter()
         .find(|running| running.id == chat || running.name == chat)
         .with_context(|| format!("no running chat {chat}"))?;
-    if old.name != name {
+    if old.name != *name {
         // The starting chat's files are not open yet under its name.
         ensure!(
             !store::exists(
@@ -791,7 +777,7 @@ fn rename(db: &mut Connection, owner: &Path, chat: &str, name: &str) -> Result<(
     }
     tx.commit()?;
     let renamed = Chat {
-        name: name.to_owned(),
+        name: name.clone(),
         ..old.clone()
     };
     Ok((old, renamed))

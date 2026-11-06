@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
+use crate::client::space_names::SpaceName;
 
 /// Requests about chats in registered checkouts.
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,7 +15,7 @@ pub enum ChatMethod {
         repository: Option<crate::client::repository::Selector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<String>,
-        name: String,
+        name: SpaceName,
         agent: String,
         /// The mode its agent starts in; `chat` when omitted.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -74,11 +75,11 @@ pub enum ChatMethod {
     /// reply also names the chat as it was before.
     RenameChat {
         chat: String,
-        name: String,
+        name: SpaceName,
     },
     /// Refuse a name a new chat could not take now.
     CheckChatName {
-        name: String,
+        name: SpaceName,
     },
     /// Refuse a `parent` a new chat in `repository`, or without one, in the
     /// worktree of `workspace` when given, could not go below.

@@ -44,6 +44,7 @@ pub mod reviews;
 pub mod secrets;
 pub mod sessions;
 pub mod sim;
+pub mod space_names;
 pub mod state;
 pub mod stopping;
 pub mod subscriptions;

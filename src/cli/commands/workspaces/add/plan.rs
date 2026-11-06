@@ -16,6 +16,7 @@ use crate::{
     protocol::ItemContext,
     terminal::PlaceName,
 };
+use crate::{client::space_names::SpaceName, model::SpaceKind};
 
 /// `creation` with its path resolved against the current directory.
 pub(super) fn absolute(ctx: &Context, mut creation: Creation) -> Result<Creation> {
@@ -67,7 +68,7 @@ pub(super) async fn planned_workspace_name(
     ctx: &Context,
     target: &AddTarget,
     creation: &Creation,
-) -> Result<String> {
+) -> Result<SpaceName> {
     let branch = match (&creation.branch, &creation.existing) {
         (Some(branch), _) => branch.clone(),
         (None, Some(selector)) => match git::strip_local(selector) {
@@ -81,7 +82,7 @@ pub(super) async fn planned_workspace_name(
         },
         (None, None) => (creation.copy.as_ref()).map_or_else(String::new, |copy| copy.name.clone()),
     };
-    Ok(crate::validate::derive_workspace_name(&branch))
+    Ok(SpaceName::derive(SpaceKind::Workspace, &branch))
 }
 
 /// Agent arguments as a queued launch carries them, refusing one that is

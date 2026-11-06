@@ -172,10 +172,10 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         for mut method in [
             AgentMethod::AgentMessages {
-                space: target.clone(),
+                space: target.to_string(),
             },
             AgentMethod::MarkAgentMessagesDelivered {
-                space: target.clone(),
+                space: target.to_string(),
                 ids: Vec::new(),
             },
         ] {
@@ -188,7 +188,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
         }
     }
     let mut method = AgentMethod::SendAgentMessage {
-        space: workspace.name.clone(),
+        space: workspace.name.to_string(),
         message: "hello".into(),
         attachments: Vec::new(),
         sender_chat: None,

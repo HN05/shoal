@@ -441,21 +441,21 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         for mut method in [
             QuestionMethod::AskQuestion {
-                space: target.clone(),
+                space: target.to_string(),
                 ask: ask("Which database?", &[]),
                 attachments: Vec::new(),
                 sender_chat: None,
             },
             QuestionMethod::AwaitAnswer {
-                space: target.clone(),
+                space: target.to_string(),
                 item: 1,
                 ask: ask("Which database?", &[]),
             },
             QuestionMethod::ListQuestions {
-                space: Some(target.clone()),
+                space: Some(target.to_string()),
             },
             QuestionMethod::WithdrawQuestion {
-                space: target.clone(),
+                space: target.to_string(),
                 number: item(1, 1),
                 shown: None,
             },

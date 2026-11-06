@@ -778,7 +778,7 @@ async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
         .await
         .unwrap();
     let files = manager.attached_files(&renamed.name).await.unwrap();
-    assert_eq!(files[0].workspace, Some(renamed.name.clone()));
+    assert_eq!(files[0].workspace, Some(renamed.name.to_string()));
 }
 
 #[tokio::test]
@@ -1249,7 +1249,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         )
         .await;
     let mut list = crate::protocol::Operation::from(FileMethod::ListFiles {
-        space: chat.name.clone(),
+        space: chat.name.to_string(),
     });
     assert!(
         scope::authorize(&manager, Some("worker"), &mut list)

@@ -178,7 +178,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         (&child.name, false),
     ] {
         let mut method = AgentMethod::SetAgentState {
-            workspace: target.clone(),
+            workspace: target.to_string(),
             state: AgentState::Waiting,
             session: None,
             turn_end: None,
@@ -194,7 +194,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
     // execution it reports for.
     for (execution, allowed) in [(None, true), (Some("another".to_owned()), false)] {
         let mut method = AgentMethod::ReportTurnFailure {
-            workspace: own.name.clone(),
+            workspace: own.name.to_string(),
             failure: TurnFailure::Overloaded,
             session: None,
             execution,

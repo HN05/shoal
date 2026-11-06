@@ -31,18 +31,15 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
         ui::select_workspace(ctx, args.copy.flatten(), Fallback::CurrentDirectory).await?;
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let live = workspaces.into_iter().find(|workspace| {
-        [
-            &workspace.id,
-            &workspace.name,
-            &workspace.number.to_string(),
-        ]
-        .contains(&&selector)
+        workspace.id == selector
+            || workspace.name == selector
+            || workspace.number.to_string() == selector
     });
     let (workspace, repository, named) = match live {
         Some(workspace) => (
             workspace.id,
             workspace.repository_id,
-            workspace.branch.unwrap_or(workspace.name),
+            workspace.branch.unwrap_or(workspace.name.into()),
         ),
         None if args.checkpoint.is_some() => removed(ctx, selector).await?,
         None => anyhow::bail!("no workspace {selector}"),
@@ -66,6 +63,6 @@ async fn removed(ctx: &Context, selector: String) -> Result<(String, String, Str
         .into_iter()
         .find(|removed| removed.workspace_id == selector || removed.name == selector)
         .with_context(|| format!("no workspace or removed workspace {selector}"))?;
-    let named = removed.checkpoint.branch.unwrap_or(removed.name);
+    let named = removed.checkpoint.branch.unwrap_or(removed.name.into());
     Ok((removed.workspace_id, removed.repository_id, named))
 }

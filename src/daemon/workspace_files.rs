@@ -109,7 +109,7 @@ impl From<Workspace> for Space {
     fn from(workspace: Workspace) -> Self {
         Self {
             id: workspace.id,
-            name: workspace.name,
+            name: workspace.name.into(),
             repository_id: Some(workspace.repository_id),
             root_dir: None,
             parent_id: workspace.parent.map(|parent| parent.id),
@@ -130,7 +130,7 @@ impl From<Chat> for Space {
     fn from(chat: Chat) -> Self {
         Self {
             id: chat.id,
-            name: chat.name,
+            name: chat.name.into(),
             repository_id: chat.repository_id,
             root_dir: chat.root_dir,
             parent_id: chat.parent.map(|parent| parent.id),

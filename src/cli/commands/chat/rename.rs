@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use crate::{
     cli::{context::Context, terminal},
+    client::space_names::SpaceName,
     model::RenamedChat,
     protocol::ConfigTarget,
 };
@@ -16,9 +17,8 @@ const NAME_REQUEST: &str = "The user asks you to rename this chat: name the work
 pub(in crate::cli::commands) async fn rename(
     ctx: &Context,
     chat: String,
-    name: String,
+    name: SpaceName,
 ) -> Result<i32> {
-    crate::validate::name("chat", &name)?;
     let renamed = crate::client::chats::rename(&ctx.paths, chat, name).await?;
     if let Err(error) = relabel(ctx, &renamed).await {
         eprintln!(
@@ -55,7 +55,7 @@ async fn relabel(ctx: &Context, renamed: &RenamedChat) -> Result<()> {
     let target = ConfigTarget::chat(chat);
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     let labels = terminal::Labels {
-        new: chat.name.clone(),
+        new: chat.name.to_string(),
         expected: previous_name.clone(),
     };
     let places = std::slice::from_ref(place);

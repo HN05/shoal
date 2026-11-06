@@ -63,7 +63,7 @@ pub(super) async fn workspace_label(
     workspace: &Workspace,
 ) -> String {
     if !names_places(host) {
-        return workspace.name.clone();
+        return workspace.name.to_string();
     }
     if let (None, Some(title)) = (&template, &workspace.title) {
         return title.clone();

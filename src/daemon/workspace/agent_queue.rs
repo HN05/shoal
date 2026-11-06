@@ -464,7 +464,6 @@ impl Manager {
     /// admitted here starts in the caller, except a launch in an existing
     /// workspace, which the daemon always starts.
     pub async fn queue_add(&self, request: QueueRequest) -> Result<QueueAdmission> {
-        crate::validate::name("queued workspace", &request.name)?;
         ensure!(
             !request.now || request.after.is_empty(),
             "a launch that starts now cannot wait for other work"
@@ -494,7 +493,7 @@ impl Manager {
         };
         let start = Start {
             id: id.clone(),
-            name: request.name.clone(),
+            name: request.name.to_string(),
             env: request.env.clone(),
         };
         let launch = Launch {

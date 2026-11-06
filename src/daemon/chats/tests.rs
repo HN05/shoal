@@ -109,7 +109,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     process.kill();
     let worker = SpaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.clone(),
+        name: workspace.name.to_string(),
         kind: SpaceKind::Workspace,
         branch: workspace.branch.clone(),
     };
@@ -418,7 +418,6 @@ async fn chats_and_workspaces_share_one_namespace() {
 
     // A chat takes neither a workspace's name nor an invalid one.
     assert!(start("worker", std::process::id()).await.is_err());
-    assert!(start("-talk", std::process::id()).await.is_err());
     let process = crate::daemon::test_support::ProcessGroup::spawn(
         std::process::Command::new("sleep").arg("600"),
     );
@@ -518,7 +517,6 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
     let rename = |chat: &str, name: &str| manager.rename_chat(chat.into(), name.into());
     assert!(rename("talk", "worker").await.is_err());
     assert!(rename("talk", "other").await.is_err());
-    assert!(rename("talk", "-topic").await.is_err());
     assert!(rename("gone", "topic").await.is_err());
     assert_eq!(
         rename("talk", "talk").await.unwrap(),
@@ -612,7 +610,7 @@ async fn concurrent_renames_keep_each_chats_files_under_its_name() {
             let chat = manager
                 .start_chat(
                     repo.id.clone().into(),
-                    format!("{name}-{round}"),
+                    format!("{name}-{round}").as_str().into(),
                     "happy-claude".into(),
                     std::process::id(),
                     None,
@@ -629,7 +627,7 @@ async fn concurrent_renames_keep_each_chats_files_under_its_name() {
         // in whichever order the two arrive.
         let (first, second) = (&chats[0], &chats[1]);
         let _ = tokio::join!(
-            manager.rename_chat(first.id.clone(), format!("moved-{round}")),
+            manager.rename_chat(first.id.clone(), format!("moved-{round}").as_str().into()),
             manager.rename_chat(second.id.clone(), first.name.clone()),
         );
         for chat in manager.chats().await.unwrap() {
@@ -637,16 +635,6 @@ async fn concurrent_renames_keep_each_chats_files_under_its_name() {
             assert_eq!(std::fs::read_to_string(&log).unwrap(), chat.id, "{chat:?}");
         }
     }
-}
-
-#[test]
-fn suffixed_names_fit_the_name_limit() {
-    let long = "a".repeat(crate::validate::MAX_NAME_LEN);
-    assert_eq!(suffixed("chat", 1), "chat");
-    assert_eq!(suffixed("chat", 3), "chat-3");
-    let cut = suffixed(&long, 12);
-    assert_eq!(cut.len(), crate::validate::MAX_NAME_LEN);
-    assert!(cut.ends_with("a-12"), "{cut}");
 }
 
 #[tokio::test]
@@ -941,10 +929,10 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         })
     };
     let diff = Operation::from(WorkspaceMethod::DiffBase {
-        workspace: workspace.name.clone(),
+        workspace: workspace.name.to_string(),
     });
     let items = Operation::from(ItemMethod::SelectItems {
-        context: ItemContext::Workspace(workspace.name.clone()),
+        context: ItemContext::Workspace(workspace.name.to_string()),
         selection: Selection::default(),
         elsewhere: false,
     });
@@ -952,7 +940,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         authorize(&manager, Some("chat"), &mut read).await.unwrap();
     }
     let mut change = Operation::from(WorkspaceMethod::SetBaseWorkspace {
-        workspace: workspace.name.clone(),
+        workspace: workspace.name.to_string(),
         base: None,
     });
     let refused = authorize(&manager, Some("chat"), &mut change).await;
@@ -981,7 +969,7 @@ async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_
         .unwrap();
     let named = Some(WorkspaceRef {
         id: workspace.id.clone(),
-        name: workspace.name.clone(),
+        name: workspace.name.to_string(),
         branch: workspace.branch.clone(),
     });
     assert_eq!(

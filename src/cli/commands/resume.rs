@@ -841,7 +841,7 @@ async fn start_sessions(
             listed.push((workspace, id));
         }
         output.agents.push(ResumedAgent {
-            workspace: workspace.name.clone(),
+            workspace: workspace.name.to_string(),
             execution: id.clone(),
             background: started.is_some(),
             reused,
@@ -1022,7 +1022,7 @@ fn report_commands(
     commands: &[SavedCommand],
 ) -> Result<StoppedCommands> {
     let report = StoppedCommands {
-        workspace: workspace.name.clone(),
+        workspace: workspace.name.to_string(),
         commands: commands
             .iter()
             .map(|command| command.argv.clone())

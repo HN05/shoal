@@ -185,7 +185,7 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         .unwrap();
     assert!(matches!(list, DemoMethod::ListDemos { workspace: Some(own) } if own == first.id));
     let mut stop = DemoMethod::StopDemos {
-        workspace: first.name.clone(),
+        workspace: first.name.to_string(),
         name: None,
     };
     scope::authorize(&manager, Some("scope"), &mut stop)
@@ -193,10 +193,10 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         .unwrap();
     for mut method in [
         DemoMethod::ListDemos {
-            workspace: Some(second.name.clone()),
+            workspace: Some(second.name.to_string()),
         },
         DemoMethod::StopDemos {
-            workspace: second.name.clone(),
+            workspace: second.name.to_string(),
             name: None,
         },
     ] {

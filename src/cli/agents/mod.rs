@@ -115,7 +115,7 @@ pub(in crate::cli) struct ChatLaunch {
     /// repository's checkout.
     pub workspace: Option<Workspace>,
     /// The name the chat is recorded under.
-    pub name: String,
+    pub name: crate::client::space_names::SpaceName,
     /// The mode its agent starts in.
     pub mode: String,
     /// The space it goes below.

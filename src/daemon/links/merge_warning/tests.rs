@@ -87,7 +87,7 @@ async fn a_branch_merge_ignores_a_check_against_a_base_workspaces_branch() {
         .await
         .unwrap();
     manager
-        .set_base_workspace(&workspace.id, Some(base.name.clone()))
+        .set_base_workspace(&workspace.id, Some(base.name.to_string()))
         .await
         .unwrap();
     fs::write(base.path.join("version"), "3\n").unwrap();

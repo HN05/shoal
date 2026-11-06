@@ -63,7 +63,7 @@ async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
         .await
         .unwrap();
     manager
-        .set_base_workspace(&workspace.id, Some(base.name.clone()))
+        .set_base_workspace(&workspace.id, Some(base.name.to_string()))
         .await
         .unwrap();
     let check = manager.check_conflicts(&workspace.id, None).await.unwrap();

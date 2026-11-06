@@ -360,7 +360,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     manager.executions.issue_scope("scope".into(), caller).await;
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         let mut method = crate::protocol::ApprovalMethod::WithdrawApproval {
-            space: target.clone(),
+            space: target.to_string(),
             number: shown.number,
         };
         let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)

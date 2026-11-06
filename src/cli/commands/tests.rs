@@ -13,7 +13,7 @@ fn workspaces(count: usize) -> Vec<Workspace> {
         .map(|index| {
             Workspace::new_record(
                 "repo".into(),
-                index.to_string(),
+                format!("w{index}").as_str().into(),
                 "/unused".into(),
                 Some(index.to_string()),
                 crate::state::WorkspaceState::Ready,
@@ -39,7 +39,7 @@ async fn workspace_overviews_refill_past_delays_and_failures_in_workspace_order(
     let peak = Cell::new(0);
     let (started, mut starts) = mpsc::unbounded_channel();
     let collect = collect_workspace_overviews(&workspaces, async |workspace| {
-        let index: usize = workspace.name.parse().unwrap();
+        let index: usize = workspace.name[1..].parse().unwrap();
         active.set(active.get() + 1);
         peak.set(peak.get().max(active.get()));
         let _active = InFlight(&active);

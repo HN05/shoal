@@ -67,7 +67,7 @@ async fn a_chat_saved_to_come_back_restores_once_agents_may_start() {
 async fn a_failed_restore_tells_the_user_and_waits_for_resume() {
     let (root, manager) = manager().await;
     let (_repo, chat, mut process) = named_chat(root.path(), &manager, "unreachable").await;
-    UNRESUMABLE.lock().unwrap().push(chat.name.clone());
+    UNRESUMABLE.lock().unwrap().push(chat.name.to_string());
     manager.save_chats(ChatRestore::Automatic).await;
     process.wait().unwrap();
 

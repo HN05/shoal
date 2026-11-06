@@ -108,7 +108,7 @@ async fn every_route_records_one_added_event_per_file() {
         .unwrap();
     assert_eq!(line["type"], "file");
     assert_eq!(line["kind"], "file_added");
-    assert_eq!(line["file"]["workspace"], workspace.name);
+    assert_eq!(line["file"]["workspace"], workspace.name.as_str());
 }
 
 #[tokio::test]
@@ -136,10 +136,10 @@ async fn every_deletion_records_one_removed_event_per_file() {
         }
     };
     // `shoal files rm --all`, which also takes kept results, so goes first.
-    attach(workspace.name.clone(), "idle.md").await;
+    attach(workspace.name.to_string(), "idle.md").await;
     manager.remove_idle_files().await.unwrap();
-    attach(workspace.name.clone(), "deleted.md").await;
-    attach(child.name.clone(), "removed.md").await;
+    attach(workspace.name.to_string(), "deleted.md").await;
+    attach(child.name.to_string(), "removed.md").await;
     for result in ["expired.md", "low-disk.md"] {
         let audit = manager
             .split_workspace(

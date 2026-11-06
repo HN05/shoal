@@ -4,7 +4,7 @@
 use anyhow::Result;
 
 use super::listing::ListFilter;
-use crate::client::queue;
+use crate::client::{queue, space_names::SpaceName};
 use crate::{
     agent_queue::AddPlan,
     cli::{context::Context, output::Palette, ui},
@@ -28,7 +28,7 @@ pub(super) enum Admission {
 pub(super) struct Launch {
     pub agent: String,
     /// The workspace the launch opens.
-    pub name: String,
+    pub name: SpaceName,
     pub issue_title: Option<String>,
     pub now: bool,
     pub after: Vec<Dependency>,
