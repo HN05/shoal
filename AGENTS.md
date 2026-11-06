@@ -88,6 +88,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   never builds one itself. What the CLI alone needs, such as parsing,
   prompting and printing, stays in `cli`, and the library builds without the
   default `cli` feature.
+- Modules under `cli` serve only the CLI. Code that the daemon, the execution
+  wrapper, the proxy or the workers use, directly or through code they call,
+  lives in a top-level module named for what it does, outside `cli`; nothing
+  outside `src/cli` names the `cli` module except the crate's `main`.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. `setup.command` is tracked and gates
   readiness; hooks are untracked user processes with workspace identity and no

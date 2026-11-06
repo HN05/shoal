@@ -23,6 +23,9 @@ instead of the PR delivery guidance below.
   connection and client-side logic; the CLI sends each daemon request through
   a named client operation and never builds one itself. The module builds
   without the `cli` feature.
+- Modules under `cli` serve only the CLI: flag code outside `src/cli`, other
+  than the crate's `main`, that names the `cli` module, and code under `cli`
+  that the daemon, the execution wrapper, the proxy or the workers need.
 - Forge requests, and logic that reads forge data without the daemon's state,
   such as check states, item snapshots, item URLs and run IDs, live in
   `crates/shoal-forge`, never in `src/daemon` or `src/cli`; scope, approvals,
@@ -411,7 +414,7 @@ instead of the PR delivery guidance below.
   menu and completion.
 - Commands never name an agent or terminal host. What configuration can say about
   an agent lives in its `[agents.<name>]` description; tool-specific code lives in an
-  `Integration` keyed by agent name under `cli/agents/`, and terminal-specific code
+  `Integration` keyed by agent name under `agents/`, and terminal-specific code
   in a `Host` under `terminal/`. Optional integrations stay behind their Cargo
   feature and setting.
 - Claude and Codex launches (including Happy and Claude and Codex app handoffs) persist
