@@ -79,7 +79,7 @@ pub(in crate::cli) async fn closes_with(
 /// Record `place`, one Shoal created for `workspace`, so the daemon closes
 /// it once the workspace is removed. Without the record the place stays
 /// open, so a failure only warns.
-async fn record_owned(ctx: &Context, workspace: &str, place: Origin) {
+pub(super) async fn record_owned(ctx: &Context, workspace: &str, place: Origin) {
     if let Err(error) =
         crate::client::workspaces::record_owned_place(&ctx.paths, workspace, place).await
     {
@@ -90,21 +90,24 @@ async fn record_owned(ctx: &Context, workspace: &str, place: Origin) {
 /// Record the place this process runs in, one the host named `host`
 /// created for `workspace`, as [`record_owned`] does.
 pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: HostName, workspace: &str) {
-    record_owned_in(ctx, named(host), workspace).await;
+    if let Some(place) = created_here(named(host)).await {
+        record_owned(ctx, workspace, place).await;
+    }
 }
 
-/// Record the place of `host` this process runs in, one `host` created for
-/// `workspace`, as [`record_owned`] does. Only that host names it: another
-/// host's variables this process inherited name a place Shoal did not
-/// create. A host that reuses IDs tells this place apart from an earlier one
-/// under its ID, whose record it replaces.
-pub(super) async fn record_owned_in(ctx: &Context, host: &dyn Host, workspace: &str) {
-    let Some(place) = origin_here(host) else {
-        return;
-    };
+/// The place of `host` this process runs in, one `host` created, with what
+/// tells it apart from a later place under its ID. Only that host names it:
+/// another host's variables this process inherited name a place Shoal did
+/// not create. Without what tells it apart, a record of the place could
+/// name a later one, so a failure only warns.
+pub(super) async fn created_here(host: &dyn Host) -> Option<Origin> {
+    let place = origin_here(host)?;
     match with_instance(host, place).await {
-        Ok(place) => record_owned(ctx, workspace, place).await,
-        Err(error) => eprintln!("warning: cannot record the place Shoal opened: {error:#}"),
+        Ok(place) => Some(place),
+        Err(error) => {
+            eprintln!("warning: cannot record the place Shoal opened: {error:#}");
+            None
+        }
     }
 }
 

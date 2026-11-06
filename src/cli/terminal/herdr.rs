@@ -133,21 +133,11 @@ impl Places for Herdr {
     /// The tab holding the pane.
     fn rename_place<'a>(
         &'a self,
-        place: &'a str,
-        _instance: Option<&'a str>,
-        label: &'a str,
-    ) -> BoxFuture<'a, ()> {
-        Box::pin(tabs::rename(place, label))
-    }
-
-    /// The tab holding the pane.
-    fn relabel_place<'a>(
-        &'a self,
         place: &'a Origin,
-        old: &'a str,
-        new: &'a str,
+        expected: Option<&'a str>,
+        label: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(tabs::relabel(place, old, new))
+        Box::pin(tabs::rename(place, expected, label))
     }
 }
 

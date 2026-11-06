@@ -127,39 +127,20 @@ impl Places for Tmux {
         true
     }
 
-    /// Without `instance`, only the pane this process runs in, which no
-    /// later pane can have replaced.
-    fn rename_place<'a>(
-        &'a self,
-        place: &'a str,
-        instance: Option<&'a str>,
-        label: &'a str,
-    ) -> BoxFuture<'a, ()> {
-        Box::pin(async move {
-            if instance.is_none() && var(PANE_VAR).as_deref() != Some(place) {
-                return;
-            }
-            let renamed = rename_alone(&Server::here(), place, instance, None, label).await;
-            if let Err(error) = renamed {
-                eprintln!("warning: cannot rename the tmux window of {place}: {error:#}");
-            }
-        })
-    }
-
     /// A place recorded without its server instance could name a later
     /// pane, so it keeps its name.
-    fn relabel_place<'a>(
+    fn rename_place<'a>(
         &'a self,
         place: &'a Origin,
-        old: &'a str,
-        new: &'a str,
+        expected: Option<&'a str>,
+        label: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
             let Ok(instance) = instance_of(place) else {
                 return Ok(());
             };
             let server = Server::recorded(&place.data);
-            rename_alone(&server, place.id(), Some(instance), Some(old), new).await
+            rename_alone(&server, place.id(), instance, expected, label).await
         })
     }
 }
@@ -450,20 +431,20 @@ async fn reveal(place: &Origin) -> Result<()> {
 }
 
 /// Name the window of `pane` `label` while the pane is alone there, and,
-/// with `old`, while the window shows `old`; a pane beside others leaves
-/// the user's window its name, and a pane that is gone, or under its ID on
-/// a server instance other than `instance`, leaves nothing to rename.
+/// with `expected`, while the window shows that; a pane beside others
+/// leaves the user's window its name, and a pane that is gone, or under its
+/// ID on a server instance other than `instance`, leaves nothing to rename.
 async fn rename_alone(
     server: &Server,
     pane: &str,
-    instance: Option<&str>,
-    old: Option<&str>,
+    instance: &str,
+    expected: Option<&str>,
     label: &str,
 ) -> Result<()> {
-    let Some(pane) = server.pane(pane, instance).await? else {
+    let Some(pane) = server.pane(pane, Some(instance)).await? else {
         return Ok(());
     };
-    if pane.window_panes != 1 || old.is_some_and(|old| pane.window_name != old) {
+    if pane.window_panes != 1 || expected.is_some_and(|expected| pane.window_name != expected) {
         return Ok(());
     }
     server.rename_window(&pane, label).await

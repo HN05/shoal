@@ -122,40 +122,20 @@ impl Places for Zellij {
         true
     }
 
-    /// Without `instance`, only the pane this process runs in, which no
-    /// later pane can have replaced.
-    fn rename_place<'a>(
-        &'a self,
-        place: &'a str,
-        instance: Option<&'a str>,
-        label: &'a str,
-    ) -> BoxFuture<'a, ()> {
-        Box::pin(async move {
-            let here = origin().and_then(|origin| origin.place);
-            if instance.is_none() && here.as_deref() != Some(place) {
-                return;
-            }
-            let renamed = rename_alone(Server::here(), place, instance, None, label).await;
-            if let Err(error) = renamed {
-                eprintln!("warning: cannot rename the Zellij tab of {place}: {error:#}");
-            }
-        })
-    }
-
     /// A place recorded without its server instance could name a later
     /// pane, so it keeps its name.
-    fn relabel_place<'a>(
+    fn rename_place<'a>(
         &'a self,
         place: &'a Origin,
-        old: &'a str,
-        new: &'a str,
+        expected: Option<&'a str>,
+        label: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
             let Ok(instance) = instance_of(place) else {
                 return Ok(());
             };
             let server = Server::recorded(&place.data);
-            rename_alone(server, place.id(), Some(instance), Some(old), new).await
+            rename_alone(server, place.id(), instance, expected, label).await
         })
     }
 }
@@ -501,24 +481,24 @@ async fn clients_on_tab(server: &Server, session: &str, tab: u64) -> Result<u32>
 }
 
 /// Name the tab of `place` `label` while its pane is alone there, and,
-/// with `old`, while the tab shows `old`; a pane beside others leaves the
-/// user's tab its name, and a pane that is gone, or under its ID on a
+/// with `expected`, while the tab shows that; a pane beside others leaves
+/// the user's tab its name, and a pane that is gone, or under its ID on a
 /// server instance other than `instance`, leaves nothing to rename.
 async fn rename_alone(
     server: Server,
     place: &str,
-    instance: Option<&str>,
-    old: Option<&str>,
+    instance: &str,
+    expected: Option<&str>,
     label: &str,
 ) -> Result<()> {
     let pane = parse_place(place).context("invalid Zellij place")?;
     let server = server.reaching(pane.session).await?;
-    let Some(open) = server.pane(pane, instance).await? else {
+    let Some(open) = server.pane(pane, Some(instance)).await? else {
         return Ok(());
     };
     let panes = server.panes(pane.session).await?;
     let alone = panes.iter().filter(|other| other.tab == open.tab).count() == 1;
-    if !alone || old.is_some_and(|old| open.tab_name != old) {
+    if !alone || expected.is_some_and(|expected| open.tab_name != expected) {
         return Ok(());
     }
     server.rename_tab(pane.session, &open, label).await

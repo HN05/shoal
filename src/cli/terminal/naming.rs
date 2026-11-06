@@ -181,9 +181,13 @@ pub(in crate::cli) async fn relabel_places(ctx: &Context, workspace: &Workspace)
         let template = configured.options.name_template.clone();
         let label = workspace_label(ctx, template, configured.host, workspace).await;
         for place in reachable {
-            host_places
-                .rename_place(place.id(), place.instance.as_deref(), &label)
-                .await;
+            if let Err(error) = host_places.rename_place(place, None, &label).await {
+                eprintln!(
+                    "warning: cannot rename the {} place {}: {error:#}",
+                    configured.host.name(),
+                    place.id()
+                );
+            }
         }
     }
     Ok(())
@@ -204,7 +208,7 @@ pub(in crate::cli) async fn relabel_chat(ctx: &Context, old: &str, chat: &Chat) 
         .filter(|host| host.options.enabled && host.host.name() == place.host)
         .find_map(|host| host.host.places().filter(|p| p.names_places()));
     match host_places {
-        Some(host_places) => host_places.relabel_place(place, old, &chat.name).await,
+        Some(host_places) => host_places.rename_place(place, Some(old), &chat.name).await,
         None => Ok(()),
     }
 }

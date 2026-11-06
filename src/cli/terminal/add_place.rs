@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result};
 
 use super::{
     closing,
-    here::{label_current, place_here, record_owned_in},
+    here::{created_here, label_current, place_here, record_owned},
     host::{Host, Places},
     hosts::{Configured, named},
     sessions::Owner,
@@ -89,10 +89,7 @@ pub(in crate::cli) async fn host_workspace(
                     .label_current(&ctx.paths.state, Owner::Workspace(&workspace.id))
                     .await?;
             }
-            if let Some(places) = place.host.places() {
-                places.rename_place(&place.id, None, label).await;
-            }
-            record_owned_in(ctx, place.host, &workspace.id).await;
+            label_place(ctx, place.host, workspace, label).await;
             if place.closes_when_done {
                 closing::start_watcher(ctx, place.host, &place.id, &workspace.id).await?;
             }
@@ -104,6 +101,21 @@ pub(in crate::cli) async fn host_workspace(
         (None, true) => label_current(&ctx.paths, Owner::Workspace(&workspace.id)).await,
         (None, false) => Ok(()),
     }
+}
+
+/// Show `label` on the place of `host` this process runs in, one `host`
+/// created for `workspace`, and record it as that workspace's. Neither is
+/// needed for the workspace to work, so a failure only warns.
+async fn label_place(ctx: &Context, host: &dyn Host, workspace: &Workspace, label: &str) {
+    let Some(here) = created_here(host).await else {
+        return;
+    };
+    if let Some(places) = host.places()
+        && let Err(error) = places.rename_place(&here, None, label).await
+    {
+        eprintln!("warning: cannot name the {} place: {error:#}", host.name());
+    }
+    record_owned(ctx, &workspace.id, here).await;
 }
 
 /// Whether the shell that started this process enters a new workspace

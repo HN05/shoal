@@ -140,26 +140,15 @@ pub(in crate::cli) trait Places: Sync {
         false
     }
 
-    /// Show `label` as the name of `place`, one this host opened, where its
-    /// places show names; with `instance`, only while the place is still
-    /// on the server instance it records.
+    /// Show `label` as the name of `place`, one this host opened, on the
+    /// server it records, where its places show names; with `expected`,
+    /// only while it still shows that. A place that is gone, or shows
+    /// another name, keeps it.
     fn rename_place<'a>(
         &'a self,
-        _place: &'a str,
-        _instance: Option<&'a str>,
-        _label: &'a str,
-    ) -> BoxFuture<'a, ()> {
-        Box::pin(async {})
-    }
-
-    /// Show `new` as the name of `place`, recorded where a chat runs, while
-    /// the place still shows `old`, on the server the place records. A place
-    /// that is gone or shows another name keeps it.
-    fn relabel_place<'a>(
-        &'a self,
         _place: &'a Origin,
-        _old: &'a str,
-        _new: &'a str,
+        _expected: Option<&'a str>,
+        _label: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }

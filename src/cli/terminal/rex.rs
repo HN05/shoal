@@ -123,24 +123,11 @@ impl Places for Rex {
 
     fn rename_place<'a>(
         &'a self,
-        place: &'a str,
-        _instance: Option<&'a str>,
-        label: &'a str,
-    ) -> BoxFuture<'a, ()> {
-        Box::pin(async move {
-            if let Err(error) = rename_block(place, label).await {
-                eprintln!("warning: cannot rename Rex block {place}: {error:#}");
-            }
-        })
-    }
-
-    fn relabel_place<'a>(
-        &'a self,
         place: &'a Origin,
-        old: &'a str,
-        new: &'a str,
+        expected: Option<&'a str>,
+        label: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(relabel_block(place, old, new))
+        Box::pin(rename_block(place, expected, label))
     }
 }
 
@@ -366,26 +353,20 @@ async fn session_at(place: &Origin) -> Result<Option<Session>> {
     Ok(Some(Session::open(name, clients, place)))
 }
 
-/// A block that is gone leaves nothing to rename.
-async fn rename_block(place: &str, label: &str) -> Result<()> {
-    let server = Server::here()?;
-    let Some(block) = server.block(place).await? else {
-        return Ok(());
-    };
-    server.rename(place, &block, label).await
-}
-
-/// Name the block at `place` `new` while it shows `old`, on the server
-/// `place` records; a block that is gone leaves nothing to rename.
-async fn relabel_block(place: &Origin, old: &str, new: &str) -> Result<()> {
+/// Name the block at `place` `label`, on the server `place` records, and,
+/// with `expected`, only while it shows that; a block that is gone leaves
+/// nothing to rename.
+async fn rename_block(place: &Origin, expected: Option<&str>, label: &str) -> Result<()> {
     let server = Server::recorded(&place.data)?;
     let Some(block) = server.block(place.id()).await? else {
         return Ok(());
     };
-    if server.name(place.id(), &block).await?.as_deref() != Some(old) {
+    if let Some(expected) = expected
+        && server.name(place.id(), &block).await?.as_deref() != Some(expected)
+    {
         return Ok(());
     }
-    server.rename(place.id(), &block, new).await
+    server.rename(place.id(), &block, label).await
 }
 
 #[cfg(test)]

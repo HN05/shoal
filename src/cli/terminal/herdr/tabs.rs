@@ -1,7 +1,7 @@
 //! The tab holding a Herdr place. A place is a pane, while Herdr closes and
 //! renames tabs; a watcher of an earlier release names the tab itself. These
 //! reach the server this process runs under, as the watcher it serves does,
-//! except a chat's relabel, which reaches the server its place records.
+//! except a rename, which reaches the server its place records.
 use anyhow::{Context as _, Result};
 use tokio::process::Command;
 
@@ -66,33 +66,26 @@ pub(super) async fn close(place: &str) -> Result<()> {
         .with_context(|| format!("cannot close Herdr tab {}", holding.tab))
 }
 
-/// Show `label` as the name of the tab holding `place`; a place that is
-/// gone leaves nothing to rename.
-pub(super) async fn rename(place: &str, label: &str) {
-    let renamed = async {
-        let Some(holding) = holding(place).await? else {
-            return Ok(());
-        };
-        run(["tab", "rename", &holding.tab, label]).await
-    };
-    if let Err(error) = renamed.await {
-        eprintln!("warning: cannot rename the Herdr tab of {place}: {error:#}");
-    }
-}
-
-/// Name the tab holding `place` `new` while it shows `old`, on the server
-/// `place` records; a place that is gone leaves nothing to rename.
-pub(super) async fn relabel(place: &Origin, old: &str, new: &str) -> Result<()> {
+/// Name the tab holding `place` `label`, on the server `place` records,
+/// and, with `expected`, only while it shows that; a place that is gone
+/// leaves nothing to rename.
+pub(super) async fn rename(place: &Origin, expected: Option<&str>, label: &str) -> Result<()> {
     let Some(pane) = pane(super::herdr(place), place.id()).await? else {
         return Ok(());
     };
-    let Some(tab) = query::<TabInfo>(super::herdr(place), "tab", &pane.tab_id).await? else {
-        return Ok(());
-    };
-    if tab.result.tab.label.as_deref() != Some(old) {
+    if let Some(expected) = expected
+        && label_of(place, &pane.tab_id).await?.as_deref() != Some(expected)
+    {
         return Ok(());
     }
-    rename_tab(place, &pane.tab_id, new).await
+    rename_tab(place, &pane.tab_id, label).await
+}
+
+/// The label `tab`, on the server `place` records, shows; `None` once it
+/// is gone.
+async fn label_of(place: &Origin, tab: &str) -> Result<Option<String>> {
+    let tab = query::<TabInfo>(super::herdr(place), "tab", tab).await?;
+    Ok(tab.and_then(|tab| tab.result.tab.label))
 }
 
 /// Name `tab`, on the server `place` records, `label`.
