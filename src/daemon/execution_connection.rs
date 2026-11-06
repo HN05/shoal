@@ -504,7 +504,7 @@ async fn relay(
                         awaiting_started = true;
                         *resuming = true;
                         sent_stop = false;
-                        let executable = crate::cli::installed::started().identity();
+                        let executable = crate::installed::started().identity();
                         protocol::write(writer, &Control::Resume { ports, executable }).await?;
                     }
                     // The next daemon continues the wait once the wrapper reattaches.

@@ -111,7 +111,7 @@ struct Server {
 pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>) -> Result<()> {
     // Read before an upgrade can replace it, as the update below is, since
     // wrappers continue only from the binary the daemon runs.
-    crate::cli::installed::remember_started();
+    crate::installed::remember_started();
     let update = auto_update::Update::new(managed);
     paths.prepare()?;
     let descriptors = connections::raise_descriptor_limit();

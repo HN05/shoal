@@ -192,7 +192,7 @@ async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release
     let install = |script: &str| crate::test_support::install_test_script(&binary, script);
     install("#!/bin/sh\nexit 1\n");
     // The binary the wrapper started from, read before the upgrade.
-    let origin = launch::Origin::at(crate::cli::installed::Executable::at(binary.clone()));
+    let origin = launch::Origin::at(crate::installed::Executable::at(binary.clone()));
     let report = || crate::protocol::AgentMethod::ReportUpstreamReset {
         workspace: "w".into(),
         execution: "e".into(),
@@ -223,7 +223,7 @@ async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release
     assert!(received.exists());
     // A wrapper the daemon never refused needs no relay.
     std::fs::remove_file(&received).unwrap();
-    let origin = launch::Origin::at(crate::cli::installed::Executable::at(binary.clone()));
+    let origin = launch::Origin::at(crate::installed::Executable::at(binary.clone()));
     let _daemon = daemon_speaking(&paths, crate::protocol::VERSION);
     launch::send_from(&paths, &origin, report()).await;
     assert!(!received.exists());

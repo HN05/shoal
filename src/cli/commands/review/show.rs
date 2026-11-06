@@ -6,10 +6,11 @@ use crate::client::reviews;
 use crate::{
     cli::{
         context::Context,
-        installed::{Executable, arguments},
+        installed::arguments,
         output::{Palette, Style},
         ui::{self, Fallback},
     },
+    installed::Executable,
     reviews::{Finding, Posted, Review, ReviewState, ReviewTarget, Severity},
 };
 

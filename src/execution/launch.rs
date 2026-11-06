@@ -304,7 +304,7 @@ async fn prepare_tracked_launch(
     // An agent's proxy reports through the installed binary after an
     // upgrade, so the binary is read now, before the upgrade can replace it.
     if agent.is_some() {
-        crate::cli::installed::remember_started();
+        crate::installed::remember_started();
     }
     let place = terminal_place(mode).await;
     let mut auth =
@@ -342,7 +342,7 @@ async fn prepare_taken_over_launch(
     taken: super::TakenOver,
     mode: &Mode,
 ) -> Result<TrackedLaunch> {
-    crate::cli::installed::remember_started();
+    crate::installed::remember_started();
     let super::TakenOver {
         workspace,
         agent,

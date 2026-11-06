@@ -31,7 +31,7 @@ use crate::{
 /// connection over and the daemon runs that binary.
 pub(super) fn installed(link: &Link, daemon: Option<FileIdentity>) -> Option<PathBuf> {
     link.descriptor()?;
-    let installed = crate::cli::installed::started().installed()?;
+    let installed = crate::installed::started().installed()?;
     runs_daemon_binary(installed, daemon).then(|| installed.to_owned())
 }
 

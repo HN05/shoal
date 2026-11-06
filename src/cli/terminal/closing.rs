@@ -135,7 +135,7 @@ pub async fn watch(
     let record = super::here::origin_here(host)
         .filter(|origin| origin.place.is_some())
         .unwrap_or_else(|| Origin::created(host.name(), place.id.clone()));
-    let executable = installed::Executable::current();
+    let executable = crate::installed::Executable::current();
     let lifecycle = || async {
         match workspace_lifecycle(ctx, &place.workspace).await {
             Ok(lifecycle) => Ok(Some(lifecycle)),

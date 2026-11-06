@@ -35,6 +35,8 @@ mod happy;
 #[cfg(feature = "cli")]
 mod hooks;
 #[cfg(feature = "cli")]
+mod installed;
+#[cfg(feature = "cli")]
 mod paths;
 #[cfg(feature = "cli")]
 mod presets;
