@@ -367,10 +367,7 @@ impl WakeWait {
         let inbox = match &self.inbox {
             Some(inbox) => inbox,
             None => {
-                let inbox = match &self.space {
-                    Some(space) => Inbox::named(ctx, space).await?,
-                    None => Inbox::current(ctx, Fallback::OwnWorkspace).await?,
-                };
+                let inbox = Inbox::waited_for(ctx, self.space.as_deref(), self.restarted).await?;
                 self.inbox.insert(inbox)
             }
         };
@@ -409,6 +406,23 @@ struct Inbox {
 }
 
 impl Inbox {
+    /// The inbox a wake hook waits on: the one `space` names, else the
+    /// current one. After a daemon restart, found once the daemon knows the
+    /// agent's scope again, as the wait itself is.
+    async fn waited_for(ctx: &Context, space: Option<&str>, restarted: bool) -> Result<Self> {
+        let find = || async move {
+            match space {
+                Some(space) => Self::named(ctx, space).await,
+                None => Self::current(ctx, Fallback::OwnWorkspace).await,
+            }
+        };
+        if restarted {
+            crate::client::connection::after_restart(find).await
+        } else {
+            find().await
+        }
+    }
+
     /// The inbox of the workspace or running chat `space` names.
     async fn named(ctx: &Context, space: &str) -> Result<Self> {
         match crate::client::workspaces::present_space(&ctx.paths, space).await? {
