@@ -16,7 +16,7 @@ use crate::{
         agents,
         commands::{
             agent_queue, issues, operations,
-            workspaces::{SetUp, follow_setup},
+            workspaces::{SetUp, follow_setup, prepare::queue_in_workspace},
         },
         context::Context,
         output::{Palette, Style},
@@ -219,13 +219,8 @@ async fn queue_unless_own_way(
     if agents::runs_its_own_way(&agent, &settings) {
         return Ok(None);
     }
-    super::plan::check_queued_launch(&launch, &settings)?;
-    let request = super::plan::queued_agent_request(workspace, *launch)?;
-    let admission = crate::client::queue::add(&ctx.paths, request).await?;
-    let entry = admission
-        .entry
-        .context("the daemon queued the agent without an entry")?;
-    Ok(Some(entry))
+    let queued = queue_in_workspace(ctx, workspace, &settings, *launch).await?;
+    Ok(Some(queued))
 }
 
 /// Report the agent queued in the added `workspace`.

@@ -12,6 +12,7 @@ use crate::{
         commands::operations::{Failed, Reporter},
         context::Context,
     },
+    config::Effective,
     execution,
     hooks::{self, Hook, HookKind},
     model::{QueueEntry, Workspace},
@@ -144,9 +145,20 @@ async fn queue_agent(
         ConfigTarget::Workspace(workspace.id.clone()),
     )
     .await?;
-    check_queued_launch(&launch, &settings)?;
-    let request = queued_agent_request(workspace, launch)?;
     reporter.ensure_running()?;
+    queue_in_workspace(ctx, workspace, &settings, launch).await
+}
+
+/// Queue `launch` in the ready `workspace`, whose effective `settings`
+/// must let it run, for the agent queue to start detached.
+pub(super) async fn queue_in_workspace(
+    ctx: &Context,
+    workspace: &Workspace,
+    settings: &Effective,
+    launch: QueuedLaunch,
+) -> Result<QueueEntry> {
+    check_queued_launch(&launch, settings)?;
+    let request = queued_agent_request(workspace, launch)?;
     let admission = crate::client::queue::add(&ctx.paths, request).await?;
     admission
         .entry
