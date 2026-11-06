@@ -13,7 +13,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         workspaces_dir: None,
         contribution: false,
     };
-    let topic = Topic::repository(&repo, CHAT_MODE);
+    let topic = Topic::repository(&repo, crate::config::modes::CHAT);
     let agent: Agent = "codex".parse().unwrap();
     let model = ModelChoice {
         model: None,
@@ -152,7 +152,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         commit: "0123456789abcdef".into(),
         made_for: None,
     });
-    let at_commit = Topic::workspace(workspace, CHAT_MODE);
+    let at_commit = Topic::workspace(workspace, crate::config::modes::CHAT);
     let told = brief(&settings, &agent, &repo, &at_commit, false)
         .unwrap()
         .system;

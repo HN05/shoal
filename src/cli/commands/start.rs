@@ -151,7 +151,7 @@ fn mode_entries(
 /// agent the worker mode would not tell it is one, else the worker.
 fn default_mode(args: &StartArgs) -> &'static str {
     match args.chat || args.in_workspace.is_some() {
-        true => chat::CHAT_MODE,
+        true => modes::CHAT,
         false => modes::DEFAULT,
     }
 }

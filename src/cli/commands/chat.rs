@@ -34,9 +34,6 @@ mod rename;
 
 pub(super) use rename::{rename, request_name};
 
-/// The mode of a chat started without one.
-pub(super) const CHAT_MODE: &str = "chat";
-
 /// What a chat starts as: its mode, and the issue it starts on, if any,
 /// where `Some(None)` asks for one.
 pub(super) struct Subject {

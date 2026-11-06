@@ -63,7 +63,7 @@ fn topic(repo: &Repository, config: &Path) -> chat::Topic {
         ],
         name: format!("{}-setup", repository::name(repo)),
         asks_name: false,
-        mode: chat::CHAT_MODE.to_owned(),
+        mode: crate::config::modes::CHAT.to_owned(),
         subject: Some(crate::config::templates::Subject::told(prompt(
             repository::name(repo),
             config,
