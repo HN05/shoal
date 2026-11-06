@@ -3298,6 +3298,7 @@ shoal move export topic | ssh other shoal move import --resume  # agents continu
 shoal move ssh other plan-cache                # the same, once ssh reaches Shoal there
 shoal move export --repo app --all -o moving   # end every space of app, a file each
 shoal move export topic spike -o moving        # remove both, a file each
+shoal move export topic --keep -o copy.shoal   # keep topic running and write a copy of it
 shoal move import moving                       # continue every space exported to moving
 ```
 
@@ -3333,6 +3334,20 @@ each refusal and ends nothing. It asks once before ending the chats and releasin
 the workspaces' holds, then exports each space and lists the files it wrote; a
 failure there leaves the remaining ones to export, and the command exits 1
 naming each failed space.
+
+`shoal move export [space] --keep -o <file>` leaves the space running and writes a
+copy of it instead: a workspace at a new checkpoint, as `shoal work checkpoint`
+takes one, or with `--checkpoint N` at an earlier one `shoal work restore
+<workspace>` lists, and a chat with its session. It refuses a removed workspace,
+a chat whose agent reported no session, several spaces and `--all`. The import
+opens a workspace copy as a new workspace on the nearest free `-2`, `-3`, ...
+variant of its branch, linked to its issues but not its PRs or CI runs, where
+`shoal resume` starts its agents from forks of their sessions, as `shoal start
+--fork` does, or as new agents told the workspace is a copy; a chat copy starts
+as a new chat from a fork of its session. Forks get session IDs of their own, so
+the original conversations never change. A copy of an earlier checkpoint warns at
+export and import that the agents' conversations describe work its files lack,
+and tells the agents so. Import refuses `--keep-sessions` for a copy.
 
 `shoal move import <file>` reads an export, or standard input without a file or for
 `-`, refusing a terminal, and continues it in the registered repository with the

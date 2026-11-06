@@ -227,6 +227,7 @@ shoal work restore fix-login 3     # Return the workspace to checkpoint 3
 shoal move ssh other fix-login # Move the workspace or chat to another machine; its agents continue there
 shoal move export fix-login | ssh other shoal move import # The same through any pipe
 shoal move export --repo app --all -o moving # Export every workspace and chat of app, a file each
+shoal move export fix-login --keep -o copy.shoal # Export a copy and keep fix-login running here
 shoal move import moving           # Import every space exported to a directory
 shoal pr open                 # Push, then link the branch's open PR or open one
 shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft

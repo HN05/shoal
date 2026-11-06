@@ -2574,7 +2574,15 @@ daemon, which outlives a terminal closing with the workspace and checks the
 destination before removing anything. Import records both as a removal of this
 repository, the ref before the records, then runs the normal restore. Moving rather than copying keeps one workspace per
 branch, so two agents never push it or watch its PRs, and the source's removal
-stays restorable when the transfer fails. The bundle leaves out the default
+stays restorable when the transfer fails. A copy, which leaves the space
+running, keeps that rule by becoming new work: a workspace's copy is one of its
+checkpoints, which the import opens as a new workspace on a branch of its own
+with its issue links but not its PRs or CI runs, and every copied agent, a
+chat's included, starts from a fork of its session under a new ID, so the
+original conversation never changes, even on the same machine. A copy of an
+earlier checkpoint carries sessions newer than its files, which export, import
+and the forked agents are told. Copies use a format version of their own, so an
+older importer refuses one rather than opening the space it copies. The bundle leaves out the default
 remote's default branch, which the importer fetches when it lacks the commit the
 bundle builds on, since that branch only advances. Repositories match by origin.
 Exporting every workspace of a repository checks each one before removing any, so
