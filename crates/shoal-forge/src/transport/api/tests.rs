@@ -38,6 +38,25 @@ async fn repeated_reads_send_the_validators_and_keep_the_unchanged_body() {
     );
 }
 
+#[tokio::test]
+async fn reads_are_sent_again_after_a_failure_that_may_pass_and_changes_are_not() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let sent = AtomicUsize::new(0);
+    // Every other request finds the forge busy, starting with the first.
+    let server = Server::start(move |_| match sent.fetch_add(1, Ordering::SeqCst) % 2 {
+        0 => (503, Vec::new(), Vec::new()),
+        _ => (200, Vec::new(), r#"{"number":7}"#.into()),
+    });
+    let account = agent_on(&server, "agent");
+    let repo = repo_on(&server, ForgeKind::GitHub, "team/project");
+    let endpoint = "repos/team/project/issues/7".to_owned();
+    let read = repo.send(&account, &Request::get(endpoint.clone())).await;
+    assert_eq!(read.unwrap(), serde_json::json!({"number": 7}));
+    let edit = Request::new(HttpMethod::Patch, endpoint, None);
+    assert!(repo.send(&account, &edit).await.is_err());
+    assert_eq!(server.received().len(), 3);
+}
+
 #[test]
 fn forgejo_responses_report_status_and_messages() {
     assert_eq!(curl_body("{\"number\":7}\n201").unwrap(), "{\"number\":7}");

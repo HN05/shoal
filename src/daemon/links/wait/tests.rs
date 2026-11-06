@@ -2557,8 +2557,9 @@ async fn the_background_poll_reads_spaces_together() {
         if number.contains("/comments") {
             return (200, Vec::new(), "[]".into());
         }
+        // A refusal that is not sent again, so a read alone fails the poll.
         if !arrived() {
-            return (500, Vec::new(), Vec::new());
+            return (400, Vec::new(), Vec::new());
         }
         let issue = json!({"number": number.parse::<u64>().unwrap(), "title": "Fix",
             "state": "open"});

@@ -3,7 +3,6 @@
 use std::{future::Future, time::Duration};
 
 use anyhow::Result;
-use serde_json::Value;
 
 /// How many times a request is sent before its failure is returned.
 const ATTEMPTS: u32 = 4;
@@ -79,10 +78,10 @@ impl Resend {
 
 /// What `send` returns, calling it again, after a longer wait each time,
 /// while it fails in a way `resend` allows and attempts remain.
-pub(crate) async fn resending<F, Fut>(resend: Resend, mut send: F) -> Result<Value>
+pub(crate) async fn resending<T, F, Fut>(resend: Resend, mut send: F) -> Result<T>
 where
     F: FnMut() -> Fut,
-    Fut: Future<Output = Result<Value>>,
+    Fut: Future<Output = Result<T>>,
 {
     let mut wait = FIRST_WAIT;
     for _ in 1..ATTEMPTS {

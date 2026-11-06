@@ -81,11 +81,12 @@ impl ForgeRepo {
     /// empty one.
     pub async fn raw(&self, account: &Account, raw: &RawRequest) -> Result<Value> {
         let endpoint = self.raw_endpoint(raw)?;
-        let request = if raw.method == HttpMethod::Get {
-            Request::new(raw.method, self.kind.raw_read(endpoint), raw.body.clone()).repeatable()
+        let endpoint = if raw.method == HttpMethod::Get {
+            self.kind.raw_read(endpoint)
         } else {
-            Request::new(raw.method, endpoint, raw.body.clone())
+            endpoint
         };
+        let request = Request::new(raw.method, endpoint, raw.body.clone());
         self.send(account, &request).await
     }
 

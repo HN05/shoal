@@ -4449,7 +4449,9 @@ PR's head commit, read with the host's token when it has one. The daemon
 repeats a REST read as a conditional request with the `ETag` and `Last-Modified`
 of the last response it got for that URL as the same account, and takes a
 `304 Not Modified` to mean that response still holds; it keeps them in memory
-only.
+only. Every forge read is sent up to three more times, after longer waits each time,
+while its connection fails or breaks, it times out, or the forge answers with a
+5xx other than a rate limit.
 Failed CI jobs include the failing step when the runner records it and a
 command to read the log; a log lookup failure stays on that check's update.
 

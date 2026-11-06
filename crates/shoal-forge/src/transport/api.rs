@@ -73,26 +73,35 @@ impl Request {
         Self::new(HttpMethod::Get, endpoint, None)
     }
 
+    /// A request that is sent again after a failure that may pass when it
+    /// is a read, since reading twice changes nothing.
     pub fn new(method: HttpMethod, endpoint: String, body: Option<Value>) -> Self {
+        let changes = method != HttpMethod::Get;
         Self {
             method,
             endpoint,
             body,
             confirm: None,
             upload: None,
-            resend: Resend::Never,
+            resend: if changes {
+                Resend::Never
+            } else {
+                Resend::Always
+            },
             conditions: Vec::new(),
             redirects: false,
             max_bytes: MAX_RESPONSE_BYTES,
-            changes: method != HttpMethod::Get,
+            changes,
         }
     }
 
     /// This request as a read whatever its method, such as a GraphQL query
     /// sent as a POST.
-    pub fn reading(mut self) -> Self {
-        self.changes = false;
-        self
+    pub fn reading(self) -> Self {
+        Self {
+            changes: false,
+            ..self.repeatable()
+        }
     }
 
     /// Follow the redirects the forge answers with; curl leaves the
@@ -210,13 +219,13 @@ impl ForgeRepo {
         request: &Request,
         refusals: &[u16],
     ) -> Result<Result<Value, u16>> {
-        async {
+        resending(request.resend, || async {
             let response = self.within_limit(account, request).await?;
             if refusals.contains(&response.status) {
                 return Ok(Err(response.status));
             }
             json_body(response.success_body()?).map(Ok)
-        }
+        })
         .await
         .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
     }
@@ -224,10 +233,10 @@ impl ForgeRepo {
     /// The text of the response to `request`, which need not be JSON, such
     /// as a job log; it is not remembered for a conditional read.
     pub(crate) async fn read_text(&self, account: &Account, request: &Request) -> Result<String> {
-        async {
+        resending(request.resend, || async {
             let response = self.within_limit(account, request).await?;
             response.success_body().map(str::to_owned)
-        }
+        })
         .await
         .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
     }

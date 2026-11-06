@@ -1715,6 +1715,8 @@ forge's rate-limit headers and sends nothing to a forge that limits the account
 until the limit ends; polls wait for it and the user gets one notification,
 because a lookup failure would ask an agent to act on what only time fixes. A
 429 is such a limit, never resent within seconds as a 503 is.
+The layer sends a read again after a failure that may pass, since reading twice
+changes nothing and one refused connection would otherwise fail a whole poll.
 
 Notifications stay in the terminal: the daemon records what a user would
 otherwise miss (busy resources and who holds them, port conflicts, exits of

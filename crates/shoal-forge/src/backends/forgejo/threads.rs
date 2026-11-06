@@ -62,8 +62,7 @@ async fn inline_comments_of(
         return Ok(Value::Array(Vec::new()));
     }
     let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews/{id}/comments"));
-    repo.send(account, &Request::get(endpoint).repeatable())
-        .await
+    repo.send(account, &Request::get(endpoint)).await
 }
 
 /// The Forgejo thread with `comment`.

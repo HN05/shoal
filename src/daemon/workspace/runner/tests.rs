@@ -231,7 +231,7 @@ pub(super) async fn github_fixture() -> GitHubFixture {
         {
             let id: u64 = listed.parse().unwrap();
             if id == 5 {
-                return (500, Vec::new(), b"{}".to_vec());
+                return (403, Vec::new(), b"{}".to_vec());
             }
             let mut jobs = if id == 1 {
                 state.queued.clone()
