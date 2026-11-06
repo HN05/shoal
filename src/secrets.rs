@@ -217,7 +217,7 @@ async fn confirm_grant(paths: &Paths, tool: &str, name: &str, secret: &Secret) -
             source: Some(crate::daemon::secrets::specification(secret)),
         },
     };
-    let body = crate::cli::client::call(paths, method)
+    let body = crate::client::connection::call(paths, method)
         .await
         .with_context(|| format!("{tool} needs secrets.{name}"))?;
     match body {

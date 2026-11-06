@@ -20,7 +20,7 @@ use super::{
     takeover, wake,
 };
 use crate::{
-    cli::client,
+    client::connection,
     config::repo::Pushes,
     daemon::approvals::Undecided,
     env,
@@ -588,7 +588,7 @@ async fn prepare_push_gate(paths: &Paths, workspace: &str) -> Result<crate::push
         workspace: workspace.to_owned(),
         on_branch: false,
     };
-    let workspace: crate::model::Workspace = client::request(paths, method).await?;
+    let workspace: crate::model::Workspace = connection::request(paths, method).await?;
     crate::push_gate::Launch::prepare(paths, &workspace.path)
         .await
         .context("[permissions] push")

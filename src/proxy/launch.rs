@@ -117,9 +117,9 @@ pub(super) async fn send_from(
         return false;
     };
     if !origin.upgraded.load(Ordering::Relaxed) {
-        match crate::cli::client::call(paths, report).await {
+        match crate::client::connection::call(paths, report).await {
             Ok(_) => return true,
-            Err(error) if error.is::<crate::cli::client::ProtocolMismatch>() => {
+            Err(error) if error.is::<crate::client::connection::ProtocolMismatch>() => {
                 origin.upgraded.store(true, Ordering::Relaxed);
             }
             Err(_) => return false,
@@ -178,7 +178,7 @@ pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i
         ),
         "the proxy-report worker sends only a wrapper's reports"
     );
-    crate::cli::client::call(paths, report).await?;
+    crate::client::connection::call(paths, report).await?;
     Ok(0)
 }
 

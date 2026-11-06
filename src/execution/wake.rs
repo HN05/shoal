@@ -10,9 +10,9 @@ use anyhow::Result;
 use crate::{
     cli::{
         agents::PromptWake,
-        client,
         terminal::{PromptSession, WAKE_PROMPT},
     },
+    client::connection,
     model::ExecutionPlan,
     paths::Paths,
     protocol::AgentMethod,
@@ -121,7 +121,7 @@ async fn request(
         due,
         interrupted,
     };
-    let (_stream, body) = client::open(paths, method).await?;
+    let (_stream, body) = connection::open(paths, method).await?;
     body.into_result().map(drop)
 }
 

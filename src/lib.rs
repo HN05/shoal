@@ -126,7 +126,7 @@ pub fn main() {
     // SAFETY: as above; only the chat this process starts was shown.
     unsafe { env::take_shown_chat() };
     profile::start();
-    client::connection::supervise(&cli::client::Command);
+    client::connection::supervise(&service::Command);
     run_cli(cli);
 }
 

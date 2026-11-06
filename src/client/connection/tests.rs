@@ -2,6 +2,22 @@ use super::*;
 use crate::protocol::{ErrorCode, RemoteError};
 use tokio::net::UnixListener;
 
+/// Supervision that takes the daemon recorded in the state directory's lock
+/// for its owner, as the `shoal` command's does for a live one.
+struct RecordedOwner;
+
+impl Supervision for RecordedOwner {
+    fn owner(&self, paths: &Paths) -> Option<Identity> {
+        serde_json::from_slice(&std::fs::read(paths.daemon_lock()).ok()?).ok()
+    }
+
+    fn managed(&self, _paths: &Paths) -> bool {
+        false
+    }
+
+    fn waiting_for_update(&self) {}
+}
+
 async fn reply<T>(response: Response) -> Result<T>
 where
     T: TryFrom<Body, Error = anyhow::Error>,
@@ -248,7 +264,7 @@ async fn protocol_mismatch_precedes_payload_extraction() {
 #[tokio::test]
 async fn a_daemon_that_owns_the_state_directory_without_answering_is_unresponsive() -> Result<()> {
     // The shoal command tells an unresponsive daemon apart; apps do not.
-    supervise(&crate::cli::client::Command);
+    supervise(&RecordedOwner);
     let temp = tempfile::tempdir_in("/tmp")?;
     let paths = Paths::for_test(temp.path());
     paths.prepare()?;
