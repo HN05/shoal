@@ -1977,8 +1977,11 @@ branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
 starts, from the then-current default branch. A start that runs detached, from
 a scoped caller or one without a terminal, creates the workspace and sets it up
-first, reporting setup errors to the caller; its preparation then queues the
-agent in it, which the daemon starts, and the call returns reporting the entry
+first, reporting setup errors to the caller. A scoped caller's preparation then
+queues the agent in it; for the user's, the caller queues it once setup ends,
+from the workspace's own settings, except that an agent an app or Happy runs
+opens in place when the limits admit it, otherwise waiting in the queue. The
+daemon starts a queued agent, and the call returns reporting the entry
 (`--json` emits the workspace record, then the entry). `--now` starts that agent
 regardless of the limits, which a scoped caller cannot ask, and `--focus` is
 refused. A detached start that waits for other work queues as a whole as from
