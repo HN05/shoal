@@ -141,6 +141,10 @@ pub struct StartArgs {
     /// Agent session the chat continues, which shoal move import passes.
     #[arg(long, hide = true, requires = "chat")]
     pub session: Option<String>,
+    /// Start from a fork of --session instead of continuing it, which shoal
+    /// move import passes for a copy.
+    #[arg(long, hide = true, requires = "session")]
+    pub fork_session: bool,
     /// Stopped chat, by ID, that this start restores under its own name,
     /// which shoal resume passes.
     #[arg(long, hide = true, requires_all = ["chat", "name"])]

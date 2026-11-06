@@ -859,7 +859,7 @@ pub(in crate::cli) fn ensure_forks(settings: &Effective, name: &str) -> Result<(
 
 /// The arguments that start agent `name` in `directory` from a fork of
 /// `session`, refusing an agent [`ensure_forks`] refuses.
-fn fork_args(
+pub(in crate::cli) fn fork_args(
     settings: &Effective,
     name: &str,
     session: &str,

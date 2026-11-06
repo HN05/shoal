@@ -137,6 +137,7 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
         model: Default::default(),
         args: Vec::new(),
         session: chat.session.clone(),
+        fork: false,
         restore: Some(chat.id.clone()),
         handoff: None,
         parent: None,

@@ -232,6 +232,7 @@ async fn in_chat(ctx: &Context, args: StartArgs, mode: String) -> Result<i32> {
         model: args.model.into(),
         args: args.args,
         session: args.session,
+        fork: args.fork_session,
         restore: args.restore,
         handoff: args.handoff,
         parent: args.parent,

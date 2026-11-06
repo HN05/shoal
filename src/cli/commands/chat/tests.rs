@@ -27,6 +27,7 @@ fn a_chat_started_beside_keeps_its_agent_model_and_arguments() {
         model: &model,
         args: &args,
         session: None,
+        fork: false,
         restore: None,
         parent: None,
     };
@@ -97,6 +98,7 @@ fn a_chat_in_a_workspace_reopens_there_and_is_told_not_to_edit() {
         model: &ModelChoice::default(),
         args: &[],
         session: None,
+        fork: false,
         restore: None,
         parent: None,
     };
@@ -227,6 +229,7 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
         model: &ModelChoice::default(),
         args: &[],
         session: Some("s1"),
+        fork: false,
         restore: None,
         parent: None,
     };
@@ -243,6 +246,23 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     let issue =
         templates::IssueFields::at(&start.linked_issue.unwrap(), start.linked_issue_title).unwrap();
     assert_eq!((issue.number, issue.title.as_str()), (7, "Decide"));
+    assert_eq!(start.session.as_deref(), Some("s1"));
+    assert!(!start.fork_session);
+    // A copy's chat starts from a fork of the session there too.
+    let fork = Beside {
+        fork: true,
+        ..beside
+    };
+    let cli =
+        crate::cli::Cli::try_parse_from(std::iter::once("shoal".into()).chain(fork.relaunch(None)))
+            .unwrap();
+    let Some(crate::cli::Command::Create(crate::cli::args::create::CreateCommand::Start(start))) =
+        cli.command
+    else {
+        panic!("expected start");
+    };
+    assert_eq!(start.session.as_deref(), Some("s1"));
+    assert!(start.fork_session);
     let unlinked = Topic::imported(&repo, "plan", &SpaceLinks::default());
     assert_eq!(unlinked.relaunch, Topic::repository(&repo, "plan").relaunch);
 }

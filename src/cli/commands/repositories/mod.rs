@@ -40,6 +40,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
                 model: model.into(),
                 args,
                 session: None,
+                fork: false,
                 restore: None,
                 handoff: None,
                 parent: None,

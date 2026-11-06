@@ -215,6 +215,9 @@ pub(super) struct Options {
     /// The agent session the chat continues, such as one `shoal move
     /// import` brought, instead of starting a new one.
     pub session: Option<String>,
+    /// Whether the chat starts from a fork of `session`, which stays
+    /// unchanged, instead of continuing it.
+    pub fork: bool,
     /// The stopped chat, by ID, that this start restores under its own name
     /// instead of recording a new one.
     pub restore: Option<String>,
@@ -458,6 +461,7 @@ pub(super) async fn launch(
         model,
         args,
         session,
+        fork,
         restore,
         // Received with the caller's options.
         handoff: _,
@@ -476,7 +480,12 @@ pub(super) async fn launch(
     let asks_name = topic.asks_name && requested.is_none();
     let name = initial_name(ctx, &topic, requested).await?;
     let settings = self::settings(ctx, &repo).await?;
-    let resumed = resumed_args(&settings, &agent, session.as_deref())?;
+    let session_args = SessionArgs {
+        session: session.as_deref(),
+        fork,
+        directory: topic.home(&repo).path(),
+    };
+    let resumed = session_args.of(&settings, &agent)?;
     let brief = brief(&settings, &agent, &repo, &topic, session.is_some())?;
     let launch = agents::ChatLaunch {
         name,
@@ -513,6 +522,7 @@ pub(super) async fn launch(
         model: &model,
         args: &args,
         session: session.as_deref(),
+        fork,
         restore: restore.as_deref(),
         parent: parent.as_deref(),
     };
@@ -606,21 +616,40 @@ pub(super) async fn launch(
     .map(Started::Exited)
 }
 
-/// The arguments with which `agent` continues `session`, unless the chat
-/// starts a new one; an agent without resume arguments starts a new one,
-/// with a warning.
-fn resumed_args(
-    settings: &Effective,
-    agent: &Agent,
-    session: Option<&str>,
-) -> Result<Vec<OsString>> {
-    let Some(session) = session else {
-        return Ok(Vec::new());
-    };
-    ensure!(
-        crate::execution::recovery::valid_session(session),
-        "invalid agent session ID"
-    );
+/// The session a chat's agent continues, or starts in `directory` from a
+/// fork of when `fork`.
+struct SessionArgs<'a> {
+    session: Option<&'a str>,
+    fork: bool,
+    directory: &'a Path,
+}
+
+impl SessionArgs<'_> {
+    /// The arguments with which `agent` continues the session or starts from
+    /// a fork of it, unless the chat starts a new one; an agent without
+    /// such arguments starts a new one, with a warning.
+    fn of(&self, settings: &Effective, agent: &Agent) -> Result<Vec<OsString>> {
+        let Some(session) = self.session else {
+            return Ok(Vec::new());
+        };
+        ensure!(
+            crate::execution::recovery::valid_session(session),
+            "invalid agent session ID"
+        );
+        if !self.fork {
+            return Ok(resumed_args(settings, agent, session));
+        }
+        if let Err(error) = agents::ensure_forks(settings, agent.name()) {
+            eprintln!("warning: {error:#}, so the chat starts a new session");
+            return Ok(Vec::new());
+        }
+        agents::fork_args(settings, agent.name(), session, self.directory)
+    }
+}
+
+/// The arguments with which `agent` continues `session`; an agent without
+/// resume arguments starts a new one, with a warning.
+fn resumed_args(settings: &Effective, agent: &Agent, session: &str) -> Vec<OsString> {
     let resumed = settings
         .launch(agent.name())
         .arguments
@@ -631,7 +660,7 @@ fn resumed_args(
             agent.name()
         );
     }
-    Ok(resumed.unwrap_or_default())
+    resumed.unwrap_or_default()
 }
 
 /// `--name`, which [`Options::check_name`] checked, else the topic's name
@@ -736,8 +765,8 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
 }
 
 /// A chat to start in a new place: its topic, name, agent, requested model,
-/// forwarded arguments, the session it continues and the stopped chat it
-/// restores.
+/// forwarded arguments, the session it continues or forks and the stopped
+/// chat it restores.
 struct Beside<'a> {
     topic: &'a Topic,
     name: &'a str,
@@ -745,6 +774,7 @@ struct Beside<'a> {
     model: &'a ModelChoice,
     args: &'a [OsString],
     session: Option<&'a str>,
+    fork: bool,
     restore: Option<&'a str>,
     parent: Option<&'a str>,
 }
@@ -771,6 +801,9 @@ impl Beside<'_> {
         }
         if let Some(session) = self.session {
             chat.extend(["--session".into(), session.into()]);
+            if self.fork {
+                chat.push("--fork-session".into());
+            }
         }
         if let Some(restore) = self.restore {
             chat.extend(["--restore".into(), restore.into()]);
