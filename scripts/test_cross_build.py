@@ -104,7 +104,7 @@ class CrossBuildTests(unittest.TestCase):
                     self.assertEqual(result.stderr, "tool warning\n")
                     self.assertEqual(result.returncode, 7)
 
-    def test_cross_build_exposes_a_valid_sdk_only_for_macos(self):
+    def test_cross_build_links_with_the_sdk_and_header_room_only_for_macos(self):
         with tempfile.TemporaryDirectory() as root:
             root = Path(root)
             bin_dir = root / "bin"
@@ -127,15 +127,19 @@ class CrossBuildTests(unittest.TestCase):
             cargo.write_text(
                 "#!/usr/bin/env python3\nimport json, os, sys\n"
                 "print(json.dumps({'args': sys.argv[1:], 'sdk': os.environ.get('SDKROOT'), "
+                "'rustflags': os.environ.get('RUSTFLAGS'), "
                 "'wrapper': os.environ['CARGO_ZIGBUILD_ZIG_PATH']}))\n"
             )
             cargo.chmod(0o755)
-            env = {key: value for key, value in os.environ.items() if key != "SDKROOT"}
+            env = {key: value for key, value in os.environ.items() if key not in ("SDKROOT", "RUSTFLAGS")}
             env.update(PATH=f"{bin_dir}{os.pathsep}{env['PATH']}", CARGO_TARGET_DIR=str(root / "target"))
-            for target, _platform, _os, _arch in release_targets():
-                with self.subTest(target=target):
+            # The release sets no RUSTFLAGS; ci.yml's manual cross-build sets some.
+            for target, rustflags in [(row[0], rustflags) for row in release_targets()
+                                      for rustflags in (None, "-D warnings")]:
+                with self.subTest(target=target, rustflags=rustflags):
                     result = subprocess.run(
-                        [str(SCRIPTS / "cross-build.sh"), target], env=env,
+                        [str(SCRIPTS / "cross-build.sh"), target],
+                        env=env if rustflags is None else {**env, "RUSTFLAGS": rustflags},
                         capture_output=True, text=True, check=True,
                     )
                     clean, build = map(json.loads, result.stdout.splitlines())
@@ -147,8 +151,12 @@ class CrossBuildTests(unittest.TestCase):
                         self.assertEqual((sdk / "usr/include/stdio.h").read_text(), "bundled header")
                         self.assertEqual((sdk / "usr/lib/libSystem.tbd").read_text(), "bundled stub")
                         self.assertEqual(json.loads((sdk / "SDKSettings.json").read_text())["MinimalDisplayName"], "15.1")
+                        headerpad = "-C link-arg=-Wl,-headerpad_max_install_names"
+                        self.assertEqual(build["rustflags"],
+                                         headerpad if rustflags is None else f"{rustflags} {headerpad}")
                     else:
                         self.assertIsNone(build["sdk"])
+                        self.assertEqual(build["rustflags"], rustflags)
             result = subprocess.run(
                 [str(SCRIPTS / "cross-build.sh"), "unsupported"], env=env,
                 capture_output=True, text=True, check=False,
