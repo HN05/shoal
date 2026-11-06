@@ -52,7 +52,8 @@ async fn a_prs_discussion_reviews_and_checks_are_read_together() {
             json!({"number": 7, "title": "Fix", "state": "open", "mergeable": true,
                 "head": {"ref": "topic", "sha": "abc"}, "base": {"ref": "main"}})
         } else if !arrived() {
-            return (500, Vec::new(), Vec::new());
+            // A refusal that is not sent again, so a read alone fails.
+            return (400, Vec::new(), Vec::new());
         } else if request.line.contains("/status") {
             json!({"statuses": [], "total_count": 0})
         } else {
