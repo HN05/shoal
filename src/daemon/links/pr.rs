@@ -221,13 +221,24 @@ impl Manager {
         checkout: &std::path::Path,
         input: &str,
     ) -> Result<(ForgeRepo, u64, String)> {
+        let forge = (self.guarded_forge(checkout, "PR lookup needs an origin remote")).await?;
+        let (number, url) = forge.pull(input)?;
+        Ok((forge, number, url))
+    }
+
+    /// The forge of the repository whose origin `checkout` has, reading the
+    /// origin under the file-access stall guard; `missing` is the error
+    /// without one.
+    pub(super) async fn guarded_forge(
+        &self,
+        checkout: &std::path::Path,
+        missing: &'static str,
+    ) -> Result<ForgeRepo> {
         let remote = self
             .check_access(checkout, repository::remote_url_from_path(checkout))
             .await?
-            .context("PR lookup needs an origin remote")?;
-        let forge = self.forge(&remote).await?;
-        let (number, url) = forge.pull(input)?;
-        Ok((forge, number, url))
+            .context(missing)?;
+        self.forge(&remote).await
     }
 
     /// Watches survive restarts. A failed lookup never counts as a merge and a
