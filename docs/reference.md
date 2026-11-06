@@ -1622,7 +1622,7 @@ environment it runs with sets that variable; a lifetime in
 `CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `resume_command`, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it. Builds without the default
 `proxy` Cargo feature refuse to launch an agent that names one.
 
-`instructions` passes the rendered agent guidance apart from the first message,
+`instructions` passes the rendered system text apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
 `resume` and `resume_latest` restore a stopped agent's session (see `resume_command`);
 `fork` starts a new session from a copy of session `{session}`, which
@@ -1652,7 +1652,7 @@ a permission prompt, such as where the tools it runs leave output. Each entry is
 absolute or starts with `~/`; a repository's list replaces the global one, and an
 empty list gives none.
 Each entry replaces the built-in one for Claude, Codex and the other built-in tools.
-Otherwise, for AI tool launches, `{prompt}` combines the rendered agent guidance and
+Otherwise, for AI tool launches, `{prompt}` combines the rendered system text and
 issue prompt, separated by a blank line. Without that placeholder, nonempty context
 becomes the first forwarded argument. Substitutions happen once; user arguments
 remain literal. Claude and Codex, and their launch profiles, also get Shoal's
@@ -4868,7 +4868,7 @@ hook review. The hook reads the event from stdin and prints nothing when there
 is nothing new; failures go to stderr and never fail the agent. Other agents
 whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can
 run the same command; the rest rely on `shoal messages` and `shoal watch`, which
-Shoal's agent guidance mentions.
+Shoal's guidance mentions.
 A chat registers the same message and [turn-state](#agent-state) hooks, and
 for Claude Code the wake hook. Under a chat, outside any workspace scope, they
 and `shoal messages` deliver the chat's messages about the workspaces it

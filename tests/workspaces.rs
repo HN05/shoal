@@ -21294,7 +21294,8 @@ fn strip_shoal_arguments(text: &str, separator: char) -> String {
         .join(&separator.to_string())
 }
 
-/// Every agent prompt starts with Shoal's guidance, which spans these lines.
+/// Every workspace agent's prompt starts with Shoal's guidance, which spans
+/// these lines.
 const GUIDANCE_START: &str = "You are working in Shoal workspace ";
 const GUIDANCE_END: &str = "Name your space with `shoal work rename` once you know what it is for.";
 
