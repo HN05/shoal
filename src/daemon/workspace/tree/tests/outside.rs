@@ -73,15 +73,36 @@ async fn worked(
 
 #[tokio::test]
 async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir() {
-    let (_temp, manager) = manager().await;
+    let (temp, manager) = manager().await;
     let (master, _process) = outside(&manager, "master", None).await;
     assert_eq!(master.repository_id, None);
     let tmp_dir = master.tmp_dir.clone().unwrap();
     assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());
-    let root = manager.config().root_dir(&manager.paths).unwrap();
-    assert!(tmp_dir.starts_with(root), "{}", tmp_dir.display());
+    let root_dir = manager.config().root_dir(&manager.paths).unwrap();
+    assert_eq!(tmp_dir, root_dir.join(".tmp").join(&master.id));
     let listed = manager.recorded_chat(&master.id).await.unwrap().unwrap();
     assert_eq!(listed.tmp_dir, Some(tmp_dir.clone()));
+    // A daemon with another state directory sharing root_dir neither lists
+    // nor takes it.
+    let other =
+        crate::tmp_dirs::Layout::outside_repositories(&root_dir, &temp.path().join("other"));
+    assert_eq!(other.list().unwrap(), Vec::<String>::new());
+    other.prepare("another").unwrap_err();
+    manager.sweep_tmp_dirs().await.unwrap();
+    assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());
+    // A new root_dir leaves it where the chat started, as a repository
+    // keeps its directory.
+    let moved = std::fs::canonicalize(temp.path()).unwrap().join("moved");
+    crate::test_support::configure(&manager, &format!("[machine]\nroot_dir = {moved:?}\n")).await;
+    let listed = manager.recorded_chat(&master.id).await.unwrap().unwrap();
+    assert_eq!(listed.tmp_dir, Some(tmp_dir.clone()));
+    assert_eq!(listed.root_dir, Some(root_dir.clone()));
+    let directory = manager.chat_checkout_path(&listed).await.unwrap();
+    assert_eq!(directory, root_dir);
+    let space = manager.chat_space(&listed).await.unwrap();
+    assert_eq!(space.directories, std::slice::from_ref(&tmp_dir));
+    manager.sweep_tmp_dirs().await.unwrap();
+    assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());
     manager.remove_chat(&master.id, None).await.unwrap();
     assert!(!tmp_dir.exists(), "{}", tmp_dir.display());
 }

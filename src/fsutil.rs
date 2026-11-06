@@ -235,6 +235,16 @@ pub fn create_marked_dir(root: &Path, owner: &str) -> io::Result<()> {
     }
 }
 
+/// The owner the real directory `root` is marked as; none for a directory
+/// without a readable mark, or anything else.
+pub fn marked_owner(root: &Path) -> Option<String> {
+    fs::symlink_metadata(root)
+        .ok()
+        .filter(|metadata| metadata.is_dir())?;
+    let marked = read_optional(&root.join(OWNER_MARKER)).ok()??;
+    Some(marked.trim_end().to_owned())
+}
+
 /// Whether `root` is a real directory marked as `owner`'s, so nothing Shoal
 /// creates or deletes there is reached through a symlink or belongs to anyone
 /// else.

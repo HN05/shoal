@@ -552,7 +552,9 @@ its source and checkout path. After verifying the checkout's identity and
 boundaries, it deletes the checkout recursively, then removes the repository
 directory only when that directory is empty.
 Each workspace and chat gets its own temporary directory as `TMPDIR`, in the
-repository directory's `.tmp` under its ID, which never changes or comes back
+repository directory's `.tmp` under its ID, or `root_dir`'s for a chat without a
+repository, which the daemon marks with its state directory so another daemon
+sharing `root_dir` leaves it alone. The ID never changes or comes back
 like a name. Outside the worktree it neither dirties it nor enters checkpoints,
 and its path stays short enough for the Unix sockets tools create in it on
 macOS. It is created only once its record exists and deleted with it, by

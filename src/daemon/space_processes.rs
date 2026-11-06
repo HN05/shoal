@@ -134,7 +134,7 @@ impl Manager {
         let repo = self.chat_repository(chat).await?;
         Ok(Space {
             id: chat.id.clone(),
-            directories: (self.chat_tmp_layout(repo.as_ref())?)
+            directories: (self.chat_tmp_layout(repo.as_ref(), chat))
                 .and_then(|layout| layout.existing(&chat.id))
                 .into_iter()
                 .collect(),

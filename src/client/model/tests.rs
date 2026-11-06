@@ -107,6 +107,7 @@ fn spaces_find_a_workspace_or_a_running_or_stopped_chat_by_id_or_name() {
         started_at: 0,
         origin: None,
         tmp_dir: None,
+        root_dir: None,
         session: None,
         restore,
         links: Default::default(),

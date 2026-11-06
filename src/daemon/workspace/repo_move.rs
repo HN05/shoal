@@ -54,7 +54,9 @@ impl Manager {
     /// The repositories [`Self::move_repositories`] would move into `root`, or
     /// the configured `root_dir`, in `layout`, and the executions running in
     /// them, which must stop first, refusing as the move would before
-    /// anything moves or changes.
+    /// anything moves or changes. Only the leftovers of chats without a
+    /// repository in the configured root go, which the root being left would
+    /// keep otherwise.
     pub async fn plan_repository_moves(
         &self,
         root: Option<&Path>,
@@ -66,6 +68,8 @@ impl Manager {
         if let Some(root) = root {
             target.path = root.to_owned();
         }
+        self.ensure_root_dir_unused().await?;
+        self.remove_root_dir_leftovers().await?;
         let (plan, repositories) = self
             .movable_repositories(&target, Running::StoppedFirst)
             .await?;
@@ -88,6 +92,8 @@ impl Manager {
         let _registry = self.gates.lock_registry().await;
         let mut target = self.configured_root()?;
         target.layout = layout;
+        self.ensure_root_dir_unused().await?;
+        self.remove_root_dir_leftovers().await?;
         let (plan, moving) = self.movable_repositories(&target, Running::Refused).await?;
         plan.apply()?;
         let root = plan.destination()?;
@@ -127,6 +133,32 @@ impl Manager {
             .collect();
         plan.ensure_linkable(&directories)?;
         Ok((plan, moving))
+    }
+
+    /// Refuse while a chat without a repository, which runs in `root_dir` and
+    /// keeps its temporary directory there, is recorded. Callers hold the
+    /// registry gate, which recording such a chat takes too.
+    async fn ensure_root_dir_unused(&self) -> Result<()> {
+        let rootless: Vec<_> = (self.chats().await?.into_iter())
+            .filter(|chat| chat.repository_id.is_none())
+            .map(|chat| chat.name)
+            .collect();
+        ensure!(
+            rootless.is_empty(),
+            "chats without a repository run in root_dir and keep files there; remove {} first",
+            rootless.join(", ")
+        );
+        Ok(())
+    }
+
+    /// Delete what chats without a repository, none of which is left, kept
+    /// in the configured root: the root a plan moves out of, or the one a
+    /// move links, which must not hold it.
+    async fn remove_root_dir_leftovers(&self) -> Result<()> {
+        let Some(tmp) = self.outside_tmp_layout() else {
+            return Ok(());
+        };
+        tokio::task::spawn_blocking(move || tmp.remove()).await?
     }
 
     /// Finish or roll back every move a stopped daemon or failed attempt left.

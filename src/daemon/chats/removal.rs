@@ -24,8 +24,7 @@ impl Manager {
             .store
             .run(move |db| delete(db, &id, expires_at))
             .await?;
-        let repository = chat.repository_id.as_deref();
-        if let Err(error) = self.delete_chat_tmp_dir(repository, &chat.id).await {
+        if let Err(error) = self.delete_chat_tmp_dir(chat).await {
             log!(
                 "chat {}: temporary directory not deleted: {error:#}",
                 chat.id

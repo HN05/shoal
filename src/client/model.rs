@@ -1443,6 +1443,10 @@ pub struct Chat {
     /// repository without a directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tmp_dir: Option<std::path::PathBuf>,
+    /// The `root_dir` a chat without a repository started in, where it runs
+    /// and keeps its temporary directory however `root_dir` changes later.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_dir: Option<std::path::PathBuf>,
     /// The agent session its hooks reported last, which an export continues.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,

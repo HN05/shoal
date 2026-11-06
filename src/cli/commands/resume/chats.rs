@@ -143,11 +143,15 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
     chat::launch(ctx, repo, settings, topic, options).await
 }
 
-/// Where the stopped `chat` starts again: its registered repository, or
-/// `root_dir` for a chat without one.
+/// Where the stopped `chat` starts again: its registered repository, or the
+/// `root_dir` a chat without one started in.
 async fn saved_repository(ctx: &Context, chat: &Chat) -> Result<ChatRepository> {
     let Some(id) = &chat.repository_id else {
-        return Ok(ChatRepository::Outside(chat::root_dir(ctx).await?));
+        let root_dir = match &chat.root_dir {
+            Some(root_dir) => root_dir.clone(),
+            None => chat::root_dir(ctx).await?,
+        };
+        return Ok(ChatRepository::Outside(root_dir));
     };
     let repositories = crate::client::repositories::list(&ctx.paths).await?;
     let repo = (repositories.into_iter())

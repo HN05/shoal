@@ -7,6 +7,7 @@ use rusqlite::Connection;
 
 use crate::{
     daemon::{log, workspace::Manager},
+    model::Chat,
     tmp_dirs::Layout,
 };
 
@@ -21,21 +22,13 @@ impl Manager {
         remove(layout, vec![id.to_owned()]).await
     }
 
-    /// Delete the temporary directory of the chat `id` of `repository`, or
-    /// of none, once its record is gone.
-    pub(crate) async fn delete_chat_tmp_dir(
-        &self,
-        repository: Option<&str>,
-        id: &str,
-    ) -> Result<()> {
-        let repo = match repository {
-            Some(repository) => Some(self.repository(repository).await?),
-            None => None,
-        };
-        let Some(layout) = self.chat_tmp_layout(repo.as_ref())? else {
+    /// Delete the temporary directory of `chat` once its record is gone.
+    pub(crate) async fn delete_chat_tmp_dir(&self, chat: &Chat) -> Result<()> {
+        let repo = self.chat_repository(chat).await?;
+        let Some(layout) = self.chat_tmp_layout(repo.as_ref(), chat) else {
             return Ok(());
         };
-        remove(layout, vec![id.to_owned()]).await
+        remove(layout, vec![chat.id.clone()]).await
     }
 
     /// Delete every temporary directory that belongs to no workspace or chat
@@ -52,10 +45,9 @@ impl Manager {
                 failed.push(format!("{}: {error:#}", crate::repository::name(&repo)));
             }
         }
-        let outside = self.chat_tmp_layout(None);
-        let swept = async { self.sweep_layout_tmp_dirs(outside?, None).await };
-        if let Err(error) = swept.await {
-            failed.push(format!("root_dir: {error:#}"));
+        let outside = self.outside_tmp_layout();
+        if let Err(error) = self.sweep_layout_tmp_dirs(outside, None).await {
+            failed.push(format!("chats without a repository: {error:#}"));
         }
         ensure!(failed.is_empty(), "{}", failed.join("; "));
         Ok(())

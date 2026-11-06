@@ -23,6 +23,7 @@ fn spaces() -> Spaces {
         started_at: 0,
         origin: None,
         tmp_dir: None,
+        root_dir: None,
         session: None,
         restore,
         links: Default::default(),

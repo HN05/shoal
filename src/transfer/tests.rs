@@ -65,6 +65,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         started_at: 0,
         origin: None,
         tmp_dir: None,
+        root_dir: None,
         session: Some("s1".into()),
         restore: None,
         links: crate::model::SpaceLinks {

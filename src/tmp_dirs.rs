@@ -10,16 +10,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
-    fsutil::{create_marked_dir, is_marked_dir},
+    fsutil::{create_marked_dir, is_marked_dir, marked_owner},
     model::Repository,
 };
-
-/// The owner `root_dir`'s temporary directories are marked as, which no
-/// repository ID takes.
-const OUTSIDE_REPOSITORIES: &str = "root";
 
 /// The directory of one repository's temporary directories, or of those of
 /// the chats without a repository.
@@ -38,9 +34,11 @@ impl Layout {
     }
 
     /// The temporary directories of the chats without a repository, in
-    /// `root_dir`.
-    pub fn outside_repositories(root_dir: &Path) -> Self {
-        Self::new(root_dir, OUTSIDE_REPOSITORIES)
+    /// `root_dir`, marked as those of the daemon whose state directory is
+    /// `state`, which no repository ID names: a daemon sharing `root_dir`
+    /// neither uses nor sweeps them.
+    pub fn outside_repositories(root_dir: &Path, state: &Path) -> Self {
+        Self::new(root_dir, &state.display().to_string())
     }
 
     /// The repository's temporary directories; registrations from before the
@@ -66,11 +64,7 @@ impl Layout {
     pub fn prepare(&self, id: &str) -> Result<PathBuf> {
         create_marked_dir(&self.root, &self.owner)
             .with_context(|| format!("create {}", self.root.display()))?;
-        ensure!(
-            is_marked_dir(&self.root, &self.owner),
-            "{} is not a directory Shoal created for temporary files; move it away",
-            self.root.display()
-        );
+        self.ensure_own()?;
         let directory = self.locate(id);
         match fs::DirBuilder::new().mode(0o700).create(&directory) {
             Err(error) if error.kind() != ErrorKind::AlreadyExists => {
@@ -84,6 +78,25 @@ impl Layout {
             directory.display()
         );
         Ok(directory)
+    }
+
+    /// Refuse a directory in the way that Shoal did not create for this
+    /// owner, leaving one another owner's, such as a daemon's that shares
+    /// `root_dir`, to it.
+    fn ensure_own(&self) -> Result<()> {
+        if let Some(owner) = marked_owner(&self.root).filter(|owner| *owner != self.owner) {
+            bail!(
+                "{} holds the temporary directories of {owner}, which this Shoal is not; give each \
+                 Shoal its own root_dir",
+                self.root.display()
+            );
+        }
+        ensure!(
+            is_marked_dir(&self.root, &self.owner),
+            "{} is not a directory Shoal created for temporary files; move it away",
+            self.root.display()
+        );
+        Ok(())
     }
 
     /// The temporary directory of the workspace or chat `id` when it is one

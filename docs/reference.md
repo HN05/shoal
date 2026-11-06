@@ -1925,8 +1925,10 @@ starts its chat the same way. It runs in `root_dir`, with its `TMPDIR` in
 repository, `--repo` or `--issue` is refused, and `--in` starts the mode's
 chat in that workspace's worktree, in its repository, instead. The agent waits for you
 to speak first, as in any chat. `shoal work` and `--json` list it with a null
-`repository_id`, and it is stopped, resumed and removed like any other chat;
-removing it first removes every space below it, in every repository.
+`repository_id` and the `root_dir` it started in, where it resumes and keeps its
+`TMPDIR` however `root_dir` changes later, and it is stopped, resumed and removed
+like any other chat; removing it first removes every space below it, in every
+repository.
 
 `shoal start` run from it starts workspaces and chats below it in any
 registered repository, whose messages, questions, completion, approval
@@ -2813,7 +2815,10 @@ chat, queued agent launches or a starting CI job, a queued or running review, a 
 operation, a checkout leased as a repository resource, another repository's
 checkout or workspace or Shoal's state inside its directory, or a process
 other than those commands and agents whose working directory is inside it, so
-leave those directories first. The move is recorded before anything moves; a failed or
+leave those directories first. A [master session](#master-session) or any
+other chat without a repository, running or stopped, also refuses the move,
+since it runs in `root_dir` and keeps its temporary directory there; remove it
+first, and the move deletes the `.tmp` it leaves. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
 repository refuses other changes until the next `move root` or daemon start
 completes it. Agent trust for the old paths is removed, and the new paths are
@@ -3311,11 +3316,17 @@ shared `/tmp`; a `TMPDIR` in `[env]` replaces it. The daemon creates the
 directory, readable only by you, when it starts a process in the workspace,
 exports its environment or records the chat, reserving the repository directory
 for a registration without one. It marks `.tmp` with the repository and refuses
-to start the process or chat while an unmarked `.tmp` is in the way.
+to start the process or chat while an unmarked `.tmp` is in the way. A chat
+without a repository has its directory in the `.tmp` of the `root_dir` it started
+in, where it stays when `root_dir` changes, and the daemon marks that `.tmp` with
+its state directory: a daemon with another state directory that
+shares `root_dir` neither uses nor deletes it, and starts no chat without a
+repository there.
 
 Nothing in it is kept: removing the workspace or chat deletes the
 directory without a checkpoint, and cleanup deletes those that belong to no
-workspace or chat of the repository. Removing the repository deletes `.tmp`.
+workspace or chat of the repository, or to no chat without a repository.
+Removing the repository deletes `.tmp`.
 
 ### Remove a workspace
 

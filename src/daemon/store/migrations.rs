@@ -482,9 +482,13 @@ pub(super) fn allow_branchless_workspaces(db: &Connection) -> Result<()> {
 }
 
 /// Drop the `NOT NULL` constraint on `chats.repository_id`: a chat that
-/// manages every repository's spaces has none of its own.
+/// manages every repository's spaces has none of its own. Such a chat
+/// records the `root_dir` it started in, which keeps its temporary
+/// directory as a repository's directory keeps its chats'.
 pub(super) fn allow_chats_without_repository(db: &Connection) -> Result<()> {
-    drop_not_null(db, "chats", "repository_id TEXT")
+    drop_not_null(db, "chats", "repository_id TEXT")?;
+    db.execute_batch("ALTER TABLE chats ADD COLUMN root_dir TEXT")?;
+    Ok(())
 }
 
 /// Drop the `NOT NULL` constraint of the column `table` defines as

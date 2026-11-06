@@ -182,11 +182,7 @@ impl Manager {
             parent,
         } = new;
         crate::validate::name("chat", &name)?;
-        // Its temporary directory goes in the repository's directory.
-        let repository = match repository {
-            Some(id) => Some(self.reserve_repository_directory(&id).await?),
-            None => None,
-        };
+        let home = self.reserve_chat_home(repository).await?;
         let process = identity::capture(pid)?.context("the chat process is not running")?;
         // A save under way would miss it, and a shutdown's would not come again.
         let _saving = self.chat_saves.lock().await;
@@ -202,7 +198,7 @@ impl Manager {
         let chat = Chat {
             id: Uuid::new_v4().to_string(),
             number: 0,
-            repository_id: repository.as_ref().map(|repository| repository.id.clone()),
+            repository_id: (home.repository.as_ref()).map(|repository| repository.id.clone()),
             name,
             agent,
             mode,
@@ -211,6 +207,7 @@ impl Manager {
             started_at,
             origin,
             tmp_dir: None,
+            root_dir: home.root_dir.clone(),
             session: None,
             restore: None,
             links: SpaceLinks::default(),
@@ -226,7 +223,28 @@ impl Manager {
             .store
             .run(move |db| insert(db, chat, &recorded, hands_over, below))
             .await?;
-        self.give_tmp_dir(chat, repository.as_ref(), process).await
+        self.give_tmp_dir(chat, home.repository.as_ref(), process)
+            .await
+    }
+
+    /// Where a new chat of `repository` keeps its temporary directory: the
+    /// repository's directory, reserved now, or for a chat without one the
+    /// configured `root_dir`, which stays its own however `root_dir` changes
+    /// later. A chat without one is recorded under the registry gate, so a
+    /// root move, which holds it, finds the chat before clearing `root_dir`.
+    async fn reserve_chat_home(&self, repository: Option<String>) -> Result<ChatHome<'_>> {
+        Ok(match repository {
+            Some(id) => ChatHome {
+                repository: Some(self.reserve_repository_directory(&id).await?),
+                root_dir: None,
+                _registry: None,
+            },
+            None => ChatHome {
+                repository: None,
+                _registry: Some(self.gates.lock_registry().await),
+                root_dir: Some(self.config().root_dir(&self.paths)?),
+            },
+        })
     }
 
     /// `chat`, just recorded with `process`, with its temporary directory,
@@ -238,7 +256,7 @@ impl Manager {
         repository: Option<&Repository>,
         process: Identity,
     ) -> Result<Chat> {
-        match self.chat_tmp_dir(repository, &chat.id) {
+        match self.chat_tmp_dir(repository, &chat) {
             Ok(tmp_dir) => {
                 chat.tmp_dir = tmp_dir;
                 Ok(chat)
@@ -272,12 +290,12 @@ impl Manager {
     /// free as a new chat's, and move its files to that name.
     pub async fn rename_chat(&self, chat: String, name: String) -> Result<RenamedChat> {
         crate::validate::name("chat", &name)?;
-        let paths = self.paths.clone();
+        let (paths, owner) = (self.paths.clone(), self.root_dir_owner());
         // The store's one thread moves the files after the rename commits,
         // so no other rename or chat start reaches either name in between.
         self.store
             .run(move |db| {
-                let (old, renamed) = rename(db, &chat, &name)?;
+                let (old, renamed) = rename(db, &owner, &chat, &name)?;
                 // The chat has its new name even when its files stay behind.
                 if old.name != renamed.name
                     && let Err(error) = move_chat_files(&paths, &old, &renamed)
@@ -297,7 +315,10 @@ impl Manager {
         let process = identity::capture(pid)?.context("the chat process is not running")?;
         let chat = chat.to_owned();
         let _handoff = self.chat_handoffs.write().await;
-        self.store.run(move |db| move_to(db, &chat, &process)).await
+        let owner = self.root_dir_owner();
+        self.store
+            .run(move |db| move_to(db, &owner, &chat, &process))
+            .await
     }
 
     /// Record `session` as the agent session the running chat `id` continues.
@@ -318,14 +339,8 @@ impl Manager {
     /// process exited.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
         self.stop_finished_chats().await?;
-        let mut chats = self.store.run(|db| recorded(db)).await?;
-        // A `root_dir` the configuration cannot give leaves them without one.
-        if let Ok(Some(layout)) = self.chat_tmp_layout(None) {
-            for chat in chats.iter_mut().filter(|chat| chat.repository_id.is_none()) {
-                chat.tmp_dir = Some(layout.locate(&chat.id));
-            }
-        }
-        Ok(chats)
+        let owner = self.root_dir_owner();
+        self.store.run(move |db| recorded(db, &owner)).await
     }
 
     /// The agent processes of the running chats.
@@ -531,38 +546,58 @@ impl Manager {
     }
 
     /// The directory a chat outside a workspace runs in: its repository's
-    /// registered checkout, or `root_dir` for a chat without a repository.
+    /// registered checkout, or the `root_dir` a chat without a repository
+    /// started in.
     pub(crate) async fn chat_checkout_path(&self, chat: &Chat) -> Result<std::path::PathBuf> {
-        match self.chat_repository(chat).await? {
-            Some(repository) => Ok(repository.path),
-            None => self.config().root_dir(&self.paths),
+        match (self.chat_repository(chat).await?, &chat.root_dir) {
+            (Some(repository), _) => Ok(repository.path),
+            (None, Some(root_dir)) => Ok(root_dir.clone()),
+            (None, None) => self.config().root_dir(&self.paths),
         }
     }
 
-    /// The layout of the temporary directories of the chats of
-    /// `repository`, or of those without one in `root_dir`; none in a
-    /// repository without a directory.
+    /// The layout that keeps the temporary directory of `chat` of
+    /// `repository`, or for a chat without one of the `root_dir` it started
+    /// in; none in a repository without a directory.
     pub(crate) fn chat_tmp_layout(
         &self,
         repository: Option<&Repository>,
-    ) -> Result<Option<tmp_dirs::Layout>> {
+        chat: &Chat,
+    ) -> Option<tmp_dirs::Layout> {
         match repository {
-            Some(repository) => Ok(tmp_dirs::Layout::of(repository)),
-            None => Ok(Some(tmp_dirs::Layout::outside_repositories(
-                &self.config().root_dir(&self.paths)?,
-            ))),
+            Some(repository) => tmp_dirs::Layout::of(repository),
+            None => (chat.root_dir.as_deref())
+                .map(|root| tmp_dirs::Layout::outside_repositories(root, &self.root_dir_owner())),
         }
     }
 
-    /// The temporary directory of the chat `id` of `repository`, or of
-    /// none, created when missing.
+    /// The layout of the temporary directories of the chats without a
+    /// repository in the configured `root_dir`, which no other daemon uses or
+    /// sweeps; none while `root_dir` is not valid, when no such chat starts
+    /// either.
+    pub(crate) fn outside_tmp_layout(&self) -> Option<tmp_dirs::Layout> {
+        let root_dir = self.config().root_dir(&self.paths).ok()?;
+        Some(tmp_dirs::Layout::outside_repositories(
+            &root_dir,
+            &self.root_dir_owner(),
+        ))
+    }
+
+    /// The state directory as the daemon marks what it keeps in `root_dir`:
+    /// canonical, so every path to it names the same owner.
+    pub(crate) fn root_dir_owner(&self) -> std::path::PathBuf {
+        std::fs::canonicalize(&self.paths.state).unwrap_or_else(|_| self.paths.state.clone())
+    }
+
+    /// The temporary directory of `chat` of `repository`, or of none,
+    /// created when missing.
     pub(crate) fn chat_tmp_dir(
         &self,
         repository: Option<&Repository>,
-        id: &str,
+        chat: &Chat,
     ) -> Result<Option<std::path::PathBuf>> {
-        (self.chat_tmp_layout(repository)?)
-            .map(|layout| layout.prepare(id))
+        (self.chat_tmp_layout(repository, chat))
+            .map(|layout| layout.prepare(&chat.id))
             .transpose()
     }
 
@@ -600,6 +635,14 @@ fn workspace_ref(workspace: &Workspace) -> WorkspaceRef {
 /// workspace it runs in is being removed, starting until it is moved when
 /// it `hands_over`, below the space `parent` when given, which must take it
 /// and, as `removing` shows, not be a chat being removed.
+/// Where a new chat keeps its temporary directory, and the registry gate a
+/// chat without a repository is recorded under.
+struct ChatHome<'a> {
+    repository: Option<Repository>,
+    root_dir: Option<std::path::PathBuf>,
+    _registry: Option<tokio::sync::MutexGuard<'a, ()>>,
+}
+
 fn insert(
     db: &mut Connection,
     mut chat: Chat,
@@ -616,8 +659,8 @@ fn insert(
     store::ensure_name_available(&tx, &chat.name, None)?;
     tx.execute(
         "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting,
-            unique_id,scope_token,workspace_id,mode)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            unique_id,scope_token,workspace_id,mode,root_dir)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
         params![
             chat.id,
             chat.repository_id,
@@ -634,7 +677,8 @@ fn insert(
             unique_id(process)?,
             Uuid::new_v4().to_string(),
             workspace,
-            chat.mode
+            chat.mode,
+            (chat.root_dir.as_deref()).map(|root| root.to_string_lossy().into_owned())
         ],
     )?;
     chat.number = tx.query_row("SELECT number FROM chats WHERE id=?1", [&chat.id], |row| {
@@ -722,9 +766,9 @@ pub(crate) fn suffixed(base: &str, suffix: u64) -> String {
 
 /// Rename the running or stopped chat `chat`, by ID or name, to `name` unless
 /// another holds it. Returns the chat before and after.
-fn rename(db: &mut Connection, chat: &str, name: &str) -> Result<(Chat, Chat)> {
+fn rename(db: &mut Connection, owner: &Path, chat: &str, name: &str) -> Result<(Chat, Chat)> {
     let tx = db.transaction()?;
-    let old = recorded(&tx)?
+    let old = recorded(&tx, owner)?
         .into_iter()
         .find(|running| running.id == chat || running.name == chat)
         .with_context(|| format!("no running chat {chat}"))?;
@@ -771,27 +815,28 @@ fn move_chat_files(paths: &crate::paths::Paths, old: &Chat, renamed: &Chat) -> R
 /// Make `process` the one the running chat `chat` runs as. A stopped
 /// chat's agent was stopped, so a session started for it is refused, which
 /// its launcher then stops.
-fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> {
+fn move_to(db: &mut Connection, owner: &Path, chat: &str, process: &Identity) -> Result<Chat> {
     let moved = db.execute(
         "UPDATE chats SET pid=?2,birth=?3,unique_id=?4,starting=0 WHERE id=?1 AND restore IS NULL",
         params![chat, process.pid, process.birth, unique_id(process)?],
     )?;
     anyhow::ensure!(moved == 1, "no running chat {chat}");
-    recorded(db)?
+    recorded(db, owner)?
         .into_iter()
         .find(|running| running.id == chat)
         .context("the chat ended")
 }
 
-/// The running and stopped chats in start order. A chat without a
-/// repository has its temporary directory in `root_dir`, which only the
-/// configuration names, so it is left out here.
-fn recorded(db: &Connection) -> Result<Vec<Chat>> {
+/// The running and stopped chats in start order, a chat without a
+/// repository with its temporary directory in the `root_dir` it started in,
+/// marked as `owner`'s, the daemon's state directory.
+fn recorded(db: &Connection, owner: &Path) -> Result<Vec<Chat>> {
     db.prepare(
         "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
                     chats.restore,chats.completion,
-                    workspaces.id,workspaces.name,workspaces.branch,chats.number,chats.mode
+                    workspaces.id,workspaces.name,workspaces.branch,chats.number,chats.mode,
+                    chats.root_dir
              FROM chats LEFT JOIN repositories ON repositories.id=chats.repository_id
                 LEFT JOIN workspaces ON workspaces.id=chats.workspace_id
              ORDER BY chats.started_at, chats.rowid",
@@ -799,11 +844,17 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
     .query_map([], |row| {
         let id: String = row.get(0)?;
         let repository_id: Option<String> = row.get(1)?;
-        let tmp_dir = (repository_id.as_deref())
-            .zip(row.get::<_, Option<String>>(7)?)
-            .map(|(repository_id, directory)| {
-                tmp_dirs::Layout::new(Path::new(&directory), repository_id).locate(&id)
-            });
+        let root_dir = row
+            .get::<_, Option<String>>(16)?
+            .map(std::path::PathBuf::from);
+        let tmp_dir = match (&repository_id, row.get::<_, Option<String>>(7)?) {
+            (Some(repository_id), Some(directory)) => {
+                Some(tmp_dirs::Layout::new(Path::new(&directory), repository_id).locate(&id))
+            }
+            (Some(_), None) => None,
+            (None, _) => (root_dir.as_deref())
+                .map(|root| tmp_dirs::Layout::outside_repositories(root, owner).locate(&id)),
+        };
         Ok(Chat {
             id,
             number: row.get(14)?,
@@ -823,6 +874,7 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
             started_at: row.get(5)?,
             origin: store::json_column(row, "origin")?,
             tmp_dir,
+            root_dir,
             session: row.get(8)?,
             restore: row.get(9)?,
             links: SpaceLinks::default(),
