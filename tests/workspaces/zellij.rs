@@ -265,18 +265,30 @@ impl ZellijServer {
         tabs
     }
 
-    /// The running sessions.
+    /// The running sessions. Zellij's own listing leaves out a session too
+    /// busy to answer, so they are the sessions of the running servers.
     fn sessions(&self) -> Vec<String> {
-        let output = self
-            .zellij()
-            .args(["list-sessions", "--short", "--no-formatting"])
-            .output()
-            .unwrap();
-        String::from_utf8(output.stdout)
-            .unwrap()
+        self.servers().unwrap()
+    }
+
+    /// The sessions whose server runs in the test's socket directory, as
+    /// the servers' last argument, the session's socket, names them.
+    fn servers(&self) -> std::io::Result<Vec<String>> {
+        let output = Command::new("ps").args(["-A", "-o", "args="]).output()?;
+        if !output.status.success() {
+            return Err(std::io::Error::other(format!("ps: {output:?}")));
+        }
+        let sockets = fs::canonicalize(self.sockets.path())?;
+        Ok(String::from_utf8_lossy(&output.stdout)
             .lines()
-            .map(str::to_owned)
-            .collect()
+            .filter_map(|line| {
+                let (_, socket) = line.split_once(" --server ")?;
+                let socket = Path::new(socket.trim_end());
+                fs::canonicalize(socket.parent()?)
+                    .is_ok_and(|dir| dir.starts_with(&sockets))
+                    .then(|| socket.file_name()?.to_str().map(str::to_owned))?
+            })
+            .collect())
     }
 
     /// `command` as if run in the user's pane.
@@ -304,14 +316,15 @@ impl ZellijServer {
     }
 
     /// What Zellij shows of the user's session: its client, its panes, the
-    /// sessions and Zellij's log.
+    /// sessions, their servers and Zellij's log.
     fn report(&mut self) -> String {
         format!(
-            "client: {}\nclient screen:\n{}\nlist-panes: {:?}\nlist-sessions: {:?}\nzellij log:\n{}",
+            "client: {}\nclient screen:\n{}\nlist-panes: {:?}\nlist-sessions: {:?}\nservers: {:?}\nzellij log:\n{}",
             self.client_state(),
             self.client_screen(),
             self.pane_table(),
             self.session_table(),
+            self.servers(),
             zellij_log(),
         )
     }
