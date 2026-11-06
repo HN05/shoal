@@ -1,5 +1,7 @@
 use super::*;
 
+mod stopped;
+
 #[test]
 fn agents_are_labelled_by_name_stop_time_and_reason() {
     let root = tempfile::tempdir().unwrap();

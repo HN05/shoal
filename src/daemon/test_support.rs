@@ -5,6 +5,8 @@ use std::{fs, path::Path, sync::Arc};
 pub(crate) use crate::test_support::*;
 use crate::{daemon::workspace::Manager, paths::Paths};
 
+pub(crate) mod overload;
+
 /// Keep the temporary root alive until all manager operations have finished.
 /// Its global config removes eligible workspaces on their first sweep, as
 /// reopened managers also read; grace period tests set their own.
