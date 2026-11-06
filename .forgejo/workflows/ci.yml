@@ -1,9 +1,9 @@
-# PR and main checks on the shared Linux Docker runner; the rust job is intended
-# as the required check on the `main` protection rule.
+# PR and main checks on Shoal runners; the rust job is intended as the
+# required check on the `main` protection rule.
 #
 # A PR whose only `area/` label is `area/docs` runs no checks: the gate job
-# reads the labels and the rust job's check steps skip themselves without
-# touching /ci-target, which still reports a status for the required check.
+# reads the labels and the rust job's check steps skip themselves, which still
+# reports a status for the required check.
 # Pushes to main and dispatches always run everything, except that a release
 # PR (`release/v*`) and its version commit on main run no checks: release.py
 # validates that tree itself.
@@ -24,20 +24,13 @@
 # ranks `skipped` above `success`. The undraft job names the rust and gate
 # contexts; keep them in step with the job names.
 #
-# No JavaScript actions (actions/checkout, actions/cache): the runner would have
-# to inject Node into the job container, which does not work under Podman. Hence
-# the plain-git checkout, and caching by the runner rather than the workflow;
-# its config mounts host directories into every job container:
-#   /var/cache/ci/cargo/registry -> /usr/local/cargo/registry
-#   /var/cache/ci/cargo/git      -> /usr/local/cargo/git
-#   /var/cache/ci/target         -> /ci-target
-# Every step that runs cargo in /ci-target (here and in release.yml) first
-# sources .forgejo/scripts/lock-target-dir.sh, which moves CARGO_TARGET_DIR to
-# a free slot directory under it and holds that slot for the rest of the step,
-# and runs `cargo clean --workspace` before its first build so another branch's
-# build of the workspace's packages is never taken as fresh. The directories
-# grow without bound; clear /var/cache/ci/target on the runner host when it
-# gets large.
+# The checks run on a Shoal runner (docs/reference.md#runner), on Linux or
+# macOS, whichever machine with `runner.enabled` for this repository admits it
+# first. Steps run on that machine's host with its installed tools, in a
+# disposable workspace at the job's commit, so there is no checkout step. The
+# workspace starts from the seed build of main that .shoal.toml's `cargo`
+# preset makes, so a job rebuilds only what its commit changed. Build settings that change Cargo's fingerprints, such as
+# CARGO_INCREMENTAL or a profile's debuginfo, would rebuild everything instead.
 
 name: ci
 
@@ -58,18 +51,12 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Clean builds are faster without incremental artefacts or test debuginfo.
-  CARGO_INCREMENTAL: "0"
-  CARGO_PROFILE_DEV_DEBUG: "0"
-  CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   undraft:
     name: undraft (edits run the checks only after leaving draft)
     if: github.event.action == 'edited' && !github.event.pull_request.draft
-    runs-on: docker
-    container:
-      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+    runs-on: shoal
     outputs:
       run: ${{ steps.statuses.outputs.run }}
     steps:
@@ -108,10 +95,7 @@ jobs:
       needs.undraft.outputs.run != 'false' &&
       !startsWith(github.head_ref, 'release/v') &&
       !startsWith(github.event.head_commit.message, 'chore: prepare release v')
-    runs-on: docker
-    container:
-      # Same local image as the rust job; it carries curl and jq.
-      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+    runs-on: shoal
     outputs:
       docs_only: ${{ steps.labels.outputs.docs_only }}
       # Names the rust job through its matrix (see the top of the file).
@@ -155,64 +139,20 @@ jobs:
     strategy:
       matrix:
         checks: ["${{ needs.gate.outputs.checks }}"]
-    runs-on: docker
-    container:
-      # Built from .forgejo/ci-image/Containerfile on the runner host; the tag is
-      # the Rust version.
-      image: git.henriknordvik.com/hn05/ci-shoal:1.98
-      # Test fixtures keep their state, repositories and daemons under /tmp. On
-      # the runner's disk an fsync can stall for over a second under shared I/O
-      # load, so each daemon's SQLite commits overran the fixtures' time limits;
-      # tmpfs makes fsync free. Tests exec scripts there, so it must allow exec.
-      options: --tmpfs /tmp:rw,exec,nosuid,mode=1777,size=8g
+    runs-on: shoal
+    # A Shoal runner never stops a running job on its own.
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: ${{ env.SHOAL_WORKSPACE_PATH }}
     env:
-      # Runner-mounted volume; a plain directory when unmounted.
-      CARGO_TARGET_DIR: /ci-target
       DOCS_ONLY: ${{ needs.gate.outputs.docs_only }}
       # Empty outside PRs.
       PR_BASE: ${{ github.event.pull_request.base.sha }}
     steps:
-      - name: Checkout
-        run: |
-          git init -q .
-          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
-          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
-            fetch -q --depth 1 origin "${{ github.sha }}"
-          git checkout -q FETCH_HEAD
-          # A PR's base tree decides whether the musl test runs (see below).
-          # Without it the test runs.
-          if [ -n "$PR_BASE" ]; then
-            git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
-              fetch -q --depth 1 origin "$PR_BASE" || echo "base fetch failed; the musl test will run"
-          fi
-
-      - name: Toolchain (baked into the image)
-        run: rustc --version && cargo clippy --version && wt --version
-
-      - name: Cache state (runner-mounted volumes)
-        run: |
-          for d in /usr/local/cargo/registry /usr/local/cargo/git /ci-target; do
-            if mountpoint -q "$d" 2>/dev/null; then
-              echo "$d: mounted, $(du -sh "$d" 2>/dev/null | cut -f1)"
-            else
-              echo "$d: not a mount point (runner cache volumes missing; build is uncached)"
-            fi
-          done
-          mkdir -p /ci-target
-
-      # Tests detach thousands of processes. Unreaped, they stay zombies that
-      # every process inventory in the tests reads, which doubled the job's
-      # system CPU. The image runs tini as PID 1 (see its Containerfile).
-      - name: PID 1 reaps orphans
+      - name: Toolchain
         if: env.DOCS_ONLY != 'true'
-        run: |
-          orphan=$(sh -c 'sleep 0.1 >/dev/null 2>&1 & echo $!')
-          for _ in $(seq 50); do
-            [ -e "/proc/$orphan" ] || exit 0
-            sleep 0.1
-          done
-          echo "PID 1 ($(ps -p 1 -o args=)) left orphan $orphan unreaped; rebuild the CI image with .forgejo/ci-image/build.sh on the runner host"
-          exit 1
+        run: .forgejo/scripts/check-toolchain.sh && wt --version
 
       - name: Release script tests
         if: env.DOCS_ONLY != 'true'
@@ -222,41 +162,77 @@ jobs:
         if: env.DOCS_ONLY != 'true'
         run: cargo fmt --all -- --check
 
-      # One step, because the slot lasts as long as the step's shell.
-      - name: cargo clippy and cargo test (holding a /ci-target slot)
+      - name: cargo clippy
         if: env.DOCS_ONLY != 'true'
         run: |
-          . .forgejo/scripts/lock-target-dir.sh
-          cargo clean --workspace
           cargo clippy --locked --all-targets -- -D warnings
           # Apps build shoal::client alone, without the CLI and the daemon.
           cargo clippy --locked --lib --no-default-features -- -D warnings
-          # A workspace build unifies features; each crate must also build alone.
+
+      - name: cargo check of each crate alone
+        if: env.DOCS_ONLY != 'true'
+        # A workspace build unifies features; each crate must also build alone.
+        run: |
           for manifest in crates/*/Cargo.toml; do
             cargo check --locked --manifest-path "$manifest"
           done
-          cargo test --locked
-          # Distributed Linux binaries link musl, whose libc types differ from
-          # GNU's: the shipped code must compile against them.
-          musl_target="$(rustc -vV | sed -n 's/^host: //p' | sed 's/-gnu$/-musl/')"
+
+      - name: cargo test
+        if: env.DOCS_ONLY != 'true'
+        run: cargo test --locked
+
+      # Distributed Linux binaries link musl, whose libc types differ from
+      # GNU's: the shipped code must compile against them. Only a Linux runner
+      # checks it; the release workflow builds every target.
+      - name: musl build (Linux runners)
+        if: env.DOCS_ONLY != 'true'
+        run: |
+          if [ "$(uname -s)" != Linux ]; then
+            echo "not a Linux runner: skipping the musl build"
+            exit 0
+          fi
+          musl_target="$(uname -m)-unknown-linux-musl"
           cargo-zigbuild check --locked --target "$musl_target" --lib --bins
           # GNU-only tests cannot catch musl's unsupported Metadata::created().
           # Testing rebuilds the whole crate with codegen for 5 tests of the
           # identity module, so a PR runs them only when it changes that
           # module, the dependencies or this workflow; pushes to main and
-          # dispatches always run them.
-          if [ -z "$PR_BASE" ] || ! git diff --quiet "$PR_BASE" HEAD -- \
-              src/daemon/workspace/identity.rs src/daemon/workspace/identity \
-              Cargo.toml Cargo.lock .forgejo/workflows/ci.yml .forgejo/ci-image; then
+          # dispatches, and a PR whose base the workspace lacks, always run them.
+          if [ -z "$PR_BASE" ] || ! git cat-file -e "$PR_BASE^{commit}" 2>/dev/null ||
+              ! git diff --quiet "$PR_BASE" HEAD -- \
+                src/daemon/workspace/identity.rs src/daemon/workspace/identity \
+                Cargo.toml Cargo.lock .forgejo/workflows/ci.yml; then
             cargo-zigbuild test --locked --target "$musl_target" --lib daemon::workspace::identity
           else
             echo "the PR leaves the identity module and the dependencies alone: skipping the musl test"
           fi
 
-      - name: Cross-build release binaries (manual CI runs)
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          RUSTFLAGS: '-D warnings'
+  # Release targets need every Rust target and the pinned Zig, which the CI
+  # image has and Shoal runners need not.
+  cross-build:
+    name: cross-build release binaries (manual runs)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: docker
+    container:
+      # Built from .forgejo/ci-image/Containerfile on the runner host; the tag is
+      # the Rust version.
+      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+    env:
+      # Runner-mounted volume; a plain directory when unmounted.
+      CARGO_TARGET_DIR: /ci-target
+      RUSTFLAGS: '-D warnings'
+    steps:
+      - name: Checkout
+        run: |
+          git init -q .
+          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
+            fetch -q --depth 1 origin "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+
+      # One step, because the /ci-target slot lasts as long as the step's shell.
+      - name: Cross-build (holding a /ci-target slot)
+        shell: bash
         run: |
           set -euo pipefail
           . .forgejo/scripts/lock-target-dir.sh

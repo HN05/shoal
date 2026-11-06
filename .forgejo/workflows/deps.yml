@@ -26,7 +26,7 @@ jobs:
     name: dependency report
     runs-on: docker
     container:
-      # Same image as ci.yml's rust job; bump every tag together.
+      # Same image as release.yml; bump every tag together.
       image: git.henriknordvik.com/hn05/ci-shoal:1.98
     steps:
       - name: Checkout

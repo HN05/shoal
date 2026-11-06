@@ -2,7 +2,8 @@
 # writes every test that failed into one evergreen issue. Kept out of ci.yml so
 # it never gates a pull request; a flaky test found here is fixed before it
 # fails someone's PR. Unlike deps.yml, a finding fails the run, so the failure
-# notification reaches the owner as well as the issue.
+# notification reaches the owner as well as the issue. It runs on a Shoal
+# runner like ci.yml's rust job; see that file's header.
 
 name: flaky
 
@@ -19,44 +20,28 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Same build settings as ci.yml, so a test fails here the way it fails there.
-  CARGO_INCREMENTAL: "0"
-  CARGO_PROFILE_DEV_DEBUG: "0"
-  CARGO_PROFILE_TEST_DEBUG: "0"
   # Rounds of `cargo test`; each takes about as long as ci.yml's test step.
   ROUNDS: "10"
 
 jobs:
   hunt:
     name: flaky-test hunt
-    runs-on: docker
-    container:
-      # Same image and /tmp as ci.yml's rust job; bump every tag together.
-      image: git.henriknordvik.com/hn05/ci-shoal:1.98
-      options: --tmpfs /tmp:rw,exec,nosuid,mode=1777,size=8g
-    env:
-      CARGO_TARGET_DIR: /ci-target
+    runs-on: shoal
+    # A Shoal runner never stops a running job on its own.
+    timeout-minutes: 240
+    defaults:
+      run:
+        working-directory: ${{ env.SHOAL_WORKSPACE_PATH }}
     steps:
-      - name: Checkout
-        run: |
-          # A scheduled event carries no head commit on every Forgejo version.
-          ref='${{ github.sha }}'
-          [ -n "$ref" ] || ref='${{ github.ref_name }}'
-          git init -q .
-          git remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
-          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:${{ github.token }}' | base64 | tr -d '\n')" \
-            fetch -q --depth 1 origin "$ref"
-          git checkout -q FETCH_HEAD
+      - name: Toolchain
+        run: .forgejo/scripts/check-toolchain.sh
 
-      # One step, because the /ci-target slot lasts as long as the step's shell.
-      - name: Run the suite repeatedly (holding a /ci-target slot)
+      - name: Run the suite repeatedly
         env:
           # Forgejo's run URL takes the run number, not the internal run id.
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_number }}
           SOURCE: ${{ github.server_url }}/${{ github.repository }}/src/branch/main/.forgejo/workflows/flaky.yml
         run: |
-          . .forgejo/scripts/lock-target-dir.sh
-          cargo clean --workspace
           # Findings are published before the run fails on them.
           rc=0
           .forgejo/scripts/flaky-report.sh "$ROUNDS" > report.md || rc=$?

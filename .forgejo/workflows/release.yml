@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Same build settings as ci.yml. Without them release.py's `cargo test` links
+  # Without these release.py's `cargo test` links
   # the test binary with full debuginfo and incremental state, which outgrows
   # the runner LXC's memory and gets rustc killed.
   CARGO_INCREMENTAL: "0"
@@ -33,7 +33,7 @@ jobs:
       run:
         shell: bash
     env:
-      # Runner-mounted volume shared with ci.yml; see its header comment.
+      # Runner-mounted volume; see .forgejo/ci-image/Containerfile.
       CARGO_TARGET_DIR: /ci-target
     steps:
       - name: Check configuration

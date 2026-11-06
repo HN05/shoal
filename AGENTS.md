@@ -344,17 +344,29 @@ and the Python release-script tests; a PR whose only `area/` label is
 `area/docs` skips them, as do the release workflow's PR and version commit,
 which `scripts/release.py` validates itself. A draft PR runs no checks; taking it out of draft
 (removing the `WIP:` title prefix, as `shoal ready` does) starts one run.
-Jobs use the image built from
+Its jobs, and `flaky.yml`'s, run with `runs-on: shoal` on Shoal runners: any
+Linux or macOS machine whose Shoal has `runner.enabled` for this repository,
+with Rust at `rust-version`, which the jobs check, with clippy and rustfmt, and
+the tools the tests spawn installed on the host (those
+`.forgejo/ci-image/Containerfile` installs; on Linux, which alone checks the
+musl build, cargo-zigbuild, Zig and the host's musl Rust target). The test
+fixtures' daemons commit SQLite with fsync under `TMPDIR`, which Shoal puts in
+the repository directory; where that disk stalls on fsync, the machine's local
+config sets `TMPDIR` in `[env]` to a tmpfs. Each job runs in a workspace at its
+commit that starts from the `cargo` preset's seed build of `main`, so it has no
+checkout step and rebuilds only what its commit changed; keep settings that
+change Cargo's fingerprints out of the workflows.
+Code that tests run must not keep a path the seed build compiled in, such as
+`env!("CARGO_BIN_EXE_shoal")`; read it at run time.
+The other workflows run on the Docker runner, in the image built from
 `.forgejo/ci-image/Containerfile` (`git.henriknordvik.com/hn05/ci-shoal:<rust
-version>`), so a run installs nothing: new CI tooling goes into the
+version>`), so a run installs nothing: new tooling for them goes into the
 Containerfile, and only the owner rebuilds it with `.forgejo/ci-image/build.sh`
 on the runner host, then updates `workspace.package.rust-version` in `Cargo.toml`, the
-Containerfile's `ARG RUST`, and the `image:` tag in every workflow. The image's
-`tail` runs the job container's PID 1 under tini, which reaps the orphans
-tests leave. Cargo builds
-share the runner-mounted `/ci-target`; every step that runs cargo there sources
-`.forgejo/scripts/lock-target-dir.sh` first, which takes a free slot directory
-instead of waiting, and runs `cargo clean --workspace`.
+Containerfile's `ARG RUST`, and the `image:` tag in every workflow, and the
+Shoal runners' machines install the same Rust. The Docker jobs' cargo
+builds share the runner-mounted `/ci-target` through
+`.forgejo/scripts/lock-target-dir.sh`, as the Containerfile describes.
 `.forgejo/workflows/deps.yml` runs weekly (and on `shoal ci run deps.yml
 --branch main`) and rewrites one evergreen `tracking` issue, found by the marker comment
 in its body, with `cargo audit` and `cargo outdated` findings. It is never a
@@ -364,10 +376,6 @@ night (and on `shoal ci run flaky.yml --branch main`) and rewrites the evergreen
 `Flaky test report` issue with every test that failed; a failure fails the run.
 The run log keeps each failed test's output for the issue that fixes it.
 It is never a required check.
-`.forgejo/workflows/shoal-runner.yml` runs the rust job's checks with
-`runs-on: shoal` on a machine whose Shoal runs this repository's CI jobs
-(`runner.enabled`), only on `shoal ci run shoal-runner.yml`; it is never a
-required check.
 `.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
 opens or leaves draft and whenever `review/default`, `review/claude` or
 `review/codex` is added; `review/none` suppresses it. Pushing commits does not

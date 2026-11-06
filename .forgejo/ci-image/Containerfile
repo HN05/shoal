@@ -1,11 +1,28 @@
-# CI image for the Forgejo workflows. Everything the jobs would
-# otherwise install per run lives here, and the tag is the Rust version: never a
-# floating tag, so a run can say which toolchain it used.
+# CI image for the Forgejo workflows on the Docker runner; the checks run on
+# Shoal runners instead (see ci.yml). Everything the jobs would otherwise
+# install per run lives here, and the tag is the Rust version: never a
+# floating tag, so a run can say which toolchain it used. The tools the tests
+# spawn are also what a Shoal runner's machine needs.
 #
 # Build with ./build.sh on the runner host, then bump ARG RUST below and the
 # `image:` tags in every workflow that uses this image, and package.rust-version
 # in Cargo.toml. A change here that keeps
 # the Rust version still needs a rebuild with the same tag. See AGENTS.md "CI".
+#
+# Jobs on the Docker runner use no JavaScript actions (actions/checkout,
+# actions/cache): the runner would have to inject Node into the job container,
+# which does not work under Podman. Hence their plain-git checkout, and caching
+# by the runner rather than the workflow; its config mounts host directories
+# into every job container:
+#   /var/cache/ci/cargo/registry -> /usr/local/cargo/registry
+#   /var/cache/ci/cargo/git      -> /usr/local/cargo/git
+#   /var/cache/ci/target         -> /ci-target
+# Every step that runs cargo in /ci-target first sources
+# .forgejo/scripts/lock-target-dir.sh, which moves CARGO_TARGET_DIR to a free
+# slot directory under it and holds that slot for the rest of the step, and runs
+# `cargo clean --workspace` before its first build so another branch's build of
+# the workspace's packages is never taken as fresh. The directories grow without
+# bound; clear /var/cache/ci/target on the runner host when it gets large.
 
 ARG RUST=1.98
 FROM docker.io/library/rust:${RUST}-trixie
@@ -13,8 +30,8 @@ FROM docker.io/library/rust:${RUST}-trixie
 # The daemon and workspace tests spawn these: git and Worktrunk for worktrees,
 # lsof for port checks, zsh and bash as user shells, python3 for the xcrun
 # fixture and the release scripts, tmux for the tmux host's tests against an
-# isolated server. curl and jq serve the label gate in ci.yml,
-# deps.yml and the Zig download below; xz-utils unpacks it. pkg-config and
+# isolated server. curl and jq serve the report workflows
+# and the Zig download below; xz-utils unpacks it. pkg-config and
 # libssl-dev build cargo-outdated, which links the cargo crate. tini reaps
 # orphans as the job container's first process (see below).
 RUN rustup component add rustfmt clippy \
@@ -40,7 +57,7 @@ RUN rustup component add rustfmt clippy \
 # tests' daemons and fixtures take would read them all. The workflow's
 # `container.options: --init` is ignored. The runner finds `tail` on this
 # image's PATH, where this one comes before /usr/bin and runs tail under tini
-# when it is PID 1. ci.yml checks that PID 1 reaps.
+# when it is PID 1.
 COPY --chmod=755 .forgejo/ci-image/tail /usr/local/bin/tail
 
 # Zellij serves the Zellij host's tests against isolated sessions. Debian does
