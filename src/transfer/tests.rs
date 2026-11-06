@@ -779,10 +779,13 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
     let links = manager.workspace(&copy.id).await.unwrap().links;
     assert!(links.opened.is_empty(), "{links:?}");
     assert_eq!(links.related, [issue]);
-    // Its agent starts from a fork of the session it reported here.
+    // Its agent starts from a fork of the session it reported here, which
+    // only a machine with an ID knows it exported; without one, nor any of
+    // the session's files, it starts anew.
     let saved = recovery::Saved::load(&manager.paths, &copy.id).unwrap();
     let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
-    assert_eq!(record.session.as_deref(), Some("s1"));
+    let forked = crate::process::machine::id().map(|_| "s1");
+    assert_eq!(record.session.as_deref(), forked);
     assert_eq!(record.copied, Some(Copied::default()));
     assert!(!record.moved);
     // The original keeps its branch, files and agent.
