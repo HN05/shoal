@@ -555,11 +555,14 @@ fn moved(removed: RemovedWorkspace) -> RemovedWorkspace {
 }
 
 /// `sessions` of a copy, whose agents start from forks of their sessions
-/// in a place of their own, marked as `copied` says.
+/// in a place of their own, marked as `copied` says, as executions of their
+/// own, since the original's may still run and each import is another copy.
 fn copied_sessions(sessions: Sessions, copied: Copied) -> Sessions {
+    let execution = || uuid::Uuid::new_v4().to_string();
     let agents = sessions.agents.into_iter().map(|agent| {
         let record = agent.record.elsewhere();
         StoppedAgent {
+            execution: execution(),
             record: Record {
                 copied: Some(copied),
                 ..record
@@ -568,6 +571,7 @@ fn copied_sessions(sessions: Sessions, copied: Copied) -> Sessions {
         }
     });
     let last_sessions = sessions.last_sessions.into_iter().map(|last| LastSession {
+        execution: execution(),
         copied: Some(copied),
         origin: None,
         ..last

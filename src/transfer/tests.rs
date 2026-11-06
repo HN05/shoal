@@ -694,6 +694,17 @@ fn a_copy_forks_its_agents_sessions_in_no_place_of_the_original() {
     assert_eq!(new.agents[0].record.session, None);
     assert_eq!(new.agents[0].record.copied, Some(copied));
     assert_eq!(new.last_sessions[0].copied, Some(copied));
+    // Each import runs them as executions of their own, apart from the
+    // original's, which may still run.
+    let original = manifest.sessions.as_ref().unwrap();
+    for (sessions, other) in [(&here, &new), (&new, &here)] {
+        assert_ne!(sessions.agents[0].execution, original.agents[0].execution);
+        assert_ne!(sessions.agents[0].execution, other.agents[0].execution);
+        assert_ne!(
+            sessions.last_sessions[0].execution,
+            original.last_sessions[0].execution
+        );
+    }
 }
 
 #[tokio::test]
