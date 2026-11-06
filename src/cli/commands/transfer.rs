@@ -25,11 +25,15 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
         MoveCommand::Export(ExportArgs {
             repository: Some(repository),
             output,
+            keep,
             confirmation,
             ..
         }) => {
             let directory = output.context("--all writes a file each; name a directory with -o")?;
-            export::export_all(ctx, repository, directory, confirmation.yes).await
+            match keep {
+                true => export::copy::export_all_copies(ctx, repository, directory).await,
+                false => export::export_all(ctx, repository, directory, confirmation.yes).await,
+            }
         }
         MoveCommand::Export(ExportArgs {
             space,

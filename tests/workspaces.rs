@@ -1444,6 +1444,40 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
 }
 
 #[test]
+fn export_all_keep_copies_every_space_past_one_that_cannot_be_copied() {
+    let fixture = Fixture::new();
+    let paths: Vec<_> = ["first", "second"]
+        .into_iter()
+        .map(|name| Path::new(fixture.add(name)["path"].as_str().unwrap()).to_owned())
+        .collect();
+    let repo = fixture.repo.to_str().unwrap();
+    let directory = fixture.root.path().join("copies");
+    fs::create_dir(&directory).unwrap();
+    // The file the first copy would overwrite fails that copy alone.
+    fs::write(directory.join("first.shoal"), "").unwrap();
+    let copied = fixture
+        .command()
+        .args([
+            "--json", "move", "export", "--repo", repo, "--all", "--keep",
+        ])
+        .args(["-o", directory.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(copied.status.code(), Some(1), "{copied:?}");
+    let copied: Value = serde_json::from_slice(&copied.stdout).unwrap();
+    let names: Vec<_> = copied["exported"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|export| export["manifest"]["workspace"]["name"].clone())
+        .collect();
+    assert_eq!(names, ["second"], "{copied}");
+    assert_eq!(copied["failed"][0]["workspace"], "first", "{copied}");
+    assert!(paths.iter().all(|path| path.exists()));
+    assert!(fs::metadata(directory.join("second.shoal")).unwrap().len() > 0);
+}
+
+#[test]
 fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
     let fixture = Fixture::new();
     let paths: Vec<_> = ["first", "second", "third"]

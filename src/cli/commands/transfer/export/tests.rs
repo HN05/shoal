@@ -47,3 +47,10 @@ fn a_workspace_with_chats_in_it_is_refused_before_anything_ends() {
     let error = ensure_children_exported(&check, &["worker", "split"]).unwrap_err();
     assert!(error.to_string().contains("(reading)"), "{error}");
 }
+
+#[test]
+fn a_checkpoint_copies_only_one_space() {
+    copy::ensure_one_at_checkpoint(1, Some(3)).unwrap();
+    copy::ensure_one_at_checkpoint(2, None).unwrap();
+    assert!(copy::ensure_one_at_checkpoint(2, Some(3)).is_err());
+}

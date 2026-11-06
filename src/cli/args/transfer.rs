@@ -17,7 +17,7 @@ pub enum MoveCommand {
     /// workspace is exported without another removal. Without -o, or with `-`, it writes to
     /// standard output, which must not be a terminal. When -o names a directory, several spaces,
     /// or with --all every space of the repository, go to a file each in it, once each one can
-    /// be exported. --keep leaves the space running and writes a copy of it instead.
+    /// be exported. --keep leaves the spaces running and writes copies of them instead.
     Export(ExportArgs),
     /// Continue workspaces and chats shoal move export wrote, in the repository with the same origin.
     ///
@@ -65,14 +65,14 @@ pub struct ExportArgs {
     /// and --all need; defaults to standard output.
     #[arg(short, long, required_if_eq("all", "true"))]
     pub output: Option<PathBuf>,
-    /// Leave the space running and export a copy of it, which shoal move import opens as a new
-    /// space: a workspace at a new checkpoint on a branch of its own, or a chat from a fork of
+    /// Leave the spaces running and export copies of them, which shoal move import opens as new
+    /// spaces: a workspace at a new checkpoint on a branch of its own, or a chat from a fork of
     /// its session.
-    #[arg(long, conflicts_with = "all")]
+    #[arg(long)]
     pub keep: bool,
     /// Export a copy of the workspace at this earlier checkpoint, numbered as shoal work restore
     /// lists them.
-    #[arg(long, requires = "keep", value_name = "N")]
+    #[arg(long, requires = "keep", conflicts_with = "all", value_name = "N")]
     pub checkpoint: Option<u64>,
     #[command(flatten)]
     pub confirmation: ConfirmationArgs,

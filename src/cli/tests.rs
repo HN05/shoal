@@ -349,5 +349,7 @@ fn a_kept_export_narrows_to_a_checkpoint_of_one_space() {
     let parse = |args: &[&str]| Cli::try_parse_from(["shoal", "move", "export"].iter().chain(args));
     assert!(parse(&["topic", "--keep", "--checkpoint", "3", "-o", "f"]).is_ok());
     assert!(parse(&["topic", "--checkpoint", "3", "-o", "f"]).is_err());
-    assert!(parse(&["--repo", "app", "--all", "--keep", "-o", "d"]).is_err());
+    let all = ["--repo", "app", "--all", "--keep", "-o", "d"];
+    assert!(parse(&all).is_ok());
+    assert!(parse(&[&all[..], &["--checkpoint", "3"]].concat()).is_err());
 }

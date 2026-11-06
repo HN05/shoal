@@ -2700,6 +2700,8 @@ bundle builds on, since that branch only advances. Repositories match by origin.
 Exporting every workspace of a repository checks each one before removing any, so
 one that cannot leave refuses the set while all stay; a failure once removals
 begin leaves the exported ones moved and the rest in place, each reported.
+Copying several spaces needs no such check, since a copy removes nothing: one
+that cannot be copied is reported and the rest are copied.
 Agent conversations are the agent tools' private files, which Shoal never
 reads or changes. Shoal tells clients where they are without reading them: the
 daemon reports the sessions a space's agents reported, and `shoal::client`
