@@ -266,3 +266,19 @@ fn an_imported_chat_reopens_with_its_issue_without_asking_the_forge() {
     let unlinked = Topic::imported(&repo, "plan", &SpaceLinks::default());
     assert_eq!(unlinked.relaunch, Topic::repository(&repo, "plan").relaunch);
 }
+
+#[test]
+fn a_chat_whose_agent_cannot_fork_starts_a_new_session() {
+    let settings = crate::config::Config::default()
+        .resolve(&Default::default())
+        .unwrap();
+    let forked = SessionArgs {
+        session: Some("s1"),
+        fork: true,
+        directory: Path::new("/repos/shoal"),
+    };
+    let claude: Agent = "claude".parse().unwrap();
+    assert!(!forked.of(&settings, &claude).unwrap().is_empty());
+    let opencode: Agent = "opencode".parse().unwrap();
+    assert!(forked.of(&settings, &opencode).unwrap().is_empty());
+}

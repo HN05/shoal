@@ -486,7 +486,9 @@ pub(super) async fn launch(
         directory: topic.home(&repo).path(),
     };
     let resumed = session_args.of(&settings, &agent)?;
-    let brief = brief(&settings, &agent, &repo, &topic, session.is_some())?;
+    // An agent that cannot continue or fork the session starts a new one,
+    // which has not seen the chat's rules.
+    let brief = brief(&settings, &agent, &repo, &topic, !resumed.is_empty())?;
     let launch = agents::ChatLaunch {
         name,
         mode: topic.mode.clone(),
