@@ -2,6 +2,7 @@
 directory, zmx, tmux and Zellij directories and Git config, without the
 caller's Shoal, Git, host or agent settings, so nothing reaches the user's own
 daemon or sessions."""
+import hashlib
 import json
 import os
 import shutil
@@ -19,6 +20,8 @@ IDENTITY = {f"GIT_{role}_{field}": value for role in ("AUTHOR", "COMMITTER")
 LEAKING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "SHOAL_", "HERDR_", "ZMX_", "HAPPY_", "REX_",
            "TMUX", "ZELLIJ")
 DAEMON_START_SECONDS = 60
+# Not TMPDIR, which can itself be deep.
+SOCKETS_ROOT = Path("/tmp")
 
 
 def build(profile="dev"):
@@ -34,16 +37,25 @@ def build(profile="dev"):
     sys.exit("cargo built no shoal executable")
 
 
+def sockets_directory(sandbox):
+    """The short directory for the sandbox's state, zmx, tmux and Zellij
+    directories, which hold sockets, named after the sandbox so a later run
+    finds it. Socket paths hold about 100 bytes and zmx fits session names into
+    what its directory leaves, so a sandbox under a long path cannot hold them
+    itself."""
+    digest = hashlib.sha256(str(sandbox).encode()).hexdigest()[:16]
+    return SOCKETS_ROOT / f"shoal-sandbox-{digest}"
+
+
 def isolated(sandbox, identity):
     """The caller's environment without its Git, Shoal, host or agent settings,
     with the sandbox's home, state, zmx, tmux and Zellij directories and Git
     commits made as `identity`."""
     env = isolated_git.environment(sandbox / "home", **identity)
     env = {name: value for name, value in env.items() if not name.startswith(LEAKING)}
-    env.update(SHOAL_STATE_DIR=str(sandbox / "state"), ZMX_DIR=str(sandbox / "zmx"),
-               TMUX_TMPDIR=str(sandbox / "tmux"),
-               # Short, since Zellij's socket paths are.
-               ZELLIJ_SOCKET_DIR=str(sandbox / "z"))
+    sockets = sockets_directory(sandbox)
+    env.update(SHOAL_STATE_DIR=str(sockets / "state"), ZMX_DIR=str(sockets / "zmx"),
+               TMUX_TMPDIR=str(sockets / "tmux"), ZELLIJ_SOCKET_DIR=str(sockets / "zellij"))
     return env
 
 
@@ -58,13 +70,21 @@ def prepare_directories(sandbox):
     """Create the home and tmux directories `isolated` names, which their
     programs expect to exist."""
     (sandbox / "home").mkdir(parents=True)
-    (sandbox / "tmux").mkdir()
+    sockets = sockets_directory(sandbox)
+    sockets.mkdir(mode=0o700)
+    (sockets / "tmux").mkdir()
 
 
 def prepare_zmx_lock(sandbox):
     """Create the ownership lock beside the sandbox's zmx directory. Debug builds
     only open an existing lock there, leaving the user's own to the installed Shoal."""
-    (sandbox / "zmx.shoal-ownership.lock").touch()
+    (sockets_directory(sandbox) / "zmx.shoal-ownership.lock").touch()
+
+
+def remove(sandbox):
+    """Remove the sandbox and its sockets directory."""
+    shutil.rmtree(sandbox, ignore_errors=True)
+    shutil.rmtree(sockets_directory(sandbox), ignore_errors=True)
 
 
 class Sandbox:
@@ -83,11 +103,9 @@ class Sandbox:
 
     def clear(self):
         """Remove the last run's sandbox, stopping a daemon an interrupted run left."""
-        if not self.path.exists():
-            return
         if (self.bin_dir / "shoal").exists():
             self.run(["daemon", "stop"], check=False)
-        shutil.rmtree(self.path)
+        remove(self.path)
 
     def prepare(self, shoal, prompt):
         """Start over with `shoal` as the sandbox's build and `prompt` naming
