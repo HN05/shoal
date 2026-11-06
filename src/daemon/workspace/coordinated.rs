@@ -38,7 +38,7 @@ impl Manager {
         let id = id.to_owned();
         self.store
             .run(move |db| match working_coordinator(db, &id, &agents)? {
-                Some(coordinator) => agent_runs(db, &coordinator, &agents),
+                Some(coordinator) => tree::agent_runs(db, &coordinator, &agents),
                 None => Ok(false),
             })
             .await
@@ -74,17 +74,6 @@ fn working_coordinator(
         return Ok(None);
     }
     tree::coordinator_of(db, id, agents)
-}
-
-/// Whether the agent of the space `id` runs: a workspace's tracked agent,
-/// or a chat's until the chat stops.
-fn agent_runs(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<bool> {
-    Ok(agents.contains(id)
-        || store::exists(
-            db,
-            "SELECT 1 FROM chats WHERE id=?1 AND restore IS NULL",
-            [id],
-        )?)
 }
 
 #[cfg(test)]

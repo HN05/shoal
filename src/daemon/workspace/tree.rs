@@ -219,11 +219,6 @@ impl Manager {
 pub(crate) struct TrackedAgents(Vec<String>);
 
 impl TrackedAgents {
-    /// Whether the agent of workspace `id` is among them.
-    pub(crate) fn contains(&self, id: &str) -> bool {
-        self.0.iter().any(|tracked| tracked == id)
-    }
-
     /// The parameter `has_agent` reads.
     fn parameter(&self) -> String {
         serde_json::Value::from(self.0.clone()).to_string()
@@ -272,20 +267,37 @@ fn down(descend: &str) -> String {
     )
 }
 
-/// SQL true when the space in `column` has an agent: a workspace's agent
-/// reporting its turn state, or among the tracked agents bound as parameter
-/// `?2`, or a chat's running agent, or a queued restore of either, whose
-/// agent receives what arrived once it starts.
+/// SQL true when the space in `column` has an agent: one that runs, a
+/// workspace's agent reporting its turn state, or a queued restore of
+/// either, whose agent receives what arrived once it starts.
 fn has_agent(column: &str) -> String {
     format!(
-        "(EXISTS (SELECT 1 FROM space_agent_state WHERE space_agent_state.space_id={column})
+        "({} OR EXISTS (SELECT 1 FROM space_agent_state WHERE space_agent_state.space_id={column})
             OR EXISTS (SELECT 1 FROM agent_queue
                 WHERE agent_queue.workspace_id={column} AND agent_queue.kind='{}')
-            OR {column} IN (SELECT value FROM json_each(?2))
-            OR EXISTS (SELECT 1 FROM chats WHERE chats.id={column}
-                AND (chats.restore IS NULL OR chats.restore='{}')))",
+            OR EXISTS (SELECT 1 FROM chats WHERE chats.id={column} AND chats.restore='{}'))",
+        runs_agent(column),
         crate::state::QueueKind::Restore,
         ChatRestore::Automatic,
+    )
+}
+
+/// SQL true when the agent of the space in `column` runs: a workspace's
+/// among the tracked agents bound as parameter `?2`, or a chat's until the
+/// chat stops.
+fn runs_agent(column: &str) -> String {
+    format!(
+        "({column} IN (SELECT value FROM json_each(?2))
+            OR EXISTS (SELECT 1 FROM chats WHERE chats.id={column} AND chats.restore IS NULL))"
+    )
+}
+
+/// Whether the agent of the space `id` runs, in any turn state.
+pub(crate) fn agent_runs(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<bool> {
+    crate::daemon::store::exists(
+        db,
+        &format!("SELECT 1 WHERE {}", runs_agent("?1")),
+        params![id, agents.parameter()],
     )
 }
 
