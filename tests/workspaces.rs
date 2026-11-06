@@ -21328,9 +21328,25 @@ fn strip_shoal_arguments(text: &str, separator: char) -> String {
 /// these lines.
 const GUIDANCE_START: &str = "You are working in Shoal workspace ";
 const GUIDANCE_END: &str = "Name your space with `shoal work rename` once you know what it is for.";
+/// The built-in `work` rule, which the built-in modes list right after the
+/// guidance.
+const WORK_RULE: &str = include_str!("../src/client/config/rules/work.md");
+
+/// Where the guidance that starts at `start` in `text` ends, with the
+/// built-in `work` rule when it follows.
+fn guidance_end(text: &str, start: usize) -> Option<usize> {
+    let end = start + text[start..].find(GUIDANCE_END)? + GUIDANCE_END.len();
+    let work = format!("\n\n{}", WORK_RULE.trim_end());
+    Some(if text[end..].starts_with(&work) {
+        end + work.len()
+    } else {
+        end
+    })
+}
 
 /// Removes each argument, with the flag that introduces it, whose whole value is
-/// the guidance; guidance followed by additions stays for [`after_guidance`].
+/// the guidance and the built-in `work` rule; guidance followed by additions
+/// stays for [`after_guidance`].
 fn strip_guidance(text: &str, separator: char) -> String {
     let wrappers = [
         (format!("--append-system-prompt{separator}"), String::new()),
@@ -21343,10 +21359,7 @@ fn strip_guidance(text: &str, separator: char) -> String {
     let mut text = text.to_owned();
     let mut from = 0;
     while let Some(start) = text[from..].find(GUIDANCE_START).map(|start| from + start) {
-        let Some(end) = text[start..]
-            .find(GUIDANCE_END)
-            .map(|end| start + end + GUIDANCE_END.len())
-        else {
+        let Some(end) = guidance_end(&text, start) else {
             break;
         };
         let (before, after) = (&text[..start], &text[end..]);
@@ -21370,20 +21383,21 @@ fn strip_guidance(text: &str, separator: char) -> String {
     text
 }
 
-/// The additions that follow Shoal's guidance in a prompt.
+/// The additions that follow Shoal's guidance and the built-in `work` rule in
+/// a prompt.
 fn after_guidance(prompt: &str) -> String {
     assert!(prompt.starts_with(GUIDANCE_START), "{prompt}");
     remove_guidance(prompt)
 }
 
-/// `text` with each copy of the guidance and the blank line after it removed.
+/// `text` with each copy of the guidance, the built-in `work` rule after it
+/// and the blank line after them removed.
 fn remove_guidance(text: &str) -> String {
     let mut text = text.to_owned();
     while let Some(start) = text.find(GUIDANCE_START) {
-        let Some(end) = text[start..].find(GUIDANCE_END) else {
+        let Some(mut end) = guidance_end(&text, start) else {
             break;
         };
-        let mut end = start + end + GUIDANCE_END.len();
         if text[end..].starts_with("\n\n") {
             end += 2;
         }
@@ -26608,12 +26622,17 @@ fn chat_instructions_append_the_chat_rules_to_shoals_description() {
         "{}",
         args[1]
     );
-    // Without additions, Shoal's facts and space rules stand alone.
+    // Without additions, Shoal's facts, space rules and `work` rule stand alone.
     fs::write(config_dir.join("rules/chat.md"), "").unwrap();
     fs::write(fixture.repo.join(".shoal/rules/chat.md"), "").unwrap();
     let args = chat();
     assert!(args[1].starts_with(&description), "{}", args[1]);
-    assert!(args[1].ends_with(GUIDANCE_END), "{}", args[1]);
+    assert_eq!(
+        guidance_end(&args[1], 0),
+        Some(args[1].len()),
+        "{}",
+        args[1]
+    );
 }
 
 /// A chat in a workspace runs its agent in the worktree as a chat, told

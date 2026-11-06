@@ -2296,7 +2296,11 @@ and vague: what a command does and when its conditions hold belong in the skill
 and the user rules, so a space rule never has conditions to keep in step with
 them.
 Practices beyond these belong in user rules, which a mode chains and a user
-or repository may replace. Nothing is
+or repository may replace. The built-in modes list the `work` rule, one short
+sentence per practice of Shoal's workflow: marking work ready, asking the
+user, resolving local review findings and giving separate work its own space.
+General work habits belong in a repository's own instructions, not in Shoal's
+rules. Nothing is
 seeded into the config directory: a seeded copy froze the default for whoever
 had it. Rendering substitutes known fields once without evaluating their
 contents, and never renders the subject, which the forge or the user wrote.

@@ -29,6 +29,9 @@ pub const PLAN: &str = "plan";
 pub const REVIEW_RULE: &str = "review";
 /// The mode of a chat without a repository that manages every space.
 pub const ORCHESTRATE: &str = "orchestrate";
+/// The practices of Shoal's built-in modes, which a user's own modes may
+/// list, replace or leave out.
+const WORK_RULE: &str = "work";
 
 const MODES_DIR: &str = "modes";
 const RULES_DIR: &str = "rules";
@@ -63,12 +66,12 @@ pub struct RuleConfig {
     pub text: Option<String>,
 }
 
-/// The modes Shoal ships.
+/// The modes Shoal ships, each with the `work` rule before its own.
 pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
     let mode = |kind, rule: &str, instructions: &str| ModeConfig {
         kind: Some(kind),
         repository: None,
-        rules: vec![rule.to_owned()],
+        rules: vec![WORK_RULE.to_owned(), rule.to_owned()],
         instructions: Some(instructions.to_owned()),
     };
     BTreeMap::from([
@@ -89,20 +92,25 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
             ORCHESTRATE.to_owned(),
             ModeConfig {
                 repository: Some(false),
-                rules: vec!["chat".to_owned(), ORCHESTRATE.to_owned()],
+                rules: vec![
+                    WORK_RULE.to_owned(),
+                    "chat".to_owned(),
+                    ORCHESTRATE.to_owned(),
+                ],
                 ..mode(SpaceKind::Chat, "chat", "")
             },
         ),
     ])
 }
 
-/// The rules Shoal ships; the review style and the orchestrating chat's
-/// have text of their own.
+/// The rules Shoal ships; the `worker` and `chat` rules have no text of
+/// their own.
 pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
     let rule = |text: &str| RuleConfig {
         text: Some(text.to_owned()),
     };
     BTreeMap::from([
+        (WORK_RULE.to_owned(), rule(include_str!("rules/work.md"))),
         ("worker".to_owned(), rule("")),
         ("chat".to_owned(), rule("")),
         (

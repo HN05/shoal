@@ -121,7 +121,8 @@ a detached [Happy](https://github.com/slopus/happy) session that appears in the
 Happy app. Interactive `shoal start` uses `--agent` or picks an installed agent.
 Starts on an issue also use `agent.default = "codex"` from the repository or
 global config. Edit `~/.config/shoal/rules/worker.md` to add instructions for every
-workspace agent and `rules/chat.md` for every chat. Agents read a
+workspace agent, `rules/chat.md` for every chat and `rules/work.md` to replace
+the practices every built-in mode lists. Agents read a
 repository's own rules from its `AGENTS.md` or `CLAUDE.md`; the same rule
 files in a repository's `.shoal/` directory add instructions only Shoal's agents
 need.

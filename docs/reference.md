@@ -2210,10 +2210,10 @@ these modes:
 
 | Mode | Kind | Rules | Instructions |
 |---|---|---|---|
-| `worker` | workspace | `worker` | [implement the subject](../src/client/config/modes/worker.md) |
-| `chat` | chat | `chat` | none |
-| `plan` | chat | `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
-| `orchestrate` | chat without a repository | `chat`, [`orchestrate`](../src/client/config/rules/orchestrate.md) | none |
+| `worker` | workspace | `work`, `worker` | [implement the subject](../src/client/config/modes/worker.md) |
+| `chat` | chat | `work`, `chat` | none |
+| `plan` | chat | `work`, `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
+| `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../src/client/config/rules/orchestrate.md) | none |
 
 `shoal start` starts every new agent, in the mode `--mode` names, and in the
 kind of space the mode names unless `--chat`, `--in` or `--worktree` says
@@ -2230,8 +2230,12 @@ of space; when only one fits, the start takes it without asking, as it takes
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 and `shoal work`, `shoal status`, `shoal inbox`, the queue and the menu name a
-mode other than `worker` for a workspace or `chat` for a chat. The built-in rules have no text of their own except `review`, the style
-of a [local review](#local-reviews), and `orchestrate`.
+mode other than `worker` for a workspace or `chat` for a chat. The built-in [`work` rule](../src/client/config/rules/work.md)
+holds the practices of Shoal's workflow. A user's own modes may list it or
+leave it out, and a `rules/work.md` or `[rules.work]` replaces or extends it as
+for any rule. `review` holds the style of a [local review](#local-reviews), and
+`orchestrate` what a master session does; the `worker` and `chat` rules have no
+text of their own.
 
 A mode's instructions may also be written as `modes/<name>.md` and a rule's
 text as `rules/<name>.md`, beside `config.toml`, beside the local config, or in

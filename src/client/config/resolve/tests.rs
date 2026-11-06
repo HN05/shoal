@@ -11,7 +11,7 @@ git_profile = 'work'\n\
 [modes.worker]\nkind = 'workspace'\nrepository = true\nrules = ['chat']\ninstructions = 'work'\n[modes.chat]\nkind = 'workspace'\nrepository = true\nrules = ['worker']\ninstructions = 'talk'\n\
 [modes.plan]\nkind = 'workspace'\nrepository = true\nrules = ['review']\ninstructions = 'plan'\n\
 [modes.orchestrate]\nkind = 'chat'\nrepository = false\nrules = ['orchestrate']\ninstructions = 'manage'\n\
-[rules.worker]\ntext = 'agent'\n[rules.chat]\ntext = 'chat'\n[rules.review]\ntext = 'review'\n[rules.orchestrate]\ntext = 'orchestrate'\n\
+[rules.work]\ntext = 'work'\n[rules.worker]\ntext = 'agent'\n[rules.chat]\ntext = 'chat'\n[rules.review]\ntext = 'review'\n[rules.orchestrate]\ntext = 'orchestrate'\n\
 [terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
 [terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\
 [terminal.rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
@@ -98,7 +98,7 @@ fn a_mode_naming_an_undefined_rule_is_refused() {
         settings.modes["plan"].kind,
         crate::model::SpaceKind::Workspace
     );
-    assert_eq!(settings.modes["plan"].rules, ["chat"]);
+    assert_eq!(settings.modes["plan"].rules, ["work", "chat"]);
 }
 
 #[test]

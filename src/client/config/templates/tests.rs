@@ -141,6 +141,21 @@ fn every_space_gets_its_facts_and_the_space_rules_before_its_modes_rules() {
 }
 
 #[test]
+fn built_in_modes_carry_the_work_rule_until_a_mode_leaves_it_out() {
+    let place = worker(Delivery::Watched);
+    let system = |config: &str| {
+        brief(&settings(config), "worker", place, None)
+            .unwrap()
+            .system
+    };
+    let extended = system("[rules.work]\ntext = 'Push often.'\n");
+    assert!(extended.contains("`shoal review resolve`"), "{extended}");
+    assert!(extended.ends_with("Push often."), "{extended}");
+    let left_out = system("[modes.worker]\nrules = ['worker']\n");
+    assert!(!left_out.contains("`shoal review resolve`"), "{left_out}");
+}
+
+#[test]
 fn a_chat_mode_without_the_chat_rule_still_gets_the_facts_and_space_rules() {
     let settings = settings(
         "[rules.triage]\ntext = 'Label it.'\n\
