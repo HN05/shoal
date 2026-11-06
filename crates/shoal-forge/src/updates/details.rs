@@ -123,7 +123,7 @@ impl Edited {
 impl super::Snapshot {
     /// Take the details an own action changed as already seen; an item not
     /// observed yet takes them with its first observation.
-    pub fn adopt_edited(&mut self, edited: &Edited) {
+    pub(crate) fn adopt_edited(&mut self, edited: &Edited) {
         if let Some(details) = &mut self.details {
             details.adopt(edited);
         }
@@ -131,7 +131,7 @@ impl super::Snapshot {
 
     /// Take the details `previous` saw, from a poll that may have read the
     /// item before an own action changed them.
-    pub fn adopt_details(&mut self, previous: &Self) {
+    pub(crate) fn adopt_details(&mut self, previous: &Self) {
         if previous.details.is_some() {
             self.details.clone_from(&previous.details);
         }

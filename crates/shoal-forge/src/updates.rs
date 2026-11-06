@@ -345,7 +345,7 @@ impl Snapshot {
 
     /// Take entries in `authored` that `next` shows new or changed as already
     /// seen, and stop tracking each one taken.
-    pub fn adopt_authored(&mut self, next: &Self, authored: &mut BTreeSet<String>) {
+    pub(crate) fn adopt_authored(&mut self, next: &Self, authored: &mut BTreeSet<String>) {
         authored.retain(|key| match next.comments.get(key) {
             Some(comment)
                 if self.comments.get(key).map(|seen| &seen.fingerprint)
@@ -393,7 +393,7 @@ impl Snapshot {
     }
 
     /// Whether a check on the head commit has not finished.
-    pub fn checks_pending(&self) -> bool {
+    pub(crate) fn checks_pending(&self) -> bool {
         self.checks.values().any(|check| !check.complete)
     }
 
