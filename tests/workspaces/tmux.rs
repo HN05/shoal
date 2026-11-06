@@ -127,7 +127,7 @@ impl TmuxServer {
     fn type_shoal(&self, fixture: &Fixture, pane: &str, args: &str) {
         let line = format!(
             " '{}' --state-dir '{}' {args}",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             fixture.root.path().join("state").display()
         );
         let output = self.tmux(&["send-keys", "-t", pane, "-l", "--", &line]);

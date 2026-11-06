@@ -89,7 +89,7 @@ fn shell_init_registers_completions_for_bash_and_zsh() {
     let home = tempfile::tempdir().unwrap();
     let script = home.path().join("init.sh");
     fs::write(&script, generate(home.path(), &["shell", "init"])).unwrap();
-    let bin = Path::new(env!("CARGO_BIN_EXE_shoal")).parent().unwrap();
+    let bin = Path::new(support::shoal_binary()).parent().unwrap();
     for (shell, check) in [
         (
             "bash",

@@ -88,7 +88,7 @@ fn restart_restores_a_chat_in_a_new_place() {
              case \" $* \" in *' --resume '*) touch \"$HOME/chat-restored\";; *) touch \"$HOME/chat-started\";; esac\n\
              trap 'exit 0' TERM\n\
              while :; do sleep 1; done\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();
@@ -185,7 +185,7 @@ fn parent_fixture() -> Fixture {
              case \" $* \" in *' --resume '*) touch \"$HOME/chat-restored\";; *) touch \"$HOME/chat-started\";; esac\n\
              trap 'exit 0' TERM\n\
              while :; do sleep 1; done\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();

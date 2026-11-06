@@ -91,7 +91,7 @@ printf 'recovery-ok\n'
 "#,
             ])
             .env("INTEGRATION", &integration)
-            .env("TEST_SHOAL", env!("CARGO_BIN_EXE_shoal"))
+            .env("TEST_SHOAL", support::shoal_binary())
             .output()
             .unwrap();
         assert!(
@@ -159,7 +159,7 @@ printf 'tab-ok\n'
                 "PATH",
                 format!(
                     "{}:/usr/bin:/bin",
-                    std::path::Path::new(env!("CARGO_BIN_EXE_shoal"))
+                    std::path::Path::new(support::shoal_binary())
                         .parent()
                         .unwrap()
                         .display()
@@ -189,7 +189,7 @@ fn interactive_prompt_recovers_cleanup_that_finishes_after_command_return() {
         .unwrap();
     assert!(output.status.success());
     fs::write(&integration, output.stdout).unwrap();
-    let bin = std::path::Path::new(env!("CARGO_BIN_EXE_shoal"))
+    let bin = std::path::Path::new(support::shoal_binary())
         .parent()
         .unwrap();
     for shell in ["bash", "zsh"] {
@@ -273,7 +273,7 @@ test -f "$HOME/prompt-reset"
 "#,
         )
         .env("INTEGRATION", &integration)
-        .env("TEST_SHOAL", env!("CARGO_BIN_EXE_shoal"))
+        .env("TEST_SHOAL", support::shoal_binary())
         .output()
         .unwrap();
     assert!(

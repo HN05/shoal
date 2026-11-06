@@ -29,7 +29,7 @@ fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
              trap 'exit 0' TERM\n\
              touch \"$HOME/chat-started\"\n\
              while :; do sleep 1; done\n",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
         ),
     )
     .unwrap();

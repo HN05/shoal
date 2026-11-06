@@ -97,5 +97,18 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
 }
 
 pub fn cli(root: &Path) -> Command {
-    isolated(root, env!("CARGO_BIN_EXE_shoal"))
+    isolated(root, shoal_binary())
+}
+
+/// The `shoal` binary Cargo built for this test run. Cargo also sets the
+/// variable at run time, and that value wins: a test binary that a workspace
+/// keeps from its seed build is not rebuilt for a new binary path, so its
+/// compile-time value names the seed worktree's binary.
+#[allow(dead_code)]
+pub fn shoal_binary() -> &'static str {
+    static BINARY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    BINARY.get_or_init(|| {
+        std::env::var("CARGO_BIN_EXE_shoal")
+            .unwrap_or_else(|_| env!("CARGO_BIN_EXE_shoal").to_owned())
+    })
 }

@@ -61,7 +61,7 @@ fn copy_executable(home: &Path, destination: &Path) {
     // file descriptor and cause ETXTBSY when this test executes the fixture.
     success(
         support::isolated(home, "cp")
-            .arg(env!("CARGO_BIN_EXE_shoal"))
+            .arg(support::shoal_binary())
             .arg(destination)
             .output()
             .unwrap(),

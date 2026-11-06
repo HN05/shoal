@@ -1063,7 +1063,7 @@ fn pr_update_takes_in_the_base_on_the_forge_for_workspace_processes_too() {
         format!("{}/pulls/8", fixture.web),
         "{updated}"
     );
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let scoped = fixture.run(&[
         "run",
         "--workspace",
@@ -1856,7 +1856,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
             "deleted-cwd-test",
         ])
         .arg(&deleted)
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .args(["pr", "comment", "8", "--space", "topic", "--body", "Done"])
         .output()
         .unwrap();
@@ -2476,7 +2476,7 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
     );
 
     // Merging is the user's: a workspace process is refused before any request.
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let merge = ["pr", "merge", "--method", "rebase"];
     let scoped = fixture.run(&[&["run", "--workspace", "topic", "--", shoal][..], &merge].concat());
     assert!(!scoped.status.success(), "{scoped:?}");
@@ -2889,7 +2889,7 @@ fn delete_branch_deletes_an_ended_prs_branch_unless_it_moved() {
 
     // Deleting a branch is the user's: a workspace process is refused before
     // any request.
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let scoped = fixture.run(&[
         "run",
         "--workspace",
@@ -4330,7 +4330,7 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
     fixture.requests();
 
     // Approving lets a contributor's code run, so it is the user's decision.
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let approve = ["ci", "approve", "--pr", "8"];
     let scoped =
         fixture.run(&[&["run", "--workspace", "topic", "--", shoal][..], &approve].concat());
@@ -4759,7 +4759,7 @@ fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
 
 /// Run a Shoal command inside the workspace, as its agent would.
 fn scoped(fixture: &Fixture, args: &[&str]) -> Value {
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let output = fixture.run(
         &[
             &["run", "--workspace", "topic", "--", shoal, "--json"][..],
@@ -5460,7 +5460,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
     fixture.respond(responses);
 
     // A workspace renamed meanwhile does not get the old branch's PR linked.
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let rename = |from: &str, to: &str| {
         let renamed = fixture.run(&[
             "run",
@@ -5744,7 +5744,7 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
     refused(&["ci", "rerun", "--repo", "repo"]);
     refused(&["issue", "close", "40", "--repo", "elsewhere"]);
     // A workspace process acts only from its own workspace.
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let close = ["issue", "close", "40", "--repo", "repo"];
     refused(&[&["run", "--workspace", "topic", "--", shoal][..], &close].concat());
     // Where --repo names any repository, it stays a forge repository for one.
@@ -5839,7 +5839,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
     assert!(writes(&fixture).is_empty());
 
     // Another repository's issue cannot be the workspace's assignment.
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let exec = ["run", "--workspace", "topic", "--", shoal];
     let linked = fixture.run(&[&exec[..], &open, &["--link"]].concat());
     assert!(!linked.status.success(), "{linked:?}");
@@ -6007,7 +6007,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         fixture.requests(),
         [json!([read, null, "token agenttoken"])]
     );
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let output = fixture.run(&[
         "run",
         "--workspace",

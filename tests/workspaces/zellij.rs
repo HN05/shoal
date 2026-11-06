@@ -322,7 +322,7 @@ impl ZellijServer {
     fn type_shoal(&self, fixture: &Fixture, args: &str) {
         let line = format!(
             " '{}' --state-dir '{}' {args}\r",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             fixture.root.path().join("state").display()
         );
         let mut write = self.zellij();

@@ -22,10 +22,11 @@ fn restart_in_place_continues_an_upgraded_wrapper_from_the_installed_binary() {
     // of the daemon's binary in the target directory, where it may be cloned.
     // A child copies it, so parallel spawns cannot inherit its writable
     // descriptor and cause ETXTBSY when the wrapper executes it.
-    let releases = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let target = Path::new(support::shoal_binary()).parent().unwrap();
+    let releases = tempfile::tempdir_in(target).unwrap();
     let earlier = releases.path().join("shoal");
     let copied = support::isolated(releases.path(), "cp")
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .arg(&earlier)
         .output()
         .unwrap();
@@ -49,7 +50,7 @@ fn restart_in_place_continues_an_upgraded_wrapper_from_the_installed_binary() {
     wait_until("agent to start", || path.join("agent-started").exists());
     // The upgrade links the release the daemon runs in its place.
     let upgrade = installed.with_file_name("shoal.new");
-    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_shoal"), &upgrade).unwrap();
+    std::os::unix::fs::symlink(support::shoal_binary(), &upgrade).unwrap();
     fs::rename(&upgrade, &installed).unwrap();
     fixture.ok(&["restart", "upgraded", "--in-place"]);
     wait_until("agent to restore", || path.join("restored").exists());

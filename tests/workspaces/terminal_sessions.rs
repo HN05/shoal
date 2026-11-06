@@ -348,7 +348,7 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
 fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow::Result<()> {
     let fixture = Fixture::with_config(Some(&format!(
         "[cleanup.done]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['{}', 'done']\n",
-        env!("CARGO_BIN_EXE_shoal")
+        support::shoal_binary()
     )));
     let home = fixture.root.path();
     install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);

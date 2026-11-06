@@ -268,7 +268,7 @@ fn a_default_host_config_turns_off_leaves_zmx_alone() {
         "--workspace",
         "tried",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "start",
         fixture.repo.to_str().unwrap(),
         "child",

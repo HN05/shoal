@@ -545,7 +545,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     let workspace = fixture.add("original");
     fixture.add("other");
     let path = Path::new(workspace["path"].as_str().unwrap());
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let denied = fixture.run(&[
         "run",
         "--workspace",
@@ -951,7 +951,7 @@ fn cleanup_removes_idle_candidates_on_request() {
         "keep",
     )
     .unwrap();
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let denied = fixture.run(&["run", "--workspace", "dirty", "--", binary, "cleanup"]);
     assert!(!denied.status.success());
     // Chats are spaces too: one whose agent stopped goes, a running one stays.
@@ -1300,7 +1300,7 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
     wait_registered_execution(&here, "handed");
 
     // A machine ssh cannot reach removes nothing.
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let refused = here.run(&["move", "ssh", "down", "handed", "--shoal", shoal]);
     assert!(!refused.status.success());
     assert!(path.join("agent.sh").exists());
@@ -1337,7 +1337,7 @@ fn move_ssh_keep_copies_workspaces_there_and_leaves_them_here() {
             path
         })
         .collect();
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     let ssh = |extra: &[&'static str]| {
         let mut args = vec!["move", "ssh", "mini", "first", "second", "--keep"];
         args.extend(extra);
@@ -2097,7 +2097,7 @@ fn unregistered_repository_path_diagnostic_keeps_the_typed_argument() {
 fn setup_completion_exempts_only_the_callers_own_execution() {
     let fixture = Fixture::new();
     fixture.add("first");
-    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let shoal = support::shoal_binary();
     // Completion for setup, run inside `first` through `depth` nested execs.
     let complete = |depth: usize| {
         let mut words = vec![];
@@ -2356,7 +2356,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         "env",
         "SHOAL_COMPLETE=bash",
         "_CLAP_COMPLETE_INDEX=2",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "--",
         "shoal",
         "rm",
@@ -2412,7 +2412,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
             if completion {
                 command.args(["SHOAL_COMPLETE=bash", "_CLAP_COMPLETE_INDEX=2"]);
             }
-            command.arg(env!("CARGO_BIN_EXE_shoal"));
+            command.arg(support::shoal_binary());
             command
         } else {
             let mut command = fixture.command();
@@ -2661,7 +2661,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
                 "--workspace",
                 workspace,
                 "--",
-                env!("CARGO_BIN_EXE_shoal"),
+                support::shoal_binary(),
             ])
             .args(["--json", "status", "resource", "devices"])
             .output()
@@ -3606,7 +3606,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         "--workspace",
         "first",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "run",
         "--workspace",
         "second",
@@ -4488,7 +4488,7 @@ fn a_scoped_start_refuses_a_detached_agent_without_zmx_before_creating_the_child
             "--workspace",
             "parent",
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "start",
             fixture.repo.to_str().unwrap(),
             "child",
@@ -4550,7 +4550,7 @@ fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
              printf '{{\"session_id\":\"parent-session\"}}' | '{shoal}' internal agent-state idle >/dev/null || exit 3\n\
              '{shoal}' --json start \"$(cat \"$HOME/repo-path\")\" refused --fork --agent pi 2> \"$HOME/refused.err\"\n\
              '{shoal}' --json start \"$(cat \"$HOME/repo-path\")\" child --fork -- 'Take the child part' > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n",
-            shoal = env!("CARGO_BIN_EXE_shoal"),
+            shoal = support::shoal_binary(),
         ),
     )
     .unwrap();
@@ -4613,7 +4613,7 @@ fn start_runs_a_copys_agent_from_a_fork_of_the_copied_workspaces_session() {
              printf '{{\"session_id\":\"parent-session\"}}' | '{shoal}' internal agent-state idle >/dev/null || exit 3\n\
              echo 'half done' > untracked\n\
              '{shoal}' --json start --copy --fork -- 'Try another approach' > \"$HOME/copy.json\" 2> \"$HOME/copy.err\"\n",
-            shoal = env!("CARGO_BIN_EXE_shoal"),
+            shoal = support::shoal_binary(),
         ),
     )
     .unwrap();
@@ -4664,7 +4664,7 @@ fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
         "--workspace",
         "parent",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "start",
         fixture.repo.to_str().unwrap(),
         "child",
@@ -4862,7 +4862,7 @@ finally:
         child.kill()
         child.wait()
 "#,
-                env!("CARGO_BIN_EXE_shoal"),
+                support::shoal_binary(),
                 agent.to_str().unwrap(),
                 mode,
             ])
@@ -5074,7 +5074,7 @@ exit 7
             .args(["start", fixture.repo.to_str().unwrap(), name, "--here"])
             .args(["--agent", agent, "--", "literal spaces; $(false)"])
             .env("PATH", fixture.restricted_path(&bin))
-            .env("SHOAL_TEST_BIN", env!("CARGO_BIN_EXE_shoal"))
+            .env("SHOAL_TEST_BIN", support::shoal_binary())
             .env("SHOAL_TEST_STATE", fixture.root.path().join("state"))
             .env("SHOAL_TEST_NAME", name)
             .env("SHOAL_TEST_INSPECTION", &inspection)
@@ -5112,7 +5112,7 @@ exit 7
             "codex",
         ])
         .env("PATH", fixture.restricted_path(&bin))
-        .env("SHOAL_TEST_BIN", env!("CARGO_BIN_EXE_shoal"))
+        .env("SHOAL_TEST_BIN", support::shoal_binary())
         .env("SHOAL_TEST_INSPECTION", &inspection)
         .output()
         .unwrap();
@@ -5658,7 +5658,7 @@ fn stop_levels_take_leftovers_then_every_untracked_process() {
         "sh",
         "-c",
         "\"$0\" --json stop --leftovers > \"$1\"",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         output.to_str().unwrap(),
     ]);
     assert!(run.status.success(), "{run:?}");
@@ -5723,7 +5723,7 @@ fn leftovers_reach_status_and_the_agent_hook_once() {
             "--workspace",
             "leaky",
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "messages",
             "--hook",
         ]);
@@ -5950,7 +5950,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
         .command()
         .args(["run", "--workspace", "parent", "--", "sh", "-c"])
         .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" resume other --discard; exit $?"#)
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .output()
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
@@ -6381,7 +6381,7 @@ fn status_shows_where_each_reported_session_keeps_its_transcript() {
         path.join("agent.sh"),
         format!(
             "printf '{{\"session_id\":\"talked-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();
@@ -6434,7 +6434,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
         format!(
             "if [ \"$1\" = --resume ]; then printf '%s' \"$2\" > resumed; exit 0; fi\n\
              printf '{{\"session_id\":\"quit-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();
@@ -6486,7 +6486,7 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
             "session=carried-session\n\
              if [ \"$1\" = --resume ]; then printf '%s' \"$2\" > resumed; session=$2; fi\n\
              printf '{{\"session_id\":\"%s\"}}' \"$session\" | '{}' internal agent-state idle >/dev/null || exit 3\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();
@@ -6559,7 +6559,7 @@ fn export_carries_session_files_that_import_puts_back() {
             "session=moved-session\n\
              if [ \"$1\" = --resume ]; then printf '%s' \"$2\" > resumed; session=$2; fi\n\
              printf '{{\"session_id\":\"%s\"}}' \"$session\" | '{}' internal agent-state idle >/dev/null || exit 3\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();
@@ -6672,7 +6672,7 @@ fn a_chat_moves_with_its_session_and_continues_it() {
              trap 'exit 0' TERM\n\
              touch \"$HOME/chat-started\"\n\
              while :; do sleep 1; done\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();
@@ -6769,7 +6769,7 @@ fn export_finds_the_sessions_of_a_profile_only_the_workspace_defines() {
         path.join("agent.sh"),
         format!(
             "printf '{{\"session_id\":\"profiled-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();
@@ -7026,7 +7026,7 @@ fn chat_session_fixture() -> Fixture {
              trap 'exit 0' TERM\n\
              touch \"$TMPDIR/notes\" \"$HOME/chat-started\"\n\
              while :; do sleep 1; done\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();
@@ -7104,7 +7104,7 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
         .command()
         .args(["run", "--workspace", "worker", "--", "sh", "-c"])
         .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" resume talk --discard; exit $?"#)
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .output()
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
@@ -7616,7 +7616,7 @@ printf 'navigation-ok\n'
                 "PATH",
                 format!(
                     "{}:{}",
-                    Path::new(env!("CARGO_BIN_EXE_shoal"))
+                    Path::new(support::shoal_binary())
                         .parent()
                         .unwrap()
                         .display(),
@@ -7855,7 +7855,7 @@ fn execution_scope_limits_management_and_expires() {
     let worker = fixture.add("worker");
     let worker_path = Path::new(worker["path"].as_str().unwrap());
     fixture.add("other");
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let scoped = |args: &[&str]| {
         fixture
             .command()
@@ -8006,7 +8006,7 @@ fn setup_commands_cannot_recursively_run_setup() {
     let setup = Path::new(worker["path"].as_str().unwrap()).join("setup.sh");
     fs::write(
         &setup,
-        format!("#!/bin/sh\n'{}' work setup\n", env!("CARGO_BIN_EXE_shoal")),
+        format!("#!/bin/sh\n'{}' work setup\n", support::shoal_binary()),
     )
     .unwrap();
 
@@ -8099,7 +8099,7 @@ fn an_operation_keeps_its_scope_after_the_execution_that_started_it_ends() {
     // execution's end stops whatever still carries its identity.
     let command = format!(
         "'{}' work setup worker >/dev/null 2>&1 & cli=$!; while [ ! -e '{}' ]; do sleep 0.1; done; kill -9 $cli",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         path.join("setup-started").display()
     );
     let output = fixture.run(&["run", "--workspace", "worker", "--", "sh", "-c", &command]);
@@ -8443,7 +8443,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         "--workspace",
         "first",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "release",
         "sim",
         "--name",
@@ -8457,7 +8457,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         "--workspace",
         "first",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "--json",
         "leases",
         "sim",
@@ -8918,7 +8918,7 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
         "--workspace",
         "third",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "--json",
         "acquire",
         "sim",
@@ -8978,7 +8978,7 @@ fn clean_simulator_requires_reason_minimizes_erasure_and_keeps_audit_after_remov
         "--workspace",
         "first",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "--json",
         "history",
         "sim",
@@ -10045,13 +10045,7 @@ fn resource_scopes_separate_repos_share_global_capacity_and_limit_agents() {
     let scoped = |args: &[&str]| {
         fixture
             .command()
-            .args([
-                "run",
-                "--workspace",
-                "first",
-                "--",
-                env!("CARGO_BIN_EXE_shoal"),
-            ])
+            .args(["run", "--workspace", "first", "--", support::shoal_binary()])
             .args(args)
             .output()
             .unwrap()
@@ -10786,7 +10780,7 @@ fn rwlock_scope_and_kind_drift_preserve_active_leases() {
     commit_resource_config(&fixture.repo, "[resources.cache]\nkind='rwlock'\n");
     let first = fixture.add("first");
     let second = fixture.add("second");
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let output = fixture.run(&[
         "run",
         "--workspace",
@@ -10912,7 +10906,7 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
     assert_eq!(fixture.ok(&["status", "-"])["workspace"]["name"], "first");
     let unsupported = fixture.run(&["work", "setup", "-"]);
     assert!(!unsupported.status.success());
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let scoped = fixture
         .command()
         .args([
@@ -10957,7 +10951,7 @@ head -n 1 "$HOME/picker-input"
                     "--workspace",
                     "menu-worker",
                     "--",
-                    env!("CARGO_BIN_EXE_shoal"),
+                    support::shoal_binary(),
                 ]
             } else if key == "ctrl-o" {
                 // `shoal work` opens the same picker when its output is a terminal.
@@ -11123,7 +11117,7 @@ esac
         .args(["run", "--workspace", "asker", "--", "sh", "-c"])
         // A second command keeps the scoped shell as the listing's parent.
         .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" internal menu-rows notifications; exit $?"#)
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .output()
         .unwrap();
     assert!(!cleared.status.success(), "{cleared:?}");
@@ -11139,7 +11133,7 @@ esac
         .command()
         .args(["run", "--workspace", "asker", "--", "sh", "-c"])
         .arg(r#"env -u SHOAL_SCOPE_TOKEN "$0" inbox --print; exit $?"#)
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .output()
         .unwrap();
     assert!(!cleared.status.success(), "{cleared:?}");
@@ -11151,7 +11145,7 @@ esac
         "--workspace",
         "asker",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "inbox",
     ]);
     let (output, transcript) = fixture.terminal_command(&mut scoped, "", true);
@@ -11489,7 +11483,7 @@ fn inbox_lists_untracked_worktrees_until_they_are_adopted() {
             "--workspace",
             "tracked",
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "--json",
             "inbox",
         ])
@@ -11526,7 +11520,7 @@ fn inbox_lists_what_needs_the_user_by_kind() {
             r#""$0" internal agent-state waiting && i=0 && "#,
             r#"until [ -e "$1" ] || [ $i -ge 3000 ]; do sleep 0.1; i=$((i + 1)); done"#
         ))
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .arg(&release)
         .stdout(Stdio::null())
         .stderr(fs::File::create(&waiter_log).unwrap())
@@ -12820,7 +12814,7 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
                 "--workspace",
                 "desktop",
                 "--",
-                env!("CARGO_BIN_EXE_shoal"),
+                support::shoal_binary(),
                 "open",
                 "--app",
                 app,
@@ -12907,7 +12901,7 @@ fn sync_fetches_the_remote_and_fast_forwards_only_the_default_branch() {
     commit_file(&author, "api", "feature\n");
     git(&author, &["push", "origin", "feature/api"]);
     let feature = git(&author, &["rev-parse", "HEAD"]);
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     // A scoped agent syncs its own repository without moving its branch.
     let output = fixture.run(&[
         "run",
@@ -13028,7 +13022,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
         "--workspace",
         "second",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "repo",
         "rm",
         "doomed",
@@ -13658,7 +13652,7 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
             "--agent",
             "codex",
         ])
-        .env("SHOAL_TEST_BIN", env!("CARGO_BIN_EXE_shoal"))
+        .env("SHOAL_TEST_BIN", support::shoal_binary())
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -15408,7 +15402,7 @@ fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() 
         "--workspace",
         "coworker",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "start",
         fixture.repo.to_str().unwrap(),
         "--existing",
@@ -15756,7 +15750,7 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
                 "--workspace",
                 name,
                 "--",
-                env!("CARGO_BIN_EXE_shoal"),
+                support::shoal_binary(),
                 "--json",
                 "unlink",
                 "pr",
@@ -15925,7 +15919,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         "--workspace",
         "watch",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "--json",
         "link",
         "pr",
@@ -16034,7 +16028,7 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
     );
     fixture.script_github(&responses);
     fixture.ok(&["link", "pr", "7", "assigned", "--space", "watch"]);
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let first = fixture.ok(&[
         "run",
         "--workspace",
@@ -16203,7 +16197,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         "--space",
         "items",
     ]);
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let filtered = fixture.ok(&[
         "run",
         "--workspace",
@@ -16653,7 +16647,7 @@ fn merge_into_main_without_a_remote_needs_approval_in_scoped_processes() {
     commit_file(path, "merged", "from the workspace\n");
     let expected = git(path, &["rev-parse", "HEAD"]);
     let before = git(&fixture.repo, &["rev-parse", "main"]);
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let pending = fixture.run(&[
         "run",
         "--workspace",
@@ -16739,7 +16733,7 @@ fn unmerge_moves_main_back_after_an_agents_request_is_approved() {
     let before = git(&fixture.repo, &["rev-parse", "main"]);
     fixture.ok(&["merge", "--no-push", "worker"]);
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), head);
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let as_agent = |args: &[&str]| {
         let mut command = vec!["run", "--workspace", "worker", "--", binary];
         command.extend_from_slice(args);
@@ -16859,7 +16853,7 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
     assert!(!declined.status.success(), "{transcript}");
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), before);
     // An agent's --yes leaves the question to whoever approves the merge.
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let scoped = [
         "run",
         "--workspace",
@@ -17105,7 +17099,7 @@ cat "$HOME/release" > /dev/null
         "--workspace",
         "view",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "view",
         "--web",
     ]);
@@ -17933,7 +17927,7 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
             "--workspace",
             "holder",
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "alerts",
         ])
         .output()
@@ -18725,7 +18719,7 @@ fn tool_secrets_reach_only_their_tools() {
             launchers.join("show-tokens"),
             format!(
                 "#!/bin/sh\nexec {:?} internal secret-tool {:?} show-tokens -- \"$@\"\n",
-                env!("CARGO_BIN_EXE_shoal"),
+                support::shoal_binary(),
                 launchers
             ),
         );
@@ -18827,7 +18821,7 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
         "--workspace",
         "gated",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "internal",
         "secret-tool",
         launchers.to_str().unwrap(),
@@ -20589,7 +20583,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
                 "--workspace",
                 "receiver",
                 "--",
-                env!("CARGO_BIN_EXE_shoal"),
+                support::shoal_binary(),
             ])
             .args(["messages", "--hook"])
             .stdin(Stdio::piped())
@@ -20656,7 +20650,7 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
             r#""$0" internal wake --agent "$1"; woke=$?; "#,
             r#""$0" status --json && exit "$woke""#
         ))
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .arg(std::process::id().to_string())
         .output()
         .unwrap();
@@ -20756,7 +20750,7 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
             "--workspace",
             "own",
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "status",
             other,
         ]);
@@ -21163,7 +21157,7 @@ fn a_turns_end_shows_when_the_agents_prompt_cache_expires() {
             r#""$0" internal agent-state idle --ends-turn claude >/dev/null && "#,
             r#""$0" status --json"#
         ))
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .env("CLAUDE_CODE_PROMPT_CACHE_TTL", "5m")
         .output()
         .unwrap();
@@ -21193,7 +21187,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
         .command()
         .args(["run", "--workspace", "reporter", "--", "sh", "-c"])
         .arg(r#""$0" internal agent-state waiting >/dev/null && "$0" --json status"#)
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -21242,7 +21236,7 @@ fn agents_report_their_turn_state_from_an_unreadable_directory() {
             r#""$0" internal agent-state waiting >/dev/null; reported=$?; "#,
             r#"chmod 755 "$1/locked" && cd "$1" && "$0" --json status && exit $reported"#
         ))
-        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(support::shoal_binary())
         .arg(outside.path())
         .output()
         .unwrap();
@@ -21678,7 +21672,7 @@ fn scoped_hook(fixture: &Fixture, workspace: &str, command: &str, input: Value) 
     let mut child = fixture
         .command()
         .args(["run", "--workspace", workspace, "--"])
-        .args([env!("CARGO_BIN_EXE_shoal"), "internal", command])
+        .args([support::shoal_binary(), "internal", command])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -21703,7 +21697,7 @@ fn scoped_command(fixture: &Fixture, workspace: &str, args: &[&str]) -> Output {
             "--workspace",
             workspace,
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "--json",
         ])
         .args(args)
@@ -22787,7 +22781,7 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
             "--workspace",
             "agent",
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "--json",
             "acquire",
             "sim",
@@ -23237,7 +23231,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
         &hook,
         format!(
             "#!/bin/sh\nexec '{}' --json done \"$SHOAL_WORKSPACE\"\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     );
     set_repository_toml(
@@ -23332,7 +23326,7 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
         "--workspace",
         "hooked",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "--json",
         "done",
     ]);
@@ -23497,7 +23491,7 @@ fn agents_follow_a_keep_default_and_can_request_cleanup() {
         "--workspace",
         "keep-default",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "done",
         "--cleanup",
     ]);
@@ -23571,7 +23565,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             "--workspace",
             "multi",
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "--json",
             "unlink",
             "pr",
@@ -23587,7 +23581,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             "--workspace",
             "multi",
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "--json",
             "link",
             "pr",
@@ -25143,7 +25137,7 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
     );
     assert!(caller.status.success());
     let (worker, transcript) = fixture.interactive_command(
-        herdr_worker_command(&fixture).env("SHOAL_TEST_BINARY", env!("CARGO_BIN_EXE_shoal")),
+        herdr_worker_command(&fixture).env("SHOAL_TEST_BINARY", support::shoal_binary()),
         "",
     );
     assert_eq!(worker.status.code(), Some(143), "{worker:?} {transcript}");
@@ -25332,7 +25326,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
             "--workspace",
             "issue-work",
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "--json",
         ];
         command.extend_from_slice(args);
@@ -25358,7 +25352,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
         "--workspace",
         "issue-work",
         "--",
-        env!("CARGO_BIN_EXE_shoal"),
+        support::shoal_binary(),
         "done",
         "--undo",
     ]);
@@ -25447,7 +25441,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         vec!["status"],
         vec!["leases", "port"],
         vec!["work", "setup"],
-        vec!["run", "--", env!("CARGO_BIN_EXE_shoal"), "leases", "port"],
+        vec!["run", "--", support::shoal_binary(), "leases", "port"],
     ] {
         let output = scoped(&args);
         assert!(output.status.success(), "{args:?}: {output:?}");
@@ -25633,7 +25627,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
             "--workspace",
             "held",
             "--",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             "--json",
         ];
         command.extend_from_slice(args);
@@ -26038,7 +26032,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         home.join("bin/claude"),
         format!(
             "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" --text work > \"$HOME/chat-work\"\n\"$shoal\" --json work --chats > \"$HOME/chat-chats\"\nprintf '%s' \"$TMPDIR\" > \"$HOME/chat-tmpdir\"\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     );
     // The agent's commands reach the daemon of an explicit state directory.
@@ -26252,7 +26246,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
         home.join("bin/claude"),
         format!(
             "#!/bin/sh\nshoal='{}'\n\"$shoal\" start \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker 2>/dev/null; echo $? > \"$HOME/chat-report\"\ntouch \"$HOME/worker-opened\"\nwhile [ ! -e \"$HOME/worker-reported\" ]; do sleep 0.1; done\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     );
     let (output, transcript) = std::thread::scope(|scope| {
@@ -26319,7 +26313,7 @@ run outside messages send --space outside hello
 run takeover start "$PWD" --existing outside
 run remove rm below --yes
 "#,
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     );
     let (output, transcript) = fixture.terminal_command(
@@ -26367,7 +26361,7 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
         home.join("bin/claude"),
         format!(
             "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json start \"$PWD\" worker --agent codex -- 'Take the part' > \"$HOME/add.json\" 2> \"$HOME/add.err\"\n\"$shoal\" start \"$PWD\" later --agent codex --after worker 2> \"$HOME/later.err\"\necho $? > \"$HOME/later\"\n\"$shoal\" start \"$PWD\" now --agent codex --now 2> \"$HOME/now.err\"\necho $? > \"$HOME/now\"\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     );
     install_test_script(
@@ -26436,7 +26430,7 @@ fn a_chats_agent_adds_a_workspace_for_an_issue_it_reads_in_its_chat() {
         home.join("bin/claude"),
         format!(
             "#!/bin/sh\n'{}' --json start \"$PWD\" --issue 12 --agent codex > \"$HOME/add.json\" 2> \"$HOME/add.err\"\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     );
     install_test_script(home.join("bin/codex"), "#!/bin/sh\n");
@@ -26510,7 +26504,7 @@ fn any_space_opens_any_kind_of_child() {
              echo \"$SHOAL_CHAT\" >> \"$HOME/chats-started\"\n\
              trap 'exit 0' TERM\n\
              while :; do sleep 1; done\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();
@@ -26607,7 +26601,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
              touch \"$HOME/chat-ready\"\n\
              trap 'exit 0' TERM\n\
              while :; do sleep 1; done\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     )
     .unwrap();
@@ -27309,7 +27303,7 @@ fn a_chat_on_an_issue_is_assigned_the_issue() {
         fixture.root.path().join("bin").join("pi"),
         format!(
             "#!/bin/sh\n'{}' --json view --space \"$SHOAL_CHAT\" --no-comments > \"$HOME/plan-view\"\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     );
     let (output, transcript) = fixture.interactive_command(
@@ -27840,7 +27834,7 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
-            .env("SHOAL_TEST_BINARY", env!("CARGO_BIN_EXE_shoal"))
+            .env("SHOAL_TEST_BINARY", support::shoal_binary())
             .args([
                 "start",
                 fixture.repo.to_str().unwrap(),
@@ -27951,7 +27945,7 @@ fn an_idle_codex_with_updates_is_prompted_in_its_zmx_session() {
             "#!/bin/sh\n'{}' internal agent-state idle >/dev/null || exit 3\n\
              for _ in $(seq 600); do [ -e \"$HOME/zmx-sent\" ] && exit 0; /bin/sleep 0.1; done\n\
              exit 4\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     );
     let (output, transcript) =
@@ -29140,7 +29134,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     let launcher = install.join("shoal");
     let replacement = install.join("replacement");
     let handed_off = root.path().join("handed-off");
-    symlink(env!("CARGO_BIN_EXE_shoal"), &launcher).unwrap();
+    symlink(support::shoal_binary(), &launcher).unwrap();
     install_test_script(
         &replacement,
         "#!/bin/sh\nprintf started > \"$SHOAL_TEST_HANDED_OFF\"\nexec \"$SHOAL_TEST_REAL_BINARY\" \"$@\"\n",
@@ -29166,7 +29160,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     launch
         .args(["daemon", "run", "--managed"])
         .env("SHOAL_TEST_HANDED_OFF", &handed_off)
-        .env("SHOAL_TEST_REAL_BINARY", env!("CARGO_BIN_EXE_shoal"))
+        .env("SHOAL_TEST_REAL_BINARY", support::shoal_binary())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     let mut daemon = DaemonGuard {
@@ -29506,7 +29500,7 @@ fn a_demo_outlives_the_command_that_started_it() {
     let fixture = Fixture::new();
     fixture.add("tried");
     let bin = fixture.root.path().join("bin");
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     // A tracked command starts the demo, as an agent does, then exits.
     let output = fixture
         .command()
@@ -29592,7 +29586,7 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
         assert!(!refused.status.success(), "{args:?}");
     }
     // A workspace process without its token still acts only on its own.
-    let binary = env!("CARGO_BIN_EXE_shoal");
+    let binary = support::shoal_binary();
     let refused = fixture.run(&[
         "run",
         "--workspace",
@@ -29714,7 +29708,7 @@ assert opened.returncode == 0, opened.returncode
 assert os.tcgetpgrp(0) == group, 'foreground group was not restored'
 assert terminal_settings() == before, (before, terminal_settings())
 "#,
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
         ])
         .stdin(slave.try_clone().unwrap())
         .stdout(slave.try_clone().unwrap())
@@ -29828,7 +29822,7 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
         helper.join("git-remote-shoal"),
         format!(
             "#!/bin/sh\nexec '{}' internal push-gate \"$@\"\n",
-            env!("CARGO_BIN_EXE_shoal")
+            support::shoal_binary()
         ),
     );
     let path_with_helper = std::env::join_paths(std::iter::once(helper.clone()).chain(

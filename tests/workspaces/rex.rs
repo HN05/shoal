@@ -150,7 +150,7 @@ impl RexServer {
     fn type_shoal(&self, fixture: &Fixture, block: &str, args: &str) {
         let line = format!(
             " '{}' --state-dir '{}' {args}\r",
-            env!("CARGO_BIN_EXE_shoal"),
+            support::shoal_binary(),
             fixture.root.path().join("state").display()
         );
         let output = self.rex(&["send", "-b", block, &line]);

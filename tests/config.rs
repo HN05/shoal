@@ -114,7 +114,7 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
 #[test]
 #[ignore = "helper launched by clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state"]
 fn unscoped_child() {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_shoal"));
+    let mut command = Command::new(support::shoal_binary());
     command
         .args(std::env::var("CHILD_ARGS").unwrap().split_whitespace())
         .env_remove("SHOAL_SCOPE_TOKEN");

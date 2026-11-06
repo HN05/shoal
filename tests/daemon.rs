@@ -127,7 +127,7 @@ fn managed_update_preserves_pid_ownership_and_queued_requests() {
     let launcher = root.path().join("shoal");
     let gate = root.path().join("replacement-started");
     let replacement = root.path().join("replacement");
-    symlink(env!("CARGO_BIN_EXE_shoal"), &launcher).unwrap();
+    symlink(support::shoal_binary(), &launcher).unwrap();
     support::install_test_script(
         &replacement,
         r#"#!/bin/sh
@@ -141,7 +141,7 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
     launch
         .args(["daemon", "run", "--managed"])
         .env("SHOAL_TEST_UPDATE_GATE", &gate)
-        .env("SHOAL_TEST_REAL_BINARY", env!("CARGO_BIN_EXE_shoal"))
+        .env("SHOAL_TEST_REAL_BINARY", support::shoal_binary())
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(log.try_clone().unwrap());
@@ -204,7 +204,7 @@ fn managed_daemon_restarts_for_a_replacement_during_startup() {
     let launcher = root.path().join("shoal");
     let started = root.path().join("replacement-started");
     let replacement = root.path().join("replacement");
-    symlink(env!("CARGO_BIN_EXE_shoal"), &launcher).unwrap();
+    symlink(support::shoal_binary(), &launcher).unwrap();
     support::install_test_script(
         &replacement,
         r#"#!/bin/sh
@@ -221,7 +221,7 @@ exec "$SHOAL_TEST_REAL_BINARY" "$@"
     launch
         .args(["daemon", "run", "--managed"])
         .env("SHOAL_TEST_UPDATE_GATE", &started)
-        .env("SHOAL_TEST_REAL_BINARY", env!("CARGO_BIN_EXE_shoal"))
+        .env("SHOAL_TEST_REAL_BINARY", support::shoal_binary())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -545,7 +545,7 @@ esac
                 "PATH",
                 format!("{}:{}", self.bin.display(), std::env::var("PATH").unwrap()),
             )
-            .env("SHOAL_BINARY", env!("CARGO_BIN_EXE_shoal"))
+            .env("SHOAL_BINARY", support::shoal_binary())
             .env("SHOAL_TEST_STATE", self.root.path().join("state"))
             .env("FAKE_PID", &self.pid)
             .env("FAKE_LOG", self.root.path().join("service.log"));
@@ -780,7 +780,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
         marker.exists()
     });
     let replacement = bin.join("updated-shoal");
-    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_shoal"), &replacement).unwrap();
+    std::os::unix::fs::symlink(support::shoal_binary(), &replacement).unwrap();
     run(&[
         "daemon",
         "install",
