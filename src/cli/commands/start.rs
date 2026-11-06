@@ -143,14 +143,13 @@ fn fitting_kind(args: &StartArgs) -> Option<SpaceKind> {
 }
 
 /// The mode picked among them all for a start whose arguments fit either
-/// kind of space, once its repository, parent and agent are checked.
+/// kind of space, once its repository, parent, agent and model are checked.
 async fn picked_mode(ctx: &Context, args: &mut StartArgs) -> Result<String> {
     let repository = checked_repository(ctx, args).await?;
     let target = ConfigTarget::Repository(repository);
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
-    if let Some(agent) = &args.agent {
-        crate::cli::agents::ensure_available(agent.name(), &settings)?;
-    }
+    let model = args.model.clone().into();
+    chat::checked_agent(&settings, args.agent.clone(), &model)?;
     ModeChoice::Pick { forced: None }.chosen(ctx, &settings.modes, None)
 }
 

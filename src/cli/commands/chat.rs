@@ -63,12 +63,13 @@ pub(super) async fn start(
         };
         check_parent(ctx, &repo, None, options.parent.as_deref()).await?;
         let settings = settings(ctx, &repo).await?;
+        options.check_agent(&settings)?;
         let mode = (subject.mode).chosen(ctx, &settings.modes, Some(SpaceKind::Chat))?;
         let topic = Topic {
             linked_issue: subject.linked_issue,
             ..Topic::repository(&repo, &mode)
         };
-        let topic = on_issue(ctx, &repo, &settings, topic, subject.issue, &mut options).await?;
+        let topic = on_issue(ctx, &repo, &settings, topic, subject.issue).await?;
         begin(ctx, repo, settings, topic, options).await
     }
     .await;
@@ -93,12 +94,13 @@ pub(super) async fn start_in_workspace(
         let parent = options.parent.as_deref();
         check_parent(ctx, &repo, Some(&workspace), parent).await?;
         let settings = settings(ctx, &repo).await?;
+        options.check_agent(&settings)?;
         let mode = (subject.mode).chosen(ctx, &settings.modes, Some(SpaceKind::Chat))?;
         let topic = Topic {
             linked_issue: subject.linked_issue,
             ..Topic::workspace(workspace, &mode)
         };
-        let topic = on_issue(ctx, &repo, &settings, topic, subject.issue, &mut options).await?;
+        let topic = on_issue(ctx, &repo, &settings, topic, subject.issue).await?;
         begin(ctx, repo, settings, topic, options).await
     }
     .await;
@@ -128,24 +130,17 @@ async fn check_parent(
     .await
 }
 
-/// `topic` in `repo` started on the issue `issue` names, if any. A named
-/// agent, or a model it cannot take, is refused before an issue is asked
-/// for.
+/// `topic` in `repo` started on the issue `issue` names, if any.
 async fn on_issue(
     ctx: &Context,
     repo: &Repository,
     settings: &Effective,
     topic: Topic,
     issue: Option<Option<String>>,
-    options: &mut Options,
 ) -> Result<Topic> {
     let Some(input) = issue else {
         return Ok(topic);
     };
-    options.agent = named_agent(settings, options.agent.take())?;
-    if let Some(agent) = &options.agent {
-        check_model(settings, agent, &options.model)?;
-    }
     let issue = issue::chosen(ctx, repo, &settings.issue, &topic.mode, input).await?;
     Ok(issue::on(topic, repo, &issue))
 }
@@ -285,6 +280,13 @@ impl Options {
             (Some(name), None) => crate::client::chats::check_name(&ctx.paths, name).await,
             _ => Ok(()),
         }
+    }
+
+    /// Refuse the agent `--agent` or `agent.default` names under
+    /// `settings`, or a `--model` it cannot take, before any picker opens.
+    pub fn check_agent(&mut self, settings: &Effective) -> Result<()> {
+        self.agent = checked_agent(settings, self.agent.take(), &self.model)?;
+        Ok(())
     }
 }
 
@@ -735,6 +737,19 @@ pub(super) fn named_agent(settings: &Effective, agent: Option<Agent>) -> Result<
     };
     agents::ensure_available(agent.name(), settings)?;
     Ok(Some(agent))
+}
+
+/// [`named_agent`], refused with a `model` its launch cannot pass on.
+pub(super) fn checked_agent(
+    settings: &Effective,
+    agent: Option<Agent>,
+    model: &ModelChoice,
+) -> Result<Option<Agent>> {
+    let agent = named_agent(settings, agent)?;
+    if let Some(agent) = &agent {
+        check_model(settings, agent, model)?;
+    }
+    Ok(agent)
 }
 
 /// Refuse `model` for `agent` before anything else is asked for, when its

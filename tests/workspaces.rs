@@ -27366,19 +27366,11 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
             .collect::<Vec<_>>(),
         ["claude"]
     );
-    let (output, transcript) = fixture.interactive_command(
-        fixture.command().args([
-            "start",
-            "--chat",
-            repo,
-            "--agent",
-            "happy-claude",
-            "--mode",
-            "chat",
-        ]),
-        "",
-    );
-    assert!(!output.status.success(), "{transcript}");
+    // An agent that cannot run a chat is refused before the mode picker.
+    let args = ["start", "--chat", repo, "--agent", "happy-claude"];
+    let (output, rows) = fixture.pick(&args, "chat", "");
+    assert!(!output.status.success(), "{output:?}");
+    assert!(rows.is_empty(), "a picker opened: {rows}");
     let output = fixture.run(&["start", "--chat", repo, "--agent", "claude"]);
     assert!(!output.status.success());
     // The checkout has no value for a workspace's placeholders.
