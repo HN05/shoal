@@ -656,11 +656,13 @@ impl Manager {
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
         let account = &self.user_account();
-        let branch = selection.input.is_none().then(|| space.branch());
-        let branch = branch.flatten();
+        let linked = selection.input.is_none();
+        let branch = linked.then(|| space.branch()).flatten();
         stream::iter(items)
             .map(|(url, kind)| async move {
-                let snapshot = self.read_item_activity(account, &url, kind, branch).await?;
+                let snapshot = self
+                    .read_item_activity(account, &url, kind, branch, linked)
+                    .await?;
                 Ok((url, snapshot))
             })
             .buffered(ITEMS_READ_AT_ONCE)
@@ -669,16 +671,25 @@ impl Manager {
     }
 
     /// The activity of the item at `url`, a PR only while its head is
-    /// `branch` when one is given.
+    /// `branch` when one is given. The forge failing to read a `linked`
+    /// item leaves an unread snapshot, so a watch reports the failure as it
+    /// reports one of the item's sources; an item named on the command line
+    /// still fails, so a mistyped number does not wait silently.
     async fn read_item_activity(
         &self,
         account: &Account,
         url: &str,
         kind: LinkKind,
         branch: Option<&str>,
+        linked: bool,
     ) -> Result<Snapshot> {
         let forge = self.item_url_forge(kind, url).await?;
-        forge.item_activity(account, kind, url, branch).await
+        match forge.item_activity(account, kind, url, branch).await {
+            Err(error) if linked && rate_limited(&error).is_none() => {
+                Ok(Snapshot::unread_item(kind.noun(), &error))
+            }
+            read => read,
+        }
     }
 
     /// Poll linked items for integrations, with their own baseline, and queue

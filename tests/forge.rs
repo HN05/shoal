@@ -2186,9 +2186,17 @@ fn watches_report_a_failed_item_lookup_without_failing() {
     assert_eq!(updates[0]["kind"], "lookup_failed", "{failed}");
     let message = updates[0]["message"].as_str().unwrap();
     assert!(message.starts_with("issue lookup failed: "), "{message}");
-    // The failure persists without being reported again or failing the watch.
-    let quiet = fixture.ok(&["watch", "issue", "--space", "topic", "--timeout", "1"]);
-    assert_eq!(quiet["timed_out"], true, "{quiet}");
+    // An item named on the command line still fails, as a mistyped one would.
+    let named = fixture.run(&[
+        "watch",
+        "issue",
+        "8",
+        "--space",
+        "topic",
+        "--timeout",
+        "600",
+    ]);
+    assert!(!named.status.success(), "{named:?}");
 
     fixture.respond(json!({
         "GET repos/team/project/issues/8": issue,

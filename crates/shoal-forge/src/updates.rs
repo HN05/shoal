@@ -165,11 +165,7 @@ impl Snapshot {
     /// observation. `now` is the current time in Unix seconds.
     pub fn normalize(&mut self, previous: &Self, now: u64) {
         if self.unread {
-            *self = Self {
-                errors: std::mem::take(&mut self.errors),
-                unread: true,
-                ..previous.clone()
-            };
+            self.keep_previous(previous);
         } else {
             self.retain_failed_checks(previous);
             self.schedule_conflict_reports(previous);
@@ -180,6 +176,15 @@ impl Snapshot {
     /// Whether the lookup read nothing of the item, only its failure.
     pub fn unread(&self) -> bool {
         self.unread
+    }
+
+    /// Take everything but this lookup's failures from `previous`.
+    fn keep_previous(&mut self, previous: &Self) {
+        *self = Self {
+            errors: std::mem::take(&mut self.errors),
+            unread: true,
+            ..previous.clone()
+        };
     }
 
     /// A local merge check, observed like PR mergeability.
@@ -543,18 +548,10 @@ impl ForgeRepo {
         branch: Option<&str>,
     ) -> Result<Snapshot> {
         let (number, _) = self.item(kind, url)?;
-        let read = match kind {
+        match kind {
             LinkKind::Issue => self.issue_activity(account, number).await,
             LinkKind::Pr => self.activity(account, number, branch).await,
             LinkKind::Ci => self.run_activity(account, url).await,
-        };
-        // A forge that cannot be reached fails the item's lookup as it fails
-        // one of its sources, which a watch reports without failing.
-        match read {
-            Err(error) if rate_limited(&error).is_none() => {
-                Ok(Snapshot::unread_item(kind.noun(), &error))
-            }
-            read => read,
         }
     }
 
@@ -589,7 +586,7 @@ impl Snapshot {
 
     /// A snapshot of an item whose lookup failed with `error`, recorded
     /// under `source`.
-    fn unread_item(source: &str, error: &anyhow::Error) -> Self {
+    pub fn unread_item(source: &str, error: &anyhow::Error) -> Self {
         Self {
             errors: BTreeMap::from([(source.into(), format!("{error:#}"))]),
             unread: true,

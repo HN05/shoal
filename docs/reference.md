@@ -4505,7 +4505,8 @@ from the forge their URLs name, so Git failing in the worktree holds back only t
 branch conflict check; a watch of an item named on the command line still reads
 the origin remote with Git. A failed lookup of a linked item, or of one of its
 sources such as CI, reports a `lookup_failed` update instead of failing the watch,
-and the item's last observation stands until a lookup succeeds; each
+and the item's last observation stands until a lookup succeeds. A watch of an item
+named on the command line fails when that item cannot be read. Each
 source's failures are reported at most once every 10 minutes, whatever the error
 and however often a poll in between succeeds. A
 forge that refuses a request for its rate limit (`429`, or `403` with
