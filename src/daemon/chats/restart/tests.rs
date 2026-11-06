@@ -115,3 +115,18 @@ async fn a_daemon_update_waits_for_a_chat_restart() {
     restart.await.unwrap().unwrap();
     assert!(manager.gates.try_quiesce().is_some());
 }
+
+#[tokio::test]
+async fn a_chat_whose_settings_cannot_be_read_does_not_fail_the_listing() {
+    let (root, manager) = manager().await;
+    let (repo, chat, _process) = named_chat(root.path(), &manager, "unreadable").await;
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+    std::fs::write(repo.path.join(".shoal.toml"), "agents = [").unwrap();
+
+    let agents = manager.running_chat_agents().await.unwrap();
+    let listed = agents.iter().find(|agent| agent.execution == chat.id);
+    assert!(listed.is_some_and(|agent| !agent.restorable), "{agents:?}");
+}

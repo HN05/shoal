@@ -116,7 +116,9 @@ impl ChatAgents {
                 }
                 Some(RunningAgent {
                     agent: Some(chat.agent),
-                    restorable: resumes,
+                    // A chat its restart saved stays restorable, so that a
+                    // run joins that restart rather than skipping it.
+                    restorable: resumes || restart.is_some(),
                     state: chat.agent_state.as_ref().map(|status| status.state),
                     interrupted: false,
                     origin: chat.origin,

@@ -34,7 +34,10 @@ async fn a_request_for_a_chat_restarting_joins_the_restart_in_progress() {
     // The restart stopped the chat, which a joining request still finds.
     let joined = agents.request("c1", None, false, run("b")).unwrap();
     assert!(joined.starts.is_none());
-    let listed = agents.running(vec![(chat(Some("s1"), Some(ChatRestore::Resume)), true)]);
+    // Saved by the restart, the chat lists as stopped, and still restorable
+    // so that a run joins it.
+    let listed = agents.running(vec![(chat(Some("s1"), Some(ChatRestore::Resume)), false)]);
+    assert!(listed[0].restorable);
     let pending = listed[0].restart.clone().unwrap();
     assert_eq!(pending.run, run("a"));
     assert_eq!(pending.joined, vec!["b".to_owned()]);

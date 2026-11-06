@@ -9,7 +9,10 @@ use anyhow::{Result, anyhow};
 
 use super::restores::resume;
 use crate::{
-    daemon::workspace::{Manager, restarted},
+    daemon::{
+        log,
+        workspace::{Manager, restarted},
+    },
     model::{Chat, RunningAgent},
     sessions::Origin,
 };
@@ -67,10 +70,23 @@ impl Manager {
     pub(crate) async fn running_chat_agents(&self) -> Result<Vec<RunningAgent>> {
         let mut chats = Vec::new();
         for chat in self.chats().await? {
-            let resumes = self.chat_resumes(&chat).await?;
+            let resumes = self.listed_chat_resumes(&chat).await;
             chats.push((chat, resumes));
         }
         Ok(self.chat_agents.running(chats))
+    }
+
+    /// Whether the agent of `chat`, as listed, resumes its session: only a
+    /// running chat restarts, and one whose settings cannot be read is listed
+    /// as not restorable rather than failing the listing of every agent.
+    async fn listed_chat_resumes(&self, chat: &Chat) -> bool {
+        if chat.restore.is_some() {
+            return false;
+        }
+        self.chat_resumes(chat).await.unwrap_or_else(|error| {
+            log!("chat {} lists as not restorable: {error:#}", chat.id);
+            false
+        })
     }
 
     /// Whether the agent of `chat` continues its session when restored: the
