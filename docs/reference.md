@@ -3227,8 +3227,11 @@ outputs instead. When it clones at least one, it gives every tracked file its co
 unchanged the seed's modification time, so tools that compare modification times,
 such as Cargo and make, rebuild only changed files; next to outputs the worktree
 already had, older times could hide changed sources. Cloned files share disk blocks with the snapshot
-until rewritten. A failed build or clone records a `seed_failed` notification, and
-the workspace starts without the seed.
+until rewritten. An output that records an absolute path, such as a path a
+test binary was compiled with, names the seed worktree until it is rebuilt, and
+the seed worktree moves on with the default branch; read such paths at run time.
+A failed build or clone records a `seed_failed` notification, and the workspace
+starts without the seed.
 
 Removing the repository or its `[setup.seed]` stops a running build and deletes the
 seed worktree, snapshot and log, keeping anything else in `.seed`. Shoal marks

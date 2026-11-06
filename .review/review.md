@@ -642,6 +642,9 @@ configured command for another agent, plus proven child
   defines them: assertions on prose the code spells out as a literal beyond the
   fragment that tells outcomes apart, restated constants, defaults or tables,
   guarantees of a derive, the language or a dependency, and repeated paths.
+  CI jobs start from a seed build, so flag a path compiled into code that tests
+  run, such as `env!("CARGO_BIN_EXE_shoal")` or a build script's absolute
+  path; it names the seed worktree until the code is rebuilt.
 - Documentation: usage lives in README.md, behavior in docs/reference.md,
   decisions in docs/design.md, contributor rules in AGENTS.md. The skill under
   `skills/` says only what Shoal's commands do; flag any practice there,
