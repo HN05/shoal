@@ -4,9 +4,10 @@
 //! directory of the test's own, short enough for Zellij's socket paths, keeps
 //! everything from the user's sessions.
 use std::{
+    cell::RefCell,
     os::{fd::AsRawFd as _, unix::process::CommandExt as _},
     sync::{
-        Arc, PoisonError,
+        Arc, Once, PoisonError,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -44,6 +45,7 @@ impl ZellijServer {
             eprintln!("skipped: zellij is not installed");
             return None;
         }
+        keep_panics();
         let root = fixture.root.path().to_owned();
         let bin = root.join("bin");
         fs::create_dir_all(&bin).unwrap();
@@ -375,10 +377,32 @@ impl ZellijServer {
     }
 }
 
+thread_local! {
+    /// What the test's panic said, which its failure report repeats.
+    static PANIC: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// Keep what each panic says for the failure report as well as printing it.
+/// The report follows the panic's message and runs long, while CI keeps only
+/// the end of a failed job's log: the report ends with the message again.
+fn keep_panics() {
+    static KEEP: Once = Once::new();
+    KEEP.call_once(|| {
+        let print = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            PANIC.set(Some(info.to_string()));
+            print(info);
+        }));
+    });
+}
+
 impl Drop for ZellijServer {
     fn drop(&mut self) {
         if thread::panicking() {
             eprintln!("{}", self.report());
+            if let Some(panic) = PANIC.take() {
+                eprintln!("the test {panic}");
+            }
         }
         let _ = self.client.kill();
         let _ = self.client.wait();
