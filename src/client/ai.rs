@@ -15,7 +15,7 @@ pub mod validate;
 pub use builtin::{PROVIDERS, default_commands};
 pub use launch::{Arguments, Environment, ReviewFields, oneshot_command};
 pub use resolve::{
-    DEFAULT_PROMPT_CACHE, IntegrationKind, LaunchProfile, Tools, inherit_launchers, tools,
+    DEFAULT_PROMPT_CACHE, IntegrationKind, LaunchProfile, Tool, Tools, inherit_launchers, tools,
 };
 pub use validate::validate;
 

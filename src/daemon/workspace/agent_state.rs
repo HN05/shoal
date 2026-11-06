@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::{
     execution::recovery,
-    model::{AgentStatus, Chat, Execution, PresentSpace},
+    model::{AgentStatus, Execution, PresentSpace},
     process::{execution::Processes, identity::Scan},
     protocol::TurnEnd,
     state::{AgentState, ExecutionState, TurnFailure},
@@ -49,7 +49,7 @@ fn status(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentStatus> {
     })
 }
 
-/// Every workspace's last reported state.
+/// Every space's last reported state.
 pub(crate) fn all(db: &Connection) -> Result<Vec<(String, AgentState)>> {
     Ok(db
         .prepare("SELECT space_id,state FROM space_agent_state")?
@@ -203,10 +203,10 @@ impl Manager {
             .await
     }
 
-    /// How long the prompt cache of the agent `execution` runs in the
-    /// workspace `selector` names lives after the turn `turn_end` reports: as
-    /// its AI tool resolves there, or as reported for an agent without one,
-    /// else the default lifetime.
+    /// How long the prompt cache of the agent in the space `selector` names
+    /// lives after the turn `turn_end` reports: as its AI tool resolves
+    /// there, or as reported for an agent without one, else the default
+    /// lifetime.
     async fn prompt_cache(
         &self,
         selector: &str,
@@ -214,22 +214,24 @@ impl Manager {
         turn_end: &TurnEnd,
     ) -> Duration {
         let reported = turn_end.prompt_cache_secs.map(Duration::from_secs);
-        let agent = match execution {
-            Some(execution) => self.agent_name(execution).await,
-            None => None,
-        };
-        let tools = match self.workspace(selector).await {
-            Ok(workspace) => self
-                .workspace_settings(&workspace)
-                .await
-                .map(|settings| settings.tools)
-                .unwrap_or_default(),
-            Err(_) => Default::default(),
-        };
-        match agent.and_then(|agent| tools.get(&agent)) {
+        match self.agent_tool(selector, execution).await {
             Some(tool) => tool.prompt_cache(reported),
             None => reported.unwrap_or(crate::ai::DEFAULT_PROMPT_CACHE),
         }
+    }
+
+    /// The AI tool of the agent in the space `selector` names, as the
+    /// space's settings resolve it: a chat's own agent, or the one
+    /// `execution` runs in a workspace.
+    async fn agent_tool(&self, selector: &str, execution: Option<&str>) -> Option<crate::ai::Tool> {
+        let space = self.present_space(selector).await.ok()?;
+        let agent = match (&space, execution) {
+            (PresentSpace::Chat(chat), _) => chat.agent.clone(),
+            (PresentSpace::Workspace(_), Some(execution)) => self.agent_name(execution).await?,
+            (PresentSpace::Workspace(_), None) => return None,
+        };
+        let mut tools = self.present_space_settings(&space).await.ok()?.tools;
+        tools.remove(&agent)
     }
 
     /// Record `state` as [`Self::set_agent_state`] does, for a report that
@@ -242,26 +244,21 @@ impl Manager {
         session: Option<String>,
         ending: TurnEnding,
     ) -> Result<AgentStatus> {
-        let id = match self.present_space(selector).await? {
-            PresentSpace::Workspace(workspace) => workspace.id,
-            PresentSpace::Chat(chat) => {
-                return self.record_chat_report(&chat, state, session).await;
-            }
-        };
+        let space = self.present_space(selector).await?;
         if let Some(execution) = &execution {
             self.record_agent_turn(execution, state, ending.interrupted_after(state))
                 .await;
         }
-        if let (Some(execution), Some(session)) = (&execution, &session) {
-            ensure!(recovery::valid_session(session), "invalid agent session ID");
-            // A subscription follows the session, which the store leaves out.
-            if recovery::save_session(&self.paths, &id, execution, session)? {
-                self.signals.agent_changed();
-            }
+        if let Some(session) = session {
+            self.record_agent_session(&space, execution.as_deref(), session)
+                .await?;
         }
         let now = i64::try_from(crate::time::unix_seconds())?;
+        if stopped_chat(&space) {
+            return Ok(unrecorded(state, now));
+        }
         let report = Report {
-            workspace: id,
+            space: space.id().to_owned(),
             state,
             execution,
             at: now,
@@ -275,27 +272,31 @@ impl Manager {
         Ok(status)
     }
 
-    /// Record the agent `session` a chat's hooks report with `state`. A chat
-    /// keeps its agent's session, which its export continues elsewhere, but
-    /// no turn state, so the status is the report's own.
-    async fn record_chat_report(
+    /// Record the agent `session` reported in `space`: a chat keeps its
+    /// agent's session, which its export continues elsewhere, and a
+    /// workspace keeps the session of the agent `execution` runs for
+    /// resuming it.
+    async fn record_agent_session(
         &self,
-        chat: &Chat,
-        state: AgentState,
-        session: Option<String>,
-    ) -> Result<AgentStatus> {
-        if let Some(session) = session {
-            ensure!(
-                recovery::valid_session(&session),
-                "invalid agent session ID"
-            );
-            self.record_chat_session(&chat.id, session).await?;
+        space: &PresentSpace,
+        execution: Option<&str>,
+        session: String,
+    ) -> Result<()> {
+        ensure!(
+            recovery::valid_session(&session),
+            "invalid agent session ID"
+        );
+        match (space, execution) {
+            (PresentSpace::Chat(chat), _) => self.record_chat_session(&chat.id, session).await?,
+            (PresentSpace::Workspace(workspace), Some(execution)) => {
+                // A subscription follows the session, which the store leaves out.
+                if recovery::save_session(&self.paths, &workspace.id, execution, &session)? {
+                    self.signals.agent_changed();
+                }
+            }
+            (PresentSpace::Workspace(_), None) => {}
         }
-        Ok(AgentStatus {
-            state,
-            since: i64::try_from(crate::time::unix_seconds())?,
-            prompt_cache_expires_at: None,
-        })
+        Ok(())
     }
 
     /// Record the turn `failure` ended as reported from `execution`, which
@@ -353,9 +354,25 @@ impl TurnEnding {
     }
 }
 
+/// Whether `space` is a chat whose agent stopped, which records no turn
+/// state until it is restored.
+fn stopped_chat(space: &PresentSpace) -> bool {
+    matches!(space, PresentSpace::Chat(chat) if chat.restore.is_some())
+}
+
+/// The status of a report from the agent of a stopped chat, which arrived
+/// after the stop that ended the agent's turns and is not recorded.
+fn unrecorded(state: AgentState, now: i64) -> AgentStatus {
+    AgentStatus {
+        state,
+        since: now,
+        prompt_cache_expires_at: None,
+    }
+}
+
 /// A state report as the store records it.
 struct Report {
-    workspace: String,
+    space: String,
     state: AgentState,
     execution: Option<String>,
     /// When it arrived, in Unix seconds.
@@ -376,19 +393,19 @@ fn expiry(now: i64, lifetime: Option<Duration>) -> Result<Option<i64>> {
 /// the state it leaves and whether it changed it.
 fn save(db: &mut Connection, report: &Report) -> Result<(AgentStatus, bool)> {
     let tx = db.transaction()?;
-    let previous = get(&tx, &report.workspace)?.map(|status| status.state);
+    let previous = get(&tx, &report.space)?.map(|status| status.state);
     let changed = write_state(&tx, report)?;
-    super::turn_retry::follow_state(&tx, &report.workspace, report.state)?;
+    super::turn_retry::follow_state(&tx, &report.space, report.state)?;
     if !report.failed {
         let execution = report.execution.as_deref();
         super::turn_retry::unretried::follow_state(&tx, execution, previous, report.state)?;
     }
-    let status = get(&tx, &report.workspace)?.expect("agent state was just recorded");
+    let status = get(&tx, &report.space)?.expect("agent state was just recorded");
     tx.commit()?;
     Ok((status, changed))
 }
 
-/// Write `report` over the workspace's last one, keeping a repeated state's
+/// Write `report` over the space's last one, keeping a repeated state's
 /// start: an idle agent's prompt cache expires as a turn just ended says,
 /// keeps its expiry while the same execution stays idle, and has none
 /// otherwise. Whether anything changed.
@@ -411,7 +428,7 @@ fn write_state(db: &Connection, report: &Report) -> Result<bool> {
              OR execution_id IS NOT excluded.execution_id
              OR excluded.prompt_cache_expires_at IS NOT NULL",
         params![
-            report.workspace,
+            report.space,
             report.state,
             report.execution,
             report.at,

@@ -210,6 +210,7 @@ impl Manager {
             links: SpaceLinks::default(),
             review: Vec::new(),
             completion: None,
+            agent_state: None,
             parent: None,
             children: Vec::new(),
         };
@@ -754,6 +755,7 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
             links: SpaceLinks::default(),
             review: Vec::new(),
             completion: store::json_column(row, "completion")?,
+            agent_state: None,
             parent: None,
             children: Vec::new(),
         })
@@ -765,6 +767,7 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
         chat.review = crate::daemon::workspace::review::list(db, &chat.id)?;
         chat.parent = workspace::parent(db, &chat.id)?;
         chat.children = workspace::children(db, &chat.id)?;
+        chat.agent_state = workspace::agent_state::current(db, &chat.id)?;
         Ok(chat)
     })
     .collect()

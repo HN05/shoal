@@ -1394,6 +1394,9 @@ pub struct Chat {
     /// What `shoal done` recorded, until `shoal done --undo`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion: Option<Completion>,
+    /// The turn state its running agent last reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_state: Option<AgentStatus>,
     /// The space above it.
     #[serde(default)]
     pub parent: Option<SpaceRef>,

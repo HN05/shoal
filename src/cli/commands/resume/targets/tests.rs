@@ -28,6 +28,7 @@ fn spaces() -> Spaces {
         links: Default::default(),
         review: Vec::new(),
         completion: None,
+        agent_state: None,
         parent: None,
         children: Vec::new(),
     };

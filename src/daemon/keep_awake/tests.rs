@@ -168,3 +168,31 @@ async fn an_inhibitor_writing_past_the_pipe_is_drained_and_bounded() {
         ended.len()
     );
 }
+
+#[tokio::test]
+async fn a_chats_agent_has_work_as_a_workspaces_does() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    for (state, work) in [(AgentState::Working, true), (AgentState::Idle, false)] {
+        manager
+            .set_agent_state(&chat.id, state, None, None)
+            .await
+            .unwrap();
+        assert_eq!(has_work(&manager).await, work, "{state}");
+    }
+}

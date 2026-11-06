@@ -232,6 +232,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
         links: Default::default(),
         review: Vec::new(),
         completion: None,
+        agent_state: None,
         parent: None,
         children: Vec::new(),
     };

@@ -218,6 +218,45 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
 }
 
 #[tokio::test]
+async fn a_chat_shows_its_agents_turn_state_until_it_stops() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let shown = || async {
+        let chats = manager.chats().await.unwrap();
+        chats[0].agent_state.map(|status| status.state)
+    };
+    assert_eq!(shown().await, None);
+    let report = |state| manager.set_agent_state(&chat.id, state, None, None);
+    report(crate::state::AgentState::Waiting).await.unwrap();
+    assert_eq!(shown().await, Some(crate::state::AgentState::Waiting));
+
+    // The state ends with the chat's agent, and a report arriving after
+    // the stop is not recorded.
+    process.kill();
+    assert!(manager.chats().await.unwrap()[0].restore.is_some());
+    assert_eq!(shown().await, None);
+    report(crate::state::AgentState::Working).await.unwrap();
+    assert_eq!(shown().await, None);
+}
+
+#[tokio::test]
 async fn a_moved_chat_runs_while_its_new_process_runs() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
