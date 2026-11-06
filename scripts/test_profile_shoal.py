@@ -36,7 +36,6 @@ class IsolationTests(unittest.TestCase):
             with patch.dict(os.environ, inherited), patch("sandbox.SOCKETS_ROOT", Path(root)):
                 env = profile_shoal.environment(sandbox)
             self.assertFalse(set(inherited) & set(env))
-            self.assertEqual(env["SHOAL_STATE_DIR"], str(sandbox / "s"))
             self.assertEqual(env["SHOAL_PROFILE"], "1")
             self.assertTrue(Path(env["TMUX_TMPDIR"]).is_dir())
             repo = profile_shoal.fixture_repository(sandbox, env)

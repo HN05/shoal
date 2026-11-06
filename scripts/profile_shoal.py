@@ -25,7 +25,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from sandbox import build, isolated, prepare_directories, remove
+from sandbox import build, isolated, prepare_directories, remove, sockets_directory
 
 LINE = re.compile(r"^profile (\w+) ([\d.]+)ms (.*)$")
 IDENTITY = {f"GIT_{role}_{field}": value for role in ("AUTHOR", "COMMITTER")
@@ -65,7 +65,7 @@ def environment(sandbox):
     Shoal's timing lines on."""
     prepare_directories(sandbox)
     env = isolated(sandbox, IDENTITY)
-    env.update(SHOAL_STATE_DIR=str(sandbox / "s"), SHOAL_PROFILE="1")
+    env["SHOAL_PROFILE"] = "1"
     return env
 
 
@@ -193,7 +193,7 @@ def main():
         profile(options, sandbox)
     finally:
         if options.keep or options.sample:
-            print(f"\nkept {sandbox}")
+            print(f"\nkept {sandbox} and {sockets_directory(sandbox)}")
             if options.sample:
                 print(f"samply load {sandbox / 'daemon.json.gz'}\n"
                       f"samply load {sandbox / 'cli.json.gz'}")
