@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result};
 use serde::Deserialize;
 
 use super::{await_prompt, created, herdr, shell_command, tab_command};
-use crate::{cli::terminal::Demo, sessions::Origin, subprocess::Run};
+use crate::{sessions::Origin, subprocess::Run, terminal::Demo};
 
 /// Lines of recent output a screen read returns.
 const SCREEN_LINES: &str = "500";

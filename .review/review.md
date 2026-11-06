@@ -412,7 +412,7 @@ instead of the PR delivery guidance below.
 - Commands never name an agent or terminal host. What configuration can say about
   an agent lives in its `[agents.<name>]` description; tool-specific code lives in an
   `Integration` keyed by agent name under `cli/agents/`, and terminal-specific code
-  in a `Host` under `cli/terminal/`. Optional integrations stay behind their Cargo
+  in a `Host` under `terminal/`. Optional integrations stay behind their Cargo
   feature and setting.
 - Claude and Codex launches (including Happy and Claude and Codex app handoffs) persist
   trust for the repository's shared Shoal workspaces directory, or an explicitly

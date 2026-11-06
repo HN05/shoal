@@ -6,8 +6,13 @@ use std::path::Path;
 
 use anyhow::{Context as _, Result};
 
-use super::{Configured, Origin, Places};
-use crate::{cli::context::Context, config::Effective, model::Repository};
+use crate::{
+    cli::context::Context,
+    config::Effective,
+    model::Repository,
+    sessions::Origin,
+    terminal::{Configured, Places},
+};
 
 /// The repository whose name a configured group's name takes, looked up
 /// only once a name is needed, or for a chat without one, the `root_dir`

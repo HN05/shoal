@@ -13,10 +13,8 @@ use super::{
     add_place::add_worker_argv,
     groups,
     here::current_origin,
-    host::{Attaches, Host, Places, Start},
-    hosts::{Beside, Configured, beside, current, enabled_host, hosts, names_places},
     naming,
-    sessions::{Owner, left_open, report_detach},
+    sessions::{left_open, report_detach},
 };
 use crate::{
     cli::{
@@ -29,6 +27,10 @@ use crate::{
     execution::TrackedAgent,
     model::{Repository, Workspace},
     sessions::Origin,
+    terminal::{
+        Attaches, Beside, Configured, Host, Owner, Places, Start, current, enabled_host, hosts,
+        names_places,
+    },
 };
 
 /// Start `plan` beside this terminal: focused when it waits for the user,
@@ -644,6 +646,16 @@ pub(in crate::cli) fn launcher_program(settings: &Effective) -> Option<&'static 
         .host
         .attaches()
         .map(Attaches::launcher_program)
+}
+
+/// The host that starts work beside this terminal. A place a host opened for
+/// this process, or a terminal without a user, keeps work in place.
+fn beside(ctx: &Context, settings: &Effective) -> Configured {
+    if ctx.place.is_none() && ctx.interactive() {
+        current(settings)
+    } else {
+        Configured::plain(settings)
+    }
 }
 
 /// Whether a launch takes the caller's terminal or runs in the background.

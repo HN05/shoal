@@ -15,13 +15,13 @@ use super::{
     typed::Typed,
 };
 use crate::{
-    tools::ensure_program,
     config::repo::Placement,
     sessions::{
         HostName, Origin,
         tmux::{Opened, Shell, Tmux as Server, parse_tmux_var, var},
     },
     tools::Tool,
+    tools::ensure_program,
 };
 
 /// The variable naming the pane a process runs in.
@@ -401,7 +401,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         demo.state,
         &worker,
         demo.env,
-        super::demos::NOT_INHERITED_BY_DEMOS,
+        super::host::NOT_INHERITED_BY_DEMOS,
         true,
     )?;
     Server::recorded(&place.data)

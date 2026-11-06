@@ -23,7 +23,7 @@ const PROMPT_POLL: Duration = Duration::from_millis(50);
 
 /// A command a host types into a new place's shell, with the file that
 /// carries it until the place runs it.
-pub(in crate::cli) struct Typed {
+pub(crate) struct Typed {
     text: String,
     command: [String; 3],
     file: tempfile::TempPath,
@@ -170,7 +170,7 @@ fn place_command(line: &str, clear: &[&str], ends_shell: bool) -> [String; 3] {
 /// `canonical` reads it. Text typed before shows twice: the terminal echoes
 /// it, then the line editor draws it again. A terminal whose mode
 /// `canonical` cannot read is not waited for, and the limit bounds its reads.
-pub(in crate::cli) async fn await_prompt<Canonical, Read>(mut canonical: Canonical)
+pub(crate) async fn await_prompt<Canonical, Read>(mut canonical: Canonical)
 where
     Canonical: FnMut() -> Read,
     Read: Future<Output = Option<bool>>,
@@ -184,7 +184,7 @@ where
 }
 
 /// The launch step: run the command `file` carries, after deleting it.
-pub(in crate::cli) fn run(file: &Path) -> Result<i32> {
+pub(crate) fn run(file: &Path) -> Result<i32> {
     let launch = read(file)?;
     let (program, args) = launch
         .argv

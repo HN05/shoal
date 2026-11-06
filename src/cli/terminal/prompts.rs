@@ -3,10 +3,9 @@ use anyhow::{Context as _, Result};
 
 use super::{
     here::{current_origin, with_instance},
-    hosts::named,
     launch::keeps_agents_in_sessions,
 };
-use crate::{config::Effective, sessions::Origin};
+use crate::{config::Effective, sessions::Origin, terminal::named};
 
 /// What an agent's wrapper submits to wake the agent with new updates,
 /// which the prompt's hook supplies.

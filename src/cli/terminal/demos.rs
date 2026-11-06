@@ -2,21 +2,15 @@
 //! background processes.
 use anyhow::Result;
 
-use super::{
-    background, groups,
-    here::current_origin,
-    host::{Demo, DemoWorker, Host},
-    hosts::{named, names_places},
-    launch::place_env,
-};
+use super::{background, groups, here::current_origin, launch::place_env};
 use crate::{
-    cli::context::Context, config::Effective, demos::Launch, env, model::Workspace,
+    cli::context::Context,
+    config::Effective,
+    demos::Launch,
+    model::Workspace,
     sessions::Origin,
+    terminal::{Demo, DemoWorker, Host, named, names_places},
 };
-
-/// Variables a demo's worker must not inherit from the agent that starts it:
-/// the agent's execution marker would make the agent's exit stop the demo.
-pub(super) const NOT_INHERITED_BY_DEMOS: &[&str] = &[env::EXECUTION_ID];
 
 /// Start a demo of `workspace` in the first host that runs queued starts and
 /// keeps demos, otherwise as a background process with a log. `worker` gives

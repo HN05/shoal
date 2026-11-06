@@ -5,15 +5,14 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::client::output::daemon::{ConfigInstalled, Installed, Reloaded, Running, Status};
 use crate::{
-    cli::{
-        args::service::DaemonCommand, client, context::Context, output::Style, shell, terminal, ui,
-    },
+    cli::{args::service::DaemonCommand, client, context::Context, output::Style, shell, ui},
     config::repo::ConfigLayers,
     daemon,
     paths::Paths,
     protocol::Exit,
     service::{self, Platform},
     sessions::HostName,
+    terminal,
 };
 
 pub(super) async fn install(

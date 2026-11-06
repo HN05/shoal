@@ -1,5 +1,5 @@
 use super::*;
-use crate::cli::terminal::host::Closes;
+use crate::terminal::Closes;
 use crate::{
     model::{AgentStatus, Completion, Execution, Inspection, Workspace},
     paths::Paths,

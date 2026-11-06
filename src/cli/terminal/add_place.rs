@@ -7,15 +7,13 @@ use anyhow::{Context as _, Result};
 use super::{
     closing,
     here::{created_here, label_current, place_here, record_owned},
-    host::{Host, Places},
-    hosts::{Configured, named},
-    sessions::Owner,
 };
 use crate::{
     cli::{commands::workspaces::execute_add, context::Context, recent},
     env,
     model::Workspace,
     sessions::HostName,
+    terminal::{Configured, Host, Owner, Places, named},
 };
 
 /// The place a host opened for this process to add a workspace in, hosting

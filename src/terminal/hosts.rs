@@ -9,7 +9,6 @@ use super::{
     rex, tmux, zellij, zmx,
 };
 use crate::{
-    cli::context::Context,
     config::Effective,
     sessions::{HostName, Origin},
 };
@@ -59,12 +58,12 @@ struct Registered {
 }
 
 /// Every host, for what it does whatever config says.
-pub(super) fn hosts() -> impl Iterator<Item = &'static dyn Host> {
+pub(crate) fn hosts() -> impl Iterator<Item = &'static dyn Host> {
     registered().map(|registered| registered.host)
 }
 
 /// The hosts whose programs this process finds.
-pub(in crate::cli) fn installed_hosts() -> Vec<HostName> {
+pub(crate) fn installed_hosts() -> Vec<HostName> {
     hosts()
         .filter(|host| host.ensure_installed().is_ok())
         .map(Host::name)
@@ -72,7 +71,7 @@ pub(in crate::cli) fn installed_hosts() -> Vec<HostName> {
 }
 
 /// What config sets for a host, from the section of its own it may have.
-pub(in crate::cli) struct Options {
+pub(crate) struct Options {
     /// Whether the host serves the terminals it runs in.
     pub enabled: bool,
     /// Whether it opens places, such as tabs, beside the caller.
@@ -104,11 +103,11 @@ impl Options {
 }
 
 /// A host as `settings` set it up.
-pub(super) struct Configured {
-    pub(super) host: &'static dyn Host,
-    pub(super) options: Options,
+pub(crate) struct Configured {
+    pub(crate) host: &'static dyn Host,
+    pub(crate) options: Options,
     /// Whether the places it opens for a workspace close once it is done.
-    pub(super) closes_when_done: bool,
+    pub(crate) closes_when_done: bool,
 }
 
 impl Configured {
@@ -124,13 +123,13 @@ impl Configured {
     }
 
     /// Every host as `settings` set it up, in the order they claim a terminal.
-    pub(super) fn all(settings: &Effective) -> impl Iterator<Item = Self> + '_ {
+    pub(crate) fn all(settings: &Effective) -> impl Iterator<Item = Self> + '_ {
         registered()
             .map(|registered| Self::new(registered.host, (registered.options)(settings), settings))
     }
 
     /// The host named `name`, or the plain terminal.
-    pub(super) fn named(settings: &Effective, name: HostName) -> Self {
+    pub(crate) fn named(settings: &Effective, name: HostName) -> Self {
         Self::all(settings)
             .find(|host| host.host.name() == name)
             .unwrap_or_else(|| Self::plain(settings))
@@ -138,13 +137,13 @@ impl Configured {
 
     /// The host `default_host` names for a terminal no host serves, unless
     /// config turns it off.
-    pub(super) fn default_host(settings: &Effective) -> Option<Self> {
+    pub(crate) fn default_host(settings: &Effective) -> Option<Self> {
         Self::all(settings)
             .find(|host| host.host.name() == settings.terminal.default_host && host.options.enabled)
     }
 
     /// The plain terminal, which every terminal falls back to.
-    fn plain(settings: &Effective) -> Self {
+    pub(crate) fn plain(settings: &Effective) -> Self {
         let options = Options {
             opens_places: false,
             ..Options::DEFAULT
@@ -153,7 +152,7 @@ impl Configured {
     }
 
     /// Whether the host serves the terminal this process runs in.
-    pub(super) fn serves(&self) -> bool {
+    pub(crate) fn serves(&self) -> bool {
         self.options.enabled && self.host.serves()
     }
 
@@ -174,7 +173,7 @@ impl Configured {
     /// its group here: a place of this host in a group, such as a Herdr tab
     /// in its workspace. A start queued from a place in no group, such as a
     /// zmx session, goes to the default host.
-    pub(super) fn takes_queued(&self, origin: &Origin) -> bool {
+    pub(crate) fn takes_queued(&self, origin: &Origin) -> bool {
         self.options.enabled
             && self.places().is_some()
             && origin.host == self.host.name()
@@ -182,7 +181,7 @@ impl Configured {
     }
 
     /// How the host opens places, where config lets it.
-    pub(super) fn places(&self) -> Option<&'static dyn Places> {
+    pub(crate) fn places(&self) -> Option<&'static dyn Places> {
         self.options
             .opens_places
             .then(|| self.host.places())
@@ -192,7 +191,7 @@ impl Configured {
     /// Where a start from this terminal goes in `origin`, the place it runs
     /// in or the group it joins: splitting that place where config asks for
     /// splits and there is one, otherwise in a place of its own.
-    pub(super) fn beside<'a>(&self, origin: Option<&'a Origin>) -> Beside<'a> {
+    pub(crate) fn beside<'a>(&self, origin: Option<&'a Origin>) -> Beside<'a> {
         Beside {
             origin,
             split: origin
@@ -205,15 +204,15 @@ impl Configured {
 /// Where a new place goes: into `origin`'s group, splitting `split` when
 /// set.
 #[derive(Clone, Copy)]
-pub(super) struct Beside<'a> {
-    pub(super) origin: Option<&'a Origin>,
-    pub(super) split: Option<&'a str>,
+pub(crate) struct Beside<'a> {
+    pub(crate) origin: Option<&'a Origin>,
+    pub(crate) split: Option<&'a str>,
 }
 
 impl<'a> Beside<'a> {
     /// A place of its own in `origin`'s group, as a start without the
     /// caller's place opens.
-    pub(super) fn opening(origin: Option<&'a Origin>) -> Self {
+    pub(crate) fn opening(origin: Option<&'a Origin>) -> Self {
         Self {
             origin,
             split: None,
@@ -237,7 +236,7 @@ impl Host for Plain {
 /// The host serving this terminal under `settings`. A terminal no host
 /// serves goes to the default host, and a process without a terminal, or
 /// whose default host config turns off, runs in place.
-pub(super) fn current(settings: &Effective) -> Configured {
+pub(crate) fn current(settings: &Effective) -> Configured {
     match Configured::all(settings).find(Configured::serves) {
         Some(host) => host.serving(),
         None if on_terminal() => {
@@ -250,16 +249,6 @@ pub(super) fn current(settings: &Effective) -> Configured {
 /// Whether this process runs on a terminal.
 fn on_terminal() -> bool {
     std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
-}
-
-/// The host that starts work beside this terminal. A place a host opened for
-/// this process, or a terminal without a user, keeps work in place.
-pub(super) fn beside(ctx: &Context, settings: &Effective) -> Configured {
-    if ctx.place.is_none() && ctx.interactive() {
-        current(settings)
-    } else {
-        Configured::plain(settings)
-    }
 }
 
 /// The variables naming places of hosts other than `host`, which a place
@@ -280,20 +269,20 @@ pub(super) fn foreign_place_variables(host: HostName) -> Vec<&'static str> {
 }
 
 /// The host named `name`, where config enables it.
-pub(super) fn enabled_host(settings: &Effective, name: HostName) -> Option<&'static dyn Host> {
+pub(crate) fn enabled_host(settings: &Effective, name: HostName) -> Option<&'static dyn Host> {
     Configured::all(settings)
         .find(|host| host.options.enabled && host.host.name() == name)
         .map(|host| host.host)
 }
 
 /// Whether the places `host` opens show a name.
-pub(super) fn names_places(host: &dyn Host) -> bool {
+pub(crate) fn names_places(host: &dyn Host) -> bool {
     host.places().is_some_and(Places::names_places)
 }
 
 /// Where `place`, a place its host opened for `name`, runs and how to reach
 /// it, as a background start reports it; `None` for a host without places.
-pub(in crate::cli) fn background_place(place: &Origin, name: &str) -> Option<String> {
+pub(crate) fn background_place(place: &Origin, name: &str) -> Option<String> {
     named(place.host)
         .places()
         .map(|places| places.background_place(name))
@@ -301,7 +290,7 @@ pub(in crate::cli) fn background_place(place: &Origin, name: &str) -> Option<Str
 
 /// The host named `name`, or the plain terminal, which keeps places no
 /// host does.
-pub(super) fn named(name: HostName) -> &'static dyn Host {
+pub(crate) fn named(name: HostName) -> &'static dyn Host {
     hosts().find(|host| host.name() == name).unwrap_or(&Plain)
 }
 

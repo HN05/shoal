@@ -2,15 +2,11 @@
 //! workspace's, and closing it with the workspace.
 use anyhow::{Context as _, Result};
 
-use super::{
-    closing,
-    host::{Host, Places},
-    hosts::{hosts, named},
-    sessions::Owner,
-};
+use super::closing;
 use crate::{
     cli::context::Context,
     sessions::{HostName, Origin},
+    terminal::{Host, Owner, Places, hosts, named},
 };
 
 /// The place this process runs in, as the host serving it names it.

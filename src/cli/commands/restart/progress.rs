@@ -11,10 +11,11 @@ use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
-        terminal, ui,
+        ui,
     },
     model::RunningAgent,
     sessions::Origin,
+    terminal,
 };
 
 pub(super) struct Progress {

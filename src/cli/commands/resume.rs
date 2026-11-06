@@ -645,7 +645,7 @@ async fn launch(
     {
         return Ok(code);
     }
-    terminal::label_current(&ctx.paths, terminal::Owner::Workspace(&workspace.id)).await?;
+    terminal::label_current(&ctx.paths, crate::terminal::Owner::Workspace(&workspace.id)).await?;
     crate::execution::run_recovery(
         &ctx.paths,
         workspace.id.clone(),

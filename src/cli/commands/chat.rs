@@ -660,7 +660,7 @@ pub(super) async fn launch(
         opening,
         [resumed, args].concat(),
     )?;
-    terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
+    terminal::label_current(&ctx.paths, crate::terminal::Owner::Chat(&chat.id)).await?;
     let token = crate::client::chats::scope(&ctx.paths, &chat).await?;
     handoff::report(&Ok(()));
     run_here(

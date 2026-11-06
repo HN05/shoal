@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 
-use super::DemoWorker;
+use crate::terminal::DemoWorker;
 use crate::{
     model::Workspace,
     paths::Paths,
@@ -41,7 +41,7 @@ pub(super) fn start_demo(
         .stdout(output.try_clone()?)
         .stderr(output)
         .process_group(0);
-    for name in super::demos::NOT_INHERITED_BY_DEMOS {
+    for name in crate::terminal::NOT_INHERITED_BY_DEMOS {
         command.env_remove(name);
     }
     command

@@ -55,7 +55,7 @@ async fn status_view(ctx: &Context, space: String) -> Result<StatusView> {
         status,
         sessions: sessions
             .into_iter()
-            .map(terminal::Session::output)
+            .map(crate::terminal::Session::output)
             .collect(),
         sessions_error,
         transcripts,
@@ -74,7 +74,7 @@ fn listed<T>(found: Result<Vec<T>>) -> (Vec<T>, Option<String>) {
 
 /// The agent sessions of `space`, in the hosts its settings enable and at
 /// the places the daemon recorded it running in.
-async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<terminal::Session>> {
+async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<crate::terminal::Session>> {
     let (target, places) = match space {
         SpaceDetail::Workspace(status) => (
             ConfigTarget::Workspace(status.workspace.id.clone()),

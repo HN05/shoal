@@ -18,7 +18,6 @@ use super::{
     typed::{self, Typed},
 };
 use crate::{
-    tools::ensure_program,
     config::repo::TabPlacement,
     sessions::{
         HostName, Origin,
@@ -28,6 +27,7 @@ use crate::{
         },
     },
     tools::Tool,
+    tools::ensure_program,
 };
 
 /// Lines of scrollback a demo's screen read returns.
@@ -417,7 +417,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         demo.state,
         &worker,
         demo.env,
-        super::demos::NOT_INHERITED_BY_DEMOS,
+        super::host::NOT_INHERITED_BY_DEMOS,
         true,
     )?;
     let server = Server::recorded(&place.data);

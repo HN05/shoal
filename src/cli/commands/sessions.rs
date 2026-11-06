@@ -38,7 +38,10 @@ pub(super) async fn attach(
         (None, []) => bail!("{}", target.without_sessions()),
         (None, [only]) => only,
         (None, several) => {
-            let labels: Vec<_> = several.iter().map(terminal::Session::label).collect();
+            let labels: Vec<_> = several
+                .iter()
+                .map(crate::terminal::Session::label)
+                .collect();
             let choices: Vec<_> = several
                 .iter()
                 .zip(&labels)

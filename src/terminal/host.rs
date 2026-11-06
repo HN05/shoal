@@ -4,14 +4,18 @@ use std::{ffi::OsString, path::Path};
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 
-use super::{Owner, PlaceState, Session, Watched};
-use crate::sessions::{HostName, Origin};
+use super::{Owner, Session};
+use crate::{
+    env,
+    sessions::{HostName, Origin},
+    state::AgentState,
+};
 
 /// A terminal host: a multiplexer or terminal app that runs Shoal work beside
 /// the caller. Each capability it has is a trait of its own, which it hands
 /// out; generic code keeps work a host lacks the capability for in this
 /// process, or does it its own way.
-pub(in crate::cli) trait Host: Sync {
+pub(crate) trait Host: Sync {
     /// The name records, sessions and messages use.
     fn name(&self) -> HostName;
 
@@ -69,7 +73,7 @@ pub(in crate::cli) trait Host: Sync {
 /// caller and runs Shoal work there. Generic code starts work through it only
 /// where config lets the host open places; what a place this process runs in
 /// tells, it reads whatever config says.
-pub(in crate::cli) trait Places: Sync {
+pub(crate) trait Places: Sync {
     /// Run `start` in a new place, returning the place: one of its own in
     /// the group of `start`'s origin, or splitting the place `start` names.
     /// A focused place becomes the host's current one; generic code shows
@@ -166,9 +170,26 @@ pub(in crate::cli) trait Places: Sync {
     }
 }
 
+/// What a host shows of a place it opened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PlaceState {
+    /// The host reports the place gone, or hosting something else.
+    Gone,
+    /// The place is open, with its agent's turn state when the host reads one.
+    Open(Option<AgentState>),
+}
+
+/// A place a watcher closes: the workspace it hosts, and what told it apart
+/// from a later place under the same ID when the watch began.
+pub(crate) struct Watched {
+    pub id: String,
+    pub workspace: String,
+    pub instance: Option<String>,
+}
+
 /// A host that reads the places it opened for workspaces, so a watcher
 /// closes each once its workspace is done.
-pub(in crate::cli) trait Watches: Sync {
+pub(crate) trait Watches: Sync {
     /// Whether the watched `place` is still open, and its agent's turn as
     /// this host reads it.
     fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>>;
@@ -189,7 +210,7 @@ pub(in crate::cli) trait Watches: Sync {
 /// A host whose places carry their own ownership, so Shoal closes one the
 /// daemon keeps no record of or cannot close. A host without it has only the
 /// record, and its places without one stay open.
-pub(in crate::cli) trait Closes: Sync {
+pub(crate) trait Closes: Sync {
     /// Close `place`, one this host opened for a workspace, where the daemon
     /// leaves that to the host.
     fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>>;
@@ -197,7 +218,7 @@ pub(in crate::cli) trait Closes: Sync {
 
 /// A host that keeps agents in sessions of its own, which `shoal attach`
 /// finds where the daemon recorded them and shows as [`Places::show`] does.
-pub(in crate::cli) trait Sessions: Sync {
+pub(crate) trait Sessions: Sync {
     /// The session at `place`, where an agent or chat was recorded running,
     /// while it is open.
     fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>>;
@@ -239,7 +260,7 @@ pub(in crate::cli) trait Sessions: Sync {
 /// A host that runs agents and chats launched here in new sessions of its
 /// own this terminal attaches to, which their wrapper can type prompts into;
 /// a focused addition stays here to start its agent so.
-pub(in crate::cli) trait Attaches: Sessions {
+pub(crate) trait Attaches: Sessions {
     /// Run `start`, a tracked agent `agent` of `owner`, in a new session and
     /// attach this terminal to it, returning the session once the terminal
     /// left it.
@@ -260,7 +281,7 @@ pub(in crate::cli) trait Attaches: Sessions {
 
 /// A host that types into the places it records, such as a demo's or the
 /// place an agent runs in, for a process anywhere on its server.
-pub(in crate::cli) trait Types: Sync {
+pub(crate) trait Types: Sync {
     /// Type `keys` into `place` as they are, control characters included.
     fn send_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>>;
 }
@@ -268,7 +289,7 @@ pub(in crate::cli) trait Types: Sync {
 /// A host that keeps demos in places of its own, which the user opens as
 /// [`Places::show`] shows a place and reads, and types into as [`Types`]
 /// does.
-pub(in crate::cli) trait Demos: Sync {
+pub(crate) trait Demos: Sync {
     /// Start `demo` in a new background place of this host, returning the
     /// place.
     fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Origin>>;
@@ -277,13 +298,16 @@ pub(in crate::cli) trait Demos: Sync {
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>>;
 }
 
+/// Variables a demo's worker must not inherit from the agent that starts it:
+/// the agent's execution marker would make the agent's exit stop the demo.
+pub(crate) const NOT_INHERITED_BY_DEMOS: &[&str] = &[env::EXECUTION_ID];
+
 /// The demo worker's argv for the place it runs in.
-pub(in crate::cli) type DemoWorker<'a> =
-    dyn Fn(&Origin) -> Result<Vec<OsString>> + Send + Sync + 'a;
+pub(crate) type DemoWorker<'a> = dyn Fn(&Origin) -> Result<Vec<OsString>> + Send + Sync + 'a;
 
 /// Work a host starts in a new place, which generic code describes in full,
 /// so the host only carries it out.
-pub(in crate::cli) struct Start<'a> {
+pub(crate) struct Start<'a> {
     /// The daemon state directory that owns the place.
     pub state: &'a Path,
     /// The place the start comes from, whose group the new place joins.
@@ -306,7 +330,7 @@ pub(in crate::cli) struct Start<'a> {
 
 /// A demo a host starts in a new background place, as [`Start`] describes
 /// other work; its command depends on the place's handle.
-pub(in crate::cli) struct Demo<'a> {
+pub(crate) struct Demo<'a> {
     pub launch: &'a str,
     pub state: &'a Path,
     pub origin: Option<&'a Origin>,

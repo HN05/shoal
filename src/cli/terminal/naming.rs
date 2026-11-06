@@ -9,7 +9,6 @@ use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 
-use super::{Configured, Host, Options, Places};
 use crate::{
     cli::{
         commands::{
@@ -22,6 +21,7 @@ use crate::{
     model::{Repository, Workspace},
     protocol::ItemContext,
     sessions::{HostName, Origin},
+    terminal::{Configured, Host, Options, Places, names_places},
 };
 
 /// The name of the place hosting a workspace, with the repository and issue
@@ -140,7 +140,7 @@ pub(super) async fn workspace_label(
     host: &dyn Host,
     workspace: &Workspace,
 ) -> String {
-    if !super::names_places(host) {
+    if !names_places(host) {
         return workspace.name.clone();
     }
     if let (None, Some(title)) = (&template, &workspace.title) {

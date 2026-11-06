@@ -7,9 +7,9 @@ use tokio::process::Command;
 
 use super::{AgentStatus, TabInfo, pane, query};
 use crate::{
-    cli::terminal::PlaceState,
     sessions::{Origin, herdr},
     subprocess::Run,
+    terminal::PlaceState,
 };
 
 /// The tab holding a place, with the agent status Herdr shows for the place.

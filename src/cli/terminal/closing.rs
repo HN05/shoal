@@ -16,7 +16,6 @@ use std::{
 
 use anyhow::{Context as _, Result};
 
-use super::{Host, host::Watches, hosts::hosts};
 use crate::{
     cli::{client, context::Context, installed},
     daemon::ownership,
@@ -25,25 +24,9 @@ use crate::{
     paths::Paths,
     sessions::{HostName, Origin, PlaceClose, PlaceOwnership},
     state::AgentState,
+    terminal::{Host, PlaceState, Watched, Watches, hosts, named},
     workers,
 };
-
-/// What a host shows of a place it opened.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::cli) enum PlaceState {
-    /// The host reports the place gone, or hosting something else.
-    Gone,
-    /// The place is open, with its agent's turn state when the host reads one.
-    Open(Option<AgentState>),
-}
-
-/// A place a watcher closes: the workspace it hosts, and what told it apart
-/// from a later place under the same ID when the watch began.
-pub(in crate::cli) struct Watched {
-    pub id: String,
-    pub workspace: String,
-    pub instance: Option<String>,
-}
 
 /// Who closes a watched place once its workspace is removed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -127,7 +110,7 @@ pub async fn watch(
     place: Watched,
     kept_at: Option<String>,
 ) -> Result<i32> {
-    let host = super::hosts::named(host);
+    let host = named(host);
     let watches = host
         .watches()
         .with_context(|| format!("{} cannot read places", host.name()))?;

@@ -8,9 +8,9 @@ use serde::Deserialize;
 
 use super::{Pane, TabInfo, TabState, herdr};
 use crate::{
-    cli::terminal::Session,
     sessions::{Origin, herdr::SERVER_VARS},
     subprocess::Run,
+    terminal::Session,
 };
 
 /// The session at `place`, named after its tab, while its pane is open.

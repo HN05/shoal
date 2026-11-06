@@ -50,7 +50,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             instance,
             kept_at,
         } => {
-            let place = terminal::Watched {
+            let place = crate::terminal::Watched {
                 id: place,
                 workspace,
                 instance,
@@ -58,7 +58,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             terminal::watch_place(&ctx, host, place, kept_at).await
         }
         InternalCommand::HerdrWatch { workspace, tab } => {
-            let place = terminal::Watched {
+            let place = crate::terminal::Watched {
                 id: tab,
                 workspace,
                 instance: None,
@@ -97,7 +97,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::PushGate { remote, url } => push_gate::run(&ctx, remote, url).await,
         InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
         InternalCommand::Operation => operations::worker(&ctx).await,
-        InternalCommand::Launch { file } => terminal::run_launch(&file),
+        InternalCommand::Launch { file } => crate::terminal::run_launch(&file),
         InternalCommand::TakeOver {
             workspace,
             agent,

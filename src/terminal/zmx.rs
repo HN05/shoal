@@ -21,7 +21,6 @@ use super::{
     host::{Attaches, Closes, Demos, Places, Sessions, Types, Watches},
 };
 use crate::{
-    tools::ensure_program,
     env,
     sessions::{
         HostName, Origin,
@@ -29,6 +28,7 @@ use crate::{
     },
     subprocess::Run,
     tools::Tool,
+    tools::ensure_program,
 };
 
 /// zmx sets this inside a session; a launch there runs in place.
@@ -327,7 +327,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         &(demo.worker)(&place)?,
         &NewSession {
             environment: demo.env,
-            clear: super::demos::NOT_INHERITED_BY_DEMOS,
+            clear: super::host::NOT_INHERITED_BY_DEMOS,
             labels: vec![
                 owner_label(Owner::Workspace(demo.workspace)),
                 CREATED.into(),
