@@ -44,7 +44,7 @@ impl App {
     /// Whether the app can open: its launcher is on `search_path` and its
     /// bundle, if it names one, is installed.
     pub fn available(&self, search_path: &OsStr) -> bool {
-        super::program_available(self.program, search_path)
+        crate::tools::program_available(self.program, search_path)
             && self.bundle.is_none_or(|bundle| Path::new(bundle).exists())
     }
 }
@@ -156,7 +156,7 @@ pub(in crate::cli) async fn hand_off(
 /// its launcher is missing.
 pub(in crate::cli) fn ensure_opens(app: &App, args: &[OsString]) -> Result<()> {
     (app.check)(args)?;
-    super::ensure_program(app.name, app.program)
+    crate::tools::ensure_program(app.name, app.program)
 }
 
 /// Run `app`'s launcher with `args` from `directory`, returning its exit

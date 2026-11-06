@@ -21,7 +21,7 @@ use super::{
     host::{Attaches, Closes, Demos, Places, Sessions, Types, Watches},
 };
 use crate::{
-    cli::agents::ensure_program,
+    tools::ensure_program,
     env,
     sessions::{
         HostName, Origin,

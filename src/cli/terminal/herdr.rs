@@ -190,7 +190,7 @@ fn ensure_reachable(data: &BTreeMap<String, String>) -> Result<()> {
     if herdr::named_program(data).is_some() {
         return Ok(());
     }
-    crate::cli::agents::ensure_program("background launch", "herdr")
+    crate::tools::ensure_program("background launch", "herdr")
 }
 
 /// What Herdr's section sets: `herdr.enabled`, whether it opens tabs

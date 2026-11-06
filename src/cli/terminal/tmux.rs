@@ -15,7 +15,7 @@ use super::{
     typed::Typed,
 };
 use crate::{
-    cli::agents::ensure_program,
+    tools::ensure_program,
     config::repo::Placement,
     sessions::{
         HostName, Origin,

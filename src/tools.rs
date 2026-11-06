@@ -1,5 +1,10 @@
-//! Executable names and the dependencies checked by doctor on every installation.
-use crate::forge::transport::programs;
+//! Executable names, whether they are installed, and the dependencies
+//! checked by doctor on every installation.
+use std::{ffi::OsStr, path::Path};
+
+use anyhow::{Result, ensure};
+
+use crate::{forge::transport::programs, fsutil};
 
 #[derive(Clone, Copy)]
 pub enum Dependency {
@@ -58,5 +63,28 @@ impl Tool {
             .iter()
             .copied()
             .filter_map(|tool| tool.dependency().map(|dependency| (tool, dependency)))
+    }
+}
+
+/// Refuse a launcher whose executable is not installed.
+pub(crate) fn ensure_program(name: &str, program: &str) -> Result<()> {
+    let search_path = std::env::var_os("PATH").unwrap_or_default();
+    ensure!(
+        program_available(program, &search_path),
+        "cannot start {name}: {program} is not installed or not on PATH"
+    );
+    Ok(())
+}
+
+/// Programs with placeholders or workspace-relative paths resolve only at
+/// launch, so they are assumed available.
+pub(crate) fn program_available(program: &str, search_path: &OsStr) -> bool {
+    let path = Path::new(program);
+    if path.is_absolute() {
+        fsutil::is_executable(path).unwrap_or(false)
+    } else if program.contains('/') || program.contains('{') {
+        true
+    } else {
+        fsutil::find_executable(OsStr::new(program), search_path).is_some()
     }
 }

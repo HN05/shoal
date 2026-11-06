@@ -18,7 +18,7 @@ use super::{
     typed::{self, Typed},
 };
 use crate::{
-    cli::agents::ensure_program,
+    tools::ensure_program,
     config::repo::TabPlacement,
     sessions::{
         HostName, Origin,

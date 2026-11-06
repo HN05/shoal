@@ -35,6 +35,7 @@ use crate::{
     model::{Chat, ChatHome, LinkedItem, Relation, RemovedWorkspace, Repository, Workspace},
     paths::Paths,
     protocol::ConfigTarget,
+    tools::{ensure_program, program_available},
 };
 
 pub(in crate::cli) use crate::client::transcripts::AgentEnvironment;
@@ -872,16 +873,6 @@ fn ensure_installed(name: &str, settings: &Effective) -> Result<()> {
     Ok(())
 }
 
-/// Refuse a launcher whose executable is not installed.
-pub(in crate::cli) fn ensure_program(name: &str, program: &str) -> Result<()> {
-    let search_path = std::env::var_os("PATH").unwrap_or_default();
-    ensure!(
-        program_available(program, &search_path),
-        "cannot start {name}: {program} is not installed or not on PATH"
-    );
-    Ok(())
-}
-
 /// The executables an agent starts; `None` when it has no launcher. A
 /// terminal agent also starts `launcher`, its session host's program.
 fn programs<'a>(
@@ -900,19 +891,6 @@ fn programs<'a>(
             programs.extend(launcher);
             programs
         })
-}
-
-/// Programs with placeholders or workspace-relative paths resolve only at
-/// launch, so they are assumed available.
-pub(in crate::cli) fn program_available(program: &str, search_path: &OsStr) -> bool {
-    let path = Path::new(program);
-    if path.is_absolute() {
-        fsutil::is_executable(path).unwrap_or(false)
-    } else if program.contains('/') || program.contains('{') {
-        true
-    } else {
-        fsutil::find_executable(OsStr::new(program), search_path).is_some()
-    }
 }
 
 /// What a workspace's agent learns from its hooks about the workspace it
