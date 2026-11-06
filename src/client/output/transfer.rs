@@ -56,4 +56,11 @@ pub struct Moves {
     pub failed: Vec<Failure>,
 }
 
-outputs!(Exported, Exports, Imported, Imports, Moves);
+/// The copies a copy to another machine opened there.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Copies {
+    pub copied: Vec<Imported>,
+    pub failed: Vec<Failure>,
+}
+
+outputs!(Exported, Exports, Imported, Imports, Moves, Copies);

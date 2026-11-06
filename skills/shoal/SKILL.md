@@ -428,7 +428,8 @@ while another command runs in the workspace. `cleanup spaces` removes every
 space automatic cleanup would remove without waiting for its idle delay;
 `--dry-run` lists those, kept branches and shared caches, and why each other
 space stays. `move ssh` moves a workspace to another machine and queues its
-stopped agents there.
+stopped agents there; with `--keep`, it copies the workspace there as a new one
+and leaves it running here.
 
 ## Branches
 

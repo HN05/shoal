@@ -492,7 +492,7 @@ impl ExportDirectory {
     }
 
     /// The file the space `name` goes to.
-    fn file(&self, name: &str) -> PathBuf {
+    pub(super) fn file(&self, name: &str) -> PathBuf {
         self.path.join(Self::file_name(name))
     }
 

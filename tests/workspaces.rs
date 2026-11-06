@@ -1244,15 +1244,12 @@ fn install_ssh_to(fixture: &Fixture, other: &Fixture) {
     );
 }
 
-#[test]
-fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
-    let config = format!("{UNLIMITED_AGENTS}[agents.claude]\ncommand = ['sh', './agent.sh']\n");
-    let here = Fixture::with_config(Some(&config));
-    let there = Fixture::with_config(Some(&config));
-    // Queued restores start in detached zmx sessions.
-    install_test_script(there.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
-    // Both machines have clones of one origin, named by a URL as remotes
-    // usually are, which import matches.
+/// Two machines with `config`, whose repositories are clones of one origin,
+/// named by a URL as remotes usually are, which import matches, and where
+/// `ssh mini` on the first reaches the second.
+fn two_machines(config: Option<&str>) -> (Fixture, Fixture) {
+    let here = Fixture::with_config(config);
+    let there = Fixture::with_config(config);
     git(
         here.root.path(),
         &["init", "-q", "--bare", "-b", "main", "origin.git"],
@@ -1269,6 +1266,15 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
         there.root.path().join("clone").to_str().unwrap(),
     ]);
     install_ssh_to(&here, &there);
+    (here, there)
+}
+
+#[test]
+fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
+    let config = format!("{UNLIMITED_AGENTS}[agents.claude]\ncommand = ['sh', './agent.sh']\n");
+    let (here, there) = two_machines(Some(&config));
+    // Queued restores start in detached zmx sessions.
+    install_test_script(there.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
 
     let workspace = here.add("handed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
@@ -1317,6 +1323,51 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
     });
     fs::write(moved_path.join("release"), "").unwrap();
     wait_zmx_sessions_ended(there.root.path());
+}
+
+#[test]
+fn move_ssh_keep_copies_workspaces_there_and_leaves_them_here() {
+    let (here, there) = two_machines(None);
+    let paths: Vec<_> = ["first", "second"]
+        .into_iter()
+        .map(|name| {
+            let workspace = here.add(name);
+            let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+            fs::write(path.join("notes"), format!("{name}\n")).unwrap();
+            path
+        })
+        .collect();
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let ssh = |extra: &[&'static str]| {
+        let mut args = vec!["move", "ssh", "mini", "first", "second", "--keep"];
+        args.extend(extra);
+        args.extend(["--shoal", shoal]);
+        args
+    };
+
+    // A checkpoint number names one workspace's checkpoint.
+    let refused = here.run(&ssh(&["--checkpoint", "1"]));
+    assert!(!refused.status.success());
+    assert_eq!(there.ok(&["work"]), serde_json::json!([]));
+
+    let copied = here.ok(&ssh(&[]));
+    assert_eq!(copied["failed"], serde_json::json!([]), "{copied}");
+    let copies = copied["copied"].as_array().unwrap();
+    assert_eq!(copies.len(), 2, "{copied}");
+    let there_root = fs::canonicalize(there.root.path()).unwrap();
+    for ((copy, path), name) in copies.iter().zip(&paths).zip(["first", "second"]) {
+        assert_eq!(
+            fs::read_to_string(path.join("notes")).unwrap(),
+            format!("{name}\n")
+        );
+        let copy_path = Path::new(copy["workspace"]["path"].as_str().unwrap());
+        assert!(copy_path.starts_with(&there_root), "{copied}");
+        assert_eq!(
+            fs::read_to_string(copy_path.join("notes")).unwrap(),
+            format!("{name}\n")
+        );
+    }
+    assert_eq!(here.ok(&["work"]).as_array().unwrap().len(), 2);
 }
 
 #[test]

@@ -3493,6 +3493,7 @@ shoal move ssh other plan-cache                # the same, once ssh reaches Shoa
 shoal move export --repo app --all -o moving   # end every space of app, a file each
 shoal move export topic spike -o moving        # remove both, a file each
 shoal move export topic --keep -o copy.shoal   # keep topic running and write a copy of it
+shoal move ssh other topic --keep              # keep topic running and copy it there
 shoal move import moving                       # continue every space exported to moving
 ```
 
@@ -3586,6 +3587,10 @@ asks once before ending them. A workspace whose import fails stays removed here
 with the other machine's error, and `shoal work restore` opens it again, unless
 that machine recorded it; a chat's file stays in `<state>/unmoved`, and the error
 names the `shoal move import` that continues the chat here.
+`--keep`, with `--checkpoint N` for one workspace, copies the spaces instead, as
+`shoal move export --keep` does, and imports each copy there as a new space,
+leaving the space running here; it asks nothing, and a space it cannot copy or
+import there is reported while the rest are copied.
 
 ### Assignment completion
 

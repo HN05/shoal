@@ -1,16 +1,18 @@
-//! `shoal move ssh`: hand spaces to another machine's Shoal, as
-//! `shoal move export | ssh <host> shoal move import --resume` does, once
-//! `ssh` reaches Shoal there.
+//! `shoal move ssh`: hand spaces to another machine's Shoal, or copies of
+//! them with `--keep`, as `shoal move export | ssh <host> shoal move import
+//! --resume` does, once `ssh` reaches Shoal there.
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::Value;
 
+mod copy;
+
 use super::export::{self, ExportDirectory, PlannedExport};
 use crate::client::output::transfer::{Imported, Moves};
 use crate::{
     cli::{args::transfer::SshArgs, context::Context, ui},
-    model::Chat,
+    model::{Chat, PresentSpace},
     subprocess::{Run, diagnostic},
 };
 
@@ -27,26 +29,44 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
         Some(repository) => export::repository_spaces(ctx, repository).await?,
         None => export::selected_spaces(ctx, args.space).await?,
     };
+    if args.keep {
+        export::copy::ensure_one_at_checkpoint(spaces.len(), args.checkpoint)?;
+    }
     ctx.progress(
         &format!("Reaching Shoal on {}", remote.host),
         remote.check(),
     )
     .await?;
+    let resume = !args.no_resume;
+    match args.keep {
+        true => copy::copy_spaces(ctx, &remote, &spaces, args.checkpoint, resume).await,
+        false => move_spaces(ctx, &remote, &spaces, args.confirmation.yes, resume).await,
+    }
+}
+
+/// Move `spaces` to `remote` once each one can end here, asking once where
+/// ending them needs the user unless `yes`.
+async fn move_spaces(
+    ctx: &Context,
+    remote: &Remote,
+    spaces: &[PresentSpace],
+    yes: bool,
+    resume: bool,
+) -> Result<i32> {
     let staging = tempfile::tempdir()?;
     let directory = ExportDirectory::create(staging.path().to_owned())?;
-    let heading = match spaces.as_slice() {
+    let heading = match spaces {
         [space] => format!("Move {} to {}", space.name(), remote.host),
         _ => format!("Move {} spaces to {}", spaces.len(), remote.host),
     };
     let operation = ("move", "move");
-    let yes = args.confirmation.yes;
-    let planned = export::check_exports(ctx, &spaces, &directory, yes, &heading, operation).await?;
+    let planned = export::check_exports(ctx, spaces, &directory, yes, &heading, operation).await?;
     let mut report = ui::Report::new("move");
     for planned in planned {
         let name = planned.name().to_owned();
-        match move_one(ctx, &remote, planned, !args.no_resume).await {
+        match move_one(ctx, remote, planned, resume).await {
             Ok(imported) => {
-                let message = moved(&name, &remote.host, &imported);
+                let message = format!("Moved {name} to {}", arrived(&remote.host, &imported));
                 report.done(ctx, &message, imported)
             }
             Err(error) => report.failed(ctx, &name, &error),
@@ -65,10 +85,10 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
     report.finish(ctx, &summary, |moved, failed| Moves { moved, failed })
 }
 
-/// The report of moving `name` to `host`, where the import reported
-/// `imported`: a workspace, or a chat started in the background there.
-fn moved(name: &str, host: &str, imported: &Imported) -> String {
-    let mut message = format!("Moved {name} to {host}");
+/// Where a space went on `host`, whose import reported `imported`: a
+/// workspace, or a chat started in the background there.
+fn arrived(host: &str, imported: &Imported) -> String {
+    let mut message = host.to_owned();
     let queued = match imported {
         Imported::Workspace(reopened) => {
             message.push_str(&format!(" at {}", reopened.workspace.path.display()));
