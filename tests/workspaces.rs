@@ -5256,6 +5256,7 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
         "start",
         repo,
         "models-claude",
+        "--here",
         "--agent",
         "claude",
         "--model",
@@ -5272,6 +5273,7 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
         "start",
         repo,
         "models-codex",
+        "--here",
         "--agent",
         "codex",
         "--effort",
@@ -28661,112 +28663,53 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     fixture.ok(&["stop", "detached"]);
 }
 
-/// Without a terminal, where the agent starts follows the set-up
-/// workspace's own settings, which can differ from the checkout's: an agent
-/// its branch hands to an app launches here, since the app takes it at
-/// once, and one its branch runs as the CLI goes to the daemon.
+/// The launch report of a start whose agent Happy took over, its last
+/// line, as opposed to a queue entry.
+fn happy_launch(output: &Output) -> Value {
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let launch: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
+    assert!(launch.get("happy_daemon_recorded").is_some(), "{stdout}");
+    launch
+}
+
+/// Without a terminal, an agent Happy runs leaves the call at once anyway,
+/// so its start hands it over here, needing no host to start it in the
+/// background, also once the work it waits for is complete.
 #[test]
-fn a_start_without_a_terminal_places_its_agent_by_the_workspaces_settings() {
-    let fixture = Fixture::with_config(Some(UNLIMITED_AGENTS));
-    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
-    install_test_script(
-        fixture.root.path().join("bin/codex"),
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/codex-$(basename \"$PWD\")\"\n[ \"$1\" = app ] && exit 0\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
-    );
+fn a_start_without_a_terminal_hands_a_happy_agent_over_here() {
+    let fixture = Fixture::with_config(Some(&format!("{UNLIMITED_AGENTS}{HAPPY_ENABLED}")));
+    let record = install_fake_happy(&fixture);
+    let path = fixture.restricted_path(&fixture.root.path().join("bin"));
     let repo = fixture.repo.to_str().unwrap();
-    let mode = |mode: &str| format!("[agents.codex]\ndefault_mode = '{mode}'\n");
-    let branch = |name: &str, config: &str| {
-        git(&fixture.repo, &["switch", "-q", "-c", name]);
-        commit_resource_config(&fixture.repo, config);
-        git(&fixture.repo, &["switch", "-q", "main"]);
-    };
-    let start = |name: &str| {
-        let output = fixture
+    let start = |args: &[&str]| {
+        fixture
             .command()
-            .args([
-                "--json",
-                "start",
-                repo,
-                "--existing",
-                name,
-                "--agent",
-                "codex",
-            ])
+            .args(["--json", "start", repo])
+            .args(args)
+            .args(["--agent", "happy-codex"])
+            .env("HAPPY_RECORD", &record)
+            .env("PATH", &path)
             .stdin(Stdio::null())
             .output()
-            .unwrap();
-        assert!(output.status.success(), "{output:?}");
-        String::from_utf8(output.stdout).unwrap()
+            .unwrap()
     };
-    let recorded = |name: &str| fixture.root.path().join(format!("codex-{name}"));
-
-    // The checkout runs Codex's CLI; the branch hands it to the app.
-    branch("apped", &mode("app"));
-    let stdout = start("apped");
-    assert_eq!(stdout.lines().count(), 1, "{stdout}");
-    let args = fs::read_to_string(recorded("apped")).unwrap();
-    assert_eq!(args.lines().next(), Some("app"), "{args}");
-    let queue = fixture.ok(&["queue"]);
-    assert!(
-        (queue.as_array().unwrap().iter()).all(|entry| entry["state"] == "starting"),
-        "{queue}"
-    );
-
-    // The checkout hands Codex to the app; the branch runs its CLI.
-    commit_resource_config(&fixture.repo, &mode("app"));
-    branch("clied", &mode("cli"));
-    let stdout = start("clied");
-    let entry: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
-    assert_eq!(entry["agent"], "codex", "{stdout}");
-    wait_until("the queued agent start", || recorded("clied").exists());
-    let args = fs::read_to_string(recorded("clied")).unwrap();
-    assert_ne!(args.lines().next(), Some("app"), "{args}");
-    fixture.ok(&["stop", "clied"]);
-}
-
-/// Without a terminal, a start whose `--after` work is already complete
-/// starts at once, and an agent an app runs opens here, needing no host to
-/// start it in the background.
-#[test]
-fn a_start_after_finished_work_hands_an_app_agent_over_here() {
-    let fixture = Fixture::with_config(Some(&format!(
-        "{UNLIMITED_AGENTS}[agents.codex]\ndefault_mode = 'app'\n"
-    )));
-    let bin = fixture.root.path().join("app-bin");
-    fs::create_dir(&bin).unwrap();
-    install_test_script(
-        bin.join("codex"),
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/codex-args\"\n",
-    );
+    happy_launch(&start(&["placed"]));
     fixture.add("finished");
     fixture.ok(&["done", "finished"]);
-    let repo = fixture.repo.to_str().unwrap();
-    let output = fixture
-        .command()
-        .args(["--json", "start", repo, "next", "--agent", "codex"])
-        .args(["--after", "finished"])
-        .env("PATH", fixture.restricted_path(&bin))
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{output:?}");
-    let args = fs::read_to_string(fixture.root.path().join("codex-args")).unwrap();
-    assert_eq!(args.lines().next(), Some("app"), "{args}");
+    happy_launch(&start(&["next", "--after", "finished"]));
+    fixture.ok(&["stop", "placed"]);
+    fixture.ok(&["stop", "next"]);
 }
 
-/// Without a terminal, an agent an app runs starts here only when the agent
+/// Without a terminal, an agent Happy runs starts here only when the agent
 /// limits admit it; with every slot taken it waits in the queue.
 #[test]
-fn a_start_without_a_terminal_admits_an_app_agent_before_it_opens_here() {
-    let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.codex]\ndefault_mode = 'app'\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
-    ));
-    let bin = fixture.root.path().join("app-bin");
-    fs::create_dir(&bin).unwrap();
-    install_test_script(
-        bin.join("codex"),
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/codex-args\"\n",
-    );
+fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
+    let fixture = Fixture::with_config(Some(&format!(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n{HAPPY_ENABLED}[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n"
+    )));
+    let record = install_fake_happy(&fixture);
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
         .command()
@@ -28783,8 +28726,12 @@ fn a_start_without_a_terminal_admits_an_app_agent_before_it_opens_here() {
     });
     let output = fixture
         .command()
-        .args(["--json", "start", repo, "app", "--agent", "codex"])
-        .env("PATH", fixture.restricted_path(&bin))
+        .args(["--json", "start", repo, "happy", "--agent", "happy-codex"])
+        .env("HAPPY_RECORD", &record)
+        .env(
+            "PATH",
+            fixture.restricted_path(&fixture.root.path().join("bin")),
+        )
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -28792,9 +28739,9 @@ fn a_start_without_a_terminal_admits_an_app_agent_before_it_opens_here() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     let entry: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     assert_eq!(entry["state"], "queued", "{stdout}");
-    assert!(!fixture.root.path().join("codex-args").exists());
+    assert!(!record.exists());
     // It waits as a launch in the workspace it set up, which it keeps.
-    let status = fixture.ok(&["status", "app"]);
+    let status = fixture.ok(&["status", "happy"]);
     assert_eq!(
         fixture.ok(&["queue"])[0]["opens"],
         status["workspace"]["id"]
