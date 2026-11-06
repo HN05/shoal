@@ -27,6 +27,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
         path: path.into(),
         branch: Some(name.into()),
         at: None,
+        copied_from: None,
         state: WorkspaceState::Ready,
         error: None,
         base_commit: None,

@@ -392,6 +392,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         path: PathBuf::from(row.get::<_, String>("path")?),
         branch: row.get("branch")?,
         at: starting_commit(row)?,
+        copied_from: None,
         state: row.get("state")?,
         error: row.get("error")?,
         base_commit: row.get("base_commit")?,

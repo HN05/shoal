@@ -87,6 +87,9 @@ pub struct Workspace {
     /// Where a workspace without a branch was created.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<StartingCommit>,
+    /// What a copy of another workspace started from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copied_from: Option<CopiedFrom>,
     pub state: WorkspaceState,
     pub error: Option<String>,
     pub base_commit: Option<String>,
@@ -169,6 +172,35 @@ impl StartingCommit {
             Some(made_for) => format!("{short} ({made_for})"),
             None => short.to_owned(),
         }
+    }
+}
+
+/// The workspace a copy was made from and the copy's starting checkpoint,
+/// which keeps what it started with for as long as the copy exists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CopiedFrom {
+    /// The workspace copied; `None` once it is removed.
+    pub workspace: Option<WorkspaceRef>,
+    /// That workspace's checkpoint the copy started from; `None` for a copy
+    /// of its files at the time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint: Option<u64>,
+    /// The number of the copy's own checkpoint of what it started with.
+    pub starting_checkpoint: u64,
+    /// That checkpoint's HEAD, and the commit that keeps its files.
+    pub head: String,
+    pub commit: String,
+    /// The tree of the index it started with, which the checkpoint does not
+    /// keep.
+    #[serde(default)]
+    pub index: String,
+}
+
+impl CopiedFrom {
+    /// Whether the copy took its source's files, ignored ones included,
+    /// rather than a checkpoint's.
+    pub fn took_files(&self) -> bool {
+        self.checkpoint.is_none()
     }
 }
 
@@ -339,6 +371,9 @@ crate::state::states!(
         /// The state a restore to an earlier checkpoint replaced.
         Restore => "restore",
         Removal => "removal",
+        /// What a copy of another workspace started with, which keeps every
+        /// unsaved file whatever the archive limit.
+        Start => "start",
     }
 );
 
@@ -562,6 +597,7 @@ impl Workspace {
             path,
             branch,
             at: None,
+            copied_from: None,
             state,
             error: None,
             base_commit: None,

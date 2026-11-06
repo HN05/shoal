@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 134;
+pub(super) const SCHEMA_VERSION: i64 = 135;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -397,7 +397,17 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (132, include_str!("merges.sql"), None),
     (133, SPACE_MODES, None),
     (134, include_str!("space_agent_state.sql"), None),
+    (135, WORKSPACE_COPIES, None),
 ];
+
+/// The workspace a copy was made from, its checkpoint the copy started
+/// from, the number of the copy's own checkpoint of what it started with,
+/// which keeps that checkpoint from expiring, and the tree of the index it
+/// started with, which no checkpoint records.
+pub(super) const WORKSPACE_COPIES: &str = "ALTER TABLE workspaces ADD COLUMN copied_from TEXT;
+ALTER TABLE workspaces ADD COLUMN copied_from_checkpoint INTEGER;
+ALTER TABLE workspaces ADD COLUMN starting_checkpoint INTEGER;
+ALTER TABLE workspaces ADD COLUMN starting_index TEXT;";
 
 /// The runner the forge registered for a claimed job alone, deleted once
 /// the job ends. Nothing references the table, so it is rebuilt, which a

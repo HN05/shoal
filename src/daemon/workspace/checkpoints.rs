@@ -109,7 +109,10 @@ impl Manager {
             .cleanup
             .restore
             .retention();
-        let files_omitted = !self.archives_unsaved_files(workspace).await?;
+        // A copy's starting checkpoint keeps what it started with whatever
+        // its size; its source had nothing a checkpoint cannot hold.
+        let files_omitted =
+            cause != CheckpointCause::Start && !self.archives_unsaved_files(workspace).await?;
         let message = format!("Shoal checkpoint of {}", workspace.name);
         let snapshot = git::checkpoint::snapshot(&workspace.path, &message, !files_omitted).await?;
         let created_at = unix_seconds();
@@ -528,13 +531,16 @@ fn delete_expired_removals(db: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Delete the repository's checkpoints that expired or that neither a
-/// workspace nor a removal record owns.
+/// Delete the repository's checkpoints that expired, other than a
+/// workspace's starting checkpoint, or that neither a workspace nor a
+/// removal record owns.
 fn delete_expired(db: &Connection, repository_id: &str) -> Result<()> {
     db.execute(
-        "DELETE FROM checkpoints WHERE repository_id=?1
-            AND (expires_at <= unixepoch() OR (workspace_id NOT IN (SELECT id FROM workspaces)
-                AND workspace_id NOT IN (SELECT workspace_id FROM removed_workspaces)))",
+        &format!(
+            "DELETE FROM checkpoints WHERE repository_id=?1
+                AND (NOT {KEPT} OR (workspace_id NOT IN (SELECT id FROM workspaces)
+                    AND workspace_id NOT IN (SELECT workspace_id FROM removed_workspaces)))"
+        ),
         [repository_id],
     )?;
     Ok(())
@@ -552,8 +558,10 @@ fn kept_commits(db: &Connection, repository_id: &str) -> Result<HashSet<String>>
 fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Checkpoint>> {
     let record: Option<String> = db
         .query_row(
-            "SELECT record FROM checkpoints WHERE workspace_id=?1 AND expires_at > unixepoch()
-                ORDER BY number DESC LIMIT 1",
+            &format!(
+                "SELECT record FROM checkpoints WHERE workspace_id=?1 AND {KEPT}
+                    ORDER BY number DESC LIMIT 1"
+            ),
             [workspace_id],
             |row| row.get(0),
         )
@@ -564,11 +572,12 @@ fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Checkpoint>> {
 }
 
 /// An unexpired checkpoint of the workspace.
-fn find(db: &Connection, workspace_id: &str, number: u64) -> Result<Option<Checkpoint>> {
+pub(super) fn find(db: &Connection, workspace_id: &str, number: u64) -> Result<Option<Checkpoint>> {
     let record: Option<String> = db
         .query_row(
-            "SELECT record FROM checkpoints WHERE workspace_id=?1 AND number=?2
-                AND expires_at > unixepoch()",
+            &format!(
+                "SELECT record FROM checkpoints WHERE workspace_id=?1 AND number=?2 AND {KEPT}"
+            ),
             params![workspace_id, number as i64],
             |row| row.get(0),
         )
@@ -577,6 +586,11 @@ fn find(db: &Connection, workspace_id: &str, number: u64) -> Result<Option<Check
         .map(|record| serde_json::from_str(&record))
         .transpose()?)
 }
+
+/// Whether a checkpoint is kept: it has not expired, or it is its
+/// workspace's starting checkpoint, which lasts as long as the workspace.
+const KEPT: &str = "(expires_at > unixepoch() OR EXISTS (SELECT 1 FROM workspaces
+    WHERE id=checkpoints.workspace_id AND starting_checkpoint=checkpoints.number))";
 
 /// The record bytes of one listing page, leaving room in a protocol frame
 /// for the envelope; [`NAME_LIMIT`] keeps one record well below it.
@@ -587,10 +601,10 @@ const NAME_LIMIT: usize = 200;
 /// The checkpoints numbered after `after`, oldest first, as many as fit in
 /// [`PAGE_BYTES`] and at least one.
 fn checkpoint_page(db: &Connection, workspace_id: &str, after: u64) -> Result<Vec<Checkpoint>> {
-    let mut statement = db.prepare(
-        "SELECT record FROM checkpoints WHERE workspace_id=?1 AND number > ?2
-            AND expires_at > unixepoch() ORDER BY number",
-    )?;
+    let mut statement = db.prepare(&format!(
+        "SELECT record FROM checkpoints WHERE workspace_id=?1 AND number > ?2 AND {KEPT}
+            ORDER BY number"
+    ))?;
     let mut rows = statement.query(params![workspace_id, after as i64])?;
     let (mut page, mut bytes) = (Vec::new(), 0);
     while let Some(row) = rows.next()? {
@@ -606,10 +620,9 @@ fn checkpoint_page(db: &Connection, workspace_id: &str, after: u64) -> Result<Ve
 
 /// The workspace's unexpired checkpoints, oldest first.
 fn workspace_checkpoints(db: &Connection, workspace_id: &str) -> Result<Vec<Checkpoint>> {
-    db.prepare(
-        "SELECT record FROM checkpoints WHERE workspace_id=?1 AND expires_at > unixepoch()
-            ORDER BY number",
-    )?
+    db.prepare(&format!(
+        "SELECT record FROM checkpoints WHERE workspace_id=?1 AND {KEPT} ORDER BY number"
+    ))?
     .query_map([workspace_id], |row| row.get::<_, String>(0))?
     .map(|record| Ok(serde_json::from_str(&record?)?))
     .collect()

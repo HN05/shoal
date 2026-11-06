@@ -11,6 +11,7 @@ mod commits;
 mod config_state;
 pub(crate) mod conflicts;
 mod contributions;
+mod copies;
 mod daemon_exit;
 mod demos;
 mod diff;
@@ -1149,6 +1150,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     workspace.latest_review = crate::daemon::reviews::store::latest_status(db, &workspace.id)?;
     workspace.agent_state = agent_state::current(db, &workspace.id)?;
     stack::load(db, workspace)?;
+    copies::load(db, workspace)?;
     tree::load(db, workspace)?;
     workspace.links = store::space_links(db, &workspace.id)?;
     workspace.running = store::exists(

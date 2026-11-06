@@ -176,6 +176,13 @@ fn retention_is_bounded_and_ids_are_never_reused() -> Result<()> {
 
 /// Remove the current event schema when tests emulate an older database.
 pub(super) fn remove_schema(db: &Connection) -> Result<()> {
+    // Workspaces record no copies again.
+    db.execute_batch(
+        "ALTER TABLE workspaces DROP COLUMN copied_from;
+         ALTER TABLE workspaces DROP COLUMN copied_from_checkpoint;
+         ALTER TABLE workspaces DROP COLUMN starting_checkpoint;
+         ALTER TABLE workspaces DROP COLUMN starting_index;",
+    )?;
     // Local merges go unrecorded again.
     db.execute_batch("DROP TABLE merges;")?;
     // Spaces have no numbers again; chats take their triggers with them.

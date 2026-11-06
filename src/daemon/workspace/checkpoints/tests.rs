@@ -385,3 +385,43 @@ async fn expiry_deletes_expired_and_unowned_checkpoints_and_adopts_removal_refs(
         .unwrap();
     assert!(left.is_empty());
 }
+
+#[tokio::test]
+async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() {
+    let f = Fixture::new().await;
+    let manager = &f.manager;
+    f.write("scratch", "notes\n");
+    let start = manager.take_checkpoint("topic", None).await.unwrap();
+    let later = manager.take_checkpoint("topic", None).await.unwrap();
+    let (id, number) = (f.workspace.id.clone(), start.number as i64);
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET copied_from='removed',starting_checkpoint=?2 WHERE id=?1",
+                params![id, number],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    f.set_expiry(start.number, 1).await;
+    f.set_expiry(later.number, 1).await;
+    manager.expire_checkpoints().await.unwrap();
+    let listed = manager.checkpoints("topic", None).await.unwrap().unwrap();
+    let numbers: Vec<_> = listed.iter().map(|checkpoint| checkpoint.number).collect();
+    assert_eq!(numbers, [start.number]);
+    assert_eq!(
+        checkpoint_refs(&f.checkout),
+        [git::checkpoint::reference(&start.commit)]
+    );
+    let copied = manager
+        .workspace("topic")
+        .await
+        .unwrap()
+        .copied_from
+        .unwrap();
+    assert_eq!(copied.workspace, None, "the source is gone");
+    assert_eq!(copied.starting_checkpoint, start.number);
+    assert_eq!((copied.head, copied.commit), (start.head, start.commit));
+}

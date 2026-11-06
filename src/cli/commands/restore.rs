@@ -351,6 +351,7 @@ fn cause_label(cause: CheckpointCause) -> &'static str {
         CheckpointCause::AgentStopped => "agent stopped",
         CheckpointCause::Restore => "before restore",
         CheckpointCause::Removal => "removal",
+        CheckpointCause::Start => "start of copy",
     }
 }
 
