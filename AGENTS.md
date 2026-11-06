@@ -250,6 +250,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   explicit workspace paths must not overlap state, checkouts, or other ownership.
   URL clones live as `.checkout` and move only with their repository directory into
   a new root; refuse roots inside state, checkouts or repository directories.
+- The state directory holds only the daemon's own state, never files agents or
+  the user work with: temporary directories, attached files and copies of work
+  live in a repository directory, or in `root_dir` for chats without a repository.
 - Accept literal Git branch names and derive portable workspace names separately.
   Suffix conflicting branch components with `-2`, `-3`, etc.; keep derived workspace
   names/directories unchanged; serialize allocation per repo. Existing branches,
