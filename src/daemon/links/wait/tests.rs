@@ -287,6 +287,35 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
 }
 
 #[tokio::test]
+async fn a_failed_first_background_read_leaves_the_baseline_to_the_next() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "unread".into(), None, None, None)
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, "pr").await;
+
+    let refused = anyhow::anyhow!("connection refused");
+    for snapshot in [Snapshot::unread_item("PR", &refused), snapshot("first")] {
+        manager
+            .record_background_activity(&workspace.id, vec![("pr".into(), snapshot)])
+            .await
+            .unwrap();
+    }
+    assert!(manager
+            .workspace_events(None, 100)
+            .await
+            .unwrap()
+            .iter()
+            .all(|item| !matches!(item, crate::daemon::events::EventItem::Event(event) if event.details.kind == crate::daemon::events::EventKind::ItemActivity)));
+}
+
+#[tokio::test]
 async fn background_activity_queues_for_the_agents_hooks() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
