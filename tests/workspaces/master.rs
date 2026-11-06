@@ -4,15 +4,33 @@ use super::*;
 
 #[test]
 fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
-    // The agent records where it runs, its temporary directory and its
-    // process, then talks until a signal ends it.
+    // The agent records where it runs, its temporary directory, its process
+    // and how listing a registered repository's issues fails without a
+    // forge, then talks until a signal ends it.
     let fixture = Fixture::with_config(Some(
-        "[agents.claude]\ncommand = ['sh', '-c', '\
-         pwd -P > \"$HOME/chat-dir\"; printf %s \"$TMPDIR\" > \"$HOME/chat-tmp\"; \
-         echo $$ > \"$HOME/chat-pid\"; trap \"exit 0\" TERM; touch \"$HOME/chat-started\"; while :; do sleep 1; done', \
-         'agent']\n",
+        "[agents.claude]\ncommand = ['sh', '-c', '. \"$HOME/chat-agent.sh\"', 'agent']\n",
     ));
     let home = fixture.root.path();
+    fs::write(
+        home.join("repo-path"),
+        fixture.repo.as_os_str().as_encoded_bytes(),
+    )
+    .unwrap();
+    fs::write(
+        home.join("chat-agent.sh"),
+        format!(
+            "pwd -P > \"$HOME/chat-dir\"\n\
+             printf %s \"$TMPDIR\" > \"$HOME/chat-tmp\"\n\
+             echo $$ > \"$HOME/chat-pid\"\n\
+             '{}' --json issue list --repo \"$(cat \"$HOME/repo-path\")\" \
+                 > /dev/null 2> \"$HOME/list-error\" < /dev/null\n\
+             trap 'exit 0' TERM\n\
+             touch \"$HOME/chat-started\"\n\
+             while :; do sleep 1; done\n",
+            env!("CARGO_BIN_EXE_shoal"),
+        ),
+    )
+    .unwrap();
     // A repository named here is refused before anything starts.
     let named = fixture.run(&[
         "start",
@@ -53,6 +71,10 @@ fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
     let root = fs::canonicalize(home.join("shoal")).unwrap();
     assert_eq!(started.directory, root);
     let id = chats[0]["id"].as_str().unwrap();
+    // It reads the issues of a registered repository from that repository's
+    // checkout, which has no forge here.
+    let listing = fs::read_to_string(home.join("list-error")).unwrap();
+    assert!(listing.contains("origin remote"), "{listing}");
     assert_eq!(started.tmp_dir, root.join(".tmp").join(id));
     let chats = fixture.ok(&["work", "--chats"]);
     assert!(!chats[0]["restore"].is_null(), "{chats}");
