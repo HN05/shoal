@@ -9,7 +9,7 @@ fn settings_of(args: &[OsString]) -> Value {
 
 #[test]
 fn a_workspace_agent_may_not_stop_itself_without_a_check() {
-    let settings = settings_of(&Claude.hook_args(WORKSPACE, false).unwrap());
+    let settings = settings_of(&Claude.hook_args(WORKSPACE.into(), false).unwrap());
     let allow = settings["permissions"]["allow"].as_array().unwrap();
     assert!(
         allow.contains(&json!("Bash(shoal stop --leftovers)")),
@@ -23,7 +23,7 @@ fn a_workspace_agent_may_not_stop_itself_without_a_check() {
 
 #[test]
 fn auto_mode_learns_that_the_workspace_branch_is_the_agents_own() {
-    let settings = settings_of(&Claude.hook_args(WORKSPACE, false).unwrap());
+    let settings = settings_of(&Claude.hook_args(WORKSPACE.into(), false).unwrap());
     let environment = settings["autoMode"]["environment"].as_array().unwrap();
     // Claude Code keeps its own entries.
     assert_eq!(environment[0], "$defaults");
@@ -37,7 +37,7 @@ fn auto_mode_learns_that_the_workspace_branch_is_the_agents_own() {
         branch: None,
         ..WORKSPACE
     };
-    let settings = settings_of(&Claude.hook_args(detached, false).unwrap());
+    let settings = settings_of(&Claude.hook_args(detached.into(), false).unwrap());
     assert!(settings.get("autoMode").is_none(), "{settings}");
 }
 
@@ -59,37 +59,29 @@ fn stop_failure_errors_name_the_turn_failure() {
 }
 
 #[test]
-fn chat_settings_deliver_messages_report_the_session_and_wake_without_turn_state() {
-    let settings = settings_of(&Claude.chat_hook_args().unwrap());
-    // Only the session start reports, for the chat's session.
-    for event in ["UserPromptSubmit", "PostToolUse", "Notification"] {
-        let groups = settings["hooks"][event].to_string();
-        assert!(!groups.contains("agent-state"), "{groups}");
+fn a_chat_agent_runs_a_workspace_agents_hooks_without_what_needs_a_worktree() {
+    let chat = settings_of(&Claude.hook_args(AgentSpace::Chat, false).unwrap());
+    let workspace = settings_of(&Claude.hook_args(WORKSPACE.into(), false).unwrap());
+    // It delivers messages, reports its turn's state and wakes as a
+    // workspace's agent does.
+    let mut shared = workspace["hooks"].as_object().unwrap().clone();
+    for event in ["WorktreeCreate", "WorktreeRemove", "SubagentStart"] {
+        assert!(shared.remove(event).is_some(), "{event}");
     }
-    // A chat belongs to no workspace and finishes no assignment.
-    assert!(settings.get("permissions").is_none(), "{settings}");
-    assert!(settings.get("autoMode").is_none(), "{settings}");
-    assert!(
-        settings["hooks"].get("WorktreeCreate").is_none(),
-        "{settings}"
-    );
-    for event in ["Stop", "StopFailure"] {
-        let wake = &settings["hooks"][event][0]["hooks"][0]["command"];
-        assert!(wake.as_str().unwrap().contains(" internal wake "), "{wake}");
-    }
-    for event in hooks::MESSAGE_EVENTS {
-        assert!(settings["hooks"][event][0]["hooks"][0]["command"].is_string());
-    }
+    assert_eq!(chat["hooks"], Value::Object(shared));
+    // A chat has no worktree, branch or assignment.
+    assert!(chat.get("permissions").is_none(), "{chat}");
+    assert!(chat.get("autoMode").is_none(), "{chat}");
 }
 
 #[test]
 fn proxied_settings_send_api_requests_to_the_proxy() {
     // The hooks are the same; the wrapper's merge adds the proxy's URL.
     assert_eq!(
-        Claude.hook_args(WORKSPACE, true).unwrap(),
-        Claude.hook_args(WORKSPACE, false).unwrap()
+        Claude.hook_args(WORKSPACE.into(), true).unwrap(),
+        Claude.hook_args(WORKSPACE.into(), false).unwrap()
     );
-    let mut args = Claude.hook_args(WORKSPACE, true).unwrap();
+    let mut args = Claude.hook_args(WORKSPACE.into(), true).unwrap();
     // The user's own auto-mode entries stay beside Shoal's.
     args.extend([
         "--settings".into(),

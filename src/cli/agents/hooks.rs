@@ -52,7 +52,7 @@ pub fn subagent(shoal: &str) -> (&'static str, Value) {
 }
 
 /// The group that reports the session an agent starts, resumes or clears,
-/// which waits for its first turn; a chat's agent reports only this.
+/// which waits for its first turn.
 pub fn session_start(shoal: &str) -> (&'static str, Value) {
     (
         "SessionStart",

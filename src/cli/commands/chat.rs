@@ -830,7 +830,7 @@ fn command(
         instructions,
         opening,
         [
-            agents::chat_hook_args(settings.integration(name))?,
+            agents::hook_args(settings.integration(name), agents::AgentSpace::Chat, false)?,
             directories,
         ]
         .concat(),

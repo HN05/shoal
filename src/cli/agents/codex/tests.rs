@@ -4,21 +4,15 @@ use super::*;
 use crate::cli::agents::tests::WORKSPACE;
 
 #[test]
-fn a_chat_agent_reports_only_its_session_start() {
-    let chat = Codex.chat_hook_args().unwrap();
-    let reports: Vec<_> = chat
-        .iter()
-        .map(|arg| arg.to_str().unwrap())
-        .filter(|arg| arg.contains("agent-state"))
-        .collect();
-    assert!(
-        matches!(reports.as_slice(), [start] if start.starts_with("hooks.SessionStart=")),
-        "{reports:?}"
-    );
-    assert!(
-        chat.iter()
-            .any(|arg| arg.to_str().unwrap().contains("messages --hook"))
-    );
+fn a_chat_agent_runs_a_workspace_agents_hooks_without_the_subagent_brief() {
+    let chat = Codex.hook_args(AgentSpace::Chat, false).unwrap();
+    let mut workspace = Codex.hook_args(WORKSPACE.into(), false).unwrap();
+    let brief = (workspace.iter())
+        .position(|arg| arg.to_str().unwrap().starts_with("hooks.SubagentStart="))
+        .unwrap();
+    // Its `-c` goes with it.
+    workspace.drain(brief - 1..=brief);
+    assert_eq!(chat, workspace);
 }
 
 #[test]
@@ -31,7 +25,7 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
             Some(config) => std::fs::write(codex.join("config.toml"), config).unwrap(),
             None => drop(std::fs::remove_file(codex.join("config.toml"))),
         }
-        let mut args = Codex.hook_args(WORKSPACE, true).unwrap();
+        let mut args = Codex.hook_args(WORKSPACE.into(), true).unwrap();
         assert_eq!(args.last().unwrap(), PROVIDER);
         let placeholder = args.len() - 1;
         let configured = BTreeMap::from([("CODEX_HOME".to_owned(), codex.clone().into())]);
@@ -71,7 +65,7 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
     // Without a proxy the hooks name no provider.
     assert!(
         !Codex
-            .hook_args(WORKSPACE, false)
+            .hook_args(WORKSPACE.into(), false)
             .unwrap()
             .iter()
             .any(|arg| arg == PROVIDER)

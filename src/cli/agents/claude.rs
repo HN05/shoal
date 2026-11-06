@@ -1,5 +1,6 @@
 //! Claude Code: its hooks deliver updates, report its turn state, wake it
-//! when idle and make the worktrees it creates child workspaces,
+//! when idle and make the worktrees a workspace's agent creates child
+//! workspaces,
 //! `.claude.json` records the directories it trusts, and a `claude://` link
 //! opens a workspace in the Claude app.
 use std::{ffi::OsString, os::unix::ffi::OsStrExt as _, path::Path};
@@ -8,7 +9,7 @@ use anyhow::{Result, ensure};
 use serde_json::{Value, json};
 
 use super::{
-    AgentEnvironment, AgentWorkspace, Integration, Wake,
+    AgentEnvironment, AgentSpace, AgentWorkspace, Integration, Wake,
     desktop::App,
     hooks,
     trust::{CLAUDE_CODE, TrustFile},
@@ -23,16 +24,8 @@ pub(super) struct Claude;
 impl Integration for Claude {
     /// Its settings carry the proxy's URL once the wrapper merges them, so
     /// a proxied launch's hooks are its plain ones.
-    fn hook_args(
-        &self,
-        workspace: AgentWorkspace,
-        _proxied: bool,
-    ) -> std::io::Result<Vec<OsString>> {
-        settings(Some(workspace))
-    }
-
-    fn chat_hook_args(&self) -> std::io::Result<Vec<OsString>> {
-        settings(None)
+    fn hook_args(&self, space: AgentSpace, _proxied: bool) -> std::io::Result<Vec<OsString>> {
+        settings(space)
     }
 
     /// Every `--settings` becomes one with the proxy's URL, since Claude
@@ -154,26 +147,22 @@ fn percent_encode(bytes: &[u8]) -> String {
 }
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's
-/// own settings, and a later `--settings` would replace it. A `workspace`'s
-/// agent also reports its turn's state, may run the commands that finish
-/// its assignment and tells auto mode that its branch is its own; a chat's
-/// agent, with no `workspace`, reports only its session. For a proxied agent
-/// the wrapper merges these with any others into the one that names the
+/// own settings, and a later `--settings` would replace it. Every agent
+/// reports its turn's state; a workspace's agent also gets the worktree and
+/// subagent hooks, may run the commands that finish its assignment and
+/// tells auto mode that its branch is its own. For a proxied agent the
+/// wrapper merges these with any others into the one that names the
 /// proxy's URL, since these settings win over the user's own `env` and the
 /// inherited environment.
-fn settings(workspace: Option<AgentWorkspace>) -> std::io::Result<Vec<OsString>> {
+fn settings(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
-    let (state, subagents, allow) = if workspace.is_some() {
-        (
-            state_hooks(&shoal),
-            subagent_hooks(&shoal),
-            lifecycle_rules(),
-        )
-    } else {
-        (vec![hooks::session_start(&shoal)], Vec::new(), Vec::new())
+    let workspace = space.workspace();
+    let (subagents, allow) = match workspace {
+        Some(_) => (subagent_hooks(&shoal), lifecycle_rules()),
+        None => (Vec::new(), Vec::new()),
     };
     let groups = hooks::messages(&shoal)
-        .chain(state)
+        .chain(state_hooks(&shoal))
         .chain(subagents)
         .chain(wake_hooks(&shoal));
     let mut settings = json!({"hooks": hooks::by_event(groups)});

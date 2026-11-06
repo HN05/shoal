@@ -53,14 +53,10 @@ pub(super) use shortcuts::{open_app, with_app};
 /// What an agent needs beyond its configured command and described
 /// arguments. Each default adds nothing.
 pub(in crate::cli) trait Integration: Sync {
-    /// Arguments that register Shoal's hooks for the session of
-    /// `workspace`'s agent and, when `proxied`, what
-    /// [`Self::route_through_proxy`] points at Shoal's proxy.
-    fn hook_args(
-        &self,
-        _workspace: AgentWorkspace,
-        _proxied: bool,
-    ) -> std::io::Result<Vec<OsString>> {
+    /// Arguments that register Shoal's hooks for the session of `space`'s
+    /// agent and, when `proxied`, what [`Self::route_through_proxy`] points
+    /// at Shoal's proxy. They inherit the space's identity.
+    fn hook_args(&self, _space: AgentSpace, _proxied: bool) -> std::io::Result<Vec<OsString>> {
         Ok(Vec::new())
     }
 
@@ -111,12 +107,6 @@ pub(in crate::cli) trait Integration: Sync {
         _environment: &AgentEnvironment,
     ) -> Result<()> {
         Ok(())
-    }
-
-    /// The hooks of a chat, which belongs to no workspace and so reports no
-    /// turn state. They inherit the chat's identity.
-    fn chat_hook_args(&self) -> std::io::Result<Vec<OsString>> {
-        Ok(Vec::new())
     }
 
     /// The config file in which the agent records trusted directories.
@@ -978,15 +968,45 @@ impl<'a> From<&'a Workspace> for AgentWorkspace<'a> {
     }
 }
 
-/// Arguments that register Shoal's hooks for the session of `workspace`'s
-/// agent with integration `kind`, and when `proxied` route its API requests
+/// The space whose agent Shoal's hooks serve: a workspace, whose agent
+/// also gets the hooks and rules that need its worktree, or a chat.
+#[derive(Clone, Copy)]
+pub(crate) enum AgentSpace<'a> {
+    Workspace(AgentWorkspace<'a>),
+    Chat,
+}
+
+impl<'a> AgentSpace<'a> {
+    /// The workspace, unless the space is a chat.
+    pub fn workspace(self) -> Option<AgentWorkspace<'a>> {
+        match self {
+            Self::Workspace(workspace) => Some(workspace),
+            Self::Chat => None,
+        }
+    }
+}
+
+impl<'a> From<AgentWorkspace<'a>> for AgentSpace<'a> {
+    fn from(workspace: AgentWorkspace<'a>) -> Self {
+        Self::Workspace(workspace)
+    }
+}
+
+impl<'a> From<&'a Workspace> for AgentSpace<'a> {
+    fn from(workspace: &'a Workspace) -> Self {
+        Self::Workspace(workspace.into())
+    }
+}
+
+/// Arguments that register Shoal's hooks for the session of `space`'s agent
+/// with integration `kind`, and when `proxied` route its API requests
 /// through Shoal's proxy.
 pub(crate) fn hook_args(
     kind: IntegrationKind,
-    workspace: AgentWorkspace,
+    space: AgentSpace,
     proxied: bool,
 ) -> std::io::Result<Vec<OsString>> {
-    integration(kind).hook_args(workspace, proxied)
+    integration(kind).hook_args(space, proxied)
 }
 
 /// Whether a failure stream from the proxy of an agent with integration
@@ -1220,12 +1240,6 @@ async fn workspaces_dir(paths: &crate::paths::Paths, workspace: &Workspace) -> O
             None
         }
     }
-}
-
-/// Arguments that register Shoal's hooks for a chat of an agent with
-/// integration `kind`.
-pub(in crate::cli) fn chat_hook_args(kind: IntegrationKind) -> std::io::Result<Vec<OsString>> {
-    integration(kind).chat_hook_args()
 }
 
 /// Start a chat of agent `name` its integration's own way; `None` leaves it

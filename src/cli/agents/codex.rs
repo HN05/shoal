@@ -8,7 +8,7 @@ use anyhow::Result;
 use serde_json::Value;
 
 use super::{
-    AgentEnvironment, Integration, Wake,
+    AgentEnvironment, AgentSpace, Integration, Wake,
     desktop::{self, App},
     hooks,
     trust::{CODEX, TrustFile},
@@ -27,12 +27,8 @@ pub(in crate::cli) const APP: App = App {
 pub(super) struct Codex;
 
 impl Integration for Codex {
-    fn hook_args(
-        &self,
-        _workspace: super::AgentWorkspace,
-        proxied: bool,
-    ) -> std::io::Result<Vec<OsString>> {
-        let mut args = shoal_overrides(true)?;
+    fn hook_args(&self, space: AgentSpace, proxied: bool) -> std::io::Result<Vec<OsString>> {
+        let mut args = shoal_overrides(space)?;
         if proxied {
             args.push(PROVIDER.into());
         }
@@ -53,10 +49,6 @@ impl Integration for Codex {
         let config = super::trust::codex_config(environment)?;
         let codex_home = config.parent().unwrap_or(routing.directory);
         provider::route(args, routing.url, codex_home, routing.directory)
-    }
-
-    fn chat_hook_args(&self) -> std::io::Result<Vec<OsString>> {
-        shoal_overrides(false)
     }
 
     /// Codex fires no hook after a failed turn, so the proxy's failure
@@ -94,26 +86,22 @@ const DAEMON_ACCESS: [&str; 2] = ["-c", "sandbox_workspace_write.network_access=
 
 /// What every Codex launch takes from Shoal: its hooks, see
 /// [`config_overrides`], and access to the daemon from Codex's sandbox.
-fn shoal_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {
-    let mut args = config_overrides(turn_state)?;
+fn shoal_overrides(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
+    let mut args = config_overrides(space)?;
     args.extend(DAEMON_ACCESS.map(OsString::from));
     Ok(args)
 }
 
 /// Codex takes each event's groups as a `-c hooks.<event>=` TOML value.
-/// `turn_state` adds the hooks of a workspace's agent: those that report the
-/// turn's state and the one that briefs its subagents; otherwise the agent,
-/// a chat's, reports only its session.
-fn config_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {
+/// Every agent reports its turn's state; a workspace's agent also gets the
+/// hook that briefs its subagents about the workspace.
+fn config_overrides(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
-    let state = if turn_state {
-        let mut state = state_hooks(&shoal);
-        state.push(hooks::subagent(&shoal));
-        state
-    } else {
-        vec![hooks::session_start(&shoal)]
-    };
-    Ok(hooks::by_event(hooks::messages(&shoal).chain(state))
+    let subagents = space.workspace().map(|_| hooks::subagent(&shoal));
+    let groups = hooks::messages(&shoal)
+        .chain(state_hooks(&shoal))
+        .chain(subagents);
+    Ok(hooks::by_event(groups)
         .into_iter()
         .flat_map(|(event, groups)| {
             let groups: toml::Value =

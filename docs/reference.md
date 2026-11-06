@@ -523,7 +523,7 @@ keep_awake = true              # Opt in
 With `keep_awake` set, the daemon keeps the machine from sleeping while an
 [agent's turn](#agent-state) is working, or while an idle agent receives the
 activity of a [watched](#linked-items-and-cleanup) PR not yet seen merged or
-closed, from its own workspace or a [child](#child-workspaces) without an agent,
+closed, from its own workspace or chat or a [child](#child-workspaces) without an agent,
 since that activity starts its next turn. Closing a laptop's lid or leaving it idle
 then does not suspend the work; once no agent has either, the machine may sleep
 again. Linux holds a `systemd-inhibit` lock on sleep, idle and the lid switch,
@@ -729,18 +729,20 @@ opens Codex/T3 apps, or runs a shell command, Ctrl-O shows status, Ctrl-S stops,
 Ctrl-D deletes. Each action returns to your shell.
 `shoal work --print`, like a filter, `--json` or output that is not a terminal,
 prints the list instead: your own workspaces first, then each running [chat](#chats)
-marked ◆ with its agent, followed by the workspaces it opened; `work --chats`
+with its agent, followed by the workspaces it opened; `work --chats`
 lists only the chats. `work --repo <repository>`, with or without
 `--chats` or `--status`, lists only that registered repository's workspaces,
 chats and queued agents. `work --status <status>`,
 repeated or comma-separated, lists only rows with one of those statuses, spelled
-in kebab case (`needs-input`, `ready-outdated`, `queued`);
-a chat's status is `process running`.
+in kebab case (`needs-input`, `ready-outdated`, `queued`).
+A chat's status is `stopped` until it is restored, then, in order of
+precedence, `needs input`, `finished`, `ready`, its agent's other
+[states](#agent-state), or `process running` before its agent reports one.
 <a id="inbox"></a>The inbox lists what needs you, each with its workspace: open questions
 and pending approval requests that no coordinating agent decides, each with its
 [number](#questions), including issue
-[proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces whose
-agent needs input, failed
+[proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces and
+running chats whose agent needs input, failed
 workspaces, [ready marks](#ready-for-review) at the current HEAD, one row per
 marked item, running [demos](#demos), Git worktrees under a repository's
 Shoal directory that no workspace owns, automatic cleanup failing other than in
@@ -4414,7 +4416,7 @@ shoal internal agent-state working   # Also waiting (for the user mid-turn) or i
 
 Agent hooks report the agent's turn state with this command, and integrations
 read it instead of each inferring it from the terminal. Shoal's terminal
-Claude Code and Codex launches, including `start --agent` and resumed sessions, register
+Claude Code and Codex launches, including `start --agent`, [chats](#chats) and resumed sessions, register
 the hooks with the [message hooks](#agent-messages); Happy sessions do not.
 A session that starts, resumes or clears reports `idle`, so a new agent shows
 `waiting` until its first turn. A turn that ends reports `idle` with
@@ -4445,13 +4447,14 @@ agent's own settings give, else 30 minutes. A state
 reported from a tracked execution shows only while that execution runs, so an
 agent whose process died, such as with a reboot, shows none, and the state ends
 with the execution's record; one reported from outside lasts until the next
-report or removal. Each change, and each end, is
-a [workspace event](#workspace-events); repeating the current state is not a
-change. Agent state never notifies, records completion, or affects cleanup;
+report or removal. A chat's state ends when the chat stops or is restored, and a
+report arriving while it is stopped is not recorded. Each change, and each end,
+of a workspace's state is a [workspace event](#workspace-events); repeating the
+current state is not a change. Agent state never notifies, records completion, or affects cleanup;
 a report from a workspace process that fails, which the hooks would discard,
 leaves the state as last reported and records an [alert](#notifications) with the error.
-Scoped callers report only for their own workspace, which their scope names
-wherever they run; `--workspace` selects another one for unscoped callers.
+Scoped callers report only for their own space, which their scope names
+wherever they run; `--space` selects another one for unscoped callers.
 
 ### Automatic cleanup
 
@@ -4737,8 +4740,8 @@ is nothing new; failures go to stderr and never fail the agent. Other agents
 whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can
 run the same command; the rest rely on `shoal messages` and `shoal watch`, which
 Shoal's agent guidance mentions.
-A chat registers the same message hooks, and for Claude Code the wake
-hook, without turn-state hooks. Under a chat, outside any workspace scope, they
+A chat registers the same message and [turn-state](#agent-state) hooks, and
+for Claude Code the wake hook. Under a chat, outside any workspace scope, they
 and `shoal messages` deliver the chat's messages about the workspaces it
 [coordinates](#child-workspaces) and those Shoal sends it for the user; a Codex
 chat receives them after its next tool call or prompt.

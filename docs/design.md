@@ -1954,11 +1954,12 @@ it marks each linked open PR at the head the forge reports, and its issue or its
 at its checkout's HEAD. Its marks are not journal events, since the journal
 records workspaces, and they show it `ready` in lists and the inbox.
 
-Agent state is the turn state a workspace's agent reports from its hooks:
+Agent state is the turn state a space's agent reports from its hooks:
 `working`, `waiting` for the user mid-turn, or `idle` before its first turn
 and after each. Lists name them by what the user does: `working`, `needs input`,
 and `waiting`, since an idle agent waits for the user or for activity that wakes
-it; a ready workspace whose agent or command reports no state is `process running`,
+it; a ready workspace whose agent or command reports no state, or a running
+chat whose agent reports none yet, is `process running`,
 one where nothing runs `inactive`, a current ready mark `ready`, and a recorded
 completion `finished`, which only stopped work and an agent needing input
 outrank. A row's marker groups statuses by what they ask of the user, in a
@@ -1970,7 +1971,7 @@ idle agents first. A workspace keeps the
 latest report; a report from a tracked execution shows only while that
 execution runs and ends with its record, while one from outside lasts until
 replaced or removal. Changes and
-endings are journal events; repeating the current state is not a change and
+endings of a workspace's state are journal events; repeating the current state is not a change and
 keeps its start time. Shoal's terminal Claude Code and Codex launches, resumed
 ones included, add the state hooks to the launch option that carries their
 message hooks (Happy sessions do not), so the agents' own configuration stays the
@@ -2083,10 +2084,14 @@ A Happy chat has no terminal to focus: like a workspace Happy session it starts
 detached, as Happy's daemon would start it, so the user continues it in the
 Happy app, and the process that recorded the chat hands the record to the
 session's process.
-A chat's agent reports its session through the session-start hook and the
-`agent-state` and `turn-failed` commands a workspace's agent uses, which act on
-the space they run in, and the record keeps the session so the chat can move; it
-records no turn state.
+A chat's agent runs the turn-state hooks a workspace's agent runs, without the
+worktree hooks and lifecycle permission rules, which need a worktree. The
+`agent-state` and `turn-failed` commands act on the space they run in and record
+the chat's state as a workspace's, and the record keeps the session so the chat
+can move. A chat has no tracked execution whose end clears its state, so its
+state ends when the chat stops or is restored. Keep-awake reads it as a
+workspace agent's; overload protection, turn retries and interrupts act on
+tracked executions, which a chat's agent is not.
 
 Issues split by whether their plan is settled: `[issue] plan_label` marks one
 that needs the owner's choices and `planned_label` one whose body holds a plan
