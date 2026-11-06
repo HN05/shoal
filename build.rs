@@ -27,10 +27,14 @@ fn main() {
     }
     configs.sort_by(|a, b| a.0.cmp(&b.0));
     let mut source = String::from("&[\n");
+    // The crate's directory is read when the crate compiles, not here: a workspace
+    // that keeps this output from its seed build would otherwise include the seed
+    // worktree's configs.
     for (name, path) in configs {
+        let file = path.file_name().and_then(|file| file.to_str()).unwrap();
         source.push_str(&format!(
-            "({name:?}, include_str!({:?})),\n",
-            path.to_str().unwrap()
+            "({name:?}, include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), {:?}))),\n",
+            format!("/configs/{file}")
         ));
     }
     source.push_str("]\n");
