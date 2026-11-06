@@ -762,10 +762,9 @@ hold on its child, and otherwise denies or passes the request up; the user
 decides at the top, and a chat whose agent stops or a
 deciding space that is removed hands the user what it had not decided, since
 neither can decide any more.
-The worker skill steers agents to a subagent working in the child's directory
-over `--agent`: the child then has no agent of its own, so its activity reaches
-the parent, and the subagent reports to the parent directly, supervision Shoal
-need not relay. Shoal does not track those subagents: their hooks report under
+When a subagent works in the child's directory instead of an `--agent`, the
+child has no agent of its own, so its activity reaches the parent, and the
+subagent reports to the parent directly, supervision Shoal need not relay. Shoal does not track those subagents: their hooks report under
 the coordinator's scope from its directory, so they cannot tell which child a
 subagent works in. A child in which no agent of its own has ever started,
 which the workspace's recorded mode tells, is instead its coordinator's work:
@@ -1621,8 +1620,7 @@ depends on Claude Code's auto-mode check. Its settings also tell auto mode, in
 an `autoMode.environment` entry after Claude Code's own, that the workspace's
 branch, commits and PR are the agent's own work, since the classifier reads
 settings but not the agent's instructions; it then allows the
-`--force-with-lease` push of the rebased branch that the worker skill
-prescribes. The classifier still judges each command, rather than an allow rule
+`--force-with-lease` push of a rebased branch. The classifier still judges each command, rather than an allow rule
 passing every push. Every agent, chats included, gets the
 configured `agent.dirs`, `/tmp` by default, as working directories, so it reads what the
 tools it runs leave there without a permission prompt. A workspace's agent also
