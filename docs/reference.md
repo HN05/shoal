@@ -1978,7 +1978,8 @@ once readings are healthy.
 branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
 starts, from the then-current default branch. A start that runs detached, from
-a scoped caller or one without a terminal, creates the workspace and sets it up
+a scoped caller or one without a terminal or with `--json`, creates the
+workspace and sets it up
 first, reporting setup errors to the caller. A scoped caller's preparation then
 queues the agent in it; for the user's, the caller queues it once setup ends,
 from the workspace's own settings, except that an agent Happy runs opens in
