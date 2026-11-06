@@ -138,19 +138,17 @@ pub fn command() -> Command {
         typed.all = leaf.try_get_one::<bool>("all").ok().flatten() == Some(&true);
     }
     let search_path = std::env::var_os("PATH").unwrap_or_default();
-    for name in typed.command_names() {
+    for name in typed.command_names(&search_path) {
         if command
             .get_subcommands()
             .any(|subcommand| subcommand.get_name() == name)
         {
             continue;
         }
-        let about = if !typed.settings().agents.contains(&name) {
-            "Configured workspace command".to_owned()
-        } else if typed.launchable(&name, &search_path) {
+        let about = if typed.settings().agents.contains(&name) {
             format!("Run {name} in a workspace")
         } else {
-            continue;
+            "Configured workspace command".to_owned()
         };
         command = command.subcommand(
             Command::new(name)
@@ -277,16 +275,14 @@ fn own_first(arg: clap::Arg) -> clap::Arg {
 }
 
 impl Typed {
-    /// The configured commands and agents a command line names, with the
-    /// agents integrations add, such as Happy's, and without those config
-    /// turns off.
-    fn command_names(&self) -> Vec<String> {
+    /// The configured commands and the agents a command line names: those
+    /// pickers offer, including the ones integrations add, such as Happy's,
+    /// whose programs are on `search_path`.
+    fn command_names(&self, search_path: &OsStr) -> Vec<String> {
         let settings = self.settings();
-        let mut names: BTreeSet<String> = (self.commands().keys())
-            .filter(|name| !settings.providers.contains(*name) || settings.agents.contains(*name))
-            .chain(&settings.agents)
-            .cloned()
-            .collect();
+        let commands = (self.commands().keys()).filter(|name| !settings.providers.contains(*name));
+        let agents = (settings.agents.iter()).filter(|name| self.launchable(name, search_path));
+        let mut names: BTreeSet<String> = commands.chain(agents).cloned().collect();
         names.extend(self.custom.clone());
         names.into_iter().collect()
     }
@@ -358,8 +354,9 @@ impl Typed {
             return vec![];
         };
         if matches!(target, Target::Commands) {
+            let search_path = std::env::var_os("PATH").unwrap_or_default();
             return self
-                .command_names()
+                .command_names(&search_path)
                 .into_iter()
                 .filter(|name| name.starts_with(current))
                 .map(CompletionCandidate::new)

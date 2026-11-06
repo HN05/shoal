@@ -227,7 +227,13 @@ fn agents_complete_only_when_enabled_and_installed() {
     fs::write(&config, "[agents.happy]\nenabled = true\n").unwrap();
     // Happy alone runs no agent, so none of its agents complete.
     install_programs(home.path(), &["happy"]);
-    assert_eq!(agents("happy-"), Vec::<String>::new());
+    for words in [
+        &["shoal", "start", "--agent", "happy-"][..],
+        &["shoal", "happy-"],
+        &["shoal", "run", "happy-"],
+    ] {
+        assert_eq!(complete(words), Vec::<String>::new(), "{words:?}");
+    }
     install_programs(home.path(), &["claude"]);
     assert_eq!(agents("happy-"), ["happy-claude"]);
     for words in [&["shoal", "happy-"][..], &["shoal", "run", "happy-"]] {
