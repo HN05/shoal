@@ -1216,7 +1216,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .store
         .run(move |db| {
             db.execute(
-                "DELETE FROM workspace_agent_state WHERE workspace_id=?1",
+                "DELETE FROM space_agent_state WHERE space_id=?1",
                 [&requester],
             )?;
             Ok(())

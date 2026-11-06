@@ -263,7 +263,7 @@ fn due(db: &Connection, workspace_id: &str, now: i64) -> Result<Option<Due>> {
                 AND NOT EXISTS (SELECT 1 FROM workspace_completion c
                     WHERE c.workspace_id=r.workspace_id)
              FROM workspace_turn_retries r
-             LEFT JOIN workspace_agent_state s ON s.workspace_id=r.workspace_id
+             LEFT JOIN space_agent_state s ON s.space_id=r.workspace_id
              WHERE r.workspace_id=?1 AND r.delivered=0 AND r.due_at<=?2",
             params![workspace_id, now],
             |row| {

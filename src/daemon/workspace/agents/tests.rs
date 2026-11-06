@@ -377,7 +377,7 @@ async fn overload_stops_the_agent_idle_longest_before_working_ones() {
             .store
             .run(move |db| {
                 db.execute(
-                    "UPDATE workspace_agent_state SET since=since-?2 WHERE workspace_id=?1",
+                    "UPDATE space_agent_state SET since=since-?2 WHERE space_id=?1",
                     rusqlite::params![id, idle_for],
                 )?;
                 Ok(())

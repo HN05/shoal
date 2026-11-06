@@ -213,7 +213,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     )?;
     db.execute_batch(
         "DROP TRIGGER workspace_review_removed; DROP TABLE space_review;
-         DROP TABLE workspace_agent_state;",
+         DROP TRIGGER workspace_agent_state_removed; DROP TABLE space_agent_state;",
     )?;
     for trigger in [
         "workspace_events_retention",

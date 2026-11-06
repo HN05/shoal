@@ -17,8 +17,8 @@ use crate::{
 pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
     Ok(db
         .query_row(
-            "SELECT state,since,prompt_cache_expires_at FROM workspace_agent_state
-             WHERE workspace_id=?1",
+            "SELECT state,since,prompt_cache_expires_at FROM space_agent_state
+             WHERE space_id=?1",
             [id],
             status,
         )
@@ -32,9 +32,9 @@ pub(crate) fn get(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
 pub(crate) fn current(db: &Connection, id: &str) -> Result<Option<AgentStatus>> {
     Ok(db
         .query_row(
-            "SELECT s.state,s.since,s.prompt_cache_expires_at FROM workspace_agent_state s
+            "SELECT s.state,s.since,s.prompt_cache_expires_at FROM space_agent_state s
              LEFT JOIN executions e ON e.id=s.execution_id
-             WHERE s.workspace_id=?1 AND (s.execution_id IS NULL OR e.state=?2)",
+             WHERE s.space_id=?1 AND (s.execution_id IS NULL OR e.state=?2)",
             params![id, ExecutionState::Running],
             status,
         )
@@ -52,7 +52,7 @@ fn status(row: &rusqlite::Row<'_>) -> rusqlite::Result<AgentStatus> {
 /// Every workspace's last reported state.
 pub(crate) fn all(db: &Connection) -> Result<Vec<(String, AgentState)>> {
     Ok(db
-        .prepare("SELECT workspace_id,state FROM workspace_agent_state")?
+        .prepare("SELECT space_id,state FROM space_agent_state")?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -86,7 +86,7 @@ impl StoppedTurn {
 fn reported_by(db: &Connection, id: &str) -> Result<Option<StoppedTurn>> {
     let reported: Option<(String, AgentState)> = db
         .query_row(
-            "SELECT workspace_id,state FROM workspace_agent_state WHERE execution_id=?1",
+            "SELECT space_id,state FROM space_agent_state WHERE execution_id=?1",
             [id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -394,10 +394,10 @@ fn save(db: &mut Connection, report: &Report) -> Result<(AgentStatus, bool)> {
 /// otherwise. Whether anything changed.
 fn write_state(db: &Connection, report: &Report) -> Result<bool> {
     let changed = db.execute(
-        "INSERT INTO workspace_agent_state
-             (workspace_id,state,execution_id,since,prompt_cache_expires_at)
+        "INSERT INTO space_agent_state
+             (space_id,state,execution_id,since,prompt_cache_expires_at)
          VALUES (?1,?2,?3,?4,?5)
-         ON CONFLICT(workspace_id) DO UPDATE SET
+         ON CONFLICT(space_id) DO UPDATE SET
              since=CASE WHEN state=excluded.state THEN since ELSE excluded.since END,
              prompt_cache_expires_at=CASE
                  WHEN excluded.state IS NOT 'idle' THEN NULL

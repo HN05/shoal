@@ -45,7 +45,7 @@ impl Turn {
 fn reported(db: &Connection) -> Result<(HashMap<String, Turn>, Vec<Execution>)> {
     let turns: HashMap<String, Turn> = db
         .prepare(
-            "SELECT execution_id,state,since,prompt_cache_expires_at FROM workspace_agent_state
+            "SELECT execution_id,state,since,prompt_cache_expires_at FROM space_agent_state
              WHERE execution_id IS NOT NULL",
         )?
         .query_map([], |row| {

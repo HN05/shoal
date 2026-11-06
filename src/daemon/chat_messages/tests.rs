@@ -106,10 +106,7 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
     manager
         .store
         .run(move |db| {
-            db.execute(
-                "DELETE FROM workspace_agent_state WHERE workspace_id=?1",
-                [id],
-            )?;
+            db.execute("DELETE FROM space_agent_state WHERE space_id=?1", [id])?;
             Ok(())
         })
         .await

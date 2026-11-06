@@ -87,8 +87,8 @@ async fn cache_expires_in(manager: &Manager, workspace: &Workspace, offset: i64)
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE workspace_agent_state
-                 SET prompt_cache_expires_at=unixepoch()+?2 WHERE workspace_id=?1",
+                "UPDATE space_agent_state
+                 SET prompt_cache_expires_at=unixepoch()+?2 WHERE space_id=?1",
                 rusqlite::params![id, offset],
             )?;
             Ok(())

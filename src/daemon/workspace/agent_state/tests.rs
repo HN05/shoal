@@ -59,7 +59,7 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
     manager
         .store
         .run(|db| {
-            db.execute("UPDATE workspace_agent_state SET since=since-60", [])?;
+            db.execute("UPDATE space_agent_state SET since=since-60", [])?;
             Ok(())
         })
         .await
