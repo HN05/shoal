@@ -1265,8 +1265,8 @@ so daemons sharing zmx can distinguish their sessions. A detached session that S
 starts labels itself once its workspace exists. A start queued from a zmx
 session joins no group, so it goes to `terminal.default_host`. Launches inside a zmx session, or in
 a Herdr pane with the integration enabled, run in place, since Herdr reads agent
-state from the pane's process. A caller without a terminal, such as an
-orchestrating agent's tool call, starts the agents of `start` and `resume --now`
+state from the pane's process. A caller without a terminal or with `--json`,
+such as an orchestrating agent's tool call, starts the agents of `start` and `resume --now`
 detached through the daemon, as a scoped caller does: run in place, the agent
 would hold the call until it exits and die with an interrupt of the caller.
 An agent Happy runs leaves the call at once anyway, so such a caller hands it

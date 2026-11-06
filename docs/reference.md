@@ -1127,8 +1127,7 @@ exit 0 once the agent exits or you detach. A launch inside a
 zmx session (`ZMX_SESSION` is set), or in a pane or block of another enabled host, such
 as a Herdr pane with `terminal.herdr.enabled`, runs in place, as does an agent
 shortcut such as `shoal claude` without a terminal. Scoped callers, and callers
-whose standard input or output is not a terminal, such as another agent's tool
-call, start the agents of `start`, `contribute` and `resume --now` detached
+without a terminal or with `--json`, such as another agent's tool call, start the agents of `start`, `contribute` and `resume --now` detached
 through the daemon instead (see [Agent queue](#agent-queue) and `shoal resume`),
 so the call returns without running the agent and interrupting it leaves the
 agent running. An agent Happy runs leaves the call at once anyway, so a
@@ -1195,7 +1194,8 @@ is labeled `<repo>#<number>` for an issue (such as `shoal#375`) and with the
 allocated workspace branch otherwise, unless `tab_name` supplies a template;
 a [workspace title](#workspaces) replaces either.
 `--here` keeps the command in the current pane; JSON, help, and noninteractive
-calls run in place.
+calls run in place, except that their agent starts detached as
+[Agents](#agents) describes.
 
 The `[terminal.herdr]` table in global or repository config uses normal per-option
 precedence. New tabs stay in the background by default when launching an agent

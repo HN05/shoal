@@ -54,7 +54,7 @@ pub async fn select(
         let workspaces = selected.workspaces.unwrap_or_default();
         return queue_below(ctx, workspaces, execution).await;
     }
-    let queuing = Queuing::of(now);
+    let queuing = Queuing::of(ctx, now);
     match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
         ([], Some([workspace])) if discard || focus || queuing == Queuing::Here { now: true } => {
             run(ctx, workspace.clone(), execution, discard, focus).await
@@ -84,15 +84,16 @@ enum Queuing {
     /// for `now` started by this process where each stopped or in the
     /// background.
     Here { now: bool },
-    /// Queued for the daemon to start, which a process without a terminal
+    /// Queued for the daemon to start, which a noninteractive process
     /// needs, at once regardless of the limits for `now`.
     Daemon { now: bool },
 }
 
 impl Queuing {
-    /// How this process starts restores.
-    fn of(now: bool) -> Self {
-        match terminal::on_terminal() {
+    /// How a process with `ctx` starts restores: a noninteractive one has no
+    /// terminal to start them beside.
+    fn of(ctx: &Context, now: bool) -> Self {
+        match ctx.interactive() {
             true => Self::Here { now },
             false => Self::Daemon { now },
         }

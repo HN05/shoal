@@ -108,7 +108,7 @@ pub(in crate::cli::commands) async fn add(
         options.after.is_empty() || plan.agent_name().is_some(),
         "--after queues an agent; name one with --agent"
     );
-    if starts_detached(&settings, &plan, &options).await? {
+    if starts_detached(ctx, &settings, &plan, &options).await? {
         ensure_detachable(&settings, &plan, &options).await?;
         return add_detached(ctx, plan, target, issue, options, after).await;
     }

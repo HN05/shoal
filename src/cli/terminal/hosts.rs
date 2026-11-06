@@ -248,7 +248,7 @@ pub(super) fn current(settings: &Effective) -> Configured {
 }
 
 /// Whether this process runs on a terminal.
-pub(in crate::cli) fn on_terminal() -> bool {
+fn on_terminal() -> bool {
     std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
 }
 

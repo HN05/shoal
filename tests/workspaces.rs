@@ -5803,18 +5803,13 @@ fn resuming_several_goes_on_after_one_fails() {
     let (output, transcript) = fixture.terminal_command(
         fixture
             .command()
-            .args(["--json", "resume", "broken", "good", "--now"]),
+            .args(["resume", "broken", "good", "--now"]),
         "",
         true,
     );
     assert!(!output.status.success(), "{output:?}\n{transcript}");
-    let report = (transcript.lines())
-        .filter(|line| line.trim_start().starts_with('{'))
-        .find_map(|line| serde_json::from_str::<Value>(line.trim()).ok())
-        .unwrap_or_else(|| panic!("{transcript}"));
-    assert_eq!(report["agents"].as_array().unwrap().len(), 1, "{report}");
-    assert_eq!(report["agents"][0]["workspace"], "good", "{report}");
-    assert_eq!(report["failed"][0]["workspace"], "broken", "{report}");
+    assert!(transcript.contains("cannot resume broken"), "{transcript}");
+    assert!(!transcript.contains("cannot resume good"), "{transcript}");
 }
 
 #[test]

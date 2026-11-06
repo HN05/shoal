@@ -24,10 +24,12 @@ use crate::{
 };
 
 /// Whether the plan's agent starts detached: always for a scoped caller,
-/// which `--here` cannot keep in place, and for a caller without a terminal
-/// unless `--here` asks to run it in place or the agent leaves the caller at
-/// once anyway, as one Happy runs does.
+/// which `--here` cannot keep in place, and for a noninteractive one, which
+/// has no terminal to start it beside, unless `--here` asks to run it in
+/// place or the agent leaves the caller at once anyway, as one Happy runs
+/// does.
 pub(super) async fn starts_detached(
+    ctx: &Context,
     settings: &AddSettings<'_>,
     plan: &AddPlan,
     options: &AddOptions,
@@ -40,7 +42,7 @@ pub(super) async fn starts_detached(
         );
         return Ok(true);
     }
-    let Some(agent) = agent.filter(|_| !options.here && !terminal::on_terminal()) else {
+    let Some(agent) = agent.filter(|_| !options.here && !ctx.interactive()) else {
         return Ok(false);
     };
     Ok(!agents::runs_its_own_way(agent, settings.get().await?))
