@@ -68,9 +68,35 @@ impl ZellijServer {
             screen: Arc::default(),
             drawn: Arc::default(),
         };
-        // The session's environment is every pane's: the fixture's tools,
-        // and a plain shell.
-        let output = server
+        // The session opens its first tab after the command that creates it
+        // returns, and a client that attaches before then gets no tab to
+        // show. Under load its server can end before then: the session is
+        // created again.
+        let mut created = 0;
+        let opened = try_wait_for(|| {
+            if !server.sessions().iter().any(|session| session == "caller") {
+                server.create(fixture);
+                created += 1;
+            }
+            server
+                .listed_panes("caller")
+                .is_some_and(|panes| panes.iter().any(|(pane, _)| pane == USERS))
+                .then_some(())
+        });
+        assert!(
+            opened.is_some(),
+            "timed out waiting for the user's session to open its pane; \
+             sessions created: {created}"
+        );
+        server.client = server.attach("caller");
+        server.show();
+        Some(server)
+    }
+
+    /// Create the user's session in the background. Its environment is
+    /// every pane's: the fixture's tools, and a plain shell.
+    fn create(&self, fixture: &Fixture) {
+        let output = self
             .zellij()
             .env("PATH", fixture.interactive_path())
             .env("SHELL", "/bin/sh")
@@ -79,16 +105,6 @@ impl ZellijServer {
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
-        // The session opens its first tab after the command returns, and a
-        // client that attaches before then gets no tab to show.
-        wait_until("the user's session to open its pane", || {
-            server
-                .listed_panes("caller")
-                .is_some_and(|panes| panes.iter().any(|(pane, _)| pane == USERS))
-        });
-        server.client = server.attach("caller");
-        server.show();
-        Some(server)
     }
 
     /// Wait until the client shows the user's session, which Shoal opens
