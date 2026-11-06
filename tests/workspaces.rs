@@ -28718,6 +28718,36 @@ fn a_start_without_a_terminal_places_its_agent_by_the_workspaces_settings() {
     fixture.ok(&["stop", "clied"]);
 }
 
+/// Without a terminal, a start whose `--after` work is already complete
+/// starts at once, and an agent an app runs opens here, needing no host to
+/// start it in the background.
+#[test]
+fn a_start_after_finished_work_hands_an_app_agent_over_here() {
+    let fixture = Fixture::with_config(Some(
+        "[machine.overload.disk]\nenabled = false\n[agents.codex]\ndefault_mode = 'app'\n",
+    ));
+    let bin = fixture.root.path().join("app-bin");
+    fs::create_dir(&bin).unwrap();
+    install_test_script(
+        bin.join("codex"),
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/codex-args\"\n",
+    );
+    fixture.add("finished");
+    fixture.ok(&["done", "finished"]);
+    let repo = fixture.repo.to_str().unwrap();
+    let output = fixture
+        .command()
+        .args(["--json", "start", repo, "next", "--agent", "codex"])
+        .args(["--after", "finished"])
+        .env("PATH", fixture.restricted_path(&bin))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let args = fs::read_to_string(fixture.root.path().join("codex-args")).unwrap();
+    assert_eq!(args.lines().next(), Some("app"), "{args}");
+}
+
 /// Without a terminal, as from another agent's tool call, `shoal resume
 /// --now` has the daemon start each restore at once, whatever the limit,
 /// instead of naming commands to run them here, and so does resuming a last

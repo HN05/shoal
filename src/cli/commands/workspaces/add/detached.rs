@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result, ensure};
 use super::{
     AddOptions,
     agent::AddSettings,
-    finish::{AgentStart, add_planned},
+    finish::{AgentStart, add_planned, execute_add_with_target},
     handoff::start_queued,
     plan::{AddPlan, planned_workspace_name},
     queue::{admit_launch, failing_entry, launch_dependencies},
@@ -20,6 +20,7 @@ use crate::{
         context::Context,
         terminal,
     },
+    config::Effective,
     model::Dependency,
 };
 
@@ -45,7 +46,8 @@ pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOption
 /// does, which then starts here since it leaves this process at once. A
 /// launch of the user's that waits for other work queues whole instead, as
 /// from a terminal, and starts in the background once that work is
-/// complete, or now when it already is.
+/// complete, or now when it already is, here for an agent that runs its own
+/// way.
 pub(super) async fn add_detached(
     ctx: &Context,
     mut plan: AddPlan,
@@ -75,6 +77,11 @@ pub(super) async fn add_detached(
     {
         return Ok(queued);
     }
+    // An agent that leaves this process at once needs no background host.
+    let settings = AddSettings::new(ctx, &target.selector);
+    if runs_its_own_way(settings.get().await?, &plan) {
+        return execute_add_with_target(ctx, plan, target, issue).await;
+    }
     start_admitted(ctx, &target, plan).await
 }
 
@@ -102,14 +109,17 @@ pub(super) async fn ensure_detachable(
         "without a terminal the agent starts detached, with nothing to focus; leave out --focus, or pass --here to run it in place"
     );
     let settings = settings.get().await?;
-    // The check reads the checkout's settings; the set-up workspace's decide.
-    if let Some(agent) = &plan.agent.agent
-        && !crate::env::is_scoped()
-        && agents::runs_its_own_way(agent, settings)
-    {
+    if !crate::env::is_scoped() && runs_its_own_way(settings, plan) {
         return Ok(());
     }
     terminal::ensure_background(settings)
+}
+
+/// Whether the plan's agent runs its own way under the checkout's
+/// `settings`, leaving this process at once, as before its workspace exists
+/// only they can tell; the set-up workspace's settings decide a placed agent.
+fn runs_its_own_way(settings: &Effective, plan: &AddPlan) -> bool {
+    (plan.agent.agent.as_ref()).is_some_and(|agent| agents::runs_its_own_way(agent, settings))
 }
 
 /// The names of the work `after` lists.
