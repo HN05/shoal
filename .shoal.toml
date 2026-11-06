@@ -1,0 +1,4 @@
+[conflicts]
+# The protocol and schema versions: each change picks the next number, so two
+# branches can bump them to the same value without a Git conflict.
+sensitive = ["src/client/protocol/version.rs", "src/daemon/store/migrations.rs"]
