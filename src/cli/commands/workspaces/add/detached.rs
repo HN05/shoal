@@ -1,7 +1,7 @@
-//! Starting an addition's agent detached, as scoped callers and callers
-//! without a terminal do: the workspace's preparation queues the agent,
-//! which the daemon starts outside the caller, so interrupting the caller
-//! leaves it running.
+//! Starting an addition's agent detached, as scoped callers and
+//! noninteractive ones do: the daemon starts it outside the caller, so
+//! interrupting the caller leaves it running. A scoped caller's preparation
+//! queues the agent; the user's is placed once its workspace is set up.
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
