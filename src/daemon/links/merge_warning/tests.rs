@@ -3,8 +3,8 @@ use std::fs;
 use rusqlite::params;
 
 use super::*;
-use crate::{
-    daemon::links::pr::{Registration, RegistrationKind},
+use crate::daemon::{
+    links::pr::{Registration, RegistrationKind},
     test_support::{commit, manager, repository},
 };
 

@@ -24,7 +24,7 @@ async fn an_oversized_reply_is_answered_with_an_error_saying_so() {
 fn refusals_keep_their_codes_under_context() {
     use anyhow::Context as _;
 
-    use crate::daemon::refusal::Refusal;
+    use crate::refusal::Refusal;
 
     let error = Err::<(), _>(Refusal::new(Reason::NotFound, "refused"))
         .context("request")

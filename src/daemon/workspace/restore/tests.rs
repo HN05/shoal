@@ -2,9 +2,9 @@ use std::fs;
 
 use super::*;
 use crate::{
+    daemon::test_support::{commit, git, manager, repository},
     model::CheckpointCause,
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{commit, git, manager, repository},
 };
 
 /// The checkpoint refs in the repository, sorted.

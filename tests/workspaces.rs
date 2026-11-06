@@ -19,6 +19,9 @@ mod upgrades;
 #[path = "workspaces/restarts.rs"]
 mod restarts;
 
+#[path = "workspaces/master.rs"]
+mod master;
+
 #[path = "support/prompt.rs"]
 mod prompt;
 #[path = "support/pty.rs"]
@@ -17832,12 +17835,10 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
 
     let status = fixture.ok(&["daemon", "status"]);
     assert_eq!(status["daemon"]["unread_notifications"], 3);
+    // The listing leaves the count to alerts and status.
     let list = fixture.run(&["work"]);
     assert!(list.status.success());
-    assert!(
-        String::from_utf8_lossy(&list.stderr).starts_with("3 new"),
-        "{list:?}"
-    );
+    assert!(list.stderr.is_empty(), "{list:?}");
     let scoped = fixture
         .command()
         .args([
@@ -19543,7 +19544,7 @@ fn start_on_a_terminal_picks_its_mode() {
         .lines()
         .filter_map(|row| row.split('\t').next())
         .collect();
-    assert_eq!(modes, ["worker", "chat", "plan"], "{rows}");
+    assert_eq!(modes, ["worker", "chat", "orchestrate", "plan"], "{rows}");
     let chats = fixture.ok(&["work", "--chats"]);
     assert_eq!(chats[0]["mode"], "chat", "{chats}");
 }

@@ -4,11 +4,11 @@ use super::{Attacher, FileSource};
 use crate::{
     daemon::{
         scope::Caller,
+        test_support::{manager, repository},
         workspace::{ExecutionKind, Manager},
     },
     execution::recovery,
     model::Workspace,
-    test_support::{manager, repository},
 };
 
 /// Whether permissions bind this test process; root reads and deletes past
@@ -1087,7 +1087,8 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
 
 /// Return a current state database to version 87, before Shoal recorded
 /// attached files, undoing the later migrations that cannot run twice.
-const BEFORE_ATTACHED_FILES: &str = "ALTER TABLE workspaces DROP COLUMN copied_from;
+const BEFORE_ATTACHED_FILES: &str = "ALTER TABLE chats DROP COLUMN root_dir;
+    ALTER TABLE workspaces DROP COLUMN copied_from;
     ALTER TABLE workspaces DROP COLUMN copied_from_checkpoint;
     ALTER TABLE workspaces DROP COLUMN starting_checkpoint;
     ALTER TABLE workspaces DROP COLUMN starting_index;
@@ -1190,7 +1191,7 @@ async fn chat(
     manager: &Manager,
     workspace: &Workspace,
     name: &str,
-    process: &crate::test_support::ProcessGroup,
+    process: &crate::daemon::test_support::ProcessGroup,
 ) -> crate::model::Chat {
     manager
         .start_chat(
@@ -1213,8 +1214,9 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
     };
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = chat(&manager, &workspace, "planning", &process).await;
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
@@ -1313,8 +1315,9 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
 async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = chat(&manager, &workspace, "planning", &process).await;
     let as_chat = Attacher::Chat {
         agent: "claude".into(),

@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     client::events::{EventItem, LinkEvent},
+    daemon::test_support::{git, manager, repository},
     model::LinkedItem,
-    test_support::{git, manager, repository},
 };
 
 async fn workspace_with_origin() -> (tempfile::TempDir, std::sync::Arc<Manager>, String) {

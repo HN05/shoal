@@ -23,10 +23,11 @@ const NO_REPOSITORY: &str =
     "no current workspace or registered checkout; run this in one, or pass --repo";
 
 /// Where a command that acts on a space, a workspace or chat, runs: the
-/// registered repository `repo` names, else the space `space`
-/// names or the chat this runs in, else the current workspace or checkout,
-/// else the registered repository of the issue or PR URL `item`, else a
-/// space the user picks.
+/// registered repository `repo` names, else in a chat without a repository
+/// the registered repository of the issue or PR URL `item`, else the space
+/// `space` names or the chat this runs in, else the current workspace or
+/// checkout, else the registered repository of `item`, else a space the
+/// user picks.
 pub(in crate::cli::commands) async fn select_space_item_context(
     ctx: &Context,
     space: Option<String>,
@@ -36,6 +37,12 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     if let Some(repo) = repo {
         return Ok(ItemContext::Checkout(named(ctx, &repo).await?.id));
     }
+    if space.is_none()
+        && in_chat_outside_repositories(ctx).await?
+        && let Some(checkout) = item_checkout(ctx, item).await?
+    {
+        return Ok(checkout);
+    }
     if space.is_some() || ui::current_chat(&space).is_some() {
         let space = ui::select_space(ctx, space, ui::Fallback::CurrentDirectory).await?;
         return space_context(ctx, space).await;
@@ -43,11 +50,8 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     if let Some(context) = current_context(ctx).await? {
         return Ok(context);
     }
-    let repos = crate::client::repositories::list(&ctx.paths).await?;
-    if let Some(url) = item.filter(|item| IssueInput::parse(item) == IssueInput::Url)
-        && let Some(repo) = super::super::issues::registered_for_item(&repos, url).await?
-    {
-        return Ok(ItemContext::Checkout(repo.id.clone()));
+    if let Some(checkout) = item_checkout(ctx, item).await? {
+        return Ok(checkout);
     }
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
     let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?;
@@ -117,14 +121,35 @@ pub(in crate::cli::commands) async fn select_open_context(
     ))
 }
 
+/// The checkout of the registered repository of the issue or PR URL
+/// `item`, if it names one.
+async fn item_checkout(ctx: &Context, item: Option<&str>) -> Result<Option<ItemContext>> {
+    let Some(url) = item.filter(|item| IssueInput::parse(item) == IssueInput::Url) else {
+        return Ok(None);
+    };
+    let repos = crate::client::repositories::list(&ctx.paths).await?;
+    let registered = super::super::issues::registered_for_item(&repos, url).await?;
+    Ok(registered.map(|repo| ItemContext::Checkout(repo.id.clone())))
+}
+
+/// Whether this runs in a chat without a repository, which acts in the
+/// checkout of every registered repository as its own.
+async fn in_chat_outside_repositories(ctx: &Context) -> Result<bool> {
+    let Some(chat) = ui::current_chat(&None) else {
+        return Ok(false);
+    };
+    let space = crate::client::workspaces::present_space(&ctx.paths, &chat).await?;
+    Ok(matches!(space, Some(PresentSpace::Chat(chat)) if chat.repository_id.is_none()))
+}
+
 /// The checkout of the registered repository `repo` names, where the user's
-/// command acts without a workspace; a workspace process acts only through
-/// its own.
+/// command, or a chat's without a repository, acts without a workspace; a
+/// workspace process acts only through its own.
 async fn registered_checkout(ctx: &Context, repo: Option<&str>) -> Result<Option<ItemContext>> {
     let Some(named) = repo else {
         return Ok(None);
     };
-    if env::inherits_scope(&ctx.paths.state) {
+    if env::inherits_scope(&ctx.paths.state) && !in_chat_outside_repositories(ctx).await? {
         return Ok(None);
     }
     let checkout = registered(ctx, named).await?;

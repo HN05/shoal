@@ -1,12 +1,14 @@
 use std::time::Duration;
 
 use crate::{
-    daemon::workspace::{ExecutionKind, Manager, RestartWaits},
+    daemon::{
+        test_support::{manager, repository},
+        workspace::{ExecutionKind, Manager, RestartWaits},
+    },
     execution::recovery,
     model::{PendingRestart, RunningAgent, Workspace},
     sessions::{HostName, Origin},
     state::AgentState,
-    test_support::{manager, repository},
 };
 
 async fn workspace(root: &std::path::Path, manager: &Manager) -> Workspace {

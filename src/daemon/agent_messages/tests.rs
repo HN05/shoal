@@ -2,11 +2,11 @@ use super::Delivery;
 use crate::{
     daemon::{
         scope::{self, Caller},
+        test_support::{manager, repository},
         workspace::{ExecutionKind, Manager},
         workspace_files::Attacher,
     },
     protocol::AgentMethod,
-    test_support::{manager, repository},
 };
 
 async fn workspace(

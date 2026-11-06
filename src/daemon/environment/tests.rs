@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::install_test_script;
+use crate::daemon::test_support::install_test_script;
 use std::fs;
 
 #[tokio::test]

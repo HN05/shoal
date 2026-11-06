@@ -1,12 +1,12 @@
 use crate::{
     daemon::{
         notifications::NotificationKind,
+        test_support::{manager, repository},
         workspace::{Manager, Source},
         workspace_files::Attacher,
     },
     model::{Chat, Workspace},
     state::AgentState,
-    test_support::{manager, repository},
 };
 
 /// A repository with a workspace named `worker` and a chat whose process is
@@ -234,8 +234,9 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
 async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             worker.repository_id.clone().into(),
@@ -302,8 +303,9 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
 async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             worker.repository_id.clone().into(),
@@ -361,8 +363,9 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
 async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_moved() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             worker.repository_id.clone().into(),

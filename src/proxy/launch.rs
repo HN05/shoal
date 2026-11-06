@@ -83,12 +83,12 @@ impl Running {
 /// daemon has refused its protocol, after which its reports go to the
 /// installed release at once rather than to a call bound to fail.
 pub(super) struct Origin {
-    executable: crate::cli::installed::Executable,
+    executable: crate::installed::Executable,
     upgraded: std::sync::atomic::AtomicBool,
 }
 
 impl Origin {
-    pub(super) fn at(executable: crate::cli::installed::Executable) -> Self {
+    pub(super) fn at(executable: crate::installed::Executable) -> Self {
         Self {
             executable,
             upgraded: std::sync::atomic::AtomicBool::new(false),
@@ -117,9 +117,9 @@ pub(super) async fn send_from(
         return false;
     };
     if !origin.upgraded.load(Ordering::Relaxed) {
-        match crate::cli::client::call(paths, report).await {
+        match crate::client::connection::call(paths, report).await {
             Ok(_) => return true,
-            Err(error) if error.is::<crate::cli::client::ProtocolMismatch>() => {
+            Err(error) if error.is::<crate::client::connection::ProtocolMismatch>() => {
                 origin.upgraded.store(true, Ordering::Relaxed);
             }
             Err(_) => return false,
@@ -131,7 +131,7 @@ pub(super) async fn send_from(
 /// The wrapper's own [`Origin`], the binary it started from.
 fn origin() -> &'static Origin {
     static ORIGIN: std::sync::OnceLock<Origin> = std::sync::OnceLock::new();
-    ORIGIN.get_or_init(|| Origin::at(crate::cli::installed::started().clone()))
+    ORIGIN.get_or_init(|| Origin::at(crate::installed::started().clone()))
 }
 
 /// Hand `report`, a proxy report's JSON, to the binary installed over
@@ -139,14 +139,14 @@ fn origin() -> &'static Origin {
 /// it. Nothing runs when nothing replaced it.
 async fn relay(
     paths: &crate::paths::Paths,
-    executable: &crate::cli::installed::Executable,
+    executable: &crate::installed::Executable,
     report: &str,
 ) -> bool {
     let Some(installed) = executable.installed() else {
         return false;
     };
-    let worker = crate::cli::internal::Worker::ProxyReport { report };
-    let Ok(argv) = crate::cli::internal::internal_command(paths, true, worker) else {
+    let worker = crate::workers::Worker::ProxyReport { report };
+    let Ok(argv) = crate::workers::internal_command(paths, true, worker) else {
         return false;
     };
     tokio::process::Command::new(installed)
@@ -178,7 +178,7 @@ pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i
         ),
         "the proxy-report worker sends only a wrapper's reports"
     );
-    crate::cli::client::call(paths, report).await?;
+    crate::client::connection::call(paths, report).await?;
     Ok(0)
 }
 
@@ -271,7 +271,7 @@ impl Reporter {
         attempt: u32,
         wait: std::time::Duration,
     ) {
-        let retry = crate::daemon::workspace::proxy_retries::ProxyRetry {
+        let retry = crate::client::executions::ProxyRetry {
             failure,
             attempt,
             next_at: self.after(wait),
@@ -306,10 +306,7 @@ impl Reporter {
         }
     }
 
-    async fn retried(
-        &self,
-        retry: Option<crate::daemon::workspace::proxy_retries::ProxyRetry>,
-    ) -> bool {
+    async fn retried(&self, retry: Option<crate::client::executions::ProxyRetry>) -> bool {
         self.send(crate::protocol::AgentMethod::ReportProxyRetry {
             workspace: self.workspace.clone(),
             execution: self.execution.clone(),

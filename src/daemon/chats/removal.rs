@@ -18,13 +18,13 @@ use crate::{
 impl Manager {
     /// Delete the record of the stopped `chat` with what only it kept.
     pub(crate) async fn delete_chat(&self, chat: &Chat) -> Result<()> {
-        let expires_at = self.chat_files_expiry(&chat.repository_id).await;
+        let expires_at = self.chat_files_expiry(chat).await;
         let id = chat.id.clone();
         let deleted = self
             .store
             .run(move |db| delete(db, &id, expires_at))
             .await?;
-        if let Err(error) = self.delete_tmp_dir(&chat.repository_id, &chat.id).await {
+        if let Err(error) = self.delete_chat_tmp_dir(chat).await {
             log!(
                 "chat {}: temporary directory not deleted: {error:#}",
                 chat.id

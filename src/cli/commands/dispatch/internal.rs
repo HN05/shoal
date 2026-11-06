@@ -4,8 +4,8 @@ use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_queue, agent_state, approvals, events, menu, messages, operations, subagents,
-            workspaces, worktree_hooks,
+            agent_queue, agent_state, approvals, events, menu, messages, operations, push_gate,
+            subagents, workspaces, worktree_hooks,
         },
         context::Context,
         terminal,
@@ -94,9 +94,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             tool,
             args,
         } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
-        InternalCommand::PushGate { remote, url } => {
-            crate::push_gate::helper::run(&ctx, remote, url).await
-        }
+        InternalCommand::PushGate { remote, url } => push_gate::run(&ctx, remote, url).await,
         InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
         InternalCommand::Operation => operations::worker(&ctx).await,
         InternalCommand::Launch { file } => terminal::run_launch(&file),

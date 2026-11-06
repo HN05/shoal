@@ -3,10 +3,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::Subcommand;
 
-use crate::{
-    cli::{commands, internal},
-    sessions::HostName,
-};
+use crate::{cli::commands, sessions::HostName, workers};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -25,20 +22,20 @@ pub enum InternalCommand {
     /// Print the fzf actions that switch the bare `shoal` picker to its next view.
     MenuNext,
     /// Print the `shoal approvals` picker's rows for it to reload.
-    #[command(name = internal::APPROVAL_ROWS)]
+    #[command(name = workers::APPROVAL_ROWS)]
     ApprovalRows {
         #[arg(long)]
         space: Option<String>,
     },
     /// Decide the request a `shoal approvals` picker row names, and print the outcome.
-    #[command(name = internal::APPROVAL_DECIDE)]
+    #[command(name = workers::APPROVAL_DECIDE)]
     ApprovalDecide {
         decision: crate::cli::args::approvals::Decision,
         row: String,
     },
     /// Send a proxy's report for an agent wrapper of an older release, which
     /// an upgraded daemon's protocol no longer accepts.
-    #[command(name = internal::PROXY_REPORT)]
+    #[command(name = workers::PROXY_REPORT)]
     ProxyReport { report: String },
     /// Report the agent's turn state; Shoal's agent hooks call it.
     AgentState {
@@ -99,7 +96,7 @@ pub enum InternalCommand {
     /// Shoal's Claude Code `WorktreeRemove` hook runs it.
     WorktreeRemove,
     /// Finish a planned merge inside its tracked execution.
-    #[command(name = internal::MERGE)]
+    #[command(name = workers::MERGE)]
     Merge {
         /// Where to write what it merged, or why it could not.
         #[arg(long)]
@@ -107,7 +104,7 @@ pub enum InternalCommand {
         plan: String,
     },
     /// Finish a planned unmerge inside its tracked execution.
-    #[command(name = internal::UNMERGE)]
+    #[command(name = workers::UNMERGE)]
     Unmerge {
         /// Where to write what it undid, or why it could not.
         #[arg(long)]
@@ -115,7 +112,7 @@ pub enum InternalCommand {
         plan: String,
     },
     /// Close a terminal host's place once its workspace completes or is removed.
-    #[command(name = internal::PLACE_WATCH)]
+    #[command(name = workers::PLACE_WATCH)]
     PlaceWatch {
         host: HostName,
         workspace: String,
@@ -129,10 +126,10 @@ pub enum InternalCommand {
     },
     /// The Herdr tab watcher of earlier releases, which continues here after
     /// an upgrade.
-    #[command(name = internal::HERDR_WATCH)]
+    #[command(name = workers::HERDR_WATCH)]
     HerdrWatch { workspace: String, tab: String },
     /// Detached execution wrapper; reports the launch on stdout, then keeps tracking it.
-    #[command(name = internal::DETACHED)]
+    #[command(name = workers::DETACHED)]
     Detached {
         workspace: String,
         #[arg(long)]
@@ -148,7 +145,7 @@ pub enum InternalCommand {
         command: Vec<OsString>,
     },
     /// Run a tool with its configured secrets; an agent's secret launchers call it.
-    #[command(name = internal::SECRET_TOOL)]
+    #[command(name = workers::SECRET_TOOL)]
     SecretTool {
         launchers: PathBuf,
         tool: String,
@@ -157,16 +154,16 @@ pub enum InternalCommand {
     },
     /// Git's remote helper for an agent's pushes, which asks the daemon
     /// before pushing; the agent's push helper launcher calls it.
-    #[command(name = internal::PUSH_GATE)]
+    #[command(name = workers::PUSH_GATE)]
     PushGate { remote: String, url: String },
     /// Run an operation the daemon started, reading its order on stdin.
-    #[command(name = internal::OPERATION)]
+    #[command(name = workers::OPERATION)]
     Operation,
     /// Start an admitted agent queue entry; the daemon runs it.
-    #[command(name = internal::QUEUE_START)]
+    #[command(name = workers::QUEUE_START)]
     QueueStart { entry: String },
     /// Add the planned workspace inside the place `host` opened for it.
-    #[command(name = internal::ADD)]
+    #[command(name = workers::ADD)]
     Add {
         #[arg(long)]
         host: HostName,
@@ -180,7 +177,7 @@ pub enum InternalCommand {
         plan: String,
     },
     /// Tracked agent inside a new place; consumes recovery records once started.
-    #[command(name = internal::SESSION)]
+    #[command(name = workers::SESSION)]
     Session {
         workspace: String,
         agent: String,
@@ -201,7 +198,7 @@ pub enum InternalCommand {
         command: Vec<OsString>,
     },
     /// A demo's wrapper, restarting its command until the demo is stopped.
-    #[command(name = internal::DEMO)]
+    #[command(name = workers::DEMO)]
     Demo {
         workspace: String,
         #[arg(long)]
@@ -211,11 +208,11 @@ pub enum InternalCommand {
     },
     /// Run the command a launch file carries, deleting the file first; hosts
     /// that cannot set a place's environment type it into the place.
-    #[command(name = internal::LAUNCH)]
+    #[command(name = workers::LAUNCH)]
     Launch { file: PathBuf },
     /// Continue an agent's wrapper from the installed binary, which an
     /// upgrade put in place of its own, over the daemon connection it hands over.
-    #[command(name = internal::TAKE_OVER)]
+    #[command(name = workers::TAKE_OVER)]
     TakeOver {
         workspace: String,
         #[arg(long)]
@@ -236,7 +233,7 @@ pub enum InternalCommand {
         log: Option<PathBuf>,
     },
     /// Copy the main checkout's ignored files inside tracked setup, then run setup.
-    #[command(name = internal::COPY_IGNORED)]
+    #[command(name = workers::COPY_IGNORED)]
     CopyIgnored {
         #[arg(last = true)]
         setup_cmd: Option<PathBuf>,

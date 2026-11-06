@@ -1,8 +1,7 @@
 use super::{Attacher, FileSource, chat, workspace};
 use crate::{
     client::events::{EventItem, FileEventDetails, FileEventKind},
-    daemon::workspace::Manager,
-    test_support::manager,
+    daemon::{test_support::manager, workspace::Manager},
 };
 
 /// The journal's file events, oldest first.
@@ -237,8 +236,9 @@ async fn a_chats_file_events_name_the_chat() {
     use FileEventKind::{Added, Removed};
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = chat(&manager, &workspace, "planning", &process).await;
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();

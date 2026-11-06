@@ -41,7 +41,7 @@ mod several;
 mod views;
 mod workspaces;
 
-pub use modes::ModeChoice;
+pub use modes::{ModeChoice, ModeFit};
 pub use picker::*;
 pub use place::{Place, pick_place};
 pub use prompt::*;

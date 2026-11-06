@@ -1,9 +1,9 @@
 use serde_json::json;
 
 use super::*;
-use crate::{
-    daemon::workspace::runner::tests::{admit_and_claim, github_fixture, github_job, launched},
+use crate::daemon::{
     test_support::git,
+    workspace::runner::tests::{admit_and_claim, github_fixture, github_job, launched},
 };
 
 /// Claim GitHub's job 11 of run 1 and report, as its runner's hook does,

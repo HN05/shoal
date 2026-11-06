@@ -1,10 +1,12 @@
 use crate::{
-    daemon::chats::{
-        restores::tests::{HELD, RESUMED, UNRESUMABLE},
-        saved::tests::{named_chat, unmarked},
+    daemon::{
+        chats::{
+            restores::tests::{HELD, RESUMED, UNRESUMABLE},
+            saved::tests::{named_chat, unmarked},
+        },
+        test_support::{ProcessGroup, manager, repository},
     },
     state::ChatRestore,
-    test_support::{ProcessGroup, manager, repository},
 };
 
 fn run(name: &str) -> Option<String> {

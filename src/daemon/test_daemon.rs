@@ -10,8 +10,8 @@ use tokio::{
 use super::{Server, connections::Capacity, workspace::Manager};
 use crate::{
     client::connection::Connector,
+    daemon::test_support::{git, manager, repository},
     model::{Repository, Workspace},
-    test_support::{git, manager, repository},
 };
 
 /// A generous guard against a hang; no test waits this long when it passes.

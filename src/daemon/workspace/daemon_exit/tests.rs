@@ -7,12 +7,12 @@ use crate::{
     daemon::{
         execution_connection::{ExecutionContext, execute},
         notifications::NotificationKind,
+        test_support::{manager, repository},
         workspace::ExecutionKind,
     },
     execution::recovery,
     model::Workspace,
     protocol::{self, Body, Control, ExecutionEvent, Response},
-    test_support::{manager, repository},
 };
 
 async fn bounded<T>(future: impl Future<Output = T>) -> T {

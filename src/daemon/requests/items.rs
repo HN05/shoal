@@ -247,7 +247,7 @@ pub(super) async fn handle(
 }
 
 impl Scoped for ItemMethod {
-    async fn scope(&mut self, manager: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             ItemMethod::WatchItems {
                 space: workspace,
@@ -278,8 +278,8 @@ impl Scoped for ItemMethod {
             } if review.has_verdict() => bail!(
                 "approving and requesting changes are the user's decision; ask them with shoal alerts send"
             ),
-            ItemMethod::OpenIssue { context, .. }
-            | ItemMethod::ListItems { context, .. }
+            // Reads go out as the agent account wherever they run.
+            ItemMethod::ListItems { context, .. }
             | ItemMethod::Labels { context, .. }
             | ItemMethod::Reviewers { context, .. }
             | ItemMethod::Capabilities { context, .. }
@@ -290,7 +290,10 @@ impl Scoped for ItemMethod {
             | ItemMethod::IssueBlockers { context, .. }
             | ItemMethod::PullRequest { context, .. }
             | ItemMethod::SelectItems { context, .. }
-            | ItemMethod::ViewItems { context, .. }
+            | ItemMethod::ViewItems { context, .. } => {
+                read_context_space(manager, caller, context).await?
+            }
+            ItemMethod::OpenIssue { context, .. }
             | ItemMethod::ForgeApi { context, .. }
             | ItemMethod::ForgeDownload { context, .. }
             | ItemMethod::ItemAction {
@@ -340,6 +343,23 @@ pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut String
             bail!("scoped processes act on items from their space, not from a registered checkout")
         }
     }
+}
+
+/// The space a read from `context` runs in, which [`context_workspace`]
+/// names; a caller whose scope reaches every space, which has every
+/// registered repository for its own, also reads from a registered
+/// checkout, which names none.
+async fn read_context_space<'a>(
+    manager: &Manager,
+    caller: &Caller,
+    context: &'a mut ItemContext,
+) -> Result<Option<&'a mut String>> {
+    if let ItemContext::Checkout(_) = context
+        && manager.reach_root(Some(caller)).await?.is_none()
+    {
+        return Ok(None);
+    }
+    context_workspace(context).map(Some)
 }
 
 /// `value` as pieces of its JSON, each fitting a frame: one PR's discussion

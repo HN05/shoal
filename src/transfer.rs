@@ -29,7 +29,7 @@ use crate::{
 /// naming its kind, 4 a workspace at a commit, which earlier importers
 /// would open on a branch, and 5 a copy, which earlier importers would
 /// open as the space it copies.
-const FORMAT: &str = "shoal workspace";
+pub(crate) const FORMAT: &str = "shoal workspace";
 const VERSION: u32 = 5;
 
 /// The version of the format that reads the package `manifest` describes.
@@ -133,16 +133,6 @@ pub async fn export(
         .await
         .context("write the export")??;
     Ok((manifest, warnings))
-}
-
-impl Source {
-    /// The repository the space belongs to.
-    pub fn repository_id(&self) -> &str {
-        match self {
-            Self::Workspace(removed) => &removed.repository_id,
-            Self::Chat(chat) => &chat.repository_id,
-        }
-    }
 }
 
 /// A session file opened for the export, with its size now; its agent has

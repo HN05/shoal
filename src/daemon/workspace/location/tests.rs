@@ -1,4 +1,4 @@
-use crate::test_support::{manager, repository};
+use crate::daemon::test_support::{manager, repository};
 
 #[tokio::test]
 async fn workspaces_stay_out_of_the_seed_cache_and_temporary_directories() {

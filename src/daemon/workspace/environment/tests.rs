@@ -1,9 +1,8 @@
 use super::*;
 use crate::{
-    daemon::scope,
+    daemon::{scope, test_support},
     protocol::{ExecutionMethod, NotificationMethod, Operation, WorkspaceMethod},
     state::WorkspaceState,
-    test_support,
 };
 
 #[tokio::test]

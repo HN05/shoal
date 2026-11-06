@@ -6,6 +6,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
+        agents::ChatRepository,
         commands::chat::{self, ChatPlace, Started},
         context::Context,
         ui,
@@ -116,19 +117,16 @@ async fn restore(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Started
 
 /// [`restore`] without the report of its failure.
 async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Started> {
-    let repo = crate::client::repositories::list(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|repo| repo.id == chat.repository_id)
-        .with_context(|| format!("the repository of chat {} is missing", chat.name))?;
-    let settings = chat::settings(ctx, &repo).await?;
+    let repo = saved_repository(ctx, chat).await?;
+    let settings = crate::client::workspaces::settings(&ctx.paths, repo.config()).await?;
     // The restored agent keeps its mode's rules; its subject was sent once.
-    let topic = match &chat.workspace {
-        Some(workspace) => chat::Topic::workspace(
+    let topic = match (&chat.workspace, &repo) {
+        (Some(workspace), _) => chat::Topic::workspace(
             chat::hosting_workspace(ctx, &workspace.id).await?,
             &chat.mode,
         ),
-        None => chat::Topic::repository(&repo, &chat.mode),
+        (None, ChatRepository::Registered(repo)) => chat::Topic::repository(repo, &chat.mode),
+        (None, ChatRepository::Outside(_)) => chat::Topic::outside_repositories(&chat.mode),
     };
     let options = chat::Options {
         agent: Some(chat.agent.parse()?),
@@ -143,4 +141,21 @@ async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Sta
         parent: None,
     };
     chat::launch(ctx, repo, settings, topic, options).await
+}
+
+/// Where the stopped `chat` starts again: its registered repository, or the
+/// `root_dir` a chat without one started in.
+async fn saved_repository(ctx: &Context, chat: &Chat) -> Result<ChatRepository> {
+    let Some(id) = &chat.repository_id else {
+        let root_dir = match &chat.root_dir {
+            Some(root_dir) => root_dir.clone(),
+            None => chat::root_dir(ctx).await?,
+        };
+        return Ok(ChatRepository::Outside(root_dir));
+    };
+    let repositories = crate::client::repositories::list(&ctx.paths).await?;
+    let repo = (repositories.into_iter())
+        .find(|repo| repo.id == *id)
+        .with_context(|| format!("the repository of chat {} is missing", chat.name))?;
+    Ok(ChatRepository::Registered(repo))
 }

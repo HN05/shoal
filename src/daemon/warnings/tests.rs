@@ -1,8 +1,10 @@
 use super::*;
 use crate::{
-    daemon::workspace::ExecutionKind,
+    daemon::{
+        test_support::{manager, repository},
+        workspace::ExecutionKind,
+    },
     state::AgentState,
-    test_support::{manager, repository},
 };
 
 #[tokio::test]

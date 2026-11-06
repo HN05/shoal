@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use crate::test_support::{commit, git, manager, repository};
+use crate::daemon::test_support::{commit, git, manager, repository};
 
 #[tokio::test]
 async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {

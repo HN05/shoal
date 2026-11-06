@@ -10,12 +10,14 @@ use std::{
 use crate::client::output::error::{CommandError, ErrorDetail};
 use crate::{
     cli::commands::operations::Failed,
-    client::approvals::{DecisionStatus, Undecided},
-    daemon::refusal::Reason,
+    client::{
+        approvals::{DecisionStatus, Undecided},
+        sim::SimulatorState,
+    },
     execution::SetupVerificationFailure,
     forge::review::status::ReviewState,
     protocol::{ErrorCode, RemoteError},
-    sim::SimulatorState,
+    refusal::Reason,
     state::{ExecutionState, WorkspaceState},
 };
 

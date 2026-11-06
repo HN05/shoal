@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head() {
-    use crate::test_support::{git, repository};
+    use crate::daemon::test_support::{git, repository};
     let root = tempfile::tempdir().unwrap();
     let path = repository(root.path(), "repo");
     let forge = ForgeRepo::parse("https://github.com/team/repo").unwrap();
@@ -39,10 +39,10 @@ async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head(
 #[tokio::test]
 async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked() {
     use crate::{
+        daemon::test_support::{manager, repository},
         forge::items::create::NewIssue,
         protocol::ItemContext,
         state::WorkspaceState,
-        test_support::{manager, repository},
     };
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");

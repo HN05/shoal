@@ -1,5 +1,5 @@
 //! Persist issue associations.
-use crate::daemon::refusal::{Reason, Refusal};
+use crate::refusal::{Reason, Refusal};
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};

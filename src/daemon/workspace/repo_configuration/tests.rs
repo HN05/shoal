@@ -1,4 +1,4 @@
-use crate::test_support;
+use crate::daemon::test_support;
 
 /// A registered repository and its local config's directory, which does not
 /// exist yet.

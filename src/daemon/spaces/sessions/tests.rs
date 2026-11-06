@@ -4,11 +4,13 @@ use anyhow::{Context as _, Result};
 
 use crate::{
     client::transcripts::ReportedSession,
-    daemon::workspace::{ExecutionKind, Manager},
+    daemon::{
+        test_support::{manager, repository},
+        workspace::{ExecutionKind, Manager},
+    },
     execution::recovery::{self, LastSession},
     model::Workspace,
     state::AgentState,
-    test_support::{manager, repository},
 };
 
 /// An execution of agent `name` in `workspace` that reported `session`.

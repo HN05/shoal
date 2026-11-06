@@ -1,7 +1,7 @@
 use super::*;
 use rusqlite::StatementStatus;
 
-const INDEX_SCHEMA: &str = include_str!("../../../daemon/store/simulator_owner.sql");
+const INDEX_SCHEMA: &str = include_str!("../../../store/simulator_owner.sql");
 
 fn owner(index: usize) -> String {
     format!("10000000-0000-0000-0000-{index:012}")

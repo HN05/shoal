@@ -4,8 +4,6 @@
 //! workspace repository's remotes to the `shoal::` transport, so Git hands
 //! every push to them to Shoal's remote helper, which asks the daemon before
 //! it pushes. Fetches keep their URLs.
-pub mod helper;
-
 use std::{
     ffi::{OsStr, OsString},
     os::unix::fs::PermissionsExt,
@@ -94,17 +92,13 @@ fn write_helper(paths: &Paths) -> Result<tempfile::TempDir> {
             directory.path().display()
         )
     })?;
-    let words = crate::cli::internal::internal_command(
-        paths,
-        false,
-        crate::cli::internal::Worker::PushGate,
-    )?
-    .into_iter()
-    .map(|word| {
-        word.into_string()
-            .map_err(|word| anyhow::anyhow!("{} is not UTF-8", word.to_string_lossy()))
-    })
-    .collect::<Result<Vec<_>>>()?;
+    let words = crate::workers::internal_command(paths, false, crate::workers::Worker::PushGate)?
+        .into_iter()
+        .map(|word| {
+            word.into_string()
+                .map_err(|word| anyhow::anyhow!("{} is not UTF-8", word.to_string_lossy()))
+        })
+        .collect::<Result<Vec<_>>>()?;
     let path = directory.path().join(HELPER);
     let invocation = crate::shell::quote(&words);
     std::fs::write(&path, format!("#!/bin/sh\nexec {invocation} \"$@\"\n"))?;

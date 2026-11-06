@@ -493,6 +493,25 @@ fn create_clone_directory(path: PathBuf) -> Result<PathBuf> {
     Ok(path)
 }
 
+impl Manager {
+    /// The configured `root_dir`, where a chat without a repository runs,
+    /// prepared as registering a repository prepares it, so a root the
+    /// chat creates first takes the layout registration would give it.
+    pub(crate) async fn prepare_chat_root(&self) -> Result<PathBuf> {
+        let _registry = self.gates.lock_registry().await;
+        let repositories = self.repositories().await?;
+        let workspaces = self.list_workspaces().await?;
+        let recorded = Recorded {
+            repositories: &repositories,
+            workspaces: &workspaces,
+        };
+        let root = self.configured_root()?;
+        let state = fs::canonicalize(&self.paths.state)?;
+        prepare_root(&root, &state, &recorded, None).await?;
+        Ok(root.path)
+    }
+}
+
 /// The configured `root_dir` and how preparing it treats it.
 pub(super) struct ConfiguredRoot {
     pub(super) path: PathBuf,

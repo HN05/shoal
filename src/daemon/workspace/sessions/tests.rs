@@ -1,9 +1,9 @@
 use super::*;
 use crate::sessions::PlaceOwnership;
 use crate::{
+    daemon::test_support::{manager, repository},
     removal::{InspectionPolicy, UnsavedWork},
     sessions::{Host, HostName, Origin, Session},
-    test_support::{manager, repository},
 };
 use futures_util::future::BoxFuture;
 use std::{

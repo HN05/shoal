@@ -7,7 +7,7 @@ use tokio::process::Command;
 
 pub(crate) use crate::config::hooks::{HookDirectory, HookKind};
 use crate::{
-    daemon::resources::ResourceLease,
+    client::resources::ResourceLease,
     env,
     model::{Chat, Workspace},
     paths::Paths,

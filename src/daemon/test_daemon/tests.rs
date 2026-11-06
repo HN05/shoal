@@ -252,7 +252,11 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
 async fn an_app_queues_an_agent_once_it_can_run() {
     let daemon = TestDaemon::start().await;
     // An agent whose command is installed wherever the tests run.
-    crate::test_support::configure(&daemon.manager, "[agents.probe]\ncommand = [\"true\"]\n").await;
+    crate::daemon::test_support::configure(
+        &daemon.manager,
+        "[agents.probe]\ncommand = [\"true\"]\n",
+    )
+    .await;
     daemon.workspace("worker").await;
     let app = daemon.connector();
     let queue = |agent: &str| QueueMethod::QueueAgent {
@@ -503,7 +507,7 @@ async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts()
     let app = daemon.connector();
     let parent = daemon.workspace("parent").await;
     let root = tempfile::tempdir().unwrap();
-    let other = crate::test_support::repository(root.path(), "other");
+    let other = crate::daemon::test_support::repository(root.path(), "other");
     let other = daemon
         .manager
         .register_repository(other.to_str().unwrap().into(), None, None)
@@ -511,7 +515,7 @@ async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts()
         .unwrap();
     let check = |repository: &Repository, workspace: Option<&str>, parent: &str| {
         crate::protocol::ChatMethod::CheckChatParent {
-            repository: repository.id.clone().into(),
+            repository: Some(repository.id.clone().into()),
             workspace: workspace.map(str::to_owned),
             parent: Some(parent.to_owned()),
         }

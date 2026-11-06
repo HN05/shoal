@@ -1,7 +1,7 @@
 use std::{fs, sync::Arc};
 
 use super::*;
-use crate::test_support::{commit, git, manager, repository};
+use crate::daemon::test_support::{commit, git, manager, repository};
 use crate::{daemon::workspace_files::Attacher, execution::recovery, model::CleanupReason};
 
 const HOUR: u64 = 3600;
@@ -537,8 +537,9 @@ async fn merged_cleanup_removes_a_chat_stopped_for_its_idle_period() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     manager
         .start_chat(
             repo.id.into(),

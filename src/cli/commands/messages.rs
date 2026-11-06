@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result, bail};
 use crate::{
     cli::{
         context::Context,
-        installed::{Executable, arguments, replace_option, with_flag, without_option},
+        installed::{arguments, replace_option, with_flag, without_option},
         output::{Palette, Style},
         terminal,
         ui::{self, Fallback},
@@ -23,6 +23,7 @@ use crate::{
         links::Updates,
     },
     forge::items::attach::Attachment,
+    installed::Executable,
     repository::Selector,
 };
 

@@ -56,8 +56,9 @@ instead of the PR delivery guidance below.
   a chat in a workspace's worktree the workspace's scope, identity, `[env]` or
   leases, or makes it the workspace's child.
 - Space tree: every space has at most one parent in `space_parents`, a ready
-  workspace or a chat of its own repository and never one below it; flag a
-  write of a parent that skips that check, a child in another repository, and
+  workspace or a chat of its own repository, or a chat without a repository,
+  and never one below it; flag a write of a parent that skips that check, a
+  child in another repository below any other parent, and
   a reader of the tree that branches on kind instead of taking the one walk up
   or down and the one check for an agent.
 - Safety of user work: removal of any space goes through the one shared path,
@@ -130,11 +131,13 @@ instead of the PR delivery guidance below.
   terminal is unscoped. Flag a chat process granted what a workspace process is
   refused, other than renaming its own chat and reading the workspace whose
   worktree it runs in with requests that only read state, and a scoped caller
-  creating a space anywhere but below its own, in its repository and the
-  worktrees of its tree, or taking over one outside its tree; a place must drop
-  the marks of the space that opened it.
+  creating a space anywhere but below its own, in its repository (any, for a
+  chat without one) and the worktrees of its tree, or taking over one outside
+  its tree; a place must drop the marks of the space that opened it.
   Scoped callers get access to their own worktree and the
-  spaces below it, recursively, only (CLI refusals also follow ancestry
+  spaces below it, recursively, only, and a chat without a repository to every
+  space, through the one operation that names a scope's reach; flag a check
+  that confines a caller another way (CLI refusals also follow ancestry
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
   Workspace allocation other than a child of their own space, removal other than of a space below their own
@@ -645,13 +648,8 @@ configured command for another agent, plus proven child
 
 ## Delivery
 
-When commit history is available, check that each commit has one coherent
-purpose and keeps its tests and documentation together. Flag avoidable bundles
-of independent changes and suggest concrete boundaries. The size guidance in
-AGENTS.md is a prompt to inspect, not a line-count gate; tightly coupled
-changes are a valid reason for a larger commit. Flag a PR that changes what
-Shoal prints or draws in the terminal without examples of the new interface in
-its description or comments. Flag a PR that fixes something beyond its
+Flag a PR that changes what Shoal prints or draws in the terminal without
+examples of the new interface in its description or comments. Flag a PR that fixes something beyond its
 assigned issue, such as a failing test, without a closing reference for it or
 saying that no open issue tracks it. After fixing substantial findings, an agent
 requests another review and marks the PR ready only once it comes back clean.
@@ -662,6 +660,7 @@ leave merging to the user instead of asking for permission to merge.
 
 - Formatting and import order (rustfmt and clippy run in CI).
 - Restating what a commit does, or style preferences not backed by `AGENTS.md`.
+- Commit history: how the PR splits into commits, their sizes and their messages.
 
 Label conventions: `area/` allows several affected areas; `type/` and
 `complexity/` each allow one. Reviewer request labels are combinable:

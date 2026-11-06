@@ -7,9 +7,11 @@ use std::{
 };
 
 use crate::{
-    daemon::chats::saved::tests::{running_chat, unmarked},
+    daemon::{
+        chats::saved::tests::{running_chat, unmarked},
+        test_support::manager,
+    },
     process::identity::Identity,
-    test_support::manager,
 };
 
 /// The agent starts a process in its group as its stop's first round

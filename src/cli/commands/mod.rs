@@ -36,6 +36,7 @@ mod notifications;
 pub(crate) mod operations;
 
 mod ports;
+mod push_gate;
 mod questions;
 mod queue;
 mod reactions;
@@ -89,11 +90,11 @@ use crate::{
         },
         context::Context,
         output::{Palette, Style},
+        shell,
     },
     env,
     model::Workspace,
     paths::Paths,
-    shell,
 };
 
 impl<T> WorkspaceOverviewResult<T> {

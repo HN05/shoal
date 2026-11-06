@@ -1421,7 +1421,9 @@ pub struct Chat {
     /// it goes.
     #[serde(default)]
     pub number: u32,
-    pub repository_id: String,
+    /// The repository it belongs to; none for a chat that manages the
+    /// spaces of every repository.
+    pub repository_id: Option<String>,
     /// Unique among workspace names and the names of other chats.
     pub name: String,
     pub agent: String,
@@ -1441,6 +1443,10 @@ pub struct Chat {
     /// repository without a directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tmp_dir: Option<std::path::PathBuf>,
+    /// The `root_dir` a chat without a repository started in, where it runs
+    /// and keeps its temporary directory however `root_dir` changes later.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_dir: Option<std::path::PathBuf>,
     /// The agent session its hooks reported last, which an export continues.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
@@ -1468,12 +1474,14 @@ pub struct Chat {
     pub children: Vec<SpaceRef>,
 }
 
-/// Where a new chat runs: its repository's registered checkout, or the
-/// worktree of a workspace in it.
+/// Where a new chat runs: its repository's registered checkout, the
+/// worktree of a workspace in it, or for a chat without a repository,
+/// `root_dir`.
 #[derive(Debug, Clone, Copy)]
 pub enum ChatHome<'a> {
     Checkout(&'a Repository),
     Workspace(&'a Workspace),
+    Root(&'a std::path::Path),
 }
 
 impl<'a> ChatHome<'a> {
@@ -1482,19 +1490,22 @@ impl<'a> ChatHome<'a> {
         match self {
             Self::Checkout(repository) => &repository.path,
             Self::Workspace(workspace) => &workspace.path,
+            Self::Root(root) => root,
         }
     }
 
-    pub fn repository_id(self) -> &'a str {
+    /// The chat's repository; none at `root_dir`.
+    pub fn repository_id(self) -> Option<&'a str> {
         match self {
-            Self::Checkout(repository) => &repository.id,
-            Self::Workspace(workspace) => &workspace.repository_id,
+            Self::Checkout(repository) => Some(&repository.id),
+            Self::Workspace(workspace) => Some(&workspace.repository_id),
+            Self::Root(_) => None,
         }
     }
 
     pub fn workspace(self) -> Option<&'a Workspace> {
         match self {
-            Self::Checkout(_) => None,
+            Self::Checkout(_) | Self::Root(_) => None,
             Self::Workspace(workspace) => Some(workspace),
         }
     }
@@ -1550,10 +1561,11 @@ impl PresentSpace {
         }
     }
 
-    pub fn repository_id(&self) -> &str {
+    /// Its repository; none for a chat without one.
+    pub fn repository_id(&self) -> Option<&str> {
         match self {
-            Self::Workspace(workspace) => &workspace.repository_id,
-            Self::Chat(chat) => &chat.repository_id,
+            Self::Workspace(workspace) => Some(&workspace.repository_id),
+            Self::Chat(chat) => chat.repository_id.as_deref(),
         }
     }
 

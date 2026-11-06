@@ -1,9 +1,9 @@
 use std::{fs, sync::Arc};
 
 use super::*;
-use crate::{
-    daemon::workspace::restore::tests::checkpoint_refs,
+use crate::daemon::{
     test_support::{commit, git, manager, repository},
+    workspace::restore::tests::checkpoint_refs,
 };
 
 struct Fixture {

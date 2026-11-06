@@ -49,7 +49,7 @@ pub(super) fn spawn(
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt as _;
 
-    use crate::cli::internal::{Worker as Internal, internal_command};
+    use crate::workers::{Worker as Internal, internal_command};
 
     let argv = internal_command(paths, false, Internal::Operation)?;
     let mut command = tokio::process::Command::new(&argv[0]);

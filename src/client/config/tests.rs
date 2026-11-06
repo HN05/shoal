@@ -580,3 +580,13 @@ fn the_runner_takes_its_settings_and_refuses_labels_it_cannot_register() {
         assert!(error.contains("runner.labels"), "{error}");
     }
 }
+
+#[test]
+fn only_the_global_config_starts_a_mode_without_a_repository() {
+    let paths = Paths::for_test("/home/test");
+    let mode = "[modes.manage]\nkind = 'chat'\nrepository = false\n";
+    assert!(Config::parse(mode, &paths).is_ok());
+    let error = crate::config::repo::parse(mode).unwrap_err().to_string();
+    assert!(error.contains("modes.manage.repository"), "{error}");
+    assert!(crate::config::repo::parse("[modes.manage]\nkind = 'chat'\n").is_ok());
+}

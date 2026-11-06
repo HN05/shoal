@@ -8,12 +8,11 @@ use super::{Integration, Launch, LaunchOptions, Wake, ensure_available};
 use crate::{
     agent::Agent,
     cli::{
-        commands::configured,
         context::Context,
         terminal,
         ui::{self, Fallback},
     },
-    config::{Effective, templates},
+    config::{Effective, named_commands, templates},
     execution,
     model::Workspace,
 };
@@ -112,7 +111,7 @@ async fn command(
         args.clone(),
     );
     let args = fork.iter().cloned().chain(args).collect();
-    configured::expand_with_fields(
+    named_commands::expand_with_fields(
         &ctx.paths,
         &settings.launchers,
         name,

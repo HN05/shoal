@@ -10,16 +10,15 @@ use crate::{
         args::create::CopyArgs,
         context::Context,
         output::{Palette, Style},
-        terminal,
+        shell, terminal,
         ui::{self, Fallback},
     },
-    daemon::refusal::{Reason, Refusal},
     model::{SpaceRef, Workspace},
     protocol::{
         CommitStart, CreationOptions, ItemContext,
         operations::{Prepared, QueuedLaunch, StartedWorkspace},
     },
-    shell,
+    refusal::{Reason, Refusal},
     state::WorkspaceState,
 };
 

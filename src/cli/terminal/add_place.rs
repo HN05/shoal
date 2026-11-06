@@ -37,10 +37,10 @@ pub(super) fn add_worker_argv(
     host: &Configured,
     focused: bool,
 ) -> Result<Vec<OsString>> {
-    crate::cli::internal::internal_command(
+    crate::workers::internal_command(
         &ctx.paths,
         false,
-        crate::cli::internal::Worker::Add {
+        crate::workers::Worker::Add {
             host: host.host.name(),
             close_when_done: host.closes_when_done,
             focused,

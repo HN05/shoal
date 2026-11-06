@@ -2,7 +2,7 @@
 //! its daemon record and what happens when it stops.
 use std::path::PathBuf;
 
-use crate::daemon::workspace::ExecutionKind;
+use crate::client::executions::ExecutionKind;
 
 #[derive(Clone)]
 pub(super) enum Mode {

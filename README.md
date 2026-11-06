@@ -153,8 +153,10 @@ After [adding an AI tool](docs/reference.md#agents), run
 An agent starts in a mode, which decides what it is told and whether it gets a
 workspace or a chat: `worker`, the default, implements its subject in a
 workspace; `chat` discusses the repository; `plan` settles an issue's plan
-with you. Without `--mode`, `shoal start` asks which on a terminal. Configure
-your own under `[modes.<name>]` and `[rules.<name>]`; see
+with you; `orchestrate` starts a master session, a chat without a repository
+that starts and steers the work of every repository for you. Without `--mode`,
+`shoal start` asks which on a terminal. Configure your own under
+`[modes.<name>]` and `[rules.<name>]`; see
 [modes and rules](docs/reference.md#modes-and-rules).
 
 ```sh
@@ -189,6 +191,7 @@ shoal happy-claude fix-login   # Detached Happy session, visible in the Happy ap
 shoal start my-project --mode chat  # Discuss the repository with an agent in its checkout
 shoal start --in fix-login     # Review a workspace's live work in a chat in its worktree, beside its agent
 shoal start --mode plan --issue  # Settle the plan of an issue that needs one, in a chat
+shoal start --mode orchestrate   # Manage the spaces of every repository from one chat
 shoal work rename my-project-chat login  # Rename a running chat
 shoal work rename --request my-project-chat  # Ask its agent to choose the name
 shoal diff fix-login           # Changes since the branch's fork point

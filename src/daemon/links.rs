@@ -24,7 +24,7 @@ pub mod wait;
 
 pub(crate) use memories::ForgeMemories;
 
-use crate::daemon::refusal::{Reason, Refusal};
+use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 

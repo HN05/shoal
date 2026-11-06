@@ -1,4 +1,4 @@
-use crate::test_support::{manager, repository};
+use crate::daemon::test_support::{manager, repository};
 
 #[tokio::test]
 async fn a_title_is_trimmed_kept_on_the_record_and_cleared_after_the_previous_one() {

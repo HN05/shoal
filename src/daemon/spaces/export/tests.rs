@@ -1,12 +1,16 @@
 use std::{fs, os::unix::process::CommandExt, path::Path, sync::Arc};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{
+        test_support::{manager, repository},
+        workspace::Manager,
+    },
     process::identity,
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{manager, repository},
     transfer::{ExportedSpace, Import, Space},
 };
+
+mod transfer;
 
 /// A manager with a chat `name` about a registered repository, whose
 /// process this test reaps once a signal ends it, so the chat ends with it.
@@ -189,8 +193,9 @@ async fn a_chat_ends_without_the_workspace_executions_it_started() {
         .unwrap()
         .expect("the wrapper runs");
     let chat = manager.chats().await.unwrap().remove(0);
+    let repository = chat.repository_id.clone().unwrap();
     let workspace = manager
-        .create_workspace(&chat.repository_id, "worker".into(), None, None, None)
+        .create_workspace(&repository, "worker".into(), None, None, None)
         .await
         .unwrap();
     let recorded = serde_json::to_string(&wrapper).unwrap();
@@ -246,8 +251,8 @@ async fn a_chat_whose_package_cannot_be_written_names_how_it_continues() {
 
 #[tokio::test]
 async fn a_disposable_workspace_is_refused_before_its_removal() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await

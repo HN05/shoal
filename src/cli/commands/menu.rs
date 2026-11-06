@@ -28,16 +28,17 @@ use crate::{
             workspace::{DesktopApp, WorkCommand, WorkspaceCommand},
         },
         context::Context,
-        internal::{self, Worker},
+        internal,
         output::{Palette, Style},
         ui::{self, Entries, KeyBindings, PickerView, ViewPicker, WidthLimit},
     },
     client::notifications::{self, Notification},
-    daemon::refusal::{Reason, Refusal},
     env,
     forge::items::link,
     model::{LinkedItem, PresentSpace},
     protocol::ConfigTarget,
+    refusal::{Reason, Refusal},
+    workers::Worker,
 };
 
 const ADD_ENTRY: &str = "add-workspace";
@@ -790,17 +791,21 @@ async fn view_command(ctx: &Context, space: Option<String>) -> Result<Command> {
 
 /// The issues and PRs the space `space` links in its own repository, the
 /// only ones `shoal view` reads for it: a workspace's worktree's, or a chat's
-/// registered checkout's; with the space's kind.
+/// registered checkout's, and none for a chat without a repository, which
+/// links nothing; with the space's kind.
 async fn linked_items(ctx: &Context, space: &str) -> Result<(Vec<LinkedItem>, &'static str)> {
     let unknown = || Refusal::new(Reason::NotFound, format!("unknown space: {space}"));
     let (links, path, kind) = match crate::client::workspaces::present_space(&ctx.paths, space)
         .await?
     {
         Some(PresentSpace::Workspace(workspace)) => (workspace.links, workspace.path, "workspace"),
+        Some(PresentSpace::Chat(chat)) if chat.repository_id.is_none() => {
+            return Ok((Vec::new(), "chat"));
+        }
         Some(PresentSpace::Chat(chat)) => {
             let repos = crate::client::repositories::list(&ctx.paths).await?;
             let checkout = (repos.into_iter())
-                .find(|repo| repo.id == chat.repository_id)
+                .find(|repo| Some(&repo.id) == chat.repository_id.as_ref())
                 .ok_or_else(unknown)?;
             (chat.links, checkout.path, "chat")
         }

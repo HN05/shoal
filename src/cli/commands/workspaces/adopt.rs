@@ -9,12 +9,12 @@ use crate::{
         commands::repositories,
         context::Context,
         output::{Palette, Style},
-        ui,
+        shell, ui,
     },
     client::recovery::{DirectoryState, ReconcileOptions},
     git,
     model::Workspace,
-    repository, shell,
+    repository,
 };
 
 pub(in crate::cli::commands) async fn adopt(

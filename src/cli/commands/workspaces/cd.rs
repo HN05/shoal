@@ -1,11 +1,8 @@
 //! Moving the shell into a workspace.
 use anyhow::{Result, ensure};
 
+use crate::cli::{context::Context, recent, shell, ui};
 use crate::client::output::workspaces::Directory;
-use crate::{
-    cli::{context::Context, recent, ui},
-    shell,
-};
 
 pub(in crate::cli::commands) async fn cd(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let workspace = match workspace {

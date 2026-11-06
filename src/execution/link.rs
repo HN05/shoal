@@ -16,7 +16,7 @@ use tokio::{
 };
 
 use crate::{
-    cli::client,
+    client::connection,
     paths::Paths,
     process::identity::Identity,
     protocol::{
@@ -81,7 +81,7 @@ impl Link {
         method: ExecutionMethod,
         limit: Duration,
     ) -> Result<(Self, Body)> {
-        let (reader, writer, body) = client::open_split(paths, method, limit).await?;
+        let (reader, writer, body) = connection::open_split(paths, method, limit).await?;
         Ok((Self::new(reader, writer), body))
     }
 
@@ -325,7 +325,9 @@ async fn attempt(paths: &Paths, request: &Reattach) -> Result<Option<Attached>, 
     // Any protocol version may answer; only its verdict matters.
     let body = match reply {
         Ok(Ok(reply)) => reply.body,
-        Ok(Err(error)) if !client::stream_closed(&error) && !client::is_unreachable(&error) => {
+        Ok(Err(error))
+            if !connection::stream_closed(&error) && !connection::is_unreachable(&error) =>
+        {
             return Err(Refused(format!("{error:#}")));
         }
         Ok(Err(_)) | Err(_) => return Ok(None),

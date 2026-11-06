@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use crate::{
-    daemon::workspace::ExecutionKind,
+use crate::daemon::{
     test_support::{manager, repository},
+    workspace::ExecutionKind,
 };
 
 #[tokio::test]

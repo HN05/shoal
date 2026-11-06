@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 135;
+pub(super) const SCHEMA_VERSION: i64 = 136;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -398,6 +398,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (133, SPACE_MODES, None),
     (134, include_str!("space_agent_state.sql"), None),
     (135, WORKSPACE_COPIES, None),
+    (136, "", Some(allow_chats_without_repository)),
 ];
 
 /// The workspace a copy was made from, its checkpoint the copy started
@@ -475,26 +476,42 @@ pub(super) const SKIPPED_SETUP: &str = "ALTER TABLE workspaces ADD COLUMN setup_
 pub(super) const WORKSPACE_COMMITS: &str = "ALTER TABLE workspaces ADD COLUMN start_commit TEXT;
 ALTER TABLE workspaces ADD COLUMN made_for TEXT;";
 
-/// Drop the `NOT NULL` constraint on `workspaces.branch` in place, as SQLite
-/// documents for removing a constraint: rebuilding the table would delete
-/// the rows of every table that references it.
+/// Drop the `NOT NULL` constraint on `workspaces.branch`.
 pub(super) fn allow_branchless_workspaces(db: &Connection) -> Result<()> {
+    drop_not_null(db, "workspaces", "branch TEXT")
+}
+
+/// Drop the `NOT NULL` constraint on `chats.repository_id`: a chat that
+/// manages every repository's spaces has none of its own. Such a chat
+/// records the `root_dir` it started in, which keeps its temporary
+/// directory as a repository's directory keeps its chats'.
+pub(super) fn allow_chats_without_repository(db: &Connection) -> Result<()> {
+    drop_not_null(db, "chats", "repository_id TEXT")?;
+    db.execute_batch("ALTER TABLE chats ADD COLUMN root_dir TEXT")?;
+    Ok(())
+}
+
+/// Drop the `NOT NULL` constraint of the column `table` defines as
+/// `column`, its name and type, in place, as SQLite documents for removing
+/// a constraint: rebuilding the table would delete the rows of every table
+/// that references it.
+fn drop_not_null(db: &Connection, table: &str, column: &str) -> Result<()> {
     let sql: String = db.query_row(
-        "SELECT sql FROM sqlite_schema WHERE type='table' AND name='workspaces'",
-        [],
+        "SELECT sql FROM sqlite_schema WHERE type='table' AND name=?1",
+        [table],
         |row| row.get(0),
     )?;
-    const CONSTRAINED: &str = "branch TEXT NOT NULL";
-    match sql.matches(CONSTRAINED).count() {
+    let constrained = format!("{column} NOT NULL");
+    match sql.matches(&constrained).count() {
         0 => return Ok(()),
         1 => {}
-        _ => anyhow::bail!("unexpected workspaces table definition"),
+        _ => anyhow::bail!("unexpected {table} table definition"),
     }
     let version: i64 = db.query_row("PRAGMA schema_version", [], |row| row.get(0))?;
     db.pragma_update(None, "writable_schema", true)?;
     db.execute(
-        "UPDATE sqlite_schema SET sql=?1 WHERE type='table' AND name='workspaces'",
-        [sql.replacen(CONSTRAINED, "branch TEXT", 1)],
+        "UPDATE sqlite_schema SET sql=?1 WHERE type='table' AND name=?2",
+        [sql.replacen(&constrained, column, 1), table.to_owned()],
     )?;
     db.pragma_update(None, "schema_version", version + 1)?;
     db.pragma_update(None, "writable_schema", false)?;
@@ -817,7 +834,7 @@ pub(super) fn migrate(db: &mut Connection) -> Result<()> {
 }
 
 fn validate_simulator_records(db: &Connection) -> Result<()> {
-    crate::sim::records::list(db, None)
+    crate::daemon::sim::records::list(db, None)
         .context("validate simulator records before indexing ownership")?;
     Ok(())
 }

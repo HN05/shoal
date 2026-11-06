@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
+    daemon::test_support::{manager, repository},
     state::WorkspaceState,
-    test_support::{manager, repository},
 };
 
 #[tokio::test]

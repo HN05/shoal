@@ -21,7 +21,7 @@ use crate::{
         },
         context::Context,
         output::{Palette, Style},
-        terminal,
+        shell, terminal,
     },
     model::{QueueEntry, Workspace},
     protocol::{
@@ -30,7 +30,6 @@ use crate::{
             OperationSpec, Preparation, Prepared, QueuedLaunch, StartedWorkspace, WorkspaceStart,
         },
     },
-    shell,
     state::QueueState,
 };
 

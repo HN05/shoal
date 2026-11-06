@@ -462,7 +462,7 @@ pub(super) async fn repository_spaces(
     let chats = crate::client::chats::list(&ctx.paths)
         .await?
         .into_iter()
-        .filter(|chat| chat.repository_id == repo.id)
+        .filter(|chat| chat.repository_id.as_ref() == Some(&repo.id))
         .map(PresentSpace::Chat);
     let mut spaces: Vec<PresentSpace> = workspaces.chain(chats).collect();
     ensure!(

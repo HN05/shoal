@@ -81,6 +81,7 @@ pub fn global(text: &str) -> Result<(Machine, RepoConfig), Error> {
 pub fn repository(text: &str) -> Result<RepoConfig, Error> {
     let root = DeTable::parse(text)?;
     refuse(&root, &[MACHINE], "[machine] belongs in the global config")
+        .and_then(|()| refuse_mode_repositories(&root))
         .and_then(|()| refuse_removed(&root))
         .map_err(|mut error| {
             error.set_input(Some(text));
@@ -90,6 +91,21 @@ pub fn repository(text: &str) -> Result<RepoConfig, Error> {
         error.set_input(Some(text));
         error
     })
+}
+
+/// Refuse a mode's `repository` in a repository config: a mode that starts a
+/// chat without a repository is the global config's, since no repository's
+/// config applies to that chat.
+fn refuse_mode_repositories(root: &Spanned<DeTable<'_>>) -> Result<(), Error> {
+    let Some(DeValue::Table(modes)) = root.get_ref().get("modes").map(Spanned::get_ref) else {
+        return Ok(());
+    };
+    for name in modes.keys() {
+        let name = name.get_ref();
+        let message = format!("modes.{name}.repository belongs in the global config");
+        refuse(root, &["modes", name, "repository"], &message)?;
+    }
+    Ok(())
 }
 
 /// Fail with `message` at the value `path` names, when `root` sets it.

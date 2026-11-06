@@ -2,9 +2,11 @@ use std::{fs, sync::Arc};
 
 use super::*;
 use crate::{
-    daemon::scope::Caller,
+    daemon::{
+        scope::Caller,
+        test_support::{git, manager, repository},
+    },
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{git, manager, repository},
 };
 
 struct Fixture {
@@ -386,7 +388,8 @@ async fn a_copy_with_a_conflict_is_inspected_as_changed() {
 async fn removal_keeps_starting_files_above_the_archive_limit() {
     let f = Fixture::new().await;
     let copy = f.copy(None, CopyPlace::Branch(None)).await.unwrap();
-    crate::test_support::configure(&f.manager, "[cleanup.restore]\narchive_max_mb = 0\n").await;
+    crate::daemon::test_support::configure(&f.manager, "[cleanup.restore]\narchive_max_mb = 0\n")
+        .await;
     f.manager
         .remove_workspace(&copy.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
         .await

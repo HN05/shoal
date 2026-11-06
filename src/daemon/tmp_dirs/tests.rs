@@ -1,10 +1,12 @@
 use std::os::unix::fs::PermissionsExt;
 
 use crate::{
-    daemon::workspace::ExecutionKind,
+    daemon::{
+        test_support::{manager, repository},
+        workspace::ExecutionKind,
+    },
     env,
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{manager, repository},
 };
 
 #[tokio::test]

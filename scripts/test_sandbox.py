@@ -17,10 +17,8 @@ class EnvironmentTests(unittest.TestCase):
                      "TERM": "xterm-256color"}
         with patch.dict("os.environ", inherited, clear=True):
             env = sandbox.environment(Path("/sandbox"), Path("/sandbox/bin"))
-        self.assertEqual(env["SHOAL_STATE_DIR"], "/sandbox/state")
-        self.assertEqual(env["ZMX_DIR"], "/sandbox/zmx")
-        self.assertEqual(env["TMUX_TMPDIR"], "/sandbox/tmux")
-        self.assertEqual(env["ZELLIJ_SOCKET_DIR"], "/sandbox/z")
+        for name in ("SHOAL_STATE_DIR", "ZMX_DIR", "TMUX_TMPDIR", "ZELLIJ_SOCKET_DIR"):
+            self.assertEqual(Path(env[name]).parent, sandbox.sockets_directory(Path("/sandbox")))
         self.assertEqual(env["HOME"], "/sandbox/home")
         self.assertEqual(env["PATH"], "/sandbox/bin:/usr/bin")
         self.assertEqual(env["TERM"], "xterm-256color")
@@ -29,13 +27,34 @@ class EnvironmentTests(unittest.TestCase):
                      "GIT_DIR"):
             self.assertNotIn(name, env)
 
+    def test_socket_directories_stay_short_under_a_long_sandbox_path(self):
+        deep = Path("/") / ("deep-directory/" * 20) / "sandbox"
+        env = sandbox.environment(deep, deep / "bin")
+        self.assertEqual(len(env["ZMX_DIR"]),
+                         len(sandbox.environment(Path("/s"), Path("/s/bin"))["ZMX_DIR"]))
+        self.assertNotEqual(sandbox.sockets_directory(deep),
+                            sandbox.sockets_directory(Path("/s")))
+
 
 class SandboxTests(unittest.TestCase):
     def test_the_sandbox_has_the_zmx_lock_debug_builds_open(self):
-        with tempfile.TemporaryDirectory() as root:
-            directory = Path(root)
+        with tempfile.TemporaryDirectory() as root, \
+                patch.object(sandbox, "SOCKETS_ROOT", Path(root)):
+            directory = Path(root, "sandbox")
+            sandbox.prepare_directories(directory)
             sandbox.prepare_zmx_lock(directory)
-            self.assertTrue((directory / "zmx.shoal-ownership.lock").is_file())
+            zmx = sandbox.environment(directory, directory / "bin")["ZMX_DIR"]
+            self.assertTrue(Path(zmx + ".shoal-ownership.lock").is_file())
+
+    def test_removing_the_sandbox_removes_its_sockets_directory(self):
+        with tempfile.TemporaryDirectory() as root, \
+                patch.object(sandbox, "SOCKETS_ROOT", Path(root, "sockets")):
+            Path(root, "sockets").mkdir()
+            directory = Path(root, "sandbox")
+            sandbox.prepare_directories(directory)
+            sandbox.remove(directory)
+            self.assertFalse(directory.exists())
+            self.assertFalse(sandbox.sockets_directory(directory).exists())
 
 
 if __name__ == "__main__":

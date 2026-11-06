@@ -9,12 +9,13 @@ use crate::{
         args::coordination::QuestionsArgs,
         commands::messages::hanging_indent,
         context::Context,
-        installed::{Executable, arguments, replace_option, without_option},
+        installed::{arguments, replace_option, without_option},
         output::{Palette, Style},
         ui::{self, Cell, Entries, Fallback, WidthLimit},
     },
     client::item_numbers::ItemNumber,
     client::questions::{self, Ask, Question},
+    installed::Executable,
 };
 
 pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {

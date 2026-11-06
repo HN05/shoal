@@ -792,7 +792,7 @@ impl Manager {
         env: Option<std::collections::BTreeMap<String, String>>,
     ) -> Result<ApprovalRequest> {
         let request = self.show_approval(number).await?;
-        crate::daemon::refusal::ensure_unchanged(
+        crate::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
             format_args!("approval request {number}"),
         )?;
@@ -826,7 +826,7 @@ impl Manager {
         details: proposals::ProposalDecision,
     ) -> Result<ApprovalRequest> {
         let request = self.show_approval(number).await?;
-        crate::daemon::refusal::ensure_unchanged(
+        crate::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
             format_args!("approval request {number}"),
         )?;
@@ -887,7 +887,7 @@ impl Manager {
                     stored.decider.as_deref() == Some(coordinator.as_str()),
                     "approval request {id} is not routed to this workspace"
                 );
-                crate::daemon::refusal::ensure_unchanged(
+                crate::refusal::ensure_unchanged(
                     stored.is_same(&request),
                     format_args!("approval request {id}"),
                 )?;
@@ -1005,7 +1005,7 @@ impl Manager {
     ) -> Result<ApprovalRequest> {
         let space = self.present_space(space).await?;
         let request = self.show_approval(number).await?;
-        crate::daemon::refusal::ensure_unchanged(
+        crate::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
             format_args!("approval request {number}"),
         )?;

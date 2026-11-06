@@ -1,6 +1,7 @@
 //! `[modes.<name>]` and `[rules.<name>]`: what an agent is told. A mode
 //! names the rules its system text carries, the instructions its first
-//! message ends with, and the kind of space `shoal start` creates for it.
+//! message ends with, and the kind of space `shoal start` creates for it,
+//! with or without a repository.
 //! Rules are shared by name; instructions belong to one mode. Each may be
 //! written inline or as `rules/<name>.md` and `modes/<name>.md` beside a
 //! config file.
@@ -26,6 +27,8 @@ pub const CHAT: &str = "chat";
 pub const PLAN: &str = "plan";
 /// The rule a local review's style comes from, after its fixed instructions.
 pub const REVIEW_RULE: &str = "review";
+/// The mode of a chat without a repository that manages every space.
+pub const ORCHESTRATE: &str = "orchestrate";
 
 const MODES_DIR: &str = "modes";
 const RULES_DIR: &str = "rules";
@@ -37,6 +40,10 @@ pub struct ModeConfig {
     /// The kind of space `shoal start` creates in this mode.
     #[option(default = SpaceKind::Workspace)]
     pub kind: Option<SpaceKind>,
+    /// Whether the space belongs to a repository. Only a chat may have
+    /// none: it runs in `root_dir`, and its scope reaches every space.
+    #[option(default = true)]
+    pub repository: Option<bool>,
     /// The rules the agent's system text carries after the facts of its
     /// space and the space rules, in order.
     #[option(list)]
@@ -60,6 +67,7 @@ pub struct RuleConfig {
 pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
     let mode = |kind, rule: &str, instructions: &str| ModeConfig {
         kind: Some(kind),
+        repository: None,
         rules: vec![rule.to_owned()],
         instructions: Some(instructions.to_owned()),
     };
@@ -77,10 +85,19 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
             PLAN.to_owned(),
             mode(SpaceKind::Chat, "chat", include_str!("modes/plan.md")),
         ),
+        (
+            ORCHESTRATE.to_owned(),
+            ModeConfig {
+                repository: Some(false),
+                rules: vec!["chat".to_owned(), ORCHESTRATE.to_owned()],
+                ..mode(SpaceKind::Chat, "chat", "")
+            },
+        ),
     ])
 }
 
-/// The rules Shoal ships; only the review style has text of its own.
+/// The rules Shoal ships; the review style and the orchestrating chat's
+/// have text of their own.
 pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
     let rule = |text: &str| RuleConfig {
         text: Some(text.to_owned()),
@@ -91,6 +108,10 @@ pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
         (
             REVIEW_RULE.to_owned(),
             rule(crate::config::templates::review_base()),
+        ),
+        (
+            ORCHESTRATE.to_owned(),
+            rule(include_str!("rules/orchestrate.md")),
         ),
     ])
 }
@@ -120,9 +141,15 @@ pub fn get<'a>(modes: &'a BTreeMap<String, Mode>, name: &str) -> Result<&'a Mode
         .with_context(|| format!("no mode {name}; [modes.{name}] in config defines one"))
 }
 
-/// Refuse a mode that names a rule no layer defines, once they combine.
+/// Refuse a mode that names a rule no layer defines, or a workspace without
+/// a repository, once they combine.
 pub fn check(modes: &BTreeMap<String, Mode>, rules: &BTreeMap<String, Rule>) -> Result<()> {
     for (name, mode) in modes {
+        ensure!(
+            mode.repository || mode.kind == SpaceKind::Chat,
+            "modes.{name}.repository = false needs kind = \"chat\": a workspace belongs to a \
+             repository"
+        );
         if let Some(rule) = mode.rules.iter().find(|rule| !rules.contains_key(*rule)) {
             bail!("modes.{name} names rule {rule}, which no config defines");
         }

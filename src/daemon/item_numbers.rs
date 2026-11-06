@@ -6,7 +6,7 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 pub(crate) use crate::client::item_numbers::{ItemKind, ItemNumber};
-use crate::daemon::refusal::{Reason, Refusal};
+use crate::refusal::{Reason, Refusal};
 
 /// The number of the space `id`, a workspace or a chat.
 pub(crate) fn space_number(db: &Connection, id: &str) -> Result<u32> {

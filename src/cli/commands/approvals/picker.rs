@@ -7,11 +7,12 @@ use crate::{
     cli::{
         args::approvals::Decision,
         context::Context,
-        internal::{self, Worker},
+        internal,
         output::{Palette, Style},
         ui::{self, Entries, WidthLimit},
     },
     client::approvals::{ApprovalRequest, DecisionStatus, ProposalDecision},
+    workers::Worker,
 };
 
 /// Open the chosen request; Ctrl-A approves and Ctrl-D denies the
@@ -85,7 +86,12 @@ fn decision_key<'a>(
     Ok(ui::InPlaceKey {
         key,
         label,
-        command: internal::shell_command(&ctx.paths, Worker::ApprovalDecide { decision })?,
+        command: internal::shell_command(
+            &ctx.paths,
+            Worker::ApprovalDecide {
+                decision: decision.into(),
+            },
+        )?,
     })
 }
 

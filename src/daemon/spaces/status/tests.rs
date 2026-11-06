@@ -6,8 +6,8 @@ use crate::{
 
 #[tokio::test]
 async fn status_counts_only_the_spaces_own_unread_notifications() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
@@ -58,8 +58,8 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
 
 #[tokio::test]
 async fn status_counts_the_spaces_own_open_questions() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await

@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::{manager, repository};
+use crate::daemon::test_support::{manager, repository};
 
 #[tokio::test]
 async fn recheck_readies_only_workspaces_the_audit_failed_once_they_verify() {

@@ -8,7 +8,7 @@ use crate::{
 
 #[tokio::test]
 async fn a_lookup_waiting_on_the_host_takes_the_answer_the_first_one_records() {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let host = "waiting.invalid";
     let asking = manager.gates.lock_forge_host(host).await;
     let gate = manager.gates.forge_host_gate(host);
@@ -38,7 +38,7 @@ async fn a_lookup_waiting_on_the_host_takes_the_answer_the_first_one_records() {
 
 #[tokio::test]
 async fn recorded_hosts_parse_as_their_forge_once_the_daemon_learns_them() {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let url = "https://ghe.recorded.example/team/repo/issues/7";
     manager
         .record_forge_host("ghe.recorded.example", ForgeKind::GitHub, "https")
@@ -54,7 +54,7 @@ async fn recorded_hosts_parse_as_their_forge_once_the_daemon_learns_them() {
 
 #[tokio::test]
 async fn reloaded_pins_reach_link_parsing_and_removed_ones_leave_it() {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     let url = "https://gitlab.reload.example/team/repo/issues/7";
     let config =
         Config::from_toml("[machine.forges.\"gitlab.reload.example\"]\ntype = \"forgejo\"\n")

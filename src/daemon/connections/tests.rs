@@ -5,12 +5,17 @@ use tokio::io::{AsyncReadExt, BufReader};
 use super::*;
 use crate::protocol::RepositoryMethod::ListRepositories;
 use crate::{
-    daemon::{Server, questions::Ask, serve, workspace_files::Attacher},
+    daemon::{
+        Server,
+        questions::Ask,
+        serve,
+        test_support::{manager, repository},
+        workspace_files::Attacher,
+    },
     protocol::{
         self, Body, DaemonMethod, ExecutionMethod, NotificationMethod, QuestionMethod, Request,
         Response,
     },
-    test_support::{manager, repository},
 };
 
 /// A hang guard, not the behavior under test.

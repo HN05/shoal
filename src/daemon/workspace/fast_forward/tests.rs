@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::test_support::{git, manager, repository};
+use crate::daemon::test_support::{git, manager, repository};
 
 struct Fixture {
     _root: tempfile::TempDir,

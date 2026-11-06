@@ -48,7 +48,7 @@ impl LinkSpace {
     pub(crate) fn repository_id(&self) -> &str {
         match self {
             Self::Workspace(workspace) => &workspace.repository_id,
-            Self::Chat { chat, .. } => &chat.repository_id,
+            Self::Chat { checkout, .. } => &checkout.id,
         }
     }
 
@@ -108,7 +108,7 @@ impl Manager {
         Ok(match self.present_space(selector).await? {
             PresentSpace::Workspace(workspace) => LinkSpace::Workspace(Box::new(workspace)),
             PresentSpace::Chat(chat) => {
-                let checkout = self.repository(&chat.repository_id).await?;
+                let checkout = self.chat_own_checkout(&chat).await?;
                 LinkSpace::Chat { chat, checkout }
             }
         })
@@ -144,10 +144,21 @@ impl Manager {
             ItemContext::Chat(selector) => {
                 let chat = (self.running_chat(selector).await?)
                     .with_context(|| format!("no running chat {selector}"))?;
-                self.repository(&chat.repository_id).await
+                self.chat_own_checkout(&chat).await
             }
             ItemContext::Workspace(_) => bail!("a workspace acts in its worktree"),
         }
+    }
+
+    /// The registered checkout of `chat`'s repository, where its item
+    /// requests act; a chat without a repository has none.
+    pub(crate) async fn chat_own_checkout(&self, chat: &Chat) -> Result<Repository> {
+        (self.chat_repository(chat).await?).with_context(|| {
+            format!(
+                "chat {} has no repository, so it links and acts on no repository's items",
+                chat.name
+            )
+        })
     }
 
     /// The settings of the space: a workspace's own, or a chat's

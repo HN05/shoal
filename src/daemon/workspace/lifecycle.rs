@@ -1,7 +1,7 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::{Manager, RemovalRules, executions::StopPolicy};
-use crate::daemon::refusal::{Reason, Refusal};
 use crate::daemon::space_processes::WorktreeTies;
+use crate::refusal::{Reason, Refusal};
 use crate::{
     daemon::{
         cleanup::{Rule, Snapshot},

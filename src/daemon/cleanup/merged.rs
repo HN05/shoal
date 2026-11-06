@@ -107,7 +107,7 @@ async fn sweep_at(
 /// Remove `chat` once its agent has been stopped for the merged idle period
 /// and nothing keeps it.
 async fn sweep_chat(manager: &Manager, state: &mut State, chat: &Chat, now: u64) -> Result<()> {
-    let settings = manager.repository_settings(&chat.repository_id).await?;
+    let settings = manager.chat_settings(chat).await?;
     let Some(delay) = settings.cleanup.merged.delay() else {
         return Ok(());
     };

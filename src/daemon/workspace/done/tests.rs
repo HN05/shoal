@@ -1,8 +1,11 @@
 use super::*;
 use crate::{
-    daemon::{links::pr::Action, workspace_files::Attacher},
+    daemon::{
+        links::pr::Action,
+        test_support::{commit, git, install_test_script, manager, repository},
+        workspace_files::Attacher,
+    },
     model::CleanupReason,
-    test_support::{commit, git, install_test_script, manager, repository},
 };
 use std::{fs, sync::Arc};
 
@@ -853,7 +856,9 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
         .await
         .unwrap();
     let agents = [(); 2].map(|()| {
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"))
+        crate::daemon::test_support::ProcessGroup::spawn(
+            std::process::Command::new("sleep").arg("600"),
+        )
     });
     let mut above = parent.id.clone();
     let mut chats = Vec::new();
@@ -868,7 +873,7 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
             parent: Some(above),
         };
         let chat = manager
-            .start_new_chat(parent.repository_id.clone().into(), None, start)
+            .start_new_chat(Some(parent.repository_id.clone().into()), None, start)
             .await
             .unwrap();
         above = chat.id.clone();
@@ -989,14 +994,15 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
 
 #[tokio::test]
 async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
@@ -1045,14 +1051,15 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
 
 #[tokio::test]
 async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
-    let (temp, manager) = crate::test_support::manager().await;
-    let checkout = crate::test_support::repository(temp.path(), "repo");
+    let (temp, manager) = crate::daemon::test_support::manager().await;
+    let checkout = crate::daemon::test_support::repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),

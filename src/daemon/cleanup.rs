@@ -274,7 +274,7 @@ async fn sweep_idle(manager: &Manager, timers: &mut Timers, users: &DirectoryUse
 /// Remove `chat` once idle cleanup has seen it unchanged for its idle delay
 /// and its grace period ended.
 async fn sweep_chat(manager: &Manager, timers: &mut Timers, chat: &Chat) -> Result<()> {
-    let settings = manager.repository_settings(&chat.repository_id).await?;
+    let settings = manager.chat_settings(chat).await?;
     let snapshot = match settings.cleanup.auto.delay() {
         Some(delay) => (manager.chat_cleanup_snapshot(chat, Rule::Idle).await?)
             .map(|snapshot| (delay, snapshot)),
@@ -542,6 +542,11 @@ impl Targets {
             None => None,
         };
         let within = |id: &str| repository.as_deref().is_none_or(|only| only == id);
+        // A chat without a repository is in none of them.
+        let chat_within = |chat: &Chat| match &chat.repository_id {
+            Some(id) => within(id),
+            None => repository.is_none(),
+        };
         let targets = Self {
             workspaces: manager
                 .list_workspaces()
@@ -550,7 +555,7 @@ impl Targets {
                 .filter(|workspace| within(&workspace.repository_id))
                 .collect(),
             chats: (manager.chats().await?.into_iter())
-                .filter(|chat| within(&chat.repository_id))
+                .filter(|chat| chat_within(chat))
                 .collect(),
             repositories: manager
                 .repositories()

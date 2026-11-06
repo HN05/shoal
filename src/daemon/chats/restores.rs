@@ -30,7 +30,10 @@ pub(super) async fn restore_automatic(manager: &Arc<Manager>) -> Result<Vec<Join
     if manager.agent_queue.suspended() {
         return Ok(Vec::new());
     }
-    let claimed = manager.store.run(claim_automatic).await?;
+    let owner = manager.root_dir_owner();
+    let claimed = (manager.store)
+        .run(move |db| claim_automatic(db, &owner))
+        .await?;
     drop(saving);
     Ok(claimed
         .into_iter()
@@ -70,9 +73,9 @@ impl Manager {
 
 /// Make the chats saved to come back on their own wait for `shoal resume`,
 /// returning them, unless one still runs, which runs on.
-fn claim_automatic(db: &mut Connection) -> Result<Vec<Chat>> {
+fn claim_automatic(db: &mut Connection, owner: &std::path::Path) -> Result<Vec<Chat>> {
     let tx = db.transaction()?;
-    let saved: Vec<Chat> = recorded(&tx)?
+    let saved: Vec<Chat> = recorded(&tx, owner)?
         .into_iter()
         .filter(|chat| chat.restore == Some(ChatRestore::Automatic))
         .collect();
@@ -106,7 +109,7 @@ pub(super) async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<R
     use anyhow::Context as _;
     use std::process::Stdio;
 
-    let mut argv = crate::cli::internal::shoal_argv(paths)?;
+    let mut argv = crate::workers::shoal_argv(paths)?;
     argv.extend(["resume".into(), chat.id.clone().into()]);
     let env = crate::cli::terminal::detached_start_environment(chat.origin.as_ref());
     let mut command = tokio::process::Command::new(&argv[0]);

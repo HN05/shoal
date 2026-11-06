@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn restart_waits_for_background_work_and_executions_that_cannot_reattach() {
-    let (_root, manager) = crate::test_support::manager().await;
+    let (_root, manager) = crate::daemon::test_support::manager().await;
     assert!(quiesce(&manager).is_some());
     let operation = manager.gates.operation().await;
     assert!(quiesce(&manager).is_none());

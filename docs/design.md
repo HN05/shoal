@@ -552,7 +552,9 @@ its source and checkout path. After verifying the checkout's identity and
 boundaries, it deletes the checkout recursively, then removes the repository
 directory only when that directory is empty.
 Each workspace and chat gets its own temporary directory as `TMPDIR`, in the
-repository directory's `.tmp` under its ID, which never changes or comes back
+repository directory's `.tmp` under its ID, or `root_dir`'s for a chat without a
+repository, which the daemon marks with its state directory so another daemon
+sharing `root_dir` leaves it alone. The ID never changes or comes back
 like a name. Outside the worktree it neither dirties it nor enters checkpoints,
 and its path stays short enough for the Unix sockets tools create in it on
 macOS. It is created only once its record exists and deleted with it, by
@@ -700,16 +702,18 @@ processes would be its own; places drop the marks and scope token of the space
 that opened them, so what runs there is the new chat's. Spaces form one tree through one parent link,
 `space_parents`, which records a workspace split from another and one a chat
 opened alike: every space has at most one parent, a ready workspace or a chat
-of its own repository, never one below it, and a child in another repository
-is refused, since spaces across repositories need a space without one. Every
+of its own repository, or a chat without a repository, never one below it, and
+any other child in another repository is refused: spaces across repositories
+share a parent only in a chat without one. Every
 reader takes one walk up or one walk down that link, with no branch on kind,
 and asks each space one question, whether it has an agent: a workspace's
 agent, a chat's running agent, or a queued restore of either. A scope reaches
-its space and every space below it, the CLI resolves a scoped command, a
-workspace's or a chat's, to the workspace below whose directory it runs in,
-else to its own space, and agent hooks always report for the agent's own space.
-So a chat's agent that changes into a workspace it opened acts on that
-workspace, as a workspace's agent acts on its child. The parent's agent, a workspace's or a chat's, receives the
+its space and every space below it, and a chat without a repository's every
+space, which one operation names for every check, the CLI resolves a scoped
+command, a workspace's or a chat's, to the workspace below whose directory it
+runs in, else to its own space, and agent hooks always report for the agent's
+own space. So a chat's agent that changes into a workspace it opened acts on
+that workspace, as a workspace's agent acts on its child. The parent's agent, a workspace's or a chat's, receives the
 issue and PR activity of the spaces below it without an agent of their own,
 and theirs in turn, each update naming its space, through the same cursors,
 deliveries and acknowledgements as its own; a child's own agent, which reports its turn state or which Shoal tracks
@@ -1732,7 +1736,7 @@ otherwise miss (busy resources and who holds them, port conflicts, exits of
 shortcut-launched agents, workspaces it removed or retained on its own, messages
 a workspace's agent sends to ask for attention) and the
 CLI shows them once, unless asked to keep them unread, on request or as a followed stream that also raises the
-terminal's own notifications (OSC 9); `work`, workspace `status`, and `daemon status` only count them. Recording never fails the operation it describes,
+terminal's own notifications (OSC 9); workspace `status` and `daemon status` only count them. Recording never fails the operation it describes,
 repeated polled conflicts and identical messages collapse until read, and scoped
 processes cannot read them. Agent messages are separate from completion: telling
 the user a PR is ready neither ends the assignment nor affects cleanup. The
@@ -2060,7 +2064,8 @@ issue from the chat's checkout and records it as the chat's. It starts at once f
 background sync keeps current, so an offline or diverged checkout still gets its
 chat. Its
 instructions describe the discussion only, from the `chat` rule that
-repositories can extend like the other rules; the orchestrator skill is available when the user asks for coordination. Belonging
+repositories can extend like the other rules; the orchestrator skill is available when the user asks for coordination.
+Belonging
 to no workspace, a chat is not a tracked execution: queuing and overload stops
 serve unattended agents, while the user attends a chat. It is still a
 daemon record, so lists and integrations can follow it: the agent replaces Shoal's
@@ -2155,6 +2160,15 @@ state ends when the chat stops or is restored. Keep-awake reads it as a
 workspace agent's; overload protection, turn retries and interrupts act on
 tracked executions, which a chat's agent is not.
 
+A chat may also belong to no repository: a mode with `repository = false`,
+such as the built-in `orchestrate`, starts it in `root_dir`, with the global
+config alone, as a master session whose scope reaches every space on the
+machine. It starts work below itself in any repository, receives what its
+subtree reports as any parent does, and acts on other spaces as a coordinator
+acts below it, while what the scope keeps from every agent stays the user's,
+so the user can hand coordination to a tracked, scoped agent. The orchestrator
+skill stays for an unscoped agent the user runs in their own terminal.
+
 Issues split by whether their plan is settled: `[issue] plan_label` marks one
 that needs the owner's choices and `planned_label` one whose body holds a plan
 an agent implements without asking. Both are repository configuration, so Shoal
@@ -2233,16 +2247,18 @@ reported layer is the one whose value is in use; the daemon resolves a workspace
 once per request and every use site reads them rather than layering on its own.
 Every agent starts with `shoal start`, in a mode: a named entry that lists the
 rules its system text carries, holds the instructions its first message ends
-with, and says which kind of space it starts in, so one command replaces a
+with, and says which kind of space it starts in and whether the space belongs
+to a repository, only a chat ever belonging to none, so one command replaces a
 command per kind of start. Without `--mode`, a start on a terminal picks the
 mode, since it decides what the agent is told, and lists the start's default
 first so Enter keeps it; without a terminal it takes the default, so scripts
 and agents start as before. The picker follows the checks of the arguments
 given, as every prompt does: a start whose arguments decide the kind of space
 picks among that kind's modes in its own flow, after that flow's checks, and
-another first resolves and checks its repository, parent and agent. The default mode, `worker`, always starts in a
-workspace, so a plain `start` without a terminal needs nothing from the
-daemon before it resolves its repository; another mode's kind is read
+another first resolves and checks its repository, parent and agent. The
+default mode, `worker`, always starts in a workspace, so a plain `start`
+without a terminal needs nothing from the daemon before it resolves its
+repository; another mode's kind is read
 from the named or current repository's settings, and `--chat`, `--in` and
 `--worktree` override it, a chat without `--mode` starting in the `chat` mode,
 since a worker would not be told it is in a chat. The space records the mode

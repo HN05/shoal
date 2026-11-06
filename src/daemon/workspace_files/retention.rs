@@ -39,15 +39,18 @@ impl Manager {
             .await
     }
 
-    /// When the files of the chat in repository `repository_id` expire if
-    /// it ends now: after the repository's `cleanup.restore.retention_days`,
-    /// as a removed workspace's results do, or the global setting's when the
-    /// repository's cannot be read.
-    pub(crate) async fn chat_files_expiry(&self, repository_id: &str) -> i64 {
-        let settings = match self.repository_settings(repository_id).await {
+    /// When the files of `chat` expire if it ends now: after its
+    /// repository's `cleanup.restore.retention_days`, as a removed
+    /// workspace's results do, or the global setting's for a chat without a
+    /// repository or when the repository's cannot be read.
+    pub(crate) async fn chat_files_expiry(&self, chat: &crate::model::Chat) -> i64 {
+        let settings = match self.chat_settings(chat).await {
             Ok(settings) => Ok(settings),
             Err(error) => {
-                log!("chat files of {repository_id} kept by the global retention: {error:#}");
+                log!(
+                    "files of chat {} kept by the global retention: {error:#}",
+                    chat.id
+                );
                 self.config().resolve(&Default::default())
             }
         };
@@ -96,7 +99,7 @@ impl Manager {
         space: &Space,
         holds: impl Fn(&Path) -> bool,
     ) -> Result<bool> {
-        let (repo, _files) = self.lock_repository_files(&space.repository_id).await?;
+        let (repo, _files) = self.lock_repository_files(space.files_home()?).await?;
         let there = Layout::of(&repo)
             .is_some_and(|layout| layout.kept(&space.id).iter().any(|path| holds(path)));
         if there {

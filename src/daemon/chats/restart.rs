@@ -96,7 +96,7 @@ impl Manager {
         let Some(session) = &chat.session else {
             return Ok(false);
         };
-        let settings = self.repository_settings(&chat.repository_id).await?;
+        let settings = self.chat_settings(chat).await?;
         let launch = settings.launch(&chat.agent);
         Ok(launch.arguments.resume_args(Some(session)).is_some())
     }

@@ -34,11 +34,8 @@ impl Manager {
         workspace_files::check_results(&results)?;
         let chat = self.done_chat(selector).await?;
         let _guard = self.gates.lock_prs([&chat.id]).await;
-        let settings = self.repository_settings(&chat.repository_id).await?;
-        let checkout = self.repository(&chat.repository_id).await?;
-        let (head, _) = crate::git::head_and_branch(&checkout.path)
-            .await
-            .context("cannot read the checkout's HEAD")?;
+        let settings = self.chat_settings(&chat).await?;
+        let head = self.chat_head(&chat).await?;
         let space = PresentSpace::Chat(chat.clone()).into();
         let results = self.keep_results(&space, results, attacher).await?;
         let completion = Completion {
@@ -144,6 +141,18 @@ impl Manager {
 
     async fn done_chat(&self, selector: &str) -> Result<Chat> {
         (self.running_chat(selector).await?).with_context(|| format!("no running chat {selector}"))
+    }
+
+    /// The HEAD of `chat`'s checkout, which its completion records; empty
+    /// for a chat without a repository, which has no checkout.
+    async fn chat_head(&self, chat: &Chat) -> Result<String> {
+        let Some(checkout) = self.chat_repository(chat).await? else {
+            return Ok(String::new());
+        };
+        let (head, _) = crate::git::head_and_branch(&checkout.path)
+            .await
+            .context("cannot read the checkout's HEAD")?;
+        Ok(head)
     }
 }
 

@@ -3,13 +3,13 @@
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},
+        test_support::{ProcessGroup, manager, repository},
         workspace::Manager,
         workspace_files::Attacher,
     },
     model::{Chat, SpaceKind, Workspace},
     removal::{InspectionPolicy, UnsavedWork},
     state::AgentState,
-    test_support::{ProcessGroup, manager, repository},
 };
 
 /// A workspace `root` with an agent, a chat below it running as the
@@ -62,7 +62,11 @@ async fn mixed_tree(
 
 /// Request the secret `secret` for `workspace` and route it, returning
 /// its decider.
-async fn decider(manager: &Manager, workspace: &Workspace, secret: &str) -> Option<String> {
+pub(super) async fn decider(
+    manager: &Manager,
+    workspace: &Workspace,
+    secret: &str,
+) -> Option<String> {
     let requested = manager
         .request_approval(ApprovalRequest::new(
             &workspace.id,
@@ -84,7 +88,7 @@ async fn decider(manager: &Manager, workspace: &Workspace, secret: &str) -> Opti
 }
 
 /// End `chat`'s agent, `process`, as a stop leaves it to resume.
-async fn stop_chat(manager: &Manager, chat: &Chat, process: ProcessGroup) {
+pub(super) async fn stop_chat(manager: &Manager, chat: &Chat, process: ProcessGroup) {
     process.kill();
     let id = chat.id.clone();
     manager
@@ -371,7 +375,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let start = |workspace: &Workspace| crate::protocol::ChatMethod::StartChat {
         mode: None,
-        repository: repo.id.clone().into(),
+        repository: Some(repo.id.clone().into()),
         workspace: Some(workspace.name.clone()),
         name: "auditing".into(),
         agent: "claude".into(),
@@ -421,7 +425,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     // below one outside its tree.
     let below = |parent: &Workspace| crate::protocol::ChatMethod::StartChat {
         mode: None,
-        repository: repo.id.clone().into(),
+        repository: Some(repo.id.clone().into()),
         workspace: None,
         name: "nested".into(),
         agent: "claude".into(),

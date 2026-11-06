@@ -11,11 +11,10 @@ use crate::{
     cli::{
         context::Context,
         output::{Palette, Style},
-        terminal,
+        shell, terminal,
         ui::{self, Fallback},
     },
     model::{Checkpoint, CheckpointCause, RemovedWorkspace, RestoredCheckpoint, RestoredWorkspace},
-    shell,
     state::WorkspaceState,
     time::local_seconds,
 };

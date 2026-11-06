@@ -119,9 +119,10 @@ impl Manager {
     }
 
     /// The repository layer for `target`; a repository's file is the one in
-    /// its registered checkout.
+    /// its registered checkout, and the global config has none.
     pub async fn config_layers_for(&self, target: ConfigTarget) -> Result<ConfigLayers> {
         let (repository_id, worktree_file) = match target {
+            ConfigTarget::Global => return Ok(ConfigLayers::default()),
             ConfigTarget::Workspace(selector) => {
                 let workspace = self.workspace(&selector).await?;
                 let file = self.worktree_file(&workspace.path).await?;

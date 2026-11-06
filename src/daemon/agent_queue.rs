@@ -50,7 +50,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
 /// with the multiplexer variables of the terminal that queued it.
 #[cfg(not(test))]
 pub(crate) fn spawn_start(paths: &Paths, start: &Start) -> Result<()> {
-    use crate::cli::internal::{Worker, internal_command};
+    use crate::workers::{Worker, internal_command};
     use anyhow::Context as _;
     use std::process::Stdio;
 

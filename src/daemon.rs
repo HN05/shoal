@@ -39,7 +39,6 @@ pub mod ports;
 pub mod questions;
 pub(crate) mod queue;
 pub mod recovery;
-pub(crate) mod refusal;
 mod requests;
 pub mod resources;
 mod restart_recovery;
@@ -49,6 +48,7 @@ pub mod scope;
 pub mod secrets;
 pub(crate) mod seed;
 mod shutdown_lock;
+pub(crate) mod sim;
 pub(crate) mod space_processes;
 pub(crate) mod spaces;
 mod startup;
@@ -57,6 +57,8 @@ pub mod store;
 mod subscriptions;
 #[cfg(test)]
 pub(crate) mod test_daemon;
+#[cfg(test)]
+pub(crate) mod test_support;
 mod tmp_dirs;
 mod untracked;
 mod warnings;
@@ -111,7 +113,7 @@ struct Server {
 pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>) -> Result<()> {
     // Read before an upgrade can replace it, as the update below is, since
     // wrappers continue only from the binary the daemon runs.
-    crate::cli::installed::remember_started();
+    crate::installed::remember_started();
     let update = auto_update::Update::new(managed);
     paths.prepare()?;
     let descriptors = connections::raise_descriptor_limit();
@@ -500,8 +502,8 @@ async fn accept(
         Ok(caller) => Ok(Some(caller)),
         Err(error) => {
             // A target that does not exist is refused as such, not as outside the scope.
-            let code = match refusal::Reason::of(&error) {
-                Some(refusal::Reason::NotFound) => ErrorCode::NotFound,
+            let code = match crate::refusal::Reason::of(&error) {
+                Some(crate::refusal::Reason::NotFound) => ErrorCode::NotFound,
                 _ => ErrorCode::ScopeDenied,
             };
             let body = Body::error(code, format!("{error:#}"));

@@ -11,7 +11,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    sim::{SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, audit::AuditEntry},
+    client::sim::{AuditEntry, SimRequest, Simulator, SimulatorCatalog, SimulatorOverview},
 };
 
 pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<SimulatorCatalog> {

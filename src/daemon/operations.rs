@@ -16,14 +16,11 @@ use anyhow::{Result, ensure};
 use tokio::sync::watch;
 use uuid::Uuid;
 
-use super::{
-    refusal::{Reason, Refusal},
-    scope::Caller,
-    workspace::Manager,
-};
+use super::{scope::Caller, workspace::Manager};
 use crate::protocol::operations::{
     Ended, Failure, OperationEvent, OperationSpec, Order, Progress, Report, Stream,
 };
+use crate::refusal::{Reason, Refusal};
 #[cfg(test)]
 pub(crate) use worker::fake;
 
@@ -250,8 +247,7 @@ impl Manager {
         })?;
         if let Some(caller) = caller {
             ensure!(
-                self.within_subtree(&caller.space_id, &entry.workspace)
-                    .await?,
+                self.reaches(caller, &entry.workspace).await?,
                 "workspace processes can only follow operations of their own space and those below it"
             );
         }

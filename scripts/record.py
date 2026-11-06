@@ -5,8 +5,10 @@
   python3 scripts/record.py target/rec/picker.tape --setup target/rec/setup.sh
 
 The tape lives in its own directory under target/, and the sandbox goes in that
-directory's `sandbox`: a home, state directory, zmx directory and Git config of
-its own, with `shoal` the development build and a daemon running for it. VHS
+directory's `sandbox`: a home and Git config of its own, with `shoal` the
+development build and a daemon running for it. Its state, zmx, tmux and Zellij
+directories, which hold sockets, go in a short directory under /tmp named after
+it, so their socket paths fit however long the tape's path is. VHS
 runs from the tape's directory with the sandbox's environment, so the tape needs
 no setup of its own and its Output paths are relative to that directory.
 

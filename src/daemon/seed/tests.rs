@@ -1,5 +1,7 @@
 use super::*;
-use crate::test_support::{commit, git, install_test_script, manager, native_cloning, repository};
+use crate::daemon::test_support::{
+    commit, git, install_test_script, manager, native_cloning, repository,
+};
 use std::path::PathBuf;
 
 fn modified(path: &Path) -> std::time::SystemTime {
@@ -8,7 +10,7 @@ fn modified(path: &Path) -> std::time::SystemTime {
 
 /// Builds wait under host pressure; tests choose the pressure they see.
 async fn configure(manager: &Manager, text: &str) {
-    crate::test_support::configure(manager, text).await;
+    crate::daemon::test_support::configure(manager, text).await;
 }
 
 const NO_PRESSURE: &str =

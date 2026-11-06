@@ -119,7 +119,12 @@ impl Manager {
             "the agent of chat {} reported no session to fork",
             chat.name
         );
-        let repo = self.repository(&chat.repository_id).await?;
+        let Some(repo) = self.chat_repository(&chat).await? else {
+            anyhow::bail!(
+                "chat {} has no repository, and shoal move copies only a chat in one",
+                chat.name
+            );
+        };
         let mut manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
         manifest.copy = Some(Copied::default());
         Ok(Prepared {

@@ -917,8 +917,9 @@ Every Codex launch, chats included, adds
 sandbox otherwise blocks the daemon's socket and allows a single socket only
 along with the network.
 Claude and Codex launches, including Happy's, trust the repository's checkout and
-shared Shoal workspaces directory before launch, creating the agent's user config if
-needed and preserving other settings. Claude Code looks up a worktree's trust under
+shared Shoal workspaces directory before launch, or for a chat without a repository
+`root_dir`, whose entry stays, creating the agent's user config if needed and
+preserving other settings. Claude Code looks up a worktree's trust under
 the checkout, not under parent directories above the worktree. An explicitly placed
 workspace outside the workspaces directory gets its own trust entry.
 Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
@@ -1915,6 +1916,38 @@ events go on up, to you at the top, and one removed before receiving their
 events gives you the notifications they stand for. The chat's `parent` and
 `children` fields name the spaces above and below it.
 
+### Master session
+
+`shoal start --mode orchestrate [--parent SPACE] [--agent NAME] [--name NAME] [--here] [-- ARGS]`
+starts a chat without a repository, a master session whose agent manages the
+spaces of every registered repository; any mode with `repository = false`
+starts its chat the same way. It runs in `root_dir`, with its `TMPDIR` in
+`root_dir`'s `.tmp`, and its settings come from the global config alone; a
+repository, `--repo` or `--issue` is refused, and `--in` starts the mode's
+chat in that workspace's worktree, in its repository, instead. The agent waits for you
+to speak first, as in any chat. `shoal work` and `--json` list it with a null
+`repository_id` and the `root_dir` it started in, where it resumes and keeps its
+`TMPDIR` however `root_dir` changes later, and it is stopped, resumed and removed
+like any other chat; removing it first removes every space below it, in every
+repository.
+
+`shoal start` run from it starts workspaces and chats below it in any
+registered repository, whose messages, questions, completion, approval
+requests and activity reach it first, as they reach any parent; spaces you
+start stay top-level and report to you, and several master sessions may run at
+once. A space without a repository is the only parent of a space in another
+repository. Its scope reaches every space on the machine: it lists and reads
+them, messages their agents, answers their questions, holds them, stops and
+queues their agents, resumes the ones it or the spaces below it stopped, and
+removes those you hold nothing in, under the
+[scoped workspace commands](#scoped-workspace-commands) rules. It decides only
+the requests routed to it, with a grant; merging, PR verdicts, CI approval and
+your notifications stay with you. It reads the issues and PRs of every
+registered repository and changes them only through a space of their
+repository, as `--space` names one, keeps no attached files, and [`shoal move`](#move-a-space-to-another-machine)
+refuses it. The [`shoal-orchestrator`](../skills/shoal-orchestrator/SKILL.md)
+skill is its unscoped counterpart, for an agent in your own terminal.
+
 ### Planning issues
 
 `shoal start --mode plan --issue [ISSUE]` starts a [chat](#chats) that settles
@@ -2166,7 +2199,10 @@ ends a lease grant.
 ### Modes and rules
 
 A mode decides what an agent is told and the kind of space it starts in.
-`[modes.<name>]` sets `kind`, `workspace` or `chat`; `rules`, the named rules
+`[modes.<name>]` sets `kind`, `workspace` or `chat`; `repository`, `true` by
+default, where `false` starts a [chat without a repository](#master-session)
+and is refused with any other kind or in a repository's config, since no
+repository's config applies to such a chat; `rules`, the named rules
 the agent's system text carries, in order, which a workspace agent restored
 with its built-in resume arguments receives again (a configured
 `resume_command` is the user's own and gets none); and `instructions`, sent once after
@@ -2179,6 +2215,7 @@ these modes:
 | `worker` | workspace | `worker` | [implement the subject](../src/client/config/modes/worker.md) |
 | `chat` | chat | `chat` | none |
 | `plan` | chat | `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
+| `orchestrate` | chat without a repository | `chat`, [`orchestrate`](../src/client/config/rules/orchestrate.md) | none |
 
 `shoal start` starts every new agent, in the mode `--mode` names, and in the
 kind of space the mode names unless `--chat`, `--in` or `--worktree` says
@@ -2188,14 +2225,15 @@ picker with the kind of space each starts in, and without one the start takes
 `worker`, or `chat` with `--chat` or `--in`, which the picker lists first. The
 picker opens once the start has checked the arguments it was given, and offers
 only the modes of the kind of space they ask for, a workspace for a branch,
-`--base` or another flag only a workspace takes, a chat for `--name`; when
-only one fits, the start takes it without asking, as it takes `plan` for
-`--issue` without a value, which no other mode accepts. A
+`--base` or another flag only a workspace takes, a chat for `--name`, and only
+modes in a repository when they name a repository or issue or ask for a kind
+of space; when only one fits, the start takes it without asking, as it takes
+`plan` for `--issue` without a value, which no other mode accepts. A
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 and `shoal work`, `shoal status`, `shoal inbox`, the queue and the menu name a
 mode other than `worker` for a workspace or `chat` for a chat. The built-in rules have no text of their own except `review`, the style
-of a [local review](#local-reviews).
+of a [local review](#local-reviews), and `orchestrate`.
 
 A mode's instructions may also be written as `modes/<name>.md` and a rule's
 text as `rules/<name>.md`, beside `config.toml`, beside the local config, or in
@@ -2218,8 +2256,9 @@ it loads when it needs them; the facts of its space; the space rules; its
 mode's rules; and its subject with its mode's instructions. Every agent's system
 text, in any mode, starts with Shoal's guidance: the facts of the kind of space
 it runs in, a [workspace](../src/client/config/templates/facts/workspace.md), a
-[chat in the checkout](../src/client/config/templates/facts/checkout_chat.md)
-or a [chat in a workspace's worktree](../src/client/config/templates/facts/workspace_chat.md),
+[chat in the checkout](../src/client/config/templates/facts/checkout_chat.md),
+a [chat in a workspace's worktree](../src/client/config/templates/facts/workspace_chat.md)
+or a [chat without a repository](../src/client/config/templates/facts/root_chat.md),
 which describe the space and state no practices; then the
 [space rules](../src/client/config/templates/space_rules.md), to run `shoal done`
 once its work is done and to name its space with `shoal work rename`. Its
@@ -2786,7 +2825,10 @@ chat, queued agent launches or a starting CI job, a queued or running review, a 
 operation, a checkout leased as a repository resource, another repository's
 checkout or workspace or Shoal's state inside its directory, or a process
 other than those commands and agents whose working directory is inside it, so
-leave those directories first. The move is recorded before anything moves; a failed or
+leave those directories first. A [master session](#master-session) or any
+other chat without a repository, running or stopped, also refuses the move,
+since it runs in `root_dir` and keeps its temporary directory there; remove it
+first, and the move deletes the `.tmp` it leaves. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
 repository refuses other changes until the next `move root` or daemon start
 completes it. Agent trust for the old paths is removed, and the new paths are
@@ -3284,11 +3326,17 @@ shared `/tmp`; a `TMPDIR` in `[env]` replaces it. The daemon creates the
 directory, readable only by you, when it starts a process in the workspace,
 exports its environment or records the chat, reserving the repository directory
 for a registration without one. It marks `.tmp` with the repository and refuses
-to start the process or chat while an unmarked `.tmp` is in the way.
+to start the process or chat while an unmarked `.tmp` is in the way. A chat
+without a repository has its directory in the `.tmp` of the `root_dir` it started
+in, where it stays when `root_dir` changes, and the daemon marks that `.tmp` with
+its state directory: a daemon with another state directory that
+shares `root_dir` neither uses nor deletes it, and starts no chat without a
+repository there.
 
 Nothing in it is kept: removing the workspace or chat deletes the
 directory without a checkpoint, and cleanup deletes those that belong to no
-workspace or chat of the repository. Removing the repository deletes `.tmp`.
+workspace or chat of the repository, or to no chat without a repository.
+Removing the repository deletes `.tmp`.
 
 ### Remove a workspace
 
@@ -4751,7 +4799,8 @@ A `type: "chat"` line records a chat's start, rename, stop, restore or removal:
 its `id`, `created_at`, `kind` (`chat_started`, `chat_renamed`, `chat_saved`
 when it stops, whether Shoal saved it or its agent exited, `chat_restored`, or
 `chat_ended` when it is removed) and a `chat` object with its `id`,
-`repository_id`, `name` (the new one after a rename), `agent`, `pid` and
+`repository_id` (null for a chat without a repository), `name` (the new one
+after a rename), `agent`, `pid` and
 Unix-seconds `started_at`, and on a stop its `restore`: `automatic` or `resume`.
 
 A `type: "file"` line records a file [attached](#attached-files) to a workspace
@@ -4806,8 +4855,7 @@ with its record's `id`, `name`, `title` and `path`, when there are any. On a ter
 Ghostty, WezTerm, and Kitty show as a desktop notification (tmux needs
 `allow-passthrough`); other terminals ignore it. Repeated
 identical conflicts, cleanup failures and messages collapse into one entry until read;
-every agent exit is listed. `shoal work` and `daemon status` mention pending
-ones. Arbitrary `run` commands and manual `rm` are your own and record nothing.
+every agent exit is listed. `daemon status` mentions pending ones. Arbitrary `run` commands and manual `rm` are your own and record nothing.
 Scoped commands cannot read or clear notifications but may notify about their own
 workspace and withdraw those messages. Read entries older than the newest
 500 are dropped; unread ones stay.

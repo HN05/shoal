@@ -3,7 +3,10 @@ use anyhow::Result;
 
 use super::agent::AddSettings;
 use crate::{
-    cli::{context::Context, ui::ModeChoice},
+    cli::{
+        context::Context,
+        ui::{ModeChoice, ModeFit},
+    },
     model::SpaceKind,
 };
 
@@ -20,8 +23,8 @@ pub(super) async fn choose_add_mode(
         Some(ModeChoice::Named(mode)) => Ok(Some(mode)),
         Some(pick) => {
             let modes = &settings.get().await?.modes;
-            pick.chosen(ctx, modes, Some(SpaceKind::Workspace))
-                .map(Some)
+            let fit = ModeFit::in_repository(SpaceKind::Workspace);
+            pick.chosen(ctx, modes, fit).map(Some)
         }
     }
 }

@@ -35,6 +35,8 @@ mod happy;
 #[cfg(feature = "cli")]
 mod hooks;
 #[cfg(feature = "cli")]
+mod installed;
+#[cfg(feature = "cli")]
 mod paths;
 #[cfg(feature = "cli")]
 mod presets;
@@ -44,6 +46,8 @@ mod process;
 mod proxy;
 #[cfg(feature = "cli")]
 mod push_gate;
+#[cfg(feature = "cli")]
+mod refusal;
 #[cfg(feature = "cli")]
 mod removal;
 #[cfg(feature = "cli")]
@@ -58,8 +62,6 @@ mod service;
 mod sessions;
 #[cfg(feature = "cli")]
 mod shell;
-#[cfg(feature = "cli")]
-mod sim;
 #[cfg(all(test, feature = "cli"))]
 mod test_support;
 #[cfg(feature = "cli")]
@@ -68,6 +70,8 @@ mod tmp_dirs;
 mod tools;
 #[cfg(feature = "cli")]
 mod transfer;
+#[cfg(feature = "cli")]
+mod workers;
 
 #[cfg(feature = "cli")]
 use cli::Cli;
@@ -122,7 +126,7 @@ pub fn main() {
     // SAFETY: as above; only the chat this process starts was shown.
     unsafe { env::take_shown_chat() };
     profile::start();
-    client::connection::supervise(&cli::client::Command);
+    client::connection::supervise(&service::Command);
     run_cli(cli);
 }
 

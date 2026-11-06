@@ -1,6 +1,6 @@
 //! `shoal start`: start an agent in a mode, which decides what the agent is
-//! told and, unless the command says otherwise, whether it starts in a
-//! workspace or a chat.
+//! told, whether it starts in a repository and, unless the command says
+//! otherwise, whether it starts in a workspace or a chat.
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
@@ -35,10 +35,10 @@ pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
         args.parent = Some(space_id(ctx, parent).await?);
     }
     ensure_copy_fits(&args)?;
-    let (mode, kind) = mode_and_kind(ctx, &mut args).await?;
-    match kind {
-        SpaceKind::Workspace => in_workspace(ctx, args, mode).await,
-        SpaceKind::Chat => in_chat(ctx, args, mode).await,
+    match start_of(ctx, &mut args).await? {
+        Start::Workspace(mode) => in_workspace(ctx, args, mode).await,
+        Start::Chat(mode) => in_chat(ctx, args, mode).await,
+        Start::Outside(mode) => outside_repositories(ctx, args, mode).await,
     }
 }
 
@@ -100,14 +100,22 @@ async fn space_id(ctx: &Context, selector: &str) -> Result<String> {
         .to_owned())
 }
 
-/// The mode the start takes and the kind of space it starts in: the mode
-/// `--mode` names, else on a terminal the plan mode for `--issue` without
-/// a value, which no other mode takes, or one picked once the arguments
-/// given are checked, else the [`default_mode`]. When the arguments decide
-/// the kind, its own start picks among the modes of that kind after its
-/// checks; otherwise the mode is picked here once the repository and
-/// parent are checked.
-async fn mode_and_kind(ctx: &Context, args: &mut StartArgs) -> Result<(ModeChoice, SpaceKind)> {
+/// Where a start goes, and in which mode.
+enum Start {
+    Workspace(ModeChoice),
+    /// A chat in a repository.
+    Chat(ModeChoice),
+    /// A chat without a repository, in the mode named or picked here.
+    Outside(String),
+}
+
+/// Where the start goes and its mode: the mode `--mode` names, else on a
+/// terminal the plan mode for `--issue` without a value, which no other
+/// mode takes, or one picked once the arguments given are checked, else
+/// the [`default_mode`]. When the arguments decide the kind of space, its
+/// own start picks among the modes of that kind in a repository after its
+/// checks; otherwise the mode is picked here among them all.
+async fn start_of(ctx: &Context, args: &mut StartArgs) -> Result<Start> {
     let named = match &args.mode {
         Some(mode) => Some(mode.clone()),
         None if !ui::can_pick(ctx) => Some(default_mode(args).to_owned()),
@@ -115,18 +123,31 @@ async fn mode_and_kind(ctx: &Context, args: &mut StartArgs) -> Result<(ModeChoic
         None => None,
     };
     if let Some(mode) = named {
-        let kind = kind(ctx, args, &mode).await?;
-        ensure_fits(args, kind, Some(&mode))?;
-        return Ok((ModeChoice::Named(mode), kind));
+        return shaped(ctx, args, mode).await;
     }
     let forced = forced_kind(args);
     if let Some(kind) = forced.or_else(|| fitting_kind(args)) {
         ensure_fits(args, kind, None)?;
-        return Ok((ModeChoice::Pick { forced }, kind));
+        let pick = ModeChoice::Pick { forced };
+        return Ok(match kind {
+            SpaceKind::Workspace => Start::Workspace(pick),
+            SpaceKind::Chat => Start::Chat(pick),
+        });
     }
     let mode = picked_mode(ctx, args).await?;
-    let kind = kind(ctx, args, &mode).await?;
-    Ok((ModeChoice::Named(mode), kind))
+    shaped(ctx, args, mode).await
+}
+
+/// Where a start in `mode` goes, by its [`shape`], refusing the flags
+/// that kind of space cannot use.
+async fn shaped(ctx: &Context, args: &StartArgs, mode: String) -> Result<Start> {
+    let (kind, repository) = shape(ctx, args, &mode).await?;
+    ensure_fits(args, kind, Some(&mode))?;
+    Ok(match (kind, repository) {
+        (SpaceKind::Workspace, _) => Start::Workspace(ModeChoice::Named(mode)),
+        (SpaceKind::Chat, true) => Start::Chat(ModeChoice::Named(mode)),
+        (SpaceKind::Chat, false) => Start::Outside(mode),
+    })
 }
 
 /// The kind of space the arguments other than the mode fit: a workspace
@@ -144,15 +165,30 @@ fn fitting_kind(args: &StartArgs) -> Option<SpaceKind> {
     }
 }
 
-/// The mode picked among them all for a start whose arguments fit either
-/// kind of space, once its repository, parent, agent and model are checked.
+/// The mode picked for a start whose arguments fit either kind of space,
+/// once the agent and model, and any repository or issue it names with its
+/// parent, are checked: among the modes in a repository when it names one,
+/// else among them all, by the current repository's settings or else the
+/// global config's.
 async fn picked_mode(ctx: &Context, args: &mut StartArgs) -> Result<String> {
-    let repository = checked_repository(ctx, args).await?;
-    let target = ConfigTarget::Repository(repository);
-    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    let names_repository = [&args.repository, &args.repository_override]
+        .iter()
+        .any(|named| named.is_some())
+        || args.issue.is_some();
+    let settings = match names_repository {
+        true => {
+            let target = ConfigTarget::Repository(checked_repository(ctx, args).await?);
+            crate::client::workspaces::settings(&ctx.paths, target).await?
+        }
+        false => mode_settings(ctx, args).await?,
+    };
     let model = args.model.clone().into();
     chat::checked_agent(&settings, args.agent.clone(), &model)?;
-    ModeChoice::Pick { forced: None }.chosen(ctx, &settings.modes, None)
+    let fit = ui::ModeFit {
+        kind: None,
+        repository: names_repository.then_some(true),
+    };
+    ModeChoice::Pick { forced: None }.chosen(ctx, &settings.modes, fit)
 }
 
 /// The repository the start goes in, resolved and checked with its parent
@@ -190,22 +226,36 @@ fn default_mode(args: &StartArgs) -> &'static str {
     }
 }
 
-/// The kind of space the start creates: what [`forced_kind`] says, else
-/// the kind of `mode`, which must exist before anything is created. The
-/// default mode always does and always starts in a workspace, so only
-/// another mode's start asks the daemon; a chat's start checks its mode
-/// itself once it has the repository.
-async fn kind(ctx: &Context, args: &StartArgs, mode: &str) -> Result<SpaceKind> {
-    let forced = forced_kind(args);
-    if forced == Some(SpaceKind::Chat) {
-        return Ok(SpaceKind::Chat);
+/// The kind of space the start creates, what `--chat`, `--in`,
+/// `--worktree`, `--fork` or a copy says, else the kind of `mode`, which
+/// must exist before anything is created, and whether `mode` starts it in a
+/// repository. The default mode always exists and always starts in a
+/// workspace, and a chat in a workspace's worktree belongs to its
+/// repository, so neither asks the daemon; a chat's start checks a mode
+/// found nowhere here itself once it has the repository.
+async fn shape(ctx: &Context, args: &StartArgs, mode: &str) -> Result<(SpaceKind, bool)> {
+    if args.in_workspace.is_some() {
+        return Ok((SpaceKind::Chat, true));
     }
-    if mode == modes::DEFAULT {
-        return Ok(SpaceKind::Workspace);
+    let asks_chat = args.chat;
+    if mode == modes::DEFAULT && !asks_chat {
+        return Ok((SpaceKind::Workspace, true));
     }
     let settings = mode_settings(ctx, args).await?;
-    let kind = modes::get(&settings.modes, mode)?.kind;
-    Ok(forced.unwrap_or(kind))
+    let found = modes::get(&settings.modes, mode);
+    if asks_chat {
+        return Ok((SpaceKind::Chat, found.map_or(true, |mode| mode.repository)));
+    }
+    let found = found?;
+    let forced = args.worktree || args.fork || args.copy.is_set();
+    ensure!(
+        found.repository || !forced,
+        "mode {mode} starts a chat without a repository; leave out --worktree, --fork, --copy and --checkpoint"
+    );
+    Ok(match forced {
+        true => (SpaceKind::Workspace, true),
+        false => (found.kind, found.repository),
+    })
 }
 
 /// The kind of space `--chat`, `--in`, `--worktree`, `--fork` or a copy
@@ -362,19 +412,8 @@ async fn forked(
 
 /// Start the agent in a chat in a repository's checkout, or with `--in` in
 /// a workspace's worktree.
-async fn in_chat(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32> {
-    let options = chat::Options {
-        agent: args.agent,
-        place: chat::ChatPlace::here(args.here),
-        name: args.name,
-        model: args.model.into(),
-        args: args.args,
-        session: args.session,
-        fork: args.fork_session,
-        restore: args.restore,
-        handoff: args.handoff,
-        parent: args.parent,
-    };
+async fn in_chat(ctx: &Context, mut args: StartArgs, mode: ModeChoice) -> Result<i32> {
+    let options = chat_options(&mut args);
     let (repository, issue) = chat_target(
         args.repository,
         args.repository_override,
@@ -391,6 +430,45 @@ async fn in_chat(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Result<i32
     match args.in_workspace {
         Some(workspace) => chat::start_in_workspace(ctx, workspace, subject, options).await,
         None => chat::start(ctx, repository, subject, options).await,
+    }
+}
+
+/// Start the agent in a chat without a repository, in `root_dir`; it starts
+/// on no repository or issue.
+async fn outside_repositories(ctx: &Context, mut args: StartArgs, mode: String) -> Result<i32> {
+    ensure_no_repository(&args, &mode)?;
+    chat::start_outside_repositories(ctx, mode, chat_options(&mut args)).await
+}
+
+/// Refuse a repository or issue `args` names for `mode`, which starts a chat
+/// without a repository.
+fn ensure_no_repository(args: &StartArgs, mode: &str) -> Result<()> {
+    let names = [
+        ("<repository>", args.repository.is_some()),
+        ("--repo", args.repository_override.is_some()),
+        ("--issue", args.issue.is_some()),
+    ];
+    if let Some((flag, _)) = names.iter().find(|(_, set)| *set) {
+        anyhow::bail!(
+            "{flag} does not apply to mode {mode}, which starts a chat without a repository"
+        );
+    }
+    Ok(())
+}
+
+/// How `args` start a chat, taken from them.
+fn chat_options(args: &mut StartArgs) -> chat::Options {
+    chat::Options {
+        agent: args.agent.take(),
+        place: chat::ChatPlace::here(args.here),
+        name: args.name.take(),
+        model: std::mem::take(&mut args.model).into(),
+        args: std::mem::take(&mut args.args),
+        session: args.session.take(),
+        fork: args.fork_session,
+        restore: args.restore.take(),
+        handoff: args.handoff.take(),
+        parent: args.parent.take(),
     }
 }
 

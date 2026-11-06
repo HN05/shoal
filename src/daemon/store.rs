@@ -1,14 +1,14 @@
 //! SQLite persistence: schema migrations, row mappers, and the small
 //! guards every mutation shares.
-use crate::daemon::refusal::{Reason, Refusal};
+use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Row};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
+    client::sim::CleanRequestStatus,
     model::{Execution, LinkedItem, PortReservation, Relation, Repository, SpaceLinks, Workspace},
-    sim::audit::CleanRequestStatus,
     state::{ExecutionState, WorkspaceState},
 };
 

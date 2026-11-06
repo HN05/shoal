@@ -17,7 +17,7 @@ pub(crate) use crate::client::executions::{
 };
 use crate::{
     agent::ModelChoice,
-    cli::commands::configured,
+    config::named_commands,
     fsutil::{Permissions, ReplaceOptions},
     model::Workspace,
     paths::Paths,
@@ -149,7 +149,7 @@ impl RestoreCommand<'_> {
     /// and proxy arguments, and whether it carries the prompt. It is the
     /// user's own, so Shoal adds no rules to it.
     async fn configured(self, argv: &[String]) -> Result<(Vec<OsString>, bool)> {
-        let mut command = configured::expand_with_fields(
+        let mut command = named_commands::expand_with_fields(
             self.paths,
             &self.settings.resume_commands,
             self.name,
@@ -186,7 +186,7 @@ impl RestoreCommand<'_> {
         if !takes_field {
             args.push(self.prompt.to_owned());
         }
-        configured::expand_with_fields(
+        named_commands::expand_with_fields(
             self.paths,
             &self.settings.launchers,
             self.name,

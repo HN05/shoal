@@ -1,10 +1,12 @@
 use super::*;
 use crate::{
-    daemon::scope::{self, Caller},
+    daemon::{
+        scope::{self, Caller},
+        test_support::{manager, repository},
+    },
     model::HoldPlacer,
     protocol::HoldMethod,
     state::WorkspaceState,
-    test_support::{manager, repository},
 };
 
 #[tokio::test]

@@ -1,6 +1,6 @@
 use super::*;
-use crate::{
-    daemon::approvals::proposals::PR,
+use crate::daemon::{
+    approvals::proposals::PR,
     test_support::{manager, repository},
 };
 

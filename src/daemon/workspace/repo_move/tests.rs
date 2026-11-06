@@ -1,10 +1,8 @@
 use super::*;
-use crate::{
-    daemon::{
-        workspace::{ExecutionKind, identity},
-        workspace_files::Attacher,
-    },
+use crate::daemon::{
     test_support,
+    workspace::{ExecutionKind, identity},
+    workspace_files::Attacher,
 };
 use std::sync::Arc;
 
@@ -725,5 +723,56 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     let kept = manager.attached_files(&workspace.name).await?;
     assert!(kept[0].path.starts_with(root.join("origin")), "{kept:?}");
     assert!(kept[0].path.exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_root_move_waits_for_chats_without_a_repository_and_takes_their_temporary_directories()
+-> Result<()> {
+    let (temp, manager) = test_support::indexed_manager().await;
+    let origin = test_support::repository(temp.path(), "origin");
+    let repo = manager
+        .register_repository(format!("file://{}", origin.display()).into(), None, None)
+        .await?;
+    let root = (repo.workspaces_dir.as_deref())
+        .and_then(Path::parent)
+        .context("no root")?
+        .to_owned();
+    let process = test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let new = crate::daemon::chats::NewChat {
+        name: "master".into(),
+        agent: "claude".into(),
+        mode: "orchestrate".into(),
+        pid: process.id(),
+        origin: None,
+        hands_over: false,
+        parent: None,
+    };
+    let chat = manager.start_new_chat(None, None, new).await?;
+    let error = manager
+        .plan_repository_moves(None, Layout::Excluded)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("master"), "{error:#}");
+    assert!(manager.move_repositories(Layout::Excluded).await.is_err());
+
+    process.kill();
+    manager.stop_finished_chats().await?;
+    manager.remove_chat(&chat.id, None).await?;
+    assert!(root.join(".tmp").is_dir());
+    // A move elsewhere plans while root_dir is still the root it leaves.
+    let elsewhere = fs::canonicalize(temp.path())?.join("elsewhere");
+    manager
+        .plan_repository_moves(Some(&elsewhere), Layout::Regular)
+        .await?;
+    assert!(!root.join(".tmp").exists());
+    // So does a move into the root it links, once a chat's leftover
+    // directory is there again.
+    (manager.outside_tmp_layout())
+        .context("no layout")?
+        .prepare("leftover")?;
+    manager.move_repositories(Layout::Excluded).await?;
+    assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
+    assert!(!root.join(".tmp").exists());
     Ok(())
 }

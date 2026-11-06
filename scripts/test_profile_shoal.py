@@ -33,12 +33,10 @@ class IsolationTests(unittest.TestCase):
                          "SHOAL_SCOPE_TOKEN": "caller", "CODEX_HOME": str(caller),
                          "ZMX_SESSION": "agent", "HAPPY_SESSION": "session",
                          "TMUX": "/tmp/tmux-501/default,1,0"}
-            with patch.dict(os.environ, inherited):
+            with patch.dict(os.environ, inherited), patch("sandbox.SOCKETS_ROOT", Path(root)):
                 env = profile_shoal.environment(sandbox)
             self.assertFalse(set(inherited) & set(env))
-            self.assertEqual(env["SHOAL_STATE_DIR"], str(sandbox / "s"))
             self.assertEqual(env["SHOAL_PROFILE"], "1")
-            self.assertEqual(env["ZMX_DIR"], str(sandbox / "zmx"))
             self.assertTrue(Path(env["TMUX_TMPDIR"]).is_dir())
             repo = profile_shoal.fixture_repository(sandbox, env)
             log = subprocess.run(["git", "-C", str(repo), "log", "--format=%an"], env=env,

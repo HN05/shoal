@@ -10,17 +10,31 @@ use super::{Configured, Origin, Places};
 use crate::{cli::context::Context, config::Effective, model::Repository};
 
 /// The repository whose name a configured group's name takes, looked up
-/// only once a name is needed.
+/// only once a name is needed, or for a chat without one, the `root_dir`
+/// it runs in, whose directory name the group takes.
 pub(super) enum Repo<'a> {
     Selected(crate::repository::Selector),
     Id(&'a str),
     Known(&'a Repository),
+    Root(&'a Path),
 }
 
-impl Repo<'_> {
+impl<'a> Repo<'a> {
+    /// The repository of a chat, or the `root_dir` of a chat without one.
+    pub(super) fn of_chat(repository: Option<&'a Repository>, root: &'a Path) -> Self {
+        match repository {
+            Some(repository) => Self::Known(repository),
+            None => Self::Root(root),
+        }
+    }
+
     async fn name(&self, ctx: &Context) -> Result<String> {
         let repos = match self {
             Self::Known(repo) => return Ok(crate::repository::name(repo).to_owned()),
+            Self::Root(root) => {
+                let name = root.file_name().unwrap_or(root.as_os_str());
+                return Ok(name.to_string_lossy().into_owned());
+            }
             Self::Selected(_) | Self::Id(_) => {
                 crate::client::repositories::list(&ctx.paths).await?
             }

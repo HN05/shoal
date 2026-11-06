@@ -22,7 +22,6 @@ use crate::{
     process::identity::{self, Identity},
     sessions::Origin,
     state::ChatRestore,
-    tmp_dirs,
 };
 
 impl Manager {
@@ -159,9 +158,10 @@ impl Manager {
         if let Some(workspace) = &saved.workspace {
             self.chat_workspace(&workspace.id).await?;
         }
-        let repository = self
-            .reserve_repository_directory(&saved.repository_id)
-            .await?;
+        let repository = match &saved.repository_id {
+            Some(id) => Some(self.reserve_repository_directory(id).await?),
+            None => None,
+        };
         if let Some(origin) = &origin {
             self.release_place(origin).await?;
         }
@@ -176,8 +176,12 @@ impl Manager {
             origin,
             hands_over,
         };
-        let chat = self.store.run(move |db| restore(db, &restored)).await?;
-        self.give_restored_tmp_dir(chat, &repository, pid).await
+        let owner = self.root_dir_owner();
+        let chat = (self.store)
+            .run(move |db| restore(db, &owner, &restored))
+            .await?;
+        self.give_restored_tmp_dir(chat, repository.as_ref(), pid)
+            .await
     }
 
     /// `chat`, just restored as process `pid`, with its temporary directory,
@@ -186,17 +190,20 @@ impl Manager {
     async fn give_restored_tmp_dir(
         &self,
         mut chat: Chat,
-        repository: &Repository,
+        repository: Option<&Repository>,
         pid: u32,
     ) -> Result<Chat> {
-        match tmp_dirs::directory(repository, &chat.id) {
+        match self.chat_tmp_dir(repository, &chat) {
             Ok(tmp_dir) => {
                 chat.tmp_dir = tmp_dir;
                 Ok(chat)
             }
             Err(error) => {
                 let id = chat.id.clone();
-                let (_, released) = self.store.run(move |db| resave(db, &id, pid)).await?;
+                let owner = self.root_dir_owner();
+                let (_, released) = (self.store)
+                    .run(move |db| resave(db, &owner, &id, pid))
+                    .await?;
                 self.ask_user_about(&released).await;
                 Err(error)
             }
@@ -209,7 +216,10 @@ impl Manager {
     /// it, and the user, who may not see where it ran, learns why.
     pub async fn return_to_saved(&self, id: &str, pid: u32, error: &str) -> Result<()> {
         let chat = id.to_owned();
-        let (saved, released) = self.store.run(move |db| resave(db, &chat, pid)).await?;
+        let owner = self.root_dir_owner();
+        let (saved, released) = (self.store)
+            .run(move |db| resave(db, &owner, &chat, pid))
+            .await?;
         self.ask_user_about(&released).await;
         self.notify_restore_failed(&saved, error).await;
         Ok(())
@@ -303,14 +313,19 @@ fn live_unique_id(process: &Identity) -> Result<Option<String>> {
 /// Mark the chat `id` saved for `shoal resume` while it runs as process
 /// `pid`, and refuse it once it runs as another, returning it with the
 /// requests it decided, given back to the user.
-fn resave(db: &mut Connection, id: &str, pid: u32) -> Result<(Chat, Vec<ApprovalRequest>)> {
+fn resave(
+    db: &mut Connection,
+    owner: &std::path::Path,
+    id: &str,
+    pid: u32,
+) -> Result<(Chat, Vec<ApprovalRequest>)> {
     let tx = db.transaction()?;
     tx.execute(
         "UPDATE chats SET restore=?3,stopped_at=unixepoch(),saved=1
          WHERE id=?1 AND pid=?2 AND restore IS NULL",
         params![id, pid, ChatRestore::Resume],
     )?;
-    let chat = recorded(&tx)?
+    let chat = recorded(&tx, owner)?
         .into_iter()
         .find(|chat| chat.id == id)
         .context("the chat ended")?;
@@ -350,7 +365,7 @@ pub(super) fn still_runs(db: &Connection, chat: &Chat) -> Result<bool> {
 /// A stopped chat that runs again.
 struct Restored {
     id: String,
-    repository: String,
+    repository: Option<String>,
     /// The workspace whose worktree it runs in.
     workspace: Option<String>,
     /// The process it runs as, or that hands it to a session it starts.
@@ -363,9 +378,10 @@ struct Restored {
 /// is moved when it hands over, unless a restore took it first. The check
 /// before it found nothing its stops signalled still running, nor anything
 /// they started.
-fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
+fn restore(db: &mut Connection, owner: &std::path::Path, restored: &Restored) -> Result<Chat> {
     let tx = db.transaction()?;
-    ensure_place_free(&tx, &restored.repository, restored.workspace.as_deref())?;
+    let repository = restored.repository.as_deref();
+    ensure_place_free(&tx, repository, restored.workspace.as_deref())?;
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL,stopped_at=NULL,saved=0,
             unique_id=?6
@@ -385,7 +401,7 @@ fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
     )?;
     ensure!(updated == 1, "the chat is no longer stopped");
     stopped::forget(&tx, &restored.id)?;
-    let chat = recorded(&tx)?
+    let chat = recorded(&tx, owner)?
         .into_iter()
         .find(|chat| chat.id == restored.id)
         .context("the chat ended")?;

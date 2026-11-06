@@ -1,5 +1,5 @@
 use super::*;
-use crate::{daemon::notifications::NotificationKind, test_support::manager};
+use crate::daemon::{notifications::NotificationKind, test_support::manager};
 
 #[tokio::test]
 async fn a_long_notification_listing_goes_in_pages() {

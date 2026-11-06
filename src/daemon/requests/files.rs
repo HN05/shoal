@@ -79,8 +79,8 @@ async fn narrow_to_removed(
 ) -> Result<()> {
     let space = manager.file_space(workspace).await?;
     let below = match &space.parent_id {
-        Some(parent) => manager.within_subtree(&caller.space_id, parent).await?,
-        None => false,
+        Some(parent) => manager.reaches(caller, parent).await?,
+        None => manager.reach_root(Some(caller)).await?.is_none(),
     };
     ensure!(
         below,

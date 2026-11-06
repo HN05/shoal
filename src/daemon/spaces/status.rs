@@ -54,7 +54,7 @@ impl Manager {
             }
             PresentSpace::Chat(chat) => {
                 let records = self.chat_records(&chat.id, chat.completion.clone()).await?;
-                let checkout = self.repository(&chat.repository_id).await?.path;
+                let checkout = self.chat_checkout_path(&chat).await?;
                 let chat = Box::new(chat);
                 (SpaceDetail::Chat { chat }, records, checkout)
             }

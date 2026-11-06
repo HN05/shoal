@@ -1,10 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
-    daemon::{notifications::NotificationKind, workspace::Manager},
+    daemon::{
+        notifications::NotificationKind,
+        test_support::{commit, git, manager, repository},
+        workspace::Manager,
+    },
     model::Repository,
     removal::{InspectionPolicy, UnsavedWork},
-    test_support::{commit, git, manager, repository},
 };
 
 /// A clone registered in place and then marked as a contribution. Its
@@ -212,8 +215,9 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
 async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
-    let process =
-        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let process = crate::daemon::test_support::ProcessGroup::spawn(
+        std::process::Command::new("sleep").arg("600"),
+    );
     let chat = manager
         .start_chat(
             repo.id.clone().into(),

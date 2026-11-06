@@ -25,15 +25,33 @@ pub enum ModeChoice {
     },
 }
 
+/// The spaces a picked mode must start: of `kind`, and in a repository or
+/// not as `repository` says; either when `None`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ModeFit {
+    pub kind: Option<SpaceKind>,
+    pub repository: Option<bool>,
+}
+
+impl ModeFit {
+    /// A space of `kind` in a repository.
+    pub fn in_repository(kind: SpaceKind) -> Self {
+        Self {
+            kind: Some(kind),
+            repository: Some(true),
+        }
+    }
+}
+
 impl ModeChoice {
-    /// The mode of a start in `kind` of space, or in either when `None`:
-    /// the named one, which `modes` must define, else one picked among
-    /// those that start there, without asking when only one does.
+    /// The mode of a start in the spaces `fit` allows: the named one, which
+    /// `modes` must define, else one picked among those that start there,
+    /// without asking when only one does.
     pub fn chosen(
         self,
         ctx: &Context,
         modes: &BTreeMap<String, Mode>,
-        kind: Option<SpaceKind>,
+        fit: ModeFit,
     ) -> Result<String> {
         let forced = match self {
             Self::Named(name) => {
@@ -42,48 +60,52 @@ impl ModeChoice {
             }
             Self::Pick { forced } => forced,
         };
-        let entries = mode_entries(modes, kind, forced, Palette::picker());
+        let entries = mode_entries(modes, fit, forced, Palette::picker());
         match entries.as_slice() {
             [(only, _)] => Ok(only.clone()),
             _ => {
-                let kind = kind.map_or_else(|| "space".to_owned(), |kind| kind.to_string());
-                ensure!(!entries.is_empty(), "no mode starts in a {kind}");
+                ensure!(!entries.is_empty(), "no mode starts this kind of space");
                 pick(ctx, "Mode> ", entries)
             }
         }
     }
 }
 
-/// The picker's entries for the `modes` that start in `kind` of space,
-/// `forced` or else their own: the usual mode of that kind first, so Enter
-/// keeps it, then the rest by name, each with its kind of space.
+/// The picker's entries for the `modes` that start in the spaces `fit`
+/// allows, of the kind `forced` or else their own: the usual mode of that
+/// kind first, so Enter keeps it, then the rest by name, each with the
+/// space it starts.
 fn mode_entries(
     modes: &BTreeMap<String, Mode>,
-    kind: Option<SpaceKind>,
+    fit: ModeFit,
     forced: Option<SpaceKind>,
     palette: Palette,
 ) -> Entries {
-    let usual = match forced.or(kind) {
+    let usual = match forced.or(fit.kind) {
         Some(SpaceKind::Chat) => modes::CHAT,
         _ => modes::DEFAULT,
     };
     let mut modes: Vec<_> = (modes.iter())
-        .map(|(name, mode)| (name, forced.unwrap_or(mode.kind)))
-        .filter(|(_, starts_in)| kind.is_none_or(|kind| kind == *starts_in))
+        .map(|(name, mode)| (name, forced.unwrap_or(mode.kind), mode.repository))
+        .filter(|(_, kind, repository)| {
+            fit.kind.is_none_or(|fit| fit == *kind)
+                && fit.repository.is_none_or(|fit| fit == *repository)
+        })
         .collect();
-    modes.sort_by_key(|(name, _)| name.as_str() != usual);
+    modes.sort_by_key(|(name, _, _)| name.as_str() != usual);
     let rows = modes
         .iter()
-        .map(|(name, starts_in)| {
-            [
-                ((*name).clone(), None),
-                (starts_in.to_string(), Some(Style::Muted)),
-            ]
+        .map(|(name, kind, repository)| {
+            let space = match repository {
+                true => kind.to_string(),
+                false => format!("{kind} without a repository"),
+            };
+            [((*name).clone(), None), (space, Some(Style::Muted))]
         })
         .collect();
     let labels = aligned(rows, palette);
     (modes.into_iter())
-        .map(|(name, _)| name.clone())
+        .map(|(name, _, _)| name.clone())
         .zip(labels)
         .collect()
 }

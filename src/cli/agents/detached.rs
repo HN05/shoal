@@ -384,7 +384,7 @@ pub(super) async fn start_chat(
     let home = chat.home();
     if let Some(trust) = integration.trust_file() {
         trust
-            .trust_chat(ctx, repository, home, &Default::default())
+            .trust_chat(ctx, repository.registered(), home, &Default::default())
             .await;
     }
     // This process holds the chat until the session runs, which is not in
@@ -415,7 +415,7 @@ pub(super) async fn start_chat(
     let (record, prepared) =
         hand_to_session(ctx, app, home.path(), &record, &log, prepared).await?;
     let delivered = prepared.deliver().await;
-    report_chat(ctx, app, repository, &record, &log, delivered)?;
+    report_chat(ctx, app, repository.registered(), &record, &log, delivered)?;
     Ok(0)
 }
 
@@ -484,7 +484,7 @@ async fn hand_to_session(
 fn report_chat(
     ctx: &Context,
     app: &dyn App,
-    repository: &Repository,
+    repository: Option<&Repository>,
     chat: &Chat,
     log: &Path,
     delivered: Delivered,
@@ -500,7 +500,7 @@ fn report_chat(
             app.name(),
             app.agent(),
             chat.name,
-            crate::repository::name(repository),
+            repository.map_or("every repository", crate::repository::name),
             chat.pid,
             app.place(),
             log.display(),

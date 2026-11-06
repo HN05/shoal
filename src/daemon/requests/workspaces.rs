@@ -139,11 +139,10 @@ pub(super) async fn handle(
                 .rename_workspace(&workspace, &branch, caller.and_then(|c| c.execution_id()))
                 .await?,
         ),
-        WorkspaceMethod::ListWorkspaces => Body::Workspaces(
-            manager
-                .visible_workspaces(caller.map(|c| c.space_id.as_str()))
-                .await?,
-        ),
+        WorkspaceMethod::ListWorkspaces => {
+            let root = manager.reach_root(caller).await?;
+            Body::Workspaces(manager.visible_workspaces(root.as_deref()).await?)
+        }
         WorkspaceMethod::UntrackedWorktrees => {
             let listed = manager.untracked_worktrees().await;
             return Ok(Answer::pages(listed, Body::UntrackedWorktrees));
@@ -285,7 +284,10 @@ impl Scoped for WorkspaceMethod {
                 manager.parent_below(caller, parent).await?;
                 None
             }
-            WorkspaceMethod::CheckDependencies { .. } => None,
+            WorkspaceMethod::CheckDependencies { .. }
+            | WorkspaceMethod::LayeredConfig {
+                target: ConfigTarget::Global,
+            } => None,
             WorkspaceMethod::ListWorkspaces | WorkspaceMethod::FindSpaces { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
             | WorkspaceMethod::SetWorkspaceTitle { workspace, .. }

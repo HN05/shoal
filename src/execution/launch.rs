@@ -20,18 +20,15 @@ use super::{
     takeover, wake,
 };
 use crate::{
-    cli::{
-        client,
-        internal::{Worker, internal_command},
-    },
+    client::{approvals::Undecided, connection},
     config::repo::Pushes,
-    daemon::approvals::Undecided,
     env,
     model::ExecutionPlan,
     paths::Paths,
     process::{self, identity::Identity},
     protocol::{Body, ExecutionMethod, Reattach},
     sessions::Origin,
+    workers::{Worker, internal_command},
 };
 
 /// A tracked execution the daemon recorded, with the command it runs next and
@@ -306,7 +303,7 @@ async fn prepare_tracked_launch(
     // An agent's proxy reports through the installed binary after an
     // upgrade, so the binary is read now, before the upgrade can replace it.
     if agent.is_some() {
-        crate::cli::installed::remember_started();
+        crate::installed::remember_started();
     }
     let place = terminal_place(mode).await;
     let mut auth =
@@ -344,7 +341,7 @@ async fn prepare_taken_over_launch(
     taken: super::TakenOver,
     mode: &Mode,
 ) -> Result<TrackedLaunch> {
-    crate::cli::installed::remember_started();
+    crate::installed::remember_started();
     let super::TakenOver {
         workspace,
         agent,
@@ -590,7 +587,7 @@ async fn prepare_push_gate(paths: &Paths, workspace: &str) -> Result<crate::push
         workspace: workspace.to_owned(),
         on_branch: false,
     };
-    let workspace: crate::model::Workspace = client::request(paths, method).await?;
+    let workspace: crate::model::Workspace = connection::request(paths, method).await?;
     crate::push_gate::Launch::prepare(paths, &workspace.path)
         .await
         .context("[permissions] push")

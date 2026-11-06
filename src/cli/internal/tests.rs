@@ -2,20 +2,17 @@ use std::os::unix::ffi::OsStringExt;
 
 use clap::Parser;
 
-use super::*;
-use crate::cli::{Cli, Command, args::internal::InternalCommand};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
-#[test]
-fn shoal_argv_names_even_the_default_state_directory() {
-    let default = Paths {
-        state: "/home/.local/state/shoal".into(),
-        ..Paths::for_test("/home")
-    };
-    assert_eq!(
-        shoal_argv(&default).unwrap()[1..],
-        ["--state-dir", "/home/.local/state/shoal", "--text"]
-    );
-}
+use crate::{
+    cli::{Cli, Command, args::approvals::Decision, args::internal::InternalCommand},
+    paths::Paths,
+    sessions::HostName,
+    workers::{Worker, internal_command},
+};
 
 fn parse(worker: Worker<'_>, json: bool) -> InternalCommand {
     let root = tempfile::tempdir().unwrap();
@@ -183,8 +180,14 @@ fn approval_workers_round_trip_their_space_and_decision() {
     let paths = Paths::for_test(root.path());
     for decision in [Decision::Approve, Decision::Deny] {
         // The picker appends the highlighted row.
-        let mut args =
-            internal_command(&paths, false, Worker::ApprovalDecide { decision }).unwrap();
+        let mut args = internal_command(
+            &paths,
+            false,
+            Worker::ApprovalDecide {
+                decision: decision.into(),
+            },
+        )
+        .unwrap();
         args.push("3:12".into());
         let Some(Command::Internal {
             command:

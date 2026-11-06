@@ -11,11 +11,12 @@ use crate::{
     cli::{
         client::{self},
         context::Context,
-        installed::{Executable, arguments_with},
+        installed::arguments_with,
         output::{Palette, Style},
         ui::{self, Fallback},
     },
     client::notifications::{self, Notification, Watch},
+    installed::Executable,
 };
 
 pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32) -> Result<i32> {

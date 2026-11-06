@@ -2,7 +2,7 @@
 mod intent;
 
 use super::Manager;
-use crate::daemon::refusal::{Reason, Refusal};
+use crate::refusal::{Reason, Refusal};
 use crate::{daemon::store, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Result, bail, ensure};
 use intent::RenameIntent;

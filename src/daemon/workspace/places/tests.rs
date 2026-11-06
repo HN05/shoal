@@ -1,9 +1,11 @@
 use super::*;
 use crate::sessions::PlaceOwnership;
 use crate::{
-    daemon::workspace::ExecutionKind,
+    daemon::{
+        test_support::{manager, repository},
+        workspace::ExecutionKind,
+    },
     sessions::HostName,
-    test_support::{manager, repository},
 };
 use anyhow::Context as _;
 

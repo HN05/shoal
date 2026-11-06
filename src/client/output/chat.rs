@@ -8,7 +8,8 @@ use crate::client::output::outputs;
 pub struct BackgroundChat {
     pub chat: String,
     pub agent: String,
-    pub repository: String,
+    /// Its repository; none for a chat without one.
+    pub repository: Option<String>,
     /// Where it runs and how to reach it, as the host that runs it says.
     pub place: String,
 }

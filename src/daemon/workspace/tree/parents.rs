@@ -81,13 +81,26 @@ impl Manager {
         repository: &crate::repository::Selector,
         parent: Option<&str>,
     ) -> Result<()> {
+        self.ensure_parent_takes(Some(repository), parent).await
+    }
+
+    /// Refuse a space of the repository `repository` selects, or of none for
+    /// a chat without one, below `parent` when the parent cannot take it now.
+    pub(crate) async fn ensure_parent_takes(
+        &self,
+        repository: Option<&crate::repository::Selector>,
+        parent: Option<&str>,
+    ) -> Result<()> {
         let Some(parent) = parent.map(str::to_owned) else {
             return Ok(());
         };
-        let repository = self.repository(repository.clone()).await?;
+        let repository = match repository {
+            Some(repository) => Some(self.repository(repository.clone()).await?.id),
+            None => None,
+        };
         self.store
             .run(move |db| {
-                super::ready_parent(db, &repository.id, &parent)?;
+                super::ready_parent(db, repository.as_deref(), &parent)?;
                 Ok(())
             })
             .await
@@ -153,7 +166,7 @@ fn assign(
                 [workspace],
                 |row| row.get(0),
             )?;
-            super::ensure_parent(&tx, &repository, workspace, parent)?;
+            super::ensure_parent(&tx, Some(&repository), workspace, parent)?;
         }
         super::set_parent(&tx, workspace, parent)?;
     }

@@ -293,7 +293,7 @@ async fn expand(
     workspace: &Workspace,
     args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
-    expand_with_fields(
+    named_commands::expand_with_fields(
         paths,
         commands,
         name,
@@ -302,36 +302,6 @@ async fn expand(
         &[("{prompt}", OsStr::new(""))],
     )
     .await
-}
-
-/// `name`'s command for `workspace`, with `extra_fields` beside the
-/// workspace's own placeholders.
-pub(crate) async fn expand_with_fields(
-    paths: &Paths,
-    commands: &Commands,
-    name: &str,
-    workspace: &Workspace,
-    args: Vec<OsString>,
-    extra_fields: &[(&str, &OsStr)],
-) -> Result<Vec<OsString>> {
-    let argv = commands.get(name).ok_or_else(|| unknown_command(name))?;
-    let base = diff_base(paths, workspace, argv).await?;
-    let mut fields = named_commands::workspace_fields(workspace, base.as_deref());
-    fields.extend_from_slice(extra_fields);
-    Ok(named_commands::substitute(argv, &fields, args))
-}
-
-/// The workspace's diff base commit when `argv` uses it.
-async fn diff_base(
-    paths: &Paths,
-    workspace: &Workspace,
-    argv: &[String],
-) -> Result<Option<String>> {
-    if !named_commands::uses_diff_base(argv) {
-        return Ok(None);
-    }
-    let base = crate::client::workspaces::diff_base(paths, workspace.id.clone()).await?;
-    Ok(Some(base.commit))
 }
 
 /// `name`'s command with only `fields` known, for launches outside a workspace,

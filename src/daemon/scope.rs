@@ -8,6 +8,7 @@ use crate::{
 use anyhow::{Result, ensure};
 
 mod access;
+mod reach;
 
 pub(in crate::daemon) use access::NOT_NOW;
 
@@ -27,8 +28,9 @@ pub struct ScopedExecution {
     pub agent: Option<String>,
 }
 
-/// Resolve `token` and confine `method` to the caller's own space, a
-/// workspace or a chat, and the spaces below it; a chat in a workspace's
+/// Resolve `token` and confine `method` to the spaces the caller's scope
+/// reaches: its own space, a workspace or a chat, and the spaces below it,
+/// or every space for a chat without a repository; a chat in a workspace's
 /// worktree also reads that workspace, without changing it. Optional space
 /// filters default to the caller's own; other targets must name one of them.
 pub(crate) async fn authorize(
@@ -46,7 +48,7 @@ pub(crate) async fn authorize(
     let reads_only = method.reads_space();
     if let Some(target) = method.scope(manager, &caller).await? {
         let id = manager.present_space(target).await?.id().to_owned();
-        if !manager.within_subtree(&caller.space_id, &id).await? {
+        if !manager.reaches(&caller, &id).await? {
             let home = manager.chat_home(&caller.space_id).await?;
             ensure!(
                 home.as_deref() == Some(id.as_str()),
@@ -149,7 +151,7 @@ pub(super) async fn inspect_owner(
 ) -> Result<()> {
     if let Some(caller) = caller {
         ensure!(
-            manager.within_subtree(&caller.space_id, workspace).await?,
+            manager.reaches(caller, workspace).await?,
             "workspace processes inspect only {kind} in their workspace tree"
         );
     }

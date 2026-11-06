@@ -132,7 +132,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
-    manager.publish_config(crate::test_support::global_config(
+    manager.publish_config(crate::daemon::test_support::global_config(
         "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
     ));
     let waiting = manager.queue_add(waiting_launch(&workspace)).await.unwrap();

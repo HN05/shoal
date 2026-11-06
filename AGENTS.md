@@ -45,7 +45,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   that lets it act on a chat. Command names stay short: `shoal start` starts
   every agent, in a workspace or a chat, and `shoal work` maintains spaces.
 - Spaces form one tree in `space_parents`: every space has at most one parent,
-  a ready workspace or a chat of its own repository, never one below it; a
+  a ready workspace or a chat of its own repository, or a chat without a
+  repository, which takes children in any, never one below it; any other
   child in another repository is refused. Scope, approvals, coordinator and
   delegated messages, removal and cleanup take one walk up or down that link
   and one check for an agent, with no branch on kind; messages to a space go
@@ -114,7 +115,8 @@ for delivering a PR, under Committing near the end, decide when work is done.
   lasting as long as the chat; only the user's own terminal is unscoped. CLI
   refusals also follow process ancestry for the same state directory, so a
   cleared token does not unscope. A scope covers its space and the spaces below
-  it, recursively; targets name one of them, and the agent's hooks report for
+  it, recursively, and a chat without a repository's every space, through one
+  operation every check takes; targets name one of them, and the agent's hooks report for
   its own. A chat's agent follows the workspace-agent rules below, without what
   needs a worktree; it renames its own chat. A chat in a workspace's worktree
   also reads that workspace, with requests that only read state, and changes
@@ -148,7 +150,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   only read the default branch use what the checkout has. Syncing never pushes or
   moves workspace branches; agents update their branch from it with plain Git.
 - Cleanup is space cleanup: chats follow the workspace rules below, with their
-  repository's config, meeting every condition on a worktree; a running agent
+  repository's config, or the global config for a chat without one, meeting every condition on a worktree; a running agent
   is use, a restore that waits to run its agent keeps a chat as a queued
   launch keeps a workspace, and a session Shoal saved keeps it from idle
   cleanup as saved stopped work does. Idle cleanup also counts a
@@ -248,6 +250,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   explicit workspace paths must not overlap state, checkouts, or other ownership.
   URL clones live as `.checkout` and move only with their repository directory into
   a new root; refuse roots inside state, checkouts or repository directories.
+- The state directory holds only the daemon's own state, never files agents or
+  the user work with: temporary directories, attached files and copies of work
+  live in a repository directory, or in `root_dir` for chats without a repository.
 - Accept literal Git branch names and derive portable workspace names separately.
   Suffix conflicting branch components with `-2`, `-3`, etc.; keep derived workspace
   names/directories unchanged; serialize allocation per repo. Existing branches,

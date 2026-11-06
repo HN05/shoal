@@ -1,12 +1,14 @@
 use super::*;
 use crate::{
-    daemon::workspace::agent_queue::tests::{
-        add, await_restore, bounded, connected_agent, create, limit_globally, register, request,
-        started, stopped_agents,
+    daemon::{
+        test_support::manager,
+        workspace::agent_queue::tests::{
+            add, await_restore, bounded, connected_agent, create, limit_globally, register,
+            request, started, stopped_agents,
+        },
     },
     model::{Dependency, QueueRequest},
     protocol::QueuedLaunches,
-    test_support::manager,
 };
 
 /// The waiting entries' names in queue order.

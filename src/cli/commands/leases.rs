@@ -19,9 +19,9 @@ use crate::{
         approvals::{ApprovalRequest, Specification, Target},
         leases,
         resources::{LockMode, ResourceKind, ResourceRequest},
+        sim::SimRequest,
     },
     model::PortRequest,
-    sim::SimRequest,
 };
 
 pub(super) async fn acquire(

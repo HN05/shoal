@@ -30,7 +30,7 @@ async fn migration_and_transitions_preserve_json_ownership_and_audits() -> Resul
     let root = tempfile::tempdir()?;
     let path = root.path().join("state.db");
     let db = Connection::open(&path)?;
-    db.execute_batch(include_str!("../../../tests/fixtures/schema_v17.sql"))?;
+    db.execute_batch(include_str!("../../../../tests/fixtures/schema_v17.sql"))?;
     let mut sim = record("b", Some("A"), None);
     save(&db, &sim)?;
     save(&db, &record("a", None, Some("A")))?;
@@ -108,7 +108,7 @@ async fn malformed_migration_rolls_back_and_names_the_record() -> Result<()> {
         let root = tempfile::tempdir()?;
         let path = root.path().join("state.db");
         let db = Connection::open(&path)?;
-        db.execute_batch(include_str!("../../../tests/fixtures/schema_v17.sql"))?;
+        db.execute_batch(include_str!("../../../../tests/fixtures/schema_v17.sql"))?;
         db.execute("INSERT INTO simulators VALUES ('broken',?1)", [invalid])?;
         let error = Store::open(path.clone()).await.err().unwrap();
         assert!(format!("{error:#}").contains("decode simulator record broken"));

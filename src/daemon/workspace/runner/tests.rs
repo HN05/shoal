@@ -12,12 +12,12 @@ use crate::{
     client::resources::ResourceRequest,
     daemon::{
         notifications::NotificationKind,
+        test_support::{configure, git, manager, repository},
         workspace::{Ending, ExecutionKind, Manager, StartedExecution},
     },
     forge::{backends::ForgeKind, ci::runner::JobCommand, test_support::Server},
     model::{QueueEntry, Workspace},
     state::{QueueKind, QueueState},
-    test_support::{configure, git, manager, repository},
 };
 
 /// A test launch's command and the execution standing in for it.
@@ -1066,14 +1066,14 @@ async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_o
     // stopped.
     // It runs this test binary, whose environment the scan can read where a
     // system binary's may be hidden.
-    let mut marked = crate::test_support::marked_child();
+    let mut marked = crate::daemon::test_support::marked_child();
     marked
         .env_clear()
         .env("SHOAL_TEST_PROCESS", "1")
         .env(crate::env::EXECUTION_ID, &execution)
         .process_group(0)
         .kill_on_drop(true);
-    let mut survivor = crate::test_support::spawn_marked_child(&mut marked);
+    let mut survivor = crate::daemon::test_support::spawn_marked_child(&mut marked);
     mark(&gone, &gone).await.unwrap();
     manager.finish_ended_jobs().await.unwrap();
     assert_eq!(manager.claimed_jobs().await.unwrap().len(), 1);

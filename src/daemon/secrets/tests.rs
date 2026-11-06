@@ -1,8 +1,10 @@
 use super::*;
 use crate::{
-    daemon::approvals::{DecisionStatus, Lifetime},
+    daemon::{
+        approvals::{DecisionStatus, Lifetime},
+        test_support::{manager, repository},
+    },
     secrets::Secret,
-    test_support::{manager, repository},
 };
 
 fn configure(manager: &Manager, command: &str, lifetime: Lifetime) {

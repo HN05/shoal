@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::until_tests_end;
+use crate::daemon::test_support::until_tests_end;
 
 fn command(argv: &[&str]) -> AgentCommand {
     AgentCommand {

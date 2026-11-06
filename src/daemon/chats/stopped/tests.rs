@@ -1,4 +1,7 @@
-use crate::{daemon::chats::saved::tests::running_chat, process::identity, test_support::manager};
+use crate::{
+    daemon::{chats::saved::tests::running_chat, test_support::manager},
+    process::identity,
+};
 
 #[tokio::test]
 async fn a_stop_of_a_chat_removed_meanwhile_records_nothing_and_goes_on() {
