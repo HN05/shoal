@@ -10,7 +10,7 @@ use crate::{
     },
     client::links::pr::RegistrationKind,
     forge::review::status::PrStatus,
-    model::{Chat, SpaceDetail, SpaceStatus, WorktreeStatus},
+    model::{AgentStatus, Chat, SpaceDetail, SpaceStatus, WorktreeStatus},
 };
 
 pub(super) fn render_status(view: &StatusView, json: bool) {
@@ -130,6 +130,9 @@ fn render_chat(chat: &Chat, palette: Palette) {
     outln!("Mode:          {}", chat.mode);
     if let Some(workspace) = &chat.workspace {
         outln!("Workspace:     {}", workspace.name);
+    }
+    if chat.restore.is_none() {
+        render_agent_state(chat.agent_state);
     }
     split::render(&chat.parent, &chat.children);
 }
@@ -255,19 +258,24 @@ fn render_jobs(status: &WorktreeStatus, palette: Palette) {
 
 /// The turn state the workspace's agent reported and its retries.
 fn render_agent(status: &WorktreeStatus) {
-    let agent_state = status.workspace.agent_state;
+    render_agent_state(status.workspace.agent_state);
+    if let Some(retry) = &status.proxy_retry {
+        outln!("API retry:     {}", proxy_retry_label(retry));
+    }
+    if let Some(retry) = &status.turn_retry {
+        outln!("Turn retry:    {}", turn_retry_label(retry));
+    }
+}
+
+/// The turn state a space's agent reported, and when an idle agent's
+/// prompt cache expires.
+fn render_agent_state(agent_state: Option<AgentStatus>) {
     outln!(
         "Agent state:   {}",
         agent_state.map_or("none", |status| { ui::agent_state_label(status.state) })
     );
     if let Some(expires_at) = agent_state.and_then(|status| status.prompt_cache_expires_at) {
         outln!("Prompt cache:  {}", prompt_cache_label(expires_at));
-    }
-    if let Some(retry) = &status.proxy_retry {
-        outln!("API retry:     {}", proxy_retry_label(retry));
-    }
-    if let Some(retry) = &status.turn_retry {
-        outln!("Turn retry:    {}", turn_retry_label(retry));
     }
 }
 

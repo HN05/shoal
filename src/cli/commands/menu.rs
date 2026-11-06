@@ -250,7 +250,7 @@ impl Row {
                 created_at: request.created_at,
                 workspace: space,
             },
-            Item::NeedsInput { .. } => Self::NeedsInput(space),
+            Item::NeedsInput { .. } | Item::ChatNeedsInput { .. } => Self::NeedsInput(space),
             Item::Failed { .. } => Self::Failed(space),
             Item::Ready { mark, .. } | Item::ChatReady { mark, .. } => Self::Ready {
                 space,
@@ -652,8 +652,9 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
                 super::approvals::decide_listed(ctx, number, created_at).await?,
             ));
         }
-        Row::NeedsInput(workspace) => Command::Sessions(SessionsCommand::Attach {
-            target: Some(workspace),
+        // A chat attaches by its name.
+        Row::NeedsInput(space) => Command::Sessions(SessionsCommand::Attach {
+            target: Some(chat_name(ctx, Some(&space)).await?.unwrap_or(space)),
             session: None,
         }),
         Row::Failed(workspace) => Command::Workspace(WorkspaceCommand::Status {

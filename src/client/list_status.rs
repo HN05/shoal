@@ -60,15 +60,18 @@ impl ListStatus {
         }
     }
 
-    /// A chat is stopped until it is restored; a running one is
-    /// finished once it records completion, ready once it marks its work
-    /// ready, or else runs without a reported turn state.
+    /// A chat is stopped until it is restored; a running one needs input
+    /// while its agent does, is finished once it records completion, ready
+    /// once it marks its work ready, or else shows its agent's other turn
+    /// states, or that it runs without one.
     pub fn of_chat(chat: &Chat) -> Self {
+        let agent = chat.agent_state.map(|status| status.state);
         match chat.restore {
             Some(_) => Self::Stopped,
+            None if agent == Some(AgentState::Waiting) => Self::NeedsInput,
             None if chat.completion.is_some() => Self::Finished,
             None if !chat.review.is_empty() => Self::Ready,
-            None => Self::ProcessRunning,
+            None => agent.map_or(Self::ProcessRunning, Self::agent),
         }
     }
 

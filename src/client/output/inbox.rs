@@ -26,6 +26,10 @@ pub enum Item {
         workspace: Workspace,
         mark: ReviewMark,
     },
+    /// A running chat whose agent needs input.
+    ChatNeedsInput {
+        chat: Chat,
+    },
     /// A chat's mark on its linked work or on itself.
     ChatReady {
         chat: Chat,

@@ -439,7 +439,38 @@ fn a_chat_in_a_workspace_shows_the_workspace() {
     let rows = workspace_tree_rows(&[], &[chat], &HashSet::new(), plain, None);
     assert_eq!(
         rows,
-        ["◆ 4  worker-chat  in worker  process running  claude"]
+        ["◐ 4  worker-chat  in worker  process running  claude"]
+    );
+}
+
+#[test]
+fn a_chat_shows_its_agents_turn_state_with_its_marker() {
+    let chat = |agent_state: serde_json::Value, restore: serde_json::Value| -> Chat {
+        serde_json::from_value(serde_json::json!({
+            "id": "c", "number": 4, "repository_id": "a", "name": "talk", "agent": "claude",
+            "pid": 1, "started_at": 0, "agent_state": agent_state, "restore": restore,
+        }))
+        .unwrap()
+    };
+    let plain = Palette::stdout(true);
+    let row = |chat: Chat| workspace_tree_rows(&[], &[chat], &HashSet::new(), plain, None);
+    let state = |state: &str| serde_json::json!({"state": state, "since": 0});
+    let running = serde_json::Value::Null;
+    assert_eq!(
+        row(chat(state("working"), running.clone())),
+        ["◐ 4  talk  working  claude"]
+    );
+    assert_eq!(
+        row(chat(state("waiting"), running.clone())),
+        ["● 4  talk  needs input  claude"]
+    );
+    assert_eq!(
+        row(chat(state("idle"), running.clone())),
+        ["○ 4  talk  waiting  claude"]
+    );
+    assert_eq!(
+        row(chat(serde_json::Value::Null, "resume".into())),
+        ["● 4  talk  stopped  claude"]
     );
 }
 
@@ -455,7 +486,7 @@ fn spaces_show_a_mode_other_than_their_kinds_usual_one() {
     let rows = workspace_tree_rows(&[], &[chat], &HashSet::new(), plain, None);
     assert_eq!(
         rows,
-        ["◆ 4  repo-plan-7  in worker  process running, plan mode  claude"]
+        ["◐ 4  repo-plan-7  in worker  process running, plan mode  claude"]
     );
     assert_eq!(with_mode("running", Some("worker"), "worker"), "running");
     assert_eq!(with_mode("running", None, "worker"), "running");

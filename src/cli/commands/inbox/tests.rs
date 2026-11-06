@@ -76,3 +76,28 @@ fn a_chat_in_a_workspace_names_the_workspace() {
     assert!(rows[0].contains("worker-chat"), "{rows:?}");
     assert!(rows[0].ends_with("in worker"), "{rows:?}");
 }
+
+#[test]
+fn a_running_chat_whose_agent_needs_input_is_listed() {
+    let chat = |id: &str, state: &str, restore: Option<&str>| -> crate::model::Chat {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "repository_id": "r1", "name": id, "agent": "claude",
+            "pid": 1, "started_at": 0, "restore": restore,
+            "agent_state": {"state": state, "since": 0},
+        }))
+        .unwrap()
+    };
+    let chats = [
+        chat("asking", "waiting", None),
+        chat("working", "working", None),
+        chat("stopped", "waiting", Some("resume")),
+    ];
+    let listed: Vec<String> = super::chat_items(&chats)
+        .into_iter()
+        .map(|item| match item {
+            Item::ChatNeedsInput { chat } => chat.id,
+            _ => "other".into(),
+        })
+        .collect();
+    assert_eq!(listed, ["asking"]);
+}

@@ -240,21 +240,23 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<String>) -> Vec<I
     waiting.chain(failed).chain(review).collect()
 }
 
-/// Each running chat that recorded its work as finished, and each mark of
-/// the others.
+/// Running chats whose agent needs input, then each running chat that
+/// recorded its work as finished, and each mark of the others.
 fn chat_items(chats: &[Chat]) -> Vec<Item> {
-    let running = chats.iter().filter(|chat| chat.restore.is_none());
-    running
-        .flat_map(|chat| match chat.completion {
-            Some(_) => vec![Item::ChatDone { chat: chat.clone() }],
-            None => (chat.review.iter())
-                .map(|mark| Item::ChatReady {
-                    chat: chat.clone(),
-                    mark: mark.clone(),
-                })
-                .collect(),
-        })
-        .collect()
+    let running = || chats.iter().filter(|chat| chat.restore.is_none());
+    let waiting = running()
+        .filter(|chat| ListStatus::of_chat(chat) == ListStatus::NeedsInput)
+        .map(|chat| Item::ChatNeedsInput { chat: chat.clone() });
+    let finished = running().flat_map(|chat| match chat.completion {
+        Some(_) => vec![Item::ChatDone { chat: chat.clone() }],
+        None => (chat.review.iter())
+            .map(|mark| Item::ChatReady {
+                chat: chat.clone(),
+                mark: mark.clone(),
+            })
+            .collect(),
+    });
+    waiting.chain(finished).collect()
 }
 
 impl Item {
@@ -266,7 +268,9 @@ impl Item {
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.id,
-            Self::ChatReady { chat, .. } | Self::ChatDone { chat } => &chat.id,
+            Self::ChatNeedsInput { chat }
+            | Self::ChatReady { chat, .. }
+            | Self::ChatDone { chat } => &chat.id,
             Self::Demo { demo } => &demo.workspace_id,
             Self::Untracked { .. } | Self::Cleanup { .. } | Self::SyncFailed { .. } => "",
         }
@@ -294,7 +298,9 @@ impl Item {
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,
-            Self::ChatReady { chat, .. } | Self::ChatDone { chat } => &chat.name,
+            Self::ChatNeedsInput { chat }
+            | Self::ChatReady { chat, .. }
+            | Self::ChatDone { chat } => &chat.name,
             Self::Demo { demo } => &demo.workspace,
             // The directory a workspace adopting it would be named after.
             Self::Untracked { worktree } => worktree
@@ -330,8 +336,11 @@ impl Item {
             Self::Ready { workspace, .. } => {
                 return workspace_kind(workspace, "ready", Style::Success);
             }
-            Self::ChatReady { chat, .. } => return chat_kind(chat, "ready"),
-            Self::ChatDone { chat } => return chat_kind(chat, "finished"),
+            Self::ChatNeedsInput { chat } => {
+                return chat_kind(chat, "needs input", Style::Warning);
+            }
+            Self::ChatReady { chat, .. } => return chat_kind(chat, "ready", Style::Success),
+            Self::ChatDone { chat } => return chat_kind(chat, "finished", Style::Success),
             Self::Demo { .. } => ("demo", Style::Success),
             Self::Untracked { .. } => ("untracked", Style::Warning),
             Self::Cleanup { .. } => ("cleanup", Style::Error),
@@ -360,7 +369,9 @@ impl Item {
                 chat.links.issue_title.clone().unwrap_or_default()
             }
             Self::ChatReady { chat, mark } => marked(mark, &chat.links),
-            Self::ChatDone { chat } => chat.links.issue_title.clone().unwrap_or_default(),
+            Self::ChatNeedsInput { chat } | Self::ChatDone { chat } => {
+                chat.links.issue_title.clone().unwrap_or_default()
+            }
             Self::Demo { demo } => demo.launch.name.clone(),
             Self::Untracked { worktree } => home_relative(&worktree.path),
             Self::Cleanup { error } => error.clone(),
@@ -390,10 +401,10 @@ fn workspace_kind(workspace: &Workspace, label: &str, style: Style) -> Cell {
     (label, Some(style))
 }
 
-/// The kind `label` of a finished item about `chat`, with its mode.
-fn chat_kind(chat: &Chat, label: &str) -> Cell {
+/// The kind `label` of an item about `chat`, with its mode.
+fn chat_kind(chat: &Chat, label: &str, style: Style) -> Cell {
     let label = ui::with_mode(label, Some(&chat.mode), &crate::model::chat_mode());
-    (label, Some(Style::Success))
+    (label, Some(style))
 }
 
 /// The question's recommendation and the names of the files sent with it.

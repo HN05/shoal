@@ -272,14 +272,14 @@ pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> E
         .collect()
 }
 
-/// A chat's row: its number, its name, the workspace it runs in, its
-/// status with its mode and agent.
+/// A chat's row: its status marker, number and name, the workspace it
+/// runs in, its status with its mode and agent.
 fn chat_row(chat: &Chat, depth: usize, palette: Palette) -> (String, [Cell; 6]) {
     let status = ListStatus::of_chat(chat);
     let place = chat.workspace.as_ref();
     let label = with_mode(status.label(), Some(&chat.mode), &crate::model::chat_mode());
     (
-        palette.paint(Style::Heading, "◆"),
+        status.marker(palette),
         [
             number_cell(chat.number),
             (indented(&chat.name, depth), Some(Style::Heading)),
