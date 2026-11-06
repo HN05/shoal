@@ -28624,9 +28624,9 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
 /// which the daemon starts in a session of its own that outlives the caller.
 #[test]
 fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
-    let fixture = Fixture::with_config(Some(
-        "[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'touch \"$HOME/waiter-started\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
-    ));
+    let fixture = Fixture::with_config(Some(&format!(
+        "{UNLIMITED_AGENTS}[agents.waiter]\ncommand = ['sh', '-c', 'touch \"$HOME/waiter-started\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    )));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let repo = fixture.repo.to_str().unwrap();
     let output = fixture
@@ -28667,7 +28667,7 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
 /// once, and one its branch runs as the CLI goes to the daemon.
 #[test]
 fn a_start_without_a_terminal_places_its_agent_by_the_workspaces_settings() {
-    let fixture = Fixture::with_config(Some("[machine.overload.disk]\nenabled = false\n"));
+    let fixture = Fixture::with_config(Some(UNLIMITED_AGENTS));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     install_test_script(
         fixture.root.path().join("bin/codex"),
@@ -28729,9 +28729,9 @@ fn a_start_without_a_terminal_places_its_agent_by_the_workspaces_settings() {
 /// start it in the background.
 #[test]
 fn a_start_after_finished_work_hands_an_app_agent_over_here() {
-    let fixture = Fixture::with_config(Some(
-        "[machine.overload.disk]\nenabled = false\n[agents.codex]\ndefault_mode = 'app'\n",
-    ));
+    let fixture = Fixture::with_config(Some(&format!(
+        "{UNLIMITED_AGENTS}[agents.codex]\ndefault_mode = 'app'\n"
+    )));
     let bin = fixture.root.path().join("app-bin");
     fs::create_dir(&bin).unwrap();
     install_test_script(
