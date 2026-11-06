@@ -245,6 +245,11 @@ fn a_branch_link_splits_at_the_route_that_leaves_a_repository() {
             "fix/tree/x",
         ),
         (
+            "https://forge.example/team/repo/src/branch/fix/-/tree/x",
+            "https://forge.example/team/repo",
+            "fix/-/tree/x",
+        ),
+        (
             "https://bitbucket.org/workspace/repo/branch/fix/tree/x",
             "https://bitbucket.org/workspace/repo",
             "fix/tree/x",
