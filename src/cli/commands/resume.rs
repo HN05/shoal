@@ -165,6 +165,9 @@ async fn resume_each(
     if discard {
         return discard_each(ctx, &stopped, &selected.chats).await;
     }
+    if let Queuing::Daemon { .. } = queuing {
+        ensure_daemon_starts(ctx, &stopped).await?;
+    }
     let (chats, failed) = chats::restore_each(ctx, &selected.chats).await;
     match queuing {
         Queuing::Here { now: true } => {
@@ -176,10 +179,7 @@ async fn resume_each(
             run_all(ctx, stopped, resumed).await
         }
         Queuing::Here { now: false } => queue::queue_all(ctx, stopped, chats, failed, false).await,
-        Queuing::Daemon { now } => {
-            ensure_daemon_starts(ctx, &stopped).await?;
-            queue::queue_all(ctx, stopped, chats, failed, now).await
-        }
+        Queuing::Daemon { now } => queue::queue_all(ctx, stopped, chats, failed, now).await,
     }
 }
 

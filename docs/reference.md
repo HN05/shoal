@@ -466,7 +466,9 @@ the agents as `shoal resume --focus` commands to run in separate terminals.
 Without a terminal, such as from another agent's tool call, `--now` queues every
 restore instead, a workspace's last session included, and the daemon starts each
 at once regardless of the limits; resume reports the entries as a resume without
-`--now` does, and `--json` emits them. `--focus` restores one agent in the current terminal at once,
+`--now` does, and `--json` emits them. When no host can start them in the
+background, such a resume, with or without `--now`, is refused before anything
+is restored, naming `--focus` to restore one agent here. `--focus` restores one agent in the current terminal at once,
 regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
