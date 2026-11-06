@@ -389,8 +389,8 @@ instead of the PR delivery guidance below.
   starts the agent past `max_agents`, as `--now` does; the `focus` setting does not.
   JSON, help, noninteractive and `--here` calls run in place, except that a
   scoped caller's agent, and an agent of `start` or `resume --now` from a caller
-  without a terminal or with `--json`, start detached through the daemon unless `--here` or
-  `--focus` keeps an unscoped caller's in place. Shell and untracked
+  without a terminal or with `--json`, start detached through the daemon unless `start --here` or
+  `resume --focus` keeps an unscoped caller's in place. Shell and untracked
   desktop handoffs retain the tab.
 - Each command, flag and value has one name; flag a clap alias, including an
   old name kept after a rename.

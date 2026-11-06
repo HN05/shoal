@@ -28713,7 +28713,8 @@ fn a_start_without_a_terminal_places_its_agent_by_the_workspaces_settings() {
 
 /// Without a terminal, as from another agent's tool call, `shoal resume
 /// --now` has the daemon start each restore at once, whatever the limit,
-/// a last session's too, instead of naming commands to run them here.
+/// instead of naming commands to run them here, and so does resuming a last
+/// session by itself.
 #[test]
 fn resume_now_without_a_terminal_has_the_daemon_start_its_restores() {
     let fixture = Fixture::with_config(Some(
@@ -28736,8 +28737,9 @@ fn resume_now_without_a_terminal_has_the_daemon_start_its_restores() {
         .unwrap();
         paths.push(PathBuf::from(workspace["path"].as_str().unwrap()));
     }
-    for (name, path) in ["first", "second"].iter().zip(&paths) {
-        let resumed = fixture.ok(&["resume", name, "--now"]);
+    // A last session never waits for a slot, so it needs no --now.
+    for (args, path) in [&["first", "--now"][..], &["second"]].iter().zip(&paths) {
+        let resumed = fixture.ok(&[&["resume"][..], args].concat());
         let queued = resumed["queued"].as_array().unwrap();
         assert_eq!(queued.len(), 1, "{resumed}");
         assert_eq!(queued[0]["state"], "starting", "{resumed}");

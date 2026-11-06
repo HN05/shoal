@@ -438,7 +438,7 @@ otherwise a picker listing every workspace with what it would restore, stopped
 work first, and the stopped chats; with nothing to resume anywhere it reports that without a picker.
 Completion describes each workspace the same way.
 A workspace without stopped agents continues one of its last sessions at once,
-placed as `--now` places an agent, or without a terminal through the queue, when resumed by itself, left by `shoal stop`
+placed as `--now` places an agent, or without a terminal through the queue, started at once, when resumed by itself, left by `shoal stop`
 or by an agent that exited on its own, such as one the user quit, picked as
 stopped agents are, or the `--execution` one. A workspace keeps one per agent; the next new agent started
 there or `shoal done` replaces them. Unlike stopped work they use no agent slot and never delay

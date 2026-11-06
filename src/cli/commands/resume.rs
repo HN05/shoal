@@ -244,9 +244,9 @@ async fn stopped_agents(
 
 /// Queue the restores of `workspace`'s stopped agents, only `execution`'s
 /// when given, to start as `queuing` says. Without stopped agents, a last
-/// session this process can start continues at once, as resuming the
-/// workspace by itself does not wait for a slot it never held, where it
-/// stopped or in the background.
+/// session continues at once, as resuming the workspace by itself does not
+/// wait for a slot it never held: where it stopped or in the background, or
+/// for a noninteractive process through the queue, started now.
 async fn queue_workspace(
     ctx: &Context,
     workspace: String,
@@ -264,12 +264,13 @@ async fn queue_workspace(
         !saved.is_empty(),
         "no stopped agents or commands for this workspace"
     );
+    let last_session = saved.agents.is_empty() && !saved.sessions.is_empty();
     let now = match queuing {
-        Queuing::Here { .. } if saved.agents.is_empty() && !saved.sessions.is_empty() => {
+        Queuing::Here { .. } if last_session => {
             return continue_last_session(ctx, &workspace, saved, false).await;
         }
         Queuing::Here { .. } => false,
-        Queuing::Daemon { now } => now,
+        Queuing::Daemon { now } => now || last_session,
     };
     let stopped = vec![(workspace, saved)];
     queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), now).await
