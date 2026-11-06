@@ -153,7 +153,8 @@ After [adding an AI tool](docs/reference.md#agents), run
 An agent starts in a mode, which decides what it is told and whether it gets a
 workspace or a chat: `worker`, the default, implements its subject in a
 workspace; `chat` discusses the repository; `plan` settles an issue's plan
-with you. Configure your own under `[modes.<name>]` and `[rules.<name>]`; see
+with you. Without `--mode`, `shoal start` asks which on a terminal. Configure
+your own under `[modes.<name>]` and `[rules.<name>]`; see
 [modes and rules](docs/reference.md#modes-and-rules).
 
 ```sh

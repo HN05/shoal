@@ -1786,8 +1786,9 @@ other commands do. Failed session closes notify and retry at startup or with
 starts a new chat with an agent about a repository, to discuss it, its issues
 and plans, or to coordinate work, without changing code; so does `shoal start`
 in a [mode](#modes-and-rules) whose kind is `chat`. Without `--mode`, `--chat`
-and `--in` start in the `chat` mode. The repository is the named one, else the
-issue URL's, else the current checkout's or workspace's, else a picker. The
+and `--in` start in the `chat` mode, or one picked on a terminal. The
+repository is the named one, else the issue URL's, else the current
+checkout's or workspace's, else a picker. The
 agent is `--agent`, else `agent.default`, else a picker of the installed ones.
 The agent's configured launcher runs in the registered checkout with the mode's
 rendered rules as its instructions. With `--issue`, the chat is assigned the
@@ -2179,11 +2180,13 @@ these modes:
 | `chat` | chat | `chat` | none |
 | `plan` | chat | `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
 
-`shoal start` starts every new agent, in the mode `--mode` names, `worker` by
-default, and in the kind of space the mode names unless `--chat`, `--in` or
-`--worktree` says otherwise; `worker` always starts in a workspace, and config
-that gives it another kind is refused. A new agent in an existing space may
-start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
+`shoal start` starts every new agent, in the mode `--mode` names, and in the
+kind of space the mode names unless `--chat`, `--in` or `--worktree` says
+otherwise; `worker` always starts in a workspace, and config that gives it
+another kind is refused. Without `--mode`, a terminal offers the modes in a
+picker with the kind of space each starts in, and without one the start takes
+`worker`, or `chat` with `--chat` or `--in`, which the picker lists first. A
+new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 and `shoal work`, `shoal status`, `shoal inbox`, the queue and the menu name a
 mode other than `worker` for a workspace or `chat` for a chat. The built-in rules have no text of their own except `review`, the style

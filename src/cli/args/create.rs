@@ -59,8 +59,8 @@ pub enum CreateCommand {
 // Arguments of `shoal start`.
 #[derive(Debug, Default, Args)]
 pub struct StartArgs {
-    /// The mode the agent starts in; defaults to chat with --chat or --in,
-    /// else worker.
+    /// The mode the agent starts in; on a terminal, a picker, else chat with
+    /// --chat or --in, else worker.
     #[arg(long)]
     pub mode: Option<String>,
     /// Start in a chat, whatever the mode's kind.

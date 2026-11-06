@@ -2234,9 +2234,12 @@ once per request and every use site reads them rather than layering on its own.
 Every agent starts with `shoal start`, in a mode: a named entry that lists the
 rules its system text carries, holds the instructions its first message ends
 with, and says which kind of space it starts in, so one command replaces a
-command per kind of start. The default mode, `worker`, always starts in a
-workspace, so a plain `start` needs nothing from the daemon before it resolves
-its repository, as adding a workspace never did; another mode's kind is read
+command per kind of start. Without `--mode`, a start on a terminal picks the
+mode, since it decides what the agent is told, and lists the start's default
+first so Enter keeps it; without a terminal it takes the default, so scripts
+and agents start as before. The default mode, `worker`, always starts in a
+workspace, so a plain `start` without a terminal needs nothing from the
+daemon before it resolves its repository; another mode's kind is read
 from the named or current repository's settings, and `--chat`, `--in` and
 `--worktree` override it, a chat without `--mode` starting in the `chat` mode,
 since a worker would not be told it is in a chat. The space records the mode

@@ -1,6 +1,8 @@
 //! `shoal start`: start an agent in a mode, which decides what the agent is
 //! told and, unless the command says otherwise, whether it starts in a
 //! workspace or a chat.
+use std::collections::BTreeMap;
+
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
@@ -13,9 +15,14 @@ use crate::{
     cli::{
         args::create::StartArgs,
         context::Context,
+        output::{Palette, Style},
         ui::{self, Fallback},
     },
-    config::{Effective, modes, templates},
+    config::{
+        Effective,
+        modes::{self, Mode},
+        templates,
+    },
     forge::{
         IssueInput,
         items::link::{Link, LinkTarget},
@@ -31,7 +38,7 @@ pub(super) async fn run(ctx: &Context, mut args: StartArgs) -> Result<i32> {
         crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes start agents only with their scope token"
     );
-    let mode = (args.mode.clone()).unwrap_or_else(|| default_mode(&args).to_owned());
+    let mode = mode(ctx, &args).await?;
     if let Some(parent) = &args.parent {
         args.parent = Some(space_id(ctx, parent).await?);
     }
@@ -96,6 +103,50 @@ async fn space_id(ctx: &Context, selector: &str) -> Result<String> {
         .to_owned())
 }
 
+/// The mode `--mode` names, else the one picked on a terminal, else the
+/// [`default_mode`].
+async fn mode(ctx: &Context, args: &StartArgs) -> Result<String> {
+    match &args.mode {
+        Some(mode) => Ok(mode.clone()),
+        None if ui::can_pick(ctx) => {
+            let settings = mode_settings(ctx, args).await?;
+            let (default, forced) = (default_mode(args), forced_kind(args));
+            let entries = mode_entries(&settings.modes, default, forced, Palette::picker());
+            ui::pick(ctx, "Mode> ", entries)
+        }
+        None => Ok(default_mode(args).to_owned()),
+    }
+}
+
+/// The picker's entries for `modes`: `default` first, so Enter keeps it,
+/// then the rest by name, each with the kind of space it would start in,
+/// `forced` or else its own.
+fn mode_entries(
+    modes: &BTreeMap<String, Mode>,
+    default: &str,
+    forced: Option<SpaceKind>,
+    palette: Palette,
+) -> ui::Entries {
+    let mut modes: Vec<_> = modes.iter().collect();
+    modes.sort_by_key(|(name, _)| name.as_str() != default);
+    let rows = modes
+        .iter()
+        .map(|(name, mode)| {
+            let kind = forced.unwrap_or(mode.kind);
+            [
+                ((*name).clone(), None),
+                (kind.to_string(), Some(Style::Muted)),
+            ]
+        })
+        .collect();
+    let labels = ui::aligned(rows, palette);
+    modes
+        .into_iter()
+        .map(|(name, _)| name.clone())
+        .zip(labels)
+        .collect()
+}
+
 /// The mode without `--mode`: chat for a start that asks for a chat, whose
 /// agent the worker mode would not tell it is one, else the worker.
 fn default_mode(args: &StartArgs) -> &'static str {
@@ -105,22 +156,34 @@ fn default_mode(args: &StartArgs) -> &'static str {
     }
 }
 
-/// The kind of space the start creates: what `--chat`, `--in`,
-/// `--worktree`, `--fork` or a copy says, else the kind of `mode`, which
-/// must exist before anything is created. The default mode always does and
-/// always starts in a workspace, so only another mode's start asks the
-/// daemon; a chat's start checks its mode itself once it has the repository.
+/// The kind of space the start creates: what [`forced_kind`] says, else
+/// the kind of `mode`, which must exist before anything is created. The
+/// default mode always does and always starts in a workspace, so only
+/// another mode's start asks the daemon; a chat's start checks its mode
+/// itself once it has the repository.
 async fn kind(ctx: &Context, args: &StartArgs, mode: &str) -> Result<SpaceKind> {
-    if args.chat || args.in_workspace.is_some() {
+    let forced = forced_kind(args);
+    if forced == Some(SpaceKind::Chat) {
         return Ok(SpaceKind::Chat);
     }
-    let forced = args.worktree || args.fork || args.copy.is_set();
     if mode == modes::DEFAULT {
         return Ok(SpaceKind::Workspace);
     }
     let settings = mode_settings(ctx, args).await?;
     let kind = modes::get(&settings.modes, mode)?.kind;
-    Ok(if forced { SpaceKind::Workspace } else { kind })
+    Ok(forced.unwrap_or(kind))
+}
+
+/// The kind of space `--chat`, `--in`, `--worktree`, `--fork` or a copy
+/// asks for, whatever the mode's kind.
+fn forced_kind(args: &StartArgs) -> Option<SpaceKind> {
+    if args.chat || args.in_workspace.is_some() {
+        Some(SpaceKind::Chat)
+    } else if args.worktree || args.fork || args.copy.is_set() {
+        Some(SpaceKind::Workspace)
+    } else {
+        None
+    }
 }
 
 /// The settings whose modes decide the kind: the repository's

@@ -124,3 +124,48 @@ fn a_copy_refuses_a_pr_or_branch_link_but_takes_an_issue() {
     ]));
     assert!(fits(&["https://forge.example/o/r/pulls/8"]));
 }
+
+#[test]
+fn the_mode_picker_lists_the_starts_default_first_with_its_kind_of_space() {
+    let modes = &crate::config::Config::default()
+        .resolve(&Default::default())
+        .unwrap()
+        .modes;
+    let listed = |args: &[&str]| {
+        let args = start(args);
+        let palette = Palette::stdout(true);
+        mode_entries(modes, default_mode(&args), forced_kind(&args), palette)
+            .into_iter()
+            .map(|(id, label)| {
+                let kind = label.split_whitespace().last().unwrap().to_owned();
+                (id, kind)
+            })
+            .collect::<Vec<_>>()
+    };
+    let pair = |mode: &str, kind: &str| (mode.to_owned(), kind.to_owned());
+    assert_eq!(
+        listed(&["repo"]),
+        [
+            pair("worker", "workspace"),
+            pair("chat", "chat"),
+            pair("plan", "chat")
+        ]
+    );
+    // A forced kind is the kind every mode starts in.
+    assert_eq!(
+        listed(&["repo", "--chat"]),
+        [
+            pair("chat", "chat"),
+            pair("plan", "chat"),
+            pair("worker", "chat")
+        ]
+    );
+    assert_eq!(
+        listed(&["repo", "--worktree"]),
+        [
+            pair("worker", "workspace"),
+            pair("chat", "workspace"),
+            pair("plan", "workspace")
+        ]
+    );
+}
