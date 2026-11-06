@@ -70,9 +70,10 @@ pub enum WorkspaceCommand {
     /// model, and cleanup does not see its activity.
     Open {
         workspace: Option<String>,
-        /// The app to open the workspace in.
+        /// The app to open the workspace in; defaults to the only one
+        /// installed, else a picker.
         #[arg(long, value_enum)]
-        app: DesktopApp,
+        app: Option<DesktopApp>,
         /// Arguments forwarded to the app's launcher.
         #[arg(last = true)]
         args: Vec<OsString>,

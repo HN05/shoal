@@ -906,7 +906,7 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
         },
         ExecuteChoice::App(app) => Command::Workspace(WorkspaceCommand::Open {
             workspace,
-            app,
+            app: Some(app),
             args: vec![],
         }),
         ExecuteChoice::Shell => Command::Run {

@@ -681,6 +681,7 @@ shoal edit fix-login                     # Open in $VISUAL/$EDITOR or the edit c
 shoal open fix-login --app claude        # Claude desktop app (macOS)
 shoal open fix-login --app codex         # Codex desktop app
 shoal open --app t3                      # Running T3 Code desktop app; current workspace or picker
+shoal open fix-login                     # The only installed desktop app, else a picker
 shoal claude fix-login -- --help
 shoal codex                              # Current workspace or picker
 shoal happy-codex fix-login              # Detached Happy session for the Happy app
@@ -1653,8 +1654,10 @@ next launch. `shoal run <name>` for a `[commands]`
 shortcut remains a plain command invocation without agent prompts or exit
 notifications, expanding `{prompt}` to an empty string.
 
-`shoal open --app codex|t3` runs `codex app <path>` or `t3 app <path>` with any
-`--` arguments and preserves the launcher's output and exit code. `--app claude`
+`shoal open` without `--app` opens the only installed desktop app, and on a
+terminal offers a picker when several are installed. `--app codex|t3` runs
+`codex app <path>` or `t3 app <path>` with any `--` arguments and preserves the
+launcher's output and exit code. `--app claude`
 opens the Claude app only on macOS, through `open claude://code/new?folder=<path>`,
 takes no `--` arguments, and the menu offers it once `/Applications/Claude.app`
 is installed. Desktop apps get no agent flags and provide no execution

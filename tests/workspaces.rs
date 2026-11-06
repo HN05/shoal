@@ -12641,6 +12641,34 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
             .unwrap();
         assert!(!output.status.success());
     }
+    // Without --app, the only installed app opens, and several need it
+    // without a terminal to pick on. An installed Claude app counts too.
+    let claude = cfg!(target_os = "macos") && Path::new("/Applications/Claude.app").exists();
+    let codex_only = fixture.root.path().join("codex-only-bin");
+    install_test_script_with_mode(
+        codex_only.join("codex"),
+        "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 7\n",
+        0o700,
+    );
+    let open = |bin: &Path| {
+        fixture
+            .command()
+            .args(["open", "desktop"])
+            .env("PATH", fixture.restricted_path(bin))
+            .output()
+            .unwrap()
+    };
+    let output = open(&codex_only);
+    if !claude {
+        assert_eq!(output.status.code(), Some(7), "{output:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            format!("app\n{path}\n")
+        );
+    }
+    let output = open(&bin);
+    assert!(!output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"");
     // Without a Codex on PATH, opening fails instead of reaching the
     // runner's own installation.
     let output = fixture

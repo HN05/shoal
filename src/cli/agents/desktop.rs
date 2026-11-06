@@ -12,7 +12,7 @@ use super::{
     trust::{CLAUDE_CODE, CODEX, TrustFile},
 };
 use crate::{
-    cli::{args::workspace::DesktopApp, context::Context},
+    cli::{args::workspace::DesktopApp, context::Context, ui},
     env, execution,
     model::Workspace,
 };
@@ -47,6 +47,14 @@ impl App {
             && self.bundle.is_none_or(|bundle| Path::new(bundle).exists())
     }
 }
+
+/// The apps `shoal open` hands workspaces to, with the `--app` value that
+/// names each, in the order a picker offers them.
+const APPS: [(DesktopApp, &str); 3] = [
+    (DesktopApp::Claude, "claude"),
+    (DesktopApp::Codex, "codex"),
+    (DesktopApp::T3, "t3"),
+];
 
 /// The app `shoal open --app` names.
 pub(in crate::cli) fn app(name: DesktopApp) -> &'static App {
@@ -134,17 +142,43 @@ fn percent_encode(bytes: &[u8]) -> String {
 }
 
 /// `shoal open`: hand the named workspace, else the current directory's or
-/// a picked one, to desktop `app`, refusing what cannot open before a
-/// workspace is picked.
+/// a picked one, to the named desktop app, else the one [`choose`] gives,
+/// refusing what cannot open before a workspace is picked.
 pub(in crate::cli) async fn open(
     ctx: &Context,
     workspace: Option<String>,
-    app: &App,
+    name: Option<DesktopApp>,
     args: Vec<OsString>,
 ) -> Result<i32> {
+    let app = app(match name {
+        Some(name) => name,
+        None => choose(ctx)?,
+    });
     ensure_opens(app, &args)?;
     let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
     hand_off(ctx, &workspace, app, args).await
+}
+
+/// The app `shoal open` opens without `--app`: the only one installed, else
+/// one the user picks.
+fn choose(ctx: &Context) -> Result<DesktopApp> {
+    let search_path = std::env::var_os("PATH").unwrap_or_default();
+    let installed: Vec<_> = (APPS.into_iter())
+        .filter(|(name, _)| app(*name).available(&search_path))
+        .collect();
+    match installed[..] {
+        [] => {
+            anyhow::bail!("no desktop app is installed; install the Claude, Codex or T3 Code app")
+        }
+        [(only, _)] => Ok(only),
+        _ => {
+            ensure!(
+                ctx.interactive(),
+                "several desktop apps are installed; choose one with --app"
+            );
+            ui::pick_choice(ctx, "App> ", &installed)
+        }
+    }
 }
 
 /// Hand `workspace` to desktop `app` with `args`, untracked, trusting it

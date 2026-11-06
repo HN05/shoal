@@ -40,6 +40,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
             workspace,
             app,
             args,
-        } => agents::open(&ctx, workspace, agents::app(app), args).await,
+        } => agents::open(&ctx, workspace, app, args).await,
     }
 }
