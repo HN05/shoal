@@ -93,10 +93,10 @@ fn write_launchers(secrets: &Secrets, paths: &Paths) -> Result<tempfile::TempDir
     )?;
     let tools: BTreeSet<_> = secrets.values().flat_map(|secret| &secret.tools).collect();
     for tool in tools {
-        let words = crate::cli::internal::internal_command(
+        let words = crate::workers::internal_command(
             paths,
             false,
-            crate::cli::internal::Worker::SecretTool {
+            crate::workers::Worker::SecretTool {
                 launchers: directory.path(),
                 tool,
             },

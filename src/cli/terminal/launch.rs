@@ -226,7 +226,7 @@ pub(super) fn place_env(ctx: &Context) -> Result<Vec<(&'static str, String)>> {
 
 /// This executable with `args`, as a place runs it.
 fn shoal_command(ctx: &Context, args: &[OsString]) -> Result<Vec<OsString>> {
-    let mut argv = crate::cli::internal::shoal_argv(&ctx.paths)?;
+    let mut argv = crate::workers::shoal_argv(&ctx.paths)?;
     argv.extend_from_slice(args);
     Ok(argv)
 }
@@ -567,10 +567,10 @@ fn agent_worker(
     command: &[OsString],
 ) -> Result<Vec<OsString>> {
     let name = host.host.name();
-    crate::cli::internal::internal_command(
+    crate::workers::internal_command(
         &ctx.paths,
         false,
-        crate::cli::internal::Worker::Session {
+        crate::workers::Worker::Session {
             workspace: &workspace.id,
             agent,
             records,

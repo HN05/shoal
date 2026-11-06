@@ -68,6 +68,8 @@ mod tmp_dirs;
 mod tools;
 #[cfg(feature = "cli")]
 mod transfer;
+#[cfg(feature = "cli")]
+mod workers;
 
 #[cfg(feature = "cli")]
 use cli::Cli;

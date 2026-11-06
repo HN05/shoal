@@ -56,3 +56,12 @@ pub enum Decision {
     Approve,
     Deny,
 }
+
+impl From<Decision> for crate::workers::Decision {
+    fn from(decision: Decision) -> Self {
+        match decision {
+            Decision::Approve => Self::Approve,
+            Decision::Deny => Self::Deny,
+        }
+    }
+}

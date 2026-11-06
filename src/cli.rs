@@ -114,7 +114,7 @@ pub enum Command {
     Changes(ChangesCommand),
     /// Commands Shoal, its agent hooks and integrations run, not part of the
     /// interface for people.
-    #[command(name = internal::GROUP, hide = true)]
+    #[command(name = crate::workers::GROUP, hide = true)]
     Internal {
         #[command(subcommand)]
         command: InternalCommand,

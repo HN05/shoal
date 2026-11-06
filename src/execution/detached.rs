@@ -16,11 +16,11 @@ use tokio::{
 };
 
 use crate::{
-    cli::internal::{Worker, internal_command},
     env,
     model::Workspace,
     paths::Paths,
     protocol::timing,
+    workers::{Worker, internal_command},
 };
 
 /// Start `command` in `workspace` as a tracked execution that outlives this

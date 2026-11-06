@@ -20,10 +20,7 @@ use super::{
     takeover, wake,
 };
 use crate::{
-    cli::{
-        client,
-        internal::{Worker, internal_command},
-    },
+    cli::client,
     config::repo::Pushes,
     daemon::approvals::Undecided,
     env,
@@ -32,6 +29,7 @@ use crate::{
     process::{self, identity::Identity},
     protocol::{Body, ExecutionMethod, Reattach},
     sessions::Origin,
+    workers::{Worker, internal_command},
 };
 
 /// A tracked execution the daemon recorded, with the command it runs next and

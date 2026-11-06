@@ -9,7 +9,6 @@ use crate::{
     cli::{
         args::sessions::DemoCommand,
         context::Context,
-        internal::{Worker, internal_command},
         output::{Palette, Style},
         terminal,
         ui::{self, Fallback},
@@ -18,6 +17,7 @@ use crate::{
     model::Workspace,
     protocol::ConfigTarget,
     sessions::Origin,
+    workers::{Worker, internal_command},
 };
 
 mod presets;

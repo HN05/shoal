@@ -17,13 +17,13 @@ use tokio::io::BufReader;
 
 use super::{Mode, link::Link};
 use crate::{
-    cli::internal::{Worker, internal_command},
     env,
     fsutil::{FileIdentity, set_inherited},
     model::ExecutionPlan,
     paths::Paths,
     protocol::{Control, ExecutionEvent, timing},
     sessions::Origin,
+    workers::{Worker, internal_command},
 };
 
 /// The binary the wrapper continues from: the installed one, once an

@@ -12,7 +12,7 @@ use std::{
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::{cli::internal, env};
+use crate::{env, workers};
 
 /// How long a new place's shell may take to start its line editor. Past it,
 /// Shoal types anyway, as into a shell that has none, whose terminal echoes
@@ -115,7 +115,7 @@ impl Typed {
 /// This executable's launch step for `file`, naming the state directory
 /// `state` and the output as every worker does.
 fn launch_argv(state: &Path, file: &Path) -> Result<Vec<String>> {
-    internal::internal_command_for(state, false, internal::Worker::Launch { file })?
+    workers::internal_command_for(state, false, workers::Worker::Launch { file })?
         .into_iter()
         .map(|word| word.into_string().ok())
         .collect::<Option<_>>()

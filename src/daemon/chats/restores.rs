@@ -106,7 +106,7 @@ pub(super) async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<R
     use anyhow::Context as _;
     use std::process::Stdio;
 
-    let mut argv = crate::cli::internal::shoal_argv(paths)?;
+    let mut argv = crate::workers::shoal_argv(paths)?;
     argv.extend(["resume".into(), chat.id.clone().into()]);
     let env = crate::cli::terminal::detached_start_environment(chat.origin.as_ref());
     let mut command = tokio::process::Command::new(&argv[0]);

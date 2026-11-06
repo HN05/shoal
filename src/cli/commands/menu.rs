@@ -28,7 +28,7 @@ use crate::{
             workspace::{DesktopApp, WorkCommand, WorkspaceCommand},
         },
         context::Context,
-        internal::{self, Worker},
+        internal,
         output::{Palette, Style},
         ui::{self, Entries, KeyBindings, PickerView, ViewPicker, WidthLimit},
     },
@@ -38,6 +38,7 @@ use crate::{
     forge::items::link,
     model::{LinkedItem, PresentSpace},
     protocol::ConfigTarget,
+    workers::Worker,
 };
 
 const ADD_ENTRY: &str = "add-workspace";

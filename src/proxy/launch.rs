@@ -145,8 +145,8 @@ async fn relay(
     let Some(installed) = executable.installed() else {
         return false;
     };
-    let worker = crate::cli::internal::Worker::ProxyReport { report };
-    let Ok(argv) = crate::cli::internal::internal_command(paths, true, worker) else {
+    let worker = crate::workers::Worker::ProxyReport { report };
+    let Ok(argv) = crate::workers::internal_command(paths, true, worker) else {
         return false;
     };
     tokio::process::Command::new(installed)

@@ -18,13 +18,14 @@ use anyhow::{Context as _, Result};
 
 use super::{Host, host::Watches, hosts::hosts};
 use crate::{
-    cli::{client, context::Context, installed, internal},
+    cli::{client, context::Context, installed},
     daemon::ownership,
     env,
     model::Inspection,
     paths::Paths,
     sessions::{HostName, Origin, PlaceClose, PlaceOwnership},
     state::AgentState,
+    workers,
 };
 
 /// What a host shows of a place it opened.
@@ -70,10 +71,10 @@ pub(super) async fn start_watcher(
         None => None,
     };
     let kept_at = kept_completion(ctx, workspace).await?;
-    let argv = internal::internal_command(
+    let argv = workers::internal_command(
         &ctx.paths,
         ctx.json,
-        internal::Worker::PlaceWatch {
+        workers::Worker::PlaceWatch {
             host: host.name(),
             workspace,
             place,
