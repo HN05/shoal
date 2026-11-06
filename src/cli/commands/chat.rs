@@ -893,6 +893,7 @@ fn brief(
     let place = templates::Place::Chat {
         repo: repository::name(repo),
         home: topic.home(repo),
+        delivery: agents::chat_delivery(settings, agent.name()),
     };
     let mut brief = match topic.subject.as_ref().filter(|_| !resumes) {
         Some(subject) => templates::brief(settings, &topic.mode, place, Some(subject))?,

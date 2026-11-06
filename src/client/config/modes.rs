@@ -19,8 +19,6 @@ use crate::{
 
 /// The mode `shoal start` uses without `--mode`.
 pub const DEFAULT: &str = "worker";
-/// The rule whose text starts with Shoal's description of a chat's place.
-pub const CHAT_RULE: &str = "chat";
 /// The rule a local review's style comes from, after its fixed instructions.
 pub const REVIEW_RULE: &str = "review";
 
@@ -34,8 +32,8 @@ pub struct ModeConfig {
     /// The kind of space `shoal start` creates in this mode.
     #[option(default = SpaceKind::Workspace)]
     pub kind: Option<SpaceKind>,
-    /// The rules the agent's system text carries after Shoal's guidance, in
-    /// order.
+    /// The rules the agent's system text carries after the facts of its
+    /// space and the space rules, in order.
     #[option(list)]
     pub rules: Vec<String>,
     /// How to do the mode's job, sent once after the subject in the first
@@ -69,10 +67,10 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
                 include_str!("modes/worker.md"),
             ),
         ),
-        ("chat".to_owned(), mode(SpaceKind::Chat, CHAT_RULE, "")),
+        ("chat".to_owned(), mode(SpaceKind::Chat, "chat", "")),
         (
             "plan".to_owned(),
-            mode(SpaceKind::Chat, CHAT_RULE, include_str!("modes/plan.md")),
+            mode(SpaceKind::Chat, "chat", include_str!("modes/plan.md")),
         ),
     ])
 }
@@ -84,7 +82,7 @@ pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
     };
     BTreeMap::from([
         ("worker".to_owned(), rule("")),
-        (CHAT_RULE.to_owned(), rule("")),
+        ("chat".to_owned(), rule("")),
         (
             REVIEW_RULE.to_owned(),
             rule(crate::config::templates::review_base()),

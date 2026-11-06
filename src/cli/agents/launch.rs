@@ -133,6 +133,15 @@ pub(super) fn delivery(integration: &dyn Integration, settings: &Effective) -> t
     }
 }
 
+/// How updates reach a chat's agent with `integration`, which runs without
+/// a wrapper to prompt it: pushed when a hook of its own wakes it.
+pub(super) fn chat_delivery(integration: &dyn Integration) -> templates::Delivery {
+    match integration.wakes() {
+        Wake::Hook => templates::Delivery::Pushed,
+        Wake::Prompt | Wake::Never => templates::Delivery::Watched,
+    }
+}
+
 /// What agent `name`'s configured command receives: the arguments carrying
 /// `instructions`, then `hooks` and `args`, and the value of `{prompt}`. The
 /// prompt leads `args` when the command has no `{prompt}`.

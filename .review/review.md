@@ -341,9 +341,9 @@ instead of the PR delivery guidance below.
   append the selected local/worktree repository value to the global text; empty
   repository values suppress only local additions; provenance reports the
   combined text and highest configured layer. Inline TOML wins over Markdown.
-  Shoal's built-in agent guidance precedes every workspace agent's rules, and a
-  chat's `chat` rule starts with Shoal's description of its place; neither is
-  replaceable. Substitutions never evaluate or recursively expand inserted text,
+  Shoal's built-in guidance, the facts of the agent's kind of space and the two
+  space rules, precedes every agent's rules in any mode and is not
+  replaceable; facts state no practices. Substitutions never evaluate or recursively expand inserted text,
   and the subject is never rendered.
 - Issue numbers use an explicit repository, the current registered checkout or
   managed workspace, or an interactive picker. Issue URLs must match the selected

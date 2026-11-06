@@ -2183,10 +2183,7 @@ start in another mode; a running agent's mode never changes. A space records the
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 and `shoal work`, `shoal status`, `shoal inbox`, the queue and the menu name a
 mode other than `worker` for a workspace or `chat` for a chat. The built-in rules have no text of their own except `review`, the style
-of a [local review](#local-reviews). The `chat` rule of a chat starts with
-Shoal's [description of a chat in the checkout](../src/client/config/templates/chat.md)
-or [in a workspace's worktree](../src/client/config/templates/workspace_chat.md),
-whichever the chat runs in, followed by the rule's text.
+of a [local review](#local-reviews).
 
 A mode's instructions may also be written as `modes/<name>.md` and a rule's
 text as `rules/<name>.md`, beside `config.toml`, beside the local config, or in
@@ -2200,18 +2197,28 @@ the global text, and an empty global value suppresses the built-in text. Other
 options follow the usual layering, option by option. A mode naming a rule no
 layer defines is refused. `config show` reports the combined text and the
 highest layer that configured it, with the file that layer read it from, and
-warns for each layer whose rule repeats the opening of Shoal's guidance; the
+warns for each layer whose rule repeats the opening of a space's facts; the
 daemon alerts about it in the global config when it starts or reloads its
 config. Texts are read at launch without a daemon restart.
 
-Every workspace agent receives Shoal's [agent guidance](../src/client/config/templates/agent.md)
-ahead of its mode's rules; no layer replaces or suppresses it. A launch's first
+An agent is told, in order: the skill that describes Shoal's commands, which
+it loads when it needs them; the facts of its space; the space rules; its
+mode's rules; and its subject with its mode's instructions. Every agent's system
+text, in any mode, starts with Shoal's guidance: the facts of the kind of space
+it runs in, a [workspace](../src/client/config/templates/facts/workspace.md), a
+[chat in the checkout](../src/client/config/templates/facts/checkout_chat.md)
+or a [chat in a workspace's worktree](../src/client/config/templates/facts/workspace_chat.md),
+which state where it runs, which skill describes Shoal's commands, how
+activity and messages reach it and who reports to it; then the two
+[space rules](../src/client/config/templates/space_rules.md), to run `shoal done`
+once its work is done and to name its space with `shoal work rename`. Its
+mode's rules follow. No layer replaces or suppresses the guidance. A launch's first
 message is its subject, an issue or the prompt it was given, worded the same in
 every mode, followed by its mode's instructions; without a subject it has no
 first message. Rules and instructions may use `{workspace}`, `{branch}` and
-`{path}` of the space, `{repo}` and `{head}` for a chat, `{updates}` saying how a
-workspace agent receives issue and PR activity (delivered by its hooks for
-Claude Code and for Codex in a zmx session, Rex block or Herdr pane, otherwise
+`{path}` of the space, `{repo}` and `{head}` for a chat, `{updates}` saying how
+the agent receives issue and PR activity (delivered by its hooks for
+Claude Code, and for a workspace's Codex in a zmx session, Rex block or Herdr pane, otherwise
 by running `shoal watch pr`), `{issue.number}`, `{issue.title}` and
 `{issue.url}` of the subject's issue, and `{relabel}`, the sentence that swaps
 the `[issue]` `plan_label` for `planned_label`. Unknown placeholders stay

@@ -30,21 +30,23 @@ fn worker(delivery: Delivery) -> Place<'static> {
 }
 
 #[test]
-fn the_guidance_tells_each_launch_how_it_receives_updates() {
+fn the_facts_tell_each_launch_how_it_receives_updates() {
     let settings = settings("");
-    let pushed = brief(&settings, "worker", worker(Delivery::Pushed), None).unwrap();
-    assert!(
-        !pushed.system.contains("shoal watch pr"),
-        "{}",
-        pushed.system
-    );
-    let watched = brief(&settings, "worker", worker(Delivery::Watched), None).unwrap();
-    assert!(
-        watched.system.contains("`shoal watch pr`"),
-        "{}",
-        watched.system
-    );
-    assert!(!watched.system.contains("{updates}"));
+    let repo = repository();
+    for delivery in [Delivery::Pushed, Delivery::Watched] {
+        let workspace = brief(&settings, "worker", worker(delivery), None).unwrap();
+        let chat = brief(
+            &settings,
+            "chat",
+            chat(ChatHome::Checkout(&repo), delivery),
+            None,
+        );
+        for system in [workspace.system, chat.unwrap().system] {
+            let watches = system.contains("`shoal watch pr`");
+            assert_eq!(watches, delivery == Delivery::Watched, "{system}");
+            assert!(!system.contains("{updates}"));
+        }
+    }
 }
 
 #[test]
@@ -84,37 +86,70 @@ fn rules_follow_the_guidance_and_instructions_follow_the_subject() {
     assert!(error.to_string().contains("no mode triage"), "{error}");
 }
 
-#[test]
-fn the_chat_rule_describes_where_the_chat_runs_before_its_additions() {
-    let settings = settings("[rules.chat]\ntext = 'Answer in {repo}.'\n");
-    let repo: crate::model::Repository = serde_json::from_value(serde_json::json!({
+/// Asserts that `system` holds the facts that name `place_text`, then both
+/// space rules, then `rules`, the mode's rules, with every field filled in.
+fn assert_layers(system: &str, place_text: &str, rules: &str) {
+    let at = |text: &str| {
+        system
+            .find(text)
+            .unwrap_or_else(|| panic!("no {text}: {system}"))
+    };
+    assert!(at(place_text) < at("`shoal done`"), "{system}");
+    assert!(at(place_text) < at("`shoal work rename`"), "{system}");
+    assert!(system.ends_with(rules), "{system}");
+    assert!(!system.contains('{'), "{system}");
+}
+
+fn repository() -> crate::model::Repository {
+    serde_json::from_value(serde_json::json!({
         "id": "r", "path": "/repo", "source": "/repo", "last_used": 0,
     }))
-    .unwrap();
+    .unwrap()
+}
+
+fn chat(home: ChatHome<'_>, delivery: Delivery) -> Place<'_> {
+    Place::Chat {
+        repo: "shoal",
+        home,
+        delivery,
+    }
+}
+
+#[test]
+fn every_space_gets_its_facts_and_the_space_rules_before_its_modes_rules() {
+    let settings = settings(
+        "[rules.worker]\ntext = 'Babysit {branch}.'\n\
+         [rules.chat]\ntext = 'Answer in {repo}.'\n",
+    );
+    let worker = brief(&settings, "worker", worker(Delivery::Pushed), None).unwrap();
+    assert_layers(&worker.system, "workspace topic", "\n\nBabysit topic.");
+    let repo = repository();
     let workspace = workspace();
     for (home, place_text) in [
         (ChatHome::Checkout(&repo), "checkout at /repo"),
         (ChatHome::Workspace(&workspace), "worktree at /work/topic"),
     ] {
-        let place = Place::Chat {
-            repo: "shoal",
-            home,
-        };
+        let place = chat(home, Delivery::Pushed);
         let chat = brief(&settings, "chat", place, None).unwrap();
-        assert!(chat.system.contains(place_text), "{}", chat.system);
-        assert!(
-            chat.system.ends_with("\n\nAnswer in shoal."),
-            "{}",
-            chat.system
-        );
-        // Only a workspace's agent gets Shoal's workspace guidance.
-        assert!(!chat.system.contains("shoal done"));
+        assert_layers(&chat.system, place_text, "\n\nAnswer in shoal.");
         let plan = brief(&settings, "plan", place, Some(&issue())).unwrap();
         assert_eq!(plan.system, chat.system);
         let first = plan.first_message.unwrap();
         assert!(first.starts_with("Issue #7: Decide {path}\n"), "{first}");
         assert!(first.ends_with("`shoal start --issue 7`."), "{first}");
     }
+}
+
+#[test]
+fn a_chat_mode_without_the_chat_rule_still_gets_the_facts_and_space_rules() {
+    let settings = settings(
+        "[rules.triage]\ntext = 'Label it.'\n\
+         [modes.triage]\nkind = 'chat'\nrules = ['triage']\n",
+    );
+    let repo = repository();
+    let place = chat(ChatHome::Checkout(&repo), Delivery::Pushed);
+    let triage = brief(&settings, "triage", place, None).unwrap();
+    assert_layers(&triage.system, "checkout at /repo", "\n\nLabel it.");
 }
 
 #[test]
@@ -167,9 +202,10 @@ fn restored_rules_name_the_issue_the_space_links() {
         delivery: Delivery::Watched,
     };
     let system = system(&settings, "worker", place, issue.as_ref()).unwrap();
-    assert!(
-        system.ends_with(&format!("On #7, Decide: {url}")),
-        "{system}"
+    assert_layers(
+        &system,
+        "workspace topic",
+        &format!("\n\nOn #7, Decide: {url}"),
     );
     linked.links.issue = None;
     assert!(IssueFields::linked(&linked.links).is_none());

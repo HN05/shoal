@@ -9,24 +9,30 @@ use crate::{
 
 pub use super::placeholders::render;
 
-/// Sent to every workspace agent ahead of its mode's rules.
-pub const AGENT_GUIDANCE: &str = include_str!("templates/agent.md");
-/// What the `chat` rule says first for a chat in a repository's checkout.
-pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
-/// What the `chat` rule says first for a chat in a workspace's worktree,
-/// which [`CHAT_DEFAULT`] would describe as the registered checkout.
-pub const WORKSPACE_CHAT: &str = include_str!("templates/workspace_chat.md");
+/// What a workspace's agent is told about its space.
+const WORKSPACE_FACTS: &str = include_str!("templates/facts/workspace.md");
+/// What the agent of a chat in a repository's checkout is told about its
+/// space.
+const CHECKOUT_CHAT_FACTS: &str = include_str!("templates/facts/checkout_chat.md");
+/// What the agent of a chat in a workspace's worktree is told about its
+/// space, which [`CHECKOUT_CHAT_FACTS`] would describe as the registered
+/// checkout.
+const WORKSPACE_CHAT_FACTS: &str = include_str!("templates/facts/workspace_chat.md");
+/// The practices Shoal's own mechanics depend on, sent to every agent after
+/// its space's facts.
+const SPACE_RULES: &str = include_str!("templates/space_rules.md");
 /// A review's instructions: the fixed task, read-only rules, output contract
 /// and treatment of history, then the base the `review` rule replaces.
 const REVIEW: &str = include_str!("templates/review.md");
 const REVIEW_BASE_MARKER: &str = "<!-- base -->\n";
 
-/// Whether a rule's text repeats the opening of Shoal's guidance, as a copy
-/// of an earlier worker template does, although every launch already
-/// receives it.
+/// Whether a rule's text repeats the opening of the facts of a space, as a
+/// copy of an earlier worker template does, although every launch already
+/// receives them.
 pub fn repeats_guidance(template: &str) -> bool {
-    let opening = AGENT_GUIDANCE.lines().next().unwrap_or_default();
-    template.lines().any(|line| line.trim() == opening)
+    let openings = [WORKSPACE_FACTS, CHECKOUT_CHAT_FACTS, WORKSPACE_CHAT_FACTS]
+        .map(|facts| facts.lines().next().unwrap_or_default());
+    template.lines().any(|line| openings.contains(&line.trim()))
 }
 
 /// Chat `instructions` sent as an agent's first message, which starts a turn
@@ -97,18 +103,17 @@ pub enum Delivery {
 }
 
 impl Delivery {
-    fn instruction(self) -> &'static str {
+    /// How the agent receives its updates, as its facts state it.
+    fn description(self) -> &'static str {
         match self {
             Self::Pushed => {
-                "Shoal delivers their comments, reviews, CI results and\n\
-                 merge conflicts to you as context after tool calls, and starts your next\n\
-                 turn with them after you end one. Handle each delivery, then end your\n\
-                 turn to wait for the next."
+                "Shoal delivers the comments, reviews, CI results and merge conflicts of \
+                 watched PRs to you as context after tool calls, and starts your next turn \
+                 with them after you end one."
             }
             Self::Watched => {
-                "run `shoal watch pr`. Handle the reported\n\
-                 comments, reviews, CI results and merge conflicts, then wait again; a\n\
-                 timeout means no update."
+                "`shoal watch pr` waits for the comments, reviews, CI results and merge \
+                 conflicts of watched PRs and reports them; a timeout means no update."
             }
         }
     }
@@ -122,8 +127,13 @@ pub enum Place<'a> {
         workspace: &'a Workspace,
         delivery: Delivery,
     },
-    /// A chat about the repository named `repo`, run in `home`.
-    Chat { repo: &'a str, home: ChatHome<'a> },
+    /// A chat about the repository named `repo`, run in `home`, which
+    /// receives its updates by `delivery`.
+    Chat {
+        repo: &'a str,
+        home: ChatHome<'a>,
+        delivery: Delivery,
+    },
 }
 
 /// What an agent starts on: an issue, or a task given in words.
@@ -171,7 +181,8 @@ impl IssueFields {
 /// An agent's system text and its first message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Brief {
-    /// Shoal's guidance for a workspace's agent, then the mode's rules.
+    /// The facts of the agent's space, the space rules, then the mode's
+    /// rules.
     pub system: String,
     /// The subject, then the mode's instructions; `None` without a subject,
     /// as for a restored session, which has it already.
@@ -212,7 +223,7 @@ pub fn system(
     system_text(settings, mode, place, &Fields::new(settings, place, issue))
 }
 
-/// Shoal's guidance for a workspace's agent, then the rules of `mode`, with
+/// The facts of `place`, the space rules, then the rules of `mode`, with
 /// `fields` filled in.
 fn system_text(
     settings: &Settings,
@@ -221,31 +232,26 @@ fn system_text(
     fields: &Fields,
 ) -> Result<String> {
     let resolved = modes::get(&settings.modes, mode)?;
-    let mut system = Vec::new();
-    if let Place::Workspace { .. } = place {
-        system.push(AGENT_GUIDANCE.trim_end().to_owned());
-    }
+    let mut system = vec![facts(place).to_owned(), SPACE_RULES.to_owned()];
     for name in &resolved.rules {
         let rule = settings
             .rules
             .get(name)
             .with_context(|| format!("modes.{mode} names rule {name}, which no config defines"))?;
-        system.push(rule_text(name, &rule.text, place));
+        system.push(rule.text.clone());
     }
     Ok(fields.render(&join(system)))
 }
 
-/// A rule's configured `text`, after Shoal's description of a chat's place
-/// for the `chat` rule of a chat.
-fn rule_text(name: &str, text: &str, place: Place<'_>) -> String {
-    let bundled = match place {
-        Place::Chat { home, .. } if name == modes::CHAT_RULE => match home {
-            ChatHome::Checkout(_) => CHAT_DEFAULT,
-            ChatHome::Workspace(_) => WORKSPACE_CHAT,
+/// What the agent at `place` is told about its space, by the space's kind.
+fn facts(place: Place<'_>) -> &'static str {
+    match place {
+        Place::Workspace { .. } => WORKSPACE_FACTS,
+        Place::Chat { home, .. } => match home {
+            ChatHome::Checkout(_) => CHECKOUT_CHAT_FACTS,
+            ChatHome::Workspace(_) => WORKSPACE_CHAT_FACTS,
         },
-        _ => "",
-    };
-    join([bundled.trim_end().to_owned(), text.to_owned()])
+    }
 }
 
 /// The nonempty `parts`, trimmed at their ends, a blank line apart.
@@ -271,12 +277,17 @@ impl Fields {
                 ("{workspace}", workspace.name.clone()),
                 ("{branch}", workspace.branch.clone().unwrap_or_default()),
                 ("{path}", workspace.path.to_string_lossy().into_owned()),
-                ("{updates}", delivery.instruction().to_owned()),
+                ("{updates}", delivery.description().to_owned()),
             ],
-            Place::Chat { repo, home } => {
+            Place::Chat {
+                repo,
+                home,
+                delivery,
+            } => {
                 let mut fields = vec![
                     ("{repo}", repo.to_owned()),
                     ("{path}", home.path().to_string_lossy().into_owned()),
+                    ("{updates}", delivery.description().to_owned()),
                 ];
                 if let Some(workspace) = home.workspace() {
                     fields.extend([

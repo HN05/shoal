@@ -222,6 +222,11 @@ fn agent_integration(settings: &Effective, name: &str) -> &'static dyn Integrati
     }
 }
 
+/// How updates reach the chat agent `name` launched under `settings`.
+pub(in crate::cli) fn chat_delivery(settings: &Effective, name: &str) -> templates::Delivery {
+    launch::chat_delivery(agent_integration(settings, name))
+}
+
 /// Why `settings` turn agent `name` off, if they do: its own `enabled =
 /// false`, or what turns off the integration that adds it.
 fn agent_off(settings: &Effective, name: &str) -> Option<&'static str> {

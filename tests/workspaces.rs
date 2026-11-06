@@ -21296,7 +21296,7 @@ fn strip_shoal_arguments(text: &str, separator: char) -> String {
 
 /// Every agent prompt starts with Shoal's guidance, which spans these lines.
 const GUIDANCE_START: &str = "You are working in Shoal workspace ";
-const GUIDANCE_END: &str = "Do not end your session without it.";
+const GUIDANCE_END: &str = "Name your space with `shoal work rename` once you know what it is for.";
 
 /// Removes each argument, with the flag that introduces it, whose whole value is
 /// the guidance; guidance followed by additions stays for [`after_guidance`].
@@ -26549,16 +26549,12 @@ fn chat_instructions_append_the_chat_rules_to_shoals_description() {
         "{}",
         args[1]
     );
-    // Without additions, Shoal's description stands alone.
+    // Without additions, Shoal's facts and space rules stand alone.
     fs::write(config_dir.join("rules/chat.md"), "").unwrap();
     fs::write(fixture.repo.join(".shoal/rules/chat.md"), "").unwrap();
     let args = chat();
     assert!(args[1].starts_with(&description), "{}", args[1]);
-    assert!(
-        args[1].ends_with("stays after the chat\nends."),
-        "{}",
-        args[1]
-    );
+    assert!(args[1].ends_with(GUIDANCE_END), "{}", args[1]);
 }
 
 /// A chat in a workspace runs its agent in the worktree as a chat, told
