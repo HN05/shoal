@@ -15,6 +15,7 @@ use crate::{
     cli::{args::workspace::DesktopApp, context::Context, ui},
     env, execution,
     model::Workspace,
+    protocol::ConfigTarget,
 };
 
 #[cfg(test)]
@@ -47,14 +48,6 @@ impl App {
             && self.bundle.is_none_or(|bundle| Path::new(bundle).exists())
     }
 }
-
-/// The apps `shoal open` hands workspaces to, with the `--app` value that
-/// names each, in the order a picker offers them.
-const APPS: [(DesktopApp, &str); 3] = [
-    (DesktopApp::Claude, "claude"),
-    (DesktopApp::Codex, "codex"),
-    (DesktopApp::T3, "t3"),
-];
 
 /// The app `shoal open --app` names.
 pub(in crate::cli) fn app(name: DesktopApp) -> &'static App {
@@ -142,29 +135,45 @@ fn percent_encode(bytes: &[u8]) -> String {
 }
 
 /// `shoal open`: hand the named workspace, else the current directory's or
-/// a picked one, to the named desktop app, else the one [`choose`] gives,
-/// refusing what cannot open before a workspace is picked.
+/// a picked one, to the named desktop app, else the one [`default_app`]
+/// gives.
 pub(in crate::cli) async fn open(
     ctx: &Context,
     workspace: Option<String>,
     name: Option<DesktopApp>,
     args: Vec<OsString>,
 ) -> Result<i32> {
+    // A named app that cannot open is refused before a workspace is picked.
+    if let Some(name) = name {
+        ensure_opens(app(name), &args)?;
+    }
+    let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
     let app = app(match name {
         Some(name) => name,
-        None => choose(ctx)?,
+        None => default_app(ctx, &workspace).await?,
     });
     ensure_opens(app, &args)?;
-    let workspace = super::launch::shortcut_workspace(ctx, workspace).await?;
     hand_off(ctx, &workspace, app, args).await
 }
 
-/// The app `shoal open` opens without `--app`: the only one installed, else
-/// one the user picks.
+/// The app `shoal open` opens in `workspace` without `--app`: its
+/// `app.default`, else the only one installed, else one the user picks.
+async fn default_app(ctx: &Context, workspace: &Workspace) -> Result<DesktopApp> {
+    let target = ConfigTarget::Workspace(workspace.id.clone());
+    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    match settings.app.default {
+        Some(name) => Ok(name),
+        None => choose(ctx),
+    }
+}
+
+/// The only desktop app installed, else one the user picks among those
+/// installed.
 fn choose(ctx: &Context) -> Result<DesktopApp> {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
-    let installed: Vec<_> = (APPS.into_iter())
-        .filter(|(name, _)| app(*name).available(&search_path))
+    let installed: Vec<_> = (DesktopApp::ALL.iter().copied())
+        .filter(|name| app(*name).available(&search_path))
+        .map(|name| (name, name.as_str()))
         .collect();
     match installed[..] {
         [] => {

@@ -141,6 +141,11 @@ dirs = ["/tmp"]
 # The Git profile from [machine.git_profiles] for tracked agents' Git commands.
 # git_profile = "agent"
 
+[app]
+# Desktop app `shoal open` opens when --app is omitted: "claude" (macOS),
+# "codex" or "t3". Without it, the only installed one, else a picker.
+# default = "codex"
+
 # What agents are told: rules join their system text, a mode's instructions
 # follow their subject. Rules and instructions normally live beside this file
 # as rules/<name>.md and modes/<name>.md; inline text takes precedence.

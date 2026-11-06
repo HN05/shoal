@@ -1,7 +1,7 @@
 //! Arguments of commands that list, enter, inspect and manage workspaces.
 use std::{ffi::OsString, path::PathBuf};
 
-use clap::{Subcommand, ValueEnum};
+use clap::Subcommand;
 
 use crate::cli::{args::item_reference, list_status};
 
@@ -70,8 +70,9 @@ pub enum WorkspaceCommand {
     /// model, and cleanup does not see its activity.
     Open {
         workspace: Option<String>,
-        /// The app to open the workspace in; defaults to the only one
-        /// installed, else a picker.
+        /// The app to open the workspace in: claude (macOS), codex or t3;
+        /// defaults to app.default, else the only one installed, else a
+        /// picker.
         #[arg(long, value_enum)]
         app: Option<DesktopApp>,
         /// Arguments forwarded to the app's launcher.
@@ -80,16 +81,7 @@ pub enum WorkspaceCommand {
     },
 }
 
-/// A desktop app `shoal open` hands a workspace to.
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum DesktopApp {
-    /// The Claude app, on macOS.
-    Claude,
-    /// The Codex app.
-    Codex,
-    /// The running T3 Code app.
-    T3,
-}
+pub use crate::config::repo::DesktopApp;
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]

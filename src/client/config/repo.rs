@@ -75,6 +75,8 @@ pub struct RepoConfig {
     pub git_profile: Option<String>,
     #[option(section)]
     pub agent: AgentConfig,
+    #[option(section)]
+    pub app: AppConfig,
     /// What agents are told and the kind of space they start in, by mode.
     #[option(named_sections, default = crate::config::modes::built_in_modes())]
     pub modes: BTreeMap<String, crate::config::modes::ModeConfig>,
@@ -127,6 +129,24 @@ pub struct RepoConfig {
     pub permissions: PermissionsConfig,
     #[option(section)]
     pub runner: RunnerConfig,
+}
+
+states!(
+    /// A desktop app `shoal open` hands a workspace to.
+    DesktopApp: ValueEnum {
+        Claude => "claude",
+        Codex => "codex",
+        T3 => "t3",
+    }
+);
+
+/// The desktop app of a repository's workspaces.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = App)]
+pub struct AppConfig {
+    /// Desktop app `shoal open` opens when `--app` is omitted.
+    pub default: Option<DesktopApp>,
 }
 
 /// What every agent of a repository starts with.

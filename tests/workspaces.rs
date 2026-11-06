@@ -12669,6 +12669,14 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
     let output = open(&bin);
     assert!(!output.status.success(), "{output:?}");
     assert_eq!(output.stdout, b"");
+    // `app.default` chooses among them.
+    let config = Path::new(path).join(".shoal.toml");
+    fs::write(&config, "[app]\ndefault = 'codex'\n").unwrap();
+    let output = open(&bin);
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.ends_with(&format!("app\n{path}\n")), "{stdout}");
+    fs::remove_file(&config).unwrap();
     // Without a Codex on PATH, opening fails instead of reaching the
     // runner's own installation.
     let output = fixture
