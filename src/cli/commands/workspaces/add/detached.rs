@@ -40,14 +40,10 @@ pub(super) fn starts_detached(ctx: &Context, plan: &AddPlan, options: &AddOption
     Ok(agent && !options.here && !ctx.interactive())
 }
 
-/// Open the planned workspace and have its preparation queue the agent, or
-/// for the user's, queue it once the workspace is set up unless its
-/// settings have it run its own way, as an agent a desktop app or Happy runs
-/// does, which then starts here since it leaves this process at once. A
-/// launch of the user's that waits for other work queues whole instead, as
-/// from a terminal, and starts in the background once that work is
-/// complete, or now when it already is, here for an agent that runs its own
-/// way.
+/// Open the planned workspace and start its agent detached. A scoped
+/// caller's preparation queues the agent. The user's agent is placed once
+/// setup ends. A launch of the user's that waits for other work queues
+/// whole, as from a terminal.
 pub(super) async fn add_detached(
     ctx: &Context,
     mut plan: AddPlan,
@@ -106,7 +102,7 @@ pub(super) async fn ensure_detachable(
     }
     ensure!(
         !options.focus,
-        "without a terminal the agent starts detached, with nothing to focus; leave out --focus, or pass --here to run it in place"
+        "a call without a terminal or with --json starts its agent detached, with nothing to focus; leave out --focus, or pass --here to run it in place"
     );
     let settings = settings.get().await?;
     if !crate::env::is_scoped() && runs_its_own_way(settings, plan) {

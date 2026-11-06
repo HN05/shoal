@@ -219,6 +219,7 @@ async fn queue_unless_own_way(
     if agents::runs_its_own_way(&agent, &settings) {
         return Ok(None);
     }
+    terminal::ensure_background(&settings)?;
     let queued = queue_in_workspace(ctx, workspace, &settings, *launch).await?;
     Ok(Some(queued))
 }
