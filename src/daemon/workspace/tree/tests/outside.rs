@@ -1,13 +1,17 @@
 //! Trees below a chat without a repository, which takes children in every
 //! repository and whose scope reaches every space.
 use crate::{
-    daemon::{chats::NewChat, workspace::Manager, workspace_files::Attacher},
+    daemon::{
+        chats::NewChat,
+        test_support::{ProcessGroup, manager, repository},
+        workspace::Manager,
+        workspace_files::Attacher,
+    },
     model::{Chat, Repository, Workspace},
     protocol::{
         AgentMethod, ItemContext, ItemMethod, NotificationMethod, QueueMethod, WorkspaceMethod,
     },
     state::AgentState,
-    test_support::{ProcessGroup, manager, repository},
 };
 
 /// Register a repository for each of `names`.
@@ -93,7 +97,8 @@ async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir()
     // A new root_dir leaves it where the chat started, as a repository
     // keeps its directory.
     let moved = std::fs::canonicalize(temp.path()).unwrap().join("moved");
-    crate::test_support::configure(&manager, &format!("[machine]\nroot_dir = {moved:?}\n")).await;
+    crate::daemon::test_support::configure(&manager, &format!("[machine]\nroot_dir = {moved:?}\n"))
+        .await;
     let listed = manager.recorded_chat(&master.id).await.unwrap().unwrap();
     assert_eq!(listed.tmp_dir, Some(tmp_dir.clone()));
     assert_eq!(listed.root_dir, Some(root_dir.clone()));

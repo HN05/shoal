@@ -3,10 +3,10 @@ use std::sync::Arc;
 use super::super::{ExecutionKind, Manager};
 use crate::{
     client::list_status::ListStatus,
+    daemon::test_support::{ProcessGroup, manager, repository},
     execution::TrackedAgent,
     model::{CleanupReason, Workspace},
     state::AgentState,
-    test_support::{ProcessGroup, manager, repository},
 };
 
 /// A workspace `parent` and a workspace split from it.
