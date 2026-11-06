@@ -9,7 +9,8 @@
 //! - [`picker`]: an fzf picker over `(id, label)` [`Entries`] that returns
 //!   the chosen id ([`pick`]), a typed value ([`pick_choice`]), an issue or
 //!   PR ([`pick_item`]), or the key that chose it ([`pick_with_keys`]), or
-//!   whose keys act on an entry without leaving it ([`pick_in_place`]).
+//!   whose keys act on an entry without leaving it ([`pick_in_place`]);
+//!   [`can_pick`] tells whether one can run, for choices with a usual answer.
 //! - [`views`]: choosing a row across views ([`pick_in_views`]), reading
 //!   the next view ([`next_picker_view`]) and encoding its transition
 //!   ([`PickerView::transition`]).

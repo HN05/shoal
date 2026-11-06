@@ -49,6 +49,14 @@ impl<T: Clone> KeyBindings<'_, T> {
     }
 }
 
+/// Whether a picker can run: on a terminal with fzf installed. A choice
+/// with a usual answer takes it without one instead of being refused.
+pub fn can_pick(ctx: &Context) -> bool {
+    let search_path = std::env::var_os("PATH").unwrap_or_default();
+    ctx.interactive()
+        && crate::fsutil::find_executable(Tool::Fzf.program().as_ref(), &search_path).is_some()
+}
+
 pub fn pick(ctx: &Context, prompt: &str, entries: Entries) -> Result<String> {
     Ok(run_picker(ctx, prompt, entries, Vec::new(), false)?.id)
 }

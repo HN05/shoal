@@ -35,7 +35,6 @@ use crate::{
     model::{Chat, ChatHome, LinkedItem, Relation, RemovedWorkspace, Repository, Workspace},
     paths::Paths,
     protocol::ConfigTarget,
-    tools::Tool,
 };
 
 pub(in crate::cli) use crate::client::transcripts::AgentEnvironment;
@@ -680,7 +679,6 @@ fn pick_agent(
         ctx.interactive(),
         "no agent selected; pass --agent or set agent.default in the repository or global config"
     );
-    let search_path = std::env::var_os("PATH").unwrap_or_default();
     let mut choices: Vec<_> = names(settings)
         .into_iter()
         .filter(|name| available(name))
@@ -688,9 +686,7 @@ fn pick_agent(
         .collect();
     // A picker cannot run without fzf. Treat that as “No agent” so callers
     // without the optional interactive dependency retain the existing flow.
-    if choices.is_empty()
-        || fsutil::find_executable(OsStr::new(Tool::Fzf.program()), &search_path).is_none()
-    {
+    if choices.is_empty() || !ui::can_pick(ctx) {
         return Ok(None);
     }
     choices.push((None, "No agent".into()));
