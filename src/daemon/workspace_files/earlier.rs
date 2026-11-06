@@ -35,8 +35,9 @@ impl Manager {
         }
         // A repository removed since has nothing left to record.
         if self.repository(repository_id).await.is_ok() {
-            let (repo, _files) = self.lock_repository_files(repository_id).await?;
-            if let Some(layout) = Layout::of(&repo) {
+            let key = super::HomeKey::Repository(self.repository(repository_id).await?);
+            let (home, _files) = self.lock_files_home(&key).await?;
+            if let Some(layout) = home.layout() {
                 self.record_layout_earlier_files(layout, repository_id)
                     .await?;
             }

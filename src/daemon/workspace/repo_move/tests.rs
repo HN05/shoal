@@ -776,3 +776,49 @@ async fn a_root_move_waits_for_chats_without_a_repository_and_takes_their_tempor
     assert!(!root.join(".tmp").exists());
     Ok(())
 }
+
+#[tokio::test]
+async fn a_root_move_waits_for_the_files_of_removed_chats_without_a_repository() -> Result<()> {
+    let (temp, manager) = test_support::indexed_manager().await;
+    let origin = test_support::repository(temp.path(), "origin");
+    let repo = manager
+        .register_repository(format!("file://{}", origin.display()).into(), None, None)
+        .await?;
+    let root = (repo.workspaces_dir.as_deref())
+        .and_then(Path::parent)
+        .context("no root")?
+        .to_owned();
+    let process = test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let new = crate::daemon::chats::NewChat {
+        name: "master".into(),
+        agent: "claude".into(),
+        mode: "orchestrate".into(),
+        pid: process.id(),
+        origin: None,
+        hands_over: false,
+        parent: None,
+    };
+    let chat = manager.start_new_chat(None, None, new).await?;
+    let report = temp.path().join("report.md");
+    fs::write(&report, "Plan")?;
+    manager
+        .add_attached_files(&chat.name, vec![report.into()], &Attacher::User)
+        .await?;
+    process.kill();
+    manager.stop_finished_chats().await?;
+    manager.remove_chat(&chat.id, None).await?;
+    let error = manager
+        .move_repositories(Layout::Excluded)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("master"), "{error:#}");
+
+    manager
+        .remove_attached_files("master", Vec::new(), Vec::new())
+        .await?;
+    assert!(root.join(".attachments").is_dir());
+    manager.move_repositories(Layout::Excluded).await?;
+    assert_eq!(fs::read_link(&root)?, Path::new(".shoal.noindex"));
+    assert!(!root.join(".attachments").exists());
+    Ok(())
+}

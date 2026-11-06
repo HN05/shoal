@@ -1943,7 +1943,8 @@ removes those you hold nothing in, under the
 the requests routed to it, with a grant; merging, PR verdicts, CI approval and
 your notifications stay with you. It reads the issues and PRs of every
 registered repository and changes them only through a space of their
-repository, as `--space` names one, keeps no attached files, and [`shoal move`](#move-a-space-to-another-machine)
+repository, as `--space` names one, keeps its attached files in the state
+directory, and [`shoal move`](#move-a-space-to-another-machine)
 refuses it.
 
 ### Planning issues
@@ -2830,8 +2831,10 @@ checkout or workspace or Shoal's state inside its directory, or a process
 other than those commands and agents whose working directory is inside it, so
 leave those directories first. A [master session](#master-session) or any
 other chat without a repository, running or stopped, also refuses the move,
-since it runs in `root_dir` and keeps its temporary directory there; remove it
-first, and the move deletes the `.tmp` it leaves. The move is recorded before anything moves; a failed or
+since it runs in `root_dir` and keeps its temporary directory and attached files
+there, and so do the files a removed one left; remove it first and delete those
+files with `shoal files rm --space <chat>`, and the move deletes the `.tmp` and
+`.attachments` left behind. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
 repository refuses other changes until the next `move root` or daemon start
 completes it. Agent trust for the old paths is removed, and the new paths are
@@ -4813,7 +4816,8 @@ A `type: "file"` line records a file [attached](#attached-files) to a workspace
 or chat by any route (`kind: "file_added"`) or deleted by any route, including
 `shoal files rm`, workspace removal, the retention sweep and disk space cleanup
 (`kind: "file_removed"`): its `id`, `created_at`, `workspace_id` or `chat_id`
-(the other null), `repository_id`, and `file`, the record as
+(the other null), `repository_id` (null for a chat without a repository),
+and `file`, the record as
 `shoal files --json` lists it, with its own `id`. Attaching a file that is
 already attached adds nothing.
 
@@ -4981,7 +4985,9 @@ how it came (`message` for a file sent with `shoal messages send --attach`,
 `added` for one from `shoal files add`, `result` for one handed back with
 `shoal done --attach`, `alert` and `question` for one sent with
 `shoal alerts send --attach` and `shoal questions ask --attach`), when, and the path of Shoal's copy in the repository
-directory's `.attachments`. Results, and the files sent with alerts and
+directory's `.attachments`, or for a chat without a repository that of the
+`root_dir` it started in.
+Results, and the files sent with alerts and
 questions, outlive the workspace: they stay for as
 long as its removal record, `cleanup.restore.retention_days` like its
 [checkpoints](#checkpoints-and-restore), and `shoal files <name>` still lists

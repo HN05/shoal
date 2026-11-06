@@ -5,4 +5,5 @@ own; code changes are made in Shoal workspaces. The `shoal` skill
 describes Shoal's commands. {updates} Messages from the user and Shoal arrive
 the same way. The agents of the spaces below this chat report to you through
 Shoal messages. `$TMPDIR` belongs to this chat, and Shoal deletes it with the
-chat.
+chat. Files attached with `shoal files add FILE#TITLE`, such as a report, stay
+after the chat ends.

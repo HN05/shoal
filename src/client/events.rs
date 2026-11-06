@@ -279,7 +279,8 @@ pub struct FileEventDetails {
     pub workspace_id: Option<String>,
     /// Null for a workspace's file.
     pub chat_id: Option<String>,
-    pub repository_id: String,
+    /// Null for the file of a chat without a repository.
+    pub repository_id: Option<String>,
     /// The record as `shoal files` lists it.
     pub file: crate::client::files::AttachedFile,
 }

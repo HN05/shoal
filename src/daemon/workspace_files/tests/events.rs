@@ -93,7 +93,7 @@ async fn every_route_records_one_added_event_per_file() {
     let added = &events[2];
     assert_eq!(added.workspace_id.as_deref(), Some(workspace.id.as_str()));
     assert_eq!(added.chat_id, None);
-    assert_eq!(added.repository_id, workspace.repository_id);
+    assert_eq!(added.repository_id.as_ref(), Some(&workspace.repository_id));
     // The event's file is the record as `shoal files` lists it.
     assert_eq!(added.file, listed[2]);
     assert_eq!(added.file.title.as_deref(), Some("Crash log"));
@@ -228,7 +228,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
     let gone = &removed[3];
     assert_eq!(gone.workspace_id.as_deref(), Some(expired.id.as_str()));
     assert_eq!(gone.file.workspace.as_deref(), Some("expired"));
-    assert_eq!(gone.repository_id, workspace.repository_id);
+    assert_eq!(gone.repository_id.as_ref(), Some(&workspace.repository_id));
 }
 
 #[tokio::test]
@@ -271,5 +271,54 @@ async fn a_chats_file_events_name_the_chat() {
         assert_eq!(event.chat_id.as_deref(), Some(chat.id.as_str()));
         assert_eq!(event.workspace_id, None);
         assert_eq!(event.file.chat.as_deref(), Some("planning"));
+    }
+}
+
+#[tokio::test]
+async fn the_file_events_of_a_chat_without_a_repository_name_none() {
+    use FileEventKind::{Added, Removed};
+    let (temp, manager) = manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let new = crate::daemon::chats::NewChat {
+        name: "master".into(),
+        agent: "claude".into(),
+        mode: "orchestrate".into(),
+        pid: process.id(),
+        origin: None,
+        hands_over: false,
+        parent: None,
+    };
+    let chat = manager.start_new_chat(None, None, new).await.unwrap();
+    let report = temp.path().join("report.md");
+    std::fs::write(&report, "Plan").unwrap();
+    manager
+        .add_attached_files(&chat.name, vec![report.into()], &Attacher::User)
+        .await
+        .unwrap();
+    process.kill();
+    manager.stop_finished_chats().await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE ended_chats SET expires_at=0", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.expire_results().await.unwrap();
+
+    let events = file_events(&manager).await;
+    assert_eq!(
+        summary(&events),
+        [
+            (Added, "report.md", FileSource::Added),
+            (Removed, "report.md", FileSource::Added),
+        ]
+    );
+    for event in &events {
+        assert_eq!(event.chat_id.as_deref(), Some(chat.id.as_str()));
+        assert_eq!(event.repository_id, None);
     }
 }

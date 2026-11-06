@@ -223,7 +223,7 @@ async fn removing_a_chat_without_a_repository_removes_its_children_in_every_repo
 }
 
 #[tokio::test]
-async fn a_broadcast_with_files_passes_over_a_chat_without_a_repository() {
+async fn a_broadcast_with_files_reaches_a_chat_without_a_repository() {
     let (temp, manager) = manager().await;
     let repos = repositories(&temp, &manager, &["repo"]).await;
     let (_master, _process) = outside(&manager, "master", None).await;
@@ -252,7 +252,7 @@ async fn a_broadcast_with_files_passes_over_a_chat_without_a_repository() {
         )
     };
     let reached = send(vec![report.into()]).await.unwrap();
-    assert_eq!(reached.chats, std::slice::from_ref(&talk.name));
+    assert_eq!(reached.chats, ["master".to_owned(), talk.name.clone()]);
     let reached = send(Vec::new()).await.unwrap();
     assert_eq!(reached.chats, ["master".to_owned(), talk.name]);
 }

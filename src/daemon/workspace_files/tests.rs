@@ -1312,6 +1312,113 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
 }
 
 #[tokio::test]
+async fn a_chat_without_a_repository_keeps_its_files_in_root_dir() {
+    let (temp, manager) = manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let new = crate::daemon::chats::NewChat {
+        name: "master".into(),
+        agent: "claude".into(),
+        mode: "orchestrate".into(),
+        pid: process.id(),
+        origin: None,
+        hands_over: false,
+        parent: None,
+    };
+    let chat = manager.start_new_chat(None, None, new).await.unwrap();
+    let report = temp.path().join("report.md");
+    std::fs::write(&report, "Plan").unwrap();
+    let added = manager
+        .add_attached_files(&chat.name, vec![report.into()], &Attacher::User)
+        .await
+        .unwrap();
+    let copy = added[0].path.clone();
+    let root_dir = manager.config().root_dir(&manager.paths).unwrap();
+    assert!(
+        copy.starts_with(root_dir.join(".attachments")),
+        "{}",
+        copy.display()
+    );
+    assert_eq!(manager.attached_files(&chat.id).await.unwrap(), added);
+    // Deleting the files of every idle space spares a running chat's.
+    assert!(manager.remove_idle_files().await.unwrap().is_empty());
+
+    process.kill();
+    manager.stop_finished_chats().await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
+    manager.expire_results().await.unwrap();
+    assert!(copy.exists());
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE ended_chats SET expires_at=0", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.expire_results().await.unwrap();
+    assert!(!copy.exists());
+    assert!(manager.attached_files("master").await.is_err());
+}
+
+#[tokio::test]
+async fn files_of_a_chat_without_a_repository_stay_with_the_root_dir_it_started_in() {
+    let (temp, manager) = manager().await;
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let new = crate::daemon::chats::NewChat {
+        name: "master".into(),
+        agent: "claude".into(),
+        mode: "orchestrate".into(),
+        pid: process.id(),
+        origin: None,
+        hands_over: false,
+        parent: None,
+    };
+    let chat = manager.start_new_chat(None, None, new).await.unwrap();
+    let root_dir = manager.config().root_dir(&manager.paths).unwrap();
+    let attach = |name: &str| {
+        let file = temp.path().join(name);
+        std::fs::write(&file, name).unwrap();
+        manager.add_attached_files(&chat.name, vec![file.into()], &Attacher::User)
+    };
+    let early = attach("early.md").await.unwrap()[0].path.clone();
+    // root_dir changes while the chat runs, as an edit and a reload change it.
+    let moved = std::fs::canonicalize(temp.path()).unwrap().join("moved");
+    let config = format!("[machine]\nroot_dir = {moved:?}\n");
+    crate::daemon::test_support::configure(&manager, &config).await;
+    let late = attach("late.md").await.unwrap()[0].path.clone();
+    for copy in [&early, &late] {
+        assert!(
+            copy.starts_with(root_dir.join(".attachments")),
+            "{}",
+            copy.display()
+        );
+    }
+    // Deleting one still finds it where it is kept.
+    manager
+        .remove_attached_files(&chat.id, vec!["early.md".into()], Vec::new())
+        .await
+        .unwrap();
+    assert!(!early.exists());
+
+    process.kill();
+    manager.stop_finished_chats().await.unwrap();
+    manager.remove_chat(&chat.id, None).await.unwrap();
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE ended_chats SET expires_at=0", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.expire_results().await.unwrap();
+    assert!(!late.exists(), "{}", late.display());
+    assert!(manager.attached_files("master").await.is_err());
+}
+
+#[tokio::test]
 async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;

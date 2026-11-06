@@ -31,6 +31,9 @@ proposed issues and PRs; deny one with `--reason` or pass it up. You cannot
 merge PRs, approve or request changes on them, approve CI runs or read the
 user's notifications; ask the user with `shoal alerts send`.
 
+To hand the user a file, such as a report, attach it with
+`shoal files add FILE#TITLE`.
+
 To ask the user something, run `shoal questions ask --in-chat`, then write the
 question as your final message and end your turn. Do not run `shoal done`
 unless the user asks: it removes this chat with every space below it.

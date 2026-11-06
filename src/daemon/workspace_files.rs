@@ -39,21 +39,71 @@ mod tests;
 pub(crate) struct Space {
     pub(crate) id: String,
     pub(crate) name: String,
-    /// Where its files are kept; none for a chat without a repository,
-    /// which keeps none.
+    /// The repository whose directory keeps its files; none for a chat
+    /// without a repository, whose files `root_dir` keeps.
     pub(crate) repository_id: Option<String>,
+    /// The `root_dir` a chat without a repository keeps its files in, the
+    /// one it started in; none for a space of a repository.
+    pub(crate) root_dir: Option<PathBuf>,
     /// The space's parent when it attached the files.
     pub(crate) parent_id: Option<String>,
 }
 
-impl Space {
-    /// The repository whose directory keeps the space's files.
-    pub(crate) fn files_home(&self) -> Result<&str> {
-        self.repository_id
-            .as_deref()
-            .with_context(|| format!("chat {} has no repository, so it keeps no files", self.name))
+/// Which home keeps attached files: a repository's directory, or a
+/// `root_dir` that keeps those of chats without a repository.
+#[derive(Debug, Clone)]
+pub(crate) enum HomeKey {
+    Repository(Repository),
+    Root(PathBuf),
+}
+
+impl HomeKey {
+    /// Its repository's ID; none for a `root_dir`.
+    pub(crate) fn repository_id(&self) -> Option<String> {
+        match self {
+            Self::Repository(repo) => Some(repo.id.clone()),
+            Self::Root(_) => None,
+        }
+    }
+
+    /// Its `root_dir` as records name it; none for a repository.
+    pub(crate) fn root_dir(&self) -> Option<String> {
+        match self {
+            Self::Repository(_) => None,
+            Self::Root(root) => Some(root.to_string_lossy().into_owned()),
+        }
+    }
+
+    /// What a failure names it by.
+    pub(crate) fn describe(&self) -> String {
+        match self {
+            Self::Repository(repo) => repo.path.display().to_string(),
+            Self::Root(root) => format!("the chats without a repository in {}", root.display()),
+        }
     }
 }
+
+/// Where attached files are kept: in a repository's directory, or for the
+/// chats without a repository, in `root_dir`.
+pub(crate) enum FilesHome {
+    Repository(Repository),
+    Outside(Layout),
+}
+
+impl FilesHome {
+    /// Where its files are; a repository registered before the repository
+    /// directory layout has none.
+    pub(crate) fn layout(&self) -> Option<Layout> {
+        match self {
+            Self::Repository(repo) => Layout::of(repo),
+            Self::Outside(layout) => Some(layout.clone()),
+        }
+    }
+}
+
+/// The key of the gate of the files of the chats without a repository,
+/// which no repository ID takes.
+const OUTSIDE_GATE: &str = "";
 
 impl From<Workspace> for Space {
     fn from(workspace: Workspace) -> Self {
@@ -61,6 +111,7 @@ impl From<Workspace> for Space {
             id: workspace.id,
             name: workspace.name,
             repository_id: Some(workspace.repository_id),
+            root_dir: None,
             parent_id: workspace.parent.map(|parent| parent.id),
         }
     }
@@ -81,6 +132,7 @@ impl From<Chat> for Space {
             id: chat.id,
             name: chat.name,
             repository_id: chat.repository_id,
+            root_dir: chat.root_dir,
             parent_id: chat.parent.map(|parent| parent.id),
         }
     }
@@ -312,7 +364,9 @@ impl Manager {
         ids: Vec<i64>,
     ) -> Result<Vec<AttachedFile>> {
         let space = self.file_space(selector).await?;
-        let (repo, _files) = self.lock_repository_files(space.files_home()?).await?;
+        let (home, _files) = self
+            .lock_files_home(&self.space_home(&space).await?)
+            .await?;
         let id = space.id.clone();
         let mut files = self.store.run(move |db| records::list(db, &id)).await?;
         if !names.is_empty() || !ids.is_empty() {
@@ -325,7 +379,7 @@ impl Manager {
             );
             files.retain(|file| names.contains(&file.name) || ids.contains(&file.id));
         }
-        self.delete_files(&repo, files).await
+        self.delete_files(&home, files).await
     }
 
     /// Delete the attached files of every workspace without a running agent
@@ -334,26 +388,35 @@ impl Manager {
     /// No execution starts while a repository's files are chosen and deleted.
     pub async fn remove_idle_files(&self) -> Result<Vec<AttachedFile>> {
         let mut deleted = Vec::new();
-        for listed in self.repositories().await? {
+        for key in self.files_homes().await? {
             // Execution admission comes first, as nothing holding the files
             // gate waits for it.
             let _admission = self.executions.connections().await;
-            let (repo, _files) = self.lock_repository_files(&listed.id).await?;
-            let id = repo.id.clone();
-            let files = self.store.run(move |db| records::idle(db, &id)).await?;
-            deleted.extend(self.delete_files(&repo, files).await?);
+            let (home, _files) = self.lock_files_home(&key).await?;
+            let files = self.store.run(move |db| records::idle(db, &key)).await?;
+            deleted.extend(self.delete_files(&home, files).await?);
         }
         Ok(deleted)
     }
 
-    /// Delete the copies `files` of `repo` and then their records. Callers
-    /// hold the gate of the repository's attached files.
+    /// The homes of attached files: every repository's directory, and each
+    /// `root_dir` that keeps files of chats without a repository.
+    pub(crate) async fn files_homes(&self) -> Result<Vec<HomeKey>> {
+        let repositories = self.repositories().await?.into_iter();
+        let roots = self.store.run(|db| records::roots(db)).await?;
+        Ok((repositories.map(HomeKey::Repository))
+            .chain(roots.into_iter().map(|root| HomeKey::Root(root.into())))
+            .collect())
+    }
+
+    /// Delete the copies `files` kept in `home` and then their records.
+    /// Callers hold the gate of its attached files.
     async fn delete_files(
         &self,
-        repo: &Repository,
+        home: &FilesHome,
         files: Vec<AttachedFile>,
     ) -> Result<Vec<AttachedFile>> {
-        let layout = Layout::of(repo).context("the repository has no directory")?;
+        let layout = home.layout().context("the repository has no directory")?;
         let paths: Vec<PathBuf> = files.iter().map(|file| file.path.clone()).collect();
         tokio::task::spawn_blocking(move || {
             paths.iter().try_for_each(|path| layout.delete_copy(path))
@@ -415,32 +478,59 @@ impl Manager {
             .await
     }
 
-    /// Hold the gate of repository `repository_id`'s attached files, with the
-    /// repository as it is once held: a move of its directory, which holds
-    /// the gate, may have finished meanwhile.
-    pub(crate) async fn lock_repository_files(
+    /// Where the chats without a repository keep their attached files in
+    /// `root_dir`, marked as this daemon's.
+    pub(crate) fn outside_files_layout(&self, root_dir: &std::path::Path) -> Layout {
+        Layout::outside_repositories(root_dir, &self.root_dir_owner())
+    }
+
+    /// The home that keeps the files of `space`: its repository's, or the
+    /// `root_dir` a chat without one started in, or else the configured one.
+    pub(crate) async fn space_home(&self, space: &Space) -> Result<HomeKey> {
+        Ok(match (&space.repository_id, &space.root_dir) {
+            (Some(id), _) => HomeKey::Repository(self.repository(id).await?),
+            (None, Some(root_dir)) => HomeKey::Root(root_dir.clone()),
+            (None, None) => HomeKey::Root(self.config().root_dir(&self.paths)?),
+        })
+    }
+
+    /// The names of the chats without a repository whose files are kept.
+    pub(crate) async fn outside_files_kept(&self) -> Result<Vec<String>> {
+        self.store.run(|db| records::outside_repositories(db)).await
+    }
+
+    /// Hold the gate of the attached files `key` keeps, with where they are
+    /// once held: a move of a repository's directory, which holds the gate,
+    /// may have finished meanwhile.
+    pub(crate) async fn lock_files_home(
         &self,
-        repository_id: &str,
-    ) -> Result<(Repository, OwnedMutexGuard<()>)> {
-        let guard = self.gates.lock_message_files(repository_id).await;
-        let repo = self.repository(repository_id).await?;
-        Ok((repo, guard))
+        key: &HomeKey,
+    ) -> Result<(FilesHome, OwnedMutexGuard<()>)> {
+        let gate = match key {
+            HomeKey::Repository(repo) => repo.id.clone(),
+            HomeKey::Root(_) => OUTSIDE_GATE.to_owned(),
+        };
+        let guard = self.gates.lock_message_files(&gate).await;
+        let home = match key {
+            HomeKey::Repository(repo) => FilesHome::Repository(self.repository(&repo.id).await?),
+            HomeKey::Root(root_dir) => FilesHome::Outside(self.outside_files_layout(root_dir)),
+        };
+        Ok((home, guard))
     }
 
     /// Hold the gate of the files attached to the workspace or chat `space`,
-    /// with where its repository keeps them, once the workspace is still
-    /// there and not being removed, or the chat still runs. A registration
-    /// older than the repository's directory reserves it first, under the Git
-    /// gate, which is never taken while holding this one.
+    /// with where they are kept, once the workspace is still there and not
+    /// being removed, or the chat still runs. A registration older than the
+    /// repository's directory reserves it first, under the Git gate, which
+    /// is never taken while holding this one.
     pub(crate) async fn lock_files(&self, space: &Space) -> Result<(Layout, OwnedMutexGuard<()>)> {
-        let repo = self
-            .reserve_repository_directory(space.files_home()?)
-            .await?;
-        let guard = self.gates.lock_message_files(&repo.id).await;
+        if let Some(repository) = &space.repository_id {
+            self.reserve_repository_directory(repository).await?;
+        }
+        let (home, guard) = self.lock_files_home(&self.space_home(space).await?).await?;
         // A move, removal or end may have finished while this waited.
         self.ensure_attachable(&space.id).await?;
-        let repo = self.repository(&repo.id).await?;
-        let layout = Layout::of(&repo).context("the repository has no directory")?;
+        let layout = home.layout().context("the repository has no directory")?;
         Ok((layout, guard))
     }
 

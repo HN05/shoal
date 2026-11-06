@@ -136,8 +136,9 @@ impl Manager {
     }
 
     /// Refuse while a chat without a repository, which runs in `root_dir` and
-    /// keeps its temporary directory there, is recorded. Callers hold the
-    /// registry gate, which recording such a chat takes too.
+    /// keeps its temporary directory and attached files there, or a file
+    /// such a chat left is recorded. Callers hold the registry gate, which
+    /// recording such a chat takes too.
     async fn ensure_root_dir_unused(&self) -> Result<()> {
         let rootless: Vec<_> = (self.chats().await?.into_iter())
             .filter(|chat| chat.repository_id.is_none())
@@ -148,6 +149,13 @@ impl Manager {
             "chats without a repository run in root_dir and keep files there; remove {} first",
             rootless.join(", ")
         );
+        let kept = self.outside_files_kept().await?;
+        ensure!(
+            kept.is_empty(),
+            "root_dir keeps the files of the removed chats {}; shoal files rm --space <chat> \
+             deletes each one's",
+            kept.join(", ")
+        );
         Ok(())
     }
 
@@ -155,10 +163,11 @@ impl Manager {
     /// in the configured root: the root a plan moves out of, or the one a
     /// move links, which must not hold it.
     async fn remove_root_dir_leftovers(&self) -> Result<()> {
-        let Some(tmp) = self.outside_tmp_layout() else {
-            return Ok(());
-        };
-        tokio::task::spawn_blocking(move || tmp.remove()).await?
+        if let Some(tmp) = self.outside_tmp_layout() {
+            tokio::task::spawn_blocking(move || tmp.remove()).await??;
+        }
+        let files = self.outside_files_layout(&self.config().root_dir(&self.paths)?);
+        tokio::task::spawn_blocking(move || files.remove()).await?
     }
 
     /// Finish or roll back every move a stopped daemon or failed attempt left.

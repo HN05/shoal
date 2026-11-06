@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 136;
+pub(super) const SCHEMA_VERSION: i64 = 137;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -399,6 +399,7 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (134, include_str!("space_agent_state.sql"), None),
     (135, WORKSPACE_COPIES, None),
     (136, "", Some(allow_chats_without_repository)),
+    (137, "", Some(allow_files_without_repository)),
 ];
 
 /// The workspace a copy was made from, its checkpoint the copy started
@@ -488,6 +489,15 @@ pub(super) fn allow_branchless_workspaces(db: &Connection) -> Result<()> {
 pub(super) fn allow_chats_without_repository(db: &Connection) -> Result<()> {
     drop_not_null(db, "chats", "repository_id TEXT")?;
     db.execute_batch("ALTER TABLE chats ADD COLUMN root_dir TEXT")?;
+    Ok(())
+}
+
+/// Drop the `NOT NULL` constraint on `workspace_files.repository_id`: a
+/// chat without a repository keeps its files in its `root_dir`, which each
+/// of their records names.
+pub(super) fn allow_files_without_repository(db: &Connection) -> Result<()> {
+    drop_not_null(db, "workspace_files", "repository_id TEXT")?;
+    db.execute_batch("ALTER TABLE workspace_files ADD COLUMN root_dir TEXT")?;
     Ok(())
 }
 

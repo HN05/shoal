@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use super::{AttachedFile, Attacher, FileSource, SentFile, Space, layout::Copy};
+use super::{AttachedFile, Attacher, FileSource, HomeKey, SentFile, Space, layout::Copy};
 
 const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached_by,
     COALESCE((SELECT expires_at FROM removed_workspaces r
@@ -95,6 +95,9 @@ fn space(row: &rusqlite::Row<'_>) -> rusqlite::Result<Space> {
         name: row.get(1)?,
         repository_id: row.get(2)?,
         parent_id: row.get(3)?,
+        root_dir: row
+            .get::<_, Option<String>>(4)?
+            .map(std::path::PathBuf::from),
     })
 }
 
@@ -118,14 +121,14 @@ pub(crate) fn record(
             .unwrap_or_default();
         tx.execute(
             "INSERT INTO workspace_files
-                (space_id,space,parent_id,repository_id,source,name,title,path,bytes,
+                (space_id,space,parent_id,repository_id,root_dir,source,name,title,path,bytes,
                     created_at,attached_by)
-                SELECT id,name,parent,repository_id,?2,?3,?4,?5,?6,unixepoch(),?7
+                SELECT id,name,parent,repository_id,root_dir,?2,?3,?4,?5,?6,unixepoch(),?7
                 FROM (SELECT id,name,(SELECT parent_id FROM space_parents WHERE space_id=?1)
-                            AS parent,repository_id
+                            AS parent,repository_id,NULL AS root_dir
                         FROM workspaces WHERE id=?1
                     UNION ALL SELECT id,name,(SELECT parent_id FROM space_parents WHERE space_id=?1),
-                            repository_id
+                            repository_id,root_dir
                         FROM chats WHERE id=?1)
                 WHERE true
                 ON CONFLICT(path) DO UPDATE SET title=COALESCE(excluded.title,title)",
@@ -187,18 +190,32 @@ pub(crate) fn count(db: &Connection, space_id: &str) -> Result<usize> {
     Ok(usize::try_from(count)?)
 }
 
-/// The files of repository `repository_id` whose workspace has no recorded
-/// execution, running or unresolved, and that no running chat owns, oldest
-/// first.
-pub(super) fn idle(db: &Connection, repository_id: &str) -> Result<Vec<AttachedFile>> {
+/// The files `home` keeps whose workspace has no recorded execution, running
+/// or unresolved, and that no running chat owns, oldest first.
+pub(super) fn idle(db: &Connection, home: &HomeKey) -> Result<Vec<AttachedFile>> {
     Ok(db
         .prepare(&format!(
-            "SELECT {COLUMNS} FROM workspace_files WHERE repository_id=?1
+            "SELECT {COLUMNS} FROM workspace_files WHERE {IN_HOME}
                 AND space_id NOT IN (SELECT workspace_id FROM executions)
                 AND space_id NOT IN (SELECT id FROM chats)
                 ORDER BY id"
         ))?
-        .query_map([repository_id], row)?
+        .query_map(params![home.repository_id(), home.root_dir()], row)?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Whether a record is kept in the home of the repository `?1`, or with none
+/// in the `root_dir` `?2`.
+const IN_HOME: &str = "repository_id IS ?1 AND (?1 IS NOT NULL OR root_dir IS ?2)";
+
+/// The `root_dir`s that keep files of chats without a repository.
+pub(crate) fn roots(db: &Connection) -> Result<Vec<String>> {
+    Ok(db
+        .prepare(
+            "SELECT DISTINCT root_dir FROM workspace_files
+                WHERE repository_id IS NULL AND root_dir IS NOT NULL ORDER BY root_dir",
+        )?
+        .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
@@ -208,7 +225,7 @@ pub(super) fn gone_space(db: &Connection, selector: &str) -> Result<Option<Space
     Ok(db
         .query_row(
             &format!(
-                "SELECT space_id,space,repository_id,parent_id FROM workspace_files
+                "SELECT space_id,space,repository_id,parent_id,root_dir FROM workspace_files
                     WHERE (space_id=?1 OR space=?1) AND {GONE}
                     ORDER BY id DESC LIMIT 1"
             ),
@@ -223,26 +240,28 @@ pub(super) fn gone_space(db: &Connection, selector: &str) -> Result<Option<Space
 pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
     Ok(db
         .prepare(&format!(
-            "SELECT space_id,space,repository_id,parent_id FROM workspace_files
+            "SELECT space_id,space,repository_id,parent_id,root_dir FROM workspace_files
                 WHERE {GONE} GROUP BY space_id ORDER BY MIN(id)"
         ))?
         .query_map([], space)?
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The removed workspaces and removed chats of repository `repository_id`
-/// whose files are kept though their record expired, or that never had one.
-/// A removed chat's record stays until its files are deleted, so a failed
-/// deletion still lists them as the chat's.
-pub(super) fn expired(db: &Connection, repository_id: &str) -> Result<Vec<String>> {
+/// The removed workspaces and removed chats whose files `home` keeps though
+/// their record expired, or that never had one. A removed chat's record
+/// stays until its files are deleted, so a failed deletion still lists them
+/// as the chat's.
+pub(super) fn expired(db: &Connection, home: &HomeKey) -> Result<Vec<String>> {
     Ok(db
         .prepare(&format!(
-            "SELECT DISTINCT space_id FROM workspace_files WHERE repository_id=?1 AND {GONE}
+            "SELECT DISTINCT space_id FROM workspace_files WHERE {IN_HOME} AND {GONE}
                 AND space_id NOT IN (SELECT workspace_id FROM removed_workspaces)
                 AND space_id NOT IN (SELECT chat_id FROM ended_chats
                     WHERE expires_at > unixepoch())"
         ))?
-        .query_map([repository_id], |row| row.get(0))?
+        .query_map(params![home.repository_id(), home.root_dir()], |row| {
+            row.get(0)
+        })?
         .collect::<rusqlite::Result<_>>()?)
 }
 
@@ -355,6 +374,16 @@ pub(crate) fn rebase(
         }
     }
     Ok(())
+}
+
+/// The names of the chats without a repository whose files are recorded.
+pub(crate) fn outside_repositories(db: &Connection) -> Result<Vec<String>> {
+    Ok(db
+        .prepare(
+            "SELECT DISTINCT space FROM workspace_files WHERE repository_id IS NULL ORDER BY space",
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// The repositories whose earlier copies are still to be recorded.

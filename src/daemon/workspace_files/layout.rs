@@ -1,6 +1,7 @@
 //! Where a repository keeps the files attached to its workspaces and chats:
 //! beside the workspaces, in a directory its agents are given as a working
-//! directory, so they read the files where any sandbox lets them.
+//! directory, so they read the files where any sandbox lets them. The chats
+//! without a repository keep theirs in `root_dir`, where they run.
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -41,6 +42,14 @@ impl Layout {
         repo.workspaces_dir
             .as_deref()
             .map(|directory| Self::new(directory, &repo.id))
+    }
+
+    /// The attached files of the chats without a repository, in
+    /// `root_dir`, marked as those of the daemon whose state directory is
+    /// `state`, which no repository ID names: a daemon sharing `root_dir`
+    /// neither uses nor sweeps them.
+    pub(crate) fn outside_repositories(root_dir: &Path, state: &Path) -> Self {
+        Self::new(root_dir, &state.display().to_string())
     }
 
     /// Copies of `files`, attached to `message` for the workspace

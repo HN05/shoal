@@ -438,6 +438,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 136 {
         allow_chats_without_repository(&db)?;
     }
+    if version >= 137 {
+        allow_files_without_repository(&db)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1628,6 +1631,23 @@ fn chats_may_have_no_repository_once_migrated_and_keep_what_references_them() ->
     assert_eq!(repositories, [None, Some("repo".to_owned())]);
     let messages: i64 = db.query_row("SELECT count(*) FROM chat_messages", [], |row| row.get(0))?;
     assert_eq!(messages, 1);
+    Ok(())
+}
+
+#[test]
+fn files_may_have_no_repository_once_migrated() -> Result<()> {
+    let mut db = historical_database(136)?;
+    migrate(&mut db)?;
+    db.execute(
+        "INSERT INTO workspace_files(space_id,space,source,name,path,bytes,created_at)
+            VALUES ('master','master','added','report.md','/shoal/report.md',4,1)",
+        [],
+    )?;
+    let repository: Option<String> =
+        db.query_row("SELECT repository_id FROM workspace_files", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(repository, None);
     Ok(())
 }
 

@@ -5,7 +5,7 @@ use std::path::Path;
 
 use anyhow::{Result, ensure};
 
-use super::{Space, layout::Layout, records};
+use super::{FilesHome, HomeKey, Space, records};
 use crate::{
     daemon::{log, workspace::Manager},
     model::{Repository, Workspace},
@@ -17,8 +17,9 @@ impl Manager {
     /// results stay until [`Manager::expire_results`]. The removal's own
     /// transaction already forgot their records.
     pub(crate) async fn delete_workspace_files(&self, workspace: &Workspace) -> Result<()> {
-        let (repo, _files) = self.lock_repository_files(&workspace.repository_id).await?;
-        let Some(layout) = Layout::of(&repo) else {
+        let key = HomeKey::Repository(self.repository(&workspace.repository_id).await?);
+        let (home, _files) = self.lock_files_home(&key).await?;
+        let Some(layout) = home.layout() else {
             return Ok(());
         };
         let id = workspace.id.clone();
@@ -30,7 +31,7 @@ impl Manager {
     pub(crate) async fn delete_repository_files(&self, repo: &Repository) -> Result<()> {
         let _files = self.gates.lock_message_files(&repo.id).await;
         // Records outlive copies a failed deletion leaves, so they stay listed.
-        if let Some(layout) = Layout::of(repo) {
+        if let Some(layout) = super::layout::Layout::of(repo) {
             tokio::task::spawn_blocking(move || layout.remove()).await??;
         }
         let id = repo.id.clone();
@@ -64,9 +65,9 @@ impl Manager {
     /// concerns for the next pass and does not skip the rest.
     pub async fn expire_results(&self) -> Result<()> {
         let mut failed = Vec::new();
-        for repo in self.repositories().await? {
-            if let Err(error) = self.expire_repository_results(&repo).await {
-                failed.push(format!("{}: {error:#}", repo.path.display()));
+        for key in self.files_homes().await? {
+            if let Err(error) = self.expire_home_results(&key).await {
+                failed.push(format!("{}: {error:#}", key.describe()));
             }
         }
         self.store.run(records::forget_expired_chats).await?;
@@ -74,12 +75,15 @@ impl Manager {
         Ok(())
     }
 
-    async fn expire_repository_results(&self, listed: &Repository) -> Result<()> {
-        let (repo, _files) = self.lock_repository_files(&listed.id).await?;
-        let id = repo.id.clone();
-        let expired = self.store.run(move |db| records::expired(db, &id)).await?;
+    /// Delete the expired files `key` keeps for removed spaces.
+    async fn expire_home_results(&self, key: &HomeKey) -> Result<()> {
+        let (home, _files) = self.lock_files_home(key).await?;
+        let key = key.clone();
+        let expired = (self.store)
+            .run(move |db| records::expired(db, &key))
+            .await?;
         for space_id in expired {
-            self.delete_kept_files(&repo, space_id).await?;
+            self.delete_kept_files(&home, space_id).await?;
         }
         Ok(())
     }
@@ -99,20 +103,20 @@ impl Manager {
         space: &Space,
         holds: impl Fn(&Path) -> bool,
     ) -> Result<bool> {
-        let (repo, _files) = self.lock_repository_files(space.files_home()?).await?;
-        let there = Layout::of(&repo)
+        let (home, _files) = self.lock_files_home(&self.space_home(space).await?).await?;
+        let there = (home.layout())
             .is_some_and(|layout| layout.kept(&space.id).iter().any(|path| holds(path)));
         if there {
-            self.delete_kept_files(&repo, space.id.clone()).await?;
+            self.delete_kept_files(&home, space.id.clone()).await?;
         }
         Ok(there)
     }
 
-    /// Delete the files kept for the removed workspace or removed chat
-    /// `space_id` of `repo`, and then their records. Callers hold the gate of
-    /// the repository's files.
-    async fn delete_kept_files(&self, repo: &Repository, space_id: String) -> Result<()> {
-        if let Some(layout) = Layout::of(repo) {
+    /// Delete the files kept in `home` for the removed workspace or removed
+    /// chat `space_id`, and then their records. Callers hold the gate of its
+    /// files.
+    async fn delete_kept_files(&self, home: &FilesHome, space_id: String) -> Result<()> {
+        if let Some(layout) = home.layout() {
             let id = space_id.clone();
             tokio::task::spawn_blocking(move || layout.remove_kept(&id)).await??;
         }
