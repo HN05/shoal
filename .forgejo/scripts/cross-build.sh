@@ -35,6 +35,14 @@ case "$target:$(uname -s)" in
     export SDKROOT="$(cd "$sdk" && pwd)"
     ;;
 esac
+case "$target" in
+  *-apple-darwin)
+    # sign-macos.sh adds a code signature load command where the linker wrote
+    # none, as on x86_64. Zig ends the load commands only as far before __text
+    # as its alignment happens to leave, which can be too little room.
+    export "CARGO_TARGET_$(tr 'a-z-' 'A-Z_' <<< "$target")_RUSTFLAGS=-C link-arg=-Wl,-headerpad_max_install_names"
+    ;;
+esac
 
 cargo clean --workspace --release --target "$target"
 cargo zigbuild --locked --release --target "$target"
