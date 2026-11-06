@@ -7,7 +7,7 @@
 //! closed question keeps its number until the space goes so that a late
 //! answer is refused. A question an agent asked in its conversation closes
 //! the same way when the user replies there.
-use crate::daemon::refusal::{Reason, Refusal};
+use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 use std::time::Duration;
@@ -414,7 +414,7 @@ fn record_answer(
     shown: Option<&Question>,
 ) -> Result<Question> {
     let mut question = open_question(tx, number)?;
-    crate::daemon::refusal::ensure_unchanged(
+    crate::refusal::ensure_unchanged(
         shown.is_none_or(|shown| question.is_same(shown)),
         format_args!("question {number}"),
     )?;
@@ -488,7 +488,7 @@ fn withdraw(
             )
         })?;
     question.ensure_open()?;
-    crate::daemon::refusal::ensure_unchanged(
+    crate::refusal::ensure_unchanged(
         shown.is_none_or(|shown| question.number == shown.number && question.is_same(shown)),
         format_args!("question {number}"),
     )?;

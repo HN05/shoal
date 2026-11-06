@@ -47,6 +47,8 @@ mod proxy;
 #[cfg(feature = "cli")]
 mod push_gate;
 #[cfg(feature = "cli")]
+mod refusal;
+#[cfg(feature = "cli")]
 mod removal;
 #[cfg(feature = "cli")]
 mod repository;

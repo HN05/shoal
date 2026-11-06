@@ -33,11 +33,11 @@ use crate::{
         ui::{self, Entries, KeyBindings, PickerView, ViewPicker, WidthLimit},
     },
     client::notifications::{self, Notification},
-    daemon::refusal::{Reason, Refusal},
     env,
     forge::items::link,
     model::{LinkedItem, PresentSpace},
     protocol::ConfigTarget,
+    refusal::{Reason, Refusal},
     workers::Worker,
 };
 

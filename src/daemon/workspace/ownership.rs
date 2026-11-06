@@ -7,7 +7,7 @@ use super::{
     },
     paths::matches_recorded_worktree_path,
 };
-use crate::daemon::refusal::{Reason, Refusal};
+use crate::refusal::{Reason, Refusal};
 use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;

@@ -8,8 +8,8 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    daemon::refusal::{Reason, Refusal},
     model::{SpaceKind, SpaceRef, Workspace, WorkspaceRef},
+    refusal::{Reason, Refusal},
 };
 
 pub(super) async fn run(

@@ -39,7 +39,6 @@ pub mod ports;
 pub mod questions;
 pub(crate) mod queue;
 pub mod recovery;
-pub(crate) mod refusal;
 mod requests;
 pub mod resources;
 mod restart_recovery;
@@ -500,8 +499,8 @@ async fn accept(
         Ok(caller) => Ok(Some(caller)),
         Err(error) => {
             // A target that does not exist is refused as such, not as outside the scope.
-            let code = match refusal::Reason::of(&error) {
-                Some(refusal::Reason::NotFound) => ErrorCode::NotFound,
+            let code = match crate::refusal::Reason::of(&error) {
+                Some(crate::refusal::Reason::NotFound) => ErrorCode::NotFound,
                 _ => ErrorCode::ScopeDenied,
             };
             let body = Body::error(code, format!("{error:#}"));

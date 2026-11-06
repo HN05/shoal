@@ -11,10 +11,10 @@ use crate::client::output::error::{CommandError, ErrorDetail};
 use crate::{
     cli::commands::operations::Failed,
     client::approvals::{DecisionStatus, Undecided},
-    daemon::refusal::Reason,
     execution::SetupVerificationFailure,
     forge::review::status::ReviewState,
     protocol::{ErrorCode, RemoteError},
+    refusal::Reason,
     sim::SimulatorState,
     state::{ExecutionState, WorkspaceState},
 };

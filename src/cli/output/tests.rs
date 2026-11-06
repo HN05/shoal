@@ -52,9 +52,9 @@ fn json_errors_carry_the_specific_code_of_a_daemon_or_cli_refusal() {
 
     use crate::{
         cli::commands::operations::Failed,
-        daemon::refusal::{Reason, Refusal},
         execution::SetupVerificationFailure,
         protocol::operations::Failure,
+        refusal::{Reason, Refusal},
     };
 
     let failed = |failure| anyhow::Error::from(Failed(failure));

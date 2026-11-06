@@ -4,11 +4,11 @@ use anyhow::Result;
 use futures_util::{FutureExt, future::BoxFuture};
 use tokio::{io::AsyncWrite, net::UnixStream, sync::OwnedRwLockReadGuard};
 
-use super::{
+use super::workspace::{self, Manager};
+use crate::{
+    protocol::{self, Body, ErrorCode, Response},
     refusal::Reason,
-    workspace::{self, Manager},
 };
-use crate::protocol::{self, Body, ErrorCode, Response};
 
 #[cfg(test)]
 mod tests;

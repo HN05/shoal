@@ -13,12 +13,12 @@ use crate::{
         shell, terminal,
         ui::{self, Fallback},
     },
-    daemon::refusal::{Reason, Refusal},
     model::{SpaceRef, Workspace},
     protocol::{
         CommitStart, CreationOptions, ItemContext,
         operations::{Prepared, QueuedLaunch, StartedWorkspace},
     },
+    refusal::{Reason, Refusal},
     state::WorkspaceState,
 };
 

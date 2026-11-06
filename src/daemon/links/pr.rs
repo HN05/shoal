@@ -1,5 +1,5 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
-use crate::daemon::refusal::{Reason, Refusal};
+use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 

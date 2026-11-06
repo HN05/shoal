@@ -1,7 +1,7 @@
 //! Base workspaces: the workspace whose branch a stacked workspace builds on.
 use std::path::Path;
 
-use crate::daemon::refusal::{Reason, Refusal};
+use crate::refusal::{Reason, Refusal};
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 

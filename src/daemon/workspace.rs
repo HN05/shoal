@@ -76,7 +76,7 @@ pub(crate) use tree::{
     set_parent, spaces_above,
 };
 
-use crate::daemon::refusal::{Reason, Refusal};
+use crate::refusal::{Reason, Refusal};
 use crate::{
     config::Config,
     daemon::store::{self, Store},

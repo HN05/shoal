@@ -230,8 +230,8 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     );
     let missing = manager.operation("missing", None).await.err().unwrap();
     assert_eq!(
-        crate::daemon::refusal::Reason::of(&missing),
-        Some(crate::daemon::refusal::Reason::NotFound)
+        crate::refusal::Reason::of(&missing),
+        Some(crate::refusal::Reason::NotFound)
     );
 }
 
