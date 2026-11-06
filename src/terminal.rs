@@ -11,6 +11,7 @@ mod herdr;
 mod here;
 mod host;
 mod hosts;
+mod naming;
 mod prompts;
 mod rex;
 mod sessions;
@@ -31,6 +32,7 @@ pub(crate) use hosts::{
     Beside, Configured, Options, background_place, current, enabled_host, hosts, installed_hosts,
     named, names_places,
 };
+pub(crate) use naming::{PlaceName, issue_label};
 pub(crate) use prompts::{PromptSession, WAKE_PROMPT, send_keys, submit_prompt};
 pub(crate) use sessions::{Attachment, Owner, OwnerKind, Session};
 pub(crate) use typed::run as run_launch;

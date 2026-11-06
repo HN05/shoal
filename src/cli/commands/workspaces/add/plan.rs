@@ -10,12 +10,12 @@ use crate::{
         agents,
         commands::{issues, repositories},
         context::Context,
-        terminal::PlaceName,
     },
     config::Effective,
     env, git,
     model::{QueueRequest, Repository, Workspace},
     protocol::{CreationOptions, ItemContext, PullHead, operations::QueuedLaunch},
+    terminal::PlaceName,
 };
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
@@ -81,7 +81,7 @@ pub(super) async fn plan_addition(
         Some(issue) => Some(PlaceName::new(
             None,
             target.repository(ctx).await?,
-            Some(issue),
+            Some(issue.place_issue()),
         )),
         None => None,
     };
