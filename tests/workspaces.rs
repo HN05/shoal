@@ -5746,6 +5746,8 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
 #[test]
 fn resume_all_skips_the_agents_of_done_workspaces() {
     let fixture = Fixture::new();
+    // The daemon starts the restore from the background.
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     for name in ["active", "finished"] {
         let workspace = fixture.add(name);
         let state = fixture
