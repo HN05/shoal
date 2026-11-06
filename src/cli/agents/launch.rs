@@ -127,7 +127,9 @@ async fn command(
 pub(super) fn delivery(integration: &dyn Integration, settings: &Effective) -> templates::Delivery {
     match integration.wakes() {
         Wake::Hook => templates::Delivery::Pushed,
-        Wake::Prompt if terminal::agents_can_be_prompted(settings) => templates::Delivery::Pushed,
+        Wake::Prompt if crate::terminal::agents_can_be_prompted(settings) => {
+            templates::Delivery::Pushed
+        }
         Wake::Prompt | Wake::Never => templates::Delivery::Watched,
     }
 }

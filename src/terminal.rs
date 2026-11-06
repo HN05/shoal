@@ -30,9 +30,11 @@ pub(crate) use host::{
 };
 pub(crate) use hosts::{
     Beside, Configured, Options, background_place, current, enabled_host, hosts, installed_hosts,
-    named, names_places,
+    keeps_agents_in_sessions, launcher_program, named, names_places,
 };
 pub(crate) use naming::{PlaceName, issue_label};
-pub(crate) use prompts::{PromptSession, WAKE_PROMPT, send_keys, submit_prompt};
+pub(crate) use prompts::{
+    PromptSession, WAKE_PROMPT, agents_can_be_prompted, send_keys, submit_prompt,
+};
 pub(crate) use sessions::{Attachment, Owner, OwnerKind, Session};
 pub(crate) use typed::run as run_launch;

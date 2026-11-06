@@ -3,9 +3,10 @@ use anyhow::{Context as _, Result};
 
 use super::{
     here::{current_origin, with_instance},
+    hosts::keeps_agents_in_sessions,
     named,
 };
-use crate::sessions::Origin;
+use crate::{config::Effective, sessions::Origin};
 
 /// What an agent's wrapper submits to wake the agent with new updates,
 /// which the prompt's hook supplies.
@@ -26,6 +27,12 @@ pub(crate) async fn send_keys(place: &Origin, keys: &str) -> Result<()> {
         .types()
         .with_context(|| format!("Shoal cannot type into places of {}", host.name()))?;
     types.send_keys(place, keys).await
+}
+
+/// Whether an agent launched here runs in a session its wrapper can type a
+/// prompt into: a new one, or the session this process already runs in.
+pub(crate) fn agents_can_be_prompted(settings: &Effective) -> bool {
+    keeps_agents_in_sessions(settings) || PromptSession::current().is_some()
 }
 
 /// The session this process runs in, where an agent's wrapper can type a

@@ -27,7 +27,7 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     agent::{Agent, ModelChoice},
     ai::IntegrationKind,
-    cli::{commands::configured, context::Context, terminal, ui},
+    cli::{commands::configured, context::Context, ui},
     client::transcripts::Environments,
     config::{Config, Effective, modes, named_commands::Commands, templates},
     execution::recovery,
@@ -431,7 +431,7 @@ impl Default for ModelRequest {
 /// Whether a launch of `agent` under `settings` runs in a session this
 /// terminal attaches to, rather than in place or the agent's own way.
 pub(in crate::cli) fn runs_in_session(agent: &Agent, settings: &Effective) -> bool {
-    !runs_its_own_way(agent, settings) && terminal::keeps_agents_in_sessions(settings)
+    !runs_its_own_way(agent, settings) && crate::terminal::keeps_agents_in_sessions(settings)
 }
 
 /// Whether a launch of `agent` under `settings` leaves the launching process
@@ -863,7 +863,7 @@ pub(crate) fn launch_proxy<'a>(
 /// Refuse an agent whose executables are missing, the session host a launch
 /// here under `settings` starts it in among them.
 fn ensure_installed(name: &str, settings: &Effective) -> Result<()> {
-    let launcher = super::terminal::launcher_program(settings);
+    let launcher = crate::terminal::launcher_program(settings);
     let programs = programs(name, &settings.launchers, launcher).with_context(|| {
         format!("unknown agent {name:?}; set [agents.{name}] command in Shoal config")
     })?;

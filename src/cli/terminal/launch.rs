@@ -587,21 +587,6 @@ pub(in crate::cli) async fn start_chat(
     Ok(true)
 }
 
-/// Whether an agent launched here runs in a session this terminal attaches
-/// to, leaving the caller's shell where it was once the terminal detaches.
-pub(in crate::cli) fn keeps_agents_in_sessions(settings: &Effective) -> bool {
-    current(settings).host.attaches().is_some()
-}
-
-/// The program an agent launch here under `settings` needs besides the
-/// agent's own: that of the host it runs in a session of.
-pub(in crate::cli) fn launcher_program(settings: &Effective) -> Option<&'static str> {
-    current(settings)
-        .host
-        .attaches()
-        .map(Attaches::launcher_program)
-}
-
 /// The host that starts work beside this terminal. A place a host opened for
 /// this process, or a terminal without a user, keeps work in place.
 fn beside(ctx: &Context, settings: &Effective) -> Configured {

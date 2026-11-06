@@ -5,7 +5,7 @@ use std::io::IsTerminal;
 
 use super::{
     herdr,
-    host::{Host, Places},
+    host::{Attaches, Host, Places},
     rex, tmux, zellij, zmx,
 };
 use crate::{
@@ -244,6 +244,21 @@ pub(crate) fn current(settings: &Effective) -> Configured {
         }
         None => Configured::plain(settings),
     }
+}
+
+/// Whether an agent launched here runs in a session this terminal attaches
+/// to, leaving the caller's shell where it was once the terminal detaches.
+pub(crate) fn keeps_agents_in_sessions(settings: &Effective) -> bool {
+    current(settings).host.attaches().is_some()
+}
+
+/// The program an agent launch here under `settings` needs besides the
+/// agent's own: that of the host it runs in a session of.
+pub(crate) fn launcher_program(settings: &Effective) -> Option<&'static str> {
+    current(settings)
+        .host
+        .attaches()
+        .map(Attaches::launcher_program)
 }
 
 /// Whether this process runs on a terminal.
