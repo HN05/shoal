@@ -42,9 +42,10 @@ async fn repeated_reads_send_the_validators_and_keep_the_unchanged_body() {
 async fn reads_are_sent_again_after_a_failure_that_may_pass_and_changes_are_not() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let sent = AtomicUsize::new(0);
-    // Every other request finds the forge busy, starting with the first.
+    // Every other request fails, starting with the first, with a 500 the
+    // forge may have acted on, which only a read is sent again after.
     let server = Server::start(move |_| match sent.fetch_add(1, Ordering::SeqCst) % 2 {
-        0 => (503, Vec::new(), Vec::new()),
+        0 => (500, Vec::new(), Vec::new()),
         _ => (200, Vec::new(), r#"{"number":7}"#.into()),
     });
     let account = agent_on(&server, "agent");
