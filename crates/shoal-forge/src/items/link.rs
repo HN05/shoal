@@ -256,9 +256,8 @@ impl Link {
                 target: LinkTarget::Run,
             });
         }
-        let forge = branch_forge(url).context("expected an issue, PR, CI run or branch URL")?;
-        let (repository, branch) = url.split_once(forge.branch_route()).unwrap();
-        let repository = ForgeRepo::parse_linked(repository, Some(forge))?;
+        let (repository, branch) =
+            branch_link(url).context("expected an issue, PR, CI run or branch URL")?;
         let branch = decode_branch(branch)?;
         ensure!(!branch.is_empty(), "branch URL has no branch");
         Ok(Self {
@@ -268,20 +267,15 @@ impl Link {
     }
 }
 
-/// The forge whose branch route `url` uses. A route inside another one the
-/// URL uses, as `/tree/` is inside `/-/tree/`, is that other forge's.
-fn branch_forge(url: &str) -> Option<ForgeKind> {
-    let used: Vec<&str> = ForgeKind::ALL
-        .iter()
-        .map(|forge| forge.branch_route())
-        .filter(|route| url.contains(route))
-        .collect();
-    ForgeKind::ALL.iter().copied().find(|forge| {
-        let route = forge.branch_route();
-        used.contains(&route)
-            && !used
-                .iter()
-                .any(|other| *other != route && other.contains(route))
+/// The repository and the encoded branch a branch URL names, split at the
+/// first forge's branch route that leaves a repository before it: another
+/// forge's route may appear inside a branch name or a nested group, as
+/// `/tree/` does inside `/src/branch/fix/tree/x` or `/-/tree/`.
+fn branch_link(url: &str) -> Option<(ForgeRepo, &str)> {
+    ForgeKind::ALL.iter().find_map(|&forge| {
+        let (repository, branch) = url.split_once(forge.branch_route())?;
+        let repository = ForgeRepo::parse_linked(repository, Some(forge)).ok()?;
+        Some((repository, branch))
     })
 }
 

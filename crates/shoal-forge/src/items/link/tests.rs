@@ -222,30 +222,34 @@ fn an_item_url_names_its_number_in_its_own_repository_only() {
 }
 
 #[test]
-fn a_branch_link_uses_the_route_that_holds_the_others_it_contains() {
-    for (url, forge, repository, branch) in [
+fn a_branch_link_splits_at_the_route_that_leaves_a_repository() {
+    for (url, repository, branch) in [
         (
             "https://github.com/team/repo/tree/feature/branch/x",
-            ForgeKind::GitHub,
             "https://github.com/team/repo",
             "feature/branch/x",
         ),
         (
             "https://gitlab.com/group/tree/project/-/tree/fix",
-            ForgeKind::GitLab,
             "https://gitlab.com/group/tree/project",
             "fix",
         ),
         (
-            "https://forge.example/team/repo/src/branch/fix",
-            ForgeKind::Forgejo,
+            "https://forge.example/team/repo/src/branch/fix/tree/x",
             "https://forge.example/team/repo",
-            "fix",
+            "fix/tree/x",
+        ),
+        (
+            "https://bitbucket.org/workspace/repo/branch/fix/tree/x",
+            "https://bitbucket.org/workspace/repo",
+            "fix/tree/x",
         ),
     ] {
-        assert_eq!(branch_forge(url), Some(forge), "{url}");
         let link = Link::parse(url).unwrap();
-        assert_eq!(link.repository.repository_url(), repository);
-        assert!(matches!(link.target, LinkTarget::Branch(name) if name == branch));
+        assert_eq!(link.repository.repository_url(), repository, "{url}");
+        assert!(
+            matches!(&link.target, LinkTarget::Branch(name) if name == branch),
+            "{url}"
+        );
     }
 }
