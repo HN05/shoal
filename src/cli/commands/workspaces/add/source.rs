@@ -1,8 +1,9 @@
 //! What an interactive addition starts from: a new or existing branch, an issue or a PR.
 use anyhow::{Result, ensure};
 
-use super::{plan::Creation, target::AddTarget};
+use super::target::AddTarget;
 use crate::{
+    agent_queue::Creation,
     cli::{
         client::{self},
         commands::{issues, links},

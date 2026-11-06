@@ -6,8 +6,9 @@ use anyhow::{Result, ensure};
 
 use super::environment::configured_environment;
 use super::link_pull::link_or_warn;
-use super::{check_queued_launch, queued_agent_request};
 use crate::{
+    agent_queue::queued_agent_request,
+    agents::check_queued_launch,
     cli::{
         commands::operations::{Failed, Reporter},
         context::Context,

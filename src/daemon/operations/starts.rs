@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    cli::commands::check_queued_launch,
+    agents::check_queued_launch,
     daemon::{
         links::issue::OpenIssue,
         log,

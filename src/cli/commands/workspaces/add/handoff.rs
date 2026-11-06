@@ -1,13 +1,9 @@
 //! Starting a planned addition in another terminal place.
 use anyhow::Result;
 
-use super::{
-    AddOptions,
-    agent::AddSettings,
-    plan::{AddPlan, planned_workspace_name},
-    target::AddTarget,
-};
+use super::{AddOptions, agent::AddSettings, plan::planned_workspace_name, target::AddTarget};
 use crate::{
+    agent_queue::AddPlan,
     cli::{commands::issues, context::Context, terminal},
     protocol::ConfigTarget,
 };

@@ -3,12 +3,10 @@
 //! Shoal removes once nothing of it is left.
 use anyhow::Result;
 
-use super::{
-    links,
-    workspaces::{AddOptions, Creation},
-};
+use super::{links, workspaces::AddOptions};
 use crate::{
     agent::Agent,
+    agent_queue::Creation,
     agents,
     cli::{args::create::ContributeArgs, context::Context, output::Palette, ui},
     config::{Config, repo::ConfigLayers},

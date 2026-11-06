@@ -4,15 +4,14 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result};
 
 use super::{
-    agent::ResolvedAddAgent,
     place::{HereLaunch, launch_placed},
-    plan::{AddPlan, Creation},
     queue::failing_entry,
     source::load_add_issue,
     target::AddTarget,
 };
 use crate::client::operations::NewWorkspace;
 use crate::{
+    agent_queue::{AddPlan, Creation, ResolvedAddAgent},
     cli::{
         agents,
         commands::{

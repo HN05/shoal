@@ -9,11 +9,12 @@ use super::{
     agent::AddSettings,
     finish::{AgentStart, add_planned, execute_add_with_target},
     handoff::start_queued,
-    plan::{AddPlan, planned_workspace_name},
+    plan::planned_workspace_name,
     queue::{admit_launch, failing_entry, launch_dependencies},
     target::AddTarget,
 };
 use crate::{
+    agent_queue::AddPlan,
     cli::{
         agents,
         commands::{agent_queue, issues},

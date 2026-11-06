@@ -31,7 +31,9 @@ pub(crate) use args::{
     dir_args, insert_options, model_args, restored_instruction_args, workspace_args,
     workspace_dir_args,
 };
-pub(crate) use checks::{check_model, ensure_available, ensure_forks, programs, resolve_model};
+pub(crate) use checks::{
+    check_model, check_queued_launch, ensure_available, ensure_forks, programs, resolve_model,
+};
 pub(crate) use proxy::{
     Routing, launch_proxy, proxy_defaults, proxy_ends_turns, proxy_environment,
     route_through_proxy, with_proxy_args,

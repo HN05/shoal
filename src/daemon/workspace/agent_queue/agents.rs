@@ -3,10 +3,8 @@
 use anyhow::{Context as _, Result};
 
 use crate::{
-    cli::commands::{check_queued_launch, queued_agent_request},
-    daemon::workspace::Manager,
-    model::QueueEntry,
-    protocol::operations::QueuedLaunch,
+    agent_queue::queued_agent_request, agents::check_queued_launch, daemon::workspace::Manager,
+    model::QueueEntry, protocol::operations::QueuedLaunch,
 };
 
 impl Manager {

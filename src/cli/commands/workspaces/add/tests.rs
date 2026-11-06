@@ -1,5 +1,8 @@
-use super::{AddOptions, AddPlan};
-use crate::{model::Workspace, protocol::operations::QueuedLaunch, state::WorkspaceState};
+use super::AddOptions;
+use crate::{
+    agent_queue::AddPlan, model::Workspace, protocol::operations::QueuedLaunch,
+    state::WorkspaceState,
+};
 
 fn plan(args: &[&str]) -> AddPlan {
     let workspace = Workspace::new_record(
@@ -55,23 +58,4 @@ fn an_agent_waiting_for_work_queues() {
         ..Default::default()
     };
     assert!(!options.starts_now(&plan(&[]), None, true));
-}
-
-#[test]
-fn a_finished_dependency_s_branch_is_the_base_of_new_branches_but_not_of_copies() {
-    let mut new = super::Creation::default();
-    new.build_on(Some("dependency".into()));
-    assert_eq!(new.base.as_deref(), Some("dependency"));
-    let mut copy = super::Creation {
-        copy: Some(super::CopyCreation {
-            source: crate::protocol::CopySource {
-                workspace: "topic".into(),
-                checkpoint: None,
-            },
-            name: "topic-copy".into(),
-        }),
-        ..Default::default()
-    };
-    copy.build_on(Some("dependency".into()));
-    assert_eq!(copy.base, None);
 }

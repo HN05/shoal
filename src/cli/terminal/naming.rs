@@ -9,10 +9,11 @@ use anyhow::{Context as _, Result};
 use tokio::sync::OnceCell;
 
 use crate::{
+    agent_queue::AddPlan,
     cli::{
         commands::{
             issues::{self, Issue},
-            workspaces::AddPlan,
+            workspaces::item_context,
         },
         context::Context,
     },
@@ -43,7 +44,7 @@ pub(super) async fn name_plan(
     // A queued start has only the issue's URL; the template may name it.
     let found = match (issue, plan.issue_url()) {
         (None, Some(url)) => {
-            Some(issues::load(ctx, plan.item_context(ctx, repo).await?, url).await?)
+            Some(issues::load(ctx, item_context(ctx, plan, repo).await?, url).await?)
         }
         _ => None,
     };

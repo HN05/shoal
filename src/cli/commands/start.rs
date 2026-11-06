@@ -6,10 +6,11 @@ use anyhow::{Context as _, Result, ensure};
 use super::{
     chat,
     links::{self, AddInput},
-    workspaces::{self, CopyCreation, Creation},
+    workspaces,
 };
 use crate::{
     agent::Agent,
+    agent_queue::{CopyCreation, Creation},
     cli::{
         args::create::StartArgs,
         context::Context,

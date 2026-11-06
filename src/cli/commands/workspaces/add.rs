@@ -13,8 +13,7 @@ mod target;
 pub(in crate::cli::commands) use agent::AgentLaunch;
 pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli) use handoff::start_queued;
-pub(in crate::cli) use plan::{AddPlan, CopyCreation, Creation};
-pub(crate) use plan::{check_queued_launch, queued_agent_request};
+pub(in crate::cli) use plan::item_context;
 use std::ffi::OsString;
 
 use anyhow::{Result, ensure};
@@ -28,12 +27,15 @@ use self::{
     finish::execute_add_with_target,
     handoff::start_beside,
     mode::choose_add_mode,
-    plan::{check_add_creation, plan_addition},
+    plan::{absolute, check_add_creation, plan_addition, start_as},
     queue::{admit, after_dependencies, failing_entry},
     source::{load_add_issue, pick_add_source, select_add_creation},
     target::resolve_add_target,
 };
-use crate::cli::{context::Context, ui::ModeChoice};
+use crate::{
+    agent_queue::{AddPlan, Creation},
+    cli::{context::Context, ui::ModeChoice},
+};
 
 /// How `shoal start` runs once its workspace is planned.
 #[derive(Debug, Clone, Default)]
@@ -87,7 +89,7 @@ pub(in crate::cli::commands) async fn add(
         crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes start agents only with their scope token"
     );
-    let mut creation = creation.absolute(ctx)?;
+    let mut creation = absolute(ctx, creation)?;
     let target = resolve_add_target(ctx, repository, issue.as_deref()).await?;
     check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
     let after = after_dependencies(ctx, &target, &options.after).await?;
@@ -107,7 +109,7 @@ pub(in crate::cli::commands) async fn add(
     let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
-    plan.start_as(&options, mode);
+    start_as(&mut plan, &options, mode);
     ensure!(
         options.after.is_empty() || plan.agent_name().is_some(),
         "--after queues an agent; name one with --agent"

@@ -74,7 +74,7 @@ async fn setup_workspace(ctx: &Context, repo: &Repository) -> Result<Option<Work
 async fn open(ctx: &Context, repo: &Repository) -> Result<i32> {
     let exists =
         git::ref_exists(&repo.path, &git::local_ref(BRANCH), git::isolated_command).await?;
-    let creation = workspaces::Creation {
+    let creation = crate::agent_queue::Creation {
         branch: (!exists).then(|| BRANCH.to_owned()),
         existing: exists.then(|| BRANCH.to_owned()),
         ..Default::default()

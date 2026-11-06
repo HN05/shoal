@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use crate::{
     agent::{Agent, ModelChoice},
+    agent_queue::{Creation, ResolvedAddAgent},
     cli::{agents, context::Context, terminal},
     model::Workspace,
     protocol::ConfigTarget,
@@ -15,17 +16,6 @@ pub(in crate::cli::commands) enum AgentLaunch {
     /// An ordinary add uses the interactive picker when no agent is named.
     Add(Option<Agent>),
     IssueDefault(Option<Agent>),
-}
-
-/// The agent of a plan, which queued entries store; entries queued before
-/// every launch ran tracked also carry `tracked` or `codex_mode`, which are
-/// ignored.
-#[derive(serde::Serialize, serde::Deserialize)]
-pub(super) struct ResolvedAddAgent {
-    pub(super) agent: Option<Agent>,
-    /// The model and effort requested over the configured ones.
-    #[serde(default)]
-    pub(super) model: ModelChoice,
 }
 
 /// The repository's effective settings, loaded on first use.
@@ -66,7 +56,7 @@ pub(super) enum AgentChoice {
 
 /// No agent for a fork PR's head, which a workspace at a commit holds,
 /// refusing one that was named.
-pub(super) fn for_creation(creation: &super::Creation, agent: AgentChoice) -> Result<AgentChoice> {
+pub(super) fn for_creation(creation: &Creation, agent: AgentChoice) -> Result<AgentChoice> {
     if creation.pull_head.is_none() {
         return Ok(agent);
     }
@@ -166,28 +156,23 @@ pub(super) async fn resolve_add_agent(
     Ok(ResolvedAddAgent { agent, model })
 }
 
-impl ResolvedAddAgent {
-    /// Start the agent in `workspace` told `opening`, from a fork of session
-    /// `fork` when given, else open a shell there.
-    pub(super) async fn launch(
-        self,
-        ctx: &Context,
-        workspace: Workspace,
-        opening: agents::Opening,
-        args: Vec<OsString>,
-        fork: Option<String>,
-    ) -> Result<i32> {
-        let Some(agent) = self.agent else {
-            return terminal::open_shell(ctx, &workspace.path).await;
-        };
-        let options = agents::LaunchOptions {
-            fork,
-            model: agents::ModelRequest::Override(self.model),
-            ..Default::default()
-        };
-        agents::launch_agent(ctx, agent, workspace, opening, args, options).await
-    }
+/// Start `resolved`'s agent in `workspace` told `opening`, from a fork of
+/// session `fork` when given, else open a shell there.
+pub(super) async fn launch(
+    ctx: &Context,
+    resolved: ResolvedAddAgent,
+    workspace: Workspace,
+    opening: agents::Opening,
+    args: Vec<OsString>,
+    fork: Option<String>,
+) -> Result<i32> {
+    let Some(agent) = resolved.agent else {
+        return terminal::open_shell(ctx, &workspace.path).await;
+    };
+    let options = agents::LaunchOptions {
+        fork,
+        model: agents::ModelRequest::Override(resolved.model),
+        ..Default::default()
+    };
+    agents::launch_agent(ctx, agent, workspace, opening, args, options).await
 }
-
-#[cfg(test)]
-mod tests;

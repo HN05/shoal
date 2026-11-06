@@ -6,13 +6,10 @@ use std::ffi::OsString;
 
 use anyhow::Result;
 
-use super::{
-    agent::ResolvedAddAgent,
-    finish::{holding, report_queued_in},
-    plan::AddPlan,
-};
+use super::finish::{holding, report_queued_in};
 use crate::{
     agent::Agent,
+    agent_queue::{AddPlan, ResolvedAddAgent},
     cli::{
         agents,
         commands::{agent_queue, workspaces::prepare::queue_in_workspace},
@@ -34,9 +31,13 @@ pub(super) struct HereLaunch {
 impl HereLaunch {
     /// Start the agent in `workspace`.
     pub(super) async fn run(self, ctx: &Context, workspace: Workspace) -> Result<i32> {
-        (self.agent)
-            .launch(ctx, workspace, self.opening, self.args, self.fork)
-            .await
+        let Self {
+            agent,
+            opening,
+            args,
+            fork,
+        } = self;
+        super::agent::launch(ctx, agent, workspace, opening, args, fork).await
     }
 }
 

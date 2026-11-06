@@ -1,13 +1,9 @@
 //! Admitting an addition's agent to the agent queue, with the work it waits for.
 use anyhow::Result;
 
-use super::{
-    AddOptions,
-    agent::AddSettings,
-    plan::{AddPlan, planned_workspace_name},
-    target::AddTarget,
-};
+use super::{AddOptions, agent::AddSettings, plan::planned_workspace_name, target::AddTarget};
 use crate::{
+    agent_queue::AddPlan,
     cli::{
         client::{self},
         commands::{agent_queue, issues},

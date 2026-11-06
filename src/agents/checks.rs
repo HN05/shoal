@@ -5,8 +5,9 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{added, agent_integration, agent_off, detached, launch_proxy, model_args};
 use crate::{
-    agent::ModelChoice,
+    agent::{Agent, ModelChoice},
     config::{Effective, named_commands::Commands},
+    protocol::operations::QueuedLaunch,
     tools::ensure_program,
 };
 
@@ -94,6 +95,24 @@ pub(crate) fn check_model(settings: &Effective, name: &str, model: &ModelChoice)
         Some(app) => detached::model_args(app, settings, name, model).map(drop),
         None => model_args(settings, name, model).map(drop),
     }
+}
+
+/// Refuse `launch` when it cannot run under `settings`: an agent that is
+/// off or missing, a fork it cannot start from, or a model its launch
+/// cannot pass on.
+pub(crate) fn check_queued_launch(launch: &QueuedLaunch, settings: &Effective) -> Result<()> {
+    let mode = launch
+        .mode
+        .as_deref()
+        .unwrap_or(crate::config::modes::DEFAULT);
+    crate::config::modes::get(&settings.modes, mode)?;
+    let agent: Agent = launch.agent.parse()?;
+    ensure_available(agent.name(), settings)?;
+    if launch.fork.is_some() {
+        ensure_forks(settings, agent.name())?;
+    }
+    let model = resolve_model(settings, agent.name(), launch.model.clone());
+    check_model(settings, agent.name(), &model)
 }
 
 #[cfg(test)]

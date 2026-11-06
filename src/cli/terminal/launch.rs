@@ -14,11 +14,8 @@ use super::{
     sessions::{left_open, report_detach},
 };
 use crate::{
-    cli::{
-        commands::{issues::Issue, workspaces::AddPlan},
-        context::Context,
-        recent,
-    },
+    agent_queue::AddPlan,
+    cli::{commands::issues::Issue, context::Context, recent},
     config::Effective,
     env,
     execution::TrackedAgent,

@@ -3,11 +3,12 @@ use std::ffi::OsString;
 
 use anyhow::{Context as _, Result, bail, ensure};
 
-use super::workspaces::{self, AgentLaunch, Creation};
+use super::workspaces::{self, AgentLaunch};
 use crate::client::assignments;
 use crate::client::output::workspaces::Registered;
 use crate::{
     agent::Agent,
+    agent_queue::Creation,
     cli::{
         args::items::{ItemArgs, RelationArgs},
         client,

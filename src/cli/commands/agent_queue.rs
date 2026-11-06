@@ -3,9 +3,10 @@
 
 use anyhow::Result;
 
-use super::{listing::ListFilter, workspaces::AddPlan};
+use super::listing::ListFilter;
 use crate::client::queue;
 use crate::{
+    agent_queue::AddPlan,
     cli::{context::Context, output::Palette, ui},
     model::{Dependency, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     state::{QueueKind, QueueState},

@@ -260,7 +260,7 @@ async fn pull_request(
         }
         None => {
             let tracking = fetch_pull_branch(&repo.path, "base", &pull.base).await?;
-            let creation = super::super::workspaces::Creation {
+            let creation = crate::agent_queue::Creation {
                 existing: Some(git::remote_ref("origin", &pull.head)),
                 base: Some(tracking),
                 pr: Some(pull.url.clone()),
