@@ -35,7 +35,18 @@ fn the_handoff_is_private_and_goes_with_its_starter() {
 #[tokio::test]
 async fn an_unscoped_starter_hands_over_no_token_but_takes_the_report() {
     let handoff = Handoff::create(None).unwrap();
-    assert!(!handoff.path().join(SCOPE).exists());
+    assert_eq!(take_scope(handoff.path()).unwrap(), None);
     write_report(handoff.path(), "the agent is not installed");
     assert!(handoff.wait().await.is_err());
+}
+
+#[test]
+fn a_place_takes_a_scoped_token_once_and_refuses_a_handoff_its_starter_left() {
+    let scoped = Handoff::create(Some("token")).unwrap();
+    assert_eq!(take_scope(scoped.path()).unwrap().as_deref(), Some("token"));
+    // A starter that stopped waiting removed its handoff, which never
+    // starts the chat unscoped instead.
+    let path = scoped.path().to_owned();
+    drop(scoped);
+    assert!(take_scope(&path).is_err());
 }

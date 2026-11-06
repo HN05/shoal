@@ -17,8 +17,12 @@ use std::{
 
 use anyhow::{Context as _, Result, bail, ensure};
 
-/// The file holding the starter's scope token, which the place takes.
+/// The file holding a scoped starter's token, which the place takes.
 const SCOPE: &str = "scope";
+/// The file that says the starter is unscoped, so that a handoff missing
+/// both, as one whose starter stopped waiting, is refused rather than taken
+/// as unscoped.
+const UNSCOPED: &str = "unscoped";
 /// The file in which the place reports.
 const REPORT: &str = "report";
 /// What the place reports once the chat holds its own scope token.
@@ -41,10 +45,12 @@ impl Handoff {
             .permissions(std::fs::Permissions::from_mode(0o700))
             .tempdir()
             .context("create the chat's handoff")?;
-        if let Some(token) = token {
-            std::fs::write(directory.path().join(SCOPE), token)
-                .context("write the chat's handoff")?;
-        }
+        let (file, contents) = match token {
+            Some(token) => (SCOPE, token),
+            None => (UNSCOPED, ""),
+        };
+        std::fs::write(directory.path().join(file), contents)
+            .context("write the chat's handoff")?;
         Ok(Self(directory))
     }
 
@@ -84,18 +90,35 @@ pub(super) fn receive(path: &Path) -> Result<()> {
         RECEIVED.set(path.to_owned()).is_ok(),
         "this process already received a chat's handoff"
     );
-    let scope = path.join(SCOPE);
-    let token = match std::fs::read_to_string(&scope) {
-        Ok(token) => token,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(error).context("read the chat's handoff"),
-    };
-    let _ = std::fs::remove_file(&scope);
-    ensure!(
-        crate::env::take_handed_scope(token),
-        "this process already holds a handed scope token"
-    );
+    if let Some(token) = take_scope(path)? {
+        ensure!(
+            crate::env::take_handed_scope(token),
+            "this process already holds a handed scope token"
+        );
+    }
     Ok(())
+}
+
+/// The scope token the handoff at `path` hands over, which it gives up, or
+/// `None` from an unscoped starter. A handoff that says neither, as one
+/// whose starter stopped waiting and removed it, is refused, so the chat
+/// never starts unscoped in a scoped starter's stead.
+fn take_scope(path: &Path) -> Result<Option<String>> {
+    let scope = path.join(SCOPE);
+    match std::fs::read_to_string(&scope) {
+        Ok(token) => {
+            let _ = std::fs::remove_file(&scope);
+            Ok(Some(token))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            ensure!(
+                path.join(UNSCOPED).exists(),
+                "the chat's starter no longer waits for it; start the chat again"
+            );
+            Ok(None)
+        }
+        Err(error) => Err(error).context("read the chat's handoff"),
+    }
 }
 
 /// Whether this process is the place a starter waits on.
