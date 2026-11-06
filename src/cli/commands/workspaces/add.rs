@@ -3,6 +3,7 @@ mod agent;
 mod detached;
 mod finish;
 mod handoff;
+mod place;
 mod plan;
 mod queue;
 mod source;

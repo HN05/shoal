@@ -28704,7 +28704,11 @@ fn a_start_without_a_terminal_places_its_agent_by_the_workspaces_settings() {
     assert_eq!(stdout.lines().count(), 1, "{stdout}");
     let args = fs::read_to_string(recorded("apped")).unwrap();
     assert_eq!(args.lines().next(), Some("app"), "{args}");
-    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
+    let queue = fixture.ok(&["queue"]);
+    assert!(
+        (queue.as_array().unwrap().iter()).all(|entry| entry["state"] == "starting"),
+        "{queue}"
+    );
 
     // The checkout hands Codex to the app; the branch runs its CLI.
     commit_resource_config(&fixture.repo, &mode("app"));
@@ -28746,6 +28750,50 @@ fn a_start_after_finished_work_hands_an_app_agent_over_here() {
     assert!(output.status.success(), "{output:?}");
     let args = fs::read_to_string(fixture.root.path().join("codex-args")).unwrap();
     assert_eq!(args.lines().next(), Some("app"), "{args}");
+}
+
+/// Without a terminal, an agent an app runs starts here only when the agent
+/// limits admit it; with every slot taken it waits in the queue.
+#[test]
+fn a_start_without_a_terminal_admits_an_app_agent_before_it_opens_here() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.codex]\ndefault_mode = 'app'\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    let bin = fixture.root.path().join("app-bin");
+    fs::create_dir(&bin).unwrap();
+    install_test_script(
+        bin.join("codex"),
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/codex-args\"\n",
+    );
+    let repo = fixture.repo.to_str().unwrap();
+    let mut first = fixture
+        .command()
+        .args(["start", repo, "first", "--here", "--agent", "waiter"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the first agent start", || {
+        (fixture.ok(&["work"]).as_array().unwrap().iter())
+            .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
+            && fixture.ok(&["queue"]) == serde_json::json!([])
+    });
+    let output = fixture
+        .command()
+        .args(["--json", "start", repo, "app", "--agent", "codex"])
+        .env("PATH", fixture.restricted_path(&bin))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let entry: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
+    assert_eq!(entry["state"], "queued", "{stdout}");
+    assert!(!fixture.root.path().join("codex-args").exists());
+    fixture.ok(&["queue", "cancel", entry["id"].as_str().unwrap()]);
+    fixture.ok(&["stop", "first"]);
+    first.wait().unwrap();
 }
 
 /// Without a terminal, as from another agent's tool call, `shoal resume
