@@ -51,7 +51,7 @@ fn restarted(plan: &Plan) -> Vec<&str> {
 fn skipped(plan: &Plan) -> Vec<&str> {
     plan.skipped
         .iter()
-        .map(|skipped| skipped.workspace.as_str())
+        .map(|skipped| skipped.space.as_str())
         .collect()
 }
 

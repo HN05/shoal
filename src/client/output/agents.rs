@@ -86,26 +86,26 @@ pub struct Restarted {
     /// Whether the run was interrupted before every restart ended.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub interrupted: bool,
-    /// The workspaces whose restart goes on without an interrupted run.
+    /// The spaces whose restart goes on without an interrupted run.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pending: Vec<String>,
 }
 
-/// An agent a restart restarted, by its workspace's name and its own when
-/// known.
+/// An agent a restart restarted, by the name of its space, a workspace or a
+/// chat, and its own when known.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestartedAgent {
-    pub workspace: String,
+    pub space: String,
     pub agent: Option<String>,
     /// Where it runs now, when its wrapper runs in a terminal host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub place: Option<crate::client::sessions::Origin>,
 }
 
-/// An agent a restart leaves out, and why.
+/// An agent a restart leaves out, by its space's name, and why.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skipped {
-    pub workspace: String,
+    pub space: String,
     pub agent: Option<String>,
     pub reason: String,
 }

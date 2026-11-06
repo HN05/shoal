@@ -44,7 +44,7 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
     let [agent_restarted] = restarted["restarted"].as_array().unwrap().as_slice() else {
         panic!("expected one restarted agent: {restarted}");
     };
-    assert_eq!(agent_restarted["workspace"], "renewed", "{restarted}");
+    assert_eq!(agent_restarted["space"], "renewed", "{restarted}");
     assert_eq!(agent_restarted["agent"], "claude", "{restarted}");
     // The answer names the detached session the new wrapper runs in.
     assert_eq!(agent_restarted["place"]["host"], "zmx", "{restarted}");
@@ -107,7 +107,7 @@ fn restart_restores_a_chat_in_a_new_place() {
         assert_eq!(
             restarted["restarted"],
             serde_json::json!([{
-                "workspace": "talk",
+                "space": "talk",
                 "agent": "claude",
                 "place": {"host": "zmx", "place": "talk"},
             }]),

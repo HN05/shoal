@@ -42,7 +42,7 @@ fn every_agent_takes_a_place_among_all_the_run_selected() {
     progress.skip(
         &ctx,
         Skipped {
-            workspace: "gone".into(),
+            space: "gone".into(),
             agent: None,
             reason: "no agent runs there".into(),
         },

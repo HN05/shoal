@@ -23,8 +23,8 @@ pub(super) struct Progress {
     /// How many agents the run reported on so far, and how many it selected.
     position: usize,
     total: usize,
-    /// The workspace of each agent to restart, by execution.
-    workspaces: HashMap<String, String>,
+    /// The space of each agent to restart, by execution.
+    spaces: HashMap<String, String>,
 }
 
 impl Progress {
@@ -35,7 +35,7 @@ impl Progress {
             skipped: Vec::new(),
             position: 0,
             total: restarts.len() + skipped,
-            workspaces: restarts
+            spaces: restarts
                 .iter()
                 .map(|restart| {
                     let execution = restart.agent.execution.clone();
@@ -55,7 +55,7 @@ impl Progress {
     pub(super) fn skip(&mut self, ctx: &Context, skipped: Skipped) {
         let place = self.next();
         if !ctx.json {
-            let message = format!("Skipped {} {place}: {}", skipped.workspace, skipped.reason);
+            let message = format!("Skipped {} {place}: {}", skipped.space, skipped.reason);
             outln!("{}", Palette::stdout(false).paint(Style::Warning, &message));
         }
         self.skipped.push(skipped);
@@ -81,7 +81,7 @@ impl Progress {
                     place.as_ref(),
                 ),
                 RestartedAgent {
-                    workspace: name.to_owned(),
+                    space: name.to_owned(),
                     agent: restart.agent.agent.clone(),
                     place,
                 },
@@ -108,7 +108,7 @@ impl Progress {
         let pending: Vec<String> = agents
             .iter()
             .filter(|agent| agent.restart.is_some())
-            .filter_map(|agent| self.workspace_of(agent))
+            .filter_map(|agent| self.space_of(agent))
             .collect();
         if !ctx.json {
             eprintln!("{}", interruption(&pending, agent));
@@ -117,11 +117,11 @@ impl Progress {
         Ok(130)
     }
 
-    /// The workspace of `agent`, selected as the execution it runs or ran as.
-    fn workspace_of(&self, agent: &RunningAgent) -> Option<String> {
+    /// The space of `agent`, selected as the execution it runs or ran as.
+    fn space_of(&self, agent: &RunningAgent) -> Option<String> {
         std::iter::once(&agent.execution)
             .chain(&agent.restarted_from)
-            .find_map(|execution| self.workspaces.get(execution).cloned())
+            .find_map(|execution| self.spaces.get(execution).cloned())
     }
 
     /// Print the JSON object, exiting 1 when any restart failed.
