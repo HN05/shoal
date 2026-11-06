@@ -34,6 +34,7 @@ use crate::{
 pub(in crate::cli) use desktop::{app, ensure_opens, hand_off};
 pub(in crate::cli) use launch::input;
 pub(in crate::cli) use sessions::{Existing, SessionHome, install_session_files};
+pub(in crate::cli) use trust::{cleanup_moved_trust, cleanup_repository_trust};
 
 /// Where a chat of agent `name` runs when an integration it adds starts it
 /// outside any terminal, such as an app.

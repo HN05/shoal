@@ -14,7 +14,6 @@ use crate::{
     env,
     fsutil::{self, Permissions, ReplaceOptions},
     model::Repository,
-    paths::Paths,
 };
 
 /// A tool's config file that records the directories it trusts, so a
@@ -50,27 +49,33 @@ impl TrustFile {
     }
 
     /// Trust `paths` in the config file the tool reads when it runs with
-    /// `environment`, warning about each failure.
-    pub(crate) fn trust(&self, environment: &AgentEnvironment, paths: &[std::path::PathBuf]) {
+    /// `environment`; each failure comes back as a warning.
+    pub(crate) fn trust(
+        &self,
+        environment: &AgentEnvironment,
+        paths: &[std::path::PathBuf],
+    ) -> Vec<String> {
         let config = match (self.config)(environment) {
             Ok(config) => config,
             Err(error) => {
-                eprintln!(
-                    "warning: could not mark directories as trusted for {}: {error:#}",
+                return vec![format!(
+                    "could not mark directories as trusted for {}: {error:#}",
                     self.tool
-                );
-                return;
+                )];
             }
         };
-        for path in paths {
-            if let Err(error) = (self.add)(&config, path) {
-                eprintln!(
-                    "warning: could not mark {} as trusted for {}: {error:#}",
-                    path.display(),
-                    self.tool
-                );
-            }
-        }
+        paths
+            .iter()
+            .filter_map(|path| {
+                (self.add)(&config, path).err().map(|error| {
+                    format!(
+                        "could not mark {} as trusted for {}: {error:#}",
+                        path.display(),
+                        self.tool
+                    )
+                })
+            })
+            .collect()
     }
 
     /// Remove the entries for `paths` from the config file of each of
@@ -109,79 +114,6 @@ impl TrustFile {
             }
         }
         (configs, warnings)
-    }
-}
-
-/// Remove every integration's trust entries for a repository after its
-/// deletion succeeds, as [`cleanup_moved_trust`] does, then have the daemon
-/// forget where its agents kept their configs. Cleanup is best effort and
-/// never fails the removal.
-pub(crate) async fn cleanup_repository_trust(
-    paths: &Paths,
-    repository: &Repository,
-    workspace_paths: &[PathBuf],
-) {
-    if cleanup_trust(paths, repository, workspace_paths).await {
-        forget_agent_environments(paths, repository).await;
-    }
-}
-
-/// Remove every integration's trust entries for the paths a repository had
-/// before it moved, `repository` as recorded then, both where agents running
-/// with this process's environment keep them and where the daemon kept that
-/// its agents ran with. Failures only warn.
-pub(crate) async fn cleanup_moved_trust(
-    paths: &Paths,
-    repository: &Repository,
-    workspace_paths: &[PathBuf],
-) {
-    cleanup_trust(paths, repository, workspace_paths).await;
-}
-
-/// Remove the trust entries [`cleanup_moved_trust`] removes, warning about
-/// each failure; whether the daemon said where its agents kept their
-/// configs.
-async fn cleanup_trust(
-    paths: &Paths,
-    repository: &Repository,
-    workspace_paths: &[PathBuf],
-) -> bool {
-    let agent_environments = agent_environments(paths, repository).await;
-    let warnings = forget_repository_trust(
-        &paths.home,
-        repository,
-        workspace_paths,
-        agent_environments.as_deref().unwrap_or_default(),
-    );
-    for warning in warnings {
-        eprintln!("warning: {warning}");
-    }
-    agent_environments.is_some()
-}
-
-/// Where the removed repository's tracked agents kept their configuration;
-/// `None` with a warning when the daemon cannot say.
-async fn agent_environments(
-    paths: &Paths,
-    repository: &Repository,
-) -> Option<Vec<BTreeMap<String, String>>> {
-    crate::client::repositories::agent_environments(paths, repository.id.clone())
-        .await
-        .inspect_err(|error| {
-            eprintln!(
-                "warning: could not clean trust entries where [env] put agent configs: {error:#}"
-            );
-        })
-        .ok()
-}
-
-/// Have the daemon forget the removed repository's agent configs once their
-/// trust entries are clean. Failure only warns.
-async fn forget_agent_environments(paths: &Paths, repository: &Repository) {
-    let forgotten =
-        crate::client::repositories::forget_agent_environments(paths, repository.id.clone()).await;
-    if let Err(error) = forgotten {
-        eprintln!("warning: the daemon keeps the removed repository's agent configs: {error:#}");
     }
 }
 

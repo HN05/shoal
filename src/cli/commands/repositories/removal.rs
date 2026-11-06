@@ -3,8 +3,7 @@ use anyhow::{Result, ensure};
 
 use super::selection::chosen;
 use crate::{
-    agents,
-    cli::{context::Context, ui},
+    cli::{agents, context::Context, ui},
     model::{Repository, RepositoryRemoval},
     repository,
 };
@@ -66,6 +65,6 @@ fn confirm_target(
 
 async fn cleanup_trust(ctx: &Context, repository: &Repository, result: &RepositoryRemoval) {
     if result.repository_id == repository.id {
-        agents::cleanup_repository_trust(&ctx.paths, repository, &result.workspace_paths).await;
+        agents::cleanup_repository_trust(ctx, repository, &result.workspace_paths).await;
     }
 }

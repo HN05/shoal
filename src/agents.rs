@@ -38,7 +38,7 @@ pub(crate) use proxy::{
     Routing, launch_proxy, proxy_defaults, proxy_ends_turns, proxy_environment,
     route_through_proxy, with_proxy_args,
 };
-pub(crate) use trust::{cleanup_moved_trust, cleanup_repository_trust, forget_repository_trust};
+pub(crate) use trust::forget_repository_trust;
 
 use crate::client::transcripts::AgentEnvironment;
 
