@@ -14,7 +14,7 @@ pub mod output;
 mod progress;
 pub mod recent;
 pub mod shell;
-pub(crate) mod terminal;
+mod terminal;
 pub mod ui;
 pub mod usage;
 pub mod workspace_context;
