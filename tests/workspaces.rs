@@ -24709,7 +24709,13 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
     assert!(titled.status.success(), "{titled:?}");
     assert_eq!(herdr_changes(&fixture).len(), before);
 
-    // A tab the user closed keeps the title on the record only.
+    // A tab the user closed keeps the title on the record only, though it
+    // showed the label Shoal gave it.
+    fs::write(
+        fixture.root.path().join("herdr-tab-labels"),
+        serde_json::json!({"w1:t9": "Tab names"}).to_string(),
+    )
+    .unwrap();
     fs::write(fixture.root.path().join("closed-tabs"), "w1:t9\n").unwrap();
     let before = herdr_changes(&fixture).len();
     let titled = title_in_herdr(&fixture, "topic", "Renamed later");
