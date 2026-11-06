@@ -39,7 +39,7 @@ by these areas, giving any path not listed to the closest one:
 - Execution wrapper, tracked processes and agents: `src/execution`,
   `src/process`, `src/daemon/execution_*`, `src/daemon/agent_*`, `src/agent`,
   `src/happy`
-- Resources and access: `src/daemon/ports`, `src/daemon/resources`, `src/sim`,
+- Resources and access: `src/daemon/ports`, `src/daemon/resources`, `src/daemon/sim`,
   `src/daemon/approvals`, `src/daemon/scope.rs`, `src/secrets.rs`
 - Forge integration, links, events and messages: `crates/shoal-forge`,
   `src/daemon/links`, `src/daemon/events`, `src/daemon/questions`,

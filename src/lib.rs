@@ -62,8 +62,6 @@ mod service;
 mod sessions;
 #[cfg(feature = "cli")]
 mod shell;
-#[cfg(feature = "cli")]
-mod sim;
 #[cfg(all(test, feature = "cli"))]
 mod test_support;
 #[cfg(feature = "cli")]

@@ -3,13 +3,13 @@
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
+use super::{SimRequest, Simulator};
 pub(crate) use crate::client::sim::{
     AuditEntry, CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice,
 };
 use crate::{
     daemon::{allocation::Allocation, approvals::DecisionStatus, workspace::Manager},
     model::Workspace,
-    sim::{SimRequest, Simulator},
     time::unix_seconds,
 };
 

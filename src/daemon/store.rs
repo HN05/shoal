@@ -7,8 +7,8 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
+    client::sim::CleanRequestStatus,
     model::{Execution, LinkedItem, PortReservation, Relation, Repository, SpaceLinks, Workspace},
-    sim::audit::CleanRequestStatus,
     state::{ExecutionState, WorkspaceState},
 };
 

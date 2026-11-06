@@ -817,7 +817,7 @@ pub(super) fn migrate(db: &mut Connection) -> Result<()> {
 }
 
 fn validate_simulator_records(db: &Connection) -> Result<()> {
-    crate::sim::records::list(db, None)
+    crate::daemon::sim::records::list(db, None)
         .context("validate simulator records before indexing ownership")?;
     Ok(())
 }

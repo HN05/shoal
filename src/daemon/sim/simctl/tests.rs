@@ -7,7 +7,7 @@ fn fixture(root: &Path, args: &[&str]) -> String {
     let output = Command::new("python3")
         .args([
             "-c",
-            include_str!("../../../tests/fixtures/simctl.py"),
+            include_str!("../../../../tests/fixtures/simctl.py"),
             "simctl",
         ])
         .args(args)

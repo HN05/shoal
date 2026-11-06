@@ -48,6 +48,7 @@ pub mod scope;
 pub mod secrets;
 pub(crate) mod seed;
 mod shutdown_lock;
+pub(crate) mod sim;
 pub(crate) mod space_processes;
 pub(crate) mod spaces;
 mod startup;

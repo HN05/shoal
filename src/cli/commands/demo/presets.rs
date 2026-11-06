@@ -16,11 +16,11 @@ use crate::{
         },
         context::Context,
     },
+    client::sim::{SimRequest, Simulator},
     config::repo::ConflictPolicy,
     demos::{Launch, PORT, Preset, SIM_UDID},
     model::PortRequest,
     model::{PortReservation, Workspace},
-    sim::{SimRequest, Simulator},
 };
 
 /// The workspace's lease `shoal acquire sim` takes by default, so the demo
