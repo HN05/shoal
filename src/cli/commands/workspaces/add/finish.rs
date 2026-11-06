@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result};
 
 use super::{
     agent::ResolvedAddAgent,
-    place::{Placement, place},
+    place::{HereLaunch, launch_placed},
     plan::{AddPlan, Creation},
     queue::failing_entry,
     source::load_add_issue,
@@ -60,7 +60,7 @@ pub(super) async fn execute_add_with_target(
 
 /// Run `start` under queue `entry`'s slot, held until its agent takes it
 /// over, freeing the slot with the error when `start` fails.
-async fn holding<T>(
+pub(super) async fn holding<T>(
     ctx: &Context,
     entry: &str,
     start: impl std::future::Future<Output = Result<T>>,
@@ -172,27 +172,20 @@ pub(super) async fn add_planned(
         let entry = entry.context("preparation queued no agent")?;
         return report_queued_in(ctx, &workspace, &entry);
     }
-    let mut slot = None;
-    if let Some(launch) = placed {
-        match place(ctx, &workspace, *launch).await? {
-            Placement::Queued(entry) => return report_queued_in(ctx, &workspace, &entry),
-            Placement::Waiting(entry, waiting) => {
-                return agent_queue::report_queued(ctx, &entry, waiting);
-            }
-            Placement::Here(entry) => slot = entry,
-        }
-        terminal::host_workspace(ctx, &workspace, true, &label).await?;
-    }
     let opening = agents::Opening::New {
         mode: mode.unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
         subject,
     };
-    let Some(entry) = slot else {
-        return agent.launch(ctx, *workspace, opening, args, fork).await;
+    let here = HereLaunch {
+        agent,
+        opening,
+        args,
+        fork,
     };
-    crate::env::launch_queue_entry(&entry);
-    let launched = agent.launch(ctx, *workspace, opening, args, fork);
-    holding(ctx, &entry, launched).await
+    match placed {
+        Some(placed) => launch_placed(ctx, *workspace, *placed, here, &label).await,
+        None => here.run(ctx, *workspace).await,
+    }
 }
 
 /// The launch of `agent` in `mode` that preparing the added workspace
@@ -224,7 +217,11 @@ fn queued_launch(
 }
 
 /// Report the agent queued in the added `workspace`.
-fn report_queued_in(ctx: &Context, workspace: &Workspace, entry: &QueueEntry) -> Result<i32> {
+pub(super) fn report_queued_in(
+    ctx: &Context,
+    workspace: &Workspace,
+    entry: &QueueEntry,
+) -> Result<i32> {
     let text = match entry.state {
         QueueState::Queued => format!(
             "Queued {} in {} (position {}); it starts {}",

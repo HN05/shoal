@@ -2,9 +2,15 @@
 //! from that workspace's own settings: queued for the daemon, or, for an
 //! agent that runs its own way and so leaves this process at once, started
 //! here when the agent limits admit it.
+use std::ffi::OsString;
+
 use anyhow::Result;
 
-use super::plan::AddPlan;
+use super::{
+    agent::ResolvedAddAgent,
+    finish::{holding, report_queued_in},
+    plan::AddPlan,
+};
 use crate::{
     agent::Agent,
     cli::{
@@ -17,8 +23,50 @@ use crate::{
     protocol::{ConfigTarget, operations::QueuedLaunch},
 };
 
+/// The launch of the agent that starts in this process.
+pub(super) struct HereLaunch {
+    pub agent: ResolvedAddAgent,
+    pub opening: agents::Opening,
+    pub args: Vec<OsString>,
+    pub fork: Option<String>,
+}
+
+impl HereLaunch {
+    /// Start the agent in `workspace`.
+    pub(super) async fn run(self, ctx: &Context, workspace: Workspace) -> Result<i32> {
+        (self.agent)
+            .launch(ctx, workspace, self.opening, self.args, self.fork)
+            .await
+    }
+}
+
+/// Place `launch` in the set-up `workspace` and report it, or start `here`
+/// when it goes here, in this place, labelled `label`, under the queue
+/// entry that holds its slot.
+pub(super) async fn launch_placed(
+    ctx: &Context,
+    workspace: Workspace,
+    launch: QueuedLaunch,
+    here: HereLaunch,
+    label: &str,
+) -> Result<i32> {
+    let slot = match place(ctx, &workspace, launch).await? {
+        Placement::Queued(entry) => return report_queued_in(ctx, &workspace, &entry),
+        Placement::Waiting(entry, waiting) => {
+            return agent_queue::report_queued(ctx, &entry, waiting);
+        }
+        Placement::Here(slot) => slot,
+    };
+    terminal::host_workspace(ctx, &workspace, true, label).await?;
+    let Some(entry) = slot else {
+        return here.run(ctx, workspace).await;
+    };
+    crate::env::launch_queue_entry(&entry);
+    holding(ctx, &entry, here.run(ctx, workspace)).await
+}
+
 /// Where a placed agent starts.
-pub(super) enum Placement {
+enum Placement {
     /// Queued in its workspace, which the daemon starts detached.
     Queued(Box<QueueEntry>),
     /// Waiting for a slot behind this many entries in total; the daemon
@@ -29,11 +77,7 @@ pub(super) enum Placement {
 }
 
 /// Place `launch` in the set-up `workspace`.
-pub(super) async fn place(
-    ctx: &Context,
-    workspace: &Workspace,
-    launch: QueuedLaunch,
-) -> Result<Placement> {
+async fn place(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) -> Result<Placement> {
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
         ConfigTarget::Workspace(workspace.id.clone()),
