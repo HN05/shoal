@@ -4,25 +4,30 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use super::Manager;
-use crate::model::Workspace;
+use crate::model::RetitledWorkspace;
 
 impl Manager {
-    /// Give the workspace `selector` names `title`, or clear it without one.
+    /// Give the workspace `selector` names `title`, or clear it without one,
+    /// returning it with the title it had before, which its places may
+    /// still show.
     pub async fn set_workspace_title(
         &self,
         selector: &str,
         title: Option<String>,
-    ) -> Result<Workspace> {
+    ) -> Result<RetitledWorkspace> {
         let title = title.map(|title| title.trim().to_owned());
         if let Some(title) = &title {
             crate::validate::title(title)?;
         }
-        let id = self.workspace(selector).await?.id;
-        let titled = id.clone();
+        let previous = self.workspace(selector).await?;
+        let titled = previous.id.clone();
         self.store
             .run(move |db| store_title(db, &titled, title.as_deref()))
             .await?;
-        self.workspace(&id).await
+        Ok(RetitledWorkspace {
+            workspace: self.workspace(&previous.id).await?,
+            previous_title: previous.title,
+        })
     }
 }
 

@@ -16,7 +16,7 @@ use crate::{
     config::{Config, Effective, hooks::HookKind, repo::ConfigLayers},
     model::{
         ConflictCheck, Dependency, DiffBase, Inspection, MergePreview, OwnedPlace, PresentSpace,
-        SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree, Workspace,
+        RetitledWorkspace, SpaceStatus, SpaceTarget, Spaces, UntrackedWorktree, Workspace,
     },
     protocol::{CommitStart, ConfigTarget, CreationOptions, WorkspaceMethod},
 };
@@ -145,7 +145,7 @@ pub async fn set_title(
     daemon: &impl Daemon,
     workspace: String,
     title: String,
-) -> Result<Workspace> {
+) -> Result<RetitledWorkspace> {
     let method = WorkspaceMethod::SetWorkspaceTitle {
         workspace,
         title: Some(title),

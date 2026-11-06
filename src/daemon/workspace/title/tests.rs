@@ -1,7 +1,7 @@
 use crate::test_support::{manager, repository};
 
 #[tokio::test]
-async fn a_title_is_trimmed_kept_on_the_record_and_cleared() {
+async fn a_title_is_trimmed_kept_on_the_record_and_cleared_after_the_previous_one() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -17,14 +17,16 @@ async fn a_title_is_trimmed_kept_on_the_record_and_cleared() {
         .set_workspace_title("topic", Some("  Agent tab names ".into()))
         .await
         .unwrap();
-    assert_eq!(titled.title.as_deref(), Some("Agent tab names"));
+    assert_eq!(titled.workspace.title.as_deref(), Some("Agent tab names"));
+    assert_eq!(titled.previous_title, None);
     assert_eq!(
         manager.workspace("topic").await.unwrap().title.as_deref(),
         Some("Agent tab names")
     );
 
     let cleared = manager.set_workspace_title("topic", None).await.unwrap();
-    assert_eq!(cleared.title, None);
+    assert_eq!(cleared.workspace.title, None);
+    assert_eq!(cleared.previous_title.as_deref(), Some("Agent tab names"));
 }
 
 #[tokio::test]

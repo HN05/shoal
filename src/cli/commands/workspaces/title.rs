@@ -20,7 +20,9 @@ pub(in crate::cli::commands) async fn title(
     // Refuse an invalid title before a picker asks for the workspace.
     crate::validate::title(title.trim())?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let titled = crate::client::workspaces::set_title(&ctx.paths, workspace, title).await?;
+    let titled = crate::client::workspaces::set_title(&ctx.paths, workspace, title)
+        .await?
+        .workspace;
     // The title is recorded; a place left with its old label only warns.
     if let Err(error) = terminal::relabel_places(ctx, &titled).await {
         eprintln!(

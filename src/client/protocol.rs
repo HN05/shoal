@@ -579,6 +579,7 @@ response_bodies! {
     Reached(crate::client::output::messages::Reached),
     Chat(crate::model::Chat),
     RenamedChat(crate::model::RenamedChat),
+    RetitledWorkspace(crate::model::RetitledWorkspace),
     Chats(Vec<crate::model::Chat>),
     RemovedChat(crate::client::output::chat::RemovedChat),
     ChatName(String),

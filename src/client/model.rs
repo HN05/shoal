@@ -1507,6 +1507,13 @@ pub struct RenamedChat {
     pub previous_name: String,
 }
 
+/// A workspace after its title changed, with the title it had before.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetitledWorkspace {
+    pub workspace: Workspace,
+    pub previous_title: Option<String>,
+}
+
 /// A space as it exists: a workspace or a chat, running or stopped, which
 /// share one namespace of IDs and names. JSON gives its record with its
 /// `kind`.

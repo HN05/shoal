@@ -152,7 +152,7 @@ pub(super) async fn handle(
             Body::Workspace(manager.set_base_workspace(&workspace, base).await?)
         }
         WorkspaceMethod::SetWorkspaceTitle { workspace, title } => {
-            Body::Workspace(manager.set_workspace_title(&workspace, title).await?)
+            Body::RetitledWorkspace(manager.set_workspace_title(&workspace, title).await?)
         }
         WorkspaceMethod::VerifyWorkspace {
             workspace,
