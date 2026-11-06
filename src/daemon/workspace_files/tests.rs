@@ -1088,6 +1088,15 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
 /// Return a current state database to version 87, before Shoal recorded
 /// attached files, undoing the later migrations that cannot run twice.
 const BEFORE_ATTACHED_FILES: &str = "DROP TABLE merges;
+    DROP TRIGGER chat_agent_state_ended;
+    DROP TRIGGER chat_agent_state_removed;
+    DROP TRIGGER workspace_agent_state_removed;
+    DROP TRIGGER space_agent_state_set;
+    DROP TRIGGER space_agent_state_changed;
+    DROP TRIGGER space_agent_state_cleared;
+    DROP INDEX space_agent_state_execution;
+    ALTER TABLE space_agent_state RENAME TO workspace_agent_state;
+    ALTER TABLE workspace_agent_state RENAME COLUMN space_id TO workspace_id;
     DROP TRIGGER workspace_numbered;
     DROP TRIGGER chat_started;
     CREATE TRIGGER chat_started AFTER INSERT ON chats BEGIN SELECT 1; END;
