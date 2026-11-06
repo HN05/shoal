@@ -1,12 +1,12 @@
 //! The daemon's answers to [`QueueMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use super::super::{
     agent_queue,
     answer::Answer,
-    scope::{Caller, Scoped, denied},
+    scope::{Caller, NOT_NOW, Scoped, denied},
     workspace::Manager,
 };
 use crate::protocol::{Body, QueueMethod};
@@ -52,9 +52,20 @@ pub(super) async fn handle(
             workspace,
             execution,
             env,
+            now: false,
         } => Body::QueueEntry(
             manager
                 .queue_stopped_restore(&workspace, &execution, env)
+                .await?,
+        ),
+        QueueMethod::QueueRestore {
+            workspace,
+            execution,
+            env,
+            now: true,
+        } => Body::QueueEntry(
+            manager
+                .start_stopped_restore(&workspace, &execution, env)
                 .await?,
         ),
     }))
@@ -76,8 +87,12 @@ impl Scoped for QueueMethod {
             QueueMethod::QueueRestore {
                 workspace,
                 execution,
+                now,
                 ..
-            } => Some(manager.stopped_below(caller, workspace, execution).await?),
+            } => {
+                ensure!(!*now, NOT_NOW);
+                Some(manager.stopped_below(caller, workspace, execution).await?)
+            }
             QueueMethod::QueuedPlan { .. }
             | QueueMethod::QueueStart { .. }
             | QueueMethod::QueueHold { .. }

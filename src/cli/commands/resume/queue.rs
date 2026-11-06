@@ -88,6 +88,7 @@ async fn queue(ctx: &Context, workspace: &Workspace, execution: &str) -> Result<
         workspace,
         execution,
         terminal::start_environment(),
+        false,
     )
     .await
 }

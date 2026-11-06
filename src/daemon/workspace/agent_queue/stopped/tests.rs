@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     daemon::workspace::agent_queue::tests::{
-        connected_agent, create, limit_globally, queue, register, started,
+        add, connected_agent, create, limit_globally, queue, register, started,
     },
     daemon::workspace_files::Attacher,
     execution::recovery::record_path,
@@ -95,6 +95,23 @@ async fn resumed_agents_start_from_the_daemon_as_slots_free() {
     std::fs::remove_file(record_path(&manager.paths, &workspaces[0].id, "one-agent")).unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(started(&entries[2].id));
+}
+
+#[tokio::test]
+async fn a_restore_started_now_starts_beyond_the_limit() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "work").await;
+    // A launch takes the only slot before the agent stops.
+    assert!(add(&manager, &repo, "busy").await.start);
+    stop(&manager, &workspace, "agent", STOPPED);
+    let now = manager
+        .start_stopped_restore("work", "agent", herdr())
+        .await
+        .unwrap();
+    assert_eq!(now.state, Starting);
+    assert!(started(&now.id));
 }
 
 #[tokio::test]

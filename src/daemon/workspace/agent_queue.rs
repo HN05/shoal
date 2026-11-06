@@ -487,8 +487,7 @@ impl Manager {
             });
         }
         let id = uuid::Uuid::new_v4().to_string();
-        // The daemon admits a launch in an existing workspace like a waiting one.
-        let state = if request.now && target.is_none() {
+        let state = if request.now {
             QueueState::Starting
         } else {
             QueueState::Queued
@@ -506,7 +505,7 @@ impl Manager {
             opens: target,
         };
         let detached = launch.opens.is_some();
-        let now = launch.request.now && !detached;
+        let now = launch.request.now;
         self.store.run(move |db| insert_launch(db, &launch)).await?;
         let admitted = now || self.admit_waiting(Some(&id)).await?;
         // Read the response before a detached worker can take the entry.

@@ -13,6 +13,10 @@ use crate::{
     repository::Selector,
 };
 
+/// Why a scoped caller cannot start an agent regardless of the limits.
+pub(in crate::daemon) const NOT_NOW: &str =
+    "workspace processes start agents when a slot is free; leave out --now";
+
 impl Manager {
     /// Put a space `caller` starts below the space `parent` names, which
     /// must be its own or one below it, else below its own space.
@@ -242,7 +246,7 @@ impl Manager {
     }
 
     /// The workspace `request` starts an agent in, which must be one below
-    /// the caller's.
+    /// the caller's, refusing a start regardless of the limits.
     pub(in crate::daemon) async fn queue_target<'a>(
         &self,
         caller: &Caller,
@@ -250,6 +254,7 @@ impl Manager {
     ) -> Result<&'a mut String> {
         const REFUSAL: &str =
             "workspace processes can start agents only in the workspaces split from theirs";
+        ensure!(!request.now, NOT_NOW);
         let target = request.workspace.as_mut().context(REFUSAL)?;
         self.workspace_below(caller, target, REFUSAL).await
     }

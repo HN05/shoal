@@ -53,11 +53,13 @@ pub enum QueueMethod {
         error: String,
     },
     /// Queue the restore of a stopped agent, which the daemon starts with
-    /// `env` once admitted.
+    /// `env` once admitted, or with `now` at once, regardless of the limits.
     QueueRestore {
         workspace: String,
         execution: String,
         env: std::collections::BTreeMap<String, String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        now: bool,
     },
 }
 

@@ -63,17 +63,19 @@ pub async fn fail(daemon: &impl Daemon, entry: String, error: String) -> Result<
 }
 
 /// Queue the restore of `execution`'s agent in `workspace`, which starts
-/// with `env`.
+/// with `env`, at once regardless of the limits when `now`.
 pub async fn restore(
     daemon: &impl Daemon,
     workspace: String,
     execution: String,
     env: BTreeMap<String, String>,
+    now: bool,
 ) -> Result<QueueEntry> {
     let method = QueueMethod::QueueRestore {
         workspace,
         execution,
         env,
+        now,
     };
     request(daemon, method).await
 }

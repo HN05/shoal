@@ -81,7 +81,13 @@ impl Manager {
     /// branch, so it is refused.
     pub async fn queue_start(&self, selector: &str) -> Result<QueueEntry> {
         let _gate = self.agent_queue.lock_admission().await;
-        let mut entry = self.waiting_entry(selector, None, "").await?;
+        let entry = self.waiting_entry(selector, None, "").await?;
+        self.start_waiting(entry).await
+    }
+
+    /// Start the waiting `entry` now, regardless of the limits, as
+    /// [`Manager::queue_start`] does. Requires the queue gate.
+    pub(super) async fn start_waiting(&self, mut entry: QueueEntry) -> Result<QueueEntry> {
         let base = self.start_base(&entry).await?;
         match self.waiting_wrapper(&entry).await? {
             Some(execution) => self.grant_now(&entry, &execution).await?,

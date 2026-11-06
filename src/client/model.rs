@@ -1847,6 +1847,7 @@ pub struct QueueRequest {
     /// and the caller's output setting.
     pub env: std::collections::BTreeMap<String, String>,
     /// Start at once regardless of the limits; the agent still takes a slot.
+    /// Scoped callers cannot.
     pub now: bool,
     /// The existing workspace the launch opens, such as a child workspace for
     /// its parent's agent. The daemon then starts the entry itself, outside

@@ -1188,6 +1188,29 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
 }
 
 #[tokio::test]
+async fn a_launch_in_an_existing_workspace_started_now_starts_beyond_the_limit() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let child = manager
+        .create_workspace(&repo.id, "child".into(), None, None, None)
+        .await
+        .unwrap();
+    assert!(add(&manager, &repo, "busy").await.start);
+    let admission = manager
+        .queue_add(QueueRequest {
+            workspace: Some(child.id.clone()),
+            ..request(&repo, "child", true)
+        })
+        .await
+        .unwrap();
+    let entry = admission.entry.unwrap();
+    assert!(!admission.start);
+    assert_eq!(entry.state, QueueState::Starting);
+    assert!(started(&entry.id));
+}
+
+#[tokio::test]
 async fn workspace_processes_start_agents_only_below_their_workspace() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
@@ -1223,7 +1246,15 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         let authorized =
             crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
         assert_eq!(authorized.is_ok(), allowed, "{workspace:?}");
-    }
+    } // Only the user starts one regardless of the limits.
+    let mut method = crate::protocol::QueueMethod::QueueAdd {
+        request: QueueRequest {
+            workspace: Some(child.name.clone()),
+            ..request(&repo, "launch", true)
+        },
+    };
+    let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+    assert!(authorized.is_err());
 }
 
 #[tokio::test]

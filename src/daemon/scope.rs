@@ -9,6 +9,8 @@ use anyhow::{Result, ensure};
 
 mod access;
 
+pub(in crate::daemon) use access::NOT_NOW;
+
 /// The space and optional tracked execution a scope token belongs to.
 #[derive(Debug, Clone)]
 pub struct Caller {

@@ -384,13 +384,15 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
             launches: crate::protocol::QueuedLaunches::Cancel,
         })
     };
-    let restore = |workspace: &str, execution: &str| {
+    let restore_now = |workspace: &str, execution: &str, now| {
         Operation::from(QueueMethod::QueueRestore {
             workspace: workspace.into(),
             execution: execution.into(),
             env: Default::default(),
+            now,
         })
     };
+    let restore = |workspace: &str, execution: &str| restore_now(workspace, execution, false);
     for (target, allowed) in [
         (&child.name, true),
         (&grandchild.name, true),
@@ -404,6 +406,10 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
         }
         let mut users = restore(target, "users");
         let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut users).await;
+        assert!(authorized.is_err(), "{target}");
+        // Only the user starts a restore regardless of the limits.
+        let mut now = restore_now(target, "ours", true);
+        let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut now).await;
         assert!(authorized.is_err(), "{target}");
     }
     // The child resumes what it stopped, but not what its parent stopped.

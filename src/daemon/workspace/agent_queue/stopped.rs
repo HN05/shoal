@@ -243,6 +243,31 @@ impl Manager {
         execution: &str,
         env: BTreeMap<String, String>,
     ) -> Result<QueueEntry> {
+        self.add_stopped_restore(workspace, execution, env, false)
+            .await
+    }
+
+    /// Queue the restore as [`Manager::queue_stopped_restore`] does and
+    /// start it at once, regardless of the limits.
+    pub async fn start_stopped_restore(
+        &self,
+        workspace: &str,
+        execution: &str,
+        env: BTreeMap<String, String>,
+    ) -> Result<QueueEntry> {
+        self.add_stopped_restore(workspace, execution, env, true)
+            .await
+    }
+
+    /// Queue the restore of the agent stopped as `execution` in
+    /// `workspace`, starting it at once when `now`, and return its entry.
+    async fn add_stopped_restore(
+        &self,
+        workspace: &str,
+        execution: &str,
+        env: BTreeMap<String, String>,
+        now: bool,
+    ) -> Result<QueueEntry> {
         let workspace = self.workspace(workspace).await?;
         let agent = stopped_agent(&self.paths, &workspace.id, execution)?
             .with_context(|| format!("{} has no stopped agent {execution}", workspace.name))?;
@@ -255,11 +280,16 @@ impl Manager {
         // Read the entry before dispatch can start it and its agent take it.
         let _gate = self.agent_queue.lock_admission().await;
         self.store.run(move |db| insert(db, &restore)).await?;
-        self.queue_entries()
+        let entry = self
+            .queue_entries()
             .await?
             .into_iter()
             .find(|entry| entry.execution.as_deref() == Some(execution))
-            .context("the restore already left the agent queue")
+            .context("the restore already left the agent queue")?;
+        match now && entry.state == QueueState::Queued {
+            true => self.start_waiting(entry).await,
+            false => Ok(entry),
+        }
     }
 
     /// Record the restore of the agent stopped as `execution` in `workspace`
