@@ -11,6 +11,7 @@ mod commits;
 mod config_state;
 pub(crate) mod conflicts;
 mod contributions;
+mod coordinated;
 mod copies;
 mod daemon_exit;
 mod demos;
@@ -305,9 +306,10 @@ impl Manager {
     }
 
     /// The workspaces a caller lists, with review marks checked against
-    /// HEAD. A workspace process sees its own subtree with its own workspace
-    /// first, since scoped commands without a target act on the first one; a
-    /// chat in a workspace's worktree also sees that workspace, last.
+    /// HEAD and their coordinators' turn states. A workspace process sees its
+    /// own subtree with its own workspace first, since scoped commands
+    /// without a target act on the first one; a chat in a workspace's
+    /// worktree also sees that workspace, last.
     pub async fn visible_workspaces(&self, owner: Option<&str>) -> Result<Vec<Workspace>> {
         let mut workspaces = self.list_workspaces_within(owner).await?;
         if let Some(owner) = owner {
@@ -325,6 +327,7 @@ impl Manager {
         for workspace in &mut workspaces {
             workspace.usage = self.workspace_usage(&workspace.id);
         }
+        self.load_coordinator_states(&mut workspaces).await?;
         self.attach_jobs(&mut workspaces).await?;
         Ok(workspaces)
     }

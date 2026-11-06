@@ -726,7 +726,10 @@ state unless ready; for a ready workspace it is, in order of precedence,
 `stopped` when stopped agents or commands wait for `shoal resume`,
 `needs input`, `finished` after `shoal done` until `shoal done --undo`, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
-`ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
+`parent working` while no agent of its own has ever started there and the
+agent of the nearest space above with one works, as when that agent's
+subagents work in a child it split, `ready (outdated)`, or `inactive`.
+Branches and paths are in `shoal status`.
 Every space, a workspace or a [chat](#chats), has a number no other space
 holds, the smallest free when it is created; it stays through renames and
 stops, and a later space may take it once the space is removed. `shoal status`

@@ -107,6 +107,10 @@ pub struct Workspace {
     pub latest_review: Option<crate::reviews::ReviewStatus>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_state: Option<AgentStatus>,
+    /// In a list, the turn state its coordinator's agent reports while no
+    /// agent of its own has started here, so that agent does its work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinator_state: Option<AgentState>,
     #[serde(default)]
     pub links: SpaceLinks,
     /// Whether an agent or command started through Shoal is running here.
@@ -608,6 +612,7 @@ impl Workspace {
             review: Vec::new(),
             latest_review: None,
             agent_state: None,
+            coordinator_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),
             parent: None,

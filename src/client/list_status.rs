@@ -25,6 +25,9 @@ pub enum ListStatus {
     Waiting,
     /// An agent or command without a reported turn state runs.
     ProcessRunning,
+    /// No agent of its own has started, and the agent above that does its
+    /// work is working.
+    ParentWorking,
     ReadyOutdated,
     Inactive,
     Queued,
@@ -34,8 +37,8 @@ pub enum ListStatus {
 impl ListStatus {
     /// The workspace's state unless ready, then stopped work, an agent
     /// that needs input, a recorded completion, a current ready mark, the agent's other turn
-    /// states, an agent or command running without one, an outdated mark,
-    /// or inactive.
+    /// states, an agent or command running without one, the coordinator
+    /// that does its work working, an outdated mark, or inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
         let outdated = workspace.review.iter().any(|mark| mark.stale == Some(true));
         let agent = workspace.agent_state.map(|status| status.state);
@@ -54,6 +57,9 @@ impl ListStatus {
             WorkspaceState::Ready => match agent {
                 Some(state) => Self::agent(state),
                 None if workspace.running => Self::ProcessRunning,
+                None if workspace.coordinator_state == Some(AgentState::Working) => {
+                    Self::ParentWorking
+                }
                 None if outdated => Self::ReadyOutdated,
                 None => Self::Inactive,
             },
@@ -108,6 +114,7 @@ impl ListStatus {
             Self::Working => "working",
             Self::Waiting => "waiting",
             Self::ProcessRunning => "process running",
+            Self::ParentWorking => "parent working",
             Self::ReadyOutdated => "ready (outdated)",
             Self::Inactive => "inactive",
             Self::Queued => "queued",
@@ -119,7 +126,7 @@ impl ListStatus {
     pub fn group(self) -> Group {
         match self {
             Self::NeedsInput | Self::Ready | Self::Stopped => Group::YourTurn,
-            Self::Working | Self::ProcessRunning => Group::Busy,
+            Self::Working | Self::ProcessRunning | Self::ParentWorking => Group::Busy,
             Self::Waiting
             | Self::Finished
             | Self::ReadyOutdated
@@ -163,3 +170,6 @@ impl Group {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -546,7 +546,17 @@ fn coordinator(
     if source == Source::Agent && !has_running_agent(db, &id, agents)? {
         return Ok(None);
     }
-    Ok(spaces_above(db, &id, agents)?.into_iter().next())
+    coordinator_of(db, &id, agents)
+}
+
+/// The coordinator of the space `id`: the nearest space above it with an
+/// agent.
+pub(crate) fn coordinator_of(
+    db: &Connection,
+    id: &str,
+    agents: &TrackedAgents,
+) -> Result<Option<String>> {
+    Ok(spaces_above(db, id, agents)?.into_iter().next())
 }
 
 /// Fill in the workspace's parent and its children.

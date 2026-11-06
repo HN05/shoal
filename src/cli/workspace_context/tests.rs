@@ -9,6 +9,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
         review: Vec::new(),
         latest_review: None,
         agent_state: None,
+        coordinator_state: None,
         base_workspace: None,
         stacked_workspaces: Vec::new(),
         parent: None,

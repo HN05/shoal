@@ -11,7 +11,7 @@ impl ListStatus {
             Self::Finished => Style::Done,
             Self::Working => Style::Heading,
             Self::Waiting => Style::Idle,
-            Self::ProcessRunning => Style::Active,
+            Self::ProcessRunning | Self::ParentWorking => Style::Active,
             Self::NeedsInput => Style::Attention,
             Self::Inactive | Self::Queued => Style::Muted,
             Self::Preparing
