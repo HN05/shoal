@@ -145,7 +145,7 @@ pub fn command() -> Command {
         {
             continue;
         }
-        let about = if !typed.settings().providers.contains(&name) {
+        let about = if !typed.settings().agents.contains(&name) {
             "Configured workspace command".to_owned()
         } else if typed.launchable(&name, &search_path) {
             format!("Run {name} in a workspace")
@@ -277,12 +277,14 @@ fn own_first(arg: clap::Arg) -> clap::Arg {
 }
 
 impl Typed {
-    /// The configured commands and agents a command line names, leaving out
-    /// the agents config turns off.
+    /// The configured commands and agents a command line names, with the
+    /// agents integrations add, such as Happy's, and without those config
+    /// turns off.
     fn command_names(&self) -> Vec<String> {
         let settings = self.settings();
         let mut names: BTreeSet<String> = (self.commands().keys())
             .filter(|name| !settings.providers.contains(*name) || settings.agents.contains(*name))
+            .chain(&settings.agents)
             .cloned()
             .collect();
         names.extend(self.custom.clone());

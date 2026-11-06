@@ -1435,7 +1435,8 @@ an agent when it is built in or has a `command` or `base`. Each option merges on
 its own across layers, so a repository can replace `command` and keep the global
 `resume`. Names that collide with built-in commands are rejected. The picker and
 completion offer AI tools only, and `enabled = false` turns a tool's agents
-off: pickers and completion leave them out, and launches and reviews are refused. What a tool needs of this machine, its
+off: pickers and completion leave them out, launches and reviews are refused,
+and a stopped agent's restore waits until the tool is on again. What a tool needs of this machine, its
 [skill directory](#agent-skill-outside-project-repositories) and proxy, goes
 under `[machine.agents.<name>]` in the global config.
 

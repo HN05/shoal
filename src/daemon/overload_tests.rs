@@ -403,6 +403,16 @@ async fn built_in_restore_child() {
     // A tool that cannot take it refuses the restore, which waits.
     let refused = Recovery::resolve(&manager.paths, &workspace, with_model("custom"), None, None);
     assert!(refused.await.is_err());
+    // So does the restore of an agent config turns off.
+    let config = fs::read_to_string(workspace.path.join(".shoal.toml")).unwrap();
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        format!("{config}enabled = false\n"),
+    )
+    .unwrap();
+    let off = Recovery::resolve(&manager.paths, &workspace, with_model("codex"), None, None);
+    assert!(off.await.is_err());
+    fs::write(workspace.path.join(".shoal.toml"), config).unwrap();
     // A restore tells the session why and when it stopped.
     let stop = crate::execution::recovery::Stop {
         reason: Some("critical memory pressure".into()),

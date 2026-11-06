@@ -267,6 +267,12 @@ impl Recovery {
         )
         .await?;
         let name = restored.agent.replace(' ', "-");
+        // A restore of an agent config turned off waits, as one it cannot
+        // run with its model does.
+        anyhow::ensure!(
+            !settings.turned_off(&name),
+            "{name} is turned off: its [agents] entry sets enabled = false"
+        );
         let configured = settings.resume_commands.get(&name);
         let resume_args = settings
             .launch(&name)

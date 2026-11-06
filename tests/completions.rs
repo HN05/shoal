@@ -230,6 +230,12 @@ fn agents_complete_only_when_enabled_and_installed() {
     assert_eq!(agents("happy-"), Vec::<String>::new());
     install_programs(home.path(), &["claude"]);
     assert_eq!(agents("happy-"), ["happy-claude"]);
+    for words in [&["shoal", "happy-"][..], &["shoal", "run", "happy-"]] {
+        assert!(
+            complete(words).contains(&"happy-claude".to_owned()),
+            "{words:?}"
+        );
+    }
     assert_eq!(agents("cl"), ["claude"]);
     // Happy's agents are off until enabled, and any agent can be turned off.
     fs::write(&config, "[agents.claude]\nenabled = false\n").unwrap();
