@@ -252,7 +252,9 @@ processes are proven stopped, outside the agent queue. A chat has no wrapper,
 so it restarts as `shoal resume` restores it: the daemon saves its session and
 stops its agent as a save before a daemon stop does, then runs `shoal resume`
 for it detached, as for a chat saved to come back on its own, and the restart
-ends with that restore. The daemon keeps a chat's restarts in the state an
+ends with that restore; a daemon update waits for it, since the next daemon
+would find the chat saved for `shoal resume` with nothing to bring it back. The
+daemon keeps a chat's restarts in the state an
 agent's uses and lists the turn state the chat records, so joining, continuing
 a run and `--wait` work for chats as for agents; `--in-place` skips chats, which have
 no wrapper to keep. A restart outlives the requests that asked for it; a request for an

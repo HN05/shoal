@@ -1,6 +1,6 @@
 use crate::{
     daemon::chats::{
-        restores::tests::{RESUMED, UNRESUMABLE},
+        restores::tests::{HELD, RESUMED, UNRESUMABLE},
         saved::tests::{named_chat, unmarked},
     },
     state::ChatRestore,
@@ -90,4 +90,28 @@ async fn a_chat_whose_agent_cannot_resume_its_session_keeps_running() {
     let running = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
     assert_eq!(running.restore, None);
     assert!(!RESUMED.lock().unwrap().contains(&chat.id));
+}
+
+#[tokio::test]
+async fn a_daemon_update_waits_for_a_chat_restart() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, _process) = named_chat(root.path(), &manager, "held").await;
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+    HELD.lock().unwrap().push(chat.name.clone());
+    let restart = tokio::spawn({
+        let (manager, id) = (manager.clone(), chat.id.clone());
+        async move { manager.restart_chat(&id, run("a")).await }
+    });
+    while !RESUMED.lock().unwrap().contains(&chat.id) {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+
+    // Saved and not yet restored, the chat keeps an update from starting.
+    assert!(manager.gates.try_quiesce().is_none());
+    HELD.lock().unwrap().retain(|name| *name != chat.name);
+    restart.await.unwrap().unwrap();
+    assert!(manager.gates.try_quiesce().is_some());
 }

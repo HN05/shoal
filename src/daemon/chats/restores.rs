@@ -144,6 +144,9 @@ pub(super) async fn resume(
         !tests::UNRESUMABLE.lock().unwrap().contains(&chat.name),
         "no terminal host"
     );
+    while tests::HELD.lock().unwrap().contains(&chat.name) {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
     Ok(Ok(()))
 }
 

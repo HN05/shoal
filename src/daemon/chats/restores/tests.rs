@@ -16,6 +16,8 @@ use crate::{
 pub(in crate::daemon::chats) static RESUMED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// The chats, by name, whose `shoal resume` fails.
 pub(in crate::daemon::chats) static UNRESUMABLE: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// The chats, by name, whose `shoal resume` runs until they leave the list.
+pub(in crate::daemon::chats) static HELD: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 /// Restore the chats saved to come back on their own and wait for their
 /// restores; returns how many started.

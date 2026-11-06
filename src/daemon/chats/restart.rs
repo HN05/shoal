@@ -30,8 +30,15 @@ impl Manager {
         };
         let requested = (self.chat_agents).request(id, chat.as_ref(), resumes, run)?;
         if let Some(chat) = requested.starts {
+            // A daemon update waits for the restart: the next daemon would
+            // find the chat saved for `shoal resume`, with nothing to bring
+            // it back.
+            let operation = self.gates.owned_operation().await;
             let manager = self.clone();
-            tokio::spawn(async move { manager.run_chat_restart(chat).await });
+            tokio::spawn(async move {
+                manager.run_chat_restart(chat).await;
+                drop(operation);
+            });
         }
         restarted(requested.answer).await
     }
