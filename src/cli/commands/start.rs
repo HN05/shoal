@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result, ensure};
 use super::{
     chat,
     links::{self, AddInput},
-    workspaces::{self, Creation},
+    workspaces::{self, CopyCreation, Creation},
 };
 use crate::{
     agent::Agent,
@@ -72,6 +72,8 @@ fn workspace_flags(args: &StartArgs) -> Vec<&'static str> {
         ("--base", args.base.is_some()),
         ("--git-profile", args.git_profile.is_some()),
         ("--fork", args.fork),
+        ("--copy", args.copy.copy.is_some()),
+        ("--checkpoint", args.copy.checkpoint.is_some()),
         ("--focus", args.focus),
         ("--now", args.now),
         ("--after", !args.after.is_empty()),
@@ -104,15 +106,15 @@ fn default_mode(args: &StartArgs) -> &'static str {
 }
 
 /// The kind of space the start creates: what `--chat`, `--in`,
-/// `--worktree` or `--fork` says, else the kind of `mode`, which must exist
-/// before anything is created. The default mode always does and always
-/// starts in a workspace, so only another mode's start asks the daemon; a
-/// chat's start checks its mode itself once it has the repository.
+/// `--worktree`, `--fork` or a copy says, else the kind of `mode`, which
+/// must exist before anything is created. The default mode always does and
+/// always starts in a workspace, so only another mode's start asks the
+/// daemon; a chat's start checks its mode itself once it has the repository.
 async fn kind(ctx: &Context, args: &StartArgs, mode: &str) -> Result<SpaceKind> {
     if args.chat || args.in_workspace.is_some() {
         return Ok(SpaceKind::Chat);
     }
-    let forced = args.worktree || args.fork;
+    let forced = args.worktree || args.fork || args.copy.is_set();
     if mode == modes::DEFAULT {
         return Ok(SpaceKind::Workspace);
     }
@@ -157,21 +159,29 @@ async fn mode_repository(ctx: &Context, args: &StartArgs) -> Result<Option<Strin
 
 /// Start the agent in a new or reopened workspace.
 async fn in_workspace(ctx: &Context, args: StartArgs, mode: String) -> Result<i32> {
+    ensure_copy_fits(&args)?;
     let issue = match args.issue {
         Some(None) => anyhow::bail!("--issue needs a number or URL outside plan mode"),
         Some(Some(issue)) => Some(issue),
         None => None,
     };
+    let copy = super::copies::source(ctx, args.copy).await?;
+    let copied = copy.as_ref().map(|copy| copy.source.workspace.clone());
     let (parent, agent, fork) = match args.fork {
-        true => {
-            let (parent, agent, session) = forked(ctx, args.parent, args.agent).await?;
-            (Some(parent), Some(agent), Some(session))
-        }
+        true => fork_from(ctx, copied, args.parent, args.agent).await?,
         false => (args.parent, args.agent, None),
+    };
+    // A copy goes in the copied workspace's repository unless one is named,
+    // which the daemon refuses when it is another.
+    let repository = match (&copy, &args.repository) {
+        (Some(copy), None) => args
+            .repository_override
+            .or_else(|| Some(copy.repository.clone())),
+        _ => args.repository_override,
     };
     let input = AddInput {
         positional: args.repository,
-        repository: args.repository_override,
+        repository,
         issue,
     };
     let creation = Creation {
@@ -183,6 +193,10 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: String) -> Result<i3
         pr: None,
         options: args.creation.into(),
         pull_head: None,
+        copy: copy.map(|copy| CopyCreation {
+            source: copy.source,
+            name: copy.name,
+        }),
     };
     let options = workspaces::AddOptions {
         here: args.here,
@@ -197,16 +211,44 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: String) -> Result<i3
     links::add(ctx, input, creation, agent, args.args, options).await
 }
 
-/// The workspace whose agent `--fork` forks, `parent` or else the current
-/// one, the agent that starts from the fork, `agent` or else that one, and
-/// the session it forks. An agent that cannot start from a fork is refused
-/// before anything is created.
-async fn forked(
+/// Refuse a copy beside a PR or branch link, which would open that branch
+/// instead, before anything is asked or looked up.
+fn ensure_copy_fits(args: &StartArgs) -> Result<()> {
+    let link = (args.repository.as_deref()).and_then(|positional| Link::parse(positional).ok());
+    ensure!(
+        !args.copy.is_set() || link.is_none_or(|link| matches!(link.target, LinkTarget::Issue)),
+        "a copy starts from the workspace it copies, not a PR or branch link"
+    );
+    Ok(())
+}
+
+/// The parent, agent and session of a `--fork` start: one forked from the
+/// `copied` workspace's agent goes below `parent` as any start does, while
+/// one forked from the parent's agent goes below that workspace.
+async fn fork_from(
     ctx: &Context,
+    copied: Option<String>,
     parent: Option<String>,
     agent: Option<Agent>,
+) -> Result<(Option<String>, Option<Agent>, Option<String>)> {
+    if copied.is_some() {
+        let (_, agent, session) = forked(ctx, copied, agent).await?;
+        return Ok((parent, Some(agent), Some(session)));
+    }
+    let (parent, agent, session) = forked(ctx, parent, agent).await?;
+    Ok((Some(parent), Some(agent), Some(session)))
+}
+
+/// The workspace whose agent `--fork` forks, `workspace` or else the
+/// current one, the agent that starts from the fork, `agent` or else that
+/// one, and the session it forks. An agent that cannot start from a fork
+/// is refused before anything is created.
+async fn forked(
+    ctx: &Context,
+    workspace: Option<String>,
+    agent: Option<Agent>,
 ) -> Result<(String, Agent, String)> {
-    let parent = ui::select_workspace(ctx, parent, Fallback::CurrentDirectory).await?;
+    let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let AgentSession {
         agent: running,
         session,

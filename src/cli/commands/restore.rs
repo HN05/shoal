@@ -284,8 +284,8 @@ fn print_removed(removed: &[RemovedWorkspace]) {
     }
 }
 
-/// One aligned line per removed workspace: its name, branch, and when and
-/// why it was removed.
+/// One aligned line per removed workspace: its name, branch, when and why
+/// it was removed, and the number of the checkpoint its removal took.
 fn removed_lines(removed: &[RemovedWorkspace]) -> Vec<String> {
     let width = removed
         .iter()
@@ -297,10 +297,11 @@ fn removed_lines(removed: &[RemovedWorkspace]) -> Vec<String> {
         .map(|workspace| {
             let branch = branch_label(workspace.checkpoint.branch.as_deref());
             format!(
-                "{:width$}  {branch}  removed {} ({}), restorable until {}",
+                "{:width$}  {branch}  removed {} ({}), checkpoint {}, restorable until {}",
                 workspace.name,
                 local_seconds(workspace.removed_at as i64),
                 workspace.cause,
+                workspace.checkpoint.number,
                 local_seconds(workspace.expires_at as i64),
             )
         })

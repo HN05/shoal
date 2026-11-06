@@ -30,7 +30,8 @@ pub enum CreateCommand {
     /// are removed. `shoal start` starts an agent of the child's own.
     Split {
         /// Git branch name; a portable workspace name is derived from it.
-        #[arg(required_unless_present_any = ["issue", "no_branch"])]
+        /// A copy's defaults to the copied branch's name with -copy added.
+        #[arg(required_unless_present_any = ["issue", "no_branch", "copy", "checkpoint"])]
         branch: Option<String>,
         /// Create a workspace at a commit, with no branch of its own, for
         /// comparisons and research: at --base, a tag or commit, or the default
@@ -49,6 +50,8 @@ pub enum CreateCommand {
         #[arg(long)]
         workspace: Option<String>,
         #[command(flatten)]
+        copy: CopyArgs,
+        #[command(flatten)]
         creation: CreationArgs,
     },
 }
@@ -61,7 +64,7 @@ pub struct StartArgs {
     #[arg(long)]
     pub mode: Option<String>,
     /// Start in a chat, whatever the mode's kind.
-    #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable"])]
+    #[arg(long, conflicts_with_all = ["worktree", "branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"])]
     pub chat: bool,
     /// Start in a workspace with a worktree, whatever the mode's kind.
     #[arg(long, conflicts_with_all = ["name", "in_workspace"])]
@@ -72,7 +75,7 @@ pub struct StartArgs {
         long = "in",
         num_args = 0..=1,
         value_name = "WORKSPACE",
-        conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable"]
+        conflicts_with_all = ["branch", "existing", "path", "base", "git_profile", "now", "after", "focus", "fork", "skip_setup", "disposable", "copy", "checkpoint"]
     )]
     pub in_workspace: Option<Option<String>>,
     /// The space the new one goes below, by name or number; defaults to the
@@ -96,7 +99,7 @@ pub struct StartArgs {
     /// Git branch name; a portable workspace name is derived from it.
     pub branch: Option<String>,
     /// Use an existing local branch or remote/branch without creating a new branch.
-    #[arg(long, conflicts_with_all = ["branch", "issue"])]
+    #[arg(long, conflicts_with_all = ["branch", "issue", "copy", "checkpoint"])]
     pub existing: Option<String>,
     /// The forge issue number or URL the agent starts on; a workspace's name
     /// derives from it. Without a value in plan mode, offers the open issues
@@ -118,10 +121,10 @@ pub struct StartArgs {
     /// agent.default, otherwise a picker.
     #[arg(long, value_parser = AgentParser)]
     pub agent: Option<Agent>,
-    /// Start the agent of the parent workspace from a fork of its session, so
-    /// it begins with the parent's conversation; the parent's session stays
-    /// unchanged.
-    #[arg(long)]
+    /// Start the agent from a fork of the session of the parent workspace's
+    /// agent, or with --copy of the copied workspace's, so it begins with
+    /// that conversation, which stays unchanged.
+    #[arg(long, conflicts_with = "checkpoint")]
     pub fork: bool,
     /// Start the agent now even when max_agents is reached, instead of queuing it.
     #[arg(long)]
@@ -134,6 +137,8 @@ pub struct StartArgs {
     /// or <repo>-<mode>-<issue number> with --issue, asked for on a terminal.
     #[arg(long)]
     pub name: Option<String>,
+    #[command(flatten)]
+    pub copy: CopyArgs,
     #[command(flatten)]
     pub creation: CreationArgs,
     #[command(flatten)]
@@ -163,6 +168,29 @@ pub struct StartArgs {
     /// Arguments forwarded to the agent, such as its prompt.
     #[arg(last = true)]
     pub args: Vec<OsString>,
+}
+
+// The workspace a new one copies. A doc comment here would replace the
+// description of every command that flattens it.
+#[derive(Debug, Default, Args)]
+pub struct CopyArgs {
+    /// Start from a copy of this workspace's current files, uncommitted and
+    /// untracked ones included; without a value, the current workspace, else
+    /// a picker. Conflicts with --base.
+    #[arg(long, num_args = 0..=1, value_name = "WORKSPACE", conflicts_with = "base")]
+    pub copy: Option<Option<String>>,
+    /// Start from this checkpoint of the --copy workspace, live or removed,
+    /// instead of its current files; shoal work restore <workspace> lists
+    /// them.
+    #[arg(long, value_name = "NUMBER", conflicts_with = "base")]
+    pub checkpoint: Option<u64>,
+}
+
+impl CopyArgs {
+    /// Whether a copy was asked for.
+    pub fn is_set(&self) -> bool {
+        self.copy.is_some() || self.checkpoint.is_some()
+    }
 }
 
 // What a new workspace leaves out. A doc comment here would replace the

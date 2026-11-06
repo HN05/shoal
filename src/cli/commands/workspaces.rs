@@ -22,7 +22,7 @@ mod unmerge;
 mod watch;
 
 pub(super) use add::{AddOptions, AgentLaunch, add};
-pub(in crate::cli) use add::{AddPlan, Creation, execute_add, start_queued};
+pub(in crate::cli) use add::{AddPlan, CopyCreation, Creation, execute_add, start_queued};
 pub(crate) use add::{check_queued_launch, queued_agent_request};
 pub(super) use adopt::adopt;
 pub(super) use cd::cd;

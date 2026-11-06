@@ -7,6 +7,7 @@ use anyhow::Result;
 use crate::client::{operations::NewSplit, output::split::Child};
 use crate::{
     cli::{
+        args::create::CopyArgs,
         context::Context,
         output::{Palette, Style},
         terminal,
@@ -29,6 +30,7 @@ pub(super) struct Split {
     pub branch: Option<String>,
     pub issue: Option<String>,
     pub base: Option<String>,
+    pub copy: CopyArgs,
     pub options: CreationOptions,
 }
 
@@ -37,21 +39,25 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
     if let Some(branch) = &split.branch {
         crate::git::check_branch_name(None, branch).await?;
     }
+    // A named copy fails before the parent picker too.
+    let copy = super::copies::source(ctx, split.copy).await?;
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let issue = match &split.issue {
         Some(input) => Some(load_issue(ctx, &parent, input).await?),
         None => None,
     };
     let name = match (split.branch, &issue) {
-        (Some(branch), _) => branch,
-        (None, Some(issue)) => issue.branch_name(),
+        (Some(branch), _) => Some(branch),
+        (None, Some(issue)) => Some(issue.branch_name()),
+        (None, None) if copy.is_some() => None,
         (None, None) => anyhow::bail!("name the child's branch or pass --issue"),
     };
     let start = NewSplit {
+        copy: copy.map(|copy| copy.source),
         base: split.base,
         options: split.options,
         issue: issue.as_ref().map(|issue| issue.url.clone()),
-        ..NewSplit::new(parent, Some(name))
+        ..NewSplit::new(parent, name)
     };
     let child = start_child(ctx, start).await?;
     let Some(child) = follow_preparation(ctx, child).await? else {
@@ -61,18 +67,25 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
     Ok(0)
 }
 
-/// Create a workspace at `base`, or at the default branch, without a branch:
-/// a child of the named or current workspace, or outside one a top-level
-/// workspace in the current repository.
+/// Create a workspace without a branch at `base`, or at the default branch,
+/// or a copy of the workspace `copy` names: a child of the named or current
+/// workspace, or outside one a top-level workspace in the current
+/// repository, or the copied one's.
 pub(super) async fn at_commit(
     ctx: &Context,
     workspace: Option<String>,
     base: Option<String>,
+    copy: CopyArgs,
     options: CreationOptions,
 ) -> Result<i32> {
-    let (repository, parent) = commit_owner(ctx, workspace).await?;
+    let copy = super::copies::source(ctx, copy).await?;
+    let copied = copy.as_ref().map(|copy| copy.repository.clone());
+    let (repository, parent) = commit_owner(ctx, workspace, copied).await?;
     let parent = parent.or_else(|| ui::current_chat(&None));
-    let start = CommitStart::Revision(base);
+    let start = match copy {
+        Some(copy) => CommitStart::Copy(copy.source),
+        None => CommitStart::Revision(base),
+    };
     let created =
         crate::client::workspaces::create_at_commit(&ctx.paths, repository, parent, start, options)
             .await?;
@@ -84,10 +97,12 @@ pub(super) async fn at_commit(
 }
 
 /// The repository and parent of a workspace at a commit: the named or
-/// current workspace's, or without one the current repository's and none.
+/// current workspace's, or without one the `copied` repository or else the
+/// current one, and none.
 async fn commit_owner(
     ctx: &Context,
     workspace: Option<String>,
+    copied: Option<String>,
 ) -> Result<(crate::repository::Selector, Option<String>)> {
     match ui::choose_workspace(ctx, workspace, Fallback::CurrentDirectoryOnly).await {
         Ok(parent) => {
@@ -102,6 +117,9 @@ async fn commit_owner(
             Ok((repository.into(), Some(parent)))
         }
         Err(error) if error.is::<ui::NoCurrentWorkspace>() => {
+            if let Some(repository) = copied {
+                return Ok((repository.into(), None));
+            }
             let repositories = crate::client::repositories::list(&ctx.paths).await?;
             let hint = "pass --workspace or run it in a registered checkout";
             let repository = super::issues::current_repository(ctx, repositories, hint).await?;

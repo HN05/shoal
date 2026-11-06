@@ -10,7 +10,7 @@ mod target;
 pub(in crate::cli::commands) use agent::AgentLaunch;
 pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli) use handoff::start_queued;
-pub(in crate::cli) use plan::{AddPlan, Creation};
+pub(in crate::cli) use plan::{AddPlan, CopyCreation, Creation};
 pub(crate) use plan::{check_queued_launch, queued_agent_request};
 use std::ffi::OsString;
 

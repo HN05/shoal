@@ -393,6 +393,16 @@ workspace at a commit instead of changing your own worktree:
 branch. It has no branch, PR or agent of its own; run what you need in its
 `path`, then `shoal rm` it.
 
+To try another approach from where your work is now, or to hand its current
+state to a second agent, copy your workspace instead of stashing or switching:
+`shoal split --copy` creates a child on a new branch with your committed,
+uncommitted, untracked and ignored files, and `shoal start --copy --fork --
+"<task>"` starts your agent there from a fork of your session. `--checkpoint
+<number>` starts from one of your checkpoints instead of the current files, and
+`shoal split --no-branch --copy` gives a copy at a commit to run things in
+without touching your worktree. What the copy was given is not its own work, so
+an untouched copy goes with cleanup.
+
 The child gets its own worktree, branch and setup; the result gives its `path`.
 Work there with `cd` or absolute paths: Shoal commands run inside the child's
 directory act on the child, so `shoal pr open`, `shoal ready` and `shoal done`

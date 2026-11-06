@@ -49,6 +49,9 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
         (None, Some(at)) => outln!("At:            {}", at.label()),
         (None, None) => {}
     }
+    if let Some(copied) = &workspace.copied_from {
+        outln!("Copied from:   {}", copy_source(copied));
+    }
     base::render(workspace);
     split::render(&workspace.parent, &workspace.children);
     if !status.chats.is_empty() {
@@ -99,6 +102,19 @@ fn render_workspace(status: &WorktreeStatus, palette: Palette) {
                 .as_deref()
                 .map_or(String::new(), |r| format!(" ({r})"))
         );
+    }
+}
+
+/// The workspace a copy was made from, and its checkpoint the copy started
+/// from, if any.
+fn copy_source(copied: &crate::model::CopiedFrom) -> String {
+    let workspace = match &copied.workspace {
+        Some(workspace) => base::describe(workspace),
+        None => "a removed workspace".to_owned(),
+    };
+    match copied.checkpoint {
+        Some(number) => format!("{workspace} (checkpoint {number})"),
+        None => workspace,
     }
 }
 

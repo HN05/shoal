@@ -15,6 +15,7 @@ mod cleanup;
 mod configuration;
 pub(crate) mod configured;
 mod contribute;
+mod copies;
 mod demo;
 mod dispatch;
 mod download;

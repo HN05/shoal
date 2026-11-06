@@ -4506,6 +4506,53 @@ fn start_runs_the_childs_agent_from_a_fork_of_the_parents_session() {
     assert_eq!(args.last(), Some(&"Take the child part"), "{args:?}");
 }
 
+/// An agent starts a copy of its own workspace, whose agent starts from a
+/// fork of its session and works on the same files.
+#[test]
+fn start_runs_a_copys_agent_from_a_fork_of_the_copied_workspaces_session() {
+    let fixture = Fixture::with_config(Some(
+        "[machine.overload.disk]\nenabled = false\n[agents.claude]\ncommand = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    // The agent reports its session, leaves a change and copies its
+    // workspace; the forked agent records its arguments.
+    fs::write(
+        fixture.root.path().join("agent.sh"),
+        format!(
+            "if [ \"$1\" = --resume ]; then printf '%s\\0' \"$@\" > \"$HOME/forked.tmp\"; mv \"$HOME/forked.tmp\" \"$HOME/forked\"; exit 0; fi\n\
+             printf '{{\"session_id\":\"parent-session\"}}' | '{shoal}' internal agent-state idle >/dev/null || exit 3\n\
+             echo 'half done' > untracked\n\
+             '{shoal}' --json start --copy --fork -- 'Try another approach' > \"$HOME/copy.json\" 2> \"$HOME/copy.err\"\n",
+            shoal = env!("CARGO_BIN_EXE_shoal"),
+        ),
+    )
+    .unwrap();
+    fixture.add("parent");
+    let output = fixture
+        .command()
+        .args(["claude", "parent"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let home = fixture.root.path();
+    let errors = fs::read_to_string(home.join("copy.err")).unwrap();
+    let copy = &fixture.ok(&["status", "parent-copy"])["workspace"];
+    assert_eq!(copy["branch"], "parent-copy", "{copy} {errors}");
+    assert_eq!(copy["copied_from"]["workspace"]["name"], "parent", "{copy}");
+    let path = Path::new(copy["path"].as_str().unwrap());
+    assert_eq!(
+        fs::read_to_string(path.join("untracked")).unwrap(),
+        "half done\n"
+    );
+    let forked = home.join("forked");
+    wait_until("the forked agent start", || forked.exists());
+    let args = fs::read_to_string(&forked).unwrap();
+    let args: Vec<_> = args.trim_end_matches('\0').split('\0').collect();
+    assert_eq!(args[..2], ["--resume", "parent-session"], "{args:?}");
+    assert_eq!(args.last(), Some(&"Try another approach"), "{args:?}");
+}
+
 /// A child set up for an agent that its own configuration then refuses
 /// stays ready, with nothing queued.
 #[test]
@@ -5790,6 +5837,37 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
     assert_eq!(discarded["discarded"], serde_json::json!(["child-agent"]));
     assert!(!records[2].exists());
     assert!(records[..2].iter().all(|record| record.exists()));
+}
+
+/// An agent copies its own workspace into a child, on a new branch or at
+/// its commit, and no workspace outside its tree.
+#[test]
+fn an_agent_splits_copies_of_its_own_workspace_only() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    fixture.add("other");
+    let parent = fixture.ok(&["status", "parent"])["workspace"].clone();
+    let path = PathBuf::from(parent["path"].as_str().unwrap());
+    fs::write(path.join("untracked"), "work in progress\n").unwrap();
+    for (args, branch) in [
+        (&["split", "--copy"][..], Some("parent-copy")),
+        (&["split", "--no-branch", "--copy", "parent"], None),
+    ] {
+        let split = scoped_command(&fixture, "parent", args);
+        assert!(split.status.success(), "{args:?}: {split:?}");
+        let child: Value = serde_json::from_slice(&split.stdout).unwrap();
+        assert_eq!(child["branch"].as_str(), branch, "{child}");
+        assert_eq!(
+            child["copied_from"]["workspace"]["id"], parent["id"],
+            "{child}"
+        );
+        assert_eq!(child["parent"]["id"], parent["id"], "{child}");
+        let copied = Path::new(child["path"].as_str().unwrap()).join("untracked");
+        assert_eq!(fs::read_to_string(copied).unwrap(), "work in progress\n");
+    }
+    let refused = scoped_command(&fixture, "parent", &["split", "--copy", "other"]);
+    assert!(!refused.status.success(), "{refused:?}");
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 4);
 }
 
 /// A parent's stop of its child stops the workspaces below it too, and the

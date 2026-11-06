@@ -33,6 +33,18 @@ pub(in crate::cli) struct Creation {
     /// The head of a PR from a fork, opened in a workspace at a commit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pull_head: Option<PullHead>,
+    /// The workspace the new one copies, on `branch` or a branch named
+    /// after the copied one's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy: Option<CopyCreation>,
+}
+
+/// The workspace a new one copies, and the name the copy takes without a
+/// branch of its own, which the daemon suffixes when it is taken.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(in crate::cli) struct CopyCreation {
+    pub source: crate::protocol::CopySource,
+    pub name: String,
 }
 
 impl Creation {
@@ -46,9 +58,10 @@ impl Creation {
     }
 
     /// Build a new branch on `base`, the branch of a done dependency, unless
-    /// the addition names its own base or opens an existing branch.
+    /// the addition names its own base, opens an existing branch or copies a
+    /// workspace, which starts from that workspace instead.
     pub(in crate::cli::commands) fn build_on(&mut self, base: Option<String>) {
-        if self.base.is_none() && self.existing.is_none() {
+        if self.base.is_none() && self.existing.is_none() && self.copy.is_none() {
             self.base = base;
         }
     }
@@ -107,7 +120,7 @@ pub(super) async fn planned_workspace_name(
                     .map_or_else(|| selector.clone(), |(_, branch)| branch)
             }
         },
-        (None, None) => String::new(),
+        (None, None) => (creation.copy.as_ref()).map_or_else(String::new, |copy| copy.name.clone()),
     };
     Ok(crate::validate::derive_workspace_name(&branch))
 }

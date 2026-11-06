@@ -86,6 +86,8 @@ shoal start my-project fix-api --base feature/api  # Branch from feature/api
 shoal start my-project fix-api --base origin/feature/api  # Fetch the pushed branch first
 shoal branch base set feature-api --workspace fix-api  # Record the workspace fix-api builds on
 shoal split fix-typo --workspace fix-api     # Create a child workspace for work in its own PR
+shoal start --copy fix-api --fork            # Try another approach from fix-api's current files
+shoal start --copy fix-api --checkpoint 3    # Start from fix-api's checkpoint 3, live or removed
 shoal start my-project --existing origin/feature/api --agent codex
 shoal start my-project quick-fix --path ../quick-fix
 shoal work adopt ../existing-worktree        # Take ownership, including automatic cleanup

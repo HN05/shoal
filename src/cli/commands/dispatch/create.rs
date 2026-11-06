@@ -16,16 +16,18 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
             issue,
             base,
             workspace,
+            copy,
             creation,
         } => {
             if no_branch {
-                return split::at_commit(&ctx, workspace, base, creation.into()).await;
+                return split::at_commit(&ctx, workspace, base, copy, creation.into()).await;
             }
             let split = split::Split {
                 options: creation.into(),
                 branch,
                 issue,
                 base,
+                copy,
             };
             split::run(&ctx, workspace, split).await
         }

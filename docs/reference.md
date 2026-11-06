@@ -2429,6 +2429,79 @@ coordinator answers a question asked below it with
 `shoal questions <S.N> --answer <answer>`, or passes it up: an agent with its own
 `shoal questions ask`, a chat by asking the user in the chat.
 
+### Copies
+
+```sh
+shoal start --copy                       # A copy of the current workspace, with an agent of its own
+shoal start --copy topic --fork -- "Try a queue instead of polling"
+shoal split --copy topic                 # A child copy without an agent
+shoal split --no-branch --copy topic     # A copy at topic's HEAD, without a branch
+shoal start --copy topic --checkpoint 3  # From topic's checkpoint 3, live or removed
+```
+
+`--copy [WORKSPACE]` on `shoal start` and `shoal split` starts a workspace from
+a copy of a workspace's current files: its HEAD with its staged, unstaged,
+untracked and ignored files. Without a value it copies the current workspace,
+else one picked. `--checkpoint <NUMBER>` starts from that checkpoint of the
+`--copy` workspace instead, a live or a removed one's; `shoal work restore
+<workspace>` lists a workspace's checkpoints, and `shoal work restore` names each
+removed workspace's removal checkpoint. Both conflict with `--base`, which names
+a Git ref and so brings committed work only, even for a branch a workspace has
+checked out. Uses include trying another approach from where an agent is now,
+debugging a workspace's live state without touching it, and handing the same
+state to a second agent.
+
+A copy goes on a new branch at the copied HEAD: the branch given, else the
+copied branch's name, or a workspace at a commit's name, with `-copy` added,
+suffixed as usual when taken. `shoal split --no-branch` makes it a workspace at
+a commit instead. A copy of current files is a linked worktree that Git creates
+without checking anything out; Shoal copies the source's index and worktree Git
+config into it and clones its files (APFS clones on macOS, reflinks on Linux,
+plain copies where the filesystem has neither), so `git status` and `git diff`
+match the source's. The source must be ready, its worktree must verify, and no
+Git operation may be under way there; an agent running there does not matter,
+since copying only reads it. An untracked nested repository or a changed
+submodule, whose files a checkpoint cannot hold, is refused, and so is a
+checked-out submodule or a worktree inside an ignored directory, whose Git
+metadata the copy would share. A copy of a
+checkpoint checks out the checkpoint's HEAD and writes its files as uncommitted
+changes, without telling staged from unstaged, as `shoal work restore` does; a
+checkpoint that kept HEAD only is refused. A start the [agent queue](#agent-queue)
+holds creates its copy when it leaves the queue, so it copies the files of that
+moment; `--now` copies them at once, and a checkpoint taken first with `shoal
+work checkpoint` keeps the moment for `--checkpoint`.
+
+A copy of current files has its source's ignored files instead of the
+[seed](#seed-builds) clone and `setup.copy_ignored`; a copy of a checkpoint, which
+holds no ignored files, starts from the seed like any new workspace. The rest of
+setup runs as for any workspace. A copy takes its source's diff base (base ref,
+base commit and base workspace; a removed workspace's from its removal record),
+so `shoal diff` and `shoal conflicts` show the source's work and its own. A copy
+of current files keeps the source's worktree Git config, and so its
+[Git profile](#git-profiles), unless `--git-profile` names another; a copy of a
+checkpoint gets the profile a new workspace gets. It takes no links, leases,
+holds, questions, ready marks or checkpoints, and no agent session: `shoal start
+--copy --fork` starts its agent from a fork of the copied workspace's agent's
+session, which stays unchanged, and `--fork` does not combine with
+`--checkpoint`. Its parent follows the usual rules, not the source. A copy is an
+ordinary, writable workspace with one editing agent of its own.
+
+Once its files are in, a copy takes a checkpoint of itself, its starting
+checkpoint, which keeps every unsaved file whatever `archive_max_mb` and does not
+expire while the copy exists; a later checkpoint, a removal's included, keeps
+them whatever their size too while they still match it. The commits up to its HEAD count as kept, and
+files that still match it count as unchanged, so a copy with nothing of its own
+is removed by [automatic cleanup](#automatic-cleanup) like an empty workspace;
+commits on top of it and files that differ are the copy's own work. Removal
+still deletes the copy's branch only when a remote or the default branch has all
+its commits, and otherwise [keeps](#kept-branches) it. Workspace
+processes copy only their own workspace and those below it, never from a removed
+workspace's checkpoint. `status` shows `Copied from:` with the workspace, and
+`(checkpoint <n>)` for a copy of a checkpoint; `work --json` and `status --json`
+give `copied_from` with `workspace` (`id`, `name` and `branch`, null once it is
+removed), `checkpoint`, `starting_checkpoint`, that checkpoint's `head` and
+`commit`, and `index`, the tree of the index the copy started with.
+
 ### Repositories
 
 Register a local checkout in place (no remote required) or a clone URL. Each
@@ -2863,7 +2936,8 @@ into the workspace before `setup.command`. It runs without a `setup.command`, an
 failure fails setup. It prints how many files it copied, and nothing when it
 copied none. `[setup] copy_ignored = false`, also a global default, turns it off.
 Files the workspace already has are kept, including paths cloned from a
-[seed](#seed-builds). Without a `.worktreeinclude` in the checkout every
+[seed](#seed-builds). A [copy](#copies) of a workspace's current files skips it,
+since it has that workspace's ignored files. Without a `.worktreeinclude` in the checkout every
 ignored file is copied, build caches included; its gitignore-style patterns limit
 the copy, and `[step.copy-ignored] exclude` in `.config/wt.toml` narrows it further.
 
@@ -2999,7 +3073,8 @@ running in its process group is stopped when it exits.
 A successful build freezes `paths` as a copy-on-write snapshot: APFS clones on
 macOS, reflinks on Linux, never a full copy. A new worktree whose own settings
 match the snapshot's clones its paths before setup, keeping any path that already
-exists. When it clones at least one, it gives every tracked file its commit left
+exists; a [copy](#copies) of a workspace's current files has that workspace's
+outputs instead. When it clones at least one, it gives every tracked file its commit left
 unchanged the seed's modification time, so tools that compare modification times,
 such as Cargo and make, rebuild only changed files; next to outputs the worktree
 already had, older times could hide changed sources. Cloned files share disk blocks with the snapshot
@@ -3242,11 +3317,14 @@ A checkpoint is a commit of HEAD plus the uncommitted and untracked files, witho
 ignored ones, under `refs/shoal/checkpoints/<commit>` in the
 repository; taking one leaves the worktree and its index untouched.
 `shoal work checkpoint [workspace]` takes one, and Shoal takes one when an agent
-exits or is stopped, before a restore to a checkpoint, and on every removal of an existing
-worktree except a disposable workspace's. An automatic checkpoint that would keep what the newest one keeps
+exits or is stopped, before a restore to a checkpoint, when a [copy](#copies)
+starts, and on every removal of an existing worktree except a disposable
+workspace's. An automatic checkpoint that would keep what the newest one keeps
 extends that one instead. When the unsaved files exceed `archive_max_mb`, include
 an untracked nested repository or a changed submodule, whose files it cannot hold,
-the checkpoint keeps HEAD only. Checkpoints expire after `retention_days`; their
+the checkpoint keeps HEAD only, except a copy's starting checkpoint, which
+keeps every file whatever their size. Checkpoints expire after
+`retention_days`, a copy's starting checkpoint only once the copy is gone; their
 numbers are never reused, so a number names one checkpoint for good.
 
 `shoal work restore <workspace> <number>` keeps the current state in a new checkpoint,
@@ -3261,7 +3339,8 @@ restore their own workspace's checkpoints.
 
 `shoal work restore` and `shoal work restore <workspace>` open a picker of the removed
 workspaces or of an existing workspace's checkpoints and restore the one picked;
-without a terminal, or with `--json`, they list them instead. When
+without a terminal, or with `--json`, they list them instead, each removed
+workspace with the number of its removal's checkpoint. When
 `<workspace>` names a removed one, it opens the newest removed workspace with that name or ID on its branch and recorded base, which restores its stack link while the base
 workspace exists, recreating the branch at the removed HEAD when it was deleted,
 puts its unsaved files back as uncommitted changes, links its issue and its

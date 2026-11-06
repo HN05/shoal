@@ -241,15 +241,22 @@ async fn start_add_workspace(
         pr,
         options,
         pull_head,
+        copy,
     } = creation;
-    let start = match (workspace, pull_head, existing) {
-        (Some(workspace), _, _) => WorkspaceStart::Workspace(workspace),
-        (None, Some(head), _) => WorkspaceStart::PullHead {
+    let start = match (workspace, pull_head, existing, copy) {
+        (Some(workspace), ..) => WorkspaceStart::Workspace(workspace),
+        (None, Some(head), ..) => WorkspaceStart::PullHead {
             url: pr.clone().context("a PR head needs its PR")?,
             head,
         },
-        (None, None, Some(branch)) => WorkspaceStart::Branch(branch),
-        (None, None, None) => WorkspaceStart::Name(branch.context("a branch name is required")?),
+        (None, None, Some(branch), _) => WorkspaceStart::Branch(branch),
+        (None, None, None, Some(copy)) => WorkspaceStart::Copy {
+            source: copy.source,
+            branch,
+        },
+        (None, None, None, None) => {
+            WorkspaceStart::Name(branch.context("a branch name is required")?)
+        }
     };
     let new = NewWorkspace {
         repository: target.selector.clone(),
