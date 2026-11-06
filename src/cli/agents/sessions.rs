@@ -29,14 +29,26 @@ pub(in crate::cli) enum SessionHome<'a> {
     Repository(crate::repository::Selector),
 }
 
+/// What an import does with a session file already where it goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::cli) enum Existing {
+    /// Replace it with one that continues it, as a session that went to
+    /// another machine and came back does.
+    Continued,
+    /// Keep it, whatever the import holds, as a copy's import does: its
+    /// session may still run here, writing to it.
+    Kept,
+}
+
 /// Put the session files an import carried where the agents of `home` look
-/// for them, as [`place`] does. A development build leaves them to the
-/// installed Shoal. Failures only warn; that agent's resume then fails to
-/// find its session.
+/// for them, as [`place`] does with the files there as `existing` says. A
+/// development build leaves them to the installed Shoal. Failures only
+/// warn; that agent's resume then fails to find its session.
 pub(in crate::cli) async fn install_session_files(
     ctx: &Context,
     home: SessionHome<'_>,
     files: &[ImportedSessionFile],
+    existing: Existing,
 ) {
     if files.is_empty() || !crate::build::changes_user_files() {
         return;
@@ -68,7 +80,7 @@ pub(in crate::cli) async fn install_session_files(
             session_dir(&settings, &workspace_environment, &ctx.paths.home, agent)
         });
         let placed = match directory {
-            Ok(Some(directory)) => place(directory, imported),
+            Ok(Some(directory)) => place(directory, imported, existing),
             Ok(None) => Err(anyhow::anyhow!("{agent} keeps no session files")),
             Err(error) => Err(anyhow::anyhow!("{error:#}")),
         };
@@ -103,12 +115,16 @@ fn session_dir(
 }
 
 /// Copy `imported` into the session directory `directory`. A file already
-/// there stays unless the imported one continues it, as a session that went
-/// to another machine and came back does; one that differs otherwise is a
-/// conflict, which keeps it and warns.
-fn place(directory: &Path, imported: &ImportedSessionFile) -> Result<()> {
+/// there stays unless `existing` lets the imported one replace it and it
+/// continues the file, as a session that went to another machine and came
+/// back does; one that differs otherwise is a conflict, which keeps it and
+/// warns.
+fn place(directory: &Path, imported: &ImportedSessionFile, existing: Existing) -> Result<()> {
     let destination = directory.join(&imported.file.path);
     let replaces = destination.exists();
+    if replaces && existing == Existing::Kept {
+        return Ok(());
+    }
     if replaces {
         ensure!(
             continues(&destination, imported.contents.path())?,

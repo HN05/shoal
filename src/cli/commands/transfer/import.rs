@@ -168,7 +168,7 @@ impl Package {
             Ok(restored) => SessionHome::Workspace(&restored.opened.workspace),
             Err(_) => SessionHome::Repository(self.repository.clone()),
         };
-        agents::install_session_files(ctx, home, &self.carried).await;
+        agents::install_session_files(ctx, home, &self.carried, self.existing()).await;
         restored
     }
 
@@ -189,6 +189,15 @@ impl Package {
         .await
     }
 
+    /// What the import does with session files already here: a copy keeps
+    /// them, since the original's agents may still write to them.
+    fn existing(&self) -> agents::Existing {
+        match self.copy {
+            Some(_) => agents::Existing::Kept,
+            None => agents::Existing::Continued,
+        }
+    }
+
     /// Put the packaged chat's session files in place, then start the chat
     /// in its repository's checkout at `place`, under a free name, resuming
     /// the session its agent keeps here.
@@ -204,6 +213,7 @@ impl Package {
             ctx,
             SessionHome::Repository(self.repository.clone()),
             &self.carried,
+            self.existing(),
         )
         .await;
         let settings = chat::settings(ctx, &repo).await?;
