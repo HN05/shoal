@@ -49,7 +49,7 @@ impl Manager {
                             stopped: agent.and_then(|agent| agent.overload.clone()),
                             restarted_from: renewal::earlier(renewals, &execution.id),
                             execution: execution.id,
-                            workspace_id: execution.workspace_id,
+                            space_id: execution.workspace_id,
                             origin: execution.origin,
                         })
                     })

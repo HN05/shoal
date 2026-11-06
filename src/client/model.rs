@@ -1632,7 +1632,8 @@ pub struct OwnedPlace {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunningAgent {
     pub execution: String,
-    pub workspace_id: String,
+    /// The workspace it runs in, or the chat it is the agent of.
+    pub space_id: String,
     /// `None` for an execution whose wrapper is gone, which may have run an agent.
     pub agent: Option<String>,
     /// Whether its wrapper can start its session again.

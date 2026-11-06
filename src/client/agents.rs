@@ -112,7 +112,7 @@ pub async fn restart(
 }
 
 /// The agents of the running chats, and of those a restart stopped to start
-/// again, each listed by its chat's ID as its execution and workspace.
+/// again, each listed by its chat's ID as its execution and space.
 pub async fn of_chats(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
     request(daemon, ChatMethod::ChatAgents).await
 }

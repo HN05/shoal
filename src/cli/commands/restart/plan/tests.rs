@@ -21,7 +21,7 @@ fn spaces<const N: usize>(workspaces: [Workspace; N]) -> Vec<PresentSpace> {
 fn running(workspace: &Workspace, agent: Option<&str>, restorable: bool) -> RunningAgent {
     RunningAgent {
         execution: format!("{}-execution", workspace.name),
-        workspace_id: workspace.id.clone(),
+        space_id: workspace.id.clone(),
         agent: agent.map(str::to_owned),
         restorable,
         state: None,
@@ -247,7 +247,7 @@ fn chat(name: &str) -> PresentSpace {
 fn chat_agent(name: &str, restorable: bool) -> RunningAgent {
     RunningAgent {
         execution: name.into(),
-        workspace_id: name.into(),
+        space_id: name.into(),
         agent: Some("claude".into()),
         restorable,
         state: None,

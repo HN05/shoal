@@ -87,7 +87,7 @@ impl Selection {
             let agents: Vec<_> = self
                 .agents
                 .iter()
-                .filter(|running| running.workspace_id == space.id())
+                .filter(|running| running.space_id == space.id())
                 .filter(|running| {
                     agent.is_none() || running.agent.is_none() || running.agent.as_deref() == agent
                 })

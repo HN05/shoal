@@ -28079,7 +28079,7 @@ fn agent_in_session<'a>(fixture: &'a Fixture, workspace: &str, session: &str) ->
         let agents = fixture.request(serde_json::json!("list_agents"));
         agents["data"].as_array().is_some_and(|agents| {
             agents.iter().any(|listed| {
-                listed["workspace_id"] == id
+                listed["space_id"] == id
                     && !listed["agent"].is_null()
                     && listed["origin"]["place"] == session
             })

@@ -127,7 +127,7 @@ impl ChatAgents {
                     stopped: None,
                     restarted_from: Vec::new(),
                     execution: chat.id.clone(),
-                    workspace_id: chat.id,
+                    space_id: chat.id,
                 })
             })
             .collect()

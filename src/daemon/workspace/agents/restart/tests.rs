@@ -70,7 +70,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
         [
             RunningAgent {
                 execution: agent.plan.id.clone(),
-                workspace_id: workspace.id.clone(),
+                space_id: workspace.id.clone(),
                 agent: Some("claude".into()),
                 restorable: true,
                 state: Some(AgentState::Idle),
@@ -83,7 +83,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
             },
             RunningAgent {
                 execution: gone.plan.id.clone(),
-                workspace_id: workspace.id.clone(),
+                space_id: workspace.id.clone(),
                 agent: None,
                 restorable: false,
                 state: None,

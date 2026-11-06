@@ -15,7 +15,7 @@ fn a_joined_restart_stays_joined_once_it_ends() {
     );
     let agent = RunningAgent {
         execution: "api-execution".into(),
-        workspace_id: workspace.id.clone(),
+        space_id: workspace.id.clone(),
         agent: Some("claude".into()),
         restorable: true,
         state: Some(AgentState::Working),
@@ -63,7 +63,7 @@ fn an_agent_another_command_of_the_run_restarted_is_skipped() {
     );
     let agent = RunningAgent {
         execution: "web-execution".into(),
-        workspace_id: workspace.id.clone(),
+        space_id: workspace.id.clone(),
         agent: Some("claude".into()),
         restorable: true,
         state: Some(AgentState::Working),

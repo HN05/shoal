@@ -16,7 +16,7 @@ impl Manager {
             .running_agents()
             .await?
             .into_iter()
-            .filter(|agent| agent.workspace_id == workspace.id && agent.agent.is_some())
+            .filter(|agent| agent.space_id == workspace.id && agent.agent.is_some())
             .collect())
     }
 

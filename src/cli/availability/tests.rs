@@ -111,7 +111,7 @@ fn agent_places_set_stopped_agents_apart() {
     let (running, stopped, gone) = (place("running"), place("stopped"), place("gone"));
     let agent = |workspace: &str, origin: Option<&Origin>, name: Option<&str>| RunningAgent {
         execution: format!("{workspace}-execution"),
-        workspace_id: workspace.into(),
+        space_id: workspace.into(),
         agent: name.map(Into::into),
         restorable: true,
         state: None,

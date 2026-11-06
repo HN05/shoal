@@ -6,7 +6,7 @@ use crate::{model::Workspace, sessions::HostName};
 fn agent(origin: Option<Origin>) -> RunningAgent {
     RunningAgent {
         execution: "e1".into(),
-        workspace_id: "w1".into(),
+        space_id: "w1".into(),
         agent: Some("claude".into()),
         restorable: true,
         state: Some(AgentState::Working),

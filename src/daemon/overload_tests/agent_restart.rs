@@ -12,7 +12,7 @@ async fn agent_execution(manager: &Manager, workspace: &crate::model::Workspace)
     let [agent] = agents.as_slice() else {
         panic!("expected one agent: {agents:?}");
     };
-    assert_eq!(agent.workspace_id, workspace.id);
+    assert_eq!(agent.space_id, workspace.id);
     assert_eq!(agent.agent.as_deref(), Some("fixture"));
     assert!(agent.restorable);
     agent.execution.clone()

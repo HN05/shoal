@@ -154,7 +154,7 @@ fn agent_places(agents: &[RunningAgent]) -> AgentPlaces<'_> {
             (Some(_), Some(_)) => &mut places.stopped,
             (Some(_), None) => &mut places.connected,
         };
-        kind.push((agent.workspace_id.as_str(), place));
+        kind.push((agent.space_id.as_str(), place));
     }
     places
 }

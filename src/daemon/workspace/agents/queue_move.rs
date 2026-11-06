@@ -15,7 +15,7 @@ impl Manager {
             .running_agents()
             .await?
             .into_iter()
-            .filter(|running| running.workspace_id == workspace.id)
+            .filter(|running| running.space_id == workspace.id)
             .collect();
         let running = match agents.as_slice() {
             [running] => running,

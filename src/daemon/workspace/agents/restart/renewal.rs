@@ -84,7 +84,7 @@ pub(super) fn handed_over(renewals: &Renewals) -> impl Iterator<Item = RunningAg
         };
         Some(RunningAgent {
             execution: execution.clone(),
-            workspace_id: handover.workspace_id.clone(),
+            space_id: handover.workspace_id.clone(),
             agent: Some(handover.name.replace(' ', "-")),
             restorable: true,
             state: None,
