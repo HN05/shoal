@@ -17,6 +17,13 @@ struct TmuxServer {
 
 impl TmuxServer {
     fn start(fixture: &Fixture) -> Option<Self> {
+        Self::start_on(fixture, "default")
+    }
+
+    /// The server listening on the socket `name` of the fixture's socket
+    /// directory, where only `default` is the one commands reach by
+    /// default.
+    fn start_on(fixture: &Fixture, name: &str) -> Option<Self> {
         if !Command::new("tmux")
             .arg("-V")
             .output()
@@ -40,6 +47,8 @@ impl TmuxServer {
             .env("SHELL", "/bin/sh")
             .current_dir(&fixture.repo)
             .args([
+                "-L",
+                name,
                 "new-session",
                 "-d",
                 "-s",
@@ -286,6 +295,67 @@ fn removal_closes_a_recorded_pane_only_on_the_server_that_created_it() {
     fixture.ok(&["rm", "current", "--yes"]);
     wait_until("the recorded pane to close", || !tmux.pane_open(&opened));
     assert!(tmux.pane_open(&users));
+}
+
+impl TmuxServer {
+    /// A new window named `name` beside the user's, returning its pane.
+    fn new_window(&self, name: &str) -> String {
+        self.lines(&["new-window", "-d", "-n", name, "-P", "-F", "#{pane_id}"])[0].clone()
+    }
+
+    /// `pane` on this server, as Shoal records a place in it.
+    fn origin(&self, pane: &str) -> Value {
+        serde_json::json!({"host": "tmux", "place": pane, "owned": true,
+            "data": {"socket": self.socket}, "instance": self.instance()})
+    }
+}
+
+#[test]
+fn a_workspace_title_from_outside_tmux_relabels_the_window_on_its_recorded_server() {
+    let fixture = Fixture::with_config(Some("[terminal.tmux]\nenabled = true\n"));
+    // Only the record reaches this server: commands outside tmux reach the
+    // default one.
+    let Some(tmux) = TmuxServer::start_on(&fixture, "elsewhere") else {
+        return;
+    };
+    fixture.add("titled");
+    // Shoal labelled its window with the branch, as the workspace had no
+    // title; the user's window is the user's.
+    let opened = tmux.new_window("titled");
+    for pane in [&opened, &tmux.users] {
+        let recorded = fixture.request(serde_json::json!({"record_owned_place": {
+            "workspace": "titled", "origin": tmux.origin(pane),
+        }}));
+        assert!(recorded.get("error").is_none(), "{recorded}");
+    }
+
+    fixture.ok(&["work", "rename", "titled", "Login retries"]);
+    assert_eq!(tmux.windows(), ["mine", "Login retries"]);
+}
+
+#[test]
+fn chat_rename_relabels_a_tmux_window_that_still_shows_the_old_name() {
+    let fixture = Fixture::with_config(Some("[terminal.tmux]\nenabled = true\n"));
+    let Some(tmux) = TmuxServer::start(&fixture) else {
+        return;
+    };
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    // The chats last while this test's process runs.
+    let start = |name: &str, pane: &str| {
+        let response = fixture.request(serde_json::json!({"start_chat":{
+            "repository": repository["id"], "name": name, "agent": "claude",
+            "pid": std::process::id(), "origin": tmux.origin(pane),
+        }}));
+        assert_eq!(response["type"], "chat", "{response}");
+    };
+    // Shoal opened `talk`'s window under its name; `notes` runs in the
+    // window the user named.
+    start("talk", &tmux.new_window("talk"));
+    start("notes", &tmux.users);
+
+    fixture.ok(&["work", "rename", "talk", "topic"]);
+    fixture.ok(&["work", "rename", "notes", "other"]);
+    assert_eq!(tmux.windows(), ["mine", "topic"]);
 }
 
 #[test]

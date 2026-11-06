@@ -43,7 +43,7 @@ pub(in crate::cli) use launch::{
     restore_queued, run_agent, run_in_background, start_add, start_chat, start_chat_in_background,
     start_queued,
 };
-pub(in crate::cli) use naming::{PlaceName, issue_label, relabel_chat, relabel_places};
+pub(in crate::cli) use naming::{Labels, PlaceName, Retitled, issue_label, relabel_space};
 pub(in crate::cli) use prompts::{
     CONTINUE_PROMPT, agents_can_be_prompted, send_keys, submit_prompt, submitted_by_shoal,
 };

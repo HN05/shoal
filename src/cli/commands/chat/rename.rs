@@ -5,6 +5,7 @@ use anyhow::Result;
 use crate::{
     cli::{context::Context, terminal},
     model::RenamedChat,
+    protocol::ConfigTarget,
 };
 
 /// What `shoal work rename --request` asks a chat's agent.
@@ -19,7 +20,12 @@ pub(in crate::cli::commands) async fn rename(
 ) -> Result<i32> {
     crate::validate::name("chat", &name)?;
     let renamed = crate::client::chats::rename(&ctx.paths, chat, name).await?;
-    relabel(ctx, &renamed).await;
+    if let Err(error) = relabel(ctx, &renamed).await {
+        eprintln!(
+            "warning: cannot relabel the place of chat {}: {error:#}",
+            renamed.chat.name
+        );
+    }
     ctx.show(&renamed.chat, |chat| {
         outln!("Renamed chat to {}", chat.name)
     })?;
@@ -38,15 +44,21 @@ pub(in crate::cli::commands) async fn request_name(ctx: &Context, chat: String) 
 
 /// Show the renamed chat's name on the place it runs in, where that still
 /// shows its previous name; the chat keeps its new name when that fails.
-async fn relabel(ctx: &Context, renamed: &RenamedChat) {
+async fn relabel(ctx: &Context, renamed: &RenamedChat) -> Result<()> {
     let RenamedChat {
         chat,
         previous_name,
     } = renamed;
-    if let Err(error) = terminal::relabel_chat(ctx, previous_name, chat).await {
-        eprintln!(
-            "warning: cannot relabel the place of chat {}: {error:#}",
-            chat.name
-        );
-    }
+    let Some(place) = &chat.origin else {
+        return Ok(());
+    };
+    let target = ConfigTarget::Repository(chat.repository_id.clone().into());
+    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    let labels = terminal::Labels {
+        new: chat.name.clone(),
+        expected: previous_name.clone(),
+    };
+    let places = std::slice::from_ref(place);
+    terminal::relabel_space(&settings, places, async |_| labels.clone()).await;
+    Ok(())
 }

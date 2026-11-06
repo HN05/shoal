@@ -623,10 +623,11 @@ when the branch is unchanged, then renames to the branch given. Confirmed-delete
 worktrees can still be removed through normal cleanup.
 
 `shoal work rename [WORKSPACE] TITLE` gives a workspace a title, one line of at
-most 40 characters that its agent chooses to say what the work is. The Herdr tabs
-and Rex windows Shoal opens for the workspace show it in place of the issue label
-or branch, and setting it renames those already open on the server of the Herdr
-or Rex terminal the command runs in. Scoped callers may title their own workspace.
+most 40 characters that its agent chooses to say what the work is. The tabs,
+windows and blocks Shoal opens for the workspace show it in place of the issue
+label or branch, and setting it renames those already open, wherever the command
+runs, while they still show the label Shoal gave them; one the user named keeps
+its label. Scoped callers may title their own workspace.
 `shoal work rename --request [WORKSPACE]` sends the workspace's agent an
 [agent message](#agent-messages) asking it to choose the title and set it; it is
 refused while no agent runs there.
@@ -1890,9 +1891,9 @@ a new chat's would be, and frees the old one. Without a space it gives the
 current workspace a title, else renames the chat it runs in, else the current
 checkout's only running chat, else offers a picker. A Happy chat's log and saved first
 message move to the new name, so it is refused until its session runs. The zmx session keeps the name it started with,
-since `shoal attach` finds the chat's session where the chat runs. A Herdr tab
-or Rex block the chat runs in takes the new name while it still shows the old
-one; one the user named keeps its label. `shoal work rename --request [chat]`
+since `shoal attach` finds the chat's session where the chat runs. The tab,
+window or block the chat runs in takes the new name while it still shows the
+old one; one the user named keeps its label. `shoal work rename --request [chat]`
 asks the chat's agent to choose the name and set it instead. Workspace processes
 cannot rename chats.
 

@@ -668,6 +668,89 @@ fn additions_outside_zellij_open_sessions_that_removal_ends() {
     assert!(zellij.pane_open("caller", USERS));
 }
 
+/// The place Shoal recorded for `workspace`, with `pane` of the user's
+/// session in its stead: on the same server instance.
+fn place_beside(fixture: &Fixture, workspace: &str, pane: &str) -> Value {
+    let mut place = fixture.ok(&["status", workspace])["places"][0].clone();
+    place["place"] = format!("caller:{pane}").into();
+    place
+}
+
+impl ZellijServer {
+    /// A new tab named `name` in the user's session, returning its pane.
+    fn new_tab(&self, name: &str) -> String {
+        let output = self
+            .zellij()
+            .args(["--session", "caller", "action", "new-tab", "--name", name])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        wait_for("the new tab to show", || {
+            self.listed_panes("caller")?
+                .into_iter()
+                .find(|(_, tab)| tab == name)
+                .map(|(pane, _)| pane)
+        })
+    }
+}
+
+#[test]
+fn a_workspace_title_relabels_the_tab_shoal_opened_leaving_the_users() {
+    let fixture = Fixture::with_config(Some(&format!(
+        "machine.max_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
+    )));
+    let Some(mut zellij) = ZellijServer::start(&fixture) else {
+        return;
+    };
+    add_inside(&fixture, &mut zellij, "placed");
+    wait_until("the tab Shoal opened to show", || {
+        zellij.tabs().contains(&"placed".to_owned())
+    });
+    let users_tab = zellij.tabs()[0].clone();
+    // The user's own tab, recorded as the workspace's, shows the name the
+    // user gave it.
+    let recorded = fixture.request(serde_json::json!({"record_owned_place": {
+        "workspace": "placed", "origin": place_beside(&fixture, "placed", USERS),
+    }}));
+    assert!(recorded.get("error").is_none(), "{recorded}");
+
+    fixture.ok(&["work", "rename", "placed", "Login retries"]);
+    assert_eq!(zellij.tabs(), [users_tab, "Login retries".to_owned()]);
+}
+
+#[test]
+fn chat_rename_relabels_a_zellij_tab_that_still_shows_the_old_name() {
+    let fixture = Fixture::with_config(Some(&format!(
+        "machine.max_agents = 'none'\n[terminal.zellij]\nenabled = true\n{AGENT}"
+    )));
+    let Some(mut zellij) = ZellijServer::start(&fixture) else {
+        return;
+    };
+    // A workspace's place records the server instance the chats' share.
+    add_inside(&fixture, &mut zellij, "placed");
+    let users_tab = zellij.tabs()[0].clone();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    // The chats last while this test's process runs.
+    let start = |name: &str, pane: &str| {
+        let response = fixture.request(serde_json::json!({"start_chat":{
+            "repository": repository["id"], "name": name, "agent": "claude",
+            "pid": std::process::id(), "origin": place_beside(&fixture, "placed", pane),
+        }}));
+        assert_eq!(response["type"], "chat", "{response}");
+    };
+    // Shoal opened `talk`'s tab under its name; `notes` runs in the tab the
+    // user named.
+    start("talk", &zellij.new_tab("talk"));
+    start("notes", USERS);
+
+    fixture.ok(&["work", "rename", "talk", "topic"]);
+    fixture.ok(&["work", "rename", "notes", "other"]);
+    let tabs = zellij.tabs();
+    assert!(tabs.contains(&"topic".to_owned()), "{tabs:?}");
+    assert!(tabs.contains(&users_tab), "{tabs:?}");
+    assert!(!tabs.contains(&"talk".to_owned()), "{tabs:?}");
+}
+
 #[test]
 fn demos_open_in_sessions_of_their_own_outside_zellij_and_take_input() {
     let fixture = Fixture::with_config(Some("[terminal]\ndefault_host = 'zellij'\n"));

@@ -335,6 +335,42 @@ fn chat_rename_relabels_a_block_that_still_shows_the_old_name() {
 }
 
 #[test]
+fn a_workspace_title_relabels_a_block_that_still_shows_its_label() {
+    let fixture = Fixture::new();
+    let Some(rex) = RexServer::start(&fixture) else {
+        return;
+    };
+    let (session, block) = rex.session("caller", &fixture.repo);
+    let window = rex.json(&["window", "ls", "-s", &session, "--json"])["windows"][0]["window_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // The block is alone in its window, which shows its name.
+    let label = |label: &str| {
+        let input = serde_json::json!({"session_id": session, "window_id": window, "label": label})
+            .to_string();
+        rex.json(&["api", "call", "session.set_window_label", &input]);
+    };
+    fixture.add("titled");
+    let recorded = fixture.request(serde_json::json!({"record_owned_place": {
+        "workspace": "titled",
+        "origin": {"host": "rex", "group": session, "place": block, "owned": true,
+            "data": {"server": rex.socket, "bin_dir": rex.program.parent().unwrap()}},
+    }}));
+    assert!(recorded.get("error").is_none(), "{recorded}");
+
+    // Shoal labelled the block with the branch, as the workspace had no
+    // title.
+    label("titled");
+    fixture.ok(&["work", "rename", "titled", "Login retries"]);
+    assert_eq!(rex.windows(&session), ["Login retries"]);
+    // A name the user gave stays.
+    label("notes");
+    fixture.ok(&["work", "rename", "titled", "Login backoff"]);
+    assert_eq!(rex.windows(&session), ["notes"]);
+}
+
+#[test]
 fn demos_fall_back_to_the_configured_session_and_take_input() {
     let fixture = Fixture::with_config(Some("[terminal.rex]\nsession_name = 'demos'\n"));
     let Some(rex) = RexServer::start(&fixture) else {

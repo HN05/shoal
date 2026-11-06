@@ -2,11 +2,15 @@
 //! asking its agent to.
 use anyhow::{Result, ensure};
 
-use crate::cli::{
-    commands::turns,
-    context::Context,
-    terminal,
-    ui::{self, Fallback},
+use crate::{
+    cli::{
+        commands::turns,
+        context::Context,
+        terminal,
+        ui::{self, Fallback},
+    },
+    model::RetitledWorkspace,
+    protocol::ConfigTarget,
 };
 
 /// What `shoal work rename --request` asks the workspace's agent.
@@ -20,17 +24,15 @@ pub(in crate::cli::commands) async fn title(
     // Refuse an invalid title before a picker asks for the workspace.
     crate::validate::title(title.trim())?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let titled = crate::client::workspaces::set_title(&ctx.paths, workspace, title)
-        .await?
-        .workspace;
+    let retitled = crate::client::workspaces::set_title(&ctx.paths, workspace, title).await?;
     // The title is recorded; a place left with its old label only warns.
-    if let Err(error) = terminal::relabel_places(ctx, &titled).await {
+    if let Err(error) = relabel(ctx, &retitled).await {
         eprintln!(
             "warning: cannot relabel the places of {}: {error:#}",
-            titled.name
+            retitled.workspace.name
         );
     }
-    ctx.show(&titled, |workspace| {
+    ctx.show(&retitled.workspace, |workspace| {
         outln!(
             "Set the title of {} to {}",
             workspace.name,
@@ -38,6 +40,22 @@ pub(in crate::cli::commands) async fn title(
         )
     })?;
     Ok(0)
+}
+
+/// Show the retitled workspace's label on the places Shoal created for it,
+/// where they still show the label its previous title gave them.
+async fn relabel(ctx: &Context, retitled: &RetitledWorkspace) -> Result<()> {
+    let RetitledWorkspace {
+        workspace,
+        previous_title,
+    } = retitled;
+    let places = crate::client::workspaces::places(&ctx.paths, workspace.id.clone()).await?;
+    let places: Vec<_> = places.into_iter().map(|owned| owned.origin).collect();
+    let target = ConfigTarget::Workspace(workspace.id.clone());
+    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    let labels = terminal::Retitled::new(ctx, workspace, previous_title.as_deref());
+    terminal::relabel_space(&settings, &places, async |host| labels.labels(host).await).await;
+    Ok(())
 }
 
 /// Ask the workspace's running agent to choose its title, through the

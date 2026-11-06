@@ -1050,8 +1050,8 @@ the work, so its agent names it with a workspace title, which replaces that
 default and fills a template's `{title}`. The user may set the title or ask the
 agent to choose one, a fixed agent message refused without a running agent,
 which would leave it unread until removal. Setting one relabels the places Shoal
-created for the workspace that the caller's host server reaches, while other
-places take it when they next open. An optional `terminal.herdr.tab_name` template
+created for the workspace, wherever the command runs: each through the host
+that opened it, on the server its record names, as closing reaches it. An optional `terminal.herdr.tab_name` template
 follows normal configuration precedence, substitutes repository, branch and issue
 fields once, and updates the branch after allocation. The resolved template travels
 with the launch plan so the worker preserves the caller's naming choice. Shoal
@@ -2127,9 +2127,12 @@ any deciding space. A repository may have several chats, so each call starts a n
 one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
 is removed or renamed. Renaming changes the record and the files kept under the
-name, not the zmx session, which zmx names only at creation. A tab or block
-that hosts the chat takes the new name only while it still shows the old one,
-since another label is the user's. The process the user runs chooses the name, so the tab or session that
+name, not the zmx session, which zmx names only at creation. A place that
+hosts a space, a workspace or a chat, takes a new label only while it still
+shows the label Shoal gave it, since another label is the user's: a chat's its
+old name, a workspace's the label its previous title rendered. A place labelled
+before its workspace's template, issue or branch changed keeps that stale label
+rather than risk overwriting the user's. The process the user runs chooses the name, so the tab or session that
 hosts the chat carries it before the chat is recorded; the chat's record names
 the session it runs in, so `shoal attach` finds it there, not by a session name
 zmx may have suffixed, and the chat labels the session with its ID so no

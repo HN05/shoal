@@ -24144,6 +24144,10 @@ elif args[:2] == ['pane', 'run']:
             groups.write('%d\n' % pane.pid)
 elif args[:2] == ['tab', 'rename'] and (root / 'fail-rename').exists():
     sys.exit('rename-failed')
+elif args[:2] == ['tab', 'rename']:
+    path = root / 'herdr-tab-labels'
+    labels = json.loads(path.read_text()) if path.exists() else {}
+    path.write_text(json.dumps({**labels, args[2]: args[3]}))
 elif args[:2] == ['pane', 'close'] and (root / 'herdr-unreachable').exists():
     print(json.dumps({'error': {'code': 'server_not_running'}}), file=sys.stderr)
     sys.exit(1)
@@ -24693,6 +24697,17 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
         fixture.ok(&["status", "topic"])["workspace"]["title"],
         "Agent tab names"
     );
+
+    // A tab the user renamed keeps its name.
+    fs::write(
+        fixture.root.path().join("herdr-tab-labels"),
+        serde_json::json!({"w1:t9": "notes"}).to_string(),
+    )
+    .unwrap();
+    let before = herdr_changes(&fixture).len();
+    let titled = title_in_herdr(&fixture, "topic", "Tab names");
+    assert!(titled.status.success(), "{titled:?}");
+    assert_eq!(herdr_changes(&fixture).len(), before);
 
     // A tab the user closed keeps the title on the record only.
     fs::write(fixture.root.path().join("closed-tabs"), "w1:t9\n").unwrap();
