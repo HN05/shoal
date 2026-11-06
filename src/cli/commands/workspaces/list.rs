@@ -1,15 +1,11 @@
 //! Listing workspaces and queued agents.
 use anyhow::Result;
 
-use crate::{
-    cli::{
-        client,
-        commands::{agent_queue, chat, listing},
-        context::Context,
-        output::{self, Palette},
-        ui,
-    },
-    env,
+use crate::cli::{
+    commands::{agent_queue, chat, listing},
+    context::Context,
+    output::{self, Palette},
+    ui,
 };
 
 pub(in crate::cli::commands) async fn list(
@@ -35,21 +31,5 @@ pub(in crate::cli::commands) async fn list(
             outln!("{row}");
         }
     })?;
-    // A pointer for humans; agents cannot read notifications and JSON stays clean.
-    if !ctx.json
-        && !env::is_scoped()
-        && let Ok(Some(status)) = client::status(&ctx.paths).await
-        && status.unread_notifications > 0
-    {
-        eprintln!(
-            "{} new notification{}; run shoal alerts",
-            status.unread_notifications,
-            if status.unread_notifications == 1 {
-                ""
-            } else {
-                "s"
-            }
-        );
-    }
     Ok(0)
 }
