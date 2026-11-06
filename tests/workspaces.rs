@@ -4974,16 +4974,8 @@ exit 7
     for (name, agent) in [("add-codex", "codex"), ("add-claude", "claude")] {
         let output = fixture
             .command()
-            .args([
-                "start",
-                fixture.repo.to_str().unwrap(),
-                name,
-                "--here",
-                "--agent",
-                agent,
-                "--",
-                "literal spaces; $(false)",
-            ])
+            .args(["start", fixture.repo.to_str().unwrap(), name, "--here"])
+            .args(["--agent", agent, "--", "literal spaces; $(false)"])
             .env("PATH", fixture.restricted_path(&bin))
             .env("SHOAL_TEST_BIN", env!("CARGO_BIN_EXE_shoal"))
             .env("SHOAL_TEST_STATE", fixture.root.path().join("state"))

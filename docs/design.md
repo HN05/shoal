@@ -1269,6 +1269,8 @@ state from the pane's process. A caller without a terminal, such as an
 orchestrating agent's tool call, starts the agents of `start` and `resume --now`
 detached through the daemon, as a scoped caller does: run in place, the agent
 would hold the call until it exits and die with an interrupt of the caller.
+An agent Happy runs leaves the call at once anyway, so such a caller hands it
+over in place.
 `start --here` and `resume --focus` keep the in-place launch for callers outside
 Shoal, for a script that waits on the agent's exit code, while a scoped
 caller's `--here` with an agent is refused. Agent shortcuts such as `shoal

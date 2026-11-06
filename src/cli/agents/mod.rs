@@ -393,10 +393,14 @@ impl Default for ModelRequest {
 /// Whether a launch of `agent` under `settings` runs in a session this
 /// terminal attaches to, rather than in place or the agent's own way.
 pub(in crate::cli) fn runs_in_session(agent: &Agent, settings: &Effective) -> bool {
-    agent_integration(settings, agent.name())
-        .detached()
-        .is_none()
+    !runs_its_own_way(agent, settings)
         && terminal::keeps_agents_in_sessions(settings)
+}
+
+/// Whether a launch of `agent` under `settings` leaves the launching process
+/// at once, as one its integration runs detached, such as Happy, does.
+pub(in crate::cli) fn runs_its_own_way(agent: &Agent, settings: &Effective) -> bool {
+    agent_integration(settings, agent.name()).detached().is_some()
 }
 
 /// Start an agent in a ready workspace, giving it the prompt the way it

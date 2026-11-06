@@ -15,6 +15,7 @@ use super::{
 };
 use crate::{
     cli::{
+        agents,
         commands::{agent_queue, issues},
         context::Context,
         terminal,
@@ -24,17 +25,25 @@ use crate::{
 
 /// Whether the plan's agent starts detached: always for a scoped caller,
 /// which `--here` cannot keep in place, and for a caller without a terminal
-/// unless `--here` asks to run it in place.
-pub(super) fn starts_detached(plan: &AddPlan, options: &AddOptions) -> Result<bool> {
-    let agent = plan.agent_name().is_some();
+/// unless `--here` asks to run it in place or the agent leaves the caller at
+/// once anyway, as one Happy runs does.
+pub(super) async fn starts_detached(
+    settings: &AddSettings<'_>,
+    plan: &AddPlan,
+    options: &AddOptions,
+) -> Result<bool> {
+    let agent = plan.agent.agent.as_ref();
     if crate::env::is_scoped() {
         ensure!(
-            !(agent && options.here),
+            !(agent.is_some() && options.here),
             "scoped processes start agents detached; leave out --here"
         );
         return Ok(true);
     }
-    Ok(agent && !options.here && !terminal::on_terminal())
+    let Some(agent) = agent.filter(|_| !options.here && !terminal::on_terminal()) else {
+        return Ok(false);
+    };
+    Ok(!agents::runs_its_own_way(agent, settings.get().await?))
 }
 
 /// Open the planned workspace and have its preparation queue the agent. A
