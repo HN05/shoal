@@ -28617,9 +28617,9 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
     fixture.ok(&["stop", "second"]);
 }
 
-/// A start without a terminal, as from another agent's tool call, returns
-/// once setup ends and reports the agent its preparation queued, which the
-/// daemon starts in a session of its own that outlives the caller.
+/// A start without a terminal, as from another agent's tool call run in a
+/// zmx session, returns once setup ends and reports the agent it queued,
+/// which the daemon starts in a session of its own that outlives the caller.
 #[test]
 fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     let fixture = Fixture::with_config(Some(
@@ -28630,6 +28630,7 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     let output = fixture
         .command()
         .args(["--json", "start", repo, "detached", "--agent", "waiter"])
+        .env("ZMX_SESSION", "outer")
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -28641,6 +28642,12 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     assert_eq!(reported[0]["name"], "detached", "{stdout}");
     let entry = reported.last().unwrap();
     assert_eq!(entry["agent"], "waiter", "{stdout}");
+    // The caller's own session stays its own, since the agent left it.
+    let labelled = zmx_calls(&fixture);
+    assert!(
+        !(labelled.iter()).any(|call| call.starts_with(&["set".into(), "outer".into()])),
+        "{labelled:?}"
+    );
     // The caller has exited; the agent runs on in the daemon's session.
     let started = fixture.root.path().join("waiter-started");
     wait_until("the detached agent start", || started.exists());

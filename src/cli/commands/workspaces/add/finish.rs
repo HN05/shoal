@@ -127,7 +127,9 @@ pub(super) async fn add_planned(
         (None, Some(issue), None) => issue.tab_label(target.repository(ctx).await?),
         (None, None, None) => branch.to_owned(),
     };
-    if launch.is_none() {
+    // A placed agent may still be queued, so this place becomes the
+    // workspace's only once it launches here.
+    if launch.is_none() && placed.is_none() {
         let with_agent = agent.agent.is_some();
         terminal::host_workspace(ctx, &started.workspace, with_agent, &label).await?;
     }
@@ -159,10 +161,11 @@ pub(super) async fn add_planned(
         let entry = entry.context("preparation queued no agent")?;
         return report_queued_in(ctx, &workspace, &entry);
     }
-    if let Some(launch) = placed
-        && let Some(entry) = queue_unless_own_way(ctx, &workspace, launch).await?
-    {
-        return report_queued_in(ctx, &workspace, &entry);
+    if let Some(launch) = placed {
+        if let Some(entry) = queue_unless_own_way(ctx, &workspace, launch).await? {
+            return report_queued_in(ctx, &workspace, &entry);
+        }
+        terminal::host_workspace(ctx, &workspace, true, &label).await?;
     }
     let opening = agents::Opening::New {
         mode: mode.unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
