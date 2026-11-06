@@ -136,7 +136,7 @@ fn restorer(recovery: &recovery::Recovery, stop: &Halt, automatic: bool) -> Rest
     }
     match stop {
         Halt::Ended { .. } | Halt::Shutdown { .. } if recovery.automatic => {
-            Restorer::Queue(crate::cli::terminal::start_environment())
+            Restorer::Queue(crate::terminal::start_environment())
         }
         _ => Restorer::User,
     }
@@ -197,7 +197,7 @@ pub(super) fn save_ending_agent(
 /// never ran in the launching terminal.
 fn agent_place(mode: &Mode) -> Option<crate::sessions::Origin> {
     (!matches!(mode, Mode::Detached { .. }))
-        .then(crate::cli::terminal::current_origin)
+        .then(crate::terminal::current_origin)
         .flatten()
 }
 

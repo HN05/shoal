@@ -78,6 +78,6 @@ fn a_queued_launch_keeps_its_model_arguments_fork_issue_and_place() {
     let request = super::queued_agent_request(&child, claude()).expect("the launch queues");
     assert_eq!(
         request.env,
-        crate::cli::terminal::detached_start_environment(None)
+        crate::terminal::detached_start_environment(None)
     );
 }

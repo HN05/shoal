@@ -24,7 +24,7 @@ use crate::{
     paths::Paths,
     sessions::{HostName, Origin, PlaceClose, PlaceOwnership},
     state::AgentState,
-    terminal::{Host, PlaceState, Watched, Watches, hosts, named},
+    terminal::{Host, PlaceState, Watched, Watches, hosts, named, origin_here},
     workers,
 };
 
@@ -115,7 +115,7 @@ pub async fn watch(
         .watches()
         .with_context(|| format!("{} cannot read places", host.name()))?;
     // The daemon's record of the place, as its environment names it.
-    let record = super::here::origin_here(host)
+    let record = origin_here(host)
         .filter(|origin| origin.place.is_some())
         .unwrap_or_else(|| Origin::created(host.name(), place.id.clone()));
     let executable = crate::installed::Executable::current();

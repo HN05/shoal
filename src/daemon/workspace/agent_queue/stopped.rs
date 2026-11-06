@@ -305,7 +305,7 @@ impl Manager {
         let path = recovery::record_path(&self.paths, &workspace.id, execution);
         let record = recovery::Record::load(&path)?
             .with_context(|| format!("{} has no stopped agent {execution}", workspace.name))?;
-        let env = crate::cli::terminal::detached_start_environment(record.origin.as_ref());
+        let env = crate::terminal::detached_start_environment(record.origin.as_ref());
         let target = Target {
             id: workspace.id.clone(),
             repository: workspace.repository_id.clone(),
@@ -338,7 +338,7 @@ impl Manager {
         let Some(record) = recovery::Record::load(&path).ok().flatten() else {
             return false;
         };
-        let env = crate::cli::terminal::detached_start_environment(record.origin.as_ref());
+        let env = crate::terminal::detached_start_environment(record.origin.as_ref());
         let target = Target {
             id: workspace.id.clone(),
             repository: workspace.repository_id.clone(),

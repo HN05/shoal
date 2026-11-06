@@ -1,7 +1,11 @@
-//! The agent sessions hosts keep, and whom each runs for.
+//! The agent sessions hosts keep, whom each runs for, and whether a
+//! terminal shows one.
+use anyhow::Result;
 use serde::Serialize;
 
+use super::{Host, Sessions, enabled_host};
 use crate::{
+    config::Effective,
     protocol::Protection,
     sessions::{HostName, Origin},
 };
@@ -93,3 +97,29 @@ impl Session {
         label
     }
 }
+
+/// A place where an agent runs, with the host that tells whether a terminal
+/// shows it.
+#[derive(Clone)]
+pub(crate) struct Attachment {
+    sessions: &'static dyn Sessions,
+    place: Origin,
+}
+
+impl Attachment {
+    /// What reads whether a terminal shows `place`, unless its host is
+    /// disabled in `settings` or keeps no sessions.
+    pub(crate) fn of(settings: &Effective, place: Origin) -> Option<Self> {
+        let sessions = enabled_host(settings, place.host).and_then(Host::sessions)?;
+        Some(Self { sessions, place })
+    }
+
+    /// Whether a terminal shows the place; one that is gone shows nothing.
+    pub(crate) async fn attached(&self) -> Result<bool> {
+        let session = self.sessions.session_at(&self.place).await?;
+        Ok(session.is_some_and(|session| session.clients > 0))
+    }
+}
+
+#[cfg(test)]
+mod tests;

@@ -161,8 +161,8 @@ pub(crate) fn queued_agent_request(
     workspace: &Workspace,
     mut launch: QueuedLaunch,
 ) -> Result<QueueRequest> {
-    let env = (launch.env.take())
-        .unwrap_or_else(|| crate::cli::terminal::detached_start_environment(None));
+    let env =
+        (launch.env.take()).unwrap_or_else(|| crate::terminal::detached_start_environment(None));
     let issue_title = launch.issue.as_ref().map(|issue| issue.title.clone());
     let (agent, now) = (launch.agent.clone(), launch.now);
     let plan = AddPlan::agent_in(workspace, launch)?;

@@ -9,10 +9,11 @@ use crate::client::output::{
     resume::{Queued, RestoredChat},
 };
 use crate::{
-    cli::{context::Context, terminal, ui},
+    cli::{context::Context, ui},
     execution::recovery::Saved,
     model::{QueueEntry, Workspace},
     state::QueueState,
+    terminal,
 };
 
 /// Queue the restore of every agent and last session `stopped` saves,

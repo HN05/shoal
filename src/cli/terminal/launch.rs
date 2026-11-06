@@ -2,7 +2,6 @@
 //! agents and chats, focused or in the background, and the starts the
 //! daemon runs later for a terminal that queued them.
 use std::{
-    collections::BTreeMap,
     ffi::OsString,
     path::{Path, PathBuf},
 };
@@ -11,9 +10,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{
     add_place::add_worker_argv,
-    groups,
-    here::current_origin,
-    naming,
+    groups, naming,
     sessions::{left_open, report_detach},
 };
 use crate::{
@@ -28,8 +25,8 @@ use crate::{
     model::{Repository, Workspace},
     sessions::Origin,
     terminal::{
-        Attaches, Beside, Configured, Host, Owner, Places, Start, current, enabled_host, hosts,
-        names_places,
+        Attaches, Beside, Configured, Host, Owner, Places, Start, current, current_origin,
+        enabled_host, names_places,
     },
 };
 
@@ -241,49 +238,6 @@ pub(in crate::cli) fn ensure_background(settings: &Effective) -> Result<()> {
         .context(NO_QUEUED_HOST)?
         .host
         .ensure_installed()
-}
-
-/// What a start the daemon runs later for this process needs, without a
-/// terminal: the place it comes from, the hosts' servers this process
-/// chooses, and the output setting.
-pub(crate) fn start_environment() -> BTreeMap<String, String> {
-    let mut env = BTreeMap::from([env::output_setting()]);
-    if let Some(origin) = current_origin().and_then(|origin| serde_json::to_string(&origin).ok()) {
-        env.insert(env::ORIGIN.to_owned(), origin);
-    }
-    env.extend(server_selection(|name| std::env::var(name).ok()));
-    env
-}
-
-/// The variables of a start that comes from no terminal, such as one an
-/// app queues through the protocol or the daemon queues for a stopped
-/// agent: `origin`, where that agent ran, and every host's server unset, so
-/// it opens there or, without one, in `terminal.default_host` whatever the
-/// daemon's own environment names.
-pub(crate) fn detached_start_environment(origin: Option<&Origin>) -> BTreeMap<String, String> {
-    let mut env = BTreeMap::from([env::output_setting()]);
-    let origin = origin
-        .and_then(|origin| serde_json::to_string(origin).ok())
-        .unwrap_or_else(|| NO_ORIGIN.to_owned());
-    env.insert(env::ORIGIN.to_owned(), origin);
-    env.extend(server_selection(|_| None));
-    env
-}
-
-/// The recorded origin of a start that comes from no place.
-const NO_ORIGIN: &str = "null";
-
-/// The variables that choose a host's server, with the values `var` gives
-/// them, so a start queued outside the host's places opens its place on
-/// that server. An unset one is empty, which hosts read as unset, so the
-/// daemon's own value does not stand in for it.
-fn server_selection(
-    var: impl Fn(&str) -> Option<String>,
-) -> impl Iterator<Item = (String, String)> {
-    hosts()
-        .filter_map(Host::places)
-        .flat_map(Places::server_variables)
-        .map(move |name| ((*name).to_owned(), var(name).unwrap_or_default()))
 }
 
 /// The place a start the daemon runs for this worker comes from: the one

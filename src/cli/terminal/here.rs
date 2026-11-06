@@ -1,56 +1,13 @@
-//! The place this process runs in: naming it, recording it as a
-//! workspace's, and closing it with the workspace.
+//! The place this process runs in: recording it as a workspace's, and
+//! closing it with the workspace.
 use anyhow::{Context as _, Result};
 
 use super::closing;
 use crate::{
     cli::context::Context,
     sessions::{HostName, Origin},
-    terminal::{Host, Owner, Places, hosts, named},
+    terminal::{Host, Owner, current_place, hosts, named, origin_here, with_instance},
 };
-
-/// The place this process runs in, as the host serving it names it.
-pub(crate) fn current_origin() -> Option<Origin> {
-    hosts().find_map(origin_here)
-}
-
-/// The place of `host` this process runs in, as `host` names it, with what
-/// a later start needs to open a place beside it.
-pub(super) fn origin_here(host: &dyn Host) -> Option<Origin> {
-    host.places().and_then(Places::origin)
-}
-
-/// The place this process runs in, as [`current_origin`] names it, with what
-/// tells it apart from a later place under its ID, for the daemon's record of
-/// where an execution or chat runs. Without that, a record left by a process
-/// that crashed would name a later place under the ID. A host that cannot
-/// tell leaves it out, with a warning.
-pub(crate) async fn current_place() -> Option<Origin> {
-    for host in hosts() {
-        if let Some(origin) = origin_here(host) {
-            return Some(match with_instance(host, origin.clone()).await {
-                Ok(place) => place,
-                Err(error) => {
-                    eprintln!(
-                        "warning: cannot tell this {} place apart: {error:#}",
-                        host.name()
-                    );
-                    origin
-                }
-            });
-        }
-    }
-    None
-}
-
-/// `place` of `host` with what tells it apart from a later place under its
-/// ID, for a host that reuses IDs.
-pub(super) async fn with_instance(host: &dyn Host, mut place: Origin) -> Result<Origin> {
-    if let Some(watches) = host.watches() {
-        place.instance = watches.place_instance(place.id()).await?;
-    }
-    Ok(place)
-}
 
 /// Whether the place this process runs in closes once `workspace` is
 /// removed, ending anything it streams: a watcher closes it then, or the

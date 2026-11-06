@@ -2,14 +2,14 @@
 //! background processes.
 use anyhow::Result;
 
-use super::{background, groups, here::current_origin, launch::place_env};
+use super::{background, groups, launch::place_env};
 use crate::{
     cli::context::Context,
     config::Effective,
     demos::Launch,
     model::Workspace,
     sessions::Origin,
-    terminal::{Demo, DemoWorker, Host, named, names_places},
+    terminal::{Demo, DemoWorker, Host, current_origin, named, names_places},
 };
 
 /// Start a demo of `workspace` in the first host that runs queued starts and

@@ -8,14 +8,12 @@ use std::time::Duration;
 use anyhow::Result;
 
 use crate::{
-    cli::{
-        agents::PromptWake,
-        terminal::{PromptSession, WAKE_PROMPT},
-    },
+    cli::agents::PromptWake,
     client::connection,
     model::ExecutionPlan,
     paths::Paths,
     protocol::AgentMethod,
+    terminal::{PromptSession, WAKE_PROMPT},
 };
 
 /// Prompts the agent until dropped, when the agent's process ends.

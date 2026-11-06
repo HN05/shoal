@@ -632,7 +632,7 @@ pub(super) async fn launch(
         &ctx.paths,
         home,
         new,
-        terminal::current_place().await,
+        crate::terminal::current_place().await,
         false,
         restore.as_deref(),
     )

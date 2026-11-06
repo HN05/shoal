@@ -210,7 +210,7 @@ fn queued_launch(
         args: super::plan::launch_args(args.to_vec())?,
         fork: fork.clone(),
         issue: issue.map(issues::Issue::launch_issue),
-        env: Some(terminal::start_environment()),
+        env: Some(crate::terminal::start_environment()),
         now,
     })))
 }

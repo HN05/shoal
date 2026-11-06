@@ -3,8 +3,8 @@
 use std::{io::IsTerminal, time::Duration};
 
 use crate::{
-    cli::terminal::Attachment, config::Effective, model::ExecutionPlan, paths::Paths,
-    protocol::AgentMethod, sessions::Origin,
+    config::Effective, model::ExecutionPlan, paths::Paths, protocol::AgentMethod, sessions::Origin,
+    terminal::Attachment,
 };
 
 /// How often the wrapper reads whether a terminal shows the agent and

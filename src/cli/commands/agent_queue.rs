@@ -6,9 +6,10 @@ use anyhow::Result;
 use super::{listing::ListFilter, workspaces::AddPlan};
 use crate::client::queue;
 use crate::{
-    cli::{context::Context, output::Palette, terminal, ui},
+    cli::{context::Context, output::Palette, ui},
     model::{Dependency, QueueEntry, QueueRequest, QueuedPlan, Workspace},
     state::{QueueKind, QueueState},
+    terminal,
 };
 
 pub(super) enum Admission {

@@ -20,19 +20,13 @@ pub(in crate::cli) use here::{
     close_background_place_when_done, close_here_when_done, closes_with, label_current,
     record_owned_here,
 };
-pub(crate) use here::{current_origin, current_place};
-pub(crate) use launch::{detached_start_environment, start_environment};
 pub(in crate::cli) use launch::{
     ensure_background, keeps_agents_in_sessions, launcher_program, rerun_where_stopped,
     restore_queued, run_agent, run_in_background, start_add, start_chat, start_chat_in_background,
     start_queued,
 };
 pub(in crate::cli) use naming::{Labels, PlaceName, Retitled, issue_label, relabel_space};
-pub(in crate::cli) use prompts::{
-    CONTINUE_PROMPT, agents_can_be_prompted, send_keys, submit_prompt, submitted_by_shoal,
-};
-pub(crate) use prompts::{PromptSession, WAKE_PROMPT};
-pub(crate) use sessions::Attachment;
+pub(in crate::cli) use prompts::{CONTINUE_PROMPT, agents_can_be_prompted, submitted_by_shoal};
 pub(in crate::cli) use sessions::{
     Recorded, attach, attachable, open_session_owners, session_owners, sessions,
 };

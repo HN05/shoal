@@ -424,7 +424,7 @@ async fn fail_launch(link: &mut Link, mode: &Mode, error: anyhow::Error) -> anyh
 async fn terminal_place(mode: &Mode) -> Option<Origin> {
     match mode {
         Mode::Detached { .. } | Mode::Demo { .. } => None,
-        _ => crate::cli::terminal::current_place().await,
+        _ => crate::terminal::current_place().await,
     }
 }
 

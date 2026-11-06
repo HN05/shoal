@@ -73,7 +73,7 @@ async fn running_turns(ctx: &Context, selected: Vec<String>) -> Result<Vec<Inter
 /// Type the interrupt key, then record that it ended the turn.
 async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()> {
     let target = &interruption.target;
-    terminal::send_keys(&target.place, interruption.key).await?;
+    crate::terminal::send_keys(&target.place, interruption.key).await?;
     let (workspace, execution) = (target.workspace_id.clone(), target.execution.clone());
     crate::client::agents::interrupt_turn(&ctx.paths, workspace, execution).await?;
     Ok(())
@@ -112,7 +112,7 @@ impl Continuation {
     pub(super) async fn submit(self, ctx: &Context) -> Result<i32> {
         let mut report = ui::Report::new("continue");
         for target in &self.0 {
-            match terminal::submit_prompt(&target.place, terminal::CONTINUE_PROMPT).await {
+            match crate::terminal::submit_prompt(&target.place, terminal::CONTINUE_PROMPT).await {
                 Ok(()) => report.done(
                     ctx,
                     &format!("Continued the turn of {}", target.described()),
