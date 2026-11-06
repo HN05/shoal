@@ -430,9 +430,10 @@ async fn current_workspace_or_chat(
     chat: String,
     which: Workspaces,
 ) -> Result<String> {
-    let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
-    let current = current_workspace(&workspaces)?.filter(|workspace| match which {
-        Workspaces::Below => workspace.is_below(&workspaces, &chat),
+    let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
+    let below = spaces.below(&chat);
+    let current = current_workspace(&spaces.workspaces)?.filter(|workspace| match which {
+        Workspaces::Below => below.iter().any(|space| space.id == workspace.id),
         Workspaces::Any => true,
     });
     let Some(workspace) = current else {

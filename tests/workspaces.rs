@@ -20079,6 +20079,26 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     let opened: Value = serde_json::from_slice(&output.stdout).unwrap();
+    // A workspace that a chat below the chat opened is below it too.
+    let mut nested_agent = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .spawn()
+        .unwrap();
+    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository, "name": "nested", "agent": "claude",
+        "pid": nested_agent.id(), "parent": chat
+    }}));
+    let nested = response["data"]["id"].as_str().unwrap().to_owned();
+    let output = fixture
+        .command()
+        .args(["--json", "start", fixture.repo.to_str().unwrap(), "deeper"])
+        .env("SHOAL_CHAT", &nested)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let deeper: Value = serde_json::from_slice(&output.stdout).unwrap();
     let other = fixture.add("other");
     let rename_in = |directory: &Value, name: &str| {
         let output = fixture
@@ -20094,6 +20114,8 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
 
     let renamed = rename_in(&opened["path"], "Child work");
     assert_eq!(renamed, opened["id"]);
+    let renamed = rename_in(&deeper["path"], "Nested work");
+    assert_eq!(renamed, deeper["id"]);
     // A workspace not below the chat leaves the command to the chat.
     let renamed = rename_in(&other["path"], "replanning");
     assert_eq!(renamed, chat.as_str());
@@ -20101,8 +20123,10 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
         fixture.ok(&["status", "other"])["workspace"]["title"],
         Value::Null
     );
-    agent.kill().unwrap();
-    agent.wait().unwrap();
+    for agent in [&mut agent, &mut nested_agent] {
+        agent.kill().unwrap();
+        agent.wait().unwrap();
+    }
 }
 
 #[test]

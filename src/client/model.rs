@@ -594,21 +594,6 @@ impl Workspace {
             .filter(|w| w.contains(path))
             .max_by_key(|w| w.path.components().count())
     }
-
-    /// True when the space `id` is above this workspace, following parent
-    /// links through `workspaces`.
-    pub fn is_below(&self, workspaces: &[Workspace], id: &str) -> bool {
-        let mut parent = self.parent.as_ref();
-        while let Some(space) = parent {
-            if space.id == id {
-                return true;
-            }
-            parent = (workspaces.iter())
-                .find(|workspace| workspace.id == space.id)
-                .and_then(|workspace| workspace.parent.as_ref());
-        }
-        false
-    }
 }
 
 /// The refusal of `action` in the workspace `name`, which is at a commit and
