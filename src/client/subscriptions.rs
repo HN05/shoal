@@ -5,15 +5,11 @@
 pub mod records;
 
 use anyhow::Result;
-use tokio::{
-    io::BufReader,
-    net::UnixStream,
-    time::{Instant, sleep},
-};
+use tokio::{io::BufReader, net::UnixStream};
 
 use crate::client::{
     connection::{self, Daemon},
-    protocol::{Body, Responses, SubscriptionMethod, timing},
+    protocol::{Body, Responses, SubscriptionMethod},
 };
 use records::{Record, RecordKey, Topic};
 
@@ -107,18 +103,5 @@ async fn resubscribe(
     daemon: &impl Daemon,
     topics: &[Topic],
 ) -> Result<(Responses<BufReader<UnixStream>>, Vec<Record>)> {
-    let deadline = Instant::now() + timing::DAEMON_RESTART_TIMEOUT;
-    loop {
-        match subscribe(daemon, topics).await {
-            Err(error)
-                if Instant::now() < deadline
-                    && (connection::is_unreachable(&error)
-                        || connection::stream_closed(&error)
-                        || connection::scope_denied(&error)) =>
-            {
-                sleep(timing::DAEMON_POLL_INTERVAL).await;
-            }
-            subscribed => return subscribed,
-        }
-    }
+    connection::after_restart(|| subscribe(daemon, topics)).await
 }

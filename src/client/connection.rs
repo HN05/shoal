@@ -444,6 +444,30 @@ pub async fn await_reply<M: Into<Method>>(
     }
 }
 
+/// The result of `ask`, requests that are safe to repeat, from a daemon
+/// that restarted: an unreachable socket, a closed connection or a scope
+/// refusal is tried again within the restart budget, since a restarted
+/// daemon knows an execution's scope only once its wrapper reattaches.
+pub async fn after_restart<T, F>(ask: impl Fn() -> F) -> Result<T>
+where
+    F: Future<Output = Result<T>>,
+{
+    let deadline = Instant::now() + timing::DAEMON_RESTART_TIMEOUT;
+    loop {
+        match ask().await {
+            Err(error)
+                if Instant::now() < deadline
+                    && (is_unreachable(&error)
+                        || stream_closed(&error)
+                        || scope_denied(&error)) =>
+            {
+                sleep(timing::DAEMON_POLL_INTERVAL).await;
+            }
+            answer => return answer,
+        }
+    }
+}
+
 /// A wait's time without a daemon to answer it.
 struct Outage {
     /// When the daemon last went away, or the socket was first found unreachable.

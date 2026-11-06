@@ -106,6 +106,59 @@ async fn awaited_replies_survive_a_daemon_restart() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test(start_paused = true)]
+async fn requests_after_a_restart_wait_for_the_scope() -> Result<()> {
+    let temp = tempfile::tempdir_in("/tmp")?;
+    let paths = Paths::for_test(temp.path());
+    paths.prepare()?;
+    let listener = UnixListener::bind(&paths.socket)?;
+    let asking = tokio::spawn({
+        let paths = paths.clone();
+        async move { after_restart(|| request::<()>(&paths, DaemonMethod::Status)).await }
+    });
+    // The restarted daemon refuses the scope until the wrapper reattaches.
+    let refused = Body::error(ErrorCode::ScopeDenied, "expired or unknown workspace scope");
+    for body in [refused, Body::Ok] {
+        let (mut stream, _) = listener.accept().await?;
+        let request: Request = protocol::read(&mut stream).await?;
+        protocol::write(&mut stream, &Response::new(request.id, body)).await?;
+    }
+    asking.await??;
+
+    // Another refusal ends it at once.
+    let listener_task = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await?;
+        let request: Request = protocol::read(&mut stream).await?;
+        let body = Body::error(ErrorCode::NotFound, "no such workspace");
+        protocol::write(&mut stream, &Response::new(request.id, body)).await?;
+        anyhow::Ok(listener)
+    });
+    let error = after_restart(|| request::<()>(&paths, DaemonMethod::Status))
+        .await
+        .unwrap_err();
+    assert!(!scope_denied(&error), "{error:#}");
+    let listener = listener_task.await??;
+
+    // A scope the daemon never knows again ends it once a restart had time.
+    let refusing = tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let Ok(request) = protocol::read::<Request>(&mut stream).await else {
+                return;
+            };
+            let body = Body::error(ErrorCode::ScopeDenied, "denied");
+            let _ = protocol::write(&mut stream, &Response::new(request.id, body)).await;
+        }
+    });
+    let started = Instant::now();
+    let error = after_restart(|| request::<()>(&paths, DaemonMethod::Status))
+        .await
+        .unwrap_err();
+    assert!(scope_denied(&error), "{error:#}");
+    assert!(started.elapsed() >= timing::DAEMON_RESTART_TIMEOUT);
+    refusing.abort();
+    Ok(())
+}
+
 #[tokio::test]
 async fn typed_requests_extract_payloads_and_acknowledgements() {
     let status = DaemonStatus {
