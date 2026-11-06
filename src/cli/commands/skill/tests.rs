@@ -225,6 +225,25 @@ fn install_replaces_skills_shoal_owns_and_keeps_user_changes() {
 }
 
 #[test]
+fn an_unrecorded_skill_in_a_recorded_directory_is_the_users() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path();
+    let name = SKILLS[0].0;
+    let read = || fs::read_to_string(skill_file(directory, name)).unwrap();
+    fs::create_dir_all(directory.join(name)).unwrap();
+    fs::write(skill_file(directory, name), "mine").unwrap();
+    record(directory, &[("retired", Entry::Kept)]);
+    let outcome = refresh(directory, &embedded(), Mode::Refresh).unwrap();
+    assert_eq!(outcome.kept, [name]);
+    assert_eq!(read(), "mine");
+    let outcome = refresh(directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
+    assert_eq!(outcome.kept, [name]);
+    assert_eq!(read(), "mine");
+    refresh(directory, &embedded(), Mode::Install(Changed::Replace)).unwrap();
+    assert_eq!(read(), SKILLS[0].1);
+}
+
+#[test]
 fn install_removes_retired_skills_only_while_unchanged() {
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("skills");

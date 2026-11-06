@@ -232,13 +232,16 @@ struct Outcome {
 /// skills outside them that Shoal still owns. A recorded skill whose file
 /// differs from what Shoal wrote belongs to the user, as does every skill
 /// whose directory is not a real directory, such as a link into the user's
-/// dotfiles; files from before the record existed are Shoal's. Skills are regular files, since some tools
-/// skip a linked `SKILL.md`; links earlier versions recorded become copies.
+/// dotfiles, and an unrecorded file in a directory with a record; files from
+/// before the record existed are Shoal's. Skills are regular files, since
+/// some tools skip a linked `SKILL.md`; links earlier versions recorded
+/// become copies.
 fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> Result<Outcome> {
     let loaded = Record::load(directory)?;
     let mut installation = Installation {
         directory,
         mode,
+        recorded: loaded.is_some(),
         record: loaded.clone().unwrap_or_default(),
         outcome: Outcome::default(),
     };
@@ -260,6 +263,8 @@ fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> R
 struct Installation<'a> {
     directory: &'a Path,
     mode: Mode,
+    /// Whether Shoal had recorded its installations here before this call.
+    recorded: bool,
     record: Record,
     outcome: Outcome,
 }
@@ -293,7 +298,9 @@ impl Installation<'_> {
     /// that file already holds this version.
     fn owns(&self, name: &str, path: &Path, present: bool, current: bool) -> Result<bool> {
         Ok(match self.record.skills.get(name) {
-            None => true,
+            // A file the record does not list is Shoal's only from before
+            // the record existed.
+            None => !self.recorded || !present || current,
             // An install reclaims a kept skill that matches this version.
             Some(Entry::Kept) => (!present || current) && self.mode != Mode::Refresh,
             Some(previous) if present => current || previous.matches(path)?,

@@ -2193,7 +2193,8 @@ scope, for every tool whose skill directory already exists unless a tool is
 named, independent of the daemon and never from a scoped execution; its
 availability registers nothing. Each skill directory records what Shoal installed there;
 Shoal owns a skill only while it matches that record, so it updates or removes
-only those, and treats files from before the record as its own. Unscoped
+only those, and treats files from before the record as its own and an
+unrecorded file beside a record as the user's. Unscoped
 commands other than the daemon refresh directories that still hold a Shoal
 skill, so upgrades need no reinstall; the daemon may not share the user's tool
 environment. Debug builds are development builds that share the user's home

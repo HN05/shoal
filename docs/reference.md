@@ -5558,5 +5558,5 @@ skill changed or removed since Shoal installed it is kept and reported once;
 `shoal skill install` restores a removed skill and, in a terminal, asks whether
 to keep, replace or show the diff of each changed one; `--force` replaces them
 without asking. Skills installed before the record existed are treated as
-unchanged. Debug builds neither install nor update skills unless
+unchanged; a skill a directory's record does not list is treated as changed. Debug builds neither install nor update skills unless
 `SHOAL_DEV_USER_FILES=1`.
