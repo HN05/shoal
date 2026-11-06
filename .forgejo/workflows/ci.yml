@@ -24,13 +24,16 @@
 # ranks `skipped` above `success`. The undraft job names the rust and gate
 # contexts; keep them in step with the job names.
 #
-# The checks run on a Shoal runner (docs/reference.md#runner), on Linux or
+# The rust job runs on a Shoal runner (docs/reference.md#runner), on Linux or
 # macOS, whichever machine with `runner.enabled` for this repository admits it
 # first. Steps run on that machine's host with its installed tools, in a
 # disposable workspace at the job's commit, so there is no checkout step. The
 # workspace starts from the seed build of main that .shoal.toml's `cargo`
-# preset makes, so a job rebuilds only what its commit changed. Build settings that change Cargo's fingerprints, such as
-# CARGO_INCREMENTAL or a profile's debuginfo, would rebuild everything instead.
+# preset makes, so a job rebuilds only what its commit changed. Build settings
+# that change Cargo's fingerprints, such as CARGO_INCREMENTAL or a profile's
+# debuginfo, would rebuild everything instead. The undraft and gate jobs only
+# query the forge and gain nothing from a seeded workspace, so they stay on
+# Docker.
 
 name: ci
 
@@ -56,7 +59,10 @@ jobs:
   undraft:
     name: undraft (edits run the checks only after leaving draft)
     if: github.event.action == 'edited' && !github.event.pull_request.draft
-    runs-on: shoal
+    runs-on: docker
+    container:
+      # The cross-build job's image; it carries curl and jq.
+      image: git.henriknordvik.com/hn05/ci-shoal:1.99
     outputs:
       run: ${{ steps.statuses.outputs.run }}
     steps:
@@ -95,7 +101,9 @@ jobs:
       needs.undraft.outputs.run != 'false' &&
       !startsWith(github.head_ref, 'release/v') &&
       !startsWith(github.event.head_commit.message, 'chore: prepare release v')
-    runs-on: shoal
+    runs-on: docker
+    container:
+      image: git.henriknordvik.com/hn05/ci-shoal:1.99
     outputs:
       docs_only: ${{ steps.labels.outputs.docs_only }}
       # Names the rust job through its matrix (see the top of the file).

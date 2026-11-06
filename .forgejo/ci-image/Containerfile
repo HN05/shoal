@@ -1,5 +1,5 @@
-# CI image for the Forgejo workflows on the Docker runner; the checks run on
-# Shoal runners instead (see ci.yml). Everything the jobs would otherwise
+# CI image for the Forgejo workflows on the Docker runner; ci.yml's rust checks
+# run on Shoal runners instead. Everything the jobs would otherwise
 # install per run lives here, and the tag is the Rust version: never a
 # floating tag, so a run can say which toolchain it used. The tools the tests
 # spawn are also what a Shoal runner's machine needs.

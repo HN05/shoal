@@ -344,9 +344,10 @@ and the Python release-script tests; a PR whose only `area/` label is
 `area/docs` skips them, as do the release workflow's PR and version commit,
 which `scripts/release.py` validates itself. A draft PR runs no checks; taking it out of draft
 (removing the `WIP:` title prefix, as `shoal ready` does) starts one run.
-Its jobs, and `flaky.yml`'s, run with `runs-on: shoal` on Shoal runners: any
-Linux or macOS machine whose Shoal has `runner.enabled` for this repository,
-with Rust at `rust-version`, which the jobs check, with clippy and rustfmt, and
+Its `rust` job and `flaky.yml`'s job, which build, run with `runs-on: shoal` on
+Shoal runners; the jobs that only query the forge stay on Docker. A Shoal runner
+is any Linux or macOS machine whose Shoal has `runner.enabled` for this
+repository, with Rust at `rust-version`, which the jobs check, with clippy and rustfmt, and
 the tools the tests spawn installed on the host (those
 `.forgejo/ci-image/Containerfile` installs; on Linux, which alone checks the
 musl build, cargo-zigbuild, Zig and the host's musl Rust target). The test
@@ -358,7 +359,7 @@ checkout step and rebuilds only what its commit changed; keep settings that
 change Cargo's fingerprints out of the workflows.
 Code that tests run must not keep a path the seed build compiled in, such as
 `env!("CARGO_BIN_EXE_shoal")`; read it at run time.
-The other workflows run on the Docker runner, in the image built from
+The other jobs and workflows run on the Docker runner, in the image built from
 `.forgejo/ci-image/Containerfile` (`git.henriknordvik.com/hn05/ci-shoal:<rust
 version>`), so a run installs nothing: new tooling for them goes into the
 Containerfile, and only the owner rebuilds it with `.forgejo/ci-image/build.sh`
