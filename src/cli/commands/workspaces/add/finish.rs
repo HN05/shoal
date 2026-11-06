@@ -54,7 +54,7 @@ pub(super) async fn execute_add_with_target(
     let Some(entry) = plan.queue_entry.clone() else {
         return add_planned(ctx, plan, target, issue, AgentStart::Here).await;
     };
-    let added = add_planned(ctx, plan, target, issue, AgentStart::Here);
+    let added = Box::pin(add_planned(ctx, plan, target, issue, AgentStart::Here));
     holding(ctx, &entry, added).await
 }
 
@@ -183,7 +183,7 @@ pub(super) async fn add_planned(
         fork,
     };
     match placed {
-        Some(placed) => launch_placed(ctx, *workspace, *placed, here, &label).await,
+        Some(placed) => Box::pin(launch_placed(ctx, *workspace, *placed, here, &label)).await,
         None => here.run(ctx, *workspace).await,
     }
 }

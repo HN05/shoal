@@ -111,7 +111,10 @@ pub(in crate::cli::commands) async fn add(
     );
     if starts_detached(ctx, &plan, &options)? {
         ensure_detachable(&settings, &plan, &options).await?;
-        return add_detached(ctx, plan, target, issue, options, after).await;
+        // Boxed, as are the launches below it: the start path's futures
+        // nest deep enough to overflow the main thread's stack in debug
+        // builds on Linux.
+        return Box::pin(add_detached(ctx, plan, target, issue, options, after)).await;
     }
     if let Some(queued) = admit(
         ctx,

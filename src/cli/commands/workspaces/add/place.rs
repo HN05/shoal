@@ -62,7 +62,7 @@ pub(super) async fn launch_placed(
         return here.run(ctx, workspace).await;
     };
     crate::env::launch_queue_entry(&entry);
-    holding(ctx, &entry, here.run(ctx, workspace)).await
+    holding(ctx, &entry, Box::pin(here.run(ctx, workspace))).await
 }
 
 /// Where a placed agent starts.
