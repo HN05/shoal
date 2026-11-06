@@ -201,7 +201,7 @@ async fn retrust(ctx: &Context, before: &Registrations) {
             .filter(|workspace| workspace.repository_id == old.id)
             .map(|workspace| workspace.path.clone())
             .collect();
-        agents::cleanup_moved_trust(ctx, old, &paths).await;
+        crate::agents::cleanup_moved_trust(&ctx.paths, old, &paths).await;
         for workspace in after
             .workspaces
             .iter()

@@ -6,8 +6,8 @@ use anyhow::Result;
 use super::{agent::ResolvedAddAgent, target::AddTarget};
 use crate::{
     agent::Agent,
+    agents,
     cli::{
-        agents,
         commands::{issues, repositories},
         context::Context,
     },

@@ -555,7 +555,7 @@ pub(super) async fn launch(
         instructions: brief.system,
         opening: brief.first_message,
         directories: topic.directories.clone(),
-        model: agents::resolve_model(&settings, agent.name(), model.clone()),
+        model: crate::agents::resolve_model(&settings, agent.name(), model.clone()),
         repository: repo,
         workspace: topic.workspace.clone(),
         settings,
@@ -612,7 +612,7 @@ pub(super) async fn launch(
         }));
     }
     ensure!(ctx.interactive(), "chat needs a terminal");
-    let model_args = agents::model_args(&settings, agent.name(), &resolved)?;
+    let model_args = crate::agents::model_args(&settings, agent.name(), &resolved)?;
     let name = if asks_name {
         ask_name(ctx, &name).await?
     } else {
@@ -697,7 +697,7 @@ impl SessionArgs<'_> {
         if !self.fork {
             return Ok(resumed_args(settings, agent, session));
         }
-        if let Err(error) = agents::ensure_forks(settings, agent.name()) {
+        if let Err(error) = crate::agents::ensure_forks(settings, agent.name()) {
             eprintln!("warning: {error:#}, so the chat starts a new session");
             return Ok(Vec::new());
         }
@@ -794,7 +794,7 @@ pub(super) fn named_agent(settings: &Effective, agent: Option<Agent>) -> Result<
     let Some(agent) = agent.or_else(|| settings.agent.default.clone()) else {
         return Ok(None);
     };
-    agents::ensure_available(agent.name(), settings)?;
+    crate::agents::ensure_available(agent.name(), settings)?;
     Ok(Some(agent))
 }
 
@@ -814,8 +814,8 @@ pub(super) fn checked_agent(
 /// Refuse `model` for `agent` before anything else is asked for, when its
 /// launch cannot pass the values on.
 pub(super) fn check_model(settings: &Effective, agent: &Agent, model: &ModelChoice) -> Result<()> {
-    let resolved = agents::resolve_model(settings, agent.name(), model.clone());
-    agents::check_model(settings, agent.name(), &resolved)
+    let resolved = crate::agents::resolve_model(settings, agent.name(), model.clone());
+    crate::agents::check_model(settings, agent.name(), &resolved)
 }
 
 fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
@@ -831,7 +831,7 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
         .map(|name| (name.clone(), name.as_str()))
         .collect();
     let agent: Agent = ui::pick_choice(ctx, "Agent> ", &choices)?.parse()?;
-    agents::ensure_available(agent.name(), settings)?;
+    crate::agents::ensure_available(agent.name(), settings)?;
     Ok(agent)
 }
 
@@ -934,7 +934,11 @@ fn command(
         instructions,
         opening,
         [
-            agents::hook_args(settings.integration(name), agents::AgentSpace::Chat, false)?,
+            crate::agents::hook_args(
+                settings.integration(name),
+                crate::agents::AgentSpace::Chat,
+                false,
+            )?,
             directories,
         ]
         .concat(),

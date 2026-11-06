@@ -1,5 +1,5 @@
 use super::*;
-use crate::cli::agents::tests::WORKSPACE;
+use crate::agents::tests::WORKSPACE;
 
 /// The settings `args` pass, given as JSON.
 fn settings_of(args: &[OsString]) -> Value {

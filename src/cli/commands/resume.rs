@@ -572,7 +572,7 @@ async fn start_copied(
     let fork = session
         .session
         .clone()
-        .filter(|_| crate::cli::agents::ensure_forks(&settings, agent).is_ok());
+        .filter(|_| crate::agents::ensure_forks(&settings, agent).is_ok());
     match fork {
         Some(_) => eprintln!("shoal: starting {agent} from a fork of its session in the copy"),
         None => eprintln!("shoal: starting a new {agent} session in the copy"),

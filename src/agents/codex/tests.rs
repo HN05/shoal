@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
-use crate::cli::agents::tests::WORKSPACE;
+use crate::agents::tests::WORKSPACE;
 
 #[test]
 fn a_chat_agent_runs_a_workspace_agents_hooks_without_the_subagent_brief() {

@@ -406,7 +406,7 @@ async fn forked(
     };
     let target = ConfigTarget::Workspace(parent.clone());
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
-    crate::cli::agents::ensure_forks(&settings, agent.name())?;
+    crate::agents::ensure_forks(&settings, agent.name())?;
     Ok((parent, agent, session))
 }
 

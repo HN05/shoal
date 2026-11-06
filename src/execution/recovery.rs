@@ -158,9 +158,9 @@ impl RestoreCommand<'_> {
             &[("{prompt}", self.prompt)],
         )
         .await?;
-        crate::cli::agents::insert_options(&mut command, self.model_args);
+        crate::agents::insert_options(&mut command, self.model_args);
         // Without Shoal's hooks it still goes through the agent's proxy.
-        crate::cli::agents::with_proxy_args(self.settings, self.name, &mut command);
+        crate::agents::with_proxy_args(self.settings, self.name, &mut command);
         Ok((command, argv.iter().any(|arg| arg.contains("{prompt}"))))
     }
 
@@ -170,13 +170,8 @@ impl RestoreCommand<'_> {
         args.extend(self.model_args);
         args.extend(self.instruction_args);
         args.extend(
-            crate::cli::agents::workspace_args(
-                self.paths,
-                self.settings,
-                self.name,
-                self.workspace,
-            )
-            .await?,
+            crate::agents::workspace_args(self.paths, self.settings, self.name, self.workspace)
+                .await?,
         );
         let takes_field = self
             .settings
@@ -288,8 +283,8 @@ impl Recovery {
             prompt: std::ffi::OsStr::new(&message),
             // A restore runs with what the agent ran with, or not at all, so
             // the record stays for once its templates take the values again.
-            model_args: crate::cli::agents::model_args(&settings, &name, restored.model)?,
-            instruction_args: crate::cli::agents::restored_instruction_args(
+            model_args: crate::agents::model_args(&settings, &name, restored.model)?,
+            instruction_args: crate::agents::restored_instruction_args(
                 &settings,
                 &name,
                 workspace,
@@ -301,7 +296,7 @@ impl Recovery {
             (None, Some(args)) => (restore.resumed(args).await?, true),
             (None, None) => (vec![], false),
         };
-        let proxy = crate::cli::agents::launch_proxy(&settings, &name)?.cloned();
+        let proxy = crate::agents::launch_proxy(&settings, &name)?.cloned();
         Ok(Self {
             agent: name,
             model: restored.model.clone(),

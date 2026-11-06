@@ -108,7 +108,7 @@ async fn tell_failure(ctx: &Context, reported: &Result<i32>) {
 /// in gives it.
 fn turn_end(ctx: &Context, integration: IntegrationKind) -> TurnEnd {
     let variable = |name: &str| std::env::var_os(name);
-    let lifetime = crate::cli::agents::prompt_cache(integration, &variable, &ctx.paths.home);
+    let lifetime = crate::agents::prompt_cache(integration, &variable, &ctx.paths.home);
     TurnEnd {
         prompt_cache_secs: lifetime.map(|lifetime| lifetime.as_secs()),
         final_message: None,

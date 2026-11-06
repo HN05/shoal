@@ -77,15 +77,14 @@ async fn built_in_restore_child() {
         let tools = crate::ai::tools(&Default::default());
         let tool = &tools[agent];
         let directories = [fs::canonicalize("/tmp").unwrap(), directory.to_path_buf()];
-        let launch_args =
-            crate::cli::agents::hook_args(tool.integration, (&workspace).into(), false)
-                .unwrap()
-                .into_iter()
-                .chain(
-                    directories
-                        .iter()
-                        .flat_map(|directory| tool.launch.arguments.add_dir_args(directory)),
-                );
+        let launch_args = crate::agents::hook_args(tool.integration, (&workspace).into(), false)
+            .unwrap()
+            .into_iter()
+            .chain(
+                directories
+                    .iter()
+                    .flat_map(|directory| tool.launch.arguments.add_dir_args(directory)),
+            );
         // The restored session is told its mode's rules again, after its
         // resume arguments.
         let target = crate::protocol::ConfigTarget::Workspace(workspace.id.clone());
@@ -93,7 +92,7 @@ async fn built_in_restore_child() {
             .await
             .unwrap();
         let rules =
-            crate::cli::agents::restored_instruction_args(&settings, agent, &workspace, "worker");
+            crate::agents::restored_instruction_args(&settings, agent, &workspace, "worker");
         assert!(!rules.is_empty());
         let expected: Vec<std::ffi::OsString> = restore
             .iter()

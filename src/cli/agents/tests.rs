@@ -3,12 +3,6 @@ use std::fs;
 use super::*;
 use crate::{config::named_commands, test_support::install_test_script};
 
-/// A workspace on its own branch, whose agent the integrations' tests launch.
-pub(super) const WORKSPACE: AgentWorkspace = AgentWorkspace {
-    name: "fix-login",
-    branch: Some("fix-login-redirect"),
-};
-
 #[test]
 fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
     let bin = tempfile::tempdir().unwrap();
@@ -47,174 +41,15 @@ fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
 }
 
 #[test]
-fn launches_name_the_missing_program_or_undefined_agent() {
-    let settings = crate::config::Config::from_toml(
-        "[agents.probe]\ncommand = [\"shoal-test-missing-program\"]\n",
-    )
-    .unwrap()
-    .resolve(&crate::config::repo::ConfigLayers::default())
-    .unwrap();
-    let error = ensure_installed("probe", &settings).unwrap_err();
-    assert!(
-        error.to_string().contains("shoal-test-missing-program"),
-        "{error}"
-    );
-    assert!(ensure_installed("undefined", &settings).is_err());
-}
-
-#[test]
-fn prompt_wakes_follow_how_each_integration_wakes() {
-    assert_eq!(
-        prompt_wake(IntegrationKind::Codex),
-        Some(PromptWake::Always)
-    );
-    assert_eq!(
-        prompt_wake(IntegrationKind::Claude),
-        Some(PromptWake::AfterInterrupt)
-    );
-    assert_eq!(prompt_wake(IntegrationKind::None), None);
-}
-
-#[test]
-fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
-    let config = crate::config::Config::from_toml(
-        "[machine.proxies.local]\nupstream = 'http://127.0.0.1:8317'\n\
-         \n[machine.agents.claude]\nproxy = 'local'\n[machine.agents.codex]\nproxy = 'local'",
-    )
-    .unwrap();
-    let settings = config.resolve(&Default::default()).unwrap();
-    let with = |name: &str, command: &[&str]| {
-        let mut command: Vec<OsString> = command.iter().map(Into::into).collect();
-        with_proxy_args(&settings, name, &mut command);
-        command
-    };
-    // Claude gets settings of its own for the wrapper's merge to fill in.
-    let claude = with("claude", &["claude", "--continue"]);
-    assert_eq!(claude, ["claude", "--continue", "--settings", "{}"]);
-    // Codex's provider placeholder comes before a prompt after `--`.
-    assert_eq!(
-        with("codex", &["saved-session", "--", "prompt"]),
-        [
-            "saved-session",
-            "{shoal-proxy-codex-provider}",
-            "--",
-            "prompt"
-        ]
-    );
-    // Then the wrapper routes them as it does a launch's own.
+fn a_chat_agent_gets_its_temporary_directory_after_the_configured_ones() {
+    let defaults = crate::config::Config::from_toml("")
+        .unwrap()
+        .resolve(&crate::config::repo::ConfigLayers::default())
+        .unwrap();
     let home = tempfile::tempdir().unwrap();
-    let routing = Routing {
-        url: "http://127.0.0.1:4000",
-        directory: home.path(),
-        private: home.path(),
-    };
-    let read = |path: &OsString| -> serde_json::Value {
-        serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
-    };
-    let routed = route_through_proxy(
-        IntegrationKind::Claude,
-        claude,
-        &routing,
-        home.path(),
-        &BTreeMap::new(),
-    )
-    .unwrap();
-    assert_eq!(
-        read(&routed[3])["env"]["ANTHROPIC_BASE_URL"],
-        "http://127.0.0.1:4000"
-    );
-    // A resume command's own settings stay, joined with the proxy's.
-    let own = with(
-        "claude",
-        &["claude", "--settings", r#"{"model":"opus"}"#, "--continue"],
-    );
-    let routed = route_through_proxy(
-        IntegrationKind::Claude,
-        own,
-        &routing,
-        home.path(),
-        &BTreeMap::new(),
-    )
-    .unwrap();
-    assert_eq!(routed.iter().filter(|arg| *arg == "--settings").count(), 1);
-    let joined = read(&routed[2]);
-    assert_eq!(joined["model"], "opus", "{joined}");
-    assert_eq!(joined["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:4000");
-    // An agent without a proxy runs its command as configured.
-    let plain = crate::config::Config::from_toml("").unwrap();
-    let plain = plain.resolve(&Default::default()).unwrap();
-    let mut command: Vec<OsString> = vec!["claude".into(), "--continue".into()];
-    with_proxy_args(&plain, "claude", &mut command);
-    assert_eq!(command, ["claude", "--continue"]);
-}
-
-#[test]
-fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
-    let config = crate::config::Config::from_toml(
-        "[machine.proxies.local]\nupstream = 'http://127.0.0.1:8317'\n\
-         \n[machine.agents.pi]\nproxy = 'local'\n[machine.agents.claude]\nproxy = 'local'",
-    )
-    .unwrap();
-    let settings = config.resolve(&Default::default()).unwrap();
-    assert!(ensure_available("pi", &settings).is_err());
-    // Every launch, a resumed one included, prepares its proxy this way.
-    assert!(launch_proxy(&settings, "pi").is_err());
-    let claude = launch_proxy(&settings, "claude").unwrap().unwrap();
-    assert_eq!(claude.upstream, "http://127.0.0.1:8317");
-    assert!(launch_proxy(&settings, "codex").unwrap().is_none());
-    // Claude can; whether it is installed is another matter.
-    if let Err(error) = ensure_available("claude", &settings) {
-        assert!(!error.to_string().contains("proxy"), "{error}");
-    }
-}
-
-#[test]
-fn agents_get_each_configured_directory_as_they_resolve_it() {
-    let settings = |text: &str| {
-        let config = crate::config::Config::from_toml(text).unwrap();
-        config
-            .resolve(&crate::config::repo::ConfigLayers::default())
-            .unwrap()
-    };
-    let home = tempfile::tempdir().unwrap();
-    let defaults = settings("");
     let tmp = fs::canonicalize("/tmp").unwrap();
-    assert_eq!(
-        agent_dir_args(&defaults, "claude", home.path()),
-        [OsString::from(format!("--add-dir={}", tmp.display()))]
-    );
-    assert_eq!(
-        agent_dir_args(&defaults, "codex", home.path()),
-        [OsString::from("--add-dir"), tmp.clone().into()]
-    );
-    // A tool that takes no other working directory gets none.
-    assert!(agent_dir_args(&defaults, "pi", home.path()).is_empty());
-    // `~/` names a path under the home directory; one reached again through
-    // a symlink counts once.
-    let configured = settings("agent.dirs = ['/tmp', '~/cache', '~/link']\n");
     let cache = home.path().join("cache");
     fs::create_dir(&cache).unwrap();
-    std::os::unix::fs::symlink(&cache, home.path().join("link")).unwrap();
-    assert_eq!(
-        agent_dirs(&configured, home.path()),
-        BTreeSet::from([tmp.clone(), fs::canonicalize(&cache).unwrap()])
-    );
-    assert!(agent_dirs(&settings("agent.dirs = []\n"), home.path()).is_empty());
-    // A workspace's or chat's own directory follows the configured ones.
-    assert_eq!(
-        dir_args(
-            &defaults,
-            "codex",
-            home.path(),
-            Some(Path::new("/root/repo"))
-        ),
-        [
-            OsString::from("--add-dir"),
-            tmp.clone().into(),
-            "--add-dir".into(),
-            "/root/repo".into()
-        ]
-    );
     let chat = Chat {
         mode: "chat".into(),
         number: 1,
@@ -269,37 +104,6 @@ fn enabled_turns_an_agent_off_and_happys_agents_on() {
     }
 }
 
-#[cfg(feature = "happy")]
-#[test]
-fn an_app_run_agent_takes_the_model_of_the_agent_it_starts() {
-    let config = crate::config::Config::from_toml(
-        "[agent]\ndefault = 'happy-claude'\neffort = 'xhigh'\n[agents.claude]\nmodel = 'opus'\neffort = 'low'\n",
-    )
-    .unwrap();
-    let settings = config.resolve(&Default::default()).unwrap();
-    let choice = |model: Option<&str>, effort: &str| ModelChoice {
-        model: model.map(str::to_owned),
-        effort: Some(effort.to_owned()),
-    };
-    // `[agent]` chose happy-claude, so its effort applies over Claude's own.
-    assert_eq!(
-        resolve_model(&settings, "happy-claude", Default::default()),
-        choice(Some("opus"), "xhigh")
-    );
-    assert_eq!(
-        resolve_model(&settings, "happy-codex", Default::default()),
-        ModelChoice::default()
-    );
-    let requested = ModelChoice {
-        model: None,
-        effort: Some("high".into()),
-    };
-    assert_eq!(
-        resolve_model(&settings, "happy-claude", requested),
-        choice(Some("opus"), "high")
-    );
-}
-
 #[test]
 fn a_reviewer_needs_only_its_review_command_installed() {
     let config = crate::config::Config::from_toml(
@@ -315,20 +119,4 @@ fn a_reviewer_needs_only_its_review_command_installed() {
         "{refused}"
     );
     assert!(ensure_reviewer_available("unknown", &settings).is_err());
-}
-
-#[test]
-fn a_restored_agent_whose_mode_is_gone_gets_the_default_rules() {
-    let settings = crate::config::Config::default()
-        .resolve(&Default::default())
-        .unwrap();
-    let workspace: crate::model::Workspace = serde_json::from_value(serde_json::json!({
-        "id": "id", "repository_id": "repo", "name": "topic", "branch": "topic",
-        "path": "/work/topic", "state": "ready", "created_at": 0, "updated_at": 0,
-    }))
-    .unwrap();
-    let told = |mode| restored_instruction_args(&settings, "claude", &workspace, mode);
-    let kept = told(modes::DEFAULT);
-    assert!(!kept.is_empty());
-    assert_eq!(told("removed"), kept);
 }

@@ -4,9 +4,10 @@ use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
 
-use super::{Integration, Launch, LaunchOptions, Wake, ensure_available};
+use super::{Launch, LaunchOptions};
 use crate::{
     agent::Agent,
+    agents::{Integration, Wake, ensure_available},
     cli::{
         context::Context,
         terminal,
@@ -52,10 +53,10 @@ pub(super) async fn tracked(
     launch: Launch,
 ) -> Result<i32> {
     ensure_available(&launch.name, &launch.settings)?;
-    let model_args = super::model_args(&launch.settings, &launch.name, &launch.model)?;
+    let model_args = crate::agents::model_args(&launch.settings, &launch.name, &launch.model)?;
     if let Some(trust) = integration.trust_file() {
         let profile = &launch.settings.launch(&launch.name).environment;
-        trust.trust_tracked(ctx, &launch.workspace, profile).await;
+        super::trust::tracked(trust, ctx, &launch.workspace, profile).await;
     }
     let command = command(ctx, &launch, model_args).await?;
     let Launch {
@@ -105,7 +106,7 @@ async fn command(
         prompt.clone(),
         [
             model_args,
-            super::workspace_args(&ctx.paths, settings, name, workspace).await?,
+            crate::agents::workspace_args(&ctx.paths, settings, name, workspace).await?,
         ]
         .concat(),
         args.clone(),
@@ -120,18 +121,6 @@ async fn command(
         &[("{prompt}", OsStr::new(&prompt))],
     )
     .await
-}
-
-/// How updates reach an agent with `integration` launched under `settings`:
-/// pushed when it wakes for them.
-pub(super) fn delivery(integration: &dyn Integration, settings: &Effective) -> templates::Delivery {
-    match integration.wakes() {
-        Wake::Hook => templates::Delivery::Pushed,
-        Wake::Prompt if crate::terminal::agents_can_be_prompted(settings) => {
-            templates::Delivery::Pushed
-        }
-        Wake::Prompt | Wake::Never => templates::Delivery::Watched,
-    }
 }
 
 /// How updates reach a chat's agent with `integration`, which runs without

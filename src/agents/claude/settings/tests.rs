@@ -26,7 +26,7 @@ fn settings(merged: &[OsString]) -> Value {
 
 /// `merge` for an agent in `directory`, with its private files in `private`.
 fn merge_in(args: &mut Vec<OsString>, directory: &Path, private: &Path) -> Result<()> {
-    let routing = crate::cli::agents::Routing {
+    let routing = crate::agents::Routing {
         url: URL,
         directory,
         private,

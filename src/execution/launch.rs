@@ -548,7 +548,7 @@ async fn prepare_agent_launch(
     };
     // An agent Shoal cannot point at its proxy does not start.
     let routed = match agent {
-        Some(agent) => crate::cli::agents::launch_proxy(&settings, &agent.name)?.cloned(),
+        Some(agent) => crate::agents::launch_proxy(&settings, &agent.name)?.cloned(),
         None => None,
     };
     let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;

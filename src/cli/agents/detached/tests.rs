@@ -46,13 +46,16 @@ fn stopping_a_session_stops_the_agent_it_started() {
     }
 }
 
+#[cfg(feature = "happy")]
 #[test]
 fn a_workspace_session_gets_the_workspace_directories_before_its_own_arguments() {
     let config = crate::config::Config::from_toml("").unwrap();
     let settings = config
         .resolve(&crate::config::repo::ConfigLayers::default())
         .unwrap();
-    let happy = &super::super::happy::CLAUDE;
+    let happy = crate::agents::agent_integration(&settings, "happy-claude")
+        .detached()
+        .expect("Happy runs its agents detached");
     let directories = vec![OsString::from("--add-dir=/root/repo")];
     let (_, args) = workspace_input(
         happy,

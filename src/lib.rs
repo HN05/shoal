@@ -11,6 +11,8 @@ pub mod client;
 #[cfg(feature = "cli")]
 mod agent_git;
 #[cfg(feature = "cli")]
+mod agents;
+#[cfg(feature = "cli")]
 mod build;
 #[cfg(feature = "cli")]
 mod caches;

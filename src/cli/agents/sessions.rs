@@ -9,10 +9,9 @@ use std::{
 
 use anyhow::{Result, ensure};
 
-use super::AgentEnvironment;
 use crate::{
     cli::{commands::workspaces, context::Context},
-    client::transcripts,
+    client::transcripts::{self, AgentEnvironment},
     config::Effective,
     model::Workspace,
     protocol::ConfigTarget,

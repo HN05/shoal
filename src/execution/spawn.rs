@@ -122,7 +122,7 @@ impl AgentLaunch {
     /// `execution` in `workspace`, its turns' ends when the proxy's failure
     /// stream ends them.
     pub(super) fn report_proxy(&mut self, paths: &Paths, workspace: &str, execution: &str) {
-        let ends_turns = crate::cli::agents::proxy_ends_turns(self.kind());
+        let ends_turns = crate::agents::proxy_ends_turns(self.kind());
         if let Some(proxy) = self.proxy.as_mut() {
             proxy.report_turns(paths, workspace, execution, ends_turns);
         }
@@ -167,12 +167,12 @@ impl AgentLaunch {
             return Ok(command.to_vec());
         };
         let configured = self.configured_environment(environment);
-        let routing = crate::cli::agents::Routing {
+        let routing = crate::agents::Routing {
             url: &proxy.url,
             directory,
             private: proxy.private_dir(),
         };
-        crate::cli::agents::route_through_proxy(
+        crate::agents::route_through_proxy(
             self.kind(),
             command.to_vec(),
             &routing,
@@ -207,7 +207,7 @@ impl AgentLaunch {
     ) -> Vec<(&'static str, &'static str)> {
         let configured = self.configured_environment(environment);
         let variable = |name: &str| crate::env::configured_var(&configured, name);
-        crate::cli::agents::proxy_defaults(self.kind(), &variable)
+        crate::agents::proxy_defaults(self.kind(), &variable)
     }
 
     /// What the agent's environment gets so its requests name its proxy's
@@ -219,7 +219,7 @@ impl AgentLaunch {
     ) -> Vec<(&'static str, OsString)> {
         let configured = self.configured_environment(environment);
         let variable = |name: &str| self.variable(&configured, name);
-        crate::cli::agents::proxy_environment(self.kind(), key, &variable)
+        crate::agents::proxy_environment(self.kind(), key, &variable)
     }
 }
 

@@ -74,7 +74,7 @@ impl Manager {
         let configured = environments.as_deref().unwrap_or_default();
         let home = &self.paths.home;
         let warnings =
-            crate::cli::agents::forget_repository_trust(home, repo, workspace_paths, configured);
+            crate::agents::forget_repository_trust(home, repo, workspace_paths, configured);
         for warning in warnings {
             log!("contribution {name}: {warning}");
         }

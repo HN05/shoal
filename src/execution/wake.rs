@@ -8,7 +8,7 @@ use std::time::Duration;
 use anyhow::Result;
 
 use crate::{
-    cli::agents::PromptWake,
+    agents::PromptWake,
     client::connection,
     model::ExecutionPlan,
     paths::Paths,
@@ -39,7 +39,7 @@ pub(super) fn session(
     integration: Option<crate::ai::IntegrationKind>,
     mode: &super::Mode,
 ) -> Option<Wake> {
-    let when = integration.and_then(crate::cli::agents::prompt_wake)?;
+    let when = integration.and_then(crate::agents::prompt_wake)?;
     if matches!(mode, super::Mode::Detached { .. }) {
         return None;
     }

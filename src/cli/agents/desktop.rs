@@ -8,12 +8,10 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 
-use super::{
-    AgentEnvironment,
-    trust::{CLAUDE_CODE, CODEX, TrustFile},
-};
 use crate::{
+    agents::trust::{CLAUDE_CODE, CODEX, TrustFile},
     cli::{args::workspace::DesktopApp, context::Context},
+    client::transcripts::AgentEnvironment,
     env, execution,
     model::Workspace,
 };
@@ -147,7 +145,7 @@ pub(in crate::cli) async fn hand_off(
     if let Some(trust) = app.trust {
         // The app runs with this process's environment, not the workspace's.
         let environment = AgentEnvironment::inherited(&ctx.paths.home);
-        trust.trust_workspace(ctx, workspace, &environment).await;
+        super::trust::workspace(trust, ctx, workspace, &environment).await;
     }
     run_launcher(app, &workspace.path, args).await
 }
