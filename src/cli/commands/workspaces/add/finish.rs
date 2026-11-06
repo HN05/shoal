@@ -54,9 +54,19 @@ pub(super) async fn execute_add_with_target(
     let Some(entry) = plan.queue_entry.clone() else {
         return add_planned(ctx, plan, target, issue, AgentStart::Here).await;
     };
-    let _hold = agent_queue::Hold::start(&ctx.paths, &entry).await;
-    let result = add_planned(ctx, plan, target, issue, AgentStart::Here).await;
-    failing_entry(ctx, Some(&entry), result).await
+    let added = add_planned(ctx, plan, target, issue, AgentStart::Here);
+    holding(ctx, &entry, added).await
+}
+
+/// Run `start` under queue `entry`'s slot, held until its agent takes it
+/// over, freeing the slot with the error when `start` fails.
+async fn holding<T>(
+    ctx: &Context,
+    entry: &str,
+    start: impl std::future::Future<Output = Result<T>>,
+) -> Result<T> {
+    let _hold = agent_queue::Hold::start(&ctx.paths, entry).await;
+    failing_entry(ctx, Some(entry), start.await).await
 }
 
 /// Where the planned workspace's agent starts.
@@ -181,9 +191,8 @@ pub(super) async fn add_planned(
         return agent.launch(ctx, *workspace, opening, args, fork).await;
     };
     crate::env::launch_queue_entry(&entry);
-    let _hold = agent_queue::Hold::start(&ctx.paths, &entry).await;
-    let launched = agent.launch(ctx, *workspace, opening, args, fork).await;
-    failing_entry(ctx, Some(&entry), launched).await
+    let launched = agent.launch(ctx, *workspace, opening, args, fork);
+    holding(ctx, &entry, launched).await
 }
 
 /// The launch of `agent` in `mode` that preparing the added workspace
