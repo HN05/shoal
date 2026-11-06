@@ -645,13 +645,8 @@ configured command for another agent, plus proven child
 
 ## Delivery
 
-When commit history is available, check that each commit has one coherent
-purpose and keeps its tests and documentation together. Flag avoidable bundles
-of independent changes and suggest concrete boundaries. The size guidance in
-AGENTS.md is a prompt to inspect, not a line-count gate; tightly coupled
-changes are a valid reason for a larger commit. Flag a PR that changes what
-Shoal prints or draws in the terminal without examples of the new interface in
-its description or comments. Flag a PR that fixes something beyond its
+Flag a PR that changes what Shoal prints or draws in the terminal without
+examples of the new interface in its description or comments. Flag a PR that fixes something beyond its
 assigned issue, such as a failing test, without a closing reference for it or
 saying that no open issue tracks it. After fixing substantial findings, an agent
 requests another review and marks the PR ready only once it comes back clean.
@@ -662,6 +657,7 @@ leave merging to the user instead of asking for permission to merge.
 
 - Formatting and import order (rustfmt and clippy run in CI).
 - Restating what a commit does, or style preferences not backed by `AGENTS.md`.
+- Commit history: how the PR splits into commits, their sizes and their messages.
 
 Label conventions: `area/` allows several affected areas; `type/` and
 `complexity/` each allow one. Reviewer request labels are combinable:
