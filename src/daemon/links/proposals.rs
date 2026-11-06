@@ -92,12 +92,14 @@ impl Manager {
             duplicates: Vec::new(),
             follow_up: None,
         });
-        let request = proposal(
+        let mut request = proposal(
             space.id(),
             Target::IssueOpen,
             proposals::ISSUE,
             specification,
         );
+        // A chat without a repository proposes it for the one it acts in.
+        request.repository_id = Some(space.repository_id().to_owned());
         self.record_proposal(space.name(), request, proposals::propose_issue, files)
             .await
     }
@@ -241,7 +243,8 @@ impl Manager {
             );
         }
         self.ensure_not_pushing(&request)?;
-        let space = self.find_link_space(&request.space_id).await?;
+        let repository = request.repository_id.as_deref();
+        let space = self.find_link_space(&request.space_id, repository).await?;
         let space = space.as_ref();
         // A PR an earlier approval posted was pushed already.
         if approve && request.pending_push().is_some() && request.url.is_none() {
@@ -533,7 +536,8 @@ impl Manager {
         link: bool,
         item: &Item,
     ) -> bool {
-        let Some(space) = space else {
+        // A chat without a repository records no items.
+        let Some(space) = space.filter(|space| space.keeps_links()) else {
             return false;
         };
         let recorded = async {

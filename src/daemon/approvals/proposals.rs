@@ -108,11 +108,16 @@ impl ApprovalRequest {
 /// A stored proposal, and whether this call recorded it.
 pub type Recorded = (ApprovalRequest, bool);
 
-/// Record a proposed issue for the space's repository, or return the
-/// identical one the space proposed before and the user has not decided.
+/// Record a proposed issue for the repository it names, else the space's,
+/// or return the identical one the space proposed before and the user has
+/// not decided.
 pub fn propose_issue(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Recorded> {
     require_ready_space(tx, &request.space_id)?;
-    let (_, repository) = space_record(tx, &request.space_id)?;
+    let repository = match request.repository_id.clone() {
+        Some(repository) => repository,
+        None => (space_record(tx, &request.space_id)?.1)
+            .context("a space without a repository names the repository of its proposal")?,
+    };
     let existing = repository_proposals(tx, &repository)?
         .into_iter()
         .find(|r| {
@@ -213,8 +218,9 @@ fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Approval
     Ok(request)
 }
 
-/// The name and repository of the space `id`, a workspace or a chat.
-fn space_record(db: &Connection, id: &str) -> Result<(String, String)> {
+/// The name and repository of the space `id`, a workspace or a chat, which
+/// may have none.
+fn space_record(db: &Connection, id: &str) -> Result<(String, Option<String>)> {
     Ok(db.query_row(
         "SELECT name,repository_id FROM workspaces WHERE id=?1
             UNION ALL SELECT name,repository_id FROM chats WHERE id=?1",

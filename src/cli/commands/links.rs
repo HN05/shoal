@@ -64,7 +64,7 @@ pub(super) async fn select_in_context(
         ItemContext::Workspace(_) | ItemContext::Chat(_) => {
             resolve_kind(ctx, context.clone(), selection).await?
         }
-        ItemContext::Checkout(_) => selection,
+        ItemContext::Checkout(_) | ItemContext::ChatIn { .. } => selection,
     };
     Ok((context, selection))
 }

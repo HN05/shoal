@@ -143,6 +143,16 @@ impl Manager {
                     checkout,
                 }
             }
+            // Only a chat without a repository acts in another's checkout,
+            // and only while it runs, as any chat's place.
+            ItemContext::ChatIn { chat, repository } => {
+                let (chat, checkout) = self.chat_acting_in(chat, repository).await?;
+                anyhow::ensure!(chat.restore.is_none(), "no running chat {}", chat.name);
+                Place::Chat {
+                    id: chat.id,
+                    checkout,
+                }
+            }
             ItemContext::Checkout(_) => Place::Checkout(self.context_checkout(context).await?),
         })
     }

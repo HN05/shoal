@@ -4,9 +4,9 @@ use super::*;
 
 #[test]
 fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
-    // The agent records where it runs, its temporary directory, its process
-    // and how listing a registered repository's issues fails without a
-    // forge, then talks until a signal ends it.
+    // The agent records where it runs, its temporary directory, its
+    // process and how listing and opening a registered repository's issues
+    // fail without a forge, then talks until a signal ends it.
     let fixture = Fixture::with_config(Some(
         "[agents.claude]\ncommand = ['sh', '-c', '. \"$HOME/chat-agent.sh\"', 'agent']\n",
     ));
@@ -22,8 +22,10 @@ fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
             "pwd -P > \"$HOME/chat-dir\"\n\
              printf %s \"$TMPDIR\" > \"$HOME/chat-tmp\"\n\
              echo $$ > \"$HOME/chat-pid\"\n\
-             '{}' --json issue list --repo \"$(cat \"$HOME/repo-path\")\" \
+             '{0}' --json issue list --repo \"$(cat \"$HOME/repo-path\")\" \
                  > /dev/null 2> \"$HOME/list-error\" < /dev/null\n\
+             '{0}' --json issue open --title Flaky --repo \"$(cat \"$HOME/repo-path\")\" \
+                 > /dev/null 2> \"$HOME/open-error\" < /dev/null\n\
              trap 'exit 0' TERM\n\
              touch \"$HOME/chat-started\"\n\
              while :; do sleep 1; done\n",
@@ -71,10 +73,12 @@ fn orchestrate_starts_a_chat_without_a_repository_in_root_dir() {
     let root = fs::canonicalize(home.join("shoal")).unwrap();
     assert_eq!(started.directory, root);
     let id = chats[0]["id"].as_str().unwrap();
-    // It reads the issues of a registered repository from that repository's
-    // checkout, which has no forge here.
-    let listing = fs::read_to_string(home.join("list-error")).unwrap();
-    assert!(listing.contains("origin remote"), "{listing}");
+    // It reads and opens the issues of a registered repository in that
+    // repository's checkout, which has no forge here.
+    for error in ["list-error", "open-error"] {
+        let error = fs::read_to_string(home.join(error)).unwrap();
+        assert!(error.contains("origin remote"), "{error}");
+    }
     assert_eq!(started.tmp_dir, root.join(".tmp").join(id));
     let chats = fixture.ok(&["work", "--chats"]);
     assert!(!chats[0]["restore"].is_null(), "{chats}");

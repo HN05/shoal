@@ -43,13 +43,13 @@ impl Manager {
         context: &ItemContext,
     ) -> Result<ReadPlace> {
         match context {
-            ItemContext::Workspace(selector) | ItemContext::Chat(selector) => {
-                let space = self.link_space(selector).await?;
-                self.verify_space(&space).await?;
-                Ok(ReadPlace::Space(space))
-            }
             ItemContext::Checkout(selector) => {
                 Ok(ReadPlace::Checkout(self.repository(selector).await?))
+            }
+            _ => {
+                let space = self.context_space(context).await?;
+                self.verify_space(&space).await?;
+                Ok(ReadPlace::Space(space))
             }
         }
     }

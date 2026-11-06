@@ -69,10 +69,7 @@ impl Manager {
         validate_check_name(name)?;
         let place = self.place(context).await?;
         let (forge, account) = self.place_forge_account(&place).await?;
-        let space = match place.space_id() {
-            Some(id) => Some(self.link_space(id).await?),
-            None => None,
-        };
+        let space = self.context_space_if_any(context).await?;
         let url = self.check_log_pr(space.as_ref(), &forge, selection).await?;
         forge.failed_check_log(&account, &url, name).await
     }

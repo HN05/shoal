@@ -31,7 +31,12 @@ proposed issues and PRs; deny one with `--reason` or pass it up. You cannot
 merge PRs, approve or request changes on them, approve CI runs or read the
 user's notifications; ask the user with `shoal alerts send`.
 
-To hand the user a file, such as a report, attach it with
+Every registered repository counts as your own. Name the one a command acts in
+with `--repo <repository>` or an issue or PR URL: `shoal issue list`,
+`shoal view`, `shoal issue open`, `shoal issue comment`, `shoal issue edit` and
+`shoal pr comment` work there under that repository's `[permissions]`, which may
+turn an issue you open into a proposal for the user. You open no PRs; the agents
+of the workspaces do. To hand the user a file, such as a report, attach it with
 `shoal files add FILE#TITLE`.
 
 To ask the user something, run `shoal questions ask --in-chat`, then write the

@@ -37,8 +37,9 @@ impl Manager {
         scoped: bool,
     ) -> Result<Selected> {
         match context {
-            ItemContext::Workspace(space) | ItemContext::Chat(space) => {
-                self.select_items(space, selection, elsewhere).await
+            ItemContext::Workspace(_) | ItemContext::Chat(_) | ItemContext::ChatIn { .. } => {
+                let space = self.context_space(context).await?;
+                self.select_items(&space, selection, elsewhere).await
             }
             ItemContext::Checkout(selector) => {
                 let checkout = self.repository(selector).await?;

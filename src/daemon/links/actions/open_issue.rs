@@ -3,7 +3,7 @@
 //! user's approval where the repository asks for that.
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
 
 use crate::{
     config::{
@@ -34,6 +34,9 @@ use crate::{
 /// Why `--link` is refused outside a workspace or chat.
 const LINK_NEEDS_SPACE: &str =
     "--link needs a workspace or chat to assign the issue to; run this in one or pass --space";
+/// Why `--link` is refused in a chat without a repository.
+const LINK_NEEDS_REPOSITORY: &str =
+    "a chat without a repository links no issues; open the issue without --link";
 
 impl Manager {
     /// Open an issue as the agent account in the repository of `context`, or
@@ -53,8 +56,8 @@ impl Manager {
                 self.open_workspace_issue(selector, issue, repository, link, caller)
                     .await
             }
-            ItemContext::Chat(selector) => {
-                self.open_chat_issue(selector, issue, repository, link, caller)
+            ItemContext::Chat(_) | ItemContext::ChatIn { .. } => {
+                self.open_chat_issue(context, issue, repository, link, caller)
                     .await
             }
             ItemContext::Checkout(selector) => {
@@ -64,20 +67,37 @@ impl Manager {
         }
     }
 
-    /// Open the issue from the chat's checkout as a checkout opens one, and
-    /// record it as opened by the chat, or assign it to the chat with `link`.
-    /// The chat's own agent, a scoped `caller`, records it for the user's
-    /// approval instead where `[permissions]` says so, as a workspace's does.
+    /// Open the issue from the checkout of the chat `context` names, its
+    /// repository's or the one a chat without a repository acts in, as a
+    /// checkout opens one, and record it as opened by the chat, or assign it
+    /// to the chat with `link`. The chat's own agent, a scoped `caller`,
+    /// records it for the user's approval instead where `[permissions]` says
+    /// so, as a workspace's does. A chat without a repository acting in no
+    /// registered one opens it as [`Self::open_outside_issue`] does, and
+    /// records nothing.
     async fn open_chat_issue(
         &self,
-        selector: &str,
+        context: &ItemContext,
         issue: NewIssue,
         repository: Option<String>,
         link: bool,
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
+        let space = match self.chat_outside_repositories(context).await? {
+            // The registered repository it names counts as its own.
+            Some(chat) => match self.registered_named(repository.as_deref()).await? {
+                Some(checkout) => LinkSpace::Chat { chat, checkout },
+                None => {
+                    anyhow::ensure!(!link, "{LINK_NEEDS_REPOSITORY}");
+                    return self
+                        .open_outside_issue(&chat, issue, repository, caller)
+                        .await;
+                }
+            },
+            None => self.context_space(context).await?,
+        };
         let proposer = self.proposer(caller).await;
-        let space = self.link_space(selector).await?;
+        anyhow::ensure!(!link || space.keeps_links(), "{LINK_NEEDS_REPOSITORY}");
         let checkout = self.context_checkout(&space.item_context()).await?;
         // The chat's gate keeps a link meanwhile from taking its issue's place.
         let _gate = self.gates.lock_prs([space.id()]).await;
@@ -113,12 +133,67 @@ impl Manager {
         else {
             bail!("a chat opens issues without a proposal");
         };
-        let (linked, warning) = self
-            .keep_created(space.id(), ItemKind::Issue, &opened.item, link)
-            .await?;
-        opened.linked = linked;
-        opened.warnings.extend(warning);
+        if space.keeps_links() {
+            let (linked, warning) = self
+                .keep_created(space.id(), ItemKind::Issue, &opened.item, link)
+                .await?;
+            opened.linked = linked;
+            opened.warnings.extend(warning);
+        }
         Ok(OpenOutcome::Opened(opened))
+    }
+
+    /// The chat without a repository the chat `context` names, if it is one.
+    async fn chat_outside_repositories(
+        &self,
+        context: &ItemContext,
+    ) -> Result<Option<crate::model::Chat>> {
+        let ItemContext::Chat(selector) = context else {
+            return Ok(None);
+        };
+        let chat = self.recorded_chat(selector).await?;
+        Ok(chat.filter(|chat| chat.repository_id.is_none()))
+    }
+
+    /// Open the issue a chat without a repository opens in the repository
+    /// the URL `repository` names, which is not registered, and so another
+    /// repository under the global `[permissions] issue_other_repositories`.
+    /// A proposal belongs to a registered repository, so a scoped `caller`
+    /// that the setting would have propose one is refused.
+    async fn open_outside_issue(
+        &self,
+        chat: &crate::model::Chat,
+        issue: NewIssue,
+        repository: Option<String>,
+        caller: Option<&Caller>,
+    ) -> Result<OpenOutcome> {
+        let named = repository
+            .context("a chat without a repository names where the issue opens; pass --repo")?;
+        let forge = ForgeRepo::resolve(&named, &self.forge_hosts())
+            .await
+            .with_context(|| format!("{named} is not registered; name it by its URL"))?;
+        let destination = IssueDestination {
+            forge,
+            elsewhere: true,
+        };
+        if self.proposer(caller).await.is_some() {
+            let settings = self.chat_settings(chat).await?;
+            anyhow::ensure!(
+                destination.opening(&settings)? == Opening::Direct,
+                "agents propose issues only in registered repositories from a chat without a \
+                 repository, and [permissions] issue_other_repositories asks for a proposal; ask \
+                 the user to open it"
+            );
+        }
+        let Created { item, unfinished } = (destination.forge)
+            .create_issue(&self.agent_account(), &issue)
+            .await?;
+        Ok(OpenOutcome::opened(Opened {
+            item,
+            created: true,
+            linked: false,
+            warnings: unfinished.into_iter().collect(),
+        }))
     }
 
     /// Open the issue for the workspace and record it as opened there. A

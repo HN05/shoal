@@ -63,18 +63,18 @@ impl Manager {
         input: Option<String>,
     ) -> Result<(ForgeRepo, u64, String)> {
         let (forge, input) = match context {
-            ItemContext::Workspace(selector) | ItemContext::Chat(selector) => {
-                let space = self.link_space(selector).await?;
+            ItemContext::Checkout(selector) => {
+                let checkout = self.repository(selector).await?;
+                let input = input.context(super::actions::NOTHING_LINKED)?;
+                (self.checkout_forge(&checkout).await?, input)
+            }
+            _ => {
+                let space = self.context_space(context).await?;
                 let input = match input {
                     Some(input) => input,
                     None => self.linked_item(space.id(), ItemKind::Pr).await?,
                 };
                 (self.space_forge(&space).await?, input)
-            }
-            ItemContext::Checkout(selector) => {
-                let checkout = self.repository(selector).await?;
-                let input = input.context(super::actions::NOTHING_LINKED)?;
-                (self.checkout_forge(&checkout).await?, input)
             }
         };
         let (number, url) = forge.pull(&input)?;

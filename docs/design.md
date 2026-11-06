@@ -2168,7 +2168,11 @@ config alone, as a master session whose scope reaches every space on the
 machine. It starts work below itself in any repository, receives what its
 subtree reports as any parent does, and acts on other spaces as a coordinator
 acts below it, while what the scope keeps from every agent stays the user's,
-so the user can hand coordination to a tracked, scoped agent.
+so the user can hand coordination to a tracked, scoped agent. Every registered
+repository counts as its own, so its forge actions take the repository they
+act in and that repository's `[permissions]`, and its proposals belong to
+that repository; it links nothing, since its links would name no one
+repository.
 
 Issues split by whether their plan is settled: `[issue] plan_label` marks one
 that needs the owner's choices and `planned_label` one whose body holds a plan

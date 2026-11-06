@@ -60,7 +60,7 @@ impl Manager {
         match place {
             ReadPlace::Space(space) => {
                 let selection = self.classify_number(space, selection, account).await?;
-                Ok(self.select_items(space.id(), &selection, true).await?.items)
+                Ok(self.select_items(space, &selection, true).await?.items)
             }
             ReadPlace::Checkout(checkout) => {
                 let item = (self.checkout_item(checkout, selection, true, account)).await?;

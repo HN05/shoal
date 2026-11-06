@@ -202,12 +202,13 @@ pub(crate) async fn store_issue_proposal(manager: &Manager, space: &LinkSpace) -
         duplicates: Vec::new(),
         follow_up: None,
     });
-    let request = proposal(
+    let mut request = proposal(
         space.id(),
         Target::IssueOpen,
         proposals::ISSUE,
         specification,
     );
+    request.repository_id = Some(space.repository_id().to_owned());
     let (request, _) = manager
         .store_proposal(request, proposals::propose_issue)
         .await

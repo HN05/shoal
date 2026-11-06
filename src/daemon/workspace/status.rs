@@ -107,20 +107,19 @@ impl Manager {
     /// The selected items in link order, with the worktree to look them up
     /// from. With `elsewhere`, an issue or PR URL of another repository
     /// selects that item.
-    pub async fn select_items(
+    pub(crate) async fn select_items(
         &self,
-        selector: &str,
+        space: &crate::daemon::links::space::LinkSpace,
         selection: &link::Selection,
         elsewhere: bool,
     ) -> Result<Selected> {
-        let space = self.link_space(selector).await?;
         let other = match elsewhere {
             true => self.item_elsewhere(space.origin_path(), selection).await?,
             false => None,
         };
         let items = match other {
             Some(item) => vec![item],
-            None => (self.selected_items(&space, selection).await?)
+            None => (self.selected_items(space, selection).await?)
                 .into_iter()
                 .map(|(url, kind)| SelectedItem { url, kind })
                 .collect(),

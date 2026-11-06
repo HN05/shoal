@@ -1941,11 +1941,18 @@ queues their agents, resumes the ones it or the spaces below it stopped, and
 removes those you hold nothing in, under the
 [scoped workspace commands](#scoped-workspace-commands) rules. It decides only
 the requests routed to it, with a grant; merging, PR verdicts, CI approval and
-your notifications stay with you. It reads the issues and PRs of every
-registered repository and changes them only through a space of their
-repository, as `--space` names one, keeps its attached files in the state
-directory, and [`shoal move`](#move-a-space-to-another-machine)
-refuses it.
+your notifications stay with you. Every registered repository counts as its
+own: `--repo` or an issue or PR URL names the one a command acts in, and
+there it reads, opens, comments on, labels and edits issues, comments on PRs
+and sends forge API requests under that repository's `[permissions]`, and
+its proposals go to you as that repository's; through `--space` it acts on a
+space's items as a coordinator does. It opens no PRs and links nothing. In
+a repository that is not registered it only opens an issue, named by its
+URL, where the global `[permissions] issue_other_repositories` is
+`"direct"`, since a proposal belongs to a registered repository; it reads
+such a repository only through a space whose own repository reads it. Its attached files stay in
+the `.attachments` of the `root_dir` it started in, however `root_dir` changes
+later, which the daemon marks with its state directory as it does `.tmp`, and [`shoal move`](#move-a-space-to-another-machine) refuses it.
 
 ### Planning issues
 

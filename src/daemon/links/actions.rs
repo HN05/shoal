@@ -43,13 +43,14 @@ impl Manager {
     ) -> Result<Item> {
         action.validate(kind)?;
         match context {
-            ItemContext::Workspace(selector) | ItemContext::Chat(selector) => {
-                self.space_item_action(selector, kind, input, action).await
-            }
             ItemContext::Checkout(selector) => {
                 let input = input.context(NOTHING_LINKED)?;
                 self.checkout_item_action(selector, kind, &input, action)
                     .await
+            }
+            _ => {
+                let space = self.context_space(context).await?;
+                self.space_item_action(space, kind, input, action).await
             }
         }
     }
@@ -58,12 +59,11 @@ impl Manager {
     /// change.
     async fn space_item_action(
         &self,
-        selector: &str,
+        space: LinkSpace,
         kind: ItemKind,
         input: Option<String>,
         action: Action,
     ) -> Result<Item> {
-        let space = self.link_space(selector).await?;
         self.verify_space(&space).await?;
         let forge = self.space_forge(&space).await?;
         let input = match input {

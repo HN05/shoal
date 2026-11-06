@@ -255,15 +255,20 @@ impl DownloadPiece {
 #[serde(transparent)]
 pub struct ViewPiece(pub String);
 
-/// Where an item request runs: in a workspace, in a running chat, by its ID,
-/// which acts in its repository's registered checkout, or in the registered
-/// checkout of a repository, named by its ID, for a request that needs only
-/// the repository.
+/// Where an item request runs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemContext {
+    /// The workspace, by its ID.
     Workspace(String),
+    /// The running chat, by its ID, which acts in its repository's
+    /// registered checkout.
     Chat(String),
+    /// The chat without a repository `chat` acting in the registered
+    /// checkout of `repository`, which counts as its own, by their IDs.
+    ChatIn { chat: String, repository: String },
+    /// The registered checkout of a repository, by its ID, for a request
+    /// that needs only the repository.
     Checkout(String),
 }
 

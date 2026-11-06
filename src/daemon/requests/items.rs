@@ -309,7 +309,7 @@ impl Scoped for ItemMethod {
                     | Action::Reopen
                     | Action::Update { .. },
                 ..
-            } => Some(context_workspace(context)?),
+            } => Some(change_context_space(manager, caller, context).await?),
             ItemMethod::SetIssue {
                 space: workspace, ..
             }
@@ -338,11 +338,34 @@ impl Scoped for ItemMethod {
 /// workspace, never from a registered checkout.
 pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut String> {
     match context {
-        ItemContext::Workspace(space) | ItemContext::Chat(space) => Ok(space),
+        ItemContext::Workspace(space)
+        | ItemContext::Chat(space)
+        | ItemContext::ChatIn { chat: space, .. } => Ok(space),
         ItemContext::Checkout(_) => {
             bail!("scoped processes act on items from their space, not from a registered checkout")
         }
     }
+}
+
+/// The space a change from `context` is made by, which [`context_workspace`]
+/// names; a caller whose scope reaches every space, which has every
+/// registered repository for its own, changes the items of a registered
+/// checkout as its own space acting there, under that repository's
+/// `[permissions]`.
+async fn change_context_space<'a>(
+    manager: &Manager,
+    caller: &Caller,
+    context: &'a mut ItemContext,
+) -> Result<&'a mut String> {
+    if let ItemContext::Checkout(repository) = context
+        && manager.reach_root(Some(caller)).await?.is_none()
+    {
+        *context = ItemContext::ChatIn {
+            chat: caller.space_id.clone(),
+            repository: repository.clone(),
+        };
+    }
+    context_workspace(context)
 }
 
 /// The space a read from `context` runs in, which [`context_workspace`]

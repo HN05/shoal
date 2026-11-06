@@ -136,7 +136,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
   of the nearest ancestor with one receives a child's agent-caused and agent-lifecycle events
   instead of the user. Own-workspace setup, rename, base workspace, issue, PR and own-repository CI run links and watches, merge
   acknowledgements, their demos, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
-  sync, listing issues and PRs of any repository, opening and changing those of the own repository, opening issues
+  sync, listing issues and PRs of any repository, opening and changing those of the own repository (for a chat without a repository, every registered one, under its `[permissions]`), opening issues
   in other repositories as `[permissions] issue_other_repositories` allows, rerunning
   or cancelling their CI jobs, starting, rerunning or cancelling CI runs of their own branch and reading the own repository's, and GET requests to any repository's forge API, or
   other methods to the own repository's where `[permissions] api_writes` allows them, are allowed, except merging a PR, deleting its branch, approving or requesting changes on one, or approving CI runs.

@@ -59,8 +59,8 @@ impl Manager {
         scoped: bool,
     ) -> Result<(ForgeRepo, Account)> {
         match context {
-            ItemContext::Workspace(selector) | ItemContext::Chat(selector) => {
-                let space = self.link_space(selector).await?;
+            ItemContext::Workspace(_) | ItemContext::Chat(_) | ItemContext::ChatIn { .. } => {
+                let space = self.context_space(context).await?;
                 self.verify_space(&space).await?;
                 let own = self.space_forge(&space).await?;
                 let forge = self.named_forge(own.clone(), repository).await?;

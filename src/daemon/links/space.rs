@@ -59,6 +59,15 @@ impl LinkSpace {
         }
     }
 
+    /// Whether the space records the items it opens and links: a chat
+    /// without a repository acts in many and records none.
+    pub(crate) fn keeps_links(&self) -> bool {
+        match self {
+            Self::Workspace(_) => true,
+            Self::Chat { chat, .. } => chat.repository_id.is_some(),
+        }
+    }
+
     /// The branch whose merge conflicts a workspace's watch reports; a chat
     /// works on none.
     pub(crate) fn branch(&self) -> Option<&str> {
@@ -76,10 +85,14 @@ impl LinkSpace {
     }
 
     /// Where an item request of the space runs: the workspace, or the
-    /// chat's checkout.
+    /// chat's checkout, the one it acts in for a chat without a repository.
     pub(crate) fn item_context(&self) -> ItemContext {
         match self {
             Self::Workspace(workspace) => ItemContext::Workspace(workspace.id.clone()),
+            Self::Chat { chat, checkout } if chat.repository_id.is_none() => ItemContext::ChatIn {
+                chat: chat.id.clone(),
+                repository: checkout.id.clone(),
+            },
             Self::Chat { chat, .. } => ItemContext::Chat(chat.id.clone()),
         }
     }
@@ -114,15 +127,72 @@ impl Manager {
         })
     }
 
-    /// The space `id`, while it exists.
-    pub(crate) async fn find_link_space(&self, id: &str) -> Result<Option<LinkSpace>> {
+    /// The space `context` names: a workspace or a chat by its selector, or
+    /// a chat without a repository acting in the registered repository it
+    /// names; a registered checkout is none.
+    pub(crate) async fn context_space(&self, context: &ItemContext) -> Result<LinkSpace> {
+        match context {
+            ItemContext::Workspace(selector) | ItemContext::Chat(selector) => {
+                self.link_space(selector).await
+            }
+            ItemContext::ChatIn { chat, repository } => self.chat_in(chat, repository).await,
+            ItemContext::Checkout(_) => bail!("a registered checkout is no space"),
+        }
+    }
+
+    /// [`Self::context_space`], or none for a registered checkout.
+    pub(crate) async fn context_space_if_any(
+        &self,
+        context: &ItemContext,
+    ) -> Result<Option<LinkSpace>> {
+        match context {
+            ItemContext::Checkout(_) => Ok(None),
+            _ => self.context_space(context).await.map(Some),
+        }
+    }
+
+    /// The chat without a repository `chat` names, acting in the registered
+    /// repository `repository` names, which counts as its own.
+    async fn chat_in(&self, chat: &str, repository: &str) -> Result<LinkSpace> {
+        let (chat, checkout) = self.chat_acting_in(chat, repository).await?;
+        Ok(LinkSpace::Chat { chat, checkout })
+    }
+
+    /// The chat without a repository `chat` names and the checkout of the
+    /// registered repository `repository` names, which it acts in.
+    pub(crate) async fn chat_acting_in(
+        &self,
+        chat: &str,
+        repository: &str,
+    ) -> Result<(Chat, Repository)> {
+        let chat = (self.recorded_chat(chat).await?).with_context(|| format!("no chat {chat}"))?;
+        anyhow::ensure!(
+            chat.repository_id.is_none(),
+            "chat {} acts only in its own repository",
+            chat.name
+        );
+        Ok((chat, self.repository(repository).await?))
+    }
+
+    /// The space `id`, while it exists, acting in the registered repository
+    /// `repository` when it is a chat without a repository.
+    pub(crate) async fn find_link_space(
+        &self,
+        id: &str,
+        repository: Option<&str>,
+    ) -> Result<Option<LinkSpace>> {
         let owned = id.to_owned();
         let kind = (self.store)
             .run(move |db| crate::daemon::spaces::space_kind(db, &owned))
             .await?;
-        match kind {
-            Some(_) => self.link_space(id).await.map(Some),
-            None => Ok(None),
+        if kind.is_none() {
+            return Ok(None);
+        }
+        let outside =
+            (self.recorded_chat(id).await?).is_some_and(|chat| chat.repository_id.is_none());
+        match repository.filter(|_| outside) {
+            Some(repository) => self.chat_in(id, repository).await.map(Some),
+            None => self.link_space(id).await.map(Some),
         }
     }
 
@@ -141,6 +211,9 @@ impl Manager {
     pub(crate) async fn context_checkout(&self, context: &ItemContext) -> Result<Repository> {
         match context {
             ItemContext::Checkout(selector) => self.repository(selector).await,
+            ItemContext::ChatIn { chat, repository } => {
+                Ok(self.chat_acting_in(chat, repository).await?.1)
+            }
             ItemContext::Chat(selector) => {
                 let chat = (self.running_chat(selector).await?)
                     .with_context(|| format!("no running chat {selector}"))?;
@@ -150,12 +223,51 @@ impl Manager {
         }
     }
 
+    /// The registered repository `named` names, as OWNER/NAME on its forge
+    /// or by URL; none for another repository or without a name. A name two
+    /// registrations answer to is refused, naming both.
+    pub(crate) async fn registered_named(&self, named: Option<&str>) -> Result<Option<Repository>> {
+        let Some(named) = named else {
+            return Ok(None);
+        };
+        let mut found = Vec::new();
+        for repository in self.repositories().await? {
+            if self.answers_to(&repository, named).await? {
+                found.push(repository);
+            }
+        }
+        ensure_one(named, &found)?;
+        Ok(found.pop())
+    }
+
+    /// Whether the registered `repository` is the one `named` names: never
+    /// for a checkout without an origin, while any other failure to tell
+    /// refuses rather than passing for another repository.
+    async fn answers_to(&self, repository: &Repository, named: &str) -> Result<bool> {
+        let path = &repository.path;
+        let remote = self
+            .check_access(path, crate::repository::remote_url_from_path(path))
+            .await?;
+        let Some(remote) = remote else {
+            return Ok(false);
+        };
+        let matches = async {
+            let own = self.forge(&remote).await?;
+            anyhow::Ok(own.resolve_named(named, &self.forge_hosts()).await? == own)
+        };
+        (matches.await).with_context(|| {
+            let name = crate::repository::name(repository);
+            format!("cannot tell whether {named} is the registered repository {name}")
+        })
+    }
+
     /// The registered checkout of `chat`'s repository, where its item
     /// requests act; a chat without a repository has none.
     pub(crate) async fn chat_own_checkout(&self, chat: &Chat) -> Result<Repository> {
         (self.chat_repository(chat).await?).with_context(|| {
             format!(
-                "chat {} has no repository, so it links and acts on no repository's items",
+                "chat {} has no repository of its own; name the repository with --repo or an \
+                 issue or PR URL",
                 chat.name
             )
         })
@@ -179,6 +291,21 @@ impl Manager {
     }
 }
 
+/// Refuse a name `found` lists several registered repositories for,
+/// naming each.
+fn ensure_one(named: &str, found: &[Repository]) -> Result<()> {
+    if found.len() > 1 {
+        let names: Vec<String> = (found.iter())
+            .map(|repo| format!("{} ({})", crate::repository::name(repo), repo.id))
+            .collect();
+        bail!(
+            "{named} names several registered repositories: {}; name one by its URL",
+            names.join(", ")
+        );
+    }
+    Ok(())
+}
+
 /// Whether `id` names a recorded chat, whose links change whenever it runs.
 pub(crate) fn is_chat(db: &Connection, id: &str) -> Result<bool> {
     store::exists(db, "SELECT 1 FROM chats WHERE id=?1", [id])
@@ -192,3 +319,6 @@ pub(crate) fn require_ready_space(db: &Connection, id: &str) -> Result<()> {
     }
     store::require_ready(db, id)
 }
+
+#[cfg(test)]
+mod tests;
