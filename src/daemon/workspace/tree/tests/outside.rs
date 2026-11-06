@@ -1,7 +1,7 @@
 //! Trees below a chat without a repository, which takes children in every
 //! repository and whose scope reaches every space.
 use crate::{
-    daemon::{chats::NewChat, workspace::Manager},
+    daemon::{chats::NewChat, workspace::Manager, workspace_files::Attacher},
     model::{Chat, Repository, Workspace},
     protocol::{
         AgentMethod, ItemContext, ItemMethod, NotificationMethod, QueueMethod, WorkspaceMethod,
@@ -170,6 +170,32 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
         Some(master.id.clone())
     );
     assert_eq!(super::mixed::decider(&manager, &user, "second").await, None);
+
+    // Its hooks receive what the space below it sends, and acknowledge it.
+    manager
+        .send_message(&below.id, "done".into(), Vec::new(), &Attacher::User)
+        .await
+        .unwrap();
+    let delivered = manager.space_updates(&master.id).await.unwrap();
+    let last = delivered
+        .messages
+        .last()
+        .map(|message| message.message.as_str());
+    assert_eq!(last, Some("below: done"), "{delivered:?}");
+    let deliveries = (delivered.updates.iter())
+        .map(|update| update.delivery.clone())
+        .collect();
+    let messages = delivered
+        .messages
+        .iter()
+        .map(|message| message.id)
+        .collect();
+    manager
+        .acknowledge_space_delivery(&master.id, deliveries, messages, &[])
+        .await
+        .unwrap();
+    let again = manager.space_updates(&master.id).await.unwrap();
+    assert!(again.messages.is_empty(), "{again:?}");
 }
 
 #[tokio::test]

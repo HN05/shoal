@@ -1059,8 +1059,8 @@ impl Manager {
         selector: &str,
         deliveries: Vec<String>,
     ) -> Result<()> {
-        let space = self.link_space(selector).await?;
-        let id = space.id().to_owned();
+        // A chat without a repository has no checkout, but its own deliveries.
+        let id = self.present_space(selector).await?.id().to_owned();
         // Without the PR gate: an agent's hook acknowledges within its timeout.
         // One transaction removes exactly the acknowledged deliveries, so
         // whatever a poll or a split queues meanwhile stays pending. A chat's
