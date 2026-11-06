@@ -216,7 +216,7 @@ jobs:
     container:
       # Built from .forgejo/ci-image/Containerfile on the runner host; the tag is
       # the Rust version.
-      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+      image: git.henriknordvik.com/hn05/ci-shoal:1.99
     env:
       # Runner-mounted volume; a plain directory when unmounted.
       CARGO_TARGET_DIR: /ci-target

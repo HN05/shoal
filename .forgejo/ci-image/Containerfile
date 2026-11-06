@@ -24,7 +24,7 @@
 # the workspace's packages is never taken as fresh. The directories grow without
 # bound; clear /var/cache/ci/target on the runner host when it gets large.
 
-ARG RUST=1.98
+ARG RUST=1.99
 FROM docker.io/library/rust:${RUST}-trixie
 
 # The daemon and workspace tests spawn these: git and Worktrunk for worktrees,

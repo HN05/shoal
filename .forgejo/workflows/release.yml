@@ -28,7 +28,7 @@ jobs:
     container:
       # Built from .forgejo/ci-image/Containerfile on the runner host; bump the
       # tag together with ci.yml.
-      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+      image: git.henriknordvik.com/hn05/ci-shoal:1.99
     defaults:
       run:
         shell: bash
@@ -98,7 +98,7 @@ jobs:
           - tap: homebrew-tap-github
             source: github
     container:
-      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+      image: git.henriknordvik.com/hn05/ci-shoal:1.99
     steps:
       - name: Check out release
         env:
@@ -168,7 +168,7 @@ jobs:
     needs: publish
     runs-on: docker
     container:
-      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+      image: git.henriknordvik.com/hn05/ci-shoal:1.99
     defaults:
       run:
         shell: bash
@@ -238,7 +238,7 @@ jobs:
     needs: [publish, binaries]
     runs-on: docker
     container:
-      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+      image: git.henriknordvik.com/hn05/ci-shoal:1.99
     defaults:
       run:
         shell: bash

@@ -27,7 +27,7 @@ jobs:
     runs-on: docker
     container:
       # Same image as release.yml; bump every tag together.
-      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+      image: git.henriknordvik.com/hn05/ci-shoal:1.99
     steps:
       - name: Checkout
         run: |
