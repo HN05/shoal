@@ -344,7 +344,7 @@ instead of the PR delivery guidance below.
   append the selected local/worktree repository value to the global text; empty
   repository values suppress only local additions; provenance reports the
   combined text and highest configured layer. Inline TOML wins over Markdown.
-  Shoal's built-in guidance, the facts of the agent's kind of space and the two
+  Shoal's built-in guidance, the facts of the agent's kind of space and the
   space rules, precedes every agent's rules in any mode and is not
   replaceable; facts state no practices. Substitutions never evaluate or recursively expand inserted text,
   and the subject is never rendered.

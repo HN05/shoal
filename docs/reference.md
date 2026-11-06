@@ -2253,8 +2253,8 @@ warns for each layer whose rule repeats the opening of a space's facts; the
 daemon alerts about it in the global config when it starts or reloads its
 config. Texts are read at launch without a daemon restart.
 
-An agent is told, in order: the skill that describes Shoal's commands, which
-it loads when it needs them; the facts of its space; the space rules; its
+An agent is told, in order: the [`shoal` skill](#agent-skill-outside-project-repositories),
+which describes Shoal's commands; the facts of its space; the space rules; its
 mode's rules; and its subject with its mode's instructions. Every agent's system
 text, in any mode, starts with Shoal's guidance: the facts of the kind of space
 it runs in, a [workspace](../src/client/config/templates/facts/workspace.md), a
@@ -2262,8 +2262,9 @@ it runs in, a [workspace](../src/client/config/templates/facts/workspace.md), a
 a [chat in a workspace's worktree](../src/client/config/templates/facts/workspace_chat.md)
 or a [chat without a repository](../src/client/config/templates/facts/root_chat.md),
 which describe the space and state no practices; then the
-[space rules](../src/client/config/templates/space_rules.md), to run `shoal done`
-once its work is done and to name its space with `shoal work rename`. Its
+[space rules](../src/client/config/templates/space_rules.md), to load the
+`shoal` skill, or read what `shoal skill` prints, before any other action, to run `shoal done` once its work is
+done and to name its space with `shoal work rename`. Its
 mode's rules follow. No layer replaces or suppresses the guidance. A launch's first
 message is its subject, an issue or the prompt it was given, worded the same in
 every mode, followed by its mode's instructions; without a subject it has no

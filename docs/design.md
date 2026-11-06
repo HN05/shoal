@@ -2282,9 +2282,9 @@ repository config and refused in both, and global files beside `config.toml` sit
 below inline TOML values at each level; provenance names the highest configured
 layer and the file it read, and reports the combined text.
 What an agent is told comes in layers, in the order it receives them:
-the skill, which says how each command works and is loaded on demand; the
-facts of its space; the space rules; the user rules its mode chains; and the
-task, its subject and mode's instructions in the first message. The facts and
+the skill, which says how each command works and which a space rule has it
+load first; the facts of its space; the space rules; the user rules its mode
+chains; and the task, its subject and mode's instructions in the first message. The facts and
 space rules make up Shoal's guidance, which is built in and precedes every
 agent's rules, in a workspace or a chat and in any mode, so adding rules never
 freezes or replaces it. They depend on the kind of space, a workspace, a chat
