@@ -271,7 +271,7 @@ impl Reporter {
         attempt: u32,
         wait: std::time::Duration,
     ) {
-        let retry = crate::daemon::workspace::proxy_retries::ProxyRetry {
+        let retry = crate::client::executions::ProxyRetry {
             failure,
             attempt,
             next_at: self.after(wait),
@@ -306,10 +306,7 @@ impl Reporter {
         }
     }
 
-    async fn retried(
-        &self,
-        retry: Option<crate::daemon::workspace::proxy_retries::ProxyRetry>,
-    ) -> bool {
+    async fn retried(&self, retry: Option<crate::client::executions::ProxyRetry>) -> bool {
         self.send(crate::protocol::AgentMethod::ReportProxyRetry {
             workspace: self.workspace.clone(),
             execution: self.execution.clone(),

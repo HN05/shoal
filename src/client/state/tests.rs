@@ -38,13 +38,13 @@ where
 #[test]
 fn migrated_enums_preserve_spellings() {
     use crate::{
-        config::repo::ConflictPolicy,
-        daemon::{
+        client::{
             approvals::{DecisionStatus, Lifetime},
+            executions::ExecutionKind,
             recovery::DirectoryState,
             resources::{LockMode, ResourceKind},
-            workspace::ExecutionKind,
         },
+        config::repo::ConflictPolicy,
     };
     assert_spellings(&[
         (Lifetime::Lease, "lease"),

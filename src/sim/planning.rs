@@ -160,7 +160,7 @@ pub(super) fn resolve_request(
         };
         Profile {
             requires_approval: false,
-            approval_lifetime: crate::daemon::approvals::Lifetime::Lease,
+            approval_lifetime: crate::client::approvals::Lifetime::Lease,
             device: device.clone(),
             runtime: request.runtime.clone().unwrap_or_default(),
         }
@@ -219,10 +219,10 @@ pub(super) fn resolve_request(
         lifetimes.push(repo.approval_lifetime);
     }
     profile.requires_approval = !lifetimes.is_empty();
-    profile.approval_lifetime = if lifetimes.contains(&crate::daemon::approvals::Lifetime::Lease) {
-        crate::daemon::approvals::Lifetime::Lease
+    profile.approval_lifetime = if lifetimes.contains(&crate::client::approvals::Lifetime::Lease) {
+        crate::client::approvals::Lifetime::Lease
     } else {
-        crate::daemon::approvals::Lifetime::Workspace
+        crate::client::approvals::Lifetime::Workspace
     };
     ensure!(
         allowed || config.allow_any,

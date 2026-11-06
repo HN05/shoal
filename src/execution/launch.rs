@@ -20,9 +20,8 @@ use super::{
     takeover, wake,
 };
 use crate::{
-    client::connection,
+    client::{approvals::Undecided, connection},
     config::repo::Pushes,
-    daemon::approvals::Undecided,
     env,
     model::ExecutionPlan,
     paths::Paths,
