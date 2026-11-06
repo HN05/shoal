@@ -847,3 +847,27 @@ async fn a_removed_workspace_has_nothing_to_copy() {
         "{refused:#}"
     );
 }
+
+#[tokio::test]
+async fn concurrent_imports_of_a_copy_take_branches_of_their_own() {
+    let (_source, manager, repo, _origin) = exporter().await;
+    let workspace = manager
+        .create_workspace(&repo.id, "topic".into(), None, None, None)
+        .await
+        .unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("topic.shoal");
+    manager
+        .copy_space(&workspace.name, None, file.clone())
+        .await
+        .unwrap();
+    let bytes = fs::read(&file).unwrap();
+
+    let (first, second) = tokio::join!(
+        import_here(&manager, &repo, &bytes),
+        import_here(&manager, &repo, &bytes)
+    );
+    let mut branches = [first, second].map(|restored| restored.opened.workspace.branch.unwrap());
+    branches.sort();
+    assert_eq!(branches, ["topic-2", "topic-3"]);
+}

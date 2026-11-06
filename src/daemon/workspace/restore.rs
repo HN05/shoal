@@ -191,16 +191,12 @@ impl Manager {
         if let Some(commit) = prerequisite {
             self.fetch_missing(&repo, commit).await?;
         }
-        let mut removed = self.imported_record(&repo, removed).await?;
-        if copy {
-            removed = self.copied_record(&repo, removed).await?;
-        }
-        {
+        let removed = self.imported_record(&repo, removed).await?;
+        let removed = {
             // A repository move holds this gate; the checkout may have moved.
             let (repo, _git) = self.lock_repository(&repo.id).await?;
-            self.record_import(&repo.path, bundle, removed.clone())
-                .await?;
-        }
+            self.record_import(&repo, bundle, removed, copy).await?
+        };
         self.restore_workspace(&removed.workspace_id)
             .await
             .with_context(|| {
@@ -248,8 +244,9 @@ impl Manager {
 
     /// The exported `removed` as a new workspace of `repo` that copies it:
     /// with its own ID, on a branch of its own named after the original's,
-    /// and without the PRs and CI runs, which stay with the original's
-    /// branch.
+    /// created at its HEAD, and without the PRs and CI runs, which stay with
+    /// the original's branch. The caller holds the repository's Git gate,
+    /// so a concurrent import takes another branch.
     async fn copied_record(
         &self,
         repo: &Repository,
@@ -260,8 +257,8 @@ impl Manager {
         checkpoint.workspace_id = id.clone();
         let name = match &checkpoint.branch {
             Some(branch) => {
-                let (repo, _git) = self.lock_repository(&repo.id).await?;
-                let branch = self.copy_branch(&repo, branch).await?;
+                let branch = self.copy_branch(repo, branch).await?;
+                git::branch::create(&repo.path, &branch, &checkpoint.head).await?;
                 checkpoint.branch = Some(branch.clone());
                 crate::validate::derive_workspace_name(&branch)
             }
@@ -277,23 +274,34 @@ impl Manager {
     }
 
     /// Point the checkpoint's ref at its commit, then record the checkpoint
-    /// and the removal in one transaction, as a removal would.
+    /// and the removal in one transaction, as a removal would; a `copy` as
+    /// the new workspace that copies it. The caller holds the repository's
+    /// Git gate.
     async fn record_import(
         &self,
-        repo: &Path,
+        repo: &Repository,
         bundle: Option<&Path>,
         removed: RemovedWorkspace,
-    ) -> Result<()> {
+        copy: bool,
+    ) -> Result<RemovedWorkspace> {
         let _refs = self.gates.lock_checkpoints().await;
         let commit = &removed.checkpoint.commit;
         let reference = git::checkpoint::reference(commit);
         match bundle {
-            Some(bundle) => git::bundle::fetch(repo, bundle, &reference).await?,
-            None => git::checkpoint::save(repo, &reference, commit)
+            Some(bundle) => git::bundle::fetch(&repo.path, bundle, &reference).await?,
+            None => git::checkpoint::save(&repo.path, &reference, commit)
                 .await
                 .with_context(|| format!("the default branch has no commit {commit}"))?,
         }
-        self.store.run(move |db| record_imported(db, removed)).await
+        let removed = match copy {
+            true => self.copied_record(repo, removed).await?,
+            false => removed,
+        };
+        let record = removed.clone();
+        self.store
+            .run(move |db| record_imported(db, record))
+            .await?;
+        Ok(removed)
     }
 
     /// Link the restored workspace's issue and recorded items again; the
