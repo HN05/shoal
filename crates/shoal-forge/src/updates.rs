@@ -17,8 +17,9 @@ use crate::{
     transport::limits::{RateLimited, rate_limited},
 };
 
-/// How long a lookup may keep failing with the same error before it is
-/// reported again, so a failing source cannot silence a wait indefinitely.
+/// How long after a source's failure was reported it is not reported again,
+/// however its error changes or it passes in between, so a failing source
+/// cannot silence a wait indefinitely nor end one on every poll.
 const FAILURE_REPORT_INTERVAL: u64 = 600;
 
 /// The failed jobs a finished run's update names; `view ci` lists them all.
@@ -114,7 +115,8 @@ pub struct Snapshot {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) failed_jobs: Vec<FailedJob>,
     pub(crate) errors: BTreeMap<String, String>,
-    /// Unix seconds when each failing source was last reported.
+    /// Unix seconds when each source that failed within the report interval
+    /// was last reported.
     #[serde(default)]
     pub(crate) reported: BTreeMap<String, u64>,
     /// The rate limit a source's lookup ran into, which leaves the snapshot
@@ -253,9 +255,7 @@ impl Snapshot {
             }
         }
         for (source, error) in &next.errors {
-            if self.errors.get(source) != Some(error)
-                || self.reported.get(source) != next.reported.get(source)
-            {
+            if self.reported.get(source) != next.reported.get(source) {
                 emit(
                     UpdateKind::LookupFailed,
                     format!("{source} lookup failed: {error}"),
@@ -403,25 +403,19 @@ impl Snapshot {
         state.clone_into(&mut self.state);
     }
 
-    /// Keeps each unchanged failure's report time until the interval passes,
-    /// so `changes` reports a persisting failure again once per interval.
+    /// Keeps each source's report time until the interval passes and takes
+    /// `now` for a failing source without one, so `changes` reports a
+    /// source's failures at most once per interval.
     fn schedule_failure_reports(&mut self, previous: &Self, now: u64) {
-        self.reported = self
-            .errors
+        self.reported = previous
+            .reported
             .iter()
-            .map(|(source, error)| {
-                let reported = previous
-                    .reported
-                    .get(source)
-                    .copied()
-                    .filter(|&at| {
-                        previous.errors.get(source) == Some(error)
-                            && now.saturating_sub(at) < FAILURE_REPORT_INTERVAL
-                    })
-                    .unwrap_or(now);
-                (source.clone(), reported)
-            })
+            .filter(|&(_, &at)| now.saturating_sub(at) < FAILURE_REPORT_INTERVAL)
+            .map(|(source, &at)| (source.clone(), at))
             .collect();
+        for source in self.errors.keys() {
+            self.reported.entry(source.clone()).or_insert(now);
+        }
     }
 
     /// Record each comment of `source` by its ID.

@@ -85,14 +85,16 @@ fn conflicts_are_reported_again_for_a_new_head_or_base_once_confirmed() {
 }
 
 #[test]
-fn persisting_lookup_failures_are_reported_again_after_the_interval() {
-    let failing = |error: &str| {
+fn a_sources_failures_are_reported_once_per_interval() {
+    let observed = |error: Option<&str>| {
         let mut snapshot = Snapshot::default();
-        snapshot.errors.insert("CI".into(), error.into());
+        if let Some(error) = error {
+            snapshot.errors.insert("CI".into(), error.into());
+        }
         snapshot
     };
-    let poll = |previous: &Snapshot, error: &str, now| {
-        let mut next = failing(error);
+    let poll = |previous: &Snapshot, error, now| {
+        let mut next = observed(error);
         next.normalize(previous, now);
         let kinds = previous
             .changes(&next, "pr")
@@ -101,17 +103,23 @@ fn persisting_lookup_failures_are_reported_again_after_the_interval() {
             .collect::<Vec<_>>();
         (next, kinds)
     };
-    let (first, kinds) = poll(&Snapshot::default(), "unparsable", 1000);
+    let (first, kinds) = poll(&Snapshot::default(), Some("refused after 2 ms"), 1000);
     assert_eq!(kinds, [UpdateKind::LookupFailed]);
-    let (quiet, kinds) = poll(&first, "unparsable", 1000 + FAILURE_REPORT_INTERVAL - 1);
+    // Neither another error nor a passing poll in between reports it again.
+    let (changed, kinds) = poll(&first, Some("refused after 6 ms"), 1001);
     assert!(kinds.is_empty());
-    let (again, kinds) = poll(&quiet, "unparsable", 1000 + FAILURE_REPORT_INTERVAL);
+    let (passed, kinds) = poll(&changed, None, 1002);
+    assert!(kinds.is_empty());
+    let (quiet, kinds) = poll(
+        &passed,
+        Some("broken pipe"),
+        1000 + FAILURE_REPORT_INTERVAL - 1,
+    );
+    assert!(kinds.is_empty());
+    let (again, kinds) = poll(&quiet, Some("broken pipe"), 1000 + FAILURE_REPORT_INTERVAL);
     assert_eq!(kinds, [UpdateKind::LookupFailed]);
-    let (changed, kinds) = poll(&again, "timed out", 1000 + FAILURE_REPORT_INTERVAL + 1);
-    assert_eq!(kinds, [UpdateKind::LookupFailed]);
-    let mut recovered = Snapshot::default();
-    recovered.normalize(&changed, 5000);
-    assert!(changed.changes(&recovered, "pr").is_empty());
+    let (recovered, kinds) = poll(&again, None, 1000 + 2 * FAILURE_REPORT_INTERVAL);
+    assert!(kinds.is_empty());
     assert!(recovered.reported.is_empty());
 }
 
