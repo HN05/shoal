@@ -270,8 +270,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
 Keep documentation short and current. Say each thing once, where a reader looks for
 it: usage in README.md, behavior in docs/reference.md, decisions in docs/design.md,
 contributor rules here; a new document needs a subject none of those covers. The
-skills under `skills/` say only how to work with Shoal; a rule about anything
-else, such as how to write or structure code, goes here. Edit
+skill under `skills/` says only what Shoal's commands do; a practice goes in a
+user rule, and a rule about anything else, such as how to write or structure
+code, goes here. Edit
 the sentence that describes the changed behavior instead of appending a paragraph,
 and cut text that restates code, tests, history, or another section. State a rule
 as its condition, never as the list of things that satisfy it: the condition

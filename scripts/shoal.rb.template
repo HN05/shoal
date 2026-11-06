@@ -47,15 +47,12 @@ class Shoal < Formula
   test do
     system "codesign", "--verify", "--strict", libexec/"Shoal.app" if OS.mac?
     assert_match "shoal", shell_output("#{bin}/shoal --version")
-    assert_match "name: shoal-worker", shell_output("#{bin}/shoal skill")
-    assert_match "name: shoal-orchestrator", shell_output("#{bin}/shoal skill orchestrator")
+    assert_match "name: shoal", shell_output("#{bin}/shoal skill")
     ENV["HOME"] = testpath.to_s
     ENV.delete "SHOAL_SCOPE_TOKEN"
     system bin/"shoal", "skill", "install", "codex"
-    %w[shoal-worker shoal-orchestrator].each do |skill|
-      installed = testpath/".agents/skills/#{skill}/SKILL.md"
-      refute_predicate installed, :symlink?
-      assert_equal (share/"shoal/skills/#{skill}/SKILL.md").read, installed.read
-    end
+    installed = testpath/".agents/skills/shoal/SKILL.md"
+    refute_predicate installed, :symlink?
+    assert_equal (share/"shoal/skills/shoal/SKILL.md").read, installed.read
   end
 end

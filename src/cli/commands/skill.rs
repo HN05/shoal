@@ -17,7 +17,7 @@ use anyhow::{Context, Result, ensure};
 
 use crate::{
     cli::{
-        args::integration::{SkillCommand, SkillName},
+        args::integration::SkillCommand,
         context,
         ui::{self, ModifiedSkillChoice},
     },
@@ -27,33 +27,21 @@ use crate::{
 use record::{Entry, Record};
 
 /// Bundled skills by name; a packaged directory holds `<name>/SKILL.md` for each.
-const SKILLS: [(&str, &str); 2] = [
-    (
-        "shoal-worker",
-        include_str!("../../../skills/shoal-worker/SKILL.md"),
-    ),
-    (
-        "shoal-orchestrator",
-        include_str!("../../../skills/shoal-orchestrator/SKILL.md"),
-    ),
-];
-/// The single skill installed before Shoal recorded its installations.
-const RETIRED: &str = "shoal";
+const SKILLS: [(&str, &str); 1] = [("shoal", include_str!("../../../skills/shoal/SKILL.md"))];
+/// The skills earlier versions installed before Shoal recorded its
+/// installations, which this version no longer bundles.
+const UNRECORDED: [&str; 2] = ["shoal-worker", "shoal-orchestrator"];
 
 /// Each bundled skill's name and the contents this version installs.
 type Contents = Vec<(&'static str, String)>;
 
 pub(super) fn run(
-    name: SkillName,
     command: Option<&SkillCommand>,
     json_output: bool,
     state_dir: Option<PathBuf>,
 ) -> Result<i32> {
     let Some(SkillCommand::Install { agent, force }) = command else {
-        let (name, contents) = match name {
-            SkillName::Worker => SKILLS[0],
-            SkillName::Orchestrator => SKILLS[1],
-        };
+        let [(name, contents)] = SKILLS;
         if json_output {
             let skill = Skill {
                 name: name.to_owned(),
@@ -262,7 +250,7 @@ fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> R
     }
     installation.retire_skills(skills)?;
     if loaded.is_none() {
-        installation.remove_unrecorded_skill()?;
+        installation.remove_unrecorded_skills()?;
     }
     installation.save(loaded.as_ref())?;
     Ok(installation.outcome)
@@ -354,11 +342,14 @@ impl Installation<'_> {
         self.record.save(self.directory)
     }
 
-    /// Remove the skill Shoal installed before it recorded installations.
-    fn remove_unrecorded_skill(&mut self) -> Result<()> {
-        let skill = self.directory.join(RETIRED);
-        if real_directory(&skill)? && remove_skill(&skill)? {
-            self.outcome.changed = true;
+    /// Remove the skills Shoal installed before it recorded installations.
+    fn remove_unrecorded_skills(&mut self) -> Result<()> {
+        for name in UNRECORDED {
+            let skill = self.directory.join(name);
+            if real_directory(&skill)? && exists(&skill.join("SKILL.md"))? {
+                remove_skill(&skill)?;
+                self.outcome.changed = true;
+            }
         }
         Ok(())
     }
@@ -413,7 +404,7 @@ fn holds_shoal_skills(
         .iter()
         .map(|(name, _)| *name)
         .chain(record.skills.keys().map(String::as_str))
-        .chain([RETIRED]);
+        .chain(UNRECORDED);
     for name in names {
         if exists(&skill_file(directory, name))? {
             return Ok(true);
@@ -522,28 +513,26 @@ fn install(path: &Path, contents: &str) -> Result<()> {
 }
 
 /// Remove a retired skill's `SKILL.md`, which Shoal owned, and its directory
-/// once empty; other files keep the directory. Returns whether it was there.
-fn remove_skill(directory: &Path) -> Result<bool> {
+/// once empty; other files keep the directory.
+fn remove_skill(directory: &Path) -> Result<()> {
     let path = directory.join("SKILL.md");
     match fs::symlink_metadata(&path) {
         Ok(metadata) if !metadata.is_dir() => match fs::remove_file(&path) {
             // A concurrent refresh removed it first.
-            Err(error) if record::is_absent(&error) => return Ok(false),
+            Err(error) if record::is_absent(&error) => return Ok(()),
             result => result.with_context(|| format!("remove retired skill {}", path.display()))?,
         },
-        Ok(_) => return Ok(false),
-        Err(error) if record::is_absent(&error) => return Ok(false),
+        Ok(_) => return Ok(()),
+        Err(error) if record::is_absent(&error) => return Ok(()),
         Err(error) => return Err(error).with_context(|| format!("inspect {}", path.display())),
     }
     match fs::remove_dir(directory) {
         Err(error)
             if error.kind() == io::ErrorKind::DirectoryNotEmpty || record::is_absent(&error) =>
         {
-            Ok(true)
+            Ok(())
         }
-        result => result
-            .map(|()| true)
-            .with_context(|| format!("remove {}", directory.display())),
+        result => result.with_context(|| format!("remove {}", directory.display())),
     }
 }
 

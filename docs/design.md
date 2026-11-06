@@ -2068,7 +2068,7 @@ issue from the chat's checkout and records it as the chat's. It starts at once f
 background sync keeps current, so an offline or diverged checkout still gets its
 chat. Its
 instructions describe the discussion only, from the `chat` rule that
-repositories can extend like the other rules; the orchestrator skill is available when the user asks for coordination.
+repositories can extend like the other rules.
 Belonging
 to no workspace, a chat is not a tracked execution: queuing and overload stops
 serve unattended agents, while the user attends a chat. It is still a
@@ -2170,8 +2170,7 @@ config alone, as a master session whose scope reaches every space on the
 machine. It starts work below itself in any repository, receives what its
 subtree reports as any parent does, and acts on other spaces as a coordinator
 acts below it, while what the scope keeps from every agent stays the user's,
-so the user can hand coordination to a tracked, scoped agent. The orchestrator
-skill stays for an unscoped agent the user runs in their own terminal.
+so the user can hand coordination to a tracked, scoped agent.
 
 Issues split by whether their plan is settled: `[issue] plan_label` marks one
 that needs the owner's choices and `planned_label` one whose body holds a plan
@@ -2186,12 +2185,13 @@ repository extends like any mode's text, and it
 keeps the discussion in the conversation: questions and forge comments serve
 agents blocked during implementation.
 
-Skills are split by role: `shoal-worker` covers an agent's own workspace and
-`shoal-orchestrator` covers unscoped coordination from a console, so neither
-role loads the other's commands. Both are installed together at user scope,
-for every tool whose skill directory already exists unless a tool is named,
-independent of the daemon and never from a scoped execution; their availability
-registers nothing. Each skill directory records what Shoal installed there;
+One skill, `shoal`, describes what Shoal's commands do, what they refuse and
+what follows from them, for workspaces, chats and sessions outside Shoal alike,
+and states no practices: those are user rules, which a user can replace, while
+an installed skill is kept in step with the binary. It is installed at user
+scope, for every tool whose skill directory already exists unless a tool is
+named, independent of the daemon and never from a scoped execution; its
+availability registers nothing. Each skill directory records what Shoal installed there;
 Shoal owns a skill only while it matches that record, so it updates or removes
 only those, and treats files from before the record as its own. Unscoped
 commands other than the daemon refresh directories that still hold a Shoal

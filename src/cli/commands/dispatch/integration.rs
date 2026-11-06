@@ -13,12 +13,9 @@ pub(in crate::cli::commands) async fn run(
     command: IntegrationCommand,
 ) -> Result<i32> {
     match command {
-        IntegrationCommand::Skill { name, command } => skill::run(
-            name,
-            command.as_ref(),
-            ctx.json,
-            Some(ctx.paths.state.clone()),
-        ),
+        IntegrationCommand::Skill { command } => {
+            skill::run(command.as_ref(), ctx.json, Some(ctx.paths.state.clone()))
+        }
         IntegrationCommand::Shell {
             command: ShellCommand::Completions { shell },
         } => {

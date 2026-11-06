@@ -1870,11 +1870,10 @@ workspace's scope, `[env]` or leases, and is not below the workspace, but
 below the space of the agent that started it, if any; such an agent names only
 its own workspace or one below it. Its
 scope also reads the workspace, such as its status, diff, links and CI runs,
-but refuses changes to it. Its `chat` rule
-starts with Shoal's description of a chat in a worktree instead of the checkout,
-which names the workspace, its branch or commit and its path, and tells the agent that the
-workspace's own agent may be editing there and not to change files, stage,
-commit, stash or switch branches; nothing else enforces it. Its record, and
+but refuses changes to it. Its facts
+describe a chat in a worktree instead of the checkout: they name the workspace,
+its branch or commit and its path, and tell the agent that the workspace's own
+agent may be editing there and makes its code changes; nothing enforces it. Its record, and
 `--json`, name the `workspace`, and `shoal resume` restores it there. In the
 chat, commands that act only on workspaces, such as `shoal diff`,
 `shoal conflicts` and `shoal branch base`, act on the workspace, and so does
@@ -1945,8 +1944,7 @@ the requests routed to it, with a grant; merging, PR verdicts, CI approval and
 your notifications stay with you. It reads the issues and PRs of every
 registered repository and changes them only through a space of their
 repository, as `--space` names one, keeps no attached files, and [`shoal move`](#move-a-space-to-another-machine)
-refuses it. The [`shoal-orchestrator`](../skills/shoal-orchestrator/SKILL.md)
-skill is its unscoped counterpart, for an agent in your own terminal.
+refuses it.
 
 ### Planning issues
 
@@ -5525,8 +5523,9 @@ shoal skill install          # Every tool whose skill directory exists
 shoal skill install grok     # One tool, creating its skill directory
 ```
 
-Installs the bundled skills at user scope with no daemon, as `<skill>/SKILL.md`
-in each tool's skill directory: `~/.claude/skills` for Claude (honoring an
+Installs the bundled `shoal` skill, which describes what Shoal's commands do
+for workspaces, chats and sessions outside Shoal, at user scope with no daemon,
+as `shoal/SKILL.md` in each tool's skill directory: `~/.claude/skills` for Claude (honoring an
 absolute `CLAUDE_CONFIG_DIR`), `~/.grok/skills` for Grok, and `~/.agents/skills`
 for Codex, opencode and pi, which share one copy. Without a tool name, Shoal
 installs only into skill directories that already exist and skips a configured
@@ -5543,7 +5542,7 @@ or start with `~/`. These machine settings cannot be set per repository;
 `command` makes a tool an [agent](#agents). Each `SKILL.md` is a regular copy
 of the packaged or embedded skill, since Codex skips a linked one; a linked
 skill directory is left to the user. Other files in the skill directory are
-preserved. Run it outside scoped executions. `shoal skill` prints the instructions (`--json`
+preserved. Run it outside scoped executions. `shoal skill` prints the skill (`--json`
 returns a `skill` field).
 
 Shoal records what it installed in `.shoal-skills.json` in each skill directory.

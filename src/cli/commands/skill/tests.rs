@@ -1,8 +1,21 @@
 use super::*;
 use std::os::unix::fs::symlink;
 
+/// A second bundled skill, so one skill can be installed while another is kept.
+const OTHER: &str = "shoal-other";
+
 fn embedded() -> Contents {
     skill_contents(None).unwrap()
+}
+
+/// The embedded skills and [`OTHER`], holding `other`.
+fn with_other(mut skills: Contents, other: &str) -> Contents {
+    skills.push((OTHER, other.to_owned()));
+    skills
+}
+
+fn bundled() -> Contents {
+    with_other(embedded(), "other")
 }
 
 #[test]
@@ -41,8 +54,7 @@ fn packaged_skills_link_is_optional_and_explicit_paths_take_precedence() {
         fs::create_dir_all(source.join(name)).unwrap();
         fs::write(skill_file(&source, name), "packaged").unwrap();
     }
-    fs::create_dir_all(incomplete.join(SKILLS[0].0)).unwrap();
-    fs::write(skill_file(&incomplete, SKILLS[0].0), "packaged").unwrap();
+    fs::create_dir_all(&incomplete).unwrap();
     assert_eq!(packaged_source(None, &executable).unwrap(), None);
     symlink(&source, &link).unwrap();
     assert_eq!(
@@ -109,47 +121,47 @@ fn packaged_skills_replace_recorded_links_with_copies_that_follow_upgrades() {
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("skills");
     let source = root.path().join("package");
-    let (worker, orchestrator) = (SKILLS[0].0, SKILLS[1].0);
-    for (name, _) in SKILLS {
+    let (shoal, other) = (SKILLS[0].0, OTHER);
+    for name in [shoal, other] {
         fs::create_dir_all(source.join(name)).unwrap();
         fs::write(skill_file(&source, name), "version one").unwrap();
         fs::create_dir_all(directory.join(name)).unwrap();
     }
-    fs::write(directory.join(worker).join("notes.md"), "keep").unwrap();
+    fs::write(directory.join(shoal).join("notes.md"), "keep").unwrap();
     // An earlier version linked both skills; the user since repointed one.
     let personal = root.path().join("personal.md");
     fs::write(&personal, "personal").unwrap();
-    symlink(skill_file(&source, worker), skill_file(&directory, worker)).unwrap();
-    symlink(&personal, skill_file(&directory, orchestrator)).unwrap();
+    symlink(skill_file(&source, shoal), skill_file(&directory, shoal)).unwrap();
+    symlink(&personal, skill_file(&directory, other)).unwrap();
     record(
         &directory,
         &[
-            (worker, Entry::Link(skill_file(&source, worker))),
-            (orchestrator, Entry::Link(skill_file(&source, orchestrator))),
+            (shoal, Entry::Link(skill_file(&source, shoal))),
+            (other, Entry::Link(skill_file(&source, other))),
         ],
     );
-    let packaged = skill_contents(Some(&source)).unwrap();
+    let packaged = with_other(skill_contents(Some(&source)).unwrap(), "version one");
     let outcome = refresh(&directory, &packaged, Mode::Refresh).unwrap();
-    assert_eq!(outcome.installed, [worker]);
-    assert_eq!(outcome.kept, [orchestrator]);
-    let installed = skill_file(&directory, worker);
+    assert_eq!(outcome.installed, [shoal]);
+    assert_eq!(outcome.kept, [other]);
+    let installed = skill_file(&directory, shoal);
     assert!(!installed.is_symlink());
     assert_eq!(fs::read_to_string(&installed).unwrap(), "version one");
     assert_eq!(
-        fs::read_link(skill_file(&directory, orchestrator)).unwrap(),
+        fs::read_link(skill_file(&directory, other)).unwrap(),
         personal
     );
     assert_eq!(
-        fs::read_to_string(directory.join(worker).join("notes.md")).unwrap(),
+        fs::read_to_string(directory.join(shoal).join("notes.md")).unwrap(),
         "keep"
     );
     assert_eq!(
-        fs::read_to_string(skill_file(&source, worker)).unwrap(),
+        fs::read_to_string(skill_file(&source, shoal)).unwrap(),
         "version one"
     );
     // An upgraded package updates the copy on the next refresh.
-    fs::write(skill_file(&source, worker), "version two").unwrap();
-    let packaged = skill_contents(Some(&source)).unwrap();
+    fs::write(skill_file(&source, shoal), "version two").unwrap();
+    let packaged = with_other(skill_contents(Some(&source)).unwrap(), "version one");
     assert!(
         refresh(&directory, &packaged, Mode::Refresh)
             .unwrap()
@@ -171,48 +183,45 @@ fn record(directory: &Path, entries: &[(&str, Entry)]) {
 fn install_replaces_skills_shoal_owns_and_keeps_user_changes() {
     let root = tempfile::tempdir().unwrap();
     let directory = root.path();
-    let (worker, orchestrator) = (SKILLS[0].0, SKILLS[1].0);
+    let (shoal, other) = (SKILLS[0].0, OTHER);
     let read = |name| fs::read_to_string(skill_file(directory, name)).unwrap();
     // Skills from before the record existed are Shoal's.
-    for (name, _) in SKILLS {
+    for name in [shoal, other] {
         fs::create_dir_all(directory.join(name)).unwrap();
         fs::write(skill_file(directory, name), "old").unwrap();
     }
-    refresh(directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
-    assert_eq!(read(worker), SKILLS[0].1);
+    refresh(directory, &bundled(), Mode::Install(Changed::Keep)).unwrap();
+    assert_eq!(read(shoal), SKILLS[0].1);
     // A recorded copy from an earlier version is replaced; an edited one is kept.
-    fs::write(skill_file(directory, worker), "old").unwrap();
-    fs::write(skill_file(directory, orchestrator), "edited").unwrap();
+    fs::write(skill_file(directory, shoal), "old").unwrap();
+    fs::write(skill_file(directory, other), "edited").unwrap();
     record(
         directory,
-        &[
-            (worker, Entry::copy(b"old")),
-            (orchestrator, Entry::copy(b"old")),
-        ],
+        &[(shoal, Entry::copy(b"old")), (other, Entry::copy(b"old"))],
     );
     for _ in 0..2 {
-        let outcome = refresh(directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
-        assert_eq!(outcome.installed, [worker]);
-        assert_eq!(outcome.kept, [orchestrator]);
-        assert_eq!(read(worker), SKILLS[0].1);
-        assert_eq!(read(orchestrator), "edited");
+        let outcome = refresh(directory, &bundled(), Mode::Install(Changed::Keep)).unwrap();
+        assert_eq!(outcome.installed, [shoal]);
+        assert_eq!(outcome.kept, [other]);
+        assert_eq!(read(shoal), SKILLS[0].1);
+        assert_eq!(read(other), "edited");
     }
-    let outcome = refresh(directory, &embedded(), Mode::Install(Changed::Replace)).unwrap();
+    let outcome = refresh(directory, &bundled(), Mode::Install(Changed::Replace)).unwrap();
     assert!(outcome.kept.is_empty());
-    assert_eq!(read(orchestrator), SKILLS[1].1);
+    assert_eq!(read(other), "other");
     // A removed skill is restored.
-    fs::remove_file(skill_file(directory, worker)).unwrap();
-    refresh(directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
-    assert_eq!(read(worker), SKILLS[0].1);
+    fs::remove_file(skill_file(directory, shoal)).unwrap();
+    refresh(directory, &bundled(), Mode::Install(Changed::Keep)).unwrap();
+    assert_eq!(read(shoal), SKILLS[0].1);
     // A linked skill directory is the user's, even when forced.
     let elsewhere = tempfile::tempdir().unwrap();
     fs::write(elsewhere.path().join("SKILL.md"), "old").unwrap();
-    fs::remove_dir_all(directory.join(worker)).unwrap();
-    symlink(elsewhere.path(), directory.join(worker)).unwrap();
-    record(directory, &[(worker, Entry::copy(b"old"))]);
-    let outcome = refresh(directory, &embedded(), Mode::Install(Changed::Replace)).unwrap();
-    assert_eq!(outcome.kept, [worker]);
-    assert_eq!(read(worker), "old");
+    fs::remove_dir_all(directory.join(shoal)).unwrap();
+    symlink(elsewhere.path(), directory.join(shoal)).unwrap();
+    record(directory, &[(shoal, Entry::copy(b"old"))]);
+    let outcome = refresh(directory, &bundled(), Mode::Install(Changed::Replace)).unwrap();
+    assert_eq!(outcome.kept, [shoal]);
+    assert_eq!(read(shoal), "old");
 }
 
 #[test]
@@ -268,7 +277,7 @@ fn install_removes_retired_skills_only_while_unchanged() {
         .skills
         .into_keys()
         .collect();
-    assert_eq!(names, [SKILLS[1].0, SKILLS[0].0]);
+    assert_eq!(names, [SKILLS[0].0]);
     // A retired skill is reported once, then belongs to the user.
     let outcome = refresh(&directory, &packaged, Mode::Install(Changed::Keep)).unwrap();
     assert!(outcome.kept.is_empty());
@@ -278,64 +287,64 @@ fn install_removes_retired_skills_only_while_unchanged() {
 fn refresh_updates_installed_skills_and_reports_user_changes_once() {
     let root = tempfile::tempdir().unwrap();
     let directory = root.path();
-    let (worker, orchestrator) = (SKILLS[0].0, SKILLS[1].0);
+    let (shoal, other) = (SKILLS[0].0, OTHER);
     let read = |name| fs::read_to_string(skill_file(directory, name)).unwrap();
     // Refreshing never starts an installation.
-    let outcome = refresh(directory, &embedded(), Mode::Refresh).unwrap();
+    let outcome = refresh(directory, &bundled(), Mode::Refresh).unwrap();
     assert!(!outcome.changed && outcome.installed.is_empty());
     assert_eq!(fs::read_dir(directory).unwrap().count(), 0);
 
     // An upgrade replaces what an earlier version wrote.
-    for (name, _) in SKILLS {
+    for name in [shoal, other] {
         fs::create_dir_all(directory.join(name)).unwrap();
         fs::write(skill_file(directory, name), "old").unwrap();
     }
-    record(directory, &[(worker, Entry::copy(b"old"))]);
-    fs::write(skill_file(directory, orchestrator), "edited").unwrap();
-    record(directory, &[(orchestrator, Entry::copy(b"old"))]);
-    let outcome = refresh(directory, &embedded(), Mode::Refresh).unwrap();
+    record(directory, &[(shoal, Entry::copy(b"old"))]);
+    fs::write(skill_file(directory, other), "edited").unwrap();
+    record(directory, &[(other, Entry::copy(b"old"))]);
+    let outcome = refresh(directory, &bundled(), Mode::Refresh).unwrap();
     assert!(outcome.changed);
-    assert_eq!(outcome.installed, [worker]);
-    assert_eq!(outcome.kept, [orchestrator]);
-    assert_eq!(read(worker), SKILLS[0].1);
-    assert_eq!(read(orchestrator), "edited");
+    assert_eq!(outcome.installed, [shoal]);
+    assert_eq!(outcome.kept, [other]);
+    assert_eq!(read(shoal), SKILLS[0].1);
+    assert_eq!(read(other), "edited");
     // A kept skill is reported once by refresh and on every install.
-    let outcome = refresh(directory, &embedded(), Mode::Refresh).unwrap();
+    let outcome = refresh(directory, &bundled(), Mode::Refresh).unwrap();
     assert!(!outcome.changed && outcome.kept.is_empty());
-    let outcome = refresh(directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
-    assert_eq!(outcome.kept, [orchestrator]);
-    assert_eq!(read(orchestrator), "edited");
-    refresh(directory, &embedded(), Mode::Install(Changed::Replace)).unwrap();
-    assert_eq!(read(orchestrator), SKILLS[1].1);
+    let outcome = refresh(directory, &bundled(), Mode::Install(Changed::Keep)).unwrap();
+    assert_eq!(outcome.kept, [other]);
+    assert_eq!(read(other), "edited");
+    refresh(directory, &bundled(), Mode::Install(Changed::Replace)).unwrap();
+    assert_eq!(read(other), "other");
     // A kept skill the user made identical to this version stays theirs
     // until an install reclaims it.
-    record(directory, &[(orchestrator, Entry::Kept)]);
-    let outcome = refresh(directory, &embedded(), Mode::Refresh).unwrap();
-    assert_eq!(outcome.installed, [worker]);
-    let outcome = refresh(directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
-    assert_eq!(outcome.installed, [worker, orchestrator]);
+    record(directory, &[(other, Entry::Kept)]);
+    let outcome = refresh(directory, &bundled(), Mode::Refresh).unwrap();
+    assert_eq!(outcome.installed, [shoal]);
+    let outcome = refresh(directory, &bundled(), Mode::Install(Changed::Keep)).unwrap();
+    assert_eq!(outcome.installed, [shoal, other]);
     assert_eq!(
-        Record::load(directory).unwrap().unwrap().skills[orchestrator],
-        Entry::copy(SKILLS[1].1.as_bytes())
+        Record::load(directory).unwrap().unwrap().skills[other],
+        Entry::copy(b"other")
     );
 
     // A skill the user removed returns only on install.
-    fs::remove_file(skill_file(directory, worker)).unwrap();
-    record(directory, &[(worker, Entry::copy(b"old"))]);
-    let outcome = refresh(directory, &embedded(), Mode::Refresh).unwrap();
-    assert!(outcome.kept.is_empty() && !skill_file(directory, worker).exists());
-    refresh(directory, &embedded(), Mode::Refresh).unwrap();
-    assert!(!skill_file(directory, worker).exists());
-    refresh(directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
-    assert_eq!(read(worker), SKILLS[0].1);
+    fs::remove_file(skill_file(directory, shoal)).unwrap();
+    record(directory, &[(shoal, Entry::copy(b"old"))]);
+    let outcome = refresh(directory, &bundled(), Mode::Refresh).unwrap();
+    assert!(outcome.kept.is_empty() && !skill_file(directory, shoal).exists());
+    refresh(directory, &bundled(), Mode::Refresh).unwrap();
+    assert!(!skill_file(directory, shoal).exists());
+    refresh(directory, &bundled(), Mode::Install(Changed::Keep)).unwrap();
+    assert_eq!(read(shoal), SKILLS[0].1);
 
     // Removing every Shoal skill stops refreshes there.
-    for (name, _) in SKILLS {
+    for name in [shoal, other] {
         fs::remove_dir_all(directory.join(name)).unwrap();
     }
     record(directory, &[("shoal-new", Entry::Kept)]);
-    refresh(directory, &embedded(), Mode::Refresh).unwrap();
-    assert!(!directory.join(worker).exists());
+    refresh(directory, &bundled(), Mode::Refresh).unwrap();
+    assert!(!directory.join(shoal).exists());
 }
 
 #[test]
@@ -349,9 +358,31 @@ fn diff_compares_the_installed_skill_with_this_version() {
 }
 
 #[test]
+fn a_refresh_replaces_the_skills_installed_before_the_record() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path();
+    for name in UNRECORDED {
+        fs::create_dir_all(directory.join(name)).unwrap();
+        fs::write(skill_file(directory, name), "earlier").unwrap();
+    }
+    fs::write(directory.join(UNRECORDED[0]).join("notes.md"), "keep").unwrap();
+    let outcome = refresh(directory, &embedded(), Mode::Refresh).unwrap();
+    assert!(outcome.changed);
+    assert_eq!(outcome.installed, [SKILLS[0].0]);
+    assert!(!skill_file(directory, UNRECORDED[0]).exists());
+    assert!(directory.join(UNRECORDED[0]).join("notes.md").exists());
+    assert!(!directory.join(UNRECORDED[1]).exists());
+    // Once the record exists, an unrecorded skill of that name is the user's.
+    fs::create_dir(directory.join(UNRECORDED[1])).unwrap();
+    fs::write(skill_file(directory, UNRECORDED[1]), "mine").unwrap();
+    refresh(directory, &embedded(), Mode::Install(Changed::Keep)).unwrap();
+    assert!(skill_file(directory, UNRECORDED[1]).exists());
+}
+
+#[test]
 fn retired_skill_is_removed_without_other_files() {
     let root = tempfile::tempdir().unwrap();
-    let retired = root.path().join(RETIRED);
+    let retired = root.path().join("retired");
     remove_skill(&retired).unwrap();
     fs::create_dir(&retired).unwrap();
     // A dangling link from an upgraded package is removed like a copy.

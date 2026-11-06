@@ -228,18 +228,15 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         Some(
             Command::Service(ServiceCommand::Daemon {
                 command: DaemonCommand::Run { .. }
-            }) | Command::Integration(IntegrationCommand::Skill {
-                command: Some(_),
-                ..
-            })
+            }) | Command::Integration(IntegrationCommand::Skill { command: Some(_) })
         )
     ) && let Ok(state) = Paths::command_state_dir(cli.state_dir.clone())
     {
         skill::refresh_installed(&state, cli.json);
     }
     // Skill delivery is independent of daemon state and socket-path limits.
-    if let Some(Command::Integration(IntegrationCommand::Skill { name, command })) = &cli.command {
-        return skill::run(*name, command.as_ref(), cli.json, cli.state_dir.clone());
+    if let Some(Command::Integration(IntegrationCommand::Skill { command })) = &cli.command {
+        return skill::run(command.as_ref(), cli.json, cli.state_dir.clone());
     }
     // Shell recovery must also work after cleanup, without daemon configuration.
     if let Some(Command::Integration(IntegrationCommand::Shell {

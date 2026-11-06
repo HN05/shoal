@@ -190,7 +190,7 @@ fn a_closed_stdout_ends_commands_quietly() {
     std::fs::write(&config, "[commands]\ncustom-tool = ['true']\n").unwrap();
     for args in [
         vec!["skill"],
-        vec!["--json", "skill", "worker"],
+        vec!["--json", "skill"],
         vec!["--help"],
         vec!["--version"],
         vec!["custom-tool", "--help"],
@@ -383,11 +383,7 @@ fn shoal_output_selects_the_format_of_results_and_errors() {
     let (output, _) = run(&["repo", "ls"], None, &[("SHOAL_OUTPUT", "yaml")]);
     assert_eq!(output.status.code(), Some(2), "{output:?}");
     assert!(output.stdout.is_empty());
-    let (output, _) = run(
-        &["--json", "skill", "worker"],
-        None,
-        &[("SHOAL_OUTPUT", "yaml")],
-    );
+    let (output, _) = run(&["--json", "skill"], None, &[("SHOAL_OUTPUT", "yaml")]);
     assert!(output.status.success(), "{output:?}");
 }
 
@@ -460,9 +456,9 @@ fn a_program_reads_json_output_with_the_librarys_types() {
     let repository: Repository = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(repository.id, "test");
 
-    let (output, _) = run(&["--json", "skill", "worker"], None, &[]);
+    let (output, _) = run(&["--json", "skill"], None, &[]);
     let skill: Skill = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(skill.name, "shoal-worker");
+    assert_eq!(skill.name, "shoal");
 
     let (output, _) = run(&["--json", "daemon", "status"], None, &[]);
     let status: Status = serde_json::from_slice(&output.stdout).unwrap();

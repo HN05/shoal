@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn modified_skill_choice_defaults_to_keep_and_repeats_unknown_answers() {
-    let path = Path::new("/skills/shoal-worker/SKILL.md");
+    let path = Path::new("/skills/shoal/SKILL.md");
     for (answers, expected) in [
         ("\n", ModifiedSkillChoice::Keep),
         ("", ModifiedSkillChoice::Keep),
@@ -11,18 +11,15 @@ fn modified_skill_choice_defaults_to_keep_and_repeats_unknown_answers() {
     ] {
         let mut output = Vec::new();
         let choice =
-            modified_skill_with_io("shoal-worker", path, &mut answers.as_bytes(), &mut output)
-                .unwrap();
+            modified_skill_with_io("shoal", path, &mut answers.as_bytes(), &mut output).unwrap();
         assert_eq!(choice, expected, "{answers:?}");
     }
     let mut output = Vec::new();
-    modified_skill_with_io("shoal-worker", path, &mut "x\nk\n".as_bytes(), &mut output).unwrap();
+    modified_skill_with_io("shoal", path, &mut "x\nk\n".as_bytes(), &mut output).unwrap();
     // The unknown answer asks again.
     let output = String::from_utf8(output).unwrap();
     assert_eq!(
-        output
-            .matches("shoal-worker at /skills/shoal-worker/SKILL.md")
-            .count(),
+        output.matches("shoal at /skills/shoal/SKILL.md").count(),
         2,
         "{output}"
     );

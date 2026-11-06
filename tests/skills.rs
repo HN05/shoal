@@ -19,14 +19,8 @@ fn cli(home: &Path) -> Command {
     command
 }
 
-const WORKER: &[u8] = include_bytes!("../skills/shoal-worker/SKILL.md");
-const SKILLS: [(&str, &[u8]); 2] = [
-    ("shoal-worker", WORKER),
-    (
-        "shoal-orchestrator",
-        include_bytes!("../skills/shoal-orchestrator/SKILL.md"),
-    ),
-];
+const SKILL: &[u8] = include_bytes!("../skills/shoal/SKILL.md");
+const SKILLS: [(&str, &[u8]); 1] = [("shoal", SKILL)];
 
 fn write_skills(directory: &Path, contents: &str) {
     for (name, _) in SKILLS {
@@ -160,8 +154,8 @@ fn relative_packaged_skill_link_installs_copies_that_follow_homebrew_upgrades() 
     let installed = home.path().join(".agents/skills");
     // Homebrew links the launcher into the versioned keg and the stable prefix to it.
     for (version, args) in [
-        ("0.5.0", ["skill", "install", "codex"]),
-        ("0.5.1", ["skill", "orchestrator", "--json"]),
+        ("0.5.0", &["skill", "install", "codex"][..]),
+        ("0.5.1", &["--json", "skill"]),
     ] {
         let package = cellar.join(version);
         write_skills(&package.join(skills), version);
@@ -197,19 +191,14 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
     let home = tempfile::tempdir().unwrap();
     assert_eq!(
         success(cli(home.path()).arg("skill").output().unwrap()),
-        WORKER
+        SKILL
     );
-    for (argument, (name, contents)) in ["worker", "orchestrator"].into_iter().zip(SKILLS) {
-        let exported: serde_json::Value = serde_json::from_slice(&success(
-            cli(home.path())
-                .args(["--json", "skill", argument])
-                .output()
-                .unwrap(),
-        ))
-        .unwrap();
-        assert_eq!(exported["name"], name);
-        assert_eq!(exported["skill"].as_str().unwrap().as_bytes(), contents);
-    }
+    let exported: serde_json::Value = serde_json::from_slice(&success(
+        cli(home.path()).args(["--json", "skill"]).output().unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(exported["name"], "shoal");
+    assert_eq!(exported["skill"].as_str().unwrap().as_bytes(), SKILL);
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
     // Installing for every tool writes nothing until a skill directory exists.
     success(
@@ -219,10 +208,10 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
             .unwrap(),
     );
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
-    // The single skill earlier versions installed is replaced.
-    let retired = home.path().join(".agents/skills/shoal");
-    fs::create_dir_all(&retired).unwrap();
-    fs::write(retired.join("SKILL.md"), "retired").unwrap();
+    // The skill earlier versions installed without a record is replaced.
+    let earlier = home.path().join(".agents/skills/shoal");
+    fs::create_dir_all(&earlier).unwrap();
+    fs::write(earlier.join("SKILL.md"), "earlier").unwrap();
     fs::create_dir_all(home.path().join(".claude/skills")).unwrap();
     let installed: serde_json::Value = serde_json::from_slice(&success(
         cli(home.path())
@@ -234,7 +223,7 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
     let entries = installed["installed"].as_array().unwrap();
     // opencode and pi share Codex's directory, reported once; Grok's does not
     // exist.
-    assert_eq!(entries.len(), 4);
+    assert_eq!(entries.len(), 2);
     for (agents, relative) in [
         (&["codex", "opencode", "pi"][..], ".agents/skills"),
         (&["claude"], ".claude/skills"),
@@ -256,15 +245,14 @@ fn skill_export_and_default_install_work_without_daemon_or_repository() {
             .unwrap(),
     ))
     .unwrap();
-    assert_eq!(output.lines().count(), 4);
-    assert!(!retired.exists());
+    assert_eq!(output.lines().count(), 2);
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 2);
 }
 
 #[test]
 fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
     let home = tempfile::tempdir().unwrap();
-    let directory = home.path().join(".agents/skills/shoal-worker");
+    let directory = home.path().join(".agents/skills/shoal");
     fs::create_dir_all(&directory).unwrap();
     let source = home.path().join("source-skill.md");
     fs::write(&source, "personal source\n").unwrap();
@@ -276,7 +264,7 @@ fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
         vec!["skill", "install", "codex", "--force"],
     ] {
         success(cli(home.path()).args(&args).output().unwrap());
-        assert_eq!(fs::read(directory.join("SKILL.md")).unwrap(), WORKER);
+        assert_eq!(fs::read(directory.join("SKILL.md")).unwrap(), SKILL);
         assert_eq!(fs::read_to_string(&source).unwrap(), "personal source\n");
         assert_eq!(
             fs::read_to_string(directory.join("notes.md")).unwrap(),
@@ -304,9 +292,9 @@ fn skill_install_refreshes_only_selected_tool_and_preserves_siblings() {
 fn unscoped_commands_update_installed_skills_after_upgrade() {
     let home = tempfile::tempdir().unwrap();
     let installed = home.path().join(".agents/skills");
-    // An earlier version copied one skill before Shoal recorded installations.
-    fs::create_dir_all(installed.join("shoal-worker")).unwrap();
-    fs::write(installed.join("shoal-worker/SKILL.md"), "version one").unwrap();
+    // An earlier version copied the skill before Shoal recorded installations.
+    fs::create_dir_all(installed.join("shoal")).unwrap();
+    fs::write(installed.join("shoal/SKILL.md"), "version one").unwrap();
     let run = |scope: Option<&str>, args: &[&str]| {
         let mut command = cli(home.path());
         command.env("SHOAL_STATE_DIR", home.path().join("state"));
@@ -318,7 +306,7 @@ fn unscoped_commands_update_installed_skills_after_upgrade() {
     let output = run(Some("scoped"), &["shell", "completions", "bash"]);
     success(output);
     assert_eq!(
-        fs::read_to_string(installed.join("shoal-worker/SKILL.md")).unwrap(),
+        fs::read_to_string(installed.join("shoal/SKILL.md")).unwrap(),
         "version one"
     );
     // Printing a skill also updates the installed ones.
@@ -334,8 +322,8 @@ fn unscoped_commands_update_installed_skills_after_upgrade() {
 fn development_builds_leave_installed_skills_alone() {
     let home = tempfile::tempdir().unwrap();
     let installed = home.path().join(".agents/skills");
-    fs::create_dir_all(installed.join("shoal-worker")).unwrap();
-    fs::write(installed.join("shoal-worker/SKILL.md"), "version one").unwrap();
+    fs::create_dir_all(installed.join("shoal")).unwrap();
+    fs::write(installed.join("shoal/SKILL.md"), "version one").unwrap();
     let run = |args: &[&str]| {
         cli(home.path())
             .env_remove("SHOAL_DEV_USER_FILES")
@@ -352,9 +340,9 @@ fn development_builds_leave_installed_skills_alone() {
         .map(|entry| entry.unwrap().file_name())
         .collect();
     entries.sort();
-    assert_eq!(entries, ["shoal-worker"]);
+    assert_eq!(entries, ["shoal"]);
     assert_eq!(
-        fs::read_to_string(installed.join("shoal-worker/SKILL.md")).unwrap(),
+        fs::read_to_string(installed.join("shoal/SKILL.md")).unwrap(),
         "version one"
     );
     assert!(!home.path().join(".codex").exists());
@@ -381,7 +369,7 @@ fn skill_install_honors_claude_override_and_rejects_invalid_paths_before_writes(
         .unwrap();
     assert!(!invalid.status.success());
     assert!(!home.path().join(".agents").exists());
-    let directory = config.join("skills/shoal-worker/SKILL.md");
+    let directory = config.join("skills/shoal/SKILL.md");
     fs::remove_file(&directory).unwrap();
     fs::create_dir(&directory).unwrap();
     fs::write(directory.join("keep"), "keep").unwrap();
@@ -417,7 +405,7 @@ fn scoped_processes_can_export_but_cannot_install_skills() {
                 .output()
                 .unwrap()
         ),
-        WORKER
+        SKILL
     );
     assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
 }
@@ -443,12 +431,12 @@ fn configured_ai_tools_install_selected_or_all_skills_and_override_defaults() {
             .unwrap()
     };
     let installed: serde_json::Value = serde_json::from_slice(&success(run("pi"))).unwrap();
-    assert_eq!(installed["installed"].as_array().unwrap().len(), 2);
+    assert_eq!(installed["installed"].as_array().unwrap().len(), 1);
     assert_eq!(installed["installed"][0]["agents"], json!(["pi"]));
     assert!(!home.path().join("custom codex").exists());
     fs::create_dir(home.path().join("custom codex")).unwrap();
     let installed: serde_json::Value = serde_json::from_slice(&success(run("all"))).unwrap();
-    assert_eq!(installed["installed"].as_array().unwrap().len(), 4);
+    assert_eq!(installed["installed"].as_array().unwrap().len(), 2);
     for directory in ["pi skills", "custom codex"] {
         assert_installed(&home.path().join(directory));
     }
