@@ -268,15 +268,27 @@ impl Link {
 }
 
 /// The repository and the encoded branch a branch URL names, split at the
-/// first forge's branch route that leaves a repository before it: another
-/// forge's route may appear inside a branch name or a nested group, as
-/// `/tree/` does inside `/src/branch/fix/tree/x` or `/-/tree/`.
+/// first forge's branch route that leaves a repository before it. Another
+/// forge's route may appear inside a branch name or a group, as `/tree/`
+/// does in `/src/branch/fix/tree/x`, so a route that contains another one,
+/// as `/-/tree/` contains `/tree/`, is tried before it.
 fn branch_link(url: &str) -> Option<(ForgeRepo, &str)> {
-    ForgeKind::ALL.iter().find_map(|&forge| {
+    let mut forges = ForgeKind::ALL.to_vec();
+    forges.sort_by_key(|forge| std::cmp::Reverse(contained_routes(*forge)));
+    forges.into_iter().find_map(|forge| {
         let (repository, branch) = url.split_once(forge.branch_route())?;
         let repository = ForgeRepo::parse_linked(repository, Some(forge)).ok()?;
         Some((repository, branch))
     })
+}
+
+/// How many other forges' branch routes `forge`'s contains.
+fn contained_routes(forge: ForgeKind) -> usize {
+    let route = forge.branch_route();
+    ForgeKind::ALL
+        .iter()
+        .filter(|other| **other != forge && route.contains(other.branch_route()))
+        .count()
 }
 
 pub(crate) fn decode_branch(input: &str) -> Result<String> {
