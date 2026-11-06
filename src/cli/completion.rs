@@ -277,8 +277,14 @@ fn own_first(arg: clap::Arg) -> clap::Arg {
 }
 
 impl Typed {
+    /// The configured commands and agents a command line names, leaving out
+    /// the agents config turns off.
     fn command_names(&self) -> Vec<String> {
-        let mut names: BTreeSet<String> = self.commands().keys().cloned().collect();
+        let settings = self.settings();
+        let mut names: BTreeSet<String> = (self.commands().keys())
+            .filter(|name| !settings.providers.contains(*name) || settings.agents.contains(*name))
+            .cloned()
+            .collect();
         names.extend(self.custom.clone());
         names.into_iter().collect()
     }

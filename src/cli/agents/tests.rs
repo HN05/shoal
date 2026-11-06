@@ -257,6 +257,9 @@ fn enabled_turns_an_agent_off_and_happys_agents_on() {
     assert!(agent_off(&off, "claude").is_some());
     assert!(agent_off(&off, "codex").is_none());
     assert!(!names(&off).contains(&"claude".to_owned()));
+    // A turned-off agent does not review either.
+    assert!(off.check_reviewer("claude").is_err());
+    assert!(off.check_reviewer("codex").is_ok());
     #[cfg(feature = "happy")]
     {
         assert!(agent_off(&off, "happy-codex").is_some());

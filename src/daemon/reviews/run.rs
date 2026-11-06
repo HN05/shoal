@@ -247,7 +247,7 @@ impl Manager {
             .fallback_agent
             .as_ref()
             .map(|agent| agent.name().to_owned())
-            .filter(|fallback| *fallback != agent);
+            .filter(|fallback| *fallback != agent && !settings.turned_off(fallback));
         Ok(match (ended, fallback) {
             (Ended::Failed(reason), Some(fallback)) if reason != FailureReason::TimedOut => {
                 log!(
@@ -573,6 +573,8 @@ fn reviewer_for<'a>(
         instructions,
         files,
     } = run;
+    // Config read at run time may have turned the reviewer off since.
+    settings.check_reviewer(agent)?;
     let tool = settings
         .tools
         .get(agent)

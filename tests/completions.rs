@@ -218,12 +218,12 @@ fn agents_complete_only_when_enabled_and_installed() {
     let config = home.path().join(".config/shoal/config.toml");
     fs::create_dir_all(config.parent().unwrap()).unwrap();
     let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());
-    let agents = |prefix: &str| {
-        let words = vec!["shoal", "start", "--agent", prefix];
-        let mut command = completion(home.path(), "bash", &words);
+    let complete = |words: &[&str]| {
+        let mut command = completion(home.path(), "bash", words);
         command.env("PATH", &path);
         candidates(command)
     };
+    let agents = |prefix: &str| complete(&["shoal", "start", "--agent", prefix]);
     fs::write(&config, "[agents.happy]\nenabled = true\n").unwrap();
     // Happy alone runs no agent, so none of its agents complete.
     install_programs(home.path(), &["happy"]);
@@ -235,6 +235,9 @@ fn agents_complete_only_when_enabled_and_installed() {
     fs::write(&config, "[agents.claude]\nenabled = false\n").unwrap();
     assert_eq!(agents("happy-"), Vec::<String>::new());
     assert_eq!(agents("cl"), Vec::<String>::new());
+    for words in [&["shoal", "cl"][..], &["shoal", "run", "cl"]] {
+        assert!(!complete(words).contains(&"claude".to_owned()), "{words:?}");
+    }
 }
 
 #[test]

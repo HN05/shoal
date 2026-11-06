@@ -225,7 +225,7 @@ fn agent_integration(settings: &Effective, name: &str) -> &'static dyn Integrati
 /// Why `settings` turn agent `name` off, if they do: its own `enabled =
 /// false`, or what turns off the integration that adds it.
 fn agent_off(settings: &Effective, name: &str) -> Option<&'static str> {
-    if settings.agents.get(name).and_then(|agent| agent.enabled) == Some(false) {
+    if settings.turned_off(name) {
         return Some("its [agents] entry sets enabled = false");
     }
     match (settings.integration(name), added(name)) {

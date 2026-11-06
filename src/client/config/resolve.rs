@@ -232,8 +232,12 @@ impl Effective {
     }
 
     /// Refuse agent `name` as a reviewer unless it is an AI tool with a
-    /// review template.
+    /// review template that config does not turn off.
     pub fn check_reviewer(&self, name: &str) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !self.turned_off(name),
+            "{name} is turned off: its [agents] entry sets enabled = false"
+        );
         let tool = self
             .tools
             .get(name)
@@ -244,6 +248,12 @@ impl Effective {
             "{name} has no review template; set agents.{name}.review to review with it"
         );
         Ok(())
+    }
+
+    /// Whether agent `name`'s own `[agents]` entry turns it off with
+    /// `enabled = false`.
+    pub fn turned_off(&self, name: &str) -> bool {
+        self.agents.get(name).and_then(|agent| agent.enabled) == Some(false)
     }
 
     /// The integration agent `name` runs with; none for an agent no AI tool
