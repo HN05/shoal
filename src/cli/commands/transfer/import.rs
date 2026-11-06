@@ -118,6 +118,19 @@ impl Package {
             sessions: files,
             bundle,
         } = read_import(file)?;
+        if let Some(copied) = manifest.copy {
+            ensure!(
+                options.sessions != Some(true),
+                "{} holds a copy, whose agents start from forks of the original's sessions; --keep-sessions would continue those sessions",
+                file.display()
+            );
+            if copied.earlier_files {
+                eprintln!(
+                    "warning: the agents' conversations in {} go past the copied checkpoint and describe work its files do not contain",
+                    file.display()
+                );
+            }
+        }
         let repository = options
             .repository
             .clone()
@@ -392,3 +405,6 @@ fn read_import(file: &Path) -> Result<Import> {
     let input = std::fs::File::open(file).with_context(|| format!("open {}", file.display()))?;
     Import::read(&mut BufReader::new(input))
 }
+
+#[cfg(test)]
+mod tests;

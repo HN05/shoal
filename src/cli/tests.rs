@@ -343,3 +343,11 @@ fn start_takes_an_optional_in_and_issue_and_refuses_flags_its_space_cannot_use()
         assert!(start(refused).is_err(), "{refused:?}");
     }
 }
+
+#[test]
+fn a_kept_export_narrows_to_a_checkpoint_of_one_space() {
+    let parse = |args: &[&str]| Cli::try_parse_from(["shoal", "move", "export"].iter().chain(args));
+    assert!(parse(&["topic", "--keep", "--checkpoint", "3", "-o", "f"]).is_ok());
+    assert!(parse(&["topic", "--checkpoint", "3", "-o", "f"]).is_err());
+    assert!(parse(&["--repo", "app", "--all", "--keep", "-o", "d"]).is_err());
+}

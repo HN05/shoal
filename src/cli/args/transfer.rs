@@ -17,7 +17,7 @@ pub enum MoveCommand {
     /// workspace is exported without another removal. Without -o, or with `-`, it writes to
     /// standard output, which must not be a terminal. When -o names a directory, several spaces,
     /// or with --all every space of the repository, go to a file each in it, once each one can
-    /// be exported.
+    /// be exported. --keep leaves the space running and writes a copy of it instead.
     Export(ExportArgs),
     /// Continue workspaces and chats shoal move export wrote, in the repository with the same origin.
     ///
@@ -65,6 +65,15 @@ pub struct ExportArgs {
     /// and --all need; defaults to standard output.
     #[arg(short, long, required_if_eq("all", "true"))]
     pub output: Option<PathBuf>,
+    /// Leave the space running and export a copy of it, which shoal move import opens as a new
+    /// space: a workspace at a new checkpoint on a branch of its own, or a chat from a fork of
+    /// its session.
+    #[arg(long, conflicts_with = "all")]
+    pub keep: bool,
+    /// Export a copy of the workspace at this earlier checkpoint, numbered as shoal work restore
+    /// lists them.
+    #[arg(long, requires = "keep", value_name = "N")]
+    pub checkpoint: Option<u64>,
     #[command(flatten)]
     pub confirmation: ConfirmationArgs,
 }
@@ -77,7 +86,8 @@ pub struct ImportArgs {
     /// Repository to import into, when it does not share the exported repository's origin.
     #[arg(long = "repo")]
     pub repository: Option<String>,
-    /// Continue every stopped agent's session, such as one whose files were copied by hand.
+    /// Continue every stopped agent's session, such as one whose files were copied by hand;
+    /// refused for a copy, whose agents start from forks.
     #[arg(long, conflicts_with = "new_sessions")]
     pub keep_sessions: bool,
     /// Start new sessions even on the machine that exported the space.

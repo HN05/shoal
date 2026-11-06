@@ -1,5 +1,6 @@
 //! `shoal move`: moving spaces to another Shoal, where `export` ends a space
-//! here and writes it to a file, `import` continues it from one and `ssh`
+//! here, or copies one, and writes it to a file, `import` continues it from
+//! one and `ssh`
 //! pipes one into the other, and moving repositories to another root
 //! directory.
 mod export;
@@ -34,11 +35,16 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             space,
             repository: None,
             output,
+            keep,
+            checkpoint,
             confirmation,
             ..
         }) => {
             let file = output.map_or_else(standard_output, Ok)?;
-            export::export(ctx, space, file, confirmation.yes).await
+            match keep {
+                true => export::copy::export_copy(ctx, space, file, checkpoint).await,
+                false => export::export(ctx, space, file, confirmation.yes).await,
+            }
         }
         MoveCommand::Import(ImportArgs {
             files,

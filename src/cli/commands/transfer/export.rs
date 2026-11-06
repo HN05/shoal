@@ -20,6 +20,8 @@ use crate::{
 
 use super::STANDARD_STREAM;
 
+pub(super) mod copy;
+
 /// `shoal move export`: end the space here, or take an already removed
 /// workspace, and write it to `file`. Several spaces, or any written to a
 /// directory, go to a file each in it. The destination is checked before a
@@ -173,18 +175,22 @@ impl Output {
     /// Report the export, copying it to standard output when it goes there.
     fn report(self, ctx: &Context, exported: &ExportedSpace) -> Result<i32> {
         let name = exported.manifest.name();
+        let (exported_space, opens) = match exported.manifest.copy {
+            Some(_) => (format!("a copy of {name}"), "as a new space"),
+            None => (name.to_owned(), "on another machine"),
+        };
         let Self::File { path } = &self else {
             let mut file = std::fs::File::open(self.file())?;
             crate::stdout::write(|stdout| {
                 std::io::copy(&mut file, stdout)?;
                 stdout.flush()
             })?;
-            eprintln!("Exported {name}");
+            eprintln!("Exported {exported_space}");
             return Ok(0);
         };
         ctx.emit(
             &format!(
-                "Exported {name} to {}; shoal move import opens it on another machine",
+                "Exported {exported_space} to {}; shoal move import opens it {opens}",
                 path.display()
             ),
             Exported {
