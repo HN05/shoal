@@ -4598,10 +4598,14 @@ it when it expires, and Git state such as unpushed commits is checked when it
 starts and when it expires.
 Running/unknown commands, saved stopped work, a chat running in the worktree or
 saved there, directory users (including shells), dirty/unpushed work,
-simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, and failed checks block cleanup. Pushed means reachable
-from locally known remote branches, merged into the default branch as removal
-decides, or with its changes on the branch the workspace builds on: its base
-workspace's branch, otherwise the local branch it was created from; no fetch.
+simulator leases, permits, holds, open [questions](#questions), pending PR proposals and push requests, and failed checks block cleanup.
+So does the running agent of the nearest space above with one, in any turn
+state, while no agent of the workspace's own has ever started there, as in a
+child it split for its subagents; once that agent stops, the timer starts over.
+Pushed means reachable from locally known remote branches, merged into the
+default branch as removal decides, or with its changes on the branch the
+workspace builds on: its base workspace's branch, otherwise the local branch
+it was created from; no fetch.
 A restore of an idle agent waiting for an update blocks nothing: removal cancels
 it and keeps the agent stopped, so `shoal work restore` brings it back for
 `shoal resume`.

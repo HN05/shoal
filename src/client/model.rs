@@ -922,6 +922,9 @@ pub enum CleanupReason {
     RunningCommands,
     Permits,
     Simulators,
+    /// No agent of its own has started there, and the agent of the
+    /// coordinator that does its work runs.
+    ParentAgentRunning,
     MissingDirectory,
     Dirty,
     Unpushed {
@@ -964,6 +967,7 @@ impl std::fmt::Display for CleanupReason {
             Self::RunningCommands => f.write_str("Tracked commands running"),
             Self::Permits => f.write_str("Resource permits held"),
             Self::Simulators => f.write_str("Simulator leases held"),
+            Self::ParentAgentRunning => f.write_str("Parent agent running"),
             Self::MissingDirectory => f.write_str("Directory missing"),
             Self::Dirty => f.write_str("Uncommitted or untracked changes"),
             Self::Unpushed { commits } => write!(

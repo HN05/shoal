@@ -765,7 +765,9 @@ need not relay. Shoal does not track those subagents: their hooks report under
 the coordinator's scope from its directory, so they cannot tell which child a
 subagent works in. A child in which no agent of its own has ever started,
 which the workspace's recorded mode tells, is instead its coordinator's work:
-it lists as `parent working` while that agent works. Claude Code's worktree
+it lists as `parent working` while that agent works, and idle cleanup keeps it
+while that agent runs, in any turn state, since subagents may outlast a turn
+and a coordinator may wait for the user mid-delegation. Claude Code's worktree
 hooks make the worktree it creates for a subagent such a child, so its own
 isolation needs no worktree Shoal does not own.
 A subagent inherits its agent's scope, and under Codex its instructions and

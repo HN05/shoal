@@ -892,7 +892,8 @@ impl Manager {
     /// What daemon records keep the workspace: holds, open questions and
     /// assignment state first, since their own cleanup paths decide removal,
     /// then stopped work besides the idle restores of `executions`, then
-    /// commands and leases.
+    /// commands and leases, then the running agent of a coordinator that
+    /// does its work.
     async fn recorded_cleanup_reason(
         &self,
         id: &str,
@@ -913,7 +914,13 @@ impl Manager {
         if self.chat_saved_in(id).await? {
             return Ok(Some(CleanupReason::Recovering));
         }
-        self.usage_reason(id, executions).await
+        if let Some(reason) = self.usage_reason(id, executions).await? {
+            return Ok(Some(reason));
+        }
+        Ok(self
+            .coordinator_runs(id)
+            .await?
+            .then_some(CleanupReason::ParentAgentRunning))
     }
 
     /// What keeps the workspace from every unattended removal, completion

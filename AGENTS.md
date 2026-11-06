@@ -151,8 +151,10 @@ for delivering a PR, under Committing near the end, decide when work is done.
   repository's config, meeting every condition on a worktree; a running agent
   is use, a restore that waits to run its agent keeps a chat as a queued
   launch keeps a workspace, and a session Shoal saved keeps it from idle
-  cleanup as saved stopped work does. A chat's agent exiting stops the chat, which ends
-  only by removal.
+  cleanup as saved stopped work does. Idle cleanup also counts a
+  coordinator's running agent as use of a workspace below it in which no
+  agent of its own has started, since its subagents work there. A chat's
+  agent exiting stops the chat, which ends only by removal.
 - `[cleanup.auto]` has `enabled` (default true) and `idle_minutes` (default
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,
   240 idle minutes, persisted across restarts) removes merged, unused workspaces

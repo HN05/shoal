@@ -29,6 +29,20 @@ impl Manager {
         }
         Ok(())
     }
+
+    /// Whether the agent of the coordinator that does the work of workspace
+    /// `id` runs, in any turn state, since its subagents may work on past
+    /// its turn.
+    pub(super) async fn coordinator_runs(&self, id: &str) -> Result<bool> {
+        let agents = self.tracked_agents().await;
+        let id = id.to_owned();
+        self.store
+            .run(move |db| match working_coordinator(db, &id, &agents)? {
+                Some(coordinator) => agent_runs(db, &coordinator, &agents),
+                None => Ok(false),
+            })
+            .await
+    }
 }
 
 /// The turn state the agent of the coordinator that does the work of
@@ -60,6 +74,17 @@ fn working_coordinator(
         return Ok(None);
     }
     tree::coordinator_of(db, id, agents)
+}
+
+/// Whether the agent of the space `id` runs: a workspace's tracked agent,
+/// or a chat's until the chat stops.
+fn agent_runs(db: &Connection, id: &str, agents: &TrackedAgents) -> Result<bool> {
+    Ok(agents.contains(id)
+        || store::exists(
+            db,
+            "SELECT 1 FROM chats WHERE id=?1 AND restore IS NULL",
+            [id],
+        )?)
 }
 
 #[cfg(test)]

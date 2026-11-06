@@ -219,6 +219,11 @@ impl Manager {
 pub(crate) struct TrackedAgents(Vec<String>);
 
 impl TrackedAgents {
+    /// Whether the agent of workspace `id` is among them.
+    pub(crate) fn contains(&self, id: &str) -> bool {
+        self.0.iter().any(|tracked| tracked == id)
+    }
+
     /// The parameter `has_agent` reads.
     fn parameter(&self) -> String {
         serde_json::Value::from(self.0.clone()).to_string()
