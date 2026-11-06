@@ -467,8 +467,9 @@ regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
 A stopped [chat](#chats) restores at once under its name, continuing
-its session, in a background place where a restored agent opens, or in this
-terminal with `--focus`; `--discard` removes it instead, unless workspaces are
+its session, in a background place where a restored agent opens, once the
+chat is about to run its agent there or with the error that stopped it, or in
+this terminal with `--focus`; `--discard` removes it instead, unless workspaces are
 below it, which only `shoal rm` takes. A running chat has nothing to resume.
 When a stopped agent's execution is unknown, after a daemon restart or a stop
 Shoal could not prove, the daemon forgets it once its wrapper has exited and none

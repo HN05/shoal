@@ -102,10 +102,15 @@ fn restart_restores_a_chat_in_a_new_place() {
         });
         wait_until("chat started", || home.join("chat-started").exists());
 
+        // It answers once the chat runs again, in the zmx session it opened.
         let restarted = fixture.ok(&["restart", "talk"]);
         assert_eq!(
             restarted["restarted"],
-            serde_json::json!([{"workspace": "talk", "agent": "claude"}]),
+            serde_json::json!([{
+                "workspace": "talk",
+                "agent": "claude",
+                "place": {"host": "zmx", "place": "talk"},
+            }]),
             "{restarted}"
         );
         // The first agent ended, and the restored one continues its session.

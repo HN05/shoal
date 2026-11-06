@@ -156,8 +156,8 @@ pub struct StartArgs {
     /// Title of --linked-issue.
     #[arg(long, hide = true, requires = "linked_issue")]
     pub linked_issue_title: Option<String>,
-    /// Handoff of a scoped starter that waits on this background place,
-    /// which shoal start passes.
+    /// Handoff of the starter that waits on this background place, which
+    /// shoal start passes.
     #[arg(long, hide = true, requires_all = ["chat", "here"])]
     pub handoff: Option<PathBuf>,
     /// Arguments forwarded to the agent, such as its prompt.

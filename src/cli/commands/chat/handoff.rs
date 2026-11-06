@@ -1,9 +1,11 @@
-//! The handoff of a chat that a scoped process starts in a background place.
-//! The place records the chat with the starter's scope token, which may end
-//! with the starter, so the starter waits until the chat holds its own. The
-//! token goes through a private directory that the place's command names,
-//! never through the place's environment, which a shell left there after
-//! the chat would keep.
+//! The handoff of a chat that a process starts in a background place: the
+//! starter waits until the place reports that the chat is about to run its
+//! agent, or why it does not, since opening the place proves neither. A
+//! scoped starter's place records the chat with the starter's scope token,
+//! which may end with the starter, so that token goes through the handoff
+//! too. The handoff is a private directory that the place's command names,
+//! never the place's environment, which a shell left there after the chat
+//! would keep.
 use std::{
     path::{Path, PathBuf},
     sync::{
@@ -30,15 +32,19 @@ const POLL: Duration = Duration::from_millis(100);
 pub(super) struct Handoff(tempfile::TempDir);
 
 impl Handoff {
-    /// A handoff of the scope token `token`, which only this user reads.
-    pub fn create(token: &str) -> Result<Self> {
+    /// A handoff, of the scope token `token` when the starter has one, which
+    /// only this user reads.
+    pub fn create(token: Option<&str>) -> Result<Self> {
         use std::os::unix::fs::PermissionsExt as _;
         let directory = tempfile::Builder::new()
             .prefix("shoal-chat.")
             .permissions(std::fs::Permissions::from_mode(0o700))
             .tempdir()
             .context("create the chat's handoff")?;
-        std::fs::write(directory.path().join(SCOPE), token).context("write the chat's handoff")?;
+        if let Some(token) = token {
+            std::fs::write(directory.path().join(SCOPE), token)
+                .context("write the chat's handoff")?;
+        }
         Ok(Self(directory))
     }
 
@@ -71,15 +77,19 @@ impl Handoff {
 /// The handoff this process received, to which it reports.
 static RECEIVED: OnceLock<PathBuf> = OnceLock::new();
 
-/// Take the starter's scope token from the handoff at `path` as this
-/// process's own, and report to the starter from now on.
+/// Take the starter's scope token from the handoff at `path`, when it handed
+/// one, as this process's own, and report to the starter from now on.
 pub(super) fn receive(path: &Path) -> Result<()> {
     ensure!(
         RECEIVED.set(path.to_owned()).is_ok(),
         "this process already received a chat's handoff"
     );
     let scope = path.join(SCOPE);
-    let token = std::fs::read_to_string(&scope).context("read the chat's handoff")?;
+    let token = match std::fs::read_to_string(&scope) {
+        Ok(token) => token,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error).context("read the chat's handoff"),
+    };
     let _ = std::fs::remove_file(&scope);
     ensure!(
         crate::env::take_handed_scope(token),
@@ -88,7 +98,7 @@ pub(super) fn receive(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Whether this process is the place a scoped starter waits on.
+/// Whether this process is the place a starter waits on.
 pub(super) fn awaited() -> bool {
     RECEIVED.get().is_some()
 }

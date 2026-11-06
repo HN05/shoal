@@ -221,8 +221,8 @@ pub(super) struct Options {
     /// The stopped chat, by ID, that this start restores under its own name
     /// instead of recording a new one.
     pub restore: Option<String>,
-    /// The handoff of a scoped starter that waits on this place to start
-    /// the chat with its scope.
+    /// The handoff of a starter that waits on this place to start the chat,
+    /// with its scope when it is scoped.
     pub handoff: Option<PathBuf>,
     /// The space the chat goes below; the daemon puts a scoped starter's
     /// below its own space without one.
@@ -530,12 +530,11 @@ pub(super) async fn launch(
     };
     let home = topic.home(&repo);
     if place == ChatPlace::Background {
-        // A scoped starter's scope token, with which the place records the
-        // chat, may end with the starter, so it waits for the chat's own.
-        let handoff = (crate::env::scope_token().as_deref())
-            .map(handoff::Handoff::create)
-            .transpose()?;
-        let relaunch = beside(&name).relaunch(handoff.as_ref().map(handoff::Handoff::path));
+        // Opening the place does not start the chat, so the start waits for
+        // its report. A scoped starter's scope token, with which the place
+        // records the chat, may end with the starter, so it goes along.
+        let handoff = handoff::Handoff::create(crate::env::scope_token().as_deref())?;
+        let relaunch = beside(&name).relaunch(Some(handoff.path()));
         let note = terminal::start_chat_in_background(
             ctx,
             &settings,
@@ -545,9 +544,7 @@ pub(super) async fn launch(
             &relaunch,
         )
         .await?;
-        if let Some(handoff) = handoff {
-            handoff.wait().await?;
-        }
+        handoff.wait().await?;
         return Ok(Started::Background(BackgroundChat {
             chat: name,
             agent: agent.name().to_owned(),
@@ -783,7 +780,7 @@ struct Beside<'a> {
 
 impl Beside<'_> {
     /// The `shoal` arguments that start this chat in place where it opens,
-    /// reporting to the scoped starter's `handoff`.
+    /// reporting to the `handoff` of the starter that waits on it.
     fn relaunch(&self, handoff: Option<&Path>) -> Vec<OsString> {
         let mut chat = self.topic.relaunch.clone();
         chat.extend([

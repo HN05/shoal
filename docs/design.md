@@ -663,10 +663,12 @@ names, in its repository, and a scoped caller creates nothing else, while the
 user's terminal creates top-level spaces.
 A chat an agent starts opens in a background place, since the agent cannot
 hand over its terminal, and keeps the agent's scope until it records the chat
-below the agent's space. The scope token goes through a private directory the
-place's command names, never the place's environment, which a shell left there
-would keep. The agent waits for that handoff, since its scope may
-end with it, and may not run the chat in its own terminal, where the chat's
+below the agent's space. Every start in a background place waits for the place
+to report that the chat is about to run its agent, or why not, since an open
+place proves neither; the report and a scoped starter's token go through a
+private directory the place's command names, never the place's environment,
+which a shell left there would keep. The agent waits for that handoff also
+since its scope may end with it, and may not run the chat in its own terminal, where the chat's
 processes would be its own; places drop the marks and scope token of the space
 that opened them, so what runs there is the new chat's. Spaces form one tree through one parent link,
 `space_parents`, which records a workspace split from another and one a chat
