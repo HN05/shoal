@@ -3,7 +3,7 @@
 //! the workspace and its issue, then the operation that prepares it.
 use std::{collections::BTreeMap, sync::Arc};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::commands::check_queued_launch,
@@ -11,11 +11,11 @@ use crate::{
         links::issue::OpenIssue,
         log,
         scope::Caller,
-        workspace::{Manager, NewWorkspace},
+        workspace::{CopyPlace, Manager, NewWorkspace},
     },
     model::{OpenedWorkspace, Workspace},
     protocol::{
-        CreationOptions,
+        CopySource, CreationOptions,
         operations::{OperationSpec, Preparation, QueuedLaunch, StartedWorkspace, WorkspaceStart},
     },
     removal::{InspectionPolicy, UnsavedWork},
@@ -31,6 +31,15 @@ pub(crate) struct Opening<'a> {
     pub base: Option<String>,
     pub new: NewWorkspace<'a>,
     pub parent: Option<String>,
+}
+
+/// The child a split creates: on the new branch `name` from `base`, or a
+/// copy of `copy`, on `name` or a branch named after the copied one's.
+pub(crate) struct Split {
+    pub name: Option<String>,
+    pub copy: Option<CopySource>,
+    pub base: Option<String>,
+    pub options: CreationOptions,
 }
 
 /// What preparing a new workspace does once it exists, in the caller's
@@ -70,14 +79,12 @@ impl Manager {
         self.prepare_new(opened, issue, preparing, caller).await
     }
 
-    /// Split child `name` from workspace `parent`, on `base`, leaving out
-    /// what `options` say, and start preparing it.
+    /// Split child `name` from workspace `parent`, on `base` or a copy of
+    /// `copy`, leaving out what `options` say, and start preparing it.
     pub(crate) async fn start_split(
         self: &Arc<Self>,
         parent: &str,
-        name: String,
-        base: Option<String>,
-        options: CreationOptions,
+        split: Split,
         preparing: Preparing,
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
@@ -90,14 +97,37 @@ impl Manager {
             Some(input) => Some(self.read_open_issue(&parent.path, input).await?),
             None => None,
         };
-        let child = self
-            .split_workspace(&parent.id, name, base, options)
-            .await?;
+        let child = self.create_child(&parent, split).await?;
         let opened = OpenedWorkspace {
             workspace: child,
             reused: false,
         };
         self.prepare_new(opened, issue, preparing, caller).await
+    }
+
+    /// Create the child `split` describes below `parent`.
+    async fn create_child(
+        &self,
+        parent: &Workspace,
+        Split {
+            name,
+            copy,
+            base,
+            options,
+        }: Split,
+    ) -> Result<Workspace> {
+        let Some(copy) = copy else {
+            let name = name.context("name the child's branch")?;
+            return self.split_workspace(&parent.id, name, base, options).await;
+        };
+        ensure!(base.is_none(), "a copy starts from its source, not a base");
+        let new = NewWorkspace {
+            options,
+            parent: Some(parent.id.clone()),
+            ..Default::default()
+        };
+        let repository = Selector::from(parent.repository_id.clone());
+        (self.create_copy(repository, &copy, CopyPlace::Branch(name), new)).await
     }
 
     /// Create the workspace `opening` names in `repository` on a new
@@ -129,6 +159,19 @@ impl Manager {
             WorkspaceStart::Branch(branch) => {
                 self.open_branch_below(repository, &branch, base, new, parent, confined)
                     .await
+            }
+            WorkspaceStart::Copy { source, branch } => {
+                ensure!(base.is_none(), "a copy starts from its source, not a base");
+                let new = NewWorkspace {
+                    parent: parent.clone(),
+                    ..new
+                };
+                let place = CopyPlace::Branch(branch);
+                let workspace = self.create_copy(repository, &source, place, new).await?;
+                Ok(OpenedWorkspace {
+                    workspace: self.give_to_parent(&workspace.id, parent).await?,
+                    reused: false,
+                })
             }
             WorkspaceStart::PullHead { url, head } => {
                 ensure!(

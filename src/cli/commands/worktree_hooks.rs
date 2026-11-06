@@ -33,7 +33,7 @@ pub(super) async fn create(ctx: &Context) -> Result<i32> {
     let input: Create = hook_input()?;
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let parent = enclosing(&workspaces, &input.cwd)?.id.clone();
-    let start = crate::client::operations::NewSplit::new(parent, input.name);
+    let start = crate::client::operations::NewSplit::new(parent, Some(input.name));
     let child = super::split::start_child(ctx, start).await?;
     let Some(child) = super::split::follow_preparation(ctx, child).await? else {
         return Ok(1);

@@ -52,8 +52,9 @@ for delivering a PR, under Committing near the end, decide when work is done.
   through one operation.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
   operations, except creating a workspace at a commit's worktree, which plain
-  Git creates since Worktrunk only makes worktrees on a branch, and preserve
-  Shoal's ownership records and cleanup policy.
+  Git creates since Worktrunk only makes worktrees on a branch, and a copy's,
+  since Worktrunk always checks files out; preserve Shoal's ownership records
+  and cleanup policy.
 - Keep production Git command arguments in the `git` module; callers use named
   operations and retain lifecycle and execution policy.
 - Interactive input lives in `cli::ui`, whose module doc lists what it offers:

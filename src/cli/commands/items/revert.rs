@@ -146,7 +146,7 @@ async fn revert_workspace(
         Reverting::Workspace(workspace) if crate::env::is_scoped() => {
             let start = NewSplit {
                 base,
-                ..NewSplit::new(workspace.id.clone(), name)
+                ..NewSplit::new(workspace.id.clone(), Some(name))
             };
             split::start_child(ctx, start).await?
         }

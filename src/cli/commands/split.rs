@@ -51,7 +51,7 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
         base: split.base,
         options: split.options,
         issue: issue.as_ref().map(|issue| issue.url.clone()),
-        ..NewSplit::new(parent, name)
+        ..NewSplit::new(parent, Some(name))
     };
     let child = start_child(ctx, start).await?;
     let Some(child) = follow_preparation(ctx, child).await? else {

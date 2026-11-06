@@ -162,8 +162,11 @@ pub async fn start_workspace(
 pub struct NewSplit {
     /// The workspace it is split from.
     pub workspace: String,
-    /// Its new branch.
-    pub name: String,
+    /// Its new branch; a copy's defaults to one named after the copied
+    /// workspace's.
+    pub name: Option<String>,
+    /// The workspace it copies, instead of starting from `base`.
+    pub copy: Option<crate::protocol::CopySource>,
     /// The branch its branch starts from.
     pub base: Option<String>,
     pub options: CreationOptions,
@@ -176,10 +179,11 @@ pub struct NewSplit {
 impl NewSplit {
     /// A child of `workspace` on a new branch `name`, with defaults for
     /// everything else.
-    pub fn new(workspace: String, name: String) -> Self {
+    pub fn new(workspace: String, name: Option<String>) -> Self {
         Self {
             workspace,
             name,
+            copy: None,
             base: None,
             options: CreationOptions::default(),
             issue: None,
@@ -197,6 +201,7 @@ pub async fn start_split(
     let NewSplit {
         workspace,
         name,
+        copy,
         base,
         options,
         issue,
@@ -205,6 +210,7 @@ pub async fn start_split(
     let method = OperationMethod::StartSplit {
         workspace,
         name,
+        copy,
         base,
         options,
         issue,

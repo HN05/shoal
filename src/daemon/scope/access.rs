@@ -36,6 +36,24 @@ impl Manager {
         Ok(())
     }
 
+    /// Confine a copy `caller` starts to its own workspace and those below
+    /// it, live ones only, naming the copied one by ID from then on.
+    pub(in crate::daemon) async fn copy_within(
+        &self,
+        caller: &Caller,
+        source: &mut crate::protocol::CopySource,
+    ) -> Result<()> {
+        let workspace = self.workspace(&source.workspace).await.context(
+            "workspace processes copy only existing workspaces; ask the user to start from a removed workspace's checkpoint",
+        )?;
+        ensure!(
+            self.within_subtree(&caller.space_id, &workspace.id).await?,
+            "workspace processes copy only their own workspace and those below it"
+        );
+        source.workspace = workspace.id;
+        Ok(())
+    }
+
     /// The repositories `caller` may see: its own space's, or all of them
     /// for an unscoped caller.
     pub(in crate::daemon) async fn visible_repositories(

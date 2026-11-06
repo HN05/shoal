@@ -58,6 +58,7 @@ pub(crate) use agent_queue::Grant;
 pub use agents::RestartWaits;
 pub(crate) use agents::{Outcome, Pause, Protection, Restart, Restarts, restarted};
 pub(crate) use branches::NewWorktreeOptions;
+pub(crate) use copies::CopyPlace;
 pub(crate) use daemon_exit::Ending;
 pub(crate) use executions::{Completing, ExecutionRequest, ReattachedExecution, StartedExecution};
 pub use executions::{ExecutionKind, StopRequest, UnprovenStop};

@@ -16,7 +16,7 @@ use crate::{
     fsutil::off_runtime,
     hooks::HookKind,
     model::{
-        Execution, ExecutionPlan, MergePlan, PortReservation, QueueEntry, Repository,
+        CopiedFrom, Execution, ExecutionPlan, MergePlan, PortReservation, QueueEntry, Repository,
         StoppedWorkspace, UnmergePlan, Workspace,
     },
     process::{
@@ -658,7 +658,10 @@ impl Manager {
                 self.ensure_no_pending_rename(&workspace.id).await?;
                 let setup_cmd = self.workspace_hook(workspace, HookKind::Setup).await?;
                 let pre_setup = self.workspace_hook(workspace, HookKind::PreSetup).await?;
-                let copy_ignored = self.workspace_settings(workspace).await?.setup.copy_ignored;
+                // A copy of a workspace's files has that workspace's ignored
+                // files instead.
+                let copy_ignored = self.workspace_settings(workspace).await?.setup.copy_ignored
+                    && !(workspace.copied_from.as_ref()).is_some_and(CopiedFrom::took_files);
                 // One that skipped setup runs it to clear that and run the
                 // hooks around it, whatever the setup does.
                 ensure!(

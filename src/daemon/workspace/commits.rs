@@ -40,6 +40,14 @@ impl Manager {
             Some(parent) => Some(self.parent_space(&parent).await?),
             None => None,
         };
+        if let CommitStart::Copy(source) = start {
+            let new = super::NewWorkspace {
+                options,
+                parent,
+                ..Default::default()
+            };
+            return (self.create_copy(repository, &source, super::CopyPlace::Commit, new)).await;
+        }
         // Checked before resolving the start, which may fetch: a scoped
         // process reaches only its own repository.
         self.ensure_parent_repository(&repository, parent.as_deref())
@@ -384,6 +392,7 @@ impl Manager {
         match start {
             CommitStart::Revision(base) => self.resolve_revision(repo, base.as_deref()).await,
             CommitStart::PullHead(head) => pull_head(repo, &head).await,
+            CommitStart::Copy(_) => anyhow::bail!("a copy starts from its source's HEAD"),
         }
     }
 
@@ -408,7 +417,7 @@ impl Manager {
     }
 
     /// `name`, or the first of `name-2`, `name-3`, ... that nothing holds.
-    async fn free_workspace_name(&self, name: &str) -> Result<String> {
+    pub(super) async fn free_workspace_name(&self, name: &str) -> Result<String> {
         let name = derive_workspace_name(name);
         self.store
             .run(move |db| crate::daemon::store::free_name(db, &name))

@@ -335,7 +335,7 @@ impl Manager {
     /// The removal record to reopen, kept with its checkpoints for at least
     /// [`RESTORE_CLAIM`] in the same transaction, so expiry cannot delete
     /// them while the restore runs.
-    async fn claim_removed_workspace(&self, selector: &str) -> Result<RemovedWorkspace> {
+    pub(super) async fn claim_removed_workspace(&self, selector: &str) -> Result<RemovedWorkspace> {
         let name = selector.to_owned();
         self.store
             .run(move |db| claim(db, &name))

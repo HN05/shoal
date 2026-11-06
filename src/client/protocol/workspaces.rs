@@ -247,6 +247,19 @@ pub enum CommitStart {
     /// A revision as `--base` names it; `None` for the default branch.
     Revision(Option<String>),
     PullHead(PullHead),
+    /// A copy of another workspace, at its HEAD.
+    Copy(CopySource),
+}
+
+/// The workspace a new one copies: its current files, or one of its
+/// checkpoints, of a live or a removed workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CopySource {
+    /// The workspace's name or ID; a removed workspace's only with
+    /// `checkpoint`.
+    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint: Option<u64>,
 }
 
 /// PR `number`'s head, which `origin` serves under `reference`, expected at

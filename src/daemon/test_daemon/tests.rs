@@ -457,7 +457,8 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     assert_eq!(code(inspect(&app, "api").await), ErrorCode::NotFound);
     let split = |agent| OperationMethod::StartSplit {
         workspace: "parent".into(),
-        name: "child".into(),
+        name: Some("child".into()),
+        copy: None,
         base: Some("HEAD".into()),
         options: Default::default(),
         issue: None,

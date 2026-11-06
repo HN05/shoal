@@ -69,10 +69,15 @@ pub enum OperationMethod {
         env: Option<BTreeMap<String, String>>,
     },
     /// Split a child from `workspace` and start preparing it, as `shoal
-    /// split` does, with the checks of [`Self::StartWorkspace`].
+    /// split` does, with the checks of [`Self::StartWorkspace`]: on the new
+    /// branch `name`, or with `copy` on a copy of that workspace, on `name`
+    /// or else a branch named after the copied one.
     StartSplit {
         workspace: String,
-        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        copy: Option<super::CopySource>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base: Option<String>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
@@ -114,6 +119,13 @@ pub enum WorkspaceStart {
     /// PR `url`'s head, at a commit, reopening the workspace made for the
     /// PR; it takes no base, path or Git profile.
     PullHead { url: String, head: PullHead },
+    /// A copy of another workspace of the repository on a new branch,
+    /// `branch` or else one named after the copied one's; it takes no base.
+    Copy {
+        source: super::CopySource,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        branch: Option<String>,
+    },
     /// The recorded workspace of the repository this selector names,
     /// reopened for a launch in it, never created again; it takes no base,
     /// path, Git profile or parent.

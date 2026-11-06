@@ -8,7 +8,7 @@ use super::super::{
     answer::{Answer, OperationGuard},
     operations::{
         Entry,
-        starts::{Opening, Preparing},
+        starts::{Opening, Preparing, Split},
     },
     scope::{Caller, Scoped, denied},
     workspace::{Manager, NewWorkspace},
@@ -77,12 +77,19 @@ pub(super) async fn handle(
         OperationMethod::StartSplit {
             workspace,
             name,
+            copy,
             base,
             options,
             issue,
             agent,
             env,
         } => {
+            let split = Split {
+                name,
+                copy,
+                base,
+                options,
+            };
             let preparing = Preparing {
                 issue,
                 pr: None,
@@ -91,7 +98,7 @@ pub(super) async fn handle(
             };
             Body::WorkspaceStarted(
                 manager
-                    .start_split(&workspace, name, base, options, preparing, caller)
+                    .start_split(&workspace, split, preparing, caller)
                     .await?,
             )
         }
@@ -112,7 +119,14 @@ impl Scoped for OperationMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             OperationMethod::StartOperation { spec, .. } => Some(spec.workspace_mut()),
-            OperationMethod::StartSplit { workspace, .. } => Some(workspace),
+            OperationMethod::StartSplit {
+                workspace, copy, ..
+            } => {
+                if let Some(copy) = copy {
+                    manager.copy_within(caller, copy).await?;
+                }
+                Some(workspace)
+            }
             // Only the user reopens a recorded workspace for a launch.
             OperationMethod::StartWorkspace {
                 start: WorkspaceStart::Workspace(_),
@@ -121,8 +135,11 @@ impl Scoped for OperationMethod {
             // A scoped caller opens workspaces only in its own tree, below
             // its own space unless it names one below it, which must be in
             // their repository.
-            OperationMethod::StartWorkspace { parent, .. } => {
+            OperationMethod::StartWorkspace { parent, start, .. } => {
                 manager.parent_below(caller, parent).await?;
+                if let WorkspaceStart::Copy { source, .. } = start {
+                    manager.copy_within(caller, source).await?;
+                }
                 None
             }
             OperationMethod::FollowOperation { id, .. }

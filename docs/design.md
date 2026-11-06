@@ -388,7 +388,8 @@ verified stopped before replacing their service.
 Worktrunk creates and removes worktrees through Shoal's adapter with isolated
 configuration and hooks disabled, except that plain Git, with hooks disabled too,
 creates a workspace at a commit's worktree, since Worktrunk only makes worktrees on
-a branch; Worktrunk removes it like any other. Typed adapter outcomes preserve unfamiliar strings;
+a branch, and a copy's, since Worktrunk always checks files out; Worktrunk removes
+them like any other. Typed adapter outcomes preserve unfamiliar strings;
 only confirmed branch deletion sets the response deletion flag. Invoke external
 tools with argument arrays. Captured subprocesses share optional deadlines, whose
 error names the command line and directory, and a
@@ -653,6 +654,26 @@ without a branch, and branch-only commands refuse it. `--skip-setup` and
 for a runner: one skips what gates readiness, with the removal hooks that tear it
 down, and the other makes every removal delete the workspace without inspecting it,
 asking or keeping a checkpoint.
+
+A workspace can start from a copy of another's current files or from one of its
+checkpoints, with `--copy` and `--checkpoint` on `start` and `split`: two flags,
+since spaces are also named by number, and neither combines with `--base`, which
+keeps meaning a Git ref and so committed work only. A copy is an ordinary
+workspace on a new branch, or at a commit with `split --no-branch`, with one
+editing agent of its own, a fresh one or with `--fork` one forked from the
+source's. Copies are built on checkpoints. A copy of current files gets a linked
+worktree created without checkout, the source's index and cloned files, ignored
+ones included, which replace the seed and `setup.copy_ignored`; a plain folder
+copy would share the source's `.git` file and index. It then takes a checkpoint
+of itself, private at that moment, so the record matches its files even when the
+source's agent kept editing during the clone. A copy of a checkpoint writes its
+files into a new worktree as a restore does. Either way the copy's starting
+checkpoint keeps every unsaved file whatever `archive_max_mb`, and the copy's
+record keeps it from expiring. It takes its
+source's diff base and worktree Git config, and nothing that belongs to the
+source's work: links, leases, holds, questions, ready marks, checkpoints or the
+session. Agents copy only within their scope, and a removed workspace's
+checkpoint, like reopening it, stays the user's.
 
 A child workspace is split from a parent with `shoal split`, so an agent whose
 work needs another PR gets another branch and worktree instead of switching
@@ -2548,12 +2569,14 @@ expiry, never under the repository's Git gate, which removal holds. An agent's
 checkpoint is taken only once the processes it left are proven stopped, and a
 restore excludes link changes like other lifecycle operations. Checkpoints are taken on request, when an agent exits or is stopped
 (while the workspace is ready or stopping), before a restore to a checkpoint, and
-by removal; all but requested ones extend the newest checkpoint instead when they
-would keep the same branch, HEAD and files. Unsaved files beyond
-`[cleanup.restore] archive_max_mb` are not kept, leaving HEAD only. A snapshot
+by removal, and when a copy starts; all but requested ones extend the newest
+checkpoint instead when they would keep the same branch, HEAD and files. Unsaved
+files beyond `[cleanup.restore] archive_max_mb` are not kept, leaving HEAD only,
+except in a copy's starting checkpoint. A snapshot
 fails when HEAD or the branch moves while it is taken, so its record's HEAD
 always matches its files. Checkpoints
-expire after `retention_days`, and so do those no workspace or removal record owns.
+expire after `retention_days`, a copy's starting checkpoint only once the copy is
+gone, and so do those no workspace or removal record owns.
 Restoring a checkpoint reserves the `restoring` lifecycle state, which excludes
 other lifecycle operations and new executions, refuses while another execution is
 recorded or the checkpoint's HEAD or files collide with ignored ones, keeps the current state in

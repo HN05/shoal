@@ -246,6 +246,13 @@ async fn owned_places(manager: &Manager, workspace: Option<String>) -> Result<Bo
 
 impl Scoped for WorkspaceMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+        if let WorkspaceMethod::CreateCommitWorkspace {
+            start: crate::protocol::CommitStart::Copy(source),
+            ..
+        } = self
+        {
+            manager.copy_within(caller, source).await?;
+        }
         Ok(match self {
             // The settings of its own repository choose what it opens there.
             WorkspaceMethod::LayeredConfig {

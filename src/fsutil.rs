@@ -366,6 +366,33 @@ pub async fn clone_tree(source: &Path, destination: &Path) -> anyhow::Result<()>
     }
 }
 
+/// Give the existing directory `destination` each of `source`'s children
+/// except its `.git` file, cloned as [`clone_tree`] clones them, or copied
+/// where the filesystem cannot clone.
+pub async fn clone_worktree(source: &Path, destination: &Path) -> anyhow::Result<()> {
+    let from = source.to_owned();
+    let names = off_runtime::run(move || {
+        let mut names = Vec::new();
+        for entry in fs::read_dir(&from)? {
+            names.push(entry?.file_name());
+        }
+        Ok(names)
+    })
+    .await?;
+    for name in names.into_iter().filter(|name| name != ".git") {
+        let (from, to) = (source.join(&name), destination.join(&name));
+        if clone_tree(&from, &to).await.is_ok() {
+            continue;
+        }
+        off_runtime::run(move || {
+            remove_existing(&to)?;
+            copy_entry(&from, &to).with_context(|| format!("copy {}", to.display()))
+        })
+        .await?;
+    }
+    Ok(())
+}
+
 /// How [`move_directory`] moved a directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Moved {
