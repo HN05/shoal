@@ -1,10 +1,10 @@
 use crate::{
     daemon::chats::{
         restores::tests::{RESUMED, UNRESUMABLE},
-        saved::tests::named_chat,
+        saved::tests::{named_chat, unmarked},
     },
     state::ChatRestore,
-    test_support::manager,
+    test_support::{ProcessGroup, manager, repository},
 };
 
 fn run(name: &str) -> Option<String> {
@@ -56,4 +56,38 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
     assert_eq!(saved.restore, Some(ChatRestore::Resume));
     let agents = manager.running_chat_agents().await.unwrap();
     assert!(agents.iter().all(|agent| agent.execution != chat.id));
+}
+
+#[tokio::test]
+async fn a_chat_whose_agent_cannot_resume_its_session_keeps_running() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    // No AI tool describes the agent, so nothing resumes its session.
+    let process = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "plain".into(),
+            "plain".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+
+    let agents = manager.running_chat_agents().await.unwrap();
+    assert!(!agents[0].restorable);
+    assert!(manager.restart_chat(&chat.id, run("a")).await.is_err());
+    let running = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    assert_eq!(running.restore, None);
+    assert!(!RESUMED.lock().unwrap().contains(&chat.id));
 }

@@ -24,15 +24,17 @@ async fn a_request_for_a_chat_restarting_joins_the_restart_in_progress() {
     let agents = ChatAgents::default();
     let running = chat(Some("s1"), None);
 
-    let first = agents.request("c1", Some(&running), run("a")).unwrap();
+    let first = agents
+        .request("c1", Some(&running), true, run("a"))
+        .unwrap();
     assert_eq!(
         first.starts.as_ref().map(|chat| chat.id.as_str()),
         Some("c1")
     );
     // The restart stopped the chat, which a joining request still finds.
-    let joined = agents.request("c1", None, run("b")).unwrap();
+    let joined = agents.request("c1", None, false, run("b")).unwrap();
     assert!(joined.starts.is_none());
-    let listed = agents.running(vec![chat(Some("s1"), Some(ChatRestore::Resume))]);
+    let listed = agents.running(vec![(chat(Some("s1"), Some(ChatRestore::Resume)), true)]);
     let pending = listed[0].restart.clone().unwrap();
     assert_eq!(pending.run, run("a"));
     assert_eq!(pending.joined, vec!["b".to_owned()]);
@@ -40,12 +42,14 @@ async fn a_request_for_a_chat_restarting_joins_the_restart_in_progress() {
     agents.finish("c1", &Ok(None));
     first.answer.await.unwrap().unwrap();
     joined.answer.await.unwrap().unwrap();
-    let listed = agents.running(vec![running.clone()]);
+    let listed = agents.running(vec![(running.clone(), true)]);
     assert_eq!(listed[0].restarted_by, vec!["a".to_owned(), "b".to_owned()]);
     assert_eq!(listed[0].restart, None);
 
     // Another command of a run that restarted it starts no other restart.
-    let again = agents.request("c1", Some(&running), run("a")).unwrap();
+    let again = agents
+        .request("c1", Some(&running), true, run("a"))
+        .unwrap();
     assert!(again.starts.is_none());
     again.answer.await.unwrap().unwrap();
 }
@@ -53,7 +57,7 @@ async fn a_request_for_a_chat_restarting_joins_the_restart_in_progress() {
 #[tokio::test]
 async fn a_late_join_answers_as_the_restart_ended() {
     let agents = ChatAgents::default();
-    let first = agents.request("c1", Some(&chat(Some("s1"), None)), run("a"));
+    let first = agents.request("c1", Some(&chat(Some("s1"), None)), true, run("a"));
     agents.finish("c1", &Err("no terminal host".into()));
     assert!(first.unwrap().answer.await.unwrap().is_err());
 
@@ -63,18 +67,18 @@ async fn a_late_join_answers_as_the_restart_ended() {
 }
 
 #[test]
-fn only_a_running_chat_with_a_session_starts_a_restart() {
+fn only_a_running_chat_whose_agent_resumes_starts_a_restart() {
     let agents = ChatAgents::default();
-    assert!(agents.request("c1", None, run("a")).is_err());
+    assert!(agents.request("c1", None, false, run("a")).is_err());
     assert!(
         agents
-            .request("c1", Some(&chat(None, None)), run("a"))
+            .request("c1", Some(&chat(Some("s1"), None)), false, run("a"))
             .is_err()
     );
 
     let listed = agents.running(vec![
-        chat(None, None),
-        chat(Some("s1"), Some(ChatRestore::Resume)),
+        (chat(Some("s1"), None), false),
+        (chat(Some("s1"), Some(ChatRestore::Resume)), true),
     ]);
     assert_eq!(listed.len(), 1);
     assert!(!listed[0].restorable);

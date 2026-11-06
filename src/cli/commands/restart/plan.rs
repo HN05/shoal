@@ -213,7 +213,7 @@ pub(super) fn space_skip_reason(space: &PresentSpace, running: &RunningAgent) ->
     match space {
         PresentSpace::Workspace(workspace) => skip_reason(workspace, running),
         PresentSpace::Chat(_) if !running.restorable => {
-            Some("the chat reported no session to resume".into())
+            Some("its agent cannot resume its session".into())
         }
         PresentSpace::Chat(_) => None,
     }

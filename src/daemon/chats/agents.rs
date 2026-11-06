@@ -36,11 +36,13 @@ pub(super) struct Requested {
 impl ChatAgents {
     /// Ask for a restart of the chat `id`, running as `chat` unless it is
     /// stopped, for `run`: join the restart in progress, answer at once when
-    /// another command of `run` restarted it already, or start one.
+    /// another command of `run` restarted it already, or start one when its
+    /// agent `resumes` its session.
     pub(super) fn request(
         &self,
         id: &str,
         chat: Option<&Chat>,
+        resumes: bool,
         run: Option<String>,
     ) -> Result<Requested> {
         let mut agents = self.lock();
@@ -62,8 +64,8 @@ impl ChatAgents {
         }
         let chat = chat.with_context(|| format!("no running chat {id}"))?;
         ensure!(
-            chat.session.is_some(),
-            "chat {} reported no session to resume",
+            resumes,
+            "the agent of chat {} cannot resume its session",
             chat.name
         );
         let agent = agents.entry(chat.id.clone()).or_default();
@@ -100,12 +102,13 @@ impl ChatAgents {
     }
 
     /// The agents of `chats` that run, or that a restart stopped to start
-    /// again, as `shoal restart` lists agents, each by its chat's ID.
-    pub(super) fn running(&self, chats: Vec<Chat>) -> Vec<RunningAgent> {
+    /// again, as `shoal restart` lists agents, each by its chat's ID and
+    /// with whether it resumes its session.
+    pub(super) fn running(&self, chats: Vec<(Chat, bool)>) -> Vec<RunningAgent> {
         let agents = self.lock();
         chats
             .into_iter()
-            .filter_map(|chat| {
+            .filter_map(|(chat, resumes)| {
                 let agent = agents.get(&chat.id);
                 let restart = agent.and_then(|agent| agent.restarts.pending());
                 if chat.restore.is_some() && restart.is_none() {
@@ -113,7 +116,7 @@ impl ChatAgents {
                 }
                 Some(RunningAgent {
                     agent: Some(chat.agent),
-                    restorable: chat.session.is_some(),
+                    restorable: resumes,
                     state: chat.agent_state.as_ref().map(|status| status.state),
                     interrupted: false,
                     origin: chat.origin,

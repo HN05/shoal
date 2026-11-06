@@ -242,7 +242,8 @@ fn chat(name: &str) -> PresentSpace {
     )
 }
 
-/// The agent of the chat `name`, which reported a session when `restorable`.
+/// The agent of the chat `name`, which can resume its session when
+/// `restorable`.
 fn chat_agent(name: &str, restorable: bool) -> RunningAgent {
     RunningAgent {
         execution: name.into(),

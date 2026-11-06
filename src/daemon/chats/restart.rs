@@ -24,7 +24,11 @@ impl Manager {
         run: Option<String>,
     ) -> Result<Option<Origin>> {
         let chat = self.running_chat(id).await?;
-        let requested = self.chat_agents.request(id, chat.as_ref(), run)?;
+        let resumes = match &chat {
+            Some(chat) => self.chat_resumes(chat).await?,
+            None => false,
+        };
+        let requested = (self.chat_agents).request(id, chat.as_ref(), resumes, run)?;
         if let Some(chat) = requested.starts {
             let manager = self.clone();
             tokio::spawn(async move { manager.run_chat_restart(chat).await });
@@ -54,7 +58,24 @@ impl Manager {
     /// The agents of the running chats, and of those a restart stopped to
     /// start again, as `shoal restart` lists agents.
     pub(crate) async fn running_chat_agents(&self) -> Result<Vec<RunningAgent>> {
-        Ok(self.chat_agents.running(self.chats().await?))
+        let mut chats = Vec::new();
+        for chat in self.chats().await? {
+            let resumes = self.chat_resumes(&chat).await?;
+            chats.push((chat, resumes));
+        }
+        Ok(self.chat_agents.running(chats))
+    }
+
+    /// Whether the agent of `chat` continues its session when restored: the
+    /// chat reported one, and its AI tool has arguments to resume it, without
+    /// which a restore starts a new session.
+    async fn chat_resumes(&self, chat: &Chat) -> Result<bool> {
+        let Some(session) = &chat.session else {
+            return Ok(false);
+        };
+        let settings = self.repository_settings(&chat.repository_id).await?;
+        let launch = settings.launch(&chat.agent);
+        Ok(launch.arguments.resume_args(Some(session)).is_some())
     }
 
     /// Restart `chat` and answer the requests for it with how that ended.

@@ -410,8 +410,8 @@ the agent is stopped and resumed. Either way the restore command finds the
 agent through `PATH` again, so an updated agent binary runs. A chat's agent
 restarts as `shoal resume <chat>` restores a stopped chat: Shoal saves the chat's
 session, stops its agent and restores it in a background place, where
-`shoal attach` reaches it. A restart skips a chat whose agent reported no
-session, and with `--in-place` every chat. `--all` selects every workspace and chat, and
+`shoal attach` reaches it. A restart skips a chat whose agent cannot resume
+its session, as when it reported none, and with `--in-place` every chat. `--all` selects every workspace and chat, and
 `--agent <name>` only agents of that name. Agents restart
 together; `--sequential` restarts one at a time, idle ones first, each once the
 previous one runs again and at least 10 seconds after it started. With
