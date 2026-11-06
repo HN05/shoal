@@ -1436,8 +1436,9 @@ its own across layers, so a repository can replace `command` and keep the global
 `resume`. Names that collide with built-in commands are rejected. The picker and
 completion offer AI tools only, and `enabled = false` turns a tool's agents
 off: pickers and completion leave them out, launches and reviews are refused,
-and a stopped agent's restore waits until the tool is on again. What a tool needs of this machine, its
-[skill directory](#agent-skill-outside-project-repositories) and proxy, goes
+and a stopped agent's restore waits until the tool is on again. It stops no
+running agent, and that agent's wrapper may still restart it in place. What a
+tool needs of this machine, its [skill directory](#agent-skill-outside-project-repositories) and proxy, goes
 under `[machine.agents.<name>]` in the global config.
 
 A `base` makes a tool a launch profile of another, here Claude on its own
