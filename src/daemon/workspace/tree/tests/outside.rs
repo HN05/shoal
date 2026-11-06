@@ -1,8 +1,12 @@
 //! Trees below a chat without a repository, which takes children in every
 //! repository and whose scope reaches every space.
 use crate::{
-    daemon::test_support::{ProcessGroup, manager, repository},
-    daemon::{chats::NewChat, workspace::Manager, workspace_files::Attacher},
+    daemon::{
+        chats::NewChat,
+        test_support::{ProcessGroup, manager, repository},
+        workspace::Manager,
+        workspace_files::Attacher,
+    },
     model::{Chat, Repository, Workspace},
     protocol::{
         AgentMethod, ItemContext, ItemMethod, NotificationMethod, QueueMethod, WorkspaceMethod,

@@ -35,6 +35,16 @@ case "$target:$(uname -s)" in
     export SDKROOT="$(cd "$sdk" && pwd)"
     ;;
 esac
+case "$target" in
+  *-apple-darwin)
+    # sign-macos.sh adds a code signature load command where the linker wrote
+    # none, as on x86_64. Zig ends the load commands only as far before __text
+    # as its alignment happens to leave, which can be too little room. With
+    # --target, RUSTFLAGS reaches only the target's artifacts; cargo would
+    # ignore a target-specific variable whenever the caller sets RUSTFLAGS.
+    export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-Wl,-headerpad_max_install_names"
+    ;;
+esac
 
 cargo clean --workspace --release --target "$target"
 cargo zigbuild --locked --release --target "$target"
