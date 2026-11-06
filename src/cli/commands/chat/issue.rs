@@ -19,10 +19,6 @@ use crate::{
     model::{LinkedItem, Relation, Repository},
 };
 
-/// The mode whose `--issue` without a value offers the issues that need a
-/// plan.
-const PLAN_MODE: &str = "plan";
-
 /// The registered repository of the issue `input` names, else the one
 /// `repository` names or the current one.
 pub(super) async fn repository(
@@ -47,7 +43,7 @@ pub(super) async fn chosen(
         Some(input) => input,
         None => {
             ensure!(
-                mode == PLAN_MODE,
+                mode == config::modes::PLAN,
                 "--issue needs a number or URL outside plan mode"
             );
             labelled(ctx, repo, labels).await?

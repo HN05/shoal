@@ -27047,13 +27047,11 @@ fn plan_mode_opens_a_chat_on_an_issue_that_needs_a_plan() {
         assert!(args[0].contains(expected), "{expected}: {}", args[0]);
     }
     // Without an issue, the open issues labelled as needing a plan are
-    // offered.
+    // offered; only the plan mode takes that, so no mode is asked for.
     install_recording_agent(&fixture, "pi");
     let (output, rows) = fixture.pick_in(
         &fixture.repo,
-        &[
-            "start", "--mode", "plan", "--issue", "--agent", "pi", "--here",
-        ],
+        &["start", "--issue", "--agent", "pi", "--here"],
         "12",
         "",
     );

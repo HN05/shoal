@@ -21,6 +21,9 @@ use crate::{
 pub const DEFAULT: &str = "worker";
 /// The mode a chat starts in without `--mode`.
 pub const CHAT: &str = "chat";
+/// The mode whose `--issue` without a value offers the issues that need a
+/// plan.
+pub const PLAN: &str = "plan";
 /// The rule a local review's style comes from, after its fixed instructions.
 pub const REVIEW_RULE: &str = "review";
 
@@ -71,7 +74,7 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
         ),
         (CHAT.to_owned(), mode(SpaceKind::Chat, "chat", "")),
         (
-            "plan".to_owned(),
+            PLAN.to_owned(),
             mode(SpaceKind::Chat, "chat", include_str!("modes/plan.md")),
         ),
     ])

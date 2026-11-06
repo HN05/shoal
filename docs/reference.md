@@ -2189,7 +2189,8 @@ picker with the kind of space each starts in, and without one the start takes
 picker opens once the start has checked the arguments it was given, and offers
 only the modes of the kind of space they ask for, a workspace for a branch,
 `--base` or another flag only a workspace takes, a chat for `--name`; when
-only one fits, the start takes it without asking. A
+only one fits, the start takes it without asking, as it takes `plan` for
+`--issue` without a value, which no other mode accepts. A
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 and `shoal work`, `shoal status`, `shoal inbox`, the queue and the menu name a

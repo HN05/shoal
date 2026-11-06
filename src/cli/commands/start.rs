@@ -101,15 +101,17 @@ async fn space_id(ctx: &Context, selector: &str) -> Result<String> {
 }
 
 /// The mode the start takes and the kind of space it starts in: the mode
-/// `--mode` names, else on a terminal one picked once the arguments given
-/// are checked, else the [`default_mode`]. When the arguments decide the
-/// kind, its own start picks among the modes of that kind after its
+/// `--mode` names, else on a terminal the plan mode for `--issue` without
+/// a value, which no other mode takes, or one picked once the arguments
+/// given are checked, else the [`default_mode`]. When the arguments decide
+/// the kind, its own start picks among the modes of that kind after its
 /// checks; otherwise the mode is picked here once the repository and
 /// parent are checked.
 async fn mode_and_kind(ctx: &Context, args: &mut StartArgs) -> Result<(ModeChoice, SpaceKind)> {
     let named = match &args.mode {
         Some(mode) => Some(mode.clone()),
         None if !ui::can_pick(ctx) => Some(default_mode(args).to_owned()),
+        None if args.issue == Some(None) => Some(modes::PLAN.to_owned()),
         None => None,
     };
     if let Some(mode) = named {
