@@ -17,8 +17,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback, NoCurrentWorkspace},
     },
-    client::links::PushOutcome,
-    daemon::approvals::PushSpecification,
+    client::{approvals::PushSpecification, links::PushOutcome},
     git,
     protocol::ApprovalMethod,
     tools::Tool,
@@ -27,7 +26,7 @@ use crate::{
 /// Answer Git for a push to `remote`, by name or URL, whose real URL is
 /// `url`. Git waits for each reply before it writes again, so reading and
 /// writing block.
-pub async fn run(ctx: &Context, remote: String, url: String) -> Result<i32> {
+pub(super) async fn run(ctx: &Context, remote: String, url: String) -> Result<i32> {
     let mut lines = std::io::stdin().lock().lines();
     let mut stdout = std::io::stdout().lock();
     let mut session = Session {
@@ -297,7 +296,7 @@ fn git(args: &[String]) -> tokio::process::Command {
         .args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped());
-    super::strip(&mut command);
+    crate::push_gate::strip(&mut command);
     command
 }
 
