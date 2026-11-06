@@ -19,7 +19,7 @@ use crate::{
             ConfirmationArgs, SpaceTargets,
             changes::ChangesCommand,
             coordination::{CoordinationCommand, QuestionsArgs},
-            create::CreateCommand,
+            create::{CreateCommand, StartArgs},
             items::{ItemArgs, ItemsCommand, ViewArgs},
             lifecycle::LifecycleCommand,
             repository::{RepoCommand, RepositoryCommand},
@@ -724,8 +724,12 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     })))
 }
 
+/// “+ Add workspace” starts a worker in a new workspace.
 fn add() -> Command {
-    Command::Create(CreateCommand::Start(Box::default()))
+    Command::Create(CreateCommand::Start(Box::new(StartArgs {
+        mode: Some(crate::config::modes::DEFAULT.to_owned()),
+        ..Default::default()
+    })))
 }
 
 /// What `key` does to `workspace`.
