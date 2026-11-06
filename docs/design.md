@@ -1634,8 +1634,9 @@ a workspace while it shows it and queues agents, which the daemon starts
 detached in `terminal.default_host`, which never names an external app.
 Happy sessions are an optional integration behind a default Cargo feature and
 the `agents.happy.enabled` setting, off by default, so its encrypted client stays out of
-core. Happy is an agent backend like any other: its agents start with `shoal start
---agent happy-claude|happy-codex` and have no command of their own. They are the phone-driven flow: a console session that
+core. Happy is an agent backend like any other: `shoal happy` is gone, and its
+agents start as other agents do, with `--agent happy-claude|happy-codex` or as
+`shoal happy-claude`. They are the phone-driven flow: a console session that
 Happy's daemon started in a non-workspace directory creates workspaces and starts
 sessions in them. Shoal launches `happy <agent>` with the daemon's own flags so
 the session registers with Happy and appears in the app, detached from the

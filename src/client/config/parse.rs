@@ -26,6 +26,19 @@ const REMOVED: &[(&[&str], &str)] = &[
         &["agent", "templates"],
         "[agent.templates] is gone: add text to [rules.worker], [rules.chat] or [rules.review], or to a mode's instructions under [modes.<name>]",
     ),
+    // The packaged template set both of these, so most global configs do.
+    (
+        &["agents", "claude", "default_mode"],
+        "agents.claude.default_mode is gone: agents always start as CLI agents; open a desktop app with shoal open, and set its default with app.default",
+    ),
+    (
+        &["agents", "codex", "default_mode"],
+        "agents.codex.default_mode is gone: agents always start as CLI agents; open a desktop app with shoal open, and set its default with app.default",
+    ),
+    (
+        &["terminal", "happy"],
+        "[terminal.happy] moved: set enabled under [agents.happy]",
+    ),
 ];
 
 /// Fail at the first setting of `root` that [`REMOVED`] names.

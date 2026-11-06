@@ -51,4 +51,12 @@ fn removed_settings_are_refused() {
     let text = "[agent.forge_clis]\nfj = '~/fj'\n";
     assert!(global(text).is_err());
     assert!(repository(text).is_err());
+    // Settings the packaged template once wrote name their replacement.
+    for (text, replacement) in [
+        ("[agents.codex]\ndefault_mode = 'cli'\n", "app.default"),
+        ("[terminal.happy]\nenabled = false\n", "[agents.happy]"),
+    ] {
+        let error = message(global(text).unwrap_err());
+        assert!(error.contains(replacement), "{error}");
+    }
 }
