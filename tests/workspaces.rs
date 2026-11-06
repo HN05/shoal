@@ -19528,25 +19528,31 @@ fn start_puts_a_chat_below_the_parent_it_names() {
 
 /// Without --mode, a start on a terminal whose arguments fit either kind of
 /// space offers every mode, the default first, and starts in the kind of
-/// space the picked one names.
+/// space the picked one names; one that names its repository offers only
+/// the modes in a repository.
 #[test]
 fn start_on_a_terminal_picks_its_mode() {
     let fixture = Fixture::new();
     install_recording_agent(&fixture, "claude");
-    let repo = fixture.repo.to_str().unwrap();
-    let (output, rows) = fixture.pick(
-        &["start", repo, "--agent", "claude", "--here"],
-        "chat",
-        "\n",
-    );
+    let modes = |rows: &str| -> Vec<String> {
+        (rows.lines())
+            .filter_map(|row| row.split('\t').next())
+            .map(str::to_owned)
+            .collect()
+    };
+    let args = ["start", "--agent", "claude", "--here"];
+    let (output, rows) = fixture.pick_in(&fixture.repo, &args, "chat", "\n");
     assert!(output.status.success(), "{output:?}");
-    let modes: Vec<_> = rows
-        .lines()
-        .filter_map(|row| row.split('\t').next())
-        .collect();
-    assert_eq!(modes, ["worker", "chat", "orchestrate", "plan"], "{rows}");
+    assert_eq!(
+        modes(&rows),
+        ["worker", "chat", "orchestrate", "plan"],
+        "{rows}"
+    );
     let chats = fixture.ok(&["work", "--chats"]);
     assert_eq!(chats[0]["mode"], "chat", "{chats}");
+    let repo = fixture.repo.to_str().unwrap();
+    let (_, rows) = fixture.pick(&["start", repo, "--agent", "claude"], "none", "");
+    assert_eq!(modes(&rows), ["worker", "chat", "plan"], "{rows}");
 }
 
 #[test]
