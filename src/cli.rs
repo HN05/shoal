@@ -13,6 +13,7 @@ pub mod list_status;
 pub mod output;
 mod progress;
 pub mod recent;
+pub mod shell;
 pub(crate) mod terminal;
 pub mod ui;
 pub mod usage;

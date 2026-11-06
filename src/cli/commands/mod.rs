@@ -89,11 +89,11 @@ use crate::{
         },
         context::Context,
         output::{Palette, Style},
+        shell,
     },
     env,
     model::Workspace,
     paths::Paths,
-    shell,
 };
 
 impl<T> WorkspaceOverviewResult<T> {

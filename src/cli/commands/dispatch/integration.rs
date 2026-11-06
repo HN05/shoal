@@ -1,14 +1,12 @@
 use anyhow::Result;
 
-use crate::client::output::shell::Script;
-use crate::{
-    cli::{
-        args::integration::{IntegrationCommand, ShellCommand},
-        commands::skill,
-        context::Context,
-    },
+use crate::cli::{
+    args::integration::{IntegrationCommand, ShellCommand},
+    commands::skill,
+    context::Context,
     shell,
 };
+use crate::client::output::shell::Script;
 
 pub(in crate::cli::commands) async fn run(
     ctx: Context,

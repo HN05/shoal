@@ -5,10 +5,9 @@ use std::path::PathBuf;
 use anyhow::{Result, ensure};
 
 use crate::{
-    cli::{context::Context, ui},
+    cli::{context::Context, shell, ui},
     model::Workspace,
     removal::RemovalCheck,
-    shell,
     state::WorkspaceState,
 };
 

@@ -10,7 +10,7 @@ use crate::{
         args::create::CopyArgs,
         context::Context,
         output::{Palette, Style},
-        terminal,
+        shell, terminal,
         ui::{self, Fallback},
     },
     daemon::refusal::{Reason, Refusal},
@@ -19,7 +19,6 @@ use crate::{
         CommitStart, CreationOptions, ItemContext,
         operations::{Prepared, QueuedLaunch, StartedWorkspace},
     },
-    shell,
     state::WorkspaceState,
 };
 
