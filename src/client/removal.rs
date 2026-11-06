@@ -21,7 +21,13 @@ pub struct RemovalCheck {
     pub running_commands: usize,
     /// Processes using the directory, when requested by the inspection policy.
     pub processes: Vec<String>,
+    /// Uncommitted or untracked files of its own.
     pub dirty: bool,
+    /// Uncommitted or untracked files that are those a copy started with,
+    /// which its starting checkpoint keeps, so removal deletes them as it
+    /// deletes nothing of the workspace's own.
+    #[serde(default)]
+    pub starting_files: bool,
     /// Git porcelain status lines, with quoted paths and individual untracked files.
     #[serde(default)]
     pub changed_files: Vec<String>,
@@ -46,6 +52,11 @@ pub struct RemovalCheck {
     /// branch has: they are kept there under these or other commits.
     #[serde(default)]
     pub integrated: bool,
+    /// Every commit no remote or default branch keeps is one a copy
+    /// started with, which its starting checkpoint keeps: cleanup may remove
+    /// the worktree, while removal keeps the branch.
+    #[serde(default)]
+    pub starting_commits: bool,
     /// The default branch used by this inspection, when it could be resolved.
     ///
     /// This is daemon state used to keep the removal decision consistent with
@@ -264,9 +275,9 @@ impl RemovalCheck {
     }
 
     /// Every commit is pushed or merged, or the branch the workspace builds
-    /// on has their changes.
+    /// on has their changes, or a copy started with them.
     pub fn commits_kept(&self) -> bool {
-        self.unpushed_commits == 0 || self.integrated
+        self.unpushed_commits == 0 || self.integrated || self.starting_commits
     }
 
     /// Nothing would be lost: idle, clean, and every commit kept.

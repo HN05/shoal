@@ -1671,7 +1671,9 @@ fn worktrunk_removal_options(
     } else {
         BranchRemoval::Keep
     };
-    let files = if check.workspace.disposable || unsaved.deletes_unsaved() {
+    // Worktrunk refuses a changed worktree unless forced, even when the
+    // changes are only what a copy started with.
+    let files = if check.workspace.disposable || unsaved.deletes_unsaved() || check.starting_files {
         FileRemoval::Force
     } else {
         FileRemoval::CleanOnly

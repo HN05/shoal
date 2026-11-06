@@ -95,6 +95,8 @@ pub(crate) async fn inspect(
         disposable_children: vec![],
         processes: vec![],
         dirty: false,
+        starting_files: false,
+        starting_commits: false,
         changed_files: vec![],
         changed_files_omitted: 0,
         unsaved_files_archived: false,
@@ -121,9 +123,12 @@ pub(crate) async fn inspect(
         return Ok(check);
     }
     let path = &check.workspace.path;
-    check.dirty = !git::status::porcelain(path).await?.is_empty();
+    let head = git::resolve_commit(path, "HEAD", git::run).await?;
+    let changed = !git::status::porcelain(path).await?.is_empty();
+    check.starting_files = changed && holds_starting_files(&check.workspace).await?;
+    check.dirty = changed && !check.starting_files;
     check.branch = checked_out_branch(path).await?;
-    check.head = Some(git::resolve_commit(path, "HEAD", git::run).await?);
+    check.head = Some(head);
     let tree = git::status::head_tree(path).await?;
     // The default branch may be absent locally (workspaces created from another ref).
     let default_refs = match default_branch {
@@ -133,14 +138,12 @@ pub(crate) async fn inspect(
     check.matches_default_branch = git::status::retains(path, &default_refs, "HEAD", &tree).await?;
     // Merged changes are on the default branch even when their commits are not.
     if !check.matches_default_branch {
-        check.unpushed_commits = git::status::unretained_commits(
-            path,
-            "HEAD",
-            &kept_refs(&check.workspace, check.branch.is_none(), &default_refs),
-        )
-        .await?;
+        let kept = kept_refs(&check.workspace, check.branch.is_none(), &default_refs);
+        check.unpushed_commits = git::status::unretained_commits(path, "HEAD", &kept).await?;
         check.integrated = check.unpushed_commits > 0
             && start_branch_retains_head(&check.workspace, default_branch, &tree).await?;
+        check.starting_commits =
+            check.unpushed_commits > 0 && only_starting_commits(&check.workspace, &kept).await?;
     }
     if policy == InspectionPolicy::IncludeDirectoryProcesses {
         check
@@ -148,6 +151,25 @@ pub(crate) async fn inspect(
             .await?;
     }
     Ok(check)
+}
+
+/// Whether the workspace is a copy still at its starting HEAD with the
+/// index it started with and the files of its starting checkpoint, which
+/// are not its own work. A Git operation under way is the copy's own, and
+/// leaves an index that cannot have been its starting one.
+pub(crate) async fn holds_starting_files(workspace: &Workspace) -> Result<bool> {
+    let Some(copied) = &workspace.copied_from else {
+        return Ok(false);
+    };
+    let path = &workspace.path;
+    if git::status::operation_in_progress(path).await? {
+        return Ok(false);
+    }
+    Ok(
+        git::resolve_commit(path, "HEAD", git::run).await? == copied.head
+            && git::checkpoint::index_tree(path).await? == copied.index
+            && git::checkpoint::matches(path, &copied.commit).await?,
+    )
 }
 
 /// The branch the worktree at `path` is on; `None` when detached.
@@ -174,6 +196,17 @@ fn kept_refs<'a>(
         .into_iter()
         .chain(start.map(|at| at.commit.as_str()))
         .collect()
+}
+
+/// Whether the workspace is a copy whose commits that `kept` leaves out are
+/// all ones it started with, which its starting checkpoint keeps.
+async fn only_starting_commits(workspace: &Workspace, kept: &[&str]) -> Result<bool> {
+    let Some(copied) = &workspace.copied_from else {
+        return Ok(false);
+    };
+    let mut kept = kept.to_vec();
+    kept.push(&copied.head);
+    Ok(git::status::unretained_commits(&workspace.path, "HEAD", &kept).await? == 0)
 }
 
 /// Whether the local branch the workspace builds on, unless it is the

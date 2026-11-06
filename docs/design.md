@@ -669,7 +669,11 @@ of itself, private at that moment, so the record matches its files even when the
 source's agent kept editing during the clone. A copy of a checkpoint writes its
 files into a new worktree as a restore does. Either way the copy's starting
 checkpoint keeps every unsaved file whatever `archive_max_mb`, and the copy's
-record keeps it from expiring. It takes its
+record keeps it from expiring, so commits up to its HEAD count as kept and files
+that match it count as unchanged: what a copy was given is never its own work,
+and an untouched copy is cleaned up like an empty workspace. That decides only
+whether cleanup may remove it; its branch goes only once a remote or the default
+branch has its commits, as any branch does. It takes its
 source's diff base and worktree Git config, and nothing that belongs to the
 source's work: links, leases, holds, questions, ready marks, checkpoints or the
 session. Agents copy only within their scope, and a removed workspace's

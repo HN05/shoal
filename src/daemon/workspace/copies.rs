@@ -294,7 +294,8 @@ impl Manager {
         let starting = self
             .checkpoint(workspace, CheckpointCause::Start, None)
             .await?;
-        self.record_copied_from(&workspace.id, source, starting.number)
+        let index = git::checkpoint::index_tree(&workspace.path).await?;
+        self.record_copied_from(&workspace.id, source, starting.number, index)
             .await?;
         Ok(needs_setup)
     }
@@ -347,16 +348,23 @@ impl Manager {
             .await
     }
 
-    /// Record what the copy `id` was made from and its starting checkpoint.
-    async fn record_copied_from(&self, id: &str, source: &Source, starting: u64) -> Result<()> {
+    /// Record what the copy `id` was made from, its starting checkpoint and
+    /// the tree of the index it started with.
+    async fn record_copied_from(
+        &self,
+        id: &str,
+        source: &Source,
+        starting: u64,
+        index: String,
+    ) -> Result<()> {
         let (id, source_id) = (id.to_owned(), source.workspace_id.clone());
         let checkpoint = source.checkpoint().map(|number| number as i64);
         self.store
             .run(move |db| {
                 db.execute(
                     "UPDATE workspaces SET copied_from=?2,copied_from_checkpoint=?3,
-                        starting_checkpoint=?4 WHERE id=?1",
-                    params![id, source_id, checkpoint, starting as i64],
+                        starting_checkpoint=?4,starting_index=?5 WHERE id=?1",
+                    params![id, source_id, checkpoint, starting as i64, index],
                 )?;
                 Ok(())
             })

@@ -59,8 +59,13 @@ impl Manager {
         Ok(removed)
     }
 
-    /// Whether a checkpoint would keep all of the workspace's unsaved files.
+    /// Whether a checkpoint would keep all of the workspace's unsaved files:
+    /// within the archive limit, or a copy's starting files whatever their
+    /// size, which its starting checkpoint already holds.
     pub(crate) async fn archives_unsaved_files(&self, workspace: &Workspace) -> Result<bool> {
+        if crate::removal::holds_starting_files(workspace).await? {
+            return Ok(true);
+        }
         let settings = self
             .workspace_settings(workspace)
             .await?
