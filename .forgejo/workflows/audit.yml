@@ -1,8 +1,6 @@
 name: Code audit
 
 on:
-  schedule:
-    - cron: '47 5 * * 1'
   workflow_dispatch:
     inputs:
       focus:
@@ -35,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        focus: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.focus) || '["bugs","maintainability","testing","performance","docs"]') }}
+        focus: ${{ fromJSON(format('["{0}"]', inputs.focus)) }}
     container:
       image: docker.io/library/node:22-bookworm
       volumes:

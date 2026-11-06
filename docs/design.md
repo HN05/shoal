@@ -415,7 +415,7 @@ replacement answers; daemon controls report the mismatch at once. Foreground dae
 keep explicit restart control.
 
 Advisory repository reviews default to Codex, retaining configured agent overrides
-and automatic fallback. Repository code audits run weekly read-only inspections per focus over the
+and automatic fallback. Repository code audits are manual read-only inspections per focus over the
 entire application and open one issue per new finding. Failed or incomplete attempts
 open no issues; audit results are advisory and do not gate merges.
 
