@@ -297,6 +297,27 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         .await
         .unwrap();
 
+    // It reads the items of any registered repository from its checkout, as
+    // its agent account, but changes them only through its own space.
+    let details = |repository: &Repository| ItemMethod::IssueDetails {
+        context: ItemContext::Checkout(repository.id.clone()),
+        item: "7".into(),
+    };
+    crate::daemon::scope::authorize(&manager, Some(&token), &mut details(&repos[1]))
+        .await
+        .unwrap();
+    let mut own = details(&repos[0]);
+    let reading = crate::daemon::scope::authorize(&manager, Some(&scoped), &mut own).await;
+    assert!(reading.is_err());
+    let mut close = ItemMethod::ItemAction {
+        context: ItemContext::Checkout(repos[1].id.clone()),
+        kind: crate::forge::items::link::ItemKind::Issue,
+        item: Some("7".into()),
+        action: crate::forge::items::action::Action::Close,
+    };
+    let changing = crate::daemon::scope::authorize(&manager, Some(&token), &mut close).await;
+    assert!(changing.is_err());
+
     // It resumes the agent of a space it reaches only when it or a space
     // below it stopped that agent.
     let resume = |stopper: &str| {

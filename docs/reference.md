@@ -1941,8 +1941,9 @@ queues their agents, resumes the ones it or the spaces below it stopped, and
 removes those you hold nothing in, under the
 [scoped workspace commands](#scoped-workspace-commands) rules. It decides only
 the requests routed to it, with a grant; merging, PR verdicts, CI approval and
-your notifications stay with you. It keeps no attached files, acts on no
-repository's issues or PRs, and [`shoal move`](#move-a-space-to-another-machine)
+your notifications stay with you. It reads the issues and PRs of every
+registered repository and changes them only through a space of their
+repository, as `--space` names one, keeps no attached files, and [`shoal move`](#move-a-space-to-another-machine)
 refuses it. The [`shoal-orchestrator`](../skills/shoal-orchestrator/SKILL.md)
 skill is its unscoped counterpart, for an agent in your own terminal.
 
