@@ -787,7 +787,7 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
     let forked = crate::process::machine::id().map(|_| "s1");
     assert_eq!(record.session.as_deref(), forked);
     assert_eq!(record.copied, Some(Copied::default()));
-    assert!(!record.moved);
+    assert_eq!(record.moved, forked.is_none());
     // The original keeps its branch, files and agent.
     assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), head);
     assert!(workspace.path.join("scratch").exists());
