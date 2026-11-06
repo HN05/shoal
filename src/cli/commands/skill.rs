@@ -240,11 +240,11 @@ struct Outcome {
     changed: bool,
 }
 
-/// Install the bundled skills in `directory` and remove retired ones Shoal
-/// still owns. A recorded skill whose file differs from what Shoal wrote
-/// belongs to the user, as does every skill whose directory is not a real
-/// directory, such as a link into the user's dotfiles; files from before the
-/// record existed are Shoal's. Skills are regular files, since some tools
+/// Install `skills`, the bundled ones, in `directory` and remove recorded
+/// skills outside them that Shoal still owns. A recorded skill whose file
+/// differs from what Shoal wrote belongs to the user, as does every skill
+/// whose directory is not a real directory, such as a link into the user's
+/// dotfiles; files from before the record existed are Shoal's. Skills are regular files, since some tools
 /// skip a linked `SKILL.md`; links earlier versions recorded become copies.
 fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> Result<Outcome> {
     let loaded = Record::load(directory)?;
@@ -254,13 +254,13 @@ fn refresh(directory: &Path, skills: &[(&'static str, String)], mode: Mode) -> R
         record: loaded.clone().unwrap_or_default(),
         outcome: Outcome::default(),
     };
-    if mode == Mode::Refresh && !holds_shoal_skills(directory, &installation.record)? {
+    if mode == Mode::Refresh && !holds_shoal_skills(directory, skills, &installation.record)? {
         return Ok(installation.outcome);
     }
     for &(name, ref contents) in skills {
         installation.refresh_skill(name, contents)?;
     }
-    installation.retire_skills()?;
+    installation.retire_skills(skills)?;
     if loaded.is_none() {
         installation.remove_unrecorded_skill()?;
     }
@@ -322,14 +322,14 @@ impl Installation<'_> {
         }
     }
 
-    /// Forget recorded skills this version no longer bundles, removing those
-    /// still as Shoal installed them and reporting changed ones once.
-    fn retire_skills(&mut self) -> Result<()> {
+    /// Forget recorded skills outside `bundled`, removing those still as
+    /// Shoal installed them and reporting changed ones once.
+    fn retire_skills(&mut self, bundled: &[(&'static str, String)]) -> Result<()> {
         let retired: Vec<_> = self
             .record
             .skills
             .extract_if(.., |name, _| {
-                !SKILLS.iter().any(|(bundled, _)| bundled == name)
+                !bundled.iter().any(|(skill, _)| skill == name)
             })
             .collect();
         for (name, entry) in retired {
@@ -404,8 +404,12 @@ fn show_diff(path: &Path, contents: &str) -> Result<()> {
 
 /// Whether `directory` still holds a skill Shoal installed, now or earlier;
 /// removing every one stops automatic updates there.
-fn holds_shoal_skills(directory: &Path, record: &Record) -> Result<bool> {
-    let names = SKILLS
+fn holds_shoal_skills(
+    directory: &Path,
+    bundled: &[(&'static str, String)],
+    record: &Record,
+) -> Result<bool> {
+    let names = bundled
         .iter()
         .map(|(name, _)| *name)
         .chain(record.skills.keys().map(String::as_str))
