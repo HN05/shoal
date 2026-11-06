@@ -36,7 +36,7 @@ pub(in crate::cli) use here::{
 pub(crate) use here::{current_origin, current_place};
 use host::{Demo, DemoWorker, Host, Places, Start};
 use hosts::{Configured, Options, names_places};
-pub(in crate::cli) use hosts::{background_place, installed_hosts};
+pub(in crate::cli) use hosts::{background_place, installed_hosts, on_terminal};
 pub(crate) use launch::{detached_start_environment, start_environment};
 pub(in crate::cli) use launch::{
     ensure_background, keeps_agents_in_sessions, launcher_program, rerun_where_stopped,

@@ -192,8 +192,8 @@ pub struct Preparation {
     pub agent: Option<Box<QueuedLaunch>>,
 }
 
-/// An agent to queue in a ready workspace, as a scoped `shoal start` queues
-/// a child's.
+/// An agent to queue in a ready workspace, as a `shoal start` without a
+/// terminal or a scoped one queues the new workspace's.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QueuedLaunch {
     pub agent: String,
@@ -218,6 +218,9 @@ pub struct QueuedLaunch {
     /// without them it starts as one from no terminal does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub env: Option<BTreeMap<String, String>>,
+    /// Start at once regardless of the limits, which scoped callers cannot.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub now: bool,
 }
 
 /// The issue a queued agent works on: its URL, which the start looks up

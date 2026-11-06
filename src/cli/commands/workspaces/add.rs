@@ -1,5 +1,6 @@
 //! `shoal start`: plan a workspace, then open it here or hand it to a terminal host.
 mod agent;
+mod detached;
 mod finish;
 mod handoff;
 mod plan;
@@ -21,10 +22,11 @@ use self::{
         AddSettings, check_chosen_model, choose_add_agent, choose_for_picked_issue,
         resolve_add_agent,
     },
-    finish::{add_planned, execute_add_with_target},
+    detached::{add_detached, ensure_detachable, starts_detached},
+    finish::execute_add_with_target,
     handoff::start_beside,
     plan::{check_add_creation, plan_addition},
-    queue::{admit, after_dependencies, ensure_queues_at_once, failing_entry},
+    queue::{admit, after_dependencies, failing_entry},
     source::{load_add_issue, pick_add_source, select_add_creation},
     target::resolve_add_target,
 };
@@ -106,13 +108,9 @@ pub(in crate::cli::commands) async fn add(
         options.after.is_empty() || plan.agent_name().is_some(),
         "--after queues an agent; name one with --agent"
     );
-    // A scoped caller's agent is queued once its workspace exists.
-    if crate::env::is_scoped() {
-        let queued = plan.agent_name().is_some();
-        if queued {
-            ensure_queues_at_once(ctx, &target, &settings, issue.as_ref(), &options, after).await?;
-        }
-        return add_planned(ctx, plan, target, issue, queued).await;
+    if starts_detached(&plan, &options)? {
+        ensure_detachable(&settings, &plan, &options).await?;
+        return add_detached(ctx, plan, target, issue, options, after).await;
     }
     if let Some(queued) = admit(
         ctx,

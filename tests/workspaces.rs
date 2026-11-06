@@ -715,7 +715,7 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
     fixture.add_github_origin();
     fixture.script_github(&github_issue(34, "Fix API timeout", ""));
     let repo = fixture.repo.to_str().unwrap();
-    let issue = ["start", "34", "--repo", repo, "--agent", "pi"];
+    let issue = ["start", "34", "--repo", repo, "--here", "--agent", "pi"];
     let created = fixture.ok(&[&issue[..], &["--base", "HEAD"]].concat());
     let renamed = fixture.ok(&["branch", "rename", "34-fix-api-timeout", "renamed-issue"]);
     let reopened = fixture.ok(&issue);
@@ -3919,7 +3919,9 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
     let add = |cwd: &Path| {
         let output = fixture
             .command()
-            .args(["--json", "start", "--issue", "12", "--agent", "reviewer"])
+            .args([
+                "--json", "start", "--issue", "12", "--here", "--agent", "reviewer",
+            ])
             .current_dir(cwd)
             .env("PATH", &path)
             .output()
@@ -4587,6 +4589,24 @@ fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 }
 
+/// A scoped caller's agent always starts detached, so `--here` is refused
+/// before the child exists.
+#[test]
+fn a_scoped_start_refuses_to_run_its_agent_here() {
+    let fixture = Fixture::with_config(Some("[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\n"));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    fixture.add("parent");
+    let repo = fixture.repo.to_str().unwrap();
+    let start = ["start", repo, "child", "--here", "--agent", "waiter"];
+    let output = scoped_command(&fixture, "parent", &start);
+    assert!(!output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("--here"),
+        "{output:?}"
+    );
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+}
+
 #[test]
 fn invalid_branch_names_and_normalized_name_collisions_preserve_existing_work() {
     let fixture = Fixture::new();
@@ -4958,6 +4978,7 @@ exit 7
                 "start",
                 fixture.repo.to_str().unwrap(),
                 name,
+                "--here",
                 "--agent",
                 agent,
                 "--",
@@ -4997,6 +5018,7 @@ exit 7
             "bad-base",
             "--base",
             "missing-ref",
+            "--here",
             "--agent",
             "codex",
         ])
@@ -5018,6 +5040,7 @@ exit 7
                 "start",
                 fixture.repo.to_str().unwrap(),
                 name,
+                "--here",
                 "--agent",
                 "codex",
             ])
@@ -13542,6 +13565,7 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
             "start",
             fixture.repo.to_str().unwrap(),
             "prepared",
+            "--here",
             "--agent",
             "codex",
         ])
@@ -13683,6 +13707,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
         "start",
         fixture.repo.to_str().unwrap(),
         "failed-setup",
+        "--here",
         "--agent",
         "claude",
     ]);
@@ -13994,6 +14019,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
             "start",
             fixture.repo.to_str().unwrap(),
             "hook-fails",
+            "--here",
             "--agent",
             "codex",
         ])
@@ -14653,6 +14679,7 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
                 "HEAD",
                 "--issue",
                 &input,
+                "--here",
                 "--agent",
                 agent,
                 "--",
@@ -14795,7 +14822,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         let url = format!("https://github.com/team/project/issues/{number}");
         let number_input = number.to_string();
         let input = if number >= 45 { &number_input } else { &url };
-        let mut args = vec!["--json", "start", input, "--base", "HEAD"];
+        let mut args = vec!["--json", "start", input, "--base", "HEAD", "--here"];
         if number == 47 {
             args.extend(["--repo", fixture.repo.to_str().unwrap()]);
         }
@@ -15202,7 +15229,7 @@ fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
     fixture.add_github_origin();
     fixture.script_github(&github_issue(34, "Fix API timeout", ""));
     let repo = fixture.repo.to_str().unwrap();
-    let issue = ["start", "34", "--repo", repo, "--agent", "pi"];
+    let issue = ["start", "34", "--repo", repo, "--here", "--agent", "pi"];
     let branch = "34-fix-api-timeout";
     let branches = |fixture: &Fixture| -> Vec<Value> {
         fixture
@@ -17246,6 +17273,7 @@ fn happy_agents_are_refused_until_enabled() {
             "start",
             fixture.repo.to_str().unwrap(),
             "happy-off",
+            "--here",
             "--agent",
             "happy-claude",
         ])
@@ -17273,6 +17301,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
                     "start",
                     fixture.repo.to_str().unwrap(),
                     &name,
+                    "--here",
                     "--agent",
                     "happy-codex",
                     "--",
@@ -17430,6 +17459,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
                 "HEAD",
                 "--issue",
                 "34",
+                "--here",
                 "--agent",
                 agent,
                 "--",
@@ -19285,6 +19315,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         fixture.repo.to_str().unwrap(),
         "--base",
         "HEAD",
+        "--here",
         "--",
         "literal {prompt}",
     ]);
@@ -19352,6 +19383,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         "custom-add",
         "--base",
         "HEAD",
+        "--here",
         "--agent",
         "helper",
         "--",
@@ -19402,7 +19434,8 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
     let repo = fixture.repo.to_str().unwrap();
     fixture.save_local_config(repo, &saved);
     let start = |args: &[&str]| {
-        let output = fixture.run(&[&["--json", "start", "37", "--repo", repo][..], args].concat());
+        let start = ["--json", "start", "37", "--repo", repo, "--here"];
+        let output = fixture.run(&[&start[..], args].concat());
         assert_eq!(output.status.code(), Some(7), "{output:?}");
         let workspace: Value =
             serde_json::from_slice(output.stdout.split(|b| *b == b'\n').next().unwrap()).unwrap();
@@ -23012,6 +23045,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         "start",
         fixture.repo.to_str().unwrap(),
         "agent-work",
+        "--here",
         "--agent",
         "helper",
     ]);
@@ -23048,6 +23082,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         fixture.repo.to_str().unwrap(),
         "--existing",
         "agent-work",
+        "--here",
         "--agent",
         "helper",
     ]);
@@ -23084,6 +23119,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
         "start",
         fixture.repo.to_str().unwrap(),
         "agent-work",
+        "--here",
         "--agent",
         "helper",
     ]);
@@ -23122,6 +23158,7 @@ fn agent_exit_acknowledgement_does_not_wait_for_the_hook() {
             "start",
             fixture.repo.to_str().unwrap(),
             "agent-work",
+            "--here",
             "--agent",
             "helper",
         ])
@@ -28410,13 +28447,21 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
     assert!(!output.status.success(), "{transcript}");
     assert!(!fixture.run(&["status", "no-zmx"]).status.success());
 
-    // Without a terminal the agent runs in place and needs no zmx.
-    let output = fixture
-        .command()
-        .args(["start", repo, "no-zmx", "--agent", "claude"])
-        .env("PATH", path)
-        .output()
-        .unwrap();
+    // Without a terminal the agent starts detached, which needs zmx too,
+    // unless --here runs it in place.
+    let start = |here: &[&str]| {
+        fixture
+            .command()
+            .args(["start", repo, "no-zmx", "--agent", "claude"])
+            .args(here)
+            .env("PATH", &path)
+            .output()
+            .unwrap()
+    };
+    let output = start(&[]);
+    assert!(!output.status.success(), "{output:?}");
+    assert!(!fixture.run(&["status", "no-zmx"]).status.success());
+    let output = start(&["--here"]);
     assert!(output.status.success(), "{output:?}");
 }
 
@@ -28428,7 +28473,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
         .command()
-        .args(["start", repo, "first", "--agent", "waiter"])
+        .args(["start", repo, "first", "--here", "--agent", "waiter"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -28446,7 +28491,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     };
     wait_until("the first agent start", || started("first"));
 
-    let queued = fixture.ok(&["start", repo, "second", "--agent", "waiter"]);
+    let queued = fixture.ok(&["start", repo, "second", "--here", "--agent", "waiter"]);
     assert_eq!(queued["state"], "queued", "{queued}");
     assert_eq!(queued["position"], 1, "{queued}");
     let entries = fixture.ok(&["queue"]);
@@ -28462,7 +28507,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 
     // Entries move to a position and leave the queue when cancelled.
-    fixture.ok(&["start", repo, "third", "--agent", "waiter"]);
+    fixture.ok(&["start", repo, "third", "--here", "--agent", "waiter"]);
     let moved = fixture.ok(&["queue", "move", "third", "1"]);
     assert_eq!(moved["entry"]["position"], 1, "{moved}");
     assert_eq!(moved["stopped"], false, "{moved}");
@@ -28485,7 +28530,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(cancelled["name"], "third", "{cancelled}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
     // So does one stopped, having nothing to save.
-    fixture.ok(&["start", repo, "fourth", "--agent", "waiter"]);
+    fixture.ok(&["start", repo, "fourth", "--here", "--agent", "waiter"]);
     let stopped = fixture.ok(&["stop", "fourth"]);
     assert_eq!(stopped["name"], "fourth", "{stopped}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
@@ -28494,10 +28539,15 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(removed["name"], "second", "{removed}");
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 
-    // A focused launch is one the user waits for, so it skips the queue.
+    // Without a terminal nothing shows a focused launch, so it is refused,
+    // while one started now skips the queue.
+    let refused = fixture.run(&["start", repo, "focused", "--agent", "waiter", "--focus"]);
+    assert!(!refused.status.success(), "{refused:?}");
     let mut focused = fixture
         .command()
-        .args(["start", repo, "focused", "--agent", "waiter", "--focus"])
+        .args([
+            "start", repo, "focused", "--here", "--agent", "waiter", "--now",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -28509,7 +28559,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     fixture.ok(&["rm", "focused", "--yes"]);
 
     // A queued agent named like a workspace is removed only by its ID.
-    let shared = fixture.ok(&["start", repo, "first", "--agent", "waiter"]);
+    let shared = fixture.ok(&["start", repo, "first", "--here", "--agent", "waiter"]);
     assert_eq!(shared["state"], "queued", "{shared}");
     let ambiguous = fixture.run(&["rm", "first", "--yes"]);
     assert!(!ambiguous.status.success());
@@ -28532,7 +28582,7 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
         .command()
-        .args(["start", repo, "first", "--agent", "waiter"])
+        .args(["start", repo, "first", "--here", "--agent", "waiter"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -28554,7 +28604,10 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let queued: Value = serde_json::from_slice(&output.stdout).unwrap();
+    // Without a terminal it creates the workspace, then reports the agent
+    // its preparation queued there.
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let queued: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     assert_eq!(queued["state"], "queued", "{queued}");
     // Removal frees the slot, which a stopped agent keeps for its resume.
     fixture.ok(&["stop", "first"]);
@@ -28567,6 +28620,41 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
     });
     assert_eq!(fs::read_to_string(&recorded).unwrap(), "text");
     fixture.ok(&["stop", "second"]);
+}
+
+/// A start without a terminal, as from another agent's tool call, returns
+/// once setup ends and reports the agent its preparation queued, which the
+/// daemon starts in a session of its own that outlives the caller.
+#[test]
+fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
+    let fixture = Fixture::with_config(Some(
+        "[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'touch \"$HOME/waiter-started\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let repo = fixture.repo.to_str().unwrap();
+    let output = fixture
+        .command()
+        .args(["--json", "start", repo, "detached", "--agent", "waiter"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let reported: Vec<Value> = (stdout.lines())
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(reported[0]["name"], "detached", "{stdout}");
+    let entry = reported.last().unwrap();
+    assert_eq!(entry["agent"], "waiter", "{stdout}");
+    // The caller has exited; the agent runs on in the daemon's session.
+    let started = fixture.root.path().join("waiter-started");
+    wait_until("the detached agent start", || started.exists());
+    wait_until("the detached agent's execution", || {
+        fixture.ok(&["status", "detached"])["executions"]
+            .as_array()
+            .is_some_and(|executions| !executions.is_empty())
+    });
+    fixture.ok(&["stop", "detached"]);
 }
 
 /// `shoal resume` queues restores, which the daemon starts in detached

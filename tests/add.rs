@@ -62,7 +62,7 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             "creation reached",
         ),
         (
-            vec!["start", "test", "new", "--agent", "codex"],
+            vec!["start", "test", "new", "--here", "--agent", "codex"],
             vec!["layered_config test", "queue_add", "start_workspace"],
             "creation reached",
         ),

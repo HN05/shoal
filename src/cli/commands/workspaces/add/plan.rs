@@ -164,7 +164,7 @@ pub(crate) fn queued_agent_request(
     let env = (launch.env.take())
         .unwrap_or_else(|| crate::cli::terminal::detached_start_environment(None));
     let issue_title = launch.issue.as_ref().map(|issue| issue.title.clone());
-    let agent = launch.agent.clone();
+    let (agent, now) = (launch.agent.clone(), launch.now);
     let plan = AddPlan::agent_in(workspace, launch)?;
     Ok(QueueRequest {
         repository: workspace.repository_id.as_str().into(),
@@ -174,7 +174,7 @@ pub(crate) fn queued_agent_request(
         issue_title,
         plan: serde_json::to_string(&plan)?,
         env,
-        now: false,
+        now,
         workspace: Some(workspace.id.clone()),
         after: Vec::new(),
     })
@@ -233,6 +233,7 @@ impl AddPlan {
             fork,
             issue,
             env: _,
+            now: _,
         } = launch;
         Ok(Self {
             repository: workspace.repository_id.as_str().into(),

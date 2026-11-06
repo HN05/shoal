@@ -1,5 +1,5 @@
 //! Admitting an addition's agent to the agent queue, with the work it waits for.
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::{
     AddOptions,
@@ -58,20 +58,36 @@ pub(super) async fn admit(
     options: &AddOptions,
     after: Vec<Dependency>,
 ) -> Result<Option<i32>> {
-    let Some(agent) = plan.agent_name() else {
+    if plan.agent_name().is_none() {
         return Ok(None);
-    };
+    }
     let now = options.starts_now(
         plan,
         settings.get().await?.terminal.focus,
         ctx.interactive(),
     );
+    let after = launch_dependencies(ctx, target, issue, now, after).await?;
+    admit_launch(ctx, target, plan, issue, now, after).await
+}
+
+/// [`admit`] the plan's agent, which starts `now` or waits for `after`.
+pub(super) async fn admit_launch(
+    ctx: &Context,
+    target: &AddTarget,
+    plan: &mut AddPlan,
+    issue: Option<&issues::Issue>,
+    now: bool,
+    after: Vec<Dependency>,
+) -> Result<Option<i32>> {
+    let Some(agent) = plan.agent_name() else {
+        return Ok(None);
+    };
     let launch = agent_queue::Launch {
         agent,
         name: planned_workspace_name(ctx, target, &plan.creation).await?,
         issue_title: issue.map(|issue| issue.title.clone()),
         now,
-        after: launch_dependencies(ctx, target, issue, now, after).await?,
+        after,
     };
     match agent_queue::admit(ctx, plan, launch).await? {
         agent_queue::Admission::Start { entry, base } => {
@@ -83,40 +99,6 @@ pub(super) async fn admit(
             agent_queue::report_queued(ctx, &entry, waiting).map(Some)
         }
     }
-}
-
-/// Refuse a scoped caller's agent that is not queued as soon as its new
-/// workspace exists: one that starts at once in this terminal, as `--now`
-/// and `--focus` ask, one that no host could start from the background, or
-/// one that waits for `after` or its issue's blockers, whose branch a
-/// workspace created later would build on.
-pub(super) async fn ensure_queues_at_once(
-    ctx: &Context,
-    target: &AddTarget,
-    settings: &AddSettings<'_>,
-    issue: Option<&issues::Issue>,
-    options: &AddOptions,
-    after: Vec<Dependency>,
-) -> Result<()> {
-    ensure!(
-        !options.now && !options.focus,
-        "scoped processes start agents when a slot is free; leave out --now and --focus"
-    );
-    // The daemon starts the agent from the background, which some host
-    // must take, before any work is created.
-    crate::cli::terminal::ensure_background(settings.get().await?)?;
-    let after = launch_dependencies(ctx, target, issue, false, after).await?;
-    let waits_for: Vec<_> = (after.iter())
-        .map(|dependency| match dependency {
-            Dependency::Work(name) | Dependency::Issue(name) => name.as_str(),
-        })
-        .collect();
-    ensure!(
-        waits_for.is_empty(),
-        "scoped processes add a workspace at once, so its agent cannot wait for other work; add it once {} is complete",
-        waits_for.join(", ")
-    );
-    Ok(())
 }
 
 /// `result`, after failing the queue `entry`, if any, with its error.
@@ -133,7 +115,7 @@ pub(super) async fn failing_entry<T>(
 
 /// The work a launch waits for: `after`, and the open issues the forge
 /// records as blocking its issue. A launch that starts `now` waits for nothing.
-async fn launch_dependencies(
+pub(super) async fn launch_dependencies(
     ctx: &Context,
     target: &AddTarget,
     issue: Option<&issues::Issue>,

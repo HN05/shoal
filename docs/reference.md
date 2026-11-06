@@ -1108,7 +1108,8 @@ agent's exit code, restoring OS terminal settings even after interruption. When
 the workspace is retained even when launch fails. With shell
 integration, your shell enters the new workspace after an agent run in place
 exits; an agent in a zmx session leaves it where it was.
-`--json` emits the workspace record first, then the agent's unmodified output.
+`--json` emits the workspace record first, then the agent's unmodified output,
+or for an agent that starts detached its queue entry.
 
 On a terminal, CLI agent launches (`shoal claude`, `shoal codex`, other AI
 tools, `start --agent` and `resume`) run in a [zmx](https://github.com/neurosnap/zmx)
@@ -1961,7 +1962,15 @@ once readings are healthy.
 `shoal start` with an agent asks the daemon for a slot after resolving the issue,
 branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
-starts, from the then-current default branch. The daemon starts waiting entries
+starts, from the then-current default branch. A start that runs detached, from
+a scoped caller or one without a terminal, creates the workspace and sets it up
+first, reporting setup errors to the caller; its preparation then queues the
+agent in it, which the daemon starts, and the call returns reporting the entry
+(`--json` emits the workspace record, then the entry). `--now` starts that agent
+regardless of the limits, which a scoped caller cannot ask, and `--focus` is
+refused. A detached start that waits for other work queues as a whole as from
+a terminal, starting in the background once the work is complete; a scoped
+caller's is refused. The daemon starts waiting entries
 in order as slots free, passing over an entry whose repository is full, and
 records a `queue_started` notification. An entry queued from another host's pane, block
 or tab opens a background tab or window where it was queued; otherwise it runs where
@@ -2388,7 +2397,8 @@ Herdr tab or zmx session, so the agent gets the child's own scope rather than
 the caller's; Codex runs as its CLI. The agent and that launcher, zmx outside a
 Herdr that opens tabs, are checked before the child is created, and the launch
 reopens only the child, failing if it was removed meanwhile. `--json` adds the
-queue entry as `agent`.
+queue entry as `agent`. Since the agent never runs in the caller, `--here` with
+an agent is refused.
 `--fork` starts the parent's agent there the same way, from a fork of its
 session, so the child begins with the parent's conversation and the prompt after
 `--`; the parent's session stays unchanged. Run from an agent, it forks that

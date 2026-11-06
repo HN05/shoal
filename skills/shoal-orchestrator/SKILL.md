@@ -43,8 +43,10 @@ workspace; `chat` and `plan` start in a chat, and `--chat` or `--worktree`
 overrides the mode's kind. For a repository the user does not maintain,
 `contribute` takes the same URLs: it clones the repository, forks it when the
 user cannot push there, and removes the clone once nothing of it is left. Happy agents (`happy-codex`, `happy-claude`)
-run detached and appear in the Happy app. CLI agents (`codex`, `claude`) run in
-the current terminal until they exit, so use them only when the user asks. A
+run detached and appear in the Happy app. Without a terminal, as from your tool
+calls, CLI agents (`codex`, `claude`) start detached too, in a zmx session the
+daemon opens; `--here` would run one in your tool call until it exits, so pass
+it only when the user asks. A
 `--base` naming another workspace's branch stacks the new workspace on it; `work`
 and `status` show the base workspace. `work` lists child workspaces below their
 parent, and `status` names a workspace's parent and children.
@@ -55,10 +57,11 @@ text reaches the agent as its first message (Codex through Happy's server, which
 needs this machine's Happy login). Check `prompt_delivered`; when false, the text
 is in `prompt_file` and the user must send it from the app.
 
-With `max_agents` configured (the default starts agents one at a time while measured load allows), `start` may queue a workspace's agent instead: it then emits
-the queue entry (`state: queued`, `position`) and creates nothing yet. The
-daemon starts it when a slot frees; `shoal queue` lists entries, and
-`--now` or `--focus` starts one regardless only when the user asks.
+`start` returns once the workspace is set up, emitting it and then the agent's
+queue entry; the daemon starts the agent, at once or, with `max_agents`
+configured (the default starts agents one at a time while measured load
+allows), when a slot frees (`state: queued`, `position`). `shoal queue` lists
+entries, and `--now` starts one regardless only when the user asks.
 `--after <workspace|queued agent|issue>` (repeatable) queues an agent until that
 work is done; an issue's agent also waits for the issues its forge records as
 blocking it. The agent then starts on the done workspace's branch, stacked on

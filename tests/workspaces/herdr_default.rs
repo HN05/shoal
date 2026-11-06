@@ -172,10 +172,10 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
     ));
     install_fake_herdr(&fixture);
     let repo = fixture.repo.to_str().unwrap();
-    // Without a terminal, the first agent runs in place and takes the slot.
+    // In place, the first agent takes the slot.
     let mut first = fixture
         .command()
-        .args(["start", repo, "first", "--agent", "waiter"])
+        .args(["start", repo, "first", "--here", "--agent", "waiter"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -197,7 +197,8 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
-    let queued: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let queued: Value = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
     assert_eq!(queued["state"], "queued", "{queued}");
     fixture.ok(&["stop", "first"]);
     first.wait().unwrap();

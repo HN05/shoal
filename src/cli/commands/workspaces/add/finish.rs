@@ -51,21 +51,30 @@ pub(super) async fn execute_add_with_target(
     issue: Option<issues::Issue>,
 ) -> Result<i32> {
     let Some(entry) = plan.queue_entry.clone() else {
-        return add_planned(ctx, plan, target, issue, false).await;
+        return add_planned(ctx, plan, target, issue, AgentStart::Here).await;
     };
     let _hold = agent_queue::Hold::start(&ctx.paths, &entry).await;
-    let result = add_planned(ctx, plan, target, issue, false).await;
+    let result = add_planned(ctx, plan, target, issue, AgentStart::Here).await;
     failing_entry(ctx, Some(&entry), result).await
 }
 
-/// Open the planned workspace and launch its agent here, or with `queued`
-/// have its preparation queue the agent there.
+/// Where the planned workspace's agent starts.
+#[derive(Clone, Copy)]
+pub(super) enum AgentStart {
+    /// In this process.
+    Here,
+    /// Queued by the workspace's preparation, which the daemon starts
+    /// detached, at once regardless of the limits when `now`.
+    Queued { now: bool },
+}
+
+/// Open the planned workspace and launch its agent where `start` says.
 pub(super) async fn add_planned(
     ctx: &Context,
     plan: AddPlan,
     target: AddTarget,
     issue: Option<issues::Issue>,
-    queued: bool,
+    start: AgentStart,
 ) -> Result<i32> {
     let AddPlan {
         repository: _,
@@ -85,9 +94,12 @@ pub(super) async fn add_planned(
     let pr = creation.pr.clone();
     // A queued agent starts detached, so the caller's terminal, such as a
     // chat's session, stays its own.
-    let launch = match queued {
-        true => queued_launch(&agent, issue.as_ref(), &mode, (&prompt, &args, &fork))?,
-        false => None,
+    let launch = match start {
+        AgentStart::Queued { now } => {
+            let told = (&prompt, args.as_slice(), &fork);
+            queued_launch(&agent, issue.as_ref(), &mode, told, now)?
+        }
+        AgentStart::Here => None,
     };
     let start = AddStart {
         creation,
@@ -147,13 +159,15 @@ pub(super) async fn add_planned(
 
 /// The launch of `agent` in `mode` that preparing the added workspace
 /// queues, prompted with `issue` or else the plan's own prompt, with its
-/// arguments and fork. The daemon starts it outside this process, so it gets the
-/// workspace's own scope.
+/// arguments and fork, at once regardless of the limits when `now`. The
+/// daemon starts it outside this process, so it gets the workspace's own
+/// scope.
 fn queued_launch(
     agent: &ResolvedAddAgent,
     issue: Option<&issues::Issue>,
     mode: &Option<String>,
     (prompt, args, fork): (&Option<String>, &[OsString], &Option<String>),
+    now: bool,
 ) -> Result<Option<Box<QueuedLaunch>>> {
     let Some(chosen) = &agent.agent else {
         return Ok(None);
@@ -167,6 +181,7 @@ fn queued_launch(
         fork: fork.clone(),
         issue: issue.map(issues::Issue::launch_issue),
         env: Some(terminal::start_environment()),
+        now,
     })))
 }
 
