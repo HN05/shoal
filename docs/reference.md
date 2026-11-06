@@ -2185,7 +2185,11 @@ kind of space the mode names unless `--chat`, `--in` or `--worktree` says
 otherwise; `worker` always starts in a workspace, and config that gives it
 another kind is refused. Without `--mode`, a terminal offers the modes in a
 picker with the kind of space each starts in, and without one the start takes
-`worker`, or `chat` with `--chat` or `--in`, which the picker lists first. A
+`worker`, or `chat` with `--chat` or `--in`, which the picker lists first. The
+picker opens once the start has checked the arguments it was given, and offers
+only the modes of the kind of space they ask for, a workspace for a branch,
+`--base` or another flag only a workspace takes, a chat for `--name`; when
+only one fits, the start takes it without asking. A
 new agent in an existing space may start in another mode; a running agent's mode never changes. A space records the mode its agent started in, a workspace that of its
 latest agent, and restores and restarts keep it; `--json` gives it as `mode`,
 and `shoal work`, `shoal status`, `shoal inbox`, the queue and the menu name a

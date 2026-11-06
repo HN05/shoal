@@ -3,6 +3,7 @@ mod agent;
 mod detached;
 mod finish;
 mod handoff;
+mod mode;
 mod place;
 mod plan;
 mod queue;
@@ -26,12 +27,13 @@ use self::{
     detached::{add_detached, ensure_detachable, starts_detached},
     finish::execute_add_with_target,
     handoff::start_beside,
+    mode::choose_add_mode,
     plan::{check_add_creation, plan_addition},
     queue::{admit, after_dependencies, failing_entry},
     source::{load_add_issue, pick_add_source, select_add_creation},
     target::resolve_add_target,
 };
-use crate::cli::context::Context;
+use crate::cli::{context::Context, ui::ModeChoice};
 
 /// How `shoal start` runs once its workspace is planned.
 #[derive(Debug, Clone, Default)]
@@ -47,7 +49,7 @@ pub(in crate::cli::commands) struct AddOptions {
     /// The model and effort requested over the configured ones.
     pub model: crate::agent::ModelChoice,
     /// The mode the agent starts in; the default mode when `None`.
-    pub mode: Option<String>,
+    pub mode: Option<ModeChoice>,
     /// The space the workspace goes below, instead of the chat this runs in
     /// or, for a workspace process, its own space.
     pub parent: Option<String>,
@@ -77,7 +79,7 @@ pub(in crate::cli::commands) async fn add(
     issue: Option<String>,
     agent: AgentLaunch,
     args: Vec<OsString>,
-    options: AddOptions,
+    mut options: AddOptions,
 ) -> Result<i32> {
     // Without its token, the daemon would add a workspace process's
     // workspace for the user instead of below its own.
@@ -102,9 +104,10 @@ pub(in crate::cli::commands) async fn add(
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
     // An issue or a typed name settles the branch; check it before the agent picker.
     check_add_creation(ctx, &target, &creation, options.parent.as_deref()).await?;
+    let mode = choose_add_mode(ctx, &settings, options.mode.take()).await?;
     let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
-    plan.start_as(&options);
+    plan.start_as(&options, mode);
     ensure!(
         options.after.is_empty() || plan.agent_name().is_some(),
         "--after queues an agent; name one with --agent"
@@ -134,6 +137,21 @@ pub(in crate::cli::commands) async fn add(
         return Ok(0);
     }
     execute_add_with_target(ctx, plan, target, issue).await
+}
+
+/// The repository a start goes in, the one `repository` names or `issue`
+/// belongs to, else the current or a picked one, once the daemon accepts a
+/// workspace there below `parent`. A start checks it before asking what it
+/// starts, so its refusals come first.
+pub(in crate::cli::commands) async fn check_target(
+    ctx: &Context,
+    repository: Option<String>,
+    issue: Option<&str>,
+    parent: Option<&str>,
+) -> Result<crate::repository::Selector> {
+    let target = resolve_add_target(ctx, repository, issue).await?;
+    check_add_creation(ctx, &target, &Creation::default(), parent).await?;
+    Ok(target.selector)
 }
 
 #[cfg(test)]

@@ -2237,7 +2237,10 @@ with, and says which kind of space it starts in, so one command replaces a
 command per kind of start. Without `--mode`, a start on a terminal picks the
 mode, since it decides what the agent is told, and lists the start's default
 first so Enter keeps it; without a terminal it takes the default, so scripts
-and agents start as before. The default mode, `worker`, always starts in a
+and agents start as before. The picker follows the checks of the arguments
+given, as every prompt does: a start whose arguments decide the kind of space
+picks among that kind's modes in its own flow, after that flow's checks, and
+another first resolves and checks its repository, parent and agent. The default mode, `worker`, always starts in a
 workspace, so a plain `start` without a terminal needs nothing from the
 daemon before it resolves its repository; another mode's kind is read
 from the named or current repository's settings, and `--chat`, `--in` and

@@ -258,10 +258,10 @@ impl AddPlan {
         })
     }
 
-    /// Start the agent in the mode `options` names, below the space it
-    /// names, from a fork of the session it names.
-    pub(super) fn start_as(&mut self, options: &super::AddOptions) {
-        self.mode.clone_from(&options.mode);
+    /// Start the agent in `mode`, below the space `options` names, from a
+    /// fork of the session it names.
+    pub(super) fn start_as(&mut self, options: &super::AddOptions, mode: Option<String>) {
+        self.mode = mode;
         self.parent.clone_from(&options.parent);
         self.fork.clone_from(&options.fork);
     }

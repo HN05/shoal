@@ -11,6 +11,8 @@
 //!   PR ([`pick_item`]), or the key that chose it ([`pick_with_keys`]), or
 //!   whose keys act on an entry without leaving it ([`pick_in_place`]);
 //!   [`can_pick`] tells whether one can run, for choices with a usual answer.
+//! - [`modes`]: the mode a start takes, named or picked among the modes
+//!   of the kind of space it starts in ([`ModeChoice`]).
 //! - [`views`]: choosing a row across views ([`pick_in_views`]), reading
 //!   the next view ([`next_picker_view`]) and encoding its transition
 //!   ([`PickerView::transition`]).
@@ -30,6 +32,7 @@
 //! instead, and are refused naming what the prompt asks for, or the option a
 //! caller names with [`require_argument`]. A new kind of input or choice
 //! belongs here, built on these operations, so the next command can use it too.
+mod modes;
 mod picker;
 mod place;
 mod prompt;
@@ -38,6 +41,7 @@ mod several;
 mod views;
 mod workspaces;
 
+pub use modes::ModeChoice;
 pub use picker::*;
 pub use place::{Place, pick_place};
 pub use prompt::*;

@@ -13,7 +13,7 @@ fn start(args: &[&str]) -> StartArgs {
 
 #[test]
 fn a_start_refuses_flags_its_kind_of_space_cannot_use() {
-    let chat = |args: &[&str]| ensure_fits(&start(args), SpaceKind::Chat, "plan");
+    let chat = |args: &[&str]| ensure_fits(&start(args), SpaceKind::Chat, Some("plan"));
     chat(&["repo", "--issue", "7", "--name", "talk"]).unwrap();
     for (args, flag) in [
         (&["repo", "topic"][..], "<branch>"),
@@ -29,7 +29,7 @@ fn a_start_refuses_flags_its_kind_of_space_cannot_use() {
             "{error}"
         );
     }
-    let workspace = |args: &[&str]| ensure_fits(&start(args), SpaceKind::Workspace, "worker");
+    let workspace = |args: &[&str]| ensure_fits(&start(args), SpaceKind::Workspace, Some("worker"));
     workspace(&["repo", "topic", "--base", "main"]).unwrap();
     let error = workspace(&["repo", "--name", "talk"])
         .unwrap_err()
@@ -126,46 +126,18 @@ fn a_copy_refuses_a_pr_or_branch_link_but_takes_an_issue() {
 }
 
 #[test]
-fn the_mode_picker_lists_the_starts_default_first_with_its_kind_of_space() {
-    let modes = &crate::config::Config::default()
-        .resolve(&Default::default())
-        .unwrap()
-        .modes;
-    let listed = |args: &[&str]| {
-        let args = start(args);
-        let palette = Palette::stdout(true);
-        mode_entries(modes, default_mode(&args), forced_kind(&args), palette)
-            .into_iter()
-            .map(|(id, label)| {
-                let kind = label.split_whitespace().last().unwrap().to_owned();
-                (id, kind)
-            })
-            .collect::<Vec<_>>()
-    };
-    let pair = |mode: &str, kind: &str| (mode.to_owned(), kind.to_owned());
+fn the_arguments_other_than_the_mode_decide_the_kind_they_fit() {
+    let fits = |args: &[&str]| fitting_kind(&start(args));
+    assert_eq!(fits(&["repo"]), None);
+    assert_eq!(fits(&["https://forge.example/o/r/issues/7"]), None);
+    assert_eq!(fits(&["repo", "topic"]), Some(SpaceKind::Workspace));
     assert_eq!(
-        listed(&["repo"]),
-        [
-            pair("worker", "workspace"),
-            pair("chat", "chat"),
-            pair("plan", "chat")
-        ]
-    );
-    // A forced kind is the kind every mode starts in.
-    assert_eq!(
-        listed(&["repo", "--chat"]),
-        [
-            pair("chat", "chat"),
-            pair("plan", "chat"),
-            pair("worker", "chat")
-        ]
+        fits(&["repo", "--base", "main"]),
+        Some(SpaceKind::Workspace)
     );
     assert_eq!(
-        listed(&["repo", "--worktree"]),
-        [
-            pair("worker", "workspace"),
-            pair("chat", "workspace"),
-            pair("plan", "workspace")
-        ]
+        fits(&["https://forge.example/o/r/pulls/8"]),
+        Some(SpaceKind::Workspace)
     );
+    assert_eq!(fits(&["repo", "--name", "talk"]), Some(SpaceKind::Chat));
 }

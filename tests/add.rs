@@ -130,7 +130,7 @@ fn unregistered_repositories_are_registered_on_confirmation() {
     ] {
         let daemon = FakeDaemon::start();
         let (output, transcript) = prompt::answer(
-            (daemon.command().args(args)).args(["--agent", "missing", "--mode", "worker"]),
+            daemon.command().args(args).args(["--agent", "missing"]),
             answer,
             prompt::AnswerOptions::default(),
         );
@@ -143,14 +143,14 @@ fn unregistered_repositories_are_registered_on_confirmation() {
 fn interactive_commands_refuse_their_arguments_before_prompting() {
     for (args, answer, expected, refusal) in [
         (
-            &["start", "missing", "--mode", "worker"][..],
+            &["start", "missing"][..],
             "",
             &["check_creation missing"][..],
             "repository is not registered",
         ),
         // The typed branch is checked again before the agent picker.
         (
-            &["start", "test", "--base", "main", "--mode", "worker"],
+            &["start", "test", "--base", "main"],
             "taken\n",
             &["check_creation test", "check_creation test taken"],
             "workspace name already exists: taken",

@@ -14967,8 +14967,6 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         let (output, transcript) = fixture.interactive(
             &[
                 "start",
-                "--mode",
-                "worker",
                 "https://github.com/team/project/issues/298",
                 "--base",
                 "HEAD",
@@ -15004,8 +15002,6 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
     let (output, transcript) = fixture.interactive(
         &[
             "start",
-            "--mode",
-            "worker",
             fixture.repo.to_str().unwrap(),
             "plain",
             "--base",
@@ -15375,7 +15371,7 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
             fixture
                 .command()
                 .env("SHOAL_SHELL_DIRECTIVE", &directive)
-                .args(["start", "--mode", "worker", fixture.repo.to_str().unwrap()]),
+                .args(["start", fixture.repo.to_str().unwrap(), "--mode", "worker"]),
             "",
         );
         assert!(output.status.success(), "{transcript}");
@@ -15410,7 +15406,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
             fixture
                 .command()
                 .env("SHOAL_SHELL_DIRECTIVE", &directive)
-                .args(["start", "--mode", "worker", fixture.repo.to_str().unwrap()]),
+                .args(["start", fixture.repo.to_str().unwrap(), "--mode", "worker"]),
             "",
         )
     };
@@ -19524,28 +19520,24 @@ fn start_puts_a_chat_below_the_parent_it_names() {
     let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let other = other.to_str().unwrap();
-    let (output, rows) = fixture.pick(
-        &[
-            "start", "--chat", "--mode", "chat", other, "--parent", &number,
-        ],
-        "1",
-        "",
-    );
+    let (output, rows) = fixture.pick(&["start", "--chat", other, "--parent", &number], "1", "");
     assert!(!output.status.success(), "{output:?}");
     assert!(rows.is_empty(), "the agent picker opened: {rows}");
 }
 
-/// Without --mode, a start on a terminal offers the modes, the default
-/// first, and starts in the kind of space the picked one names.
+/// Without --mode, a start on a terminal whose arguments fit either kind of
+/// space offers every mode, the default first, and starts in the kind of
+/// space the picked one names.
 #[test]
 fn start_on_a_terminal_picks_its_mode() {
     let fixture = Fixture::new();
     install_recording_agent(&fixture, "claude");
     let repo = fixture.repo.to_str().unwrap();
-    let args = [
-        "start", repo, "--agent", "claude", "--name", "talk", "--here",
-    ];
-    let (output, rows) = fixture.pick(&args, "chat", "");
+    let (output, rows) = fixture.pick(
+        &["start", repo, "--agent", "claude", "--here"],
+        "chat",
+        "\n",
+    );
     assert!(output.status.success(), "{output:?}");
     let modes: Vec<_> = rows
         .lines()
@@ -24806,13 +24798,7 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
         config.push_str("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n");
         let fixture = Fixture::with_config(Some(&config));
         install_fake_herdr(&fixture);
-        let mut args = vec![
-            "start",
-            "--mode",
-            "worker",
-            fixture.repo.to_str().unwrap(),
-            "focus",
-        ];
+        let mut args = vec!["start", fixture.repo.to_str().unwrap(), "focus"];
         if let Some(agent) = agent {
             args.extend(["--agent", agent]);
         }
@@ -24836,11 +24822,11 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
         &fixture,
         &[
             "start",
-            "--mode",
-            "worker",
             "34",
             "--repo",
             fixture.repo.to_str().unwrap(),
+            "--mode",
+            "worker",
         ],
         "",
     );
@@ -24970,8 +24956,6 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
         &fixture,
         &[
             "start",
-            "--mode",
-            "worker",
             fixture.repo.to_str().unwrap(),
             "retain",
             "--agent",
@@ -25018,8 +25002,6 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
         &fixture,
         &[
             "start",
-            "--mode",
-            "worker",
             fixture.repo.to_str().unwrap(),
             "failed-setup",
             "--agent",
@@ -27376,7 +27358,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     install_fake_agents(&fixture, &["claude", "happy"]);
     let repo = fixture.repo.to_str().unwrap();
     // Without a default agent a picker offers the installed agents that can run.
-    let (output, rows) = fixture.pick(&["start", "--mode", "chat", "--chat", repo], "0", "\n");
+    let (output, rows) = fixture.pick(&["start", "--chat", repo, "--mode", "chat"], "0", "\n");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         rows.lines()
@@ -27387,19 +27369,17 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     let (output, transcript) = fixture.interactive_command(
         fixture.command().args([
             "start",
-            "--mode",
-            "chat",
             "--chat",
             repo,
             "--agent",
             "happy-claude",
+            "--mode",
+            "chat",
         ]),
         "",
     );
     assert!(!output.status.success(), "{transcript}");
-    let output = fixture.run(&[
-        "start", "--mode", "chat", "--chat", repo, "--agent", "claude",
-    ]);
+    let output = fixture.run(&["start", "--chat", repo, "--agent", "claude"]);
     assert!(!output.status.success());
     // The checkout has no value for a workspace's placeholders.
     fs::write(
@@ -27409,7 +27389,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     .unwrap();
     let (output, transcript) = fixture.interactive_command(
         fixture.command().args([
-            "start", "--mode", "chat", "--chat", repo, "--agent", "claude", "--here",
+            "start", "--chat", repo, "--agent", "claude", "--here", "--mode", "chat",
         ]),
         "\n",
     );

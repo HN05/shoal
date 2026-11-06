@@ -22,7 +22,7 @@ use crate::{
         recent, terminal, ui,
     },
     config::{Effective, templates},
-    model::{Chat, ChatHome, LinkedItem, Relation, Repository, SpaceLinks, Workspace},
+    model::{Chat, ChatHome, LinkedItem, Relation, Repository, SpaceKind, SpaceLinks, Workspace},
     protocol::ConfigTarget,
     repository,
 };
@@ -37,7 +37,7 @@ pub(super) use rename::{rename, request_name};
 /// What a chat starts as: its mode, and the issue it starts on, if any,
 /// where `Some(None)` asks for one.
 pub(super) struct Subject {
-    pub mode: String,
+    pub mode: ui::ModeChoice,
     pub issue: Option<Option<String>>,
     /// The issue an imported chat is linked to, as [`Topic::linked_issue`].
     pub linked_issue: Option<templates::IssueFields>,
@@ -63,11 +63,12 @@ pub(super) async fn start(
         };
         check_parent(ctx, &repo, None, options.parent.as_deref()).await?;
         let settings = settings(ctx, &repo).await?;
+        let mode = (subject.mode).chosen(ctx, &settings.modes, Some(SpaceKind::Chat))?;
         let topic = Topic {
-            linked_issue: subject.linked_issue.clone(),
-            ..Topic::repository(&repo, &subject.mode)
+            linked_issue: subject.linked_issue,
+            ..Topic::repository(&repo, &mode)
         };
-        let topic = on_issue(ctx, &repo, &settings, topic, subject, &mut options).await?;
+        let topic = on_issue(ctx, &repo, &settings, topic, subject.issue, &mut options).await?;
         begin(ctx, repo, settings, topic, options).await
     }
     .await;
@@ -92,11 +93,12 @@ pub(super) async fn start_in_workspace(
         let parent = options.parent.as_deref();
         check_parent(ctx, &repo, Some(&workspace), parent).await?;
         let settings = settings(ctx, &repo).await?;
+        let mode = (subject.mode).chosen(ctx, &settings.modes, Some(SpaceKind::Chat))?;
         let topic = Topic {
-            linked_issue: subject.linked_issue.clone(),
-            ..Topic::workspace(workspace, &subject.mode)
+            linked_issue: subject.linked_issue,
+            ..Topic::workspace(workspace, &mode)
         };
-        let topic = on_issue(ctx, &repo, &settings, topic, subject, &mut options).await?;
+        let topic = on_issue(ctx, &repo, &settings, topic, subject.issue, &mut options).await?;
         begin(ctx, repo, settings, topic, options).await
     }
     .await;
@@ -126,26 +128,25 @@ async fn check_parent(
     .await
 }
 
-/// `topic` in `repo` started on the issue `subject` names, if any. The mode
-/// must exist, and a named agent, or a model it cannot take, is refused
-/// before an issue is asked for.
+/// `topic` in `repo` started on the issue `issue` names, if any. A named
+/// agent, or a model it cannot take, is refused before an issue is asked
+/// for.
 async fn on_issue(
     ctx: &Context,
     repo: &Repository,
     settings: &Effective,
     topic: Topic,
-    subject: Subject,
+    issue: Option<Option<String>>,
     options: &mut Options,
 ) -> Result<Topic> {
-    crate::config::modes::get(&settings.modes, &subject.mode)?;
-    let Some(input) = subject.issue else {
+    let Some(input) = issue else {
         return Ok(topic);
     };
     options.agent = named_agent(settings, options.agent.take())?;
     if let Some(agent) = &options.agent {
         check_model(settings, agent, &options.model)?;
     }
-    let issue = issue::chosen(ctx, repo, &settings.issue, &subject.mode, input).await?;
+    let issue = issue::chosen(ctx, repo, &settings.issue, &topic.mode, input).await?;
     Ok(issue::on(topic, repo, &issue))
 }
 
