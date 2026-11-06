@@ -352,7 +352,7 @@ pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut String
 /// registered repository for its own, changes the items of a registered
 /// checkout as its own space acting there, under that repository's
 /// `[permissions]`.
-async fn change_context_space<'a>(
+pub(super) async fn change_context_space<'a>(
     manager: &Manager,
     caller: &Caller,
     context: &'a mut ItemContext,

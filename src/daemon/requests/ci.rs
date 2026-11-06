@@ -83,10 +83,12 @@ impl Scoped for CiMethod {
             CiMethod::ApproveCiRuns { .. } => {
                 bail!("approving CI runs is the user's decision; ask them with shoal alerts send")
             }
+            // A chat without a repository acts in a registered checkout as
+            // its own space, with its agent account.
             CiMethod::CheckLog { context, .. }
             | CiMethod::CiAction { context, .. }
             | CiMethod::ListCiRuns { context, .. } => {
-                Some(super::items::context_workspace(context)?)
+                Some(super::items::change_context_space(manager, caller, context).await?)
             }
             // A workspace process acts from its own workspace, so only on
             // runs of its repository.
@@ -96,7 +98,8 @@ impl Scoped for CiMethod {
             | CiMethod::CiRunJobLog { context, .. }
             | CiMethod::StartCiRun { context, .. } => {
                 let own = own_context(manager, caller).await?;
-                Some(super::items::context_workspace(context.get_or_insert(own))?)
+                let context = context.get_or_insert(own);
+                Some(super::items::change_context_space(manager, caller, context).await?)
             }
         })
     }

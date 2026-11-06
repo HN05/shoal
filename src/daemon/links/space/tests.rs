@@ -190,6 +190,39 @@ async fn a_change_from_a_checkout_is_made_by_a_chat_without_a_repository_acting_
 }
 
 #[tokio::test]
+async fn a_chat_without_a_repository_follows_ci_in_a_registered_checkout_as_itself() {
+    let (temp, manager) = manager().await;
+    let repos = repositories(&temp, &manager, &["repo", "other"]).await;
+    let (master, _process) = chat(&manager, "master", None).await;
+    let (planning, _planning_process) = chat(&manager, "planning", Some(&repos[0])).await;
+    let list = || crate::protocol::CiMethod::ListCiRuns {
+        context: ItemContext::Checkout(repos[1].id.clone()),
+        pr: None,
+        filter: crate::forge::ci::run_view::RunFilter {
+            branch: None,
+            workflow: None,
+            commit: None,
+            limit: 10,
+        },
+    };
+    let token = manager.chat_scope(&master.id).await.unwrap();
+    let mut method = list();
+    crate::daemon::scope::authorize(&manager, Some(&token), &mut method)
+        .await
+        .unwrap();
+    let crate::protocol::CiMethod::ListCiRuns { context, .. } = method else {
+        unreachable!("the method stays a run listing");
+    };
+    let ItemContext::ChatIn { chat, repository } = context else {
+        panic!("expected the chat acting in the checkout: {context:?}");
+    };
+    assert_eq!((chat, repository), (master.id, repos[1].id.clone()));
+    let scoped = manager.chat_scope(&planning.id).await.unwrap();
+    let refused = crate::daemon::scope::authorize(&manager, Some(&scoped), &mut list()).await;
+    assert!(refused.is_err());
+}
+
+#[tokio::test]
 async fn a_chat_without_a_repository_opens_no_issue_elsewhere_unless_allowed_directly() {
     let (_temp, manager) = manager().await;
     let (master, _process) = chat(&manager, "master", None).await;

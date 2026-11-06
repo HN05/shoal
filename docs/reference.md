@@ -1943,8 +1943,9 @@ removes those you hold nothing in, under the
 the requests routed to it, with a grant; merging, PR verdicts, CI approval and
 your notifications stay with you. Every registered repository counts as its
 own: `--repo` or an issue or PR URL names the one a command acts in, and
-there it reads, opens, comments on, labels and edits issues, comments on PRs
-and sends forge API requests under that repository's `[permissions]`, and
+there it reads, opens, comments on, labels and edits issues, comments on PRs,
+lists CI runs and reruns or cancels a PR's checks, and sends forge API
+requests under that repository's `[permissions]`, and
 its proposals go to you as that repository's; through `--space` it acts on a
 space's items as a coordinator does. It opens no PRs and links nothing. In
 a repository that is not registered it only opens an issue, named by its
