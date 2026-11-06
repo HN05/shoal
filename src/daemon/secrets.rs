@@ -11,7 +11,7 @@ use crate::{
         workspace::Manager,
     },
     model::Workspace,
-    secrets::Secret,
+    secrets::{Secret, specification},
 };
 
 impl Manager {
@@ -111,15 +111,6 @@ impl Manager {
             "secrets.{name} changed since this agent started; restart it to use the new configuration"
         );
         Ok(secret)
-    }
-}
-
-/// What a grant for `secret` binds: the command that fetches it and the tools
-/// it serves.
-pub fn specification(secret: &Secret) -> SecretSpecification {
-    SecretSpecification {
-        command: secret.command.clone(),
-        tools: secret.tools.clone(),
     }
 }
 

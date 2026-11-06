@@ -9,7 +9,16 @@ use std::{
 };
 
 pub(crate) use crate::client::secrets::{Secret, Secrets, validate};
-use crate::{env, paths::Paths};
+use crate::{client::approvals::SecretSpecification, env, paths::Paths};
+
+/// What a grant for `secret` binds: the command that fetches it and the tools
+/// it serves.
+pub fn specification(secret: &Secret) -> SecretSpecification {
+    SecretSpecification {
+        command: secret.command.clone(),
+        tools: secret.tools.clone(),
+    }
+}
 
 /// The tool-scoped secrets a launcher directory serves, beside its launchers.
 /// Tool names cannot start with a dot, so no launcher can take its name.
@@ -204,7 +213,7 @@ fn exec_with(program: &Path, args: Vec<OsString>, values: Vec<(&String, OsString
 /// agent can follow it.
 async fn confirm_grant(paths: &Paths, tool: &str, name: &str, secret: &Secret) -> Result<()> {
     use crate::{
-        daemon::{approvals::DecisionStatus, secrets::SecretRequest},
+        client::{approvals::DecisionStatus, secrets::SecretRequest},
         protocol::{Body, SecretMethod},
     };
     let workspace = std::env::var(env::WORKSPACE_ID)
@@ -214,7 +223,7 @@ async fn confirm_grant(paths: &Paths, tool: &str, name: &str, secret: &Secret) -
         name: name.to_owned(),
         request: SecretRequest {
             reason: None,
-            source: Some(crate::daemon::secrets::specification(secret)),
+            source: Some(specification(secret)),
         },
     };
     let body = crate::client::connection::call(paths, method)
