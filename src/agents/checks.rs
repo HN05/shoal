@@ -7,6 +7,7 @@ use super::{added, agent_integration, agent_off, detached, launch_proxy, model_a
 use crate::{
     agent::{Agent, ModelChoice},
     config::{Effective, named_commands::Commands},
+    model::SpaceKind,
     protocol::operations::QueuedLaunch,
     tools::ensure_program,
 };
@@ -105,7 +106,7 @@ pub(crate) fn check_queued_launch(launch: &QueuedLaunch, settings: &Effective) -
         .mode
         .as_deref()
         .unwrap_or(crate::config::modes::DEFAULT);
-    crate::config::modes::get(&settings.modes, mode)?;
+    crate::config::modes::resolve(&settings.modes, mode, SpaceKind::Workspace, true)?;
     let agent: Agent = launch.agent.parse()?;
     ensure_available(agent.name(), settings)?;
     if launch.fork.is_some() {

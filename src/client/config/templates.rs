@@ -1,10 +1,12 @@
 //! Plain-text templates: substitute known fields once, never evaluate their values.
+use std::borrow::Cow;
+
 use anyhow::{Context, Result};
 
 use crate::{
     config::{Settings, modes},
     forge::items::link::LinkKind,
-    model::{ChatHome, SpaceLinks, Workspace},
+    model::{ChatHome, SpaceKind, SpaceLinks, Workspace},
 };
 
 pub use super::placeholders::render;
@@ -144,6 +146,18 @@ pub enum Place<'a> {
     },
 }
 
+impl Place<'_> {
+    /// The mode `name` of an agent here, as [`modes::resolve`] finds it for
+    /// this kind of space.
+    fn mode<'a>(self, settings: &'a Settings, name: &str) -> Result<Cow<'a, modes::Mode>> {
+        let (kind, repository) = match self {
+            Self::Workspace { .. } => (SpaceKind::Workspace, true),
+            Self::Chat { repo, .. } => (SpaceKind::Chat, repo.is_some()),
+        };
+        modes::resolve(&settings.modes, name, kind, repository)
+    }
+}
+
 /// What an agent starts on: an issue, or a task given in words.
 #[derive(Debug, Clone, Default)]
 pub struct Subject {
@@ -204,7 +218,7 @@ pub fn brief(
     place: Place<'_>,
     subject: Option<&Subject>,
 ) -> Result<Brief> {
-    let resolved = modes::get(&settings.modes, mode)?;
+    let resolved = place.mode(settings, mode)?;
     let fields = Fields::new(
         settings,
         place,
@@ -239,7 +253,7 @@ fn system_text(
     place: Place<'_>,
     fields: &Fields,
 ) -> Result<String> {
-    let resolved = modes::get(&settings.modes, mode)?;
+    let resolved = place.mode(settings, mode)?;
     let mut system = vec![facts(place).to_owned(), SPACE_RULES.to_owned()];
     for name in &resolved.rules {
         let rule = settings

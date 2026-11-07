@@ -4,8 +4,10 @@
 //! with or without a repository.
 //! Rules are shared by name; instructions belong to one mode. Each may be
 //! written inline or as `rules/<name>.md` and `modes/<name>.md` beside a
-//! config file.
+//! config file. The `setup` mode is built in apart from them: no config
+//! defines or changes it.
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     path::{Path, PathBuf},
 };
@@ -29,6 +31,12 @@ pub const PLAN: &str = "plan";
 pub const REVIEW_RULE: &str = "review";
 /// The mode of a chat without a repository that manages every space.
 pub const ORCHESTRATE: &str = "orchestrate";
+/// The mode in which an agent writes Shoal's config, which `shoal repo
+/// setup` and `shoal config setup` start. It takes the rules of its
+/// [`setup_base`] with instructions of its own.
+pub const SETUP: &str = "setup";
+/// What a setup agent is told after its subject.
+const SETUP_INSTRUCTIONS: &str = include_str!("modes/setup.md");
 /// The practices of Shoal's built-in modes, which a user's own modes may
 /// list, replace or leave out.
 const WORK_RULE: &str = "work";
@@ -129,6 +137,7 @@ pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
 pub fn validate(config: &RepoConfig) -> Result<()> {
     for name in config.modes.keys() {
         crate::validate::name("mode", name)?;
+        ensure_configurable(name)?;
     }
     let default_kind = config.modes.get(DEFAULT).and_then(|mode| mode.kind);
     ensure!(
@@ -142,11 +151,62 @@ pub fn validate(config: &RepoConfig) -> Result<()> {
     Ok(())
 }
 
+/// Refuse config for mode `name` when Shoal alone defines it.
+fn ensure_configurable(name: &str) -> Result<()> {
+    ensure!(
+        name != SETUP,
+        "mode {SETUP} is built in, and config cannot change it"
+    );
+    Ok(())
+}
+
+/// Refuse a start in mode `name` that only its own commands make.
+pub fn ensure_startable(name: &str) -> Result<()> {
+    ensure!(
+        name != SETUP,
+        "mode {SETUP} starts only with shoal repo setup or shoal config setup"
+    );
+    Ok(())
+}
+
 /// The mode `name` of `modes`, refused when no config defines it.
 pub fn get<'a>(modes: &'a BTreeMap<String, Mode>, name: &str) -> Result<&'a Mode> {
     modes
         .get(name)
         .with_context(|| format!("no mode {name}; [modes.{name}] in config defines one"))
+}
+
+/// The mode `name` of a space of `kind`, with a repository or without one
+/// as `repository` says: a setup space's [`setup_base`] with the setup
+/// instructions, else the mode `modes` defines.
+pub fn resolve<'a>(
+    modes: &'a BTreeMap<String, Mode>,
+    name: &str,
+    kind: SpaceKind,
+    repository: bool,
+) -> Result<Cow<'a, Mode>> {
+    if name != SETUP {
+        return get(modes, name).map(Cow::Borrowed);
+    }
+    let base = get(modes, setup_base(kind, repository)?)?;
+    Ok(Cow::Owned(Mode {
+        instructions: SETUP_INSTRUCTIONS.to_owned(),
+        ..base.clone()
+    }))
+}
+
+/// The mode whose kind, reach, rules and permissions a setup space of
+/// `kind` takes: the worker's for a repository's workspace, the
+/// orchestrator's for a chat without a repository, which sets up the
+/// global config.
+pub fn setup_base(kind: SpaceKind, repository: bool) -> Result<&'static str> {
+    match (kind, repository) {
+        (SpaceKind::Workspace, _) => Ok(DEFAULT),
+        (SpaceKind::Chat, false) => Ok(ORCHESTRATE),
+        (SpaceKind::Chat, true) => {
+            bail!("mode {SETUP} runs in a workspace or in a chat without a repository")
+        }
+    }
 }
 
 /// Refuse a mode that names a rule no layer defines, or a workspace without
@@ -175,6 +235,7 @@ pub type Files = BTreeMap<String, PathBuf>;
 pub fn fill(config: &mut RepoConfig, directories: &[PathBuf]) -> Result<Files> {
     let mut files = Files::new();
     for (name, path) in markdown_files(directories, MODES_DIR)? {
+        ensure_configurable(&name).with_context(|| path.display().to_string())?;
         let mode = config.modes.entry(name.clone()).or_default();
         if mode.instructions.is_none() {
             mode.instructions = Some(read(&path)?);

@@ -582,6 +582,23 @@ fn the_runner_takes_its_settings_and_refuses_labels_it_cannot_register() {
 }
 
 #[test]
+fn no_config_layer_or_file_defines_the_setup_mode() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(home.path());
+    for config in ["[modes.setup]\nrules = ['work']\n", "[modes.setup]\n"] {
+        assert!(Config::parse(config, &paths).is_err(), "{config}");
+        assert!(crate::config::repo::parse(config).is_err(), "{config}");
+    }
+    let file = Config::path(&paths);
+    let modes = file.parent().unwrap().join("modes");
+    std::fs::create_dir_all(&modes).unwrap();
+    std::fs::write(&file, "").unwrap();
+    std::fs::write(modes.join("setup.md"), "Write anything.").unwrap();
+    let error = Config::load(&paths).unwrap_err();
+    assert!(format!("{error:#}").contains("setup.md"), "{error:#}");
+}
+
+#[test]
 fn only_the_global_config_starts_a_mode_without_a_repository() {
     let paths = Paths::for_test("/home/test");
     let mode = "[modes.manage]\nkind = 'chat'\nrepository = false\n";

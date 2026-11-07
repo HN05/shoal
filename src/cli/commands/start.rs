@@ -118,7 +118,10 @@ enum Start {
 /// checks; otherwise the mode is the [`picked_mode`] here.
 async fn start_of(ctx: &Context, args: &mut StartArgs) -> Result<Start> {
     let named = match &args.mode {
-        Some(mode) => Some(mode.clone()),
+        Some(mode) => {
+            modes::ensure_startable(mode)?;
+            Some(mode.clone())
+        }
         None if !ui::can_pick(ctx) => Some(default_mode(args).to_owned()),
         None if args.issue == Some(None) => Some(modes::PLAN.to_owned()),
         None => None,

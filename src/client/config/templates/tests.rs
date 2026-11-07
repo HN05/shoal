@@ -168,6 +168,35 @@ fn a_chat_mode_without_the_chat_rule_still_gets_the_facts_and_space_rules() {
 }
 
 #[test]
+fn setup_takes_its_base_modes_rules_and_its_own_instructions() {
+    let settings = settings(
+        "[rules.worker]\ntext = 'Babysit {branch}.'\n\
+         [rules.orchestrate]\ntext = 'Manage every space.'\n",
+    );
+    let subject = Subject::told("Write the config.".into());
+    let root = Place::Chat {
+        repo: None,
+        home: ChatHome::Root(std::path::Path::new("/home/me/shoal")),
+        delivery: Delivery::Pushed,
+    };
+    for (place, base) in [(worker(Delivery::Pushed), "worker"), (root, "orchestrate")] {
+        let setup = brief(&settings, modes::SETUP, place, Some(&subject)).unwrap();
+        let based = brief(&settings, base, place, None).unwrap();
+        assert_eq!(setup.system, based.system);
+        assert_eq!(
+            system(&settings, modes::SETUP, place, None).unwrap(),
+            based.system
+        );
+        let first = setup.first_message.unwrap();
+        assert!(first.starts_with("Write the config.\n\n"), "{first}");
+        assert!(first.contains("`shoal daemon reload`"), "{first}");
+    }
+    let repo = repository();
+    let in_checkout = chat(ChatHome::Checkout(&repo), Delivery::Pushed);
+    assert!(brief(&settings, modes::SETUP, in_checkout, Some(&subject)).is_err());
+}
+
+#[test]
 fn a_chat_without_a_repository_is_told_it_runs_in_root_dir() {
     let place = Place::Chat {
         repo: None,

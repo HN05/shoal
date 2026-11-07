@@ -177,3 +177,13 @@ fn a_start_names_an_issue_with_issue_or_positionally() {
     assert_eq!(issue(&["https://forge.example/o/r/pulls/8"]), None);
     assert_eq!(issue(&["repo", "--issue"]), None);
 }
+
+#[tokio::test]
+async fn the_setup_mode_starts_only_with_its_own_commands() {
+    let home = tempfile::tempdir().unwrap();
+    let ctx = Context::new(crate::paths::Paths::for_test(home.path()), true);
+    for args in [&["--mode", "setup"][..], &["--mode", "setup", "--chat"]] {
+        let error = run(&ctx, start(args)).await.unwrap_err().to_string();
+        assert!(error.contains("shoal config setup"), "{error}");
+    }
+}
