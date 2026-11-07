@@ -28,8 +28,8 @@ use crate::{
 };
 
 pub(crate) use args::{
-    dir_args, insert_options, launch_config_dir, model_args, restored_instruction_args,
-    workspace_args, workspace_dir_args, writable_config_dir,
+    dir_args, insert_options, model_args, restored_instruction_args, workspace_args,
+    workspace_dir_args,
 };
 pub(crate) use checks::{
     check_model, check_queued_launch, ensure_available, ensure_forks, programs, resolve_model,

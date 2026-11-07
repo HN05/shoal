@@ -596,8 +596,25 @@ pub(in crate::cli) fn chat_dir_args(
 fn global_config_dir(chat: &Chat, home: &Path) -> Option<PathBuf> {
     let sets_up_global = chat.mode == modes::SETUP && chat.repository_id.is_none();
     sets_up_global
-        .then(|| crate::agents::launch_config_dir(&Config::path_for_home(home)))
+        .then(|| launch_config_dir(&Config::path_for_home(home)))
         .flatten()
+}
+
+/// The directory of the config file `file`, created when missing and
+/// resolved as agents compare paths, so a setup agent may write there.
+pub(in crate::cli) fn writable_config_dir(file: &Path) -> Result<PathBuf> {
+    let directory = file.parent().context("the config file has no directory")?;
+    std::fs::create_dir_all(directory)
+        .and_then(|()| std::fs::canonicalize(directory))
+        .with_context(|| format!("create {}", directory.display()))
+}
+
+/// [`writable_config_dir`] for a launch, which starts without it, with a
+/// warning, when it cannot be created.
+fn launch_config_dir(file: &Path) -> Option<PathBuf> {
+    writable_config_dir(file)
+        .map_err(|error| eprintln!("warning: the agent may not write its config: {error:#}"))
+        .ok()
 }
 
 /// Start a chat of agent `name` its integration's own way; `None` leaves it

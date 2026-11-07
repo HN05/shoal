@@ -39,7 +39,7 @@ fn installed_config(ctx: &Context) -> Result<PathBuf> {
     if created {
         eprintln!("Installed config default at {}", path.display());
     }
-    let directory = crate::agents::writable_config_dir(&path)?;
+    let directory = crate::cli::agents::writable_config_dir(&path)?;
     Ok(directory.join(path.file_name().context("the config has no file name")?))
 }
 

@@ -112,23 +112,6 @@ pub(crate) async fn workspace_dir_args(
     dir_args(settings, name, &paths.home, workspaces_dir.as_slice())
 }
 
-/// The directory of the config file `file`, created when missing and
-/// resolved as agents compare paths, so a setup agent may write there.
-pub(crate) fn writable_config_dir(file: &Path) -> Result<PathBuf> {
-    let directory = file.parent().context("the config file has no directory")?;
-    std::fs::create_dir_all(directory)
-        .and_then(|()| std::fs::canonicalize(directory))
-        .with_context(|| format!("create {}", directory.display()))
-}
-
-/// [`writable_config_dir`] for a launch, which starts without it, with a
-/// warning, when it cannot be created.
-pub(crate) fn launch_config_dir(file: &Path) -> Option<PathBuf> {
-    writable_config_dir(file)
-        .map_err(|error| eprintln!("warning: the agent may not write its config: {error:#}"))
-        .ok()
-}
-
 /// The arguments that give agent `name` the configured agent directories as
 /// other working directories, so it may read what the tools it runs leave
 /// there without a permission prompt.
