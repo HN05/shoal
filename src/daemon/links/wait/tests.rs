@@ -1131,6 +1131,22 @@ async fn a_hooked_agent_is_due_a_wake_once_no_wait_has_run_for_a_while() {
     assert!(!due().await);
     tokio::time::pause();
     tokio::time::advance(UNWATCHED_WAKE_DELAY).await;
+    // A long turn without a delivery leaves no wait either, until its hook
+    // starts.
+    assert!(!due().await);
+    let id = workspace.id.clone();
+    let delay = UNWATCHED_WAKE_DELAY.as_secs() as i64;
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE space_agent_state SET since=since-?2 WHERE space_id=?1",
+                rusqlite::params![id, delay],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
     assert!(due().await);
     let running = manager.item_waits.start(&workspace.id);
     tokio::time::advance(UNWATCHED_WAKE_DELAY).await;

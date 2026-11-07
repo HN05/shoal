@@ -26,7 +26,7 @@ use crate::{
         transport::limits::rate_limited,
         updates::{Edited, MergeCheck, Snapshot, Update, UpdateKind},
     },
-    model::{ConflictCheck, PresentSpace, SpaceRef, Workspace},
+    model::{AgentStatus, ConflictCheck, PresentSpace, SpaceRef, Workspace},
     repository,
 };
 
@@ -504,29 +504,35 @@ impl Manager {
         messages_due: bool,
         arming: bool,
     ) -> Result<bool> {
-        if let Some(execution) = hooked
-            && !self.hook_cannot_wake(&workspace.id, execution).await
-        {
-            return Ok(false);
-        }
         let id = workspace.id.clone();
         let state = self
             .store
             .run(move |db| crate::daemon::workspace::agent_state::get(db, &id))
             .await?;
-        if state.is_none_or(|status| status.state != crate::state::AgentState::Idle) {
+        let Some(idle) = state.filter(|status| status.state == crate::state::AgentState::Idle)
+        else {
+            return Ok(false);
+        };
+        if let Some(execution) = hooked
+            && !self.hook_cannot_wake(&workspace.id, execution, &idle).await
+        {
             return Ok(false);
         }
         Ok(messages_due || self.wake_updates_due(workspace.clone(), arming).await?)
     }
 
     /// Whether the hook that wakes the agent `execution` runs in the
-    /// workspace `id` cannot: an interrupt ended its last turn, after which
-    /// the hook does not run, or no wait for the workspace's updates has run
-    /// for [`UNWATCHED_WAKE_DELAY`], so the hook has ended or cannot wait.
-    async fn hook_cannot_wake(&self, id: &str, execution: &str) -> bool {
+    /// workspace `id`, `idle` as its status says, cannot: an interrupt ended
+    /// its last turn, after which the hook does not run, or the agent has
+    /// idled and no wait for the workspace's updates has run for
+    /// [`UNWATCHED_WAKE_DELAY`], so the hook has ended or cannot wait. A turn
+    /// that ran that long without a delivery leaves no wait behind it either,
+    /// so the hook starting as it ends gets the delay too.
+    async fn hook_cannot_wake(&self, id: &str, execution: &str, idle: &AgentStatus) -> bool {
+        let idle_for = crate::time::unix_seconds().saturating_sub(idle.since.max(0) as u64);
         self.turn_interrupted(execution).await
-            || self.item_waits.unwatched_for(id, UNWATCHED_WAKE_DELAY)
+            || (idle_for >= UNWATCHED_WAKE_DELAY.as_secs()
+                && self.item_waits.unwatched_for(id, UNWATCHED_WAKE_DELAY))
     }
 
     /// The unread messages once one that wakes an idle agent is queued.
