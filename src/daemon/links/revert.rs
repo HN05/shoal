@@ -53,12 +53,13 @@ impl Manager {
             LinkSpace::Chat { checkout, .. } => self.repository_settings(&checkout.id).await?,
         };
         if self.proposer(caller).await.is_some() {
-            if settings.permissions.pr_open == Opening::Propose {
+            let permissions = crate::config::permissions::resolve(&settings, None)?;
+            if permissions.pr_open.value == Opening::Propose {
                 bail!(
                     "[permissions] pr_open needs the user's approval for new PRs, and a forge's revert cannot wait for it; ask the user to run shoal pr revert"
                 );
             }
-            if settings.permissions.push != Pushes::Direct {
+            if permissions.push.value != Pushes::Direct {
                 bail!(
                     "[permissions] push holds back or refuses agents' pushes, and a forge's revert pushes its branch at once; ask the user to run shoal pr revert"
                 );

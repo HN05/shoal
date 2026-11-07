@@ -16,7 +16,11 @@ use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{options::Options, repo::RepoConfig},
+    config::{
+        options::Options,
+        permissions::{PermissionsConfig, SpaceMode},
+        repo::RepoConfig,
+    },
     model::SpaceKind,
 };
 
@@ -63,6 +67,9 @@ pub struct ModeConfig {
     /// message.
     #[option(template, default = String::new())]
     pub instructions: Option<String>,
+    /// What the mode's agents may do, over `[permissions]`.
+    #[option(section)]
+    pub permissions: PermissionsConfig,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
@@ -81,6 +88,7 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
         repository: None,
         rules: vec![WORK_RULE.to_owned(), rule.to_owned()],
         instructions: Some(instructions.to_owned()),
+        permissions: PermissionsConfig::default(),
     };
     BTreeMap::from([
         (
@@ -207,6 +215,32 @@ pub fn setup_base(kind: SpaceKind, repository: bool) -> Result<&'static str> {
         (SpaceKind::Chat, true) => {
             bail!("mode {SETUP} runs in a workspace or in a chat without a repository")
         }
+    }
+}
+
+/// The permissions mode `mode` sets in config, and those Shoal's mode of
+/// that name has by default, which `[permissions]` overrides; a setup mode
+/// takes both from its [`setup_base`].
+pub fn permission_layers(
+    modes: &BTreeMap<String, Mode>,
+    mode: SpaceMode,
+) -> Result<(PermissionsConfig, PermissionsConfig)> {
+    let name = match mode.name {
+        SETUP => setup_base(mode.kind, mode.repository)?,
+        name => name,
+    };
+    let configured = get(modes, name)?.permissions;
+    Ok((configured, built_in_permissions(name)))
+}
+
+/// The permissions Shoal's mode `name` has where config sets none: a
+/// worker's are the keys' defaults, and the modes that coordinate decide
+/// their children's merges and issues elsewhere; a mode Shoal does not ship
+/// has none.
+fn built_in_permissions(name: &str) -> PermissionsConfig {
+    match name {
+        CHAT | PLAN | ORCHESTRATE => PermissionsConfig::COORDINATING,
+        _ => PermissionsConfig::default(),
     }
 }
 

@@ -2231,7 +2231,9 @@ repository's config applies to such a chat; `rules`, the named rules
 the agent's system text carries, in order, which a workspace agent restored
 with its built-in resume arguments receives again (a configured
 `resume_command` is the user's own and gets none); and `instructions`, sent once after
-the agent's subject in its first message and never again on a restore.
+the agent's subject in its first message and never again on a restore;
+and `permissions`, what its agents may do, under the keys and values of
+[`[permissions]`](#mode-permissions).
 `[rules.<name>]` sets a rule's `text`, which any mode can list. Shoal ships
 these modes:
 
@@ -2244,8 +2246,8 @@ these modes:
 
 The built-in `setup` mode is apart from these: [`repo setup` and `config
 setup`](#set-up-config) start it, and a space records it as its mode. It takes
-the kind, reach and rules of `worker` in a workspace and of `orchestrate` in a
-chat without a repository, as config sets them, and [its own
+the kind, reach, rules and permissions of `worker` in a workspace and of
+`orchestrate` in a chat without a repository, as config sets them, and [its own
 instructions](../crates/shoal-client/src/config/modes/setup.md) after its subject. Config
 cannot change it: `[modes.setup]` in any layer and a `modes/setup.md` file are
 errors that ask for another name, and `shoal start --mode setup` is refused.
@@ -2318,6 +2320,26 @@ literal. Claude receives the system text as `--append-system-prompt`, Codex CLI
 as a `developer_instructions` config override, and Happy Codex before its first
 prompt through Happy's delivery path (or as the first message when there is no
 subject). Desktop handoffs receive neither. User prompt arguments are preserved.
+
+#### Mode permissions
+
+`[permissions]` and `[modes.<name>.permissions]` take the same keys:
+`issue_open`, `pr_open`, `issue_other_repositories`, `merge`, `push` and
+`api_writes`, each `"deny"`, `"propose"` or `"direct"` where the key allows
+it, in that order from narrowest to widest. An unknown key or value is an
+error. A mode's key resolves, highest first, from its `permissions` in any
+layer, then `[permissions]` in any layer, which applies to every mode, then
+the built-in mode's default, then the key's default; each layers option by
+option like other config. `worker` and a user's own modes default to the keys'
+defaults, which the sections on [issues and PRs](#approval-for-agent-issues-and-prs),
+[pushes](#approval-for-agent-pushes), [merges](#merge-into-the-default-branch)
+and [forge API requests](#forge-api-requests) give; `chat`, `plan` and
+`orchestrate` default `issue_other_repositories` and `merge` to `"direct"`.
+
+```toml
+[modes.worker.permissions]
+push = "propose"
+```
 
 A [local review](#local-reviews)'s instructions start with the fixed part of the
 [review template](../crates/shoal-client/src/config/templates/review.md), its task,

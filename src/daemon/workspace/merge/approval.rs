@@ -51,8 +51,8 @@ impl Manager {
     async fn merges_directly(&self, workspace: &Workspace) -> Result<bool> {
         use crate::config::permissions::{Opening, Pushes};
         let settings = self.workspace_settings(workspace).await?;
-        let permissions = &settings.permissions;
-        Ok(permissions.merge == Opening::Direct && permissions.push == Pushes::Direct)
+        let permissions = crate::config::permissions::resolve(&settings, None)?;
+        Ok(permissions.merge.value == Opening::Direct && permissions.push.value == Pushes::Direct)
     }
 
     /// Request `request`, refusing until the user approves it.

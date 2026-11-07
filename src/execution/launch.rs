@@ -554,7 +554,12 @@ async fn prepare_agent_launch(
         None => None,
     };
     let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;
-    let push_gate = match has_agent && settings.permissions.push != Pushes::Direct {
+    let push_gate = match has_agent
+        && crate::config::permissions::resolve(&settings, None)?
+            .push
+            .value
+            != Pushes::Direct
+    {
         true => prepare_push_gate(paths, workspace).await?,
         false => Default::default(),
     };

@@ -8,9 +8,9 @@ use serde_json::Value;
 const FULL: &str = "\
 git_profile = 'work'\n\
 [agent]\ndefault = 'claude'\nmodel = 'sonnet'\neffort = 'low'\nmax_running = 2\ndirs = ['/tmp', '~/cache']\ngit_profile = 'agent'\n\
-[modes.worker]\nkind = 'workspace'\nrepository = true\nrules = ['chat']\ninstructions = 'work'\n[modes.chat]\nkind = 'workspace'\nrepository = true\nrules = ['worker']\ninstructions = 'talk'\n\
-[modes.plan]\nkind = 'workspace'\nrepository = true\nrules = ['review']\ninstructions = 'plan'\n\
-[modes.orchestrate]\nkind = 'chat'\nrepository = false\nrules = ['orchestrate']\ninstructions = 'manage'\n\
+[modes.worker]\nkind = 'workspace'\nrepository = true\nrules = ['chat']\ninstructions = 'work'\n[modes.worker.permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'deny'\nmerge = 'propose'\npush = 'deny'\napi_writes = 'deny'\n[modes.chat]\nkind = 'workspace'\nrepository = true\nrules = ['worker']\ninstructions = 'talk'\n[modes.chat.permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'deny'\nmerge = 'propose'\npush = 'deny'\napi_writes = 'deny'\n\
+[modes.plan]\nkind = 'workspace'\nrepository = true\nrules = ['review']\ninstructions = 'plan'\n[modes.plan.permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'deny'\nmerge = 'propose'\npush = 'deny'\napi_writes = 'deny'\n\
+[modes.orchestrate]\nkind = 'chat'\nrepository = false\nrules = ['orchestrate']\ninstructions = 'manage'\n[modes.orchestrate.permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'deny'\nmerge = 'propose'\npush = 'deny'\napi_writes = 'deny'\n\
 [rules.work]\ntext = 'work'\n[rules.worker]\ntext = 'agent'\n[rules.chat]\ntext = 'chat'\n[rules.review]\ntext = 'review'\n[rules.orchestrate]\ntext = 'orchestrate'\n\
 [terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
 [terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\

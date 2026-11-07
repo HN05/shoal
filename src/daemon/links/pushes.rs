@@ -71,7 +71,9 @@ impl Manager {
             return Ok(Pushes::Direct);
         }
         let settings = self.workspace_settings(workspace).await?;
-        Ok(settings.permissions.push)
+        Ok(crate::config::permissions::resolve(&settings, None)?
+            .push
+            .value)
     }
 
     /// The push of the workspace's branch that `shoal pr open` from

@@ -337,9 +337,14 @@ impl IssueDestination {
     /// another repository they deny.
     fn opening(&self, settings: &Effective) -> Result<Opening> {
         if !self.elsewhere {
-            return Ok(settings.permissions.issue_open);
+            return Ok(crate::config::permissions::resolve(&settings, None)?
+                .issue_open
+                .value);
         }
-        match settings.permissions.issue_other_repositories {
+        match crate::config::permissions::resolve(&settings, None)?
+            .issue_other_repositories
+            .value
+        {
             OtherRepositories::Deny => bail!(
                 "agents cannot open issues in {}: [permissions] issue_other_repositories is \"deny\"",
                 self.forge.repository_url()

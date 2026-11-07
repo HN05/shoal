@@ -425,8 +425,9 @@ impl Manager {
                 };
                 // A PR whose branch is not pushed cannot open before the
                 // user approves the push, which then opens it too.
-                if let Some(proposer) = proposer
-                    .filter(|_| push.is_some() || settings.permissions.pr_open == Opening::Propose)
+                let pr_open = crate::config::permissions::resolve(&settings, None)?.pr_open;
+                if let Some(proposer) =
+                    proposer.filter(|_| push.is_some() || pr_open.value == Opening::Propose)
                 {
                     forge.check_uploads(&account, &pull.attachments).await?;
                     self.ensure_workspace_not_pushing(&workspace).await?;
