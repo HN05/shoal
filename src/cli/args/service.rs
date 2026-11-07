@@ -73,10 +73,10 @@ pub enum ConfigCommand {
 #[derive(Debug, Args)]
 pub struct ConfigSetupArgs {
     /// Run in this terminal instead of a new tab or detached session.
-    #[arg(long)]
+    #[arg(short = 'H', long)]
     pub here: bool,
     /// Agent to start; defaults to agent.default, otherwise a picker.
-    #[arg(long, value_parser = AgentParser)]
+    #[arg(short = 'a', long, value_parser = AgentParser)]
     pub agent: Option<Agent>,
     #[command(flatten)]
     pub model: ModelArgs,
