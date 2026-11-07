@@ -131,6 +131,7 @@ pub(in crate::cli::commands) async fn run(
                     cleanup,
                     integrated,
                     results: messages::attachments(&attach)?,
+                    summary: None,
                 };
                 // Before anything is picked or stopped.
                 done.check()?;

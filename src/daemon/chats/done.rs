@@ -12,7 +12,7 @@ use crate::{
         questions,
         workspace::{
             Manager,
-            done::{CompletedAncestor, push_closed_and_results},
+            done::{CompletedAncestor, push_completion_details},
         },
         workspace_files::Attacher,
     },
@@ -45,6 +45,7 @@ impl Manager {
             cleanup: done.cleanup || settings.cleanup.done.enabled,
             integrated: false,
             results,
+            summary: done.summary,
             error: None,
         };
         let (id, recorded) = (chat.id.clone(), completion.clone());
@@ -58,7 +59,7 @@ impl Manager {
             true => "chat finished; cleanup requested",
             false => "chat finished; no cleanup requested",
         });
-        push_closed_and_results(&mut notice, &chat.name, &completion, &closed);
+        push_completion_details(&mut notice, &chat.name, &completion, &closed);
         let about = About::workspace(&chat.name, &chat.id);
         (self.notify_about(about, NotificationKind::WorkspaceDone, notice)).await;
         self.signals.wake_cleanup();
@@ -207,3 +208,6 @@ fn take_completion(db: &mut Connection, id: &str) -> Result<Completion> {
     tx.commit()?;
     Ok(completion)
 }
+
+#[cfg(test)]
+mod tests;

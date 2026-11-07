@@ -84,7 +84,7 @@ const REQUESTS: &[&str] = &[
     r#"{"checkpoints":{"workspace":"fix","after":null}}"#,
     r#"{"restore_checkpoint":{"workspace":"fix","checkpoint":2}}"#,
     // Assignments and agents.
-    r#"{"mark_done":{"space":"fix","cleanup":true}}"#,
+    r#"{"mark_done":{"space":"fix","cleanup":true,"summary":"No leak"}}"#,
     r#"{"undo_done":{"space":"fix"}}"#,
     r#"{"discard_stopped_work":{"workspace":"part","execution":null}}"#,
     r#"{"mark_ready":{"space":"fix","selection":{"kind":"pr","input":null}}}"#,

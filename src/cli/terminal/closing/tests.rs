@@ -376,6 +376,7 @@ async fn inspect(
                 cleanup,
                 integrated: false,
                 results: vec![],
+                summary: None,
                 error: None,
             }),
             executions,

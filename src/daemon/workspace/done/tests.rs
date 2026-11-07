@@ -1376,3 +1376,109 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
     drop(held);
     manager.assign_parent(&root.id, None).await.unwrap();
 }
+
+#[tokio::test]
+async fn a_summary_ends_the_notice_and_each_done_replaces_it() {
+    let (_root, manager, workspace) = fixture().await;
+    manager
+        .write_local_config(
+            &workspace.repository_id,
+            Some("[cleanup.done]\nenabled = false\n".into()),
+        )
+        .await
+        .unwrap();
+    let selector = SpaceSelector::id(&workspace.id);
+    let summarized = |summary: &str| Done {
+        summary: Some(summary.into()),
+        ..Done::default()
+    };
+    let completion = manager
+        .mark_done(
+            &selector,
+            summarized("No leak; the cache is freed"),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        completion.summary.as_deref(),
+        Some("No leak; the cache is freed")
+    );
+    let notices = manager.done_notices().await;
+    assert!(notices[0].ends_with("; summary: No leak; the cache is freed"));
+
+    // The same summary at the same HEAD changes nothing; another one does.
+    let same = summarized("No leak; the cache is freed");
+    manager
+        .mark_done(&selector, same, &Attacher::User)
+        .await
+        .unwrap_err();
+    manager
+        .mark_done(
+            &selector,
+            summarized("A leak in the cache"),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    let notices = manager.done_notices().await;
+    assert_eq!(notices.len(), 2);
+    assert!(notices[1].ends_with("; summary: A leak in the cache"));
+
+    // A done without one records none.
+    manager
+        .mark_done(&selector, Done::default(), &Attacher::User)
+        .await
+        .unwrap();
+    let recorded = manager.completion(&workspace.id).await.unwrap().unwrap();
+    assert_eq!(recorded.summary, None);
+    assert!(!manager.done_notices().await[2].contains("summary"));
+
+    manager
+        .mark_done(&selector, summarized("Fixed"), &Attacher::User)
+        .await
+        .unwrap();
+    assert_eq!(
+        manager
+            .undo_done(&selector)
+            .await
+            .unwrap()
+            .summary
+            .as_deref(),
+        Some("Fixed")
+    );
+    assert!(manager.completion(&workspace.id).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn an_invalid_summary_is_refused_before_anything_is_recorded() {
+    let (_root, manager, workspace) = fixture().await;
+    let report = workspace.path.join("report.md");
+    fs::write(&report, "findings").unwrap();
+    for summary in ["two\nlines".to_owned(), "x".repeat(513)] {
+        let done = Done {
+            summary: Some(summary),
+            results: vec![report.clone().into()],
+            ..Done::default()
+        };
+        manager
+            .mark_done(&SpaceSelector::id(&workspace.id), done, &Attacher::User)
+            .await
+            .unwrap_err();
+    }
+    assert!(manager.completion(&workspace.id).await.unwrap().is_none());
+    assert!(manager.done_notices().await.is_empty());
+    let files = manager
+        .attached_files(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
+    assert!(files.is_empty());
+}
+
+#[test]
+fn a_completion_recorded_without_a_summary_reads() {
+    let completion: Completion =
+        serde_json::from_str(r#"{"head":"abc","cleanup":true,"integrated":false,"error":null}"#)
+            .unwrap();
+    assert_eq!(completion.summary, None);
+}

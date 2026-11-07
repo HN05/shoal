@@ -86,6 +86,7 @@ impl Manager {
             cleanup: done.cleanup,
             integrated: done.integrated,
             results,
+            summary: done.summary,
             error: None,
         };
         self.record_done(&workspace, completion).await
@@ -346,9 +347,8 @@ struct Persisted {
     closed: Vec<ItemNumber>,
 }
 
-/// Record `completion`, returning whether it differs from the recorded one:
-/// another HEAD, cleanup choice, integration or cleanup error, or an
-/// unreadable record.
+/// Record `completion`, returning whether it differs from the recorded one
+/// in any field, or that record is unreadable.
 fn record_completion(
     tx: &rusqlite::Transaction,
     id: &str,
@@ -382,13 +382,13 @@ fn done_notice(workspace: &str, completion: &Completion, closed: &[ItemNumber]) 
     } else {
         "; no cleanup requested"
     });
-    push_closed_and_results(&mut notice, workspace, completion, closed);
+    push_completion_details(&mut notice, workspace, completion, closed);
     notice
 }
 
-/// Add the questions a completion closed and the results it handed back
-/// to the notice of the space `space`.
-pub(crate) fn push_closed_and_results(
+/// Add the questions a completion closed, the results it handed back and,
+/// last, its summary to the notice of the space `space`.
+pub(crate) fn push_completion_details(
     notice: &mut String,
     space: &str,
     completion: &Completion,
@@ -405,6 +405,9 @@ pub(crate) fn push_closed_and_results(
             "; results in shoal files {space}: {}",
             results_preview(&completion.results)
         ));
+    }
+    if let Some(summary) = &completion.summary {
+        notice.push_str(&format!("; summary: {summary}"));
     }
 }
 

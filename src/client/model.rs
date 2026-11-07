@@ -712,6 +712,9 @@ pub struct Completion {
     /// Shoal's copies.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub results: Vec<HandedBack>,
+    /// One line saying what the work found.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
     pub error: Option<String>,
 }
 
