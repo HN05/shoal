@@ -4,6 +4,7 @@ mod render;
 use anyhow::{Context as _, Result, ensure};
 
 use self::render::render_status;
+use crate::client::space_names::SpaceSelector;
 use crate::client::{output::status::StatusView, transcripts};
 use crate::{
     cli::{
@@ -46,11 +47,12 @@ pub(in crate::cli::commands) async fn status(
 /// The status of `space`, with the sessions its terminal hosts keep and
 /// where its agents' transcripts are.
 async fn status_view(ctx: &Context, space: String) -> Result<StatusView> {
-    let status = crate::client::workspaces::status(&ctx.paths, space).await?;
+    let status =
+        crate::client::workspaces::status(&ctx.paths, SpaceSelector::parse(&space)).await?;
     let (sessions, sessions_error) = listed(sessions(ctx, &status.space).await);
     let id = status.space.id().to_owned();
     let (transcripts, transcripts_error) =
-        listed(transcripts::space_transcripts(&ctx.paths, id).await);
+        listed(transcripts::space_transcripts(&ctx.paths, SpaceSelector::id(&id)).await);
     Ok(StatusView {
         status,
         sessions: sessions
@@ -77,7 +79,7 @@ fn listed<T>(found: Result<Vec<T>>) -> (Vec<T>, Option<String>) {
 async fn sessions(ctx: &Context, space: &SpaceDetail) -> Result<Vec<crate::terminal::Session>> {
     let (target, places) = match space {
         SpaceDetail::Workspace(status) => (
-            ConfigTarget::Workspace(status.workspace.id.clone()),
+            ConfigTarget::Workspace(SpaceSelector::id(&status.workspace.id)),
             Recorded::workspace(&status.executions, &status.places),
         ),
         SpaceDetail::Chat { chat } => (ConfigTarget::chat(chat), Recorded::chat(chat)),

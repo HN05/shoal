@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     ai::IntegrationKind,
     cli::{
@@ -47,7 +48,14 @@ async fn report_state(
         ..turn_end(ctx, integration)
     });
     let session = event.as_ref().and_then(session_of);
-    let status = agents::set_state(&ctx.paths, space, state, session, turn_end).await?;
+    let status = agents::set_state(
+        &ctx.paths,
+        SpaceSelector::parse(&space),
+        state,
+        session,
+        turn_end,
+    )
+    .await?;
     emit(ctx, status)
 }
 
@@ -55,7 +63,7 @@ async fn report_state(
 /// hook of its own reports starting. Whether the turn starts: a stop of the
 /// agent that came first leaves the update for its restore.
 pub(super) async fn start_woken_turn(ctx: &Context, space: String) -> Result<bool> {
-    agents::start_woken_turn(&ctx.paths, space).await
+    agents::start_woken_turn(&ctx.paths, SpaceSelector::parse(&space)).await
 }
 
 /// Report the turn that the hook event of an agent with `integration`
@@ -81,9 +89,14 @@ async fn report_turn_failure(
     let failure =
         crate::cli::agents::turn_failure(integration, &event).unwrap_or(TurnFailure::Other);
     let turn_end = turn_end(ctx, integration);
-    let status =
-        agents::report_turn_failure(&ctx.paths, space, failure, session_of(&event), turn_end)
-            .await?;
+    let status = agents::report_turn_failure(
+        &ctx.paths,
+        SpaceSelector::parse(&space),
+        failure,
+        session_of(&event),
+        turn_end,
+    )
+    .await?;
     emit(ctx, status)
 }
 
@@ -100,7 +113,12 @@ async fn tell_failure(ctx: &Context, reported: &Result<i32>) {
     else {
         return;
     };
-    let _ = agents::report_state_failure(&ctx.paths, workspace, format!("{error:#}")).await;
+    let _ = agents::report_state_failure(
+        &ctx.paths,
+        SpaceSelector::parse(&workspace),
+        format!("{error:#}"),
+    )
+    .await;
 }
 
 /// What the hook of an agent with `integration` reports when its turn

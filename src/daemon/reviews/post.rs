@@ -6,6 +6,7 @@ use std::fmt::Write as _;
 use anyhow::Result;
 
 use super::store;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
@@ -73,7 +74,7 @@ impl Manager {
             diff.as_ref()
                 .is_some_and(|diff| diff.shows(&finding.path, u64::from(finding.line)))
         };
-        let context = ItemContext::Workspace(workspace.id.clone());
+        let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
         let action = Action::Review(new_review(review, shows, moved.then_some(head)));
         match self
             .item_action(&context, ItemKind::Pr, Some(url.clone()), action)

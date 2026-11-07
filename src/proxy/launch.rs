@@ -1,6 +1,7 @@
 //! The proxy a tracked agent's wrapper runs, the key its requests name,
 //! and the reports it sends the daemon.
 #[cfg(feature = "proxy")]
+use crate::client::space_names::SpaceSelector;
 use anyhow::Context;
 use anyhow::Result;
 
@@ -189,12 +190,12 @@ pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i
 pub async fn forget_reports(paths: &crate::paths::Paths, workspace: &str, execution: &str) -> bool {
     use crate::protocol::AgentMethod;
     let retry = AgentMethod::ReportProxyRetry {
-        workspace: workspace.to_owned(),
+        workspace: SpaceSelector::parse(workspace),
         execution: execution.to_owned(),
         retry: None,
     };
     let reset = AgentMethod::ReportUpstreamReset {
-        workspace: workspace.to_owned(),
+        workspace: SpaceSelector::parse(workspace),
         execution: execution.to_owned(),
         resets_at: None,
     };
@@ -292,7 +293,7 @@ impl Reporter {
     /// Whether the daemon took the clearing of the upstream's reset.
     async fn reset_cleared(&self) -> bool {
         self.send(crate::protocol::AgentMethod::ReportUpstreamReset {
-            workspace: self.workspace.clone(),
+            workspace: SpaceSelector::parse(&self.workspace),
             execution: self.execution.clone(),
             resets_at: None,
         })
@@ -308,7 +309,7 @@ impl Reporter {
 
     async fn retried(&self, retry: Option<crate::client::executions::ProxyRetry>) -> bool {
         self.send(crate::protocol::AgentMethod::ReportProxyRetry {
-            workspace: self.workspace.clone(),
+            workspace: SpaceSelector::parse(&self.workspace),
             execution: self.execution.clone(),
             retry,
         })
@@ -335,7 +336,7 @@ impl Reporter {
         }
         let delivered = self
             .send(crate::protocol::AgentMethod::ReportUpstreamReset {
-                workspace: self.workspace.clone(),
+                workspace: SpaceSelector::parse(&self.workspace),
                 execution: self.execution.clone(),
                 resets_at: Some(resets_at),
             })
@@ -347,7 +348,7 @@ impl Reporter {
 
     async fn turn_failed(&self, failure: crate::state::TurnFailure) {
         self.send(crate::protocol::AgentMethod::ReportTurnFailure {
-            workspace: self.workspace.clone(),
+            workspace: SpaceSelector::parse(&self.workspace),
             failure,
             session: None,
             execution: Some(self.execution.clone()),

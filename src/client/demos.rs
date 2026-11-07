@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::connection::{Daemon, request},
     protocol::DemoMethod,
@@ -189,17 +190,28 @@ fn argv(key: &str, argv: &[String]) -> Result<()> {
 }
 
 /// The demos running in `workspace`, or in every workspace.
-pub async fn running(daemon: &impl Daemon, workspace: Option<String>) -> Result<Vec<Running>> {
+pub async fn running(
+    daemon: &impl Daemon,
+    workspace: Option<SpaceSelector>,
+) -> Result<Vec<Running>> {
     request(daemon, DemoMethod::ListDemos { workspace }).await
 }
 
 /// How far `workspace`'s demo launch `launch` came.
-pub async fn progress(daemon: &impl Daemon, workspace: String, launch: String) -> Result<Progress> {
+pub async fn progress(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    launch: String,
+) -> Result<Progress> {
     request(daemon, DemoMethod::DemoProgress { workspace, launch }).await
 }
 
 /// Stop `workspace`'s demo `name`, or all of them.
-pub async fn stop(daemon: &impl Daemon, workspace: String, name: Option<String>) -> Result<()> {
+pub async fn stop(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    name: Option<String>,
+) -> Result<()> {
     request(daemon, DemoMethod::StopDemos { workspace, name }).await
 }
 

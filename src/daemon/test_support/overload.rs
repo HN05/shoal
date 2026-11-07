@@ -12,6 +12,7 @@ use anyhow::Result;
 use tokio::{net::UnixListener, task::JoinSet, time::timeout};
 
 use super::{install_test_script, isolated_test, manager, repository};
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{Server, connections, serve, store, workspace::Manager};
 
 /// A hang guard, not a deadline for process scans on a shared CI host. Its
@@ -240,7 +241,7 @@ pub(crate) async fn report_session(
     session: &str,
 ) {
     let execution = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions[0]
@@ -248,7 +249,7 @@ pub(crate) async fn report_session(
         .clone();
     manager
         .set_agent_state(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             crate::state::AgentState::Idle,
             Some(execution),
             Some(session.into()),

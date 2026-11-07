@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::{Context as _, Result};
 
 use crate::client::reviews;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::context::Context,
     model::Chat,
@@ -18,7 +19,8 @@ pub(super) async fn cancel(ctx: &Context, id: Option<i64>, space: Option<String>
         Some(id) => (None, Some(id)),
         None => cancelled(ctx, space).await?,
     };
-    let review = reviews::cancel(&ctx.paths, workspace, id).await?;
+    let review =
+        reviews::cancel(&ctx.paths, workspace.as_deref().map(SpaceSelector::id), id).await?;
     ctx.emit(&format!("Review {} cancelled.", review.id), &review)?;
     Ok(0)
 }

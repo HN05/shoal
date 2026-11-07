@@ -3,6 +3,7 @@
 //! user names a registered repository to act in without a workspace.
 use anyhow::{Result, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
     env,
@@ -65,9 +66,11 @@ pub(in crate::cli::commands) async fn space_context(
 ) -> Result<ItemContext> {
     Ok(
         match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
-            Some(PresentSpace::Chat(chat)) => ItemContext::Chat(chat.id),
-            Some(PresentSpace::Workspace(workspace)) => ItemContext::Workspace(workspace.id),
-            None => ItemContext::Workspace(space),
+            Some(PresentSpace::Chat(chat)) => ItemContext::Chat(SpaceSelector::id(&chat.id)),
+            Some(PresentSpace::Workspace(workspace)) => {
+                ItemContext::Workspace(SpaceSelector::id(&workspace.id))
+            }
+            None => ItemContext::Workspace(SpaceSelector::parse(&space)),
         },
     )
 }
@@ -162,12 +165,16 @@ pub(in crate::cli::commands) async fn current_context(
     ctx: &Context,
 ) -> Result<Option<ItemContext>> {
     match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
-        Ok(workspace) => return Ok(Some(ItemContext::Workspace(workspace))),
+        Ok(workspace) => {
+            return Ok(Some(ItemContext::Workspace(SpaceSelector::parse(
+                &workspace,
+            ))));
+        }
         Err(error) if error.is::<ui::NoCurrentWorkspace>() => {}
         Err(error) => return Err(error),
     }
     if let Some(chat) = ui::current_chat(&None) {
-        return Ok(Some(ItemContext::Chat(chat)));
+        return Ok(Some(ItemContext::Chat(SpaceSelector::parse(&chat))));
     }
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let checkout = super::super::issues::current_checkout(&repos).await?;

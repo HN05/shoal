@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
+use crate::client::space_names::SpaceSelector;
 use crate::client::{executions::ExecutionKind, processes::Identity};
 
 /// Requests that run tracked commands in a workspace.
@@ -10,7 +11,7 @@ pub enum ExecutionMethod {
     /// Long-lived: the connection stays open for the execution's lifetime.
     /// `agent` names a Shoal agent shortcut whose exit the user is told about.
     Execute {
-        workspace: String,
+        workspace: SpaceSelector,
         wrapper: Identity,
         kind: ExecutionKind,
         #[serde(default)]

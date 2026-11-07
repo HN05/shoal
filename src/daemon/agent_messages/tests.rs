@@ -1,4 +1,5 @@
 use super::Delivery;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::{self, Caller},
@@ -33,7 +34,7 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     for _ in 0..2 {
         manager
             .send_agent_message(
-                &workspace.name,
+                &SpaceSelector::from(&workspace.name),
                 "Stop the dev server".into(),
                 Vec::new(),
                 &Attacher::User,
@@ -44,7 +45,7 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     assert!(changed.has_changed().unwrap());
     manager
         .send_agent_message(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             "Rebase onto main".into(),
             Vec::new(),
             &Attacher::User,
@@ -53,7 +54,7 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
         .unwrap();
     manager
         .send_agent_message(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             "Move:\n\tabc123 to api".into(),
             Vec::new(),
             &Attacher::User,
@@ -66,12 +67,20 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     ] {
         assert!(
             manager
-                .send_agent_message(&workspace.name, rejected, Vec::new(), &Attacher::User)
+                .send_agent_message(
+                    &SpaceSelector::from(&workspace.name),
+                    rejected,
+                    Vec::new(),
+                    &Attacher::User
+                )
                 .await
                 .is_err()
         );
     }
-    let messages = manager.agent_messages(&workspace.name).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::from(&workspace.name))
+        .await
+        .unwrap();
     let texts: Vec<_> = messages.iter().map(|m| m.message.as_str()).collect();
     assert_eq!(
         texts,
@@ -82,15 +91,18 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
         ]
     );
     manager
-        .mark_agent_messages_delivered(&workspace.name, vec![messages[0].id])
+        .mark_agent_messages_delivered(&SpaceSelector::from(&workspace.name), vec![messages[0].id])
         .await
         .unwrap();
-    let remaining = manager.agent_messages(&workspace.name).await.unwrap();
+    let remaining = manager
+        .agent_messages(&SpaceSelector::from(&workspace.name))
+        .await
+        .unwrap();
     assert_eq!(remaining, messages[1..]);
     // A delivered message may be sent again.
     manager
         .send_agent_message(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             "Stop the dev server".into(),
             Vec::new(),
             &Attacher::User,
@@ -98,7 +110,11 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
         .await
         .unwrap();
     assert_eq!(
-        manager.agent_messages(&workspace.name).await.unwrap().len(),
+        manager
+            .agent_messages(&SpaceSelector::from(&workspace.name))
+            .await
+            .unwrap()
+            .len(),
         3
     );
 }
@@ -112,14 +128,18 @@ async fn a_message_for_running_work_wakes_only_while_work_runs() {
     };
     let wakes = || async {
         manager
-            .unread_agent_messages(&workspace.id)
+            .unread_agent_messages(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .wakes
     };
     queue(Delivery::WhileWorkRuns).await.unwrap();
     assert_eq!(
-        manager.agent_messages(&workspace.id).await.unwrap().len(),
+        manager
+            .agent_messages(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap()
+            .len(),
         1
     );
     assert!(!wakes().await);
@@ -146,7 +166,11 @@ async fn a_message_for_running_work_wakes_only_while_work_runs() {
     queue(Delivery::WhileWorkRuns).await.unwrap();
     assert!(wakes().await);
     assert_eq!(
-        manager.agent_messages(&workspace.id).await.unwrap().len(),
+        manager
+            .agent_messages(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap()
+            .len(),
         1
     );
 }
@@ -172,10 +196,10 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         for mut method in [
             AgentMethod::AgentMessages {
-                space: target.to_string(),
+                space: SpaceSelector::parse(target),
             },
             AgentMethod::MarkAgentMessagesDelivered {
-                space: target.to_string(),
+                space: SpaceSelector::parse(target),
                 ids: Vec::new(),
             },
         ] {
@@ -188,7 +212,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
         }
     }
     let mut method = AgentMethod::SendAgentMessage {
-        space: workspace.name.to_string(),
+        space: SpaceSelector::parse(&workspace.name),
         message: "hello".into(),
         attachments: Vec::new(),
         sender_chat: None,
@@ -228,7 +252,12 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     let (temp, manager) = manager().await;
     let parent = workspace(&temp, &manager, "parent").await;
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let sibling = manager
@@ -306,10 +335,19 @@ async fn a_message_to_all_reaches_running_agents_and_chats_below_the_sender() {
     assert_eq!(reached.chats, ["planning"]);
     // The repeat collapses into the unread message.
     for workspace in [&parent, &child, &sibling, &outside] {
-        let messages = manager.agent_messages(&workspace.id).await.unwrap();
+        let messages = manager
+            .agent_messages(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap();
         assert_eq!(messages.len(), 1, "{}", workspace.name);
     }
-    assert!(manager.agent_messages(&idle.id).await.unwrap().is_empty());
+    assert!(
+        manager
+            .agent_messages(&SpaceSelector::id(&idle.id))
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let reached = send(None, Some(parent.id.clone())).await;
     assert_eq!(
         (reached.workspaces, reached.chats),
@@ -357,7 +395,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     for _ in 0..2 {
         manager
             .send_agent_message(
-                &workspace.name,
+                &SpaceSelector::from(&workspace.name),
                 "See the log".into(),
                 vec![file.clone().into()],
                 &Attacher::User,
@@ -367,7 +405,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     }
     manager
         .send_agent_message(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             String::new(),
             vec![file.clone().into()],
             &Attacher::User,
@@ -375,7 +413,10 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
         .await
         .unwrap();
     std::fs::write(&file, "changed").unwrap();
-    let messages = manager.agent_messages(&workspace.name).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::from(&workspace.name))
+        .await
+        .unwrap();
     let [attached, alone] = messages.as_slice() else {
         panic!("{messages:?}");
     };
@@ -390,13 +431,13 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     assert!(copy.starts_with(workspaces_dir.join(".attachments").join(&workspace.id)));
 
     manager
-        .mark_agent_messages_delivered(&workspace.name, vec![attached.id])
+        .mark_agent_messages_delivered(&SpaceSelector::from(&workspace.name), vec![attached.id])
         .await
         .unwrap();
     assert!(copy.exists(), "a delivered message keeps its files");
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
         )
@@ -412,7 +453,7 @@ async fn a_refused_message_leaves_no_copies() {
     for n in 0..super::MAX_UNREAD {
         manager
             .send_agent_message(
-                &workspace.name,
+                &SpaceSelector::from(&workspace.name),
                 format!("message {n}"),
                 Vec::new(),
                 &Attacher::User,
@@ -425,7 +466,7 @@ async fn a_refused_message_leaves_no_copies() {
     assert!(
         manager
             .send_agent_message(
-                &workspace.name,
+                &SpaceSelector::from(&workspace.name),
                 "See the log".into(),
                 vec![file.into()],
                 &Attacher::User
@@ -455,7 +496,7 @@ async fn an_attached_send_waits_for_the_files_gate() {
         async move {
             manager
                 .send_agent_message(
-                    &name,
+                    &SpaceSelector::from(&name),
                     "See the log".into(),
                     vec![file.into()],
                     &Attacher::User,
@@ -473,7 +514,7 @@ async fn an_attached_send_waits_for_the_files_gate() {
     .expect("the send reaches the gate");
     assert!(
         manager
-            .agent_messages(&workspace.name)
+            .agent_messages(&SpaceSelector::from(&workspace.name))
             .await
             .unwrap()
             .is_empty()
@@ -483,7 +524,10 @@ async fn an_attached_send_waits_for_the_files_gate() {
     assert!(!attachments.join(&workspace.id).exists());
     drop(held);
     send.await.unwrap().unwrap();
-    let messages = manager.agent_messages(&workspace.name).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::from(&workspace.name))
+        .await
+        .unwrap();
     assert!(messages[0].attachments[0].exists());
 }
 
@@ -503,7 +547,7 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
         async move {
             manager
                 .send_agent_message(
-                    &id,
+                    &SpaceSelector::id(&id),
                     "See the log".into(),
                     vec![file.into()],
                     &Attacher::User,
@@ -516,7 +560,7 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
         async move {
             manager
                 .remove_workspace(
-                    &id,
+                    &SpaceSelector::id(&id),
                     crate::removal::UnsavedWork::default(),
                     crate::removal::InspectionPolicy::GitOnly,
                 )
@@ -550,7 +594,7 @@ async fn attachments_must_be_files() {
     ] {
         let sent = manager
             .send_agent_message(
-                &workspace.name,
+                &SpaceSelector::from(&workspace.name),
                 "See".into(),
                 vec![refused.clone().into()],
                 &Attacher::User,
@@ -560,13 +604,18 @@ async fn attachments_must_be_files() {
     }
     assert!(
         manager
-            .send_agent_message(&workspace.name, String::new(), Vec::new(), &Attacher::User)
+            .send_agent_message(
+                &SpaceSelector::from(&workspace.name),
+                String::new(),
+                Vec::new(),
+                &Attacher::User
+            )
             .await
             .is_err()
     );
     assert!(
         manager
-            .agent_messages(&workspace.name)
+            .agent_messages(&SpaceSelector::from(&workspace.name))
             .await
             .unwrap()
             .is_empty()

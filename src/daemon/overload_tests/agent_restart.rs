@@ -1,6 +1,7 @@
 //! `shoal restart` stops an agent and starts the saved session again: in a
 //! new wrapper the agent queue starts, or in place in the same terminal.
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     model::{QueueEntry, QueueRequest},
     state::QueueState,
@@ -195,7 +196,7 @@ async fn restart_starts_the_agent_in_a_new_wrapper_in_the_slot_it_kept() {
         panic!("expected the restarted agent: {agents:?}");
     };
     assert_ne!(agent.execution, execution);
-    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(renewed).await.unwrap().unwrap();
@@ -289,7 +290,7 @@ async fn a_restart_in_a_new_wrapper_is_joined_by_the_execution_the_agent_ran_as(
     bounded(manager.join_restart(&execution, first, Some("third".into())))
         .await
         .unwrap();
-    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(renewed).await.unwrap().unwrap();

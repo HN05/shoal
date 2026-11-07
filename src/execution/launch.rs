@@ -19,6 +19,7 @@ use super::{
     supervise::{Outcome, Saving, supervise},
     takeover, wake,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{approvals::Undecided, connection},
     config::repo::Pushes,
@@ -454,7 +455,7 @@ async fn open_execution(
 ) -> Result<(Link, ExecutionPlan)> {
     let wrapper = this_wrapper()?;
     let method = ExecutionMethod::Execute {
-        workspace,
+        workspace: SpaceSelector::parse(&workspace),
         wrapper: wrapper.clone(),
         kind: mode.kind(),
         queue_entry: agent
@@ -538,7 +539,7 @@ async fn prepare_agent_launch(
     }
     let (config, settings) = crate::client::workspaces::configuration(
         paths,
-        crate::protocol::ConfigTarget::Workspace(workspace.to_owned()),
+        crate::protocol::ConfigTarget::Workspace(SpaceSelector::parse(workspace)),
     )
     .await?;
     let secrets = if has_agent {
@@ -584,7 +585,7 @@ async fn prepare_agent_launch(
 /// `workspace`'s repository for the user's approval, or refuses them.
 async fn prepare_push_gate(paths: &Paths, workspace: &str) -> Result<crate::push_gate::Launch> {
     let method = crate::protocol::WorkspaceMethod::VerifyWorkspace {
-        workspace: workspace.to_owned(),
+        workspace: SpaceSelector::parse(workspace),
         on_branch: false,
     };
     let workspace: crate::model::Workspace = connection::request(paths, method).await?;

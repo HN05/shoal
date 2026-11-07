@@ -5,6 +5,7 @@ use std::{collections::BTreeMap, ffi::OsString, time::Duration};
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::client::output::demo::{Listing, Screen, Sent, Stopping};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::sessions::DemoCommand,
@@ -136,12 +137,12 @@ async fn start(
     // Before a picker opens or a running demo is replaced.
     overrides.validate()?;
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, id)
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id))
         .await?
         .workspace;
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let chosen = choose(&settings.demos, name, command)?.with(overrides);
@@ -157,7 +158,14 @@ async fn start(
     if crate::env::is_scoped() {
         let message = format!("Demo {} is running; open it with {opening}", chosen.name);
         let space = workspace.id.clone();
-        crate::client::notifications::send(&ctx.paths, space, message, Vec::new(), None).await?;
+        crate::client::notifications::send(
+            &ctx.paths,
+            SpaceSelector::parse(&space),
+            message,
+            Vec::new(),
+            None,
+        )
+        .await?;
     }
     ctx.emit_styled(
         Style::Success,
@@ -280,7 +288,12 @@ async fn place(
 async fn await_record(ctx: &Context, workspace: &Workspace, launch: &Launch) -> Result<Running> {
     let deadline = tokio::time::Instant::now() + START_LIMIT;
     loop {
-        let progress = demos::progress(&ctx.paths, workspace.id.clone(), launch.id.clone()).await?;
+        let progress = demos::progress(
+            &ctx.paths,
+            SpaceSelector::id(&workspace.id),
+            launch.id.clone(),
+        )
+        .await?;
         match progress {
             Progress::Running { demo } => return Ok(*demo),
             Progress::Ended => return Err(not_started(launch).await),
@@ -306,7 +319,7 @@ async fn not_started(launch: &Launch) -> anyhow::Error {
 
 async fn stop(ctx: &Context, workspace: Option<String>, name: Option<String>) -> Result<i32> {
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, id)
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id))
         .await?
         .workspace;
     stop_named(ctx, &workspace, name.clone()).await?;
@@ -345,7 +358,7 @@ async fn replace(ctx: &Context, workspace: &Workspace, name: &str) -> Result<()>
 }
 
 async fn stop_named(ctx: &Context, workspace: &Workspace, name: Option<String>) -> Result<()> {
-    demos::stop(&ctx.paths, workspace.id.clone(), name).await
+    demos::stop(&ctx.paths, SpaceSelector::id(&workspace.id), name).await
 }
 
 async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
@@ -354,7 +367,7 @@ async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
         Some(workspace) => {
             crate::client::workspaces::settings(
                 &ctx.paths,
-                ConfigTarget::Workspace(workspace.id.clone()),
+                ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
             )
             .await?
             .into_settings()
@@ -463,7 +476,8 @@ pub(in crate::cli) async fn open_running(ctx: &Context, demo: &Running) -> Resul
 /// once the worktree is verified to be the recorded one.
 async fn run_opener(ctx: &Context, demo: &Running, open: &[String]) -> Result<()> {
     let workspace =
-        crate::client::workspaces::verify(&ctx.paths, demo.workspace_id.clone(), false).await?;
+        crate::client::workspaces::verify(&ctx.paths, SpaceSelector::id(&demo.workspace_id), false)
+            .await?;
     let mut command = tokio::process::Command::new(&open[0]);
     command
         .args(&open[1..])
@@ -502,7 +516,7 @@ async fn send(ctx: &Context, workspace: Option<String>, name: &str, keys: &str) 
 /// The running demo `name` of the workspace given or chosen.
 async fn named(ctx: &Context, workspace: Option<String>, name: &str) -> Result<Running> {
     let id = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, id)
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id))
         .await?
         .workspace;
     find(
@@ -542,7 +556,7 @@ async fn scope(ctx: &Context, workspace: Option<String>) -> Result<Option<Worksp
     };
     match id {
         Some(id) => Ok(Some(
-            crate::client::workspaces::inspect(&ctx.paths, id)
+            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id))
                 .await?
                 .workspace,
         )),
@@ -551,7 +565,11 @@ async fn scope(ctx: &Context, workspace: Option<String>) -> Result<Option<Worksp
 }
 
 async fn running(ctx: &Context, workspace: Option<&Workspace>) -> Result<Vec<Running>> {
-    demos::running(&ctx.paths, workspace.map(|workspace| workspace.id.clone())).await
+    demos::running(
+        &ctx.paths,
+        workspace.map(|workspace| SpaceSelector::id(&workspace.id)),
+    )
+    .await
 }
 
 /// The last `count` lines of `screen` with trailing blank lines dropped.

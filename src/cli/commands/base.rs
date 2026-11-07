@@ -2,6 +2,7 @@
 use anyhow::{Result, ensure};
 
 use crate::client::output::workspaces::Bases;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::changes::BaseCommand,
@@ -30,7 +31,8 @@ pub(super) async fn run(
                 Change::Set(None) => Some(pick(ctx, &workspace).await?),
                 Change::Clear => None,
             };
-            crate::client::workspaces::set_base(&ctx.paths, workspace, base).await?
+            crate::client::workspaces::set_base(&ctx.paths, SpaceSelector::parse(&workspace), base)
+                .await?
         }
         None => find(
             &crate::client::workspaces::list(&ctx.paths).await?,

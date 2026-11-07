@@ -1,6 +1,7 @@
 //! Fast-forward a workspace to its branch's pushed head, as a PR review does
 //! before reviewing it.
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 
@@ -10,13 +11,17 @@ impl Manager {
     /// and the repository's Git gate exclude removal, renames and restores
     /// meanwhile, and a worktree that is no longer the recorded one or is off
     /// `branch` is refused before Git changes anything.
-    pub async fn fast_forward_workspace(&self, selector: &str, branch: &str) -> Result<bool> {
+    pub async fn fast_forward_workspace(
+        &self,
+        selector: &SpaceSelector,
+        branch: &str,
+    ) -> Result<bool> {
         let id = self.workspace(selector).await?.id;
         let reserved = self
             .reserve_lifecycle(&id, WorkspaceState::Updating)
             .await?;
         // A rename may have finished while this request waited.
-        let workspace = self.workspace(&id).await?;
+        let workspace = self.workspace_by_id(&id).await?;
         let result = self.fast_forward(&workspace, reserved, branch).await;
         self.set_state(&id, reserved, workspace.error.clone())
             .await?;

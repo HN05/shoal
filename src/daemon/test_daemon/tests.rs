@@ -1,5 +1,6 @@
 //! An app's calls through `shoal::client`, as the user and as a
 //! workspace's agent, against a daemon on an isolated state directory.
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         approvals::ApprovalRequest,
@@ -101,7 +102,7 @@ async fn removal_refuses_unsaved_work_unless_the_app_confirms_it() {
     std::fs::write(workspace.path.join("draft"), "unsaved\n").unwrap();
     let app = daemon.connector();
     let remove = |unsaved| RemovalMethod::RemoveWorkspace {
-        workspace: workspace.id.clone(),
+        workspace: SpaceSelector::id(&workspace.id),
         unsaved,
     };
     assert_eq!(
@@ -125,7 +126,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
     daemon.workspace("second").await;
     let app = daemon.connector();
     let done = AssignmentMethod::MarkDone {
-        space: workspace.id.clone(),
+        space: SpaceSelector::id(&workspace.id),
         cleanup: false,
         integrated: false,
         results: Vec::new(),
@@ -143,7 +144,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
         ErrorCode::NameTaken
     );
     let link = ItemMethod::LinkItem {
-        space: workspace.id.clone(),
+        space: SpaceSelector::id(&workspace.id),
         kind: LinkKind::Issue,
         url: "40".into(),
         relation: Relation::Related,
@@ -151,7 +152,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
     };
     connection::request::<()>(&app, link).await.unwrap();
     let unlink = || ItemMethod::UnlinkItems {
-        space: workspace.id.clone(),
+        space: SpaceSelector::id(&workspace.id),
         relation: Relation::Related,
         kind: Some(LinkKind::Issue),
         url: Some("40".into()),
@@ -175,7 +176,12 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
     };
     let question = daemon
         .manager
-        .ask_question(&workspace.name, ask, Vec::new(), &Attacher::User)
+        .ask_question(
+            &SpaceSelector::from(&workspace.name),
+            ask,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let app = daemon.connector();
@@ -279,7 +285,7 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     // A workspace's agent queues agents only in the workspaces below its own.
     let parent = daemon.workspace("parent").await;
     let split = WorkspaceMethod::SplitWorkspace {
-        workspace: parent.id.clone(),
+        workspace: SpaceSelector::id(&parent.id),
         name: "child".into(),
         base: Some("HEAD".into()),
         options: Default::default(),
@@ -344,7 +350,7 @@ async fn a_created_workspace_is_prepared_in_an_operation_the_app_follows() {
     let OperationSpec::Prepare { workspace, steps } = worker.order.spec.clone() else {
         panic!("expected a preparation: {:?}", worker.order);
     };
-    assert_eq!(workspace, started.workspace.id);
+    assert_eq!(workspace, SpaceSelector::id(&started.workspace.id));
     assert!(steps.post_setup && steps.pr.is_none() && steps.agent.is_none());
     let failure = Failure::SetupFailed {
         message: "setup command exited with status 2".into(),
@@ -516,8 +522,8 @@ async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts()
     let check = |repository: &Repository, workspace: Option<&str>, parent: &str| {
         crate::protocol::ChatMethod::CheckChatParent {
             repository: Some(repository.id.clone().into()),
-            workspace: workspace.map(str::to_owned),
-            parent: Some(parent.to_owned()),
+            workspace: workspace.map(SpaceSelector::id),
+            parent: Some(SpaceSelector::parse(parent)),
         }
     };
     let refused = |method| async { connection::request::<()>(&app, method).await.is_err() };
@@ -542,12 +548,12 @@ async fn a_chat_parent_in_another_repository_is_refused_before_the_chat_starts()
         git_profile: None,
         path: None,
         options: Default::default(),
-        parent: Some(failed.id.clone()),
+        parent: Some(SpaceSelector::id(&failed.id)),
     };
     assert!(connection::request::<()>(&app, creation).await.is_err());
     let mut child = start_workspace(&daemon, WorkspaceStart::Name("child".into()));
     if let OperationMethod::StartWorkspace { parent, .. } = &mut child {
-        *parent = Some(failed.id.clone());
+        *parent = Some(SpaceSelector::id(&failed.id));
     }
     assert!(
         connection::request::<StartedWorkspace>(&app, child)
@@ -612,7 +618,7 @@ async fn following_ends_once_the_followers_scope_token_is_revoked() {
     assert!(matches!(first, Followed::Event(_)), "{first:?}");
     daemon
         .manager
-        .revoke_workspace_environment(&own.id, token)
+        .revoke_workspace_environment(&SpaceSelector::id(&own.id), token)
         .await
         .unwrap();
     worker.stdout("two").await;

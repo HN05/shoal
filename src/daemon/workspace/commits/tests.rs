@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::{Caller, ScopedExecution},
@@ -60,7 +61,14 @@ async fn a_workspace_at_a_commit_has_no_branch_and_is_named_after_its_start() {
     );
     assert_eq!(head(&at_main.path), (main.clone(), String::new()));
     // Its diff base is where it started.
-    assert_eq!(manager.diff_base(&at_main.id).await.unwrap().commit, main);
+    assert_eq!(
+        manager
+            .diff_base(&SpaceSelector::id(&at_main.id))
+            .await
+            .unwrap()
+            .commit,
+        main
+    );
 
     let again = create(&manager, &repo.id, None, CommitStart::Revision(None))
         .await
@@ -197,7 +205,7 @@ async fn a_child_at_its_parents_branch_starts_at_the_parents_commit_without_stac
     let child = create(
         &manager,
         &repo.id,
-        Some(&parent.name),
+        Some(&parent.id),
         CommitStart::Revision(Some("parent".into())),
     )
     .await
@@ -246,7 +254,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
     ] {
         let mut request = WorkspaceMethod::CreateCommitWorkspace {
             repository: repo.id.as_str().into(),
-            parent: parent.as_ref().map(ToString::to_string),
+            parent: parent.clone().map(SpaceSelector::from),
             start: CommitStart::Revision(None),
             options: Default::default(),
         };
@@ -257,7 +265,7 @@ async fn workspace_processes_create_workspaces_at_a_commit_only_below_their_own(
             let WorkspaceMethod::CreateCommitWorkspace { parent, .. } = request else {
                 unreachable!()
             };
-            assert_eq!(parent.as_deref(), Some(own.id.as_str()));
+            assert_eq!(parent, Some(SpaceSelector::id(&own.id)));
         }
     }
 }
@@ -280,7 +288,10 @@ async fn its_starting_commit_counts_as_kept_and_later_commits_do_not() {
         .await
         .unwrap();
     let check = manager
-        .check_removal(&workspace.id, crate::removal::InspectionPolicy::GitOnly)
+        .check_removal(
+            &SpaceSelector::id(&workspace.id),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert!(check.safe() && check.unsaved_work().is_empty(), "{check:?}");
@@ -292,7 +303,10 @@ async fn its_starting_commit_counts_as_kept_and_later_commits_do_not() {
     std::fs::write(workspace.path.join("later"), "later\n").unwrap();
     commit(&workspace.path, "later");
     let check = manager
-        .check_removal(&workspace.id, crate::removal::InspectionPolicy::GitOnly)
+        .check_removal(
+            &SpaceSelector::id(&workspace.id),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert_eq!(check.unpushed_commits, 1);
@@ -316,7 +330,7 @@ async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
     std::fs::write(workspace.path.join("draft"), "draft\n").unwrap();
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,
         )
@@ -325,7 +339,10 @@ async fn a_removed_workspace_at_a_commit_is_restored_without_a_branch() {
     assert!(!workspace.path.exists());
     assert!(git(&checkout, &["branch", "--list", &workspace.name]).is_empty());
 
-    let restored = manager.restore_workspace(&workspace.name).await.unwrap();
+    let restored = manager
+        .restore_workspace(&SpaceSelector::from(&workspace.name))
+        .await
+        .unwrap();
     let reopened = restored.opened.workspace;
     assert_eq!(reopened.branch, None);
     assert_eq!(reopened.at, workspace.at);
@@ -385,7 +402,7 @@ async fn a_prs_workspace_is_reused_and_moved_to_its_new_head_unless_it_has_work(
         .to_owned();
     assert_eq!(
         manager
-            .diff_base(&opened.workspace.id)
+            .diff_base(&SpaceSelector::id(&opened.workspace.id))
             .await
             .unwrap()
             .commit,
@@ -458,7 +475,7 @@ async fn a_workspace_at_a_commit_goes_below_the_chat_or_workspace_it_names() {
         below_chat.parent.map(|parent| parent.id),
         Some(chat.id.clone())
     );
-    let child = create(Some(parent.name.to_string())).await.unwrap();
+    let child = create(Some(parent.id.clone())).await.unwrap();
     assert_eq!(
         child.parent.map(|parent| parent.id),
         Some(parent.id.clone())
@@ -489,14 +506,17 @@ async fn removing_one_switched_onto_a_branch_leaves_that_branch() {
     .unwrap();
     git(&workspace.path, &["switch", "-q", "topic"]);
     let check = manager
-        .check_removal(&workspace.id, crate::removal::InspectionPolicy::GitOnly)
+        .check_removal(
+            &SpaceSelector::id(&workspace.id),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     // On a branch, its starting commit no longer counts as kept.
     assert_eq!(check.unpushed_commits, 1, "{check:?}");
     let removed = manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,
         )
@@ -556,7 +576,7 @@ async fn reopening_a_prs_workspace_records_the_prs_base() {
         .to_owned();
     assert_eq!(
         manager
-            .diff_base(&opened.workspace.id)
+            .diff_base(&SpaceSelector::id(&opened.workspace.id))
             .await
             .unwrap()
             .commit,
@@ -603,7 +623,7 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
         .unwrap();
     manager
         .remove_workspace(
-            &opened.workspace.id,
+            &SpaceSelector::id(&opened.workspace.id),
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,
         )
@@ -611,13 +631,20 @@ async fn a_restored_prs_workspace_drops_a_base_that_is_gone() {
         .unwrap();
     git(&clone, &["update-ref", "-d", "refs/remotes/origin/release"]);
     let restored = manager
-        .restore_workspace(&opened.workspace.name)
+        .restore_workspace(&SpaceSelector::from(&opened.workspace.name))
         .await
         .unwrap()
         .opened
         .workspace;
     assert_eq!(restored.base_ref, None);
-    assert_eq!(manager.diff_base(&restored.id).await.unwrap().commit, head);
+    assert_eq!(
+        manager
+            .diff_base(&SpaceSelector::id(&restored.id))
+            .await
+            .unwrap()
+            .commit,
+        head
+    );
 }
 
 #[tokio::test]
@@ -676,7 +703,7 @@ async fn reopening_a_prs_workspace_gives_it_to_its_opener() {
     );
     // Another chat's own agent cannot take it from the first.
     open(Some(second.id.clone()), true).await.unwrap_err();
-    let kept = manager.workspace(&opened.id).await.unwrap();
+    let kept = manager.workspace_by_id(&opened.id).await.unwrap();
     assert_eq!(kept.parent.map(|parent| parent.id), Some(first.id.clone()));
     let reopened = open(Some(second.id.clone()), false)
         .await
@@ -706,11 +733,17 @@ async fn a_workspace_at_a_commit_takes_no_part_in_a_stack() {
         .await
         .unwrap();
     let as_base = manager
-        .set_base_workspace(&branch.id, Some(detached.name.to_string()))
+        .set_base_workspace(
+            &SpaceSelector::id(&branch.id),
+            Some(detached.name.to_string()),
+        )
         .await;
     assert!(as_base.is_err());
     let stacked = manager
-        .set_base_workspace(&detached.id, Some(branch.name.to_string()))
+        .set_base_workspace(
+            &SpaceSelector::id(&detached.id),
+            Some(branch.name.to_string()),
+        )
         .await;
     assert!(stacked.is_err());
 }

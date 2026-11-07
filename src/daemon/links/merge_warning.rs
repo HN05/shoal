@@ -4,6 +4,7 @@
 //! fast without one.
 use anyhow::{Context, Result};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::{Manager, conflicts::recorded},
     forge::{ForgeRepo, items::link::ItemKind},
@@ -41,7 +42,10 @@ impl Manager {
     /// The warning for merging the workspace's HEAD into the default branch,
     /// as its last check against that branch found it; a stacked
     /// workspace's check is against its base's branch instead.
-    pub async fn branch_merge_warning(&self, selector: &str) -> Result<Option<MergeWarning>> {
+    pub async fn branch_merge_warning(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<Option<MergeWarning>> {
         let workspace = self.workspace(selector).await?;
         let recorded = self.recorded_changed_on_both_sides(&workspace.id).await?;
         let Some(recorded) = recorded.filter(|recorded| !recorded.files.is_empty()) else {

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
@@ -77,7 +78,10 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
     );
     assert_eq!(all[0].execution_id, web.plan.id);
     assert_eq!(all[0].launch, launch("web"));
-    let own = manager.demos(Some(&second.name)).await.unwrap();
+    let own = manager
+        .demos(Some(&SpaceSelector::from(&second.name)))
+        .await
+        .unwrap();
     assert_eq!(own.len(), 1);
     assert_eq!(own[0].execution_id, tui.plan.id);
 
@@ -96,7 +100,13 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
         .finish_execution(web.plan.id.clone(), ExecutionKind::Command, Some(0))
         .await
         .unwrap();
-    assert!(manager.demos(Some(&first.id)).await.unwrap().is_empty());
+    assert!(
+        manager
+            .demos(Some(&SpaceSelector::id(&first.id)))
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let replacement = manager
         .begin_execution_running(
             &first.id,
@@ -107,7 +117,10 @@ async fn demos_are_recorded_with_their_executions_and_end_with_them() {
         )
         .await
         .unwrap();
-    let demos = manager.demos(Some(&first.id)).await.unwrap();
+    let demos = manager
+        .demos(Some(&SpaceSelector::id(&first.id)))
+        .await
+        .unwrap();
     assert_eq!(demos.len(), 1);
     assert_eq!(demos[0].execution_id, replacement.plan.id);
 }
@@ -142,7 +155,7 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
         .unwrap();
 
     manager
-        .stop_demos(&first.name, Some("web".into()))
+        .stop_demos(&SpaceSelector::from(&first.name), Some("web".into()))
         .await
         .unwrap();
     assert!(*web.stop.borrow_and_update());
@@ -150,12 +163,15 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
     let request = manager.executions.stop_request(&web.plan.id).await.unwrap();
     assert_eq!(request.save, Save::Nothing);
 
-    manager.stop_demos(&first.name, None).await.unwrap();
+    manager
+        .stop_demos(&SpaceSelector::from(&first.name), None)
+        .await
+        .unwrap();
     assert!(*tui.stop.borrow_and_update());
     assert!(!*command.stop.borrow_and_update());
     assert!(
         manager
-            .stop_demos(&first.name, Some("Bad".into()))
+            .stop_demos(&SpaceSelector::from(&first.name), Some("Bad".into()))
             .await
             .is_err()
     );
@@ -183,9 +199,11 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
     scope::authorize(&manager, Some("scope"), &mut list)
         .await
         .unwrap();
-    assert!(matches!(list, DemoMethod::ListDemos { workspace: Some(own) } if own == first.id));
+    assert!(
+        matches!(list, DemoMethod::ListDemos { workspace: Some(own) } if own == SpaceSelector::id(&first.id))
+    );
     let mut stop = DemoMethod::StopDemos {
-        workspace: first.name.to_string(),
+        workspace: SpaceSelector::parse(&first.name),
         name: None,
     };
     scope::authorize(&manager, Some("scope"), &mut stop)
@@ -193,10 +211,10 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
         .unwrap();
     for mut method in [
         DemoMethod::ListDemos {
-            workspace: Some(second.name.to_string()),
+            workspace: Some(SpaceSelector::parse(&second.name)),
         },
         DemoMethod::StopDemos {
-            workspace: second.name.to_string(),
+            workspace: SpaceSelector::parse(&second.name),
             name: None,
         },
     ] {
@@ -233,7 +251,13 @@ async fn a_chat_lists_no_demos_of_its_own() {
         )
         .await
         .unwrap();
-    assert!(manager.demos(Some(&chat.id)).await.unwrap().is_empty());
+    assert!(
+        manager
+            .demos(Some(&SpaceSelector::id(&chat.id)))
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(manager.demos(None).await.unwrap().len(), 1);
 }
 
@@ -326,8 +350,17 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
     // As after a daemon restart, before the wrapper reconnects.
     drop(started);
     manager.detach_execution(&id).await;
-    manager.stop_demos(&first.name, None).await.unwrap();
-    assert!(manager.demos(Some(&first.id)).await.unwrap().is_empty());
+    manager
+        .stop_demos(&SpaceSelector::from(&first.name), None)
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .demos(Some(&SpaceSelector::id(&first.id)))
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert!(away.wait().is_ok_and(|status| !status.success()));
 }
 
@@ -353,8 +386,17 @@ async fn stopping_an_away_demo_between_runs_ends_its_record() {
     // The last run was released, so the record names no child.
     drop(started);
     manager.detach_execution(&id).await;
-    manager.stop_demos(&first.name, None).await.unwrap();
-    assert!(manager.demos(Some(&first.id)).await.unwrap().is_empty());
+    manager
+        .stop_demos(&SpaceSelector::from(&first.name), None)
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .demos(Some(&SpaceSelector::id(&first.id)))
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert!(away.wait().is_ok_and(|status| !status.success()));
 }
 
@@ -377,7 +419,7 @@ async fn running_web_demos_list_their_url() {
             .unwrap();
     }
     let urls: Vec<_> = manager
-        .demos(Some(&first.id))
+        .demos(Some(&SpaceSelector::id(&first.id)))
         .await
         .unwrap()
         .into_iter()

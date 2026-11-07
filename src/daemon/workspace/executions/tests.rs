@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{install_test_script, manager, repository};
 use std::{fs, future::Future, sync::Arc};
 
@@ -58,7 +59,7 @@ async fn registration_rolls_back_setup_reservation_when_insertion_fails() {
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("injected registration failure"));
-    let after = manager.workspace(&workspace.id).await.unwrap();
+    let after = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(after.state, workspace.state);
     assert_eq!(setup_finished(&manager, &workspace).await, was_finished);
     assert!(!manager.executions.has_connections().await);
@@ -188,7 +189,7 @@ async fn pre_setup_failure_and_identity_change_close_registration() {
             .begin_execution(&workspace.id, None, ExecutionKind::Setup, None)
             .await
             .unwrap_err();
-        let after = manager.workspace(&workspace.id).await.unwrap();
+        let after = manager.workspace_by_id(&workspace.id).await.unwrap();
         assert_eq!(after.state, WorkspaceState::Failed);
         assert!(!setup_finished(&manager, &workspace).await);
         assert_eq!(after.error.as_deref(), Some(format!("{error:#}").as_str()));
@@ -307,7 +308,7 @@ async fn unreadable_process_keeps_finished_execution_unknown() {
         );
         if kind == ExecutionKind::Setup {
             assert_eq!(
-                manager.workspace(&workspace.id).await.unwrap().state,
+                manager.workspace_by_id(&workspace.id).await.unwrap().state,
                 WorkspaceState::Failed
             );
             assert!(!setup_finished(&manager, &workspace).await);
@@ -381,12 +382,12 @@ async fn recorded_child_and_unverified_group_block_completion_without_markers() 
                 .unwrap()
         );
         assert_eq!(
-            manager.workspace(&workspace.id).await.unwrap().state,
+            manager.workspace_by_id(&workspace.id).await.unwrap().state,
             WorkspaceState::Failed
         );
         assert!(!setup_finished(&manager, &workspace).await);
         let error = manager
-            .workspace(&workspace.id)
+            .workspace_by_id(&workspace.id)
             .await
             .unwrap()
             .error
@@ -432,7 +433,7 @@ async fn setup_preserves_inventory_failure_in_its_retained_diagnostic() {
             .await
             .unwrap()
     );
-    let workspace = manager.workspace(&workspace.id).await.unwrap();
+    let workspace = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(workspace.state, WorkspaceState::Failed);
     assert!(
         workspace
@@ -652,7 +653,10 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
     assert_eq!(caller.execution_id(), Some(id.as_str()));
     assert_eq!(caller.kind(), Some(ExecutionKind::Command));
     assert!(manager.executions.with_agent(&id, |_| ()).await.is_some());
-    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    let inspection = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert_eq!(inspection.executions[0].state, ExecutionState::Running);
     manager.reattach_execution(&request).await.unwrap_err();
 }
@@ -818,7 +822,12 @@ async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
             .unwrap();
         let id = started.plan.id;
         manager
-            .set_agent_state(&workspace.name, AgentState::Idle, Some(id.clone()), None)
+            .set_agent_state(
+                &SpaceSelector::from(&workspace.name),
+                AgentState::Idle,
+                Some(id.clone()),
+                None,
+            )
             .await
             .unwrap();
         // A signal stop saved the agent, which leaves a background command

@@ -5,6 +5,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context as _, Result, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agents::check_queued_launch,
     daemon::{
@@ -83,7 +84,7 @@ impl Manager {
     /// `copy`, leaving out what `options` say, and start preparing it.
     pub(crate) async fn start_split(
         self: &Arc<Self>,
-        parent: &str,
+        parent: &SpaceSelector,
         split: Split,
         preparing: Preparing,
         caller: Option<&Caller>,
@@ -118,7 +119,9 @@ impl Manager {
     ) -> Result<Workspace> {
         let Some(copy) = copy else {
             let name = name.context("name the child's branch")?;
-            return self.split_workspace(&parent.id, name, base, options).await;
+            return self
+                .split_workspace(&SpaceSelector::id(&parent.id), name, base, options)
+                .await;
         };
         ensure!(base.is_none(), "a copy starts from its source, not a base");
         let new = NewWorkspace {
@@ -169,7 +172,9 @@ impl Manager {
                 let place = CopyPlace::Branch(branch);
                 let workspace = self.create_copy(repository, &source, place, new).await?;
                 Ok(OpenedWorkspace {
-                    workspace: self.give_to_parent(&workspace.id, parent).await?,
+                    workspace: self
+                        .give_to_parent(&SpaceSelector::id(&workspace.id), parent)
+                        .await?,
                     reused: false,
                 })
             }
@@ -193,7 +198,8 @@ impl Manager {
                     "workspace {} is not in the requested repository",
                     workspace.name
                 );
-                self.reopen_workspace(&workspace.id).await
+                self.reopen_workspace(&SpaceSelector::id(&workspace.id))
+                    .await
             }
         }
     }
@@ -210,7 +216,9 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<StartedWorkspace> {
         if let Some(OpenIssue { url, title }) = issue
-            && let Err(error) = self.set_issue(&workspace.id, &url, Some(title)).await
+            && let Err(error) = self
+                .set_issue(&SpaceSelector::id(&workspace.id), &url, Some(title))
+                .await
         {
             if !reused {
                 self.discard_new(&workspace).await;
@@ -224,13 +232,13 @@ impl Manager {
             agent: preparing.agent,
         };
         let spec = OperationSpec::Prepare {
-            workspace: workspace.id.clone(),
+            workspace: SpaceSelector::id(&workspace.id),
             steps,
         };
         let operation = self.start_operation(spec, preparing.env, caller).await?;
         Ok(StartedWorkspace {
             operation,
-            workspace: Box::new(self.workspace(&workspace.id).await?),
+            workspace: Box::new(self.workspace_by_id(&workspace.id).await?),
             reused,
         })
     }
@@ -238,7 +246,11 @@ impl Manager {
     /// Remove the new `workspace`, which nothing ran in yet.
     async fn discard_new(&self, workspace: &Workspace) {
         let removal = self
-            .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+            .remove_workspace(
+                &SpaceSelector::id(&workspace.id),
+                UnsavedWork::All,
+                InspectionPolicy::GitOnly,
+            )
             .await;
         if let Err(error) = removal {
             log!(

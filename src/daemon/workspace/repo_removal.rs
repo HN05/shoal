@@ -7,6 +7,7 @@ use super::{
         real_directory_identity,
     },
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{resources::Scope, store},
     fsutil::off_runtime,
@@ -151,7 +152,7 @@ impl Manager {
     /// are ignored.
     pub async fn keep_agent_environment(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         environment: BTreeMap<String, String>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
@@ -333,14 +334,18 @@ impl Manager {
             if self.find_workspace(&workspace.id).await?.is_none() {
                 continue;
             }
-            self.remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
-                .await
-                .with_context(|| {
-                    format!(
-                        "remove workspace {}; repository retained for retry",
-                        workspace.name
-                    )
-                })?;
+            self.remove_workspace(
+                &SpaceSelector::id(&workspace.id),
+                UnsavedWork::All,
+                InspectionPolicy::GitOnly,
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "remove workspace {}; repository retained for retry",
+                    workspace.name
+                )
+            })?;
         }
         verify_directory(&repo.path, identity, false)?;
         if identity.is_some() {

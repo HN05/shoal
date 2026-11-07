@@ -36,7 +36,7 @@ async fn recheck_readies_only_workspaces_the_audit_failed_once_they_verify() {
 
     let state = |id: String| {
         let manager = manager.clone();
-        async move { manager.workspace(&id).await.unwrap() }
+        async move { manager.workspace_by_id(&id).await.unwrap() }
     };
     let mounted = state(workspaces[0].id.clone()).await;
     assert_eq!(mounted.state, WorkspaceState::Ready);
@@ -71,20 +71,20 @@ async fn the_audit_fails_workspaces_whose_file_access_stalls_until_a_recheck_fin
     assert!(stalled.is_err());
 
     manager.audit_worktrees().await.unwrap();
-    let audited = manager.workspace(&workspace.id).await.unwrap();
+    let audited = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(audited.state, WorkspaceState::Failed);
     let error = audited.error.unwrap();
     assert!(error.starts_with(STARTUP_OWNERSHIP_FAILURE), "{error}");
 
     // The recheck skips the directory until it is due to check it again.
     manager.recheck_startup_failures().await.unwrap();
-    let skipped = manager.workspace(&workspace.id).await.unwrap();
+    let skipped = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(skipped.state, WorkspaceState::Failed);
     tokio::time::pause();
     tokio::time::advance(crate::daemon::file_access::RECHECK_AFTER).await;
     tokio::time::resume();
     manager.recheck_startup_failures().await.unwrap();
-    let ready = manager.workspace(&workspace.id).await.unwrap();
+    let ready = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(ready.state, WorkspaceState::Ready);
     assert_eq!(manager.file_access.stalls(), []);
 }

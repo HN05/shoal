@@ -1,6 +1,7 @@
 //! Base workspaces: the workspace whose branch a stacked workspace builds on.
 use std::path::Path;
 
+use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
@@ -20,7 +21,7 @@ impl Manager {
     /// must change it.
     pub async fn set_base_workspace(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         base: Option<String>,
     ) -> Result<Workspace> {
         let workspace = self.workspace(selector).await?;
@@ -43,12 +44,12 @@ impl Manager {
             .gates
             .lock_prs(base.iter().chain([&workspace.id]))
             .await;
-        let workspace = self.workspace(&workspace.id).await?;
+        let workspace = self.workspace_by_id(&workspace.id).await?;
         let (id, repository_id) = (workspace.id.clone(), workspace.repository_id.clone());
         self.store
             .run(move |db| change_base(db, &repository_id, &id, base.as_deref()))
             .await?;
-        self.workspace(&workspace.id).await
+        self.workspace_by_id(&workspace.id).await
     }
 }
 

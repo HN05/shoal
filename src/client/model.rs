@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     client::{
-        processes::Identity, resources::ResourceLease, sim::Simulator, space_names::SpaceName,
+        processes::Identity,
+        resources::ResourceLease,
+        sim::Simulator,
+        space_names::{SpaceName, SpaceSelector},
     },
     config::repo::{ConflictPolicy, PortDefinition},
     state::{AgentState, ExecutionState, QueueKind, QueueState, WorkspaceState},
@@ -1595,6 +1598,14 @@ impl PresentSpace {
     }
 }
 
+/// How messages name a space: its number, then its name, as in
+/// `3 (fix-login)`.
+impl std::fmt::Display for PresentSpace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ({})", self.number(), self.name())
+    }
+}
+
 /// The spaces a caller sees: its workspaces, and its chats, running or
 /// stopped.
 #[derive(Debug, Clone, Default)]
@@ -1885,7 +1896,7 @@ pub struct QueueRequest {
     /// its parent's agent. The daemon then starts the entry itself, outside
     /// the caller's processes, whether or not a limit applies.
     #[serde(default)]
-    pub workspace: Option<String>,
+    pub workspace: Option<SpaceSelector>,
     /// The work the launch waits for; it always queues while any remains.
     #[serde(default)]
     pub after: Vec<Dependency>,

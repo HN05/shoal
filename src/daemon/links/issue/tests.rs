@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     events::{EventItem, EventKind},
     test_support::{git, manager, repository},
@@ -22,13 +23,23 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         &["remote", "add", "origin", "https://github.com/team/repo"],
     );
     let url = "https://github.com/team/repo/issues/316";
-    manager.set_issue(&workspace.id, url, None).await.unwrap();
     manager
-        .set_issue(&workspace.id, "316", Some("Show titles".into()))
+        .set_issue(&SpaceSelector::id(&workspace.id), url, None)
         .await
         .unwrap();
-    manager.set_issue(&workspace.id, "316", None).await.unwrap();
-    let links = manager.workspace(&workspace.id).await.unwrap().links;
+    manager
+        .set_issue(
+            &SpaceSelector::id(&workspace.id),
+            "316",
+            Some("Show titles".into()),
+        )
+        .await
+        .unwrap();
+    manager
+        .set_issue(&SpaceSelector::id(&workspace.id), "316", None)
+        .await
+        .unwrap();
+    let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
     assert_eq!(links.issue.as_deref(), Some(url));
     assert_eq!(links.issue_title.as_deref(), Some("Show titles"));
     let linked: Vec<_> = manager
@@ -46,11 +57,16 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     assert_eq!(linked.len(), 1);
     assert_eq!(linked[0].kind, crate::forge::items::link::LinkKind::Issue);
     assert_eq!(linked[0].url, url);
-    assert!(manager.set_issue(&workspace.id, "317", None).await.is_err());
+    assert!(
+        manager
+            .set_issue(&SpaceSelector::id(&workspace.id), "317", None)
+            .await
+            .is_err()
+    );
     assert!(
         manager
             .set_issue(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 "https://github.com/other/repo/issues/316",
                 None
             )
@@ -67,7 +83,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
     assert_eq!(
         reopened
-            .inspect_workspace(&workspace.id)
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .issue
@@ -77,7 +93,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
     );
     assert!(
         reopened
-            .clear_issue(&workspace.id, Some("317"))
+            .clear_issue(&SpaceSelector::id(&workspace.id), Some("317"))
             .await
             .is_err()
     );
@@ -89,7 +105,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             .is_some()
     );
     reopened
-        .clear_issue(&workspace.id, Some("316"))
+        .clear_issue(&SpaceSelector::id(&workspace.id), Some("316"))
         .await
         .unwrap();
     assert!(reopened.workspace_events(None, 100).await.unwrap().iter().any(
@@ -104,12 +120,12 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
             .is_none()
     );
     reopened
-        .set_issue(&workspace.id, "317", None)
+        .set_issue(&SpaceSelector::id(&workspace.id), "317", None)
         .await
         .unwrap();
     assert!(
         reopened
-            .workspace(&workspace.id)
+            .workspace_by_id(&workspace.id)
             .await
             .unwrap()
             .links

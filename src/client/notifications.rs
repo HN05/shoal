@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::{io::BufReader, net::UnixStream};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, open_buffered, pages, reconnect, request, stream_closed},
@@ -143,7 +144,7 @@ pub async fn clear(daemon: &impl Daemon) -> Result<Cleared> {
 /// attaches its files.
 pub async fn send(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     message: String,
     attachments: Vec<NewFile>,
     sender_chat: Option<String>,
@@ -158,7 +159,7 @@ pub async fn send(
 }
 
 /// Take back `space`'s unread notification `id`.
-pub async fn withdraw(daemon: &impl Daemon, space: String, id: i64) -> Result<Notification> {
+pub async fn withdraw(daemon: &impl Daemon, space: SpaceSelector, id: i64) -> Result<Notification> {
     request(daemon, NotificationMethod::WithdrawMessage { space, id }).await
 }
 

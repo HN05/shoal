@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::links::{issue, pr::Registration},
     daemon::{
@@ -26,8 +27,8 @@ pub(crate) struct Records {
 impl Manager {
     /// The status of the workspace or chat, running or stopped, `selector`
     /// names: a workspace's adds what needs its worktree.
-    pub async fn space_status(&self, selector: &str) -> Result<SpaceStatus> {
-        let space = self.present_space(selector).await?;
+    pub async fn space_status(&self, selector: &SpaceSelector) -> Result<SpaceStatus> {
+        let space = self.space(selector).await?;
         let (space, records, origin) = self.space_detail(space).await?;
         let (prs, issue_status) = self.linked_states(&origin, &records).await;
         let attention = self.attention(&space).await?;
@@ -48,7 +49,9 @@ impl Manager {
     async fn space_detail(&self, space: PresentSpace) -> Result<(SpaceDetail, Records, PathBuf)> {
         Ok(match space {
             PresentSpace::Workspace(workspace) => {
-                let (status, records) = self.worktree_status(&workspace.id).await?;
+                let (status, records) = self
+                    .worktree_status(&SpaceSelector::id(&workspace.id))
+                    .await?;
                 let path = status.workspace.path.clone();
                 (SpaceDetail::Workspace(Box::new(status)), records, path)
             }

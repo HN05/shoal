@@ -2,6 +2,7 @@
 use anyhow::{Context, Result};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     git::{
         self,
@@ -18,7 +19,7 @@ impl Manager {
     /// which defaults to the base workspace's branch, then the default branch.
     pub async fn check_conflicts(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         target: Option<String>,
     ) -> Result<ConflictCheck> {
         let workspace = self.workspace(selector).await?;
@@ -73,7 +74,7 @@ impl Manager {
     /// under the file-access guard, so a stalled worktree fails at once.
     pub(crate) async fn watched_conflicts(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         only_sensitive: bool,
     ) -> Result<Option<ConflictCheck>> {
         let workspace = self.workspace(selector).await?;

@@ -1,5 +1,6 @@
 use std::os::unix::fs::PermissionsExt;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -27,7 +28,10 @@ async fn a_workspace_has_its_own_tmpdir_until_it_is_removed() {
         .join(".tmp")
         .join(&workspace.id);
 
-    let exported = manager.workspace_environment(&workspace.id).await.unwrap();
+    let exported = manager
+        .workspace_environment(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert_eq!(exported[env::TMPDIR], expected.to_str().unwrap());
     let mode = std::fs::metadata(&expected).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o700);
@@ -58,7 +62,11 @@ async fn a_workspace_has_its_own_tmpdir_until_it_is_removed() {
 
     std::fs::write(expected.join("scratch"), "garbage").unwrap();
     manager
-        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert!(!expected.exists());
@@ -80,7 +88,10 @@ async fn env_overrides_the_workspace_tmpdir() {
         .create_workspace(&repo.id, "feature".into(), None, None, None)
         .await
         .unwrap();
-    let exported = manager.workspace_environment(&workspace.id).await.unwrap();
+    let exported = manager
+        .workspace_environment(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert_eq!(exported[env::TMPDIR], "/scratch");
 }
 

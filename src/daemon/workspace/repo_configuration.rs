@@ -1,6 +1,7 @@
 //! The configuration layers of a repository's workspaces, and where its
 //! local config file lives.
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{
         self, Config, Effective,
@@ -65,7 +66,7 @@ impl Manager {
     /// [`Self::workspace_hook`] of the workspace `selector` names.
     pub(crate) async fn selected_workspace_hook(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         kind: HookKind,
     ) -> Result<Option<std::path::PathBuf>> {
         let workspace = self.workspace(selector).await?;
@@ -329,7 +330,9 @@ impl Manager {
         with_tmp_dir: bool,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
         let repository = self.repository(&workspace.repository_id).await?;
-        let ports = self.list_ports(Some(&workspace.id)).await?;
+        let ports = self
+            .list_ports(Some(&SpaceSelector::id(&workspace.id)))
+            .await?;
         let caches = crate::caches::directories(&repository, &settings.caches)?;
         let tmp_dir = if with_tmp_dir {
             crate::tmp_dirs::directory(&repository, &workspace.id)?

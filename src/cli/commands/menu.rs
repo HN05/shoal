@@ -11,6 +11,7 @@ use anyhow::{Context as _, Result, ensure};
 use clap::ValueEnum;
 
 use super::{inbox::Inbox, listing::ListFilter};
+use crate::client::space_names::SpaceSelector;
 use crate::client::{item_numbers::ItemNumber, output::inbox::Item};
 use crate::{
     cli::{
@@ -887,8 +888,11 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
     let target = workspace
         .clone()
         .context("select a workspace to execute in")?;
-    let settings =
-        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(target)).await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(SpaceSelector::parse(&target)),
+    )
+    .await?;
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let agents = agents::names(&settings)
         .into_iter()

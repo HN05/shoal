@@ -4,6 +4,7 @@ use rusqlite::OptionalExtension;
 use std::path::{Path, PathBuf};
 
 use super::{GuardMode, Manager, ResourceGuard};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::Effective,
     daemon::{
@@ -36,7 +37,7 @@ impl Manager {
 
     /// Withdraw a recorded completion; only holds and open questions keep the
     /// workspace.
-    pub async fn undo_done(&self, selector: &str) -> Result<Completion> {
+    pub async fn undo_done(&self, selector: &SpaceSelector) -> Result<Completion> {
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
         let completion = self
@@ -69,7 +70,7 @@ impl Manager {
     /// removal.
     pub async fn mark_done(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         cleanup: bool,
         integrated: bool,
         results: Vec<crate::daemon::workspace_files::NewFile>,
@@ -301,7 +302,7 @@ impl Manager {
             return Ok(false);
         }
         let cause = self.completion_cause(&workspace.id).await?;
-        self.remove_completed(&workspace.id, &completion, cause)
+        self.remove_completed(&SpaceSelector::id(&workspace.id), &completion, cause)
             .await
     }
 

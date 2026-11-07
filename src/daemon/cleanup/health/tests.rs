@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::cleanup::SpaceFailures;
 
 /// A pass whose `step` failed with `error`, in the workspace `id` named
@@ -131,14 +132,26 @@ async fn failing_passes_notify_once_and_show_where_they_belong() {
         problem.ends_with("result expiry: disk is full"),
         "{problem}"
     );
-    let status = manager.worktree_status(&failing.id).await.unwrap().0;
+    let status = manager
+        .worktree_status(&SpaceSelector::id(&failing.id))
+        .await
+        .unwrap()
+        .0;
     let error = status.cleanup_error.unwrap();
     assert!(error.ends_with("idle agents: bad config"), "{error}");
-    let status = manager.worktree_status(&other.id).await.unwrap().0;
+    let status = manager
+        .worktree_status(&SpaceSelector::id(&other.id))
+        .await
+        .unwrap()
+        .0;
     assert_eq!(status.cleanup_error, None);
 
     manager.record_sweep(Ok(())).await;
     assert_eq!(manager.cleanup_problem(), None);
-    let status = manager.worktree_status(&failing.id).await.unwrap().0;
+    let status = manager
+        .worktree_status(&SpaceSelector::id(&failing.id))
+        .await
+        .unwrap()
+        .0;
     assert_eq!(status.cleanup_error, None);
 }

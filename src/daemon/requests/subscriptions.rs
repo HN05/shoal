@@ -9,6 +9,7 @@ use super::super::{
     subscriptions,
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::SubscriptionMethod;
 
 pub(super) fn handle(
@@ -31,7 +32,7 @@ pub(super) fn handle(
 /// A scoped caller subscribes to what its scope reaches, which the
 /// subscription narrows to it.
 impl Scoped for SubscriptionMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
         Ok(None)
     }
 }

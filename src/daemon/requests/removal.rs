@@ -9,6 +9,7 @@ use super::super::{
     scope::{Caller, Scoped, denied},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     process::identity,
     protocol::{Body, QueuedLaunches, RemovalMethod},
@@ -115,7 +116,11 @@ pub(super) async fn handle(
 }
 
 impl Scoped for RemovalMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         const REFUSAL: &str = "workspace processes remove only the workspaces split from theirs; finish their own with shoal done";
         match self {
             // The check refuses holds too, so a batch refuses before removing any.

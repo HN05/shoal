@@ -2,6 +2,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, await_reply, request},
@@ -70,7 +71,7 @@ pub async fn show(daemon: &impl Daemon, number: ItemNumber) -> Result<Question> 
 }
 
 /// The open questions of `space`, or of every space.
-pub async fn list(daemon: &impl Daemon, space: Option<String>) -> Result<Listing> {
+pub async fn list(daemon: &impl Daemon, space: Option<SpaceSelector>) -> Result<Listing> {
     request(daemon, QuestionMethod::ListQuestions { space }).await
 }
 
@@ -78,7 +79,7 @@ pub async fn list(daemon: &impl Daemon, space: Option<String>) -> Result<Listing
 /// chat `sender_chat` names, when its agent asks, attaches its files.
 pub async fn ask(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     ask: Ask,
     attachments: Vec<NewFile>,
     sender_chat: Option<String>,
@@ -103,7 +104,7 @@ pub async fn await_answer(
     restarted: bool,
 ) -> Result<Question> {
     let method = || QuestionMethod::AwaitAnswer {
-        space: space.to_owned(),
+        space: SpaceSelector::parse(space),
         item,
         ask: ask.clone(),
     };
@@ -112,20 +113,20 @@ pub async fn await_answer(
 
 /// Mark the turn of `space`'s calling agent as asking the user in its
 /// conversation.
-pub async fn ask_in_chat(daemon: &impl Daemon, space: String) -> Result<()> {
+pub async fn ask_in_chat(daemon: &impl Daemon, space: SpaceSelector) -> Result<()> {
     request(daemon, QuestionMethod::AskInChat { space }).await
 }
 
 /// Close the questions `space`'s agents asked in their conversation, where
 /// the user replied.
-pub async fn replied_in_chat(daemon: &impl Daemon, space: String) -> Result<()> {
+pub async fn replied_in_chat(daemon: &impl Daemon, space: SpaceSelector) -> Result<()> {
     request(daemon, QuestionMethod::RepliedInChat { space }).await
 }
 
 /// Withdraw `shown`, which its space's agents no longer need answered.
 pub async fn withdraw(daemon: &impl Daemon, shown: Question) -> Result<Question> {
     let method = QuestionMethod::WithdrawQuestion {
-        space: shown.space_id.clone(),
+        space: SpaceSelector::id(&shown.space_id),
         number: shown.number,
         shown: Some(shown),
     };

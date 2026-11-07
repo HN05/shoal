@@ -10,6 +10,7 @@ use super::{
     target::AddTarget,
 };
 use crate::client::operations::NewWorkspace;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent_queue::{AddPlan, Creation, ResolvedAddAgent},
     cli::{
@@ -251,7 +252,7 @@ async fn enters_added(
     };
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     Ok(!agents::runs_in_session(chosen, &settings))
@@ -292,7 +293,7 @@ async fn start_add_workspace(
         copy,
     } = creation;
     let start = match (workspace, pull_head, existing, copy) {
-        (Some(workspace), ..) => WorkspaceStart::Workspace(workspace),
+        (Some(workspace), ..) => WorkspaceStart::Workspace(SpaceSelector::parse(&workspace)),
         (None, Some(head), ..) => WorkspaceStart::PullHead {
             url: pr.clone().context("a PR head needs its PR")?,
             head,
@@ -312,7 +313,7 @@ async fn start_add_workspace(
         base,
         path,
         git_profile,
-        parent,
+        parent: parent.as_deref().map(SpaceSelector::id),
         options,
         issue: issue.map(|issue| issue.url.clone()),
         pr,
@@ -387,7 +388,7 @@ async fn prepare_after_setup(
     AfterSetup { pr, agent }: AfterSetup,
 ) -> Result<(Prepared, Result<()>)> {
     let spec = OperationSpec::Prepare {
-        workspace: workspace.id.clone(),
+        workspace: SpaceSelector::id(&workspace.id),
         steps: Preparation {
             post_setup: !reused,
             pr,
@@ -399,9 +400,10 @@ async fn prepare_after_setup(
         Ok(prepared) => (prepared.agent, Ok(())),
         Err(error) => (None, Err(error)),
     };
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.id)
-        .await?
-        .workspace;
+    let workspace =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id))
+            .await?
+            .workspace;
     let workspace = Box::new(workspace);
     Ok((Prepared { workspace, agent }, result))
 }

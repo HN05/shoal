@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::{CreationOptions, ErrorCode, Lifetime, PullHead};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::ModelChoice,
     client::{
@@ -54,7 +55,7 @@ pub enum OperationMethod {
         /// The space opening the workspace, which it goes below; `None`
         /// gives it to the user.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        parent: Option<String>,
+        parent: Option<SpaceSelector>,
         /// Apply only when the workspace is new.
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
@@ -73,7 +74,7 @@ pub enum OperationMethod {
     /// branch `name`, or with `copy` on a copy of that workspace, on `name`
     /// or else a branch named after the copied one.
     StartSplit {
-        workspace: String,
+        workspace: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -129,7 +130,7 @@ pub enum WorkspaceStart {
     /// The recorded workspace of the repository this selector names,
     /// reopened for a launch in it, never created again; it takes no base,
     /// path, Git profile or parent.
-    Workspace(String),
+    Workspace(SpaceSelector),
 }
 
 /// An operation preparing a workspace a request opened, and the workspace
@@ -154,26 +155,26 @@ pub struct Order {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OperationSpec {
     Prepare {
-        workspace: String,
+        workspace: SpaceSelector,
         #[serde(flatten)]
         steps: Preparation,
     },
     /// Push the workspace's branch, then open its PR or link the open one.
     OpenPull {
-        workspace: String,
+        workspace: SpaceSelector,
         options: PullOptions,
     },
     /// Merge the workspace's branch as `options` say.
     Merge {
-        workspace: String,
+        workspace: SpaceSelector,
         options: crate::model::MergeOptions,
     },
     /// Undo the latest local merge of the workspace's branch.
-    Unmerge { workspace: String },
+    Unmerge { workspace: SpaceSelector },
     /// Run the push the user approved in request `approval`, then let the
     /// daemon decide the request, opening the PR it proposed.
     Push {
-        workspace: String,
+        workspace: SpaceSelector,
         approval: String,
         push: crate::client::approvals::PushSpecification,
     },
@@ -233,7 +234,7 @@ pub struct LaunchIssue {
 
 impl OperationSpec {
     /// The workspace the operation works in.
-    pub fn workspace_mut(&mut self) -> &mut String {
+    pub fn workspace_mut(&mut self) -> &mut SpaceSelector {
         match self {
             Self::Prepare { workspace, .. }
             | Self::OpenPull { workspace, .. }

@@ -6,10 +6,11 @@ use std::path::PathBuf;
 use anyhow::{Result, ensure};
 
 pub(crate) use crate::client::processes::{Selection, Stopped};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{store, workspace::Manager},
     fsutil::off_runtime,
-    model::{Chat, Workspace},
+    model::{Chat, PresentSpace, Workspace},
     process::identity::{
         self, Identity,
         spaces::{self, Space, Untracked},
@@ -54,14 +55,14 @@ impl Manager {
     /// or chat `selector` names, as [`Self::stop_untracked`] does.
     pub(crate) async fn stop_space_processes(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         selection: Selection,
         requester: Option<Identity>,
     ) -> Result<Stopped> {
-        let workspace = match self.workspace(selector).await {
-            Ok(workspace) => workspace,
-            Err(error) => {
-                let chat = self.running_chat(selector).await?.ok_or(error)?;
+        let workspace = match self.space(selector).await? {
+            PresentSpace::Workspace(workspace) => workspace,
+            PresentSpace::Chat(_) => {
+                let chat = self.running_chat(selector).await?;
                 let processes = self
                     .stop_untracked(self.chat_space(&chat).await?, selection, requester)
                     .await?;

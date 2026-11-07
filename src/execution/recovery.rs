@@ -15,6 +15,7 @@ pub(crate) use claim::{RecoveryClaim, claim, discard_saved};
 pub(crate) use crate::client::executions::{
     Copied, LastSession, Record, Stage, Stop, StoppedAgent, earlier_place, unnamed_execution,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::ModelChoice,
     config::named_commands,
@@ -218,9 +219,10 @@ impl Recovery {
         agent: &super::TrackedAgent,
     ) -> Self {
         let resolved = async {
-            let workspace = crate::client::workspaces::inspect(paths, workspace_id.to_owned())
-                .await?
-                .workspace;
+            let workspace =
+                crate::client::workspaces::inspect(paths, SpaceSelector::id(workspace_id))
+                    .await?
+                    .workspace;
             let restored = Restored {
                 agent: &agent.name,
                 model: &agent.model,
@@ -258,7 +260,7 @@ impl Recovery {
     ) -> Result<Self> {
         let settings = crate::client::workspaces::settings(
             paths,
-            ConfigTarget::Workspace(workspace.id.clone()),
+            ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
         )
         .await?;
         let name = restored.agent.replace(' ', "-");

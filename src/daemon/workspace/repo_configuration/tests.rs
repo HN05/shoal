@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support;
 
 /// A registered repository and its local config's directory, which does not
@@ -64,7 +65,7 @@ async fn a_workspace_recorded_where_the_local_config_belongs_is_never_local_conf
     assert_ne!(agent.as_deref(), Some("codex"));
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::IncludeDirectoryProcesses,
         )
@@ -110,7 +111,7 @@ async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_t
     std::fs::write(workspace.path.join(".shoal.toml"), "not toml [").unwrap();
     manager.file_access.stall_rechecking(&workspace.path);
 
-    let target = crate::protocol::ConfigTarget::Workspace(workspace.id.clone());
+    let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
     let error = format!("{:#}", manager.config_layers_for(target).await.unwrap_err());
     let directory = workspace.path.parent().unwrap().display().to_string();
     assert!(
@@ -125,7 +126,7 @@ async fn a_workspace_in_a_stalled_directory_refuses_its_layers_without_reading_t
     assert!(format!("{settings:#}").contains("stalled"), "{settings:#}");
 
     manager.file_access.recover_at(&workspace.path);
-    let target = crate::protocol::ConfigTarget::Workspace(workspace.id.clone());
+    let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
     let error = format!("{:#}", manager.config_layers_for(target).await.unwrap_err());
     assert!(error.contains("TOML parse error"), "{error}");
 }

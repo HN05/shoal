@@ -12,6 +12,7 @@ use super::{
     processes::{self, ChatProcesses},
     recorded, stopped,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, release_decided_by},
@@ -162,7 +163,8 @@ impl Manager {
         );
         self.ensure_ended(saved, pid).await?;
         if let Some(workspace) = &saved.workspace {
-            self.chat_workspace(&workspace.id).await?;
+            self.chat_workspace(&SpaceSelector::id(&workspace.id))
+                .await?;
         }
         let repository = match &saved.repository_id {
             Some(id) => Some(self.reserve_repository_directory(id).await?),
@@ -260,12 +262,12 @@ impl Manager {
             .await
     }
 
-    /// The stopped chat `selector` names, by ID or name.
-    async fn saved_chat(&self, selector: &str) -> Result<Chat> {
-        self.recorded_chat(selector)
+    /// The stopped chat `id`.
+    async fn saved_chat(&self, id: &str) -> Result<Chat> {
+        self.chat_by_id(id)
             .await?
             .filter(|chat| chat.restore.is_some())
-            .with_context(|| format!("no stopped chat {selector}"))
+            .with_context(|| format!("no stopped chat {id}"))
     }
 
     /// Refuse the stopped `chat` while a process it owns still runs, other

@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 
 use super::{Manager, restore::RestoredFiles};
 use crate::client::space_names::SpaceName;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     git,
     model::{
@@ -27,8 +28,8 @@ struct Start {
 
 impl Manager {
     /// Create a workspace at the commit `start` names in `repository`: a
-    /// child of the space `parent`, a chat's ID or a workspace, or without
-    /// one a top-level workspace of the user's. It runs setup like any
+    /// child of the space `parent`, by ID, or without one a top-level
+    /// workspace of the user's. It runs setup like any
     /// workspace unless the caller skips it.
     pub async fn create_commit_workspace(
         &self,
@@ -37,10 +38,6 @@ impl Manager {
         start: CommitStart,
         options: CreationOptions,
     ) -> Result<Workspace> {
-        let parent = match parent {
-            Some(parent) => Some(self.parent_space(&parent).await?),
-            None => None,
-        };
         if let CommitStart::Copy(source) = start {
             let new = super::NewWorkspace {
                 options,
@@ -55,20 +52,6 @@ impl Manager {
             .await?;
         let (repo, _guard) = self.lock_repository(repository).await?;
         self.create_at_start(&repo, parent, start, options).await
-    }
-
-    /// The ID of the space `parent` names: a chat's ID, or a workspace's
-    /// name or ID.
-    async fn parent_space(&self, parent: &str) -> Result<String> {
-        let id = parent.to_owned();
-        let kind = self
-            .store
-            .run(move |db| crate::daemon::spaces::space_kind(db, &id))
-            .await?;
-        Ok(match kind {
-            Some(SpaceKind::Chat) => parent.to_owned(),
-            _ => self.workspace(parent).await?.id,
-        })
     }
 
     /// Open PR `url`'s `head` in a workspace at a commit in `repository`:
@@ -105,9 +88,12 @@ impl Manager {
             // workspace's child stays its parent's.
             let workspace = match workspace.parent {
                 Some(parent) if parent.kind == SpaceKind::Workspace => {
-                    self.workspace(&workspace.id).await?
+                    self.workspace_by_id(&workspace.id).await?
                 }
-                _ => self.give_to_parent(&workspace.id, parent).await?,
+                _ => {
+                    self.give_to_parent(&SpaceSelector::id(&workspace.id), parent)
+                        .await?
+                }
             };
             return Ok(OpenedWorkspace {
                 workspace,
@@ -259,7 +245,7 @@ impl Manager {
         commit: &str,
         reference: Option<&str>,
     ) -> Result<()> {
-        let workspace = self.workspace(id).await?;
+        let workspace = self.workspace_by_id(id).await?;
         let (repo, _guard) = self.lock_repository(&workspace.repository_id).await?;
         let reserved = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Updating)

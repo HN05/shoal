@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 
 #[tokio::test]
 async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head() {
@@ -71,7 +72,7 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         .keep_created(&workspace.id, ItemKind::Issue, &item(1), true)
         .await
         .unwrap_err();
-    let links = manager.workspace(&workspace.id).await.unwrap().links;
+    let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
     assert_eq!(links.opened.len(), 1);
 
     manager
@@ -83,7 +84,7 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         title: "Follow-up".into(),
         ..NewIssue::default()
     };
-    let context = ItemContext::Workspace(workspace.id.clone());
+    let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
     let error = manager
         .open_issue(&context, issue, None, false, None)
         .await
@@ -93,7 +94,12 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         "{error:#}"
     );
     let error = manager
-        .open_pull(&workspace.id, PullOptions::default(), false, None)
+        .open_pull(
+            &SpaceSelector::id(&workspace.id),
+            PullOptions::default(),
+            false,
+            None,
+        )
         .await
         .unwrap_err();
     assert!(
@@ -109,7 +115,7 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         .unwrap();
     assert!(!linked);
     assert!(warning.is_some());
-    let links = manager.workspace(&workspace.id).await.unwrap().links;
+    let links = manager.workspace_by_id(&workspace.id).await.unwrap().links;
     assert_eq!(links.opened.len(), 1);
     let created = manager
         .workspace_events(None, 100)

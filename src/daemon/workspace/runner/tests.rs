@@ -8,6 +8,7 @@ use std::{
 
 use serde_json::{Value, json};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::resources::ResourceRequest,
     daemon::{
@@ -369,7 +370,10 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
     assert!(job_entries(manager).await.is_empty());
     let claimed = manager.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
-    let workspace = manager.workspace(&claimed[0].workspace_id).await.unwrap();
+    let workspace = manager
+        .workspace_by_id(&claimed[0].workspace_id)
+        .await
+        .unwrap();
     assert_eq!(workspace.name, "ci-rust-4");
     assert_eq!(workspace.repository_id, fixture.repository);
     assert_eq!(workspace.branch, None);
@@ -421,14 +425,14 @@ async fn a_claimed_job_runs_the_forges_runner_in_its_own_workspace_until_it_ends
 
     // A running job keeps its workspace.
     manager.finish_ended_jobs().await.unwrap();
-    assert!(manager.workspace(&workspace.id).await.is_ok());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_ok());
 
     manager
         .finish_execution(started.plan.id.clone(), ExecutionKind::Command, Some(0))
         .await
         .unwrap();
     manager.finish_ended_jobs().await.unwrap();
-    assert!(manager.workspace(&workspace.id).await.is_err());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
     assert!(!directory.exists());
 }
@@ -484,7 +488,7 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
         queue: false,
     };
     manager
-        .acquire_resource(&other.id, request, None)
+        .acquire_resource(&SpaceSelector::id(&other.id), request, None)
         .await
         .unwrap();
 
@@ -493,7 +497,7 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
     assert_eq!(waiting.len(), 1);
     assert_eq!(waiting[0].state, QueueState::Queued);
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
-    assert!(manager.workspace("ci-rust-4").await.is_err());
+    assert!(manager.workspace(&"ci-rust-4".into()).await.is_err());
     // It waits a while before admission tries it again.
     manager.dispatch_queue().await.unwrap();
     assert!(manager.admitted_jobs().await.unwrap().is_empty());
@@ -501,14 +505,18 @@ async fn a_job_waits_while_its_permit_pool_is_full() {
     // Once the pool has a permit, the job holds it while it runs.
     manager.runners.forget_permits_busy();
     manager
-        .release_resource(&other.id, "builds".into(), "held".into())
+        .release_resource(
+            &SpaceSelector::id(&other.id),
+            "builds".into(),
+            "held".into(),
+        )
         .await
         .unwrap();
     admit_and_claim(manager).await;
     let claimed = manager.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     let leases = manager
-        .list_resources(Some(&claimed[0].workspace_id))
+        .list_resources(Some(&SpaceSelector::id(&claimed[0].workspace_id)))
         .await
         .unwrap();
     assert_eq!(leases.len(), 1);
@@ -551,7 +559,12 @@ async fn a_restart_during_a_claim_keeps_a_started_command_and_removes_the_rest()
     forget_execution().await.unwrap();
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
-    assert!(manager.workspace(&claimed[0].workspace_id).await.is_err());
+    assert!(
+        manager
+            .workspace_by_id(&claimed[0].workspace_id)
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -669,7 +682,7 @@ async fn stopping_a_jobs_workspace_cancels_its_run_and_leaves_the_end_to_the_for
 
     let stopped = manager
         .stop_workspace_manually(
-            &claimed[0].workspace_id,
+            &SpaceSelector::id(&claimed[0].workspace_id),
             false,
             None,
             crate::protocol::QueuedLaunches::Cancel,
@@ -777,7 +790,7 @@ async fn daemon_exit_with_runner(job: Value, ending: Ending) -> Fixture {
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: workspace.clone(),
+            workspace: SpaceSelector::parse(&workspace),
             wrapper: wrapper.clone(),
             kind: ExecutionKind::Command,
             agent: None,
@@ -846,7 +859,7 @@ async fn a_job_admitted_as_the_system_shuts_down_waits_in_the_queue() {
     assert_eq!(waiting.len(), 1);
     assert_eq!(waiting[0].state, QueueState::Queued);
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
-    assert!(manager.workspace("ci-rust-4").await.is_err());
+    assert!(manager.workspace(&"ci-rust-4".into()).await.is_err());
     manager.agent_queue.suspend(false).await;
 }
 
@@ -895,20 +908,20 @@ async fn a_claim_a_restart_cut_short_gives_its_permit_back_before_the_job_is_cla
         queue: false,
     };
     manager
-        .acquire_resource(&workspace.id, request, None)
+        .acquire_resource(&SpaceSelector::id(&workspace.id), request, None)
         .await
         .unwrap();
 
     // The cut-short claim's workspace goes with its permit, and the job,
     // still admitted, is claimed again.
     manager.finish_ended_jobs().await.unwrap();
-    assert!(manager.workspace(&workspace.id).await.is_err());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     manager.claim_job(entry).await;
     let claimed = manager.claimed_jobs().await.unwrap();
     assert_eq!(claimed.len(), 1);
     assert_ne!(claimed[0].workspace_id, workspace.id);
     let leases = manager
-        .list_resources(Some(&claimed[0].workspace_id))
+        .list_resources(Some(&SpaceSelector::id(&claimed[0].workspace_id)))
         .await
         .unwrap();
     assert_eq!(leases.len(), 1);
@@ -1082,5 +1095,10 @@ async fn a_runner_gone_while_the_daemon_was_away_gives_its_job_up_once_nothing_o
     // Once nothing of it runs, the job ends here.
     manager.finish_ended_jobs().await.unwrap();
     assert!(manager.claimed_jobs().await.unwrap().is_empty());
-    assert!(manager.workspace(&claimed[0].workspace_id).await.is_err());
+    assert!(
+        manager
+            .workspace_by_id(&claimed[0].workspace_id)
+            .await
+            .is_err()
+    );
 }

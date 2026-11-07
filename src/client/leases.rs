@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::Result;
 use tokio::time::sleep;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         approvals::{ApprovalRequest, DecisionStatus},
@@ -81,7 +82,7 @@ pub enum PortAcquisition {
 /// Reserve the port `name` for `workspace`.
 pub async fn acquire_port(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     name: String,
     request: PortRequest,
 ) -> Result<PortAcquisition> {
@@ -98,23 +99,27 @@ pub async fn acquire_port(
     }
 }
 
-pub async fn release_port(daemon: &impl Daemon, workspace: String, name: String) -> Result<()> {
+pub async fn release_port(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    name: String,
+) -> Result<()> {
     request(daemon, PortMethod::PortRelease { workspace, name }).await
 }
 
 /// The ports `workspace` reserved.
-pub async fn ports(daemon: &impl Daemon, workspace: String) -> Result<PortOverview> {
+pub async fn ports(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<PortOverview> {
     request(daemon, PortMethod::PortOverview { workspace }).await
 }
 
 /// The ports `workspace`'s repository configures, and the automatic range.
-pub async fn port_catalog(daemon: &impl Daemon, workspace: String) -> Result<PortCatalog> {
+pub async fn port_catalog(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<PortCatalog> {
     request(daemon, PortMethod::PortCatalog { workspace }).await
 }
 
 pub async fn acquire_simulator(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     request: SimRequest,
 ) -> Result<Acquisition<Simulator>> {
     self::request(daemon, SimulatorMethod::SimAcquire { workspace, request }).await
@@ -122,7 +127,7 @@ pub async fn acquire_simulator(
 
 pub async fn release_simulator(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     name: String,
 ) -> Result<()> {
     request(daemon, SimulatorMethod::SimRelease { workspace, name }).await
@@ -131,7 +136,7 @@ pub async fn release_simulator(
 /// The simulators `workspace` leases, or every workspace's.
 pub async fn simulators(
     daemon: &impl Daemon,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<SimulatorOverview> {
     request(daemon, SimulatorMethod::SimOverview { workspace }).await
 }
@@ -139,7 +144,7 @@ pub async fn simulators(
 /// The simulator devices `workspace` sees, or every one.
 pub async fn simulator_devices(
     daemon: &impl Daemon,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
 ) -> Result<Vec<Simulator>> {
     request(daemon, SimulatorMethod::SimList { workspace }).await
 }
@@ -147,7 +152,7 @@ pub async fn simulator_devices(
 /// The simulator profiles and runtimes `workspace` may lease.
 pub async fn simulator_catalog(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
 ) -> Result<SimulatorCatalog> {
     request(daemon, SimulatorMethod::SimCatalog { workspace }).await
 }
@@ -156,7 +161,7 @@ pub async fn simulator_catalog(
 /// workspace, before the Unix time `before`.
 pub async fn simulator_history(
     daemon: &impl Daemon,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     limit: u32,
     before: Option<i64>,
 ) -> Result<Vec<AuditEntry>> {
@@ -170,7 +175,7 @@ pub async fn simulator_history(
 
 pub async fn acquire_resource(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     request: ResourceRequest,
 ) -> Result<Acquisition<ResourceLease>> {
     self::request(
@@ -182,7 +187,7 @@ pub async fn acquire_resource(
 
 pub async fn release_resource(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     pool: String,
     name: String,
 ) -> Result<()> {
@@ -195,18 +200,18 @@ pub async fn release_resource(
 }
 
 /// The resource pools `workspace` sees and the permits it holds.
-pub async fn resources(daemon: &impl Daemon, workspace: String) -> Result<Overview> {
+pub async fn resources(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Overview> {
     request(daemon, ResourceMethod::ResourceOverview { workspace }).await
 }
 
 /// The resource pools `workspace`'s configuration defines.
-pub async fn resource_catalog(daemon: &impl Daemon, workspace: String) -> Result<Catalog> {
+pub async fn resource_catalog(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Catalog> {
     request(daemon, ResourceMethod::ResourceCatalog { workspace }).await
 }
 
 pub async fn acquire_secret(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     name: String,
     request: SecretRequest,
 ) -> Result<Acquisition<SecretGrant>> {
@@ -218,19 +223,26 @@ pub async fn acquire_secret(
     self::request(daemon, method).await
 }
 
-pub async fn release_secret(daemon: &impl Daemon, workspace: String, name: String) -> Result<()> {
+pub async fn release_secret(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    name: String,
+) -> Result<()> {
     request(daemon, SecretMethod::SecretRelease { workspace, name }).await
 }
 
 /// The secrets `workspace`'s configuration defines.
-pub async fn secret_catalog(daemon: &impl Daemon, workspace: String) -> Result<SecretCatalog> {
+pub async fn secret_catalog(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+) -> Result<SecretCatalog> {
     request(daemon, SecretMethod::SecretCatalog { workspace }).await
 }
 
 /// Hold `workspace` against cleanup as `name`, for `reason`.
 pub async fn acquire_hold(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     name: String,
     reason: Option<String>,
 ) -> Result<Acquisition<WorkspaceHold>> {
@@ -242,12 +254,16 @@ pub async fn acquire_hold(
     request(daemon, method).await
 }
 
-pub async fn release_hold(daemon: &impl Daemon, workspace: String, name: String) -> Result<()> {
+pub async fn release_hold(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    name: String,
+) -> Result<()> {
     request(daemon, HoldMethod::HoldRelease { workspace, name }).await
 }
 
 /// The holds on `workspace`.
-pub async fn holds(daemon: &impl Daemon, workspace: String) -> Result<Vec<WorkspaceHold>> {
+pub async fn holds(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Vec<WorkspaceHold>> {
     request(daemon, HoldMethod::HoldList { workspace }).await
 }
 

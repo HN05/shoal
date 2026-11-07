@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 
 #[test]
 fn numstat_counts_text_and_binary_files() {
@@ -26,8 +27,15 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
         .await
         .unwrap();
     // A saved conflict check makes status read HEAD.
-    manager.check_conflicts(&workspace.id, None).await.unwrap();
-    let status = manager.worktree_status(&workspace.id).await.unwrap().0;
+    manager
+        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
+    let status = manager
+        .worktree_status(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap()
+        .0;
     assert!(status.diff.is_some(), "{:?}", status.diff_error);
     assert!(status.changed_on_both_sides.is_some());
 
@@ -38,7 +46,11 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
     tokio::time::resume();
     assert!(stalled.is_err());
 
-    let status = manager.worktree_status(&workspace.id).await.unwrap().0;
+    let status = manager
+        .worktree_status(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap()
+        .0;
     assert!(status.diff.is_none());
     assert!(status.changed_on_both_sides.is_none());
     assert!(status.diff_error.is_some());

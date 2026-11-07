@@ -1,4 +1,5 @@
 use crate::client::recovery::ReconcileOptions;
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 /// Requests that keep, restore and repair workspace state: checkpoints and reconciliation.
@@ -7,20 +8,23 @@ use serde::{Deserialize, Serialize};
 pub enum RecoveryMethod {
     /// Keep the workspace's HEAD and unsaved files in a new checkpoint.
     Checkpoint {
-        workspace: String,
+        workspace: SpaceSelector,
         name: Option<String>,
     },
     /// A page of an existing workspace's checkpoints numbered after `after`;
     /// none when no workspace matches.
     Checkpoints {
-        workspace: String,
+        workspace: SpaceSelector,
         after: Option<u64>,
     },
     /// Return a workspace to one of its checkpoints.
-    RestoreCheckpoint { workspace: String, checkpoint: u64 },
+    RestoreCheckpoint {
+        workspace: SpaceSelector,
+        checkpoint: u64,
+    },
     /// Inspect one workspace, or all, and with `options` repair what verifies.
     Reconcile {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         options: ReconcileOptions,
     },
 }

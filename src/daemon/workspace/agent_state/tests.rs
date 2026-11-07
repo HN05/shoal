@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
@@ -51,8 +52,8 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
         })
         .await
         .unwrap();
-    let report =
-        |state| manager.set_agent_state(&workspace.name, state, Some("agent".into()), None);
+    let selected = SpaceSelector::from(&workspace.name);
+    let report = |state| manager.set_agent_state(&selected, state, Some("agent".into()), None);
 
     let working = report(AgentState::Working).await.unwrap();
     // A repeated state keeps its start time and records no change.
@@ -70,7 +71,11 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
     assert_eq!(waiting.state, AgentState::Waiting);
     assert!(waiting.since >= working.since);
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().agent_state,
+        manager
+            .workspace_by_id(&workspace.id)
+            .await
+            .unwrap()
+            .agent_state,
         Some(waiting)
     );
 
@@ -83,7 +88,11 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
         .await
         .unwrap();
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().agent_state,
+        manager
+            .workspace_by_id(&workspace.id)
+            .await
+            .unwrap()
+            .agent_state,
         None
     );
     assert_eq!(
@@ -94,7 +103,12 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
     // A report from outside a tracked execution stays until replaced, and
     // removal takes it without an event.
     manager
-        .set_agent_state(&workspace.name, AgentState::Idle, None, None)
+        .set_agent_state(
+            &SpaceSelector::from(&workspace.name),
+            AgentState::Idle,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let id = workspace.id.clone();
@@ -128,7 +142,7 @@ async fn workspaces_show_no_state_while_the_reporting_execution_is_unknown() {
     set_execution(ExecutionState::Running).await.unwrap();
     let idle = manager
         .set_agent_state(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             AgentState::Idle,
             Some("agent".into()),
             None,
@@ -138,14 +152,22 @@ async fn workspaces_show_no_state_while_the_reporting_execution_is_unknown() {
 
     set_execution(ExecutionState::Unknown).await.unwrap();
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().agent_state,
+        manager
+            .workspace_by_id(&workspace.id)
+            .await
+            .unwrap()
+            .agent_state,
         None
     );
 
     // A wrapper that reattaches brings its state back.
     set_execution(ExecutionState::Running).await.unwrap();
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().agent_state,
+        manager
+            .workspace_by_id(&workspace.id)
+            .await
+            .unwrap()
+            .agent_state,
         Some(idle)
     );
 }
@@ -169,7 +191,12 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         )
         .await;
     let child = manager
-        .split_workspace(&own.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&own.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for (target, allowed) in [
@@ -178,7 +205,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         (&child.name, false),
     ] {
         let mut method = AgentMethod::SetAgentState {
-            workspace: target.to_string(),
+            workspace: SpaceSelector::parse(target),
             state: AgentState::Waiting,
             session: None,
             turn_end: None,
@@ -194,7 +221,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
     // execution it reports for.
     for (execution, allowed) in [(None, true), (Some("another".to_owned()), false)] {
         let mut method = AgentMethod::ReportTurnFailure {
-            workspace: own.name.to_string(),
+            workspace: SpaceSelector::parse(&own.name),
             failure: TurnFailure::Overloaded,
             session: None,
             execution,
@@ -221,12 +248,17 @@ async fn a_failed_turn_leaves_the_agent_idle() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&manager, &temp).await;
     manager
-        .set_agent_state(&workspace.name, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::from(&workspace.name),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let status = manager
         .report_turn_failure(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             TurnFailure::Overloaded,
             None,
             None,
@@ -267,7 +299,7 @@ async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
     for execution in ["stopped", "exited"] {
         manager
             .set_agent_state(
-                &workspace.name,
+                &SpaceSelector::from(&workspace.name),
                 AgentState::Idle,
                 Some(execution.into()),
                 None,
@@ -296,21 +328,26 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
         ..TurnEnd::default()
     };
     let ended = manager
-        .end_agent_turn(&workspace.name, None, None, hour)
+        .end_agent_turn(&SpaceSelector::from(&workspace.name), None, None, hour)
         .await
         .unwrap();
     assert_eq!(ended.state, AgentState::Idle);
     assert_eq!(ended.prompt_cache_expires_at, Some(ended.since + 3600));
     // Another idle report, such as an idle prompt's, keeps the expiry.
     let repeated = manager
-        .set_agent_state(&workspace.name, AgentState::Idle, None, None)
+        .set_agent_state(
+            &SpaceSelector::from(&workspace.name),
+            AgentState::Idle,
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(repeated, ended);
     // Working drops it, and idle without an ended turn knows none.
     for state in [AgentState::Working, AgentState::Idle] {
         let status = manager
-            .set_agent_state(&workspace.name, state, None, None)
+            .set_agent_state(&SpaceSelector::from(&workspace.name), state, None, None)
             .await
             .unwrap();
         assert_eq!(status.prompt_cache_expires_at, None, "{state:?}");
@@ -318,11 +355,21 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
     // A turn whose agent knows no lifetime gets the default one. Working
     // first makes the turn's end start a new `since`.
     manager
-        .set_agent_state(&workspace.name, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::from(&workspace.name),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let unknown = manager
-        .end_agent_turn(&workspace.name, None, None, TurnEnd::default())
+        .end_agent_turn(
+            &SpaceSelector::from(&workspace.name),
+            None,
+            None,
+            TurnEnd::default(),
+        )
         .await
         .unwrap();
     assert_eq!(unknown.prompt_cache_expires_at, Some(unknown.since + 1800));
@@ -359,7 +406,12 @@ async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
         ..TurnEnd::default()
     };
     let ended = manager
-        .end_agent_turn(&workspace.name, Some(started.plan.id), None, reported)
+        .end_agent_turn(
+            &SpaceSelector::from(&workspace.name),
+            Some(started.plan.id),
+            None,
+            reported,
+        )
         .await
         .unwrap();
     assert_eq!(ended.prompt_cache_expires_at, Some(ended.since + 300));

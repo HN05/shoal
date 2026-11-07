@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agents::PromptWake,
     client::connection,
@@ -111,7 +112,7 @@ const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 
 async fn request(paths: &Paths, workspace: &str, due: bool, hooked: Option<String>) -> Result<()> {
     let method = AgentMethod::AwaitAgentWake {
-        workspace: workspace.to_owned(),
+        workspace: SpaceSelector::parse(workspace),
         due,
         hooked,
     };

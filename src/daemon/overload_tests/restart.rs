@@ -1,6 +1,7 @@
 //! Daemon interruptions of stopped agents: a restart quarantines their
 //! executions, and startup reconciles them from their recovery records.
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     execution::recovery::{Record, Stage, record_path},
     model::{Execution, Workspace},
@@ -21,7 +22,7 @@ async fn restart(manager: &Manager) -> Arc<Manager> {
 
 async fn executions(manager: &Manager, workspace: &Workspace) -> Vec<Execution> {
     manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions
@@ -497,7 +498,7 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
     assert!(record(&reopened, &workspace, &id).is_none());
     assert!(blocked(&reopened).await.is_empty());
     // A stop the agent receives saves the wrapper's record as usual.
-    bounded(reopened.stop_workspace(&workspace.id, StopRequest::manual()))
+    bounded(reopened.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);

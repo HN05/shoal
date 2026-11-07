@@ -5,6 +5,7 @@ use std::ffi::OsString;
 use anyhow::Result;
 
 use super::{AddOptions, target::AddTarget};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent_queue::{AddPlan, Creation, ResolvedAddAgent},
     cli::{
@@ -114,8 +115,8 @@ pub(in crate::cli) async fn item_context(
     repo: &Repository,
 ) -> Result<ItemContext> {
     Ok(match (&plan.workspace, &plan.chat) {
-        (Some(workspace), _) => ItemContext::Workspace(workspace.clone()),
-        (None, Some(chat)) => ItemContext::Chat(chat.clone()),
+        (Some(workspace), _) => ItemContext::Workspace(SpaceSelector::parse(workspace)),
+        (None, Some(chat)) => ItemContext::Chat(SpaceSelector::parse(chat)),
         (None, None) => issues::read_context(ctx, repo).await?,
     })
 }
@@ -142,7 +143,7 @@ pub(super) async fn check_add_creation(
         base: creation.base.clone(),
         git_profile: creation.git_profile.clone(),
         path: creation.path.clone(),
-        parent,
+        parent: parent.as_deref().map(SpaceSelector::id),
         options: creation.options,
     };
     crate::client::workspaces::check_creation(&ctx.paths, planned).await

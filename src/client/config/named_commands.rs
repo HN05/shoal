@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::connection::Daemon, config::placeholders::render_os as render, model::Workspace,
 };
@@ -98,7 +99,8 @@ async fn diff_base(
     if !uses_diff_base(argv) {
         return Ok(None);
     }
-    let base = crate::client::workspaces::diff_base(daemon, workspace.id.clone()).await?;
+    let base =
+        crate::client::workspaces::diff_base(daemon, SpaceSelector::id(&workspace.id)).await?;
     Ok(Some(base.commit))
 }
 

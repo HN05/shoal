@@ -15,6 +15,7 @@ pub(crate) use crate::client::sim::{
 use audit::CleanRequest;
 use simctl::Inventory;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{allocation::Allocation, approvals, queue, scope::Caller, workspace::Manager},
     model::Workspace,
@@ -89,7 +90,7 @@ fn available(runtimes: Vec<simctl::Runtime>) -> Vec<simctl::Runtime> {
 }
 
 impl Manager {
-    pub async fn simulator_catalog(&self, selector: &str) -> Result<SimulatorCatalog> {
+    pub async fn simulator_catalog(&self, selector: &SpaceSelector) -> Result<SimulatorCatalog> {
         let workspace = self.workspace(selector).await?;
         let config = self.config();
         let preferred = self
@@ -111,14 +112,20 @@ impl Manager {
         })
     }
 
-    pub async fn simulator_overview(&self, selector: Option<&str>) -> Result<SimulatorOverview> {
+    pub async fn simulator_overview(
+        &self,
+        selector: Option<&SpaceSelector>,
+    ) -> Result<SimulatorOverview> {
         Ok(SimulatorOverview {
             simulators: self.selected_simulators(selector).await?,
         })
     }
 
     /// The simulators of the workspace `selector` names, or all of them.
-    pub async fn selected_simulators(&self, selector: Option<&str>) -> Result<Vec<Simulator>> {
+    pub async fn selected_simulators(
+        &self,
+        selector: Option<&SpaceSelector>,
+    ) -> Result<Vec<Simulator>> {
         let owner = self.workspace_filter(selector).await?;
         self.list_simulators(owner.as_deref()).await
     }
@@ -203,7 +210,7 @@ impl Manager {
 
     pub async fn acquire_simulator(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         request: SimRequest,
         caller: Option<&Caller>,
     ) -> Result<Allocation<Box<Simulator>>> {
@@ -468,7 +475,7 @@ impl Manager {
         // Removal may have started while simctl was running. Its cleanup waits
         // for our gate, so retain the claim and let that path remove it.
         ensure!(
-            self.workspace(&workspace.id).await?.state == WorkspaceState::Ready,
+            self.workspace_by_id(&workspace.id).await?.state == WorkspaceState::Ready,
             "workspace removal started during simulator boot"
         );
         Ok(())
@@ -492,7 +499,7 @@ impl Manager {
         )
     }
 
-    pub async fn release_simulator(&self, selector: &str, name: String) -> Result<()> {
+    pub async fn release_simulator(&self, selector: &SpaceSelector, name: String) -> Result<()> {
         let _guard = self.gates.lock_simulators().await;
         let workspace = self.workspace(selector).await?;
         ensure!(

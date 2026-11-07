@@ -3,6 +3,7 @@
 //! process or a chat's agent, the user's own logins otherwise.
 use anyhow::{Context, Result};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::connection::{Daemon, pages, request},
     forge::{
@@ -219,7 +220,7 @@ pub async fn merge_warning(
 /// reverting its merge needs.
 pub async fn merged_pull(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     item: Option<String>,
 ) -> Result<MergedPull> {
     request(daemon, ItemMethod::MergedPull { space, item }).await

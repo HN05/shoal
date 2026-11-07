@@ -2,12 +2,13 @@
 use anyhow::{Context, Result, ensure};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{git, model::DiffBase};
 
 impl Manager {
     /// The commit `shoal diff` compares against: the fork point from the
     /// recorded base ref, falling back to a plain merge base.
-    pub async fn diff_base(&self, selector: &str) -> Result<DiffBase> {
+    pub async fn diff_base(&self, selector: &SpaceSelector) -> Result<DiffBase> {
         let workspace = self.workspace(selector).await?;
         // Git reads the recorded path only while the workspace's own
         // worktree is there, not a checkout that replaced it.

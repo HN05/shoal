@@ -5,6 +5,7 @@ use std::{collections::BTreeMap, time::Duration};
 use anyhow::Result;
 use tokio::{io::AsyncReadExt as _, sync::oneshot};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, open, request, stream_closed},
@@ -53,7 +54,7 @@ pub async fn move_entry(
 
 /// Record `workspace` as the one the starting `entry` opened, or the
 /// existing one the waiting launch `entry` opens.
-pub async fn attach(daemon: &impl Daemon, entry: String, workspace: String) -> Result<()> {
+pub async fn attach(daemon: &impl Daemon, entry: String, workspace: SpaceSelector) -> Result<()> {
     request(daemon, QueueMethod::QueueAttach { entry, workspace }).await
 }
 
@@ -67,7 +68,7 @@ pub async fn fail(daemon: &impl Daemon, entry: String, error: String) -> Result<
 /// with `env`, at once regardless of the limits when `now`.
 pub async fn restore(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     execution: String,
     env: BTreeMap<String, String>,
     now: bool,

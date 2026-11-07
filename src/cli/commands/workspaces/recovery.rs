@@ -1,6 +1,7 @@
 //! Reconciling a workspace's record with its worktree and processes.
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::context::Context,
     client::recovery::{ReconcileOptions, Report},
@@ -12,7 +13,8 @@ pub(super) async fn reconcile(
     workspace: &Workspace,
     options: ReconcileOptions,
 ) -> Result<Vec<Report>> {
-    crate::client::recovery::reconcile(&ctx.paths, Some(workspace.id.clone()), options).await
+    crate::client::recovery::reconcile(&ctx.paths, Some(SpaceSelector::id(&workspace.id)), options)
+        .await
 }
 
 /// The problems `reports` leave, joined for a message.

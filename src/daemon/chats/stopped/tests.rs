@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{chats::saved::tests::running_chat, test_support::manager},
     process::identity,
@@ -12,8 +13,11 @@ async fn a_stop_of_a_chat_removed_meanwhile_records_nothing_and_goes_on() {
     // the chat is removed before the next round.
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    manager.remove_chat(&chat.id, None).await.unwrap();
-    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_none());
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
+    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_none());
 
     manager
         .record_chat_stopping(&chat.id, vec![agent])

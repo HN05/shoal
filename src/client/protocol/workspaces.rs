@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ConfigTarget;
 use super::Lifetime;
+use crate::client::space_names::SpaceSelector;
 use crate::config::hooks::HookKind;
 
 /// Requests that create, find, inspect and change workspaces.
@@ -16,7 +17,7 @@ pub enum WorkspaceMethod {
         base: Option<String>,
         /// The space opening the workspace, which it goes below; `None`
         /// gives it to the user.
-        parent: Option<String>,
+        parent: Option<SpaceSelector>,
         /// Apply only when opening creates a new worktree.
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
@@ -29,18 +30,18 @@ pub enum WorkspaceMethod {
         git_profile: Option<String>,
         /// The space opening the workspace, which it goes below; `None`
         /// gives it to the user.
-        parent: Option<String>,
+        parent: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
     /// Reopen the existing `workspace` for a launch in it, never creating one.
     ReopenWorkspace {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     /// Create a workspace on a new branch in `workspace`'s repository, split
     /// from it as its child.
     SplitWorkspace {
-        workspace: String,
+        workspace: SpaceSelector,
         name: String,
         base: Option<String>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
@@ -50,7 +51,7 @@ pub enum WorkspaceMethod {
     /// space `parent`, or without one a top-level workspace of the user's.
     CreateCommitWorkspace {
         repository: crate::client::repository::Selector,
-        parent: Option<String>,
+        parent: Option<SpaceSelector>,
         start: CommitStart,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
@@ -63,7 +64,7 @@ pub enum WorkspaceMethod {
         repository: crate::client::repository::Selector,
         url: String,
         head: PullHead,
-        parent: Option<String>,
+        parent: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
@@ -82,7 +83,7 @@ pub enum WorkspaceMethod {
         /// The space the workspace would be below, which must be in the
         /// repository.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        parent: Option<String>,
+        parent: Option<SpaceSelector>,
     },
     /// Refuse the work `after` names that a queued launch in `repository`
     /// could not wait for, without queuing anything.
@@ -96,7 +97,7 @@ pub enum WorkspaceMethod {
         copy: bool,
     },
     RenameWorkspace {
-        workspace: String,
+        workspace: SpaceSelector,
         branch: String,
     },
     ListWorkspaces,
@@ -109,82 +110,82 @@ pub enum WorkspaceMethod {
     },
     /// Give the workspace a title its places show, or clear it without one.
     SetWorkspaceTitle {
-        workspace: String,
+        workspace: SpaceSelector,
         title: Option<String>,
     },
     /// The places Shoal created for the workspace.
     WorkspacePlaces {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     /// Record or clear the workspace whose branch this one builds on.
     SetBaseWorkspace {
-        workspace: String,
+        workspace: SpaceSelector,
         base: Option<String>,
     },
     InspectWorkspace {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     /// The workspace record once its worktree identity is verified, and with
     /// `on_branch` that it is on its recorded branch, before the CLI changes Git
     /// state through it.
     VerifyWorkspace {
-        workspace: String,
+        workspace: SpaceSelector,
         on_branch: bool,
     },
     /// Fast-forward the workspace recorded on `branch` to the fetched
     /// `origin/<branch>`, refusing a worktree that is not the recorded one on it.
     FastForwardWorkspace {
-        workspace: String,
+        workspace: SpaceSelector,
         branch: String,
     },
     WorkspaceEnv {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     RevokeWorkspaceEnv {
-        workspace: String,
+        workspace: SpaceSelector,
         token: String,
     },
     /// The status of a workspace or chat, running or stopped.
     SpaceStatus {
-        space: String,
+        space: SpaceSelector,
     },
     /// The sessions the agents of a workspace or chat reported.
     SpaceSessions {
-        space: String,
+        space: SpaceSelector,
     },
     /// Write a copy of a workspace or chat for another Shoal to the new file
     /// `file`, leaving it running: a workspace at its checkpoint
     /// `checkpoint`, or at a new one.
     CopySpace {
-        space: String,
+        space: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         checkpoint: Option<u64>,
         file: std::path::PathBuf,
     },
     DiffBase {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     Conflicts {
-        workspace: String,
+        workspace: SpaceSelector,
         target: Option<String>,
     },
     /// What merging the workspace into the default branch does, after the
     /// checks the merge makes before it changes anything; with `push`, the
     /// merge pushes the default branch afterwards.
     PreviewMerge {
-        workspace: String,
+        workspace: SpaceSelector,
         push: bool,
     },
     /// Keep where an agent of the workspace keeps its configuration, before
     /// Shoal trusts the workspace there, until the repository's removal.
     KeepAgentEnvironment {
-        workspace: String,
+        workspace: SpaceSelector,
         environment: std::collections::BTreeMap<String, String>,
     },
     /// Record a place Shoal created for the workspace, which it closes once
     /// the workspace is removed.
     RecordOwnedPlace {
-        workspace: String,
+        workspace: SpaceSelector,
         origin: crate::client::sessions::Origin,
     },
     /// The places Shoal created for every workspace.
@@ -193,17 +194,17 @@ pub enum WorkspaceMethod {
     /// daemon's record still names that workspace its owner. The workspace
     /// may already be removed.
     CloseOwnedPlace {
-        workspace: String,
+        workspace: SpaceSelector,
         place: crate::client::sessions::Origin,
     },
     /// Whose `place` is, as the daemon knows it for `workspace`.
     PlaceOwnership {
-        workspace: String,
+        workspace: SpaceSelector,
         place: crate::client::sessions::Origin,
     },
     /// One effective hook, resolved against the directory where it runs.
     WorkspaceHook {
-        workspace: String,
+        workspace: SpaceSelector,
         kind: HookKind,
     },
     /// The repository layer of the target's config, for the CLI to resolve
@@ -255,9 +256,9 @@ pub enum CommitStart {
 /// checkpoints, of a live or a removed workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CopySource {
-    /// The workspace's name or ID; a removed workspace's only with
-    /// `checkpoint`.
-    pub workspace: String,
+    /// The workspace's number, name or ID; a removed workspace's name or
+    /// ID only with `checkpoint`.
+    pub workspace: SpaceSelector,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkpoint: Option<u64>,
 }

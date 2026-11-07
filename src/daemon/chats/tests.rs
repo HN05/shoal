@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events::{ChatEventKind, EventItem, EventKind},
@@ -78,7 +79,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         .unwrap();
     assert_eq!(
         manager
-            .workspace(&workspace.id)
+            .workspace_by_id(&workspace.id)
             .await
             .unwrap()
             .parent
@@ -92,7 +93,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
         .unwrap();
     assert_eq!(
         manager
-            .workspace(&workspace.id)
+            .workspace_by_id(&workspace.id)
             .await
             .unwrap()
             .parent
@@ -124,7 +125,7 @@ async fn chats_stop_with_their_process_and_keep_the_workspaces_they_open() {
     );
     assert_eq!(
         manager
-            .workspace(&workspace.id)
+            .workspace_by_id(&workspace.id)
             .await
             .unwrap()
             .parent
@@ -192,7 +193,7 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
     assert_eq!(chat.session, None);
     let reported = manager
         .set_agent_state(
-            "reporter",
+            &"reporter".into(),
             crate::state::AgentState::Idle,
             None,
             Some("session-1".into()),
@@ -203,7 +204,12 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
     // A report without a session, or with another, keeps the latest one.
     for session in [None, Some("session-2".into())] {
         manager
-            .set_agent_state(&chat.id, crate::state::AgentState::Idle, None, session)
+            .set_agent_state(
+                &SpaceSelector::id(&chat.id),
+                crate::state::AgentState::Idle,
+                None,
+                session,
+            )
             .await
             .unwrap();
     }
@@ -211,7 +217,7 @@ async fn a_chat_keeps_the_session_its_agent_reports() {
     assert_eq!(chats[0].session.as_deref(), Some("session-2"));
     manager
         .set_agent_state(
-            &chat.id,
+            &SpaceSelector::id(&chat.id),
             crate::state::AgentState::Idle,
             None,
             Some("../escape".into()),
@@ -247,7 +253,8 @@ async fn a_chat_shows_its_agents_turn_state_until_it_stops() {
         chats[0].agent_state.map(|status| status.state)
     };
     assert_eq!(shown().await, None);
-    let report = |state| manager.set_agent_state(&chat.id, state, None, None);
+    let selected = SpaceSelector::id(&chat.id);
+    let report = |state| manager.set_agent_state(&selected, state, None, None);
     report(crate::state::AgentState::Waiting).await.unwrap();
     assert_eq!(shown().await, Some(crate::state::AgentState::Waiting));
 
@@ -454,7 +461,7 @@ async fn chats_and_workspaces_share_one_namespace() {
     );
     assert!(
         manager
-            .rename_workspace(&worker.id, "talk", None)
+            .rename_workspace(&SpaceSelector::id(&worker.id), "talk", None)
             .await
             .is_err()
     );
@@ -468,13 +475,13 @@ async fn chats_and_workspaces_share_one_namespace() {
             .await
             .is_err()
     );
-    manager.remove_chat("talk", None).await.unwrap();
+    manager.remove_chat(&"talk".into(), None).await.unwrap();
     manager
         .check_creation(&repo.id, Some("talk"), None, options)
         .await
         .unwrap();
     let renamed = manager
-        .rename_workspace(&worker.id, "talk", None)
+        .rename_workspace(&SpaceSelector::id(&worker.id), "talk", None)
         .await
         .unwrap();
     assert_eq!(renamed.name, "talk");
@@ -675,7 +682,10 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     process.kill();
     assert!(manager.chats().await.unwrap()[0].restore.is_some());
     assert!(tmp_dir.exists());
-    manager.remove_chat(&chat.id, None).await.unwrap();
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
     assert!(!tmp_dir.exists());
 
@@ -729,7 +739,12 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
         .await
         .unwrap();
     let split = manager
-        .split_workspace(&opened.id, "split".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&opened.id),
+            "split".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let other = manager
@@ -740,18 +755,18 @@ async fn removing_a_chat_removes_the_workspaces_below_it_first_and_stops_its_age
     // A removal the user confirmed for fewer spaces than are below it takes
     // none of them, and the chat stays.
     manager
-        .remove_chat("talk", Some(vec![opened.id.clone()]))
+        .remove_chat(&"talk".into(), Some(vec![opened.id.clone()]))
         .await
         .unwrap_err();
-    assert!(manager.workspace(&split.id).await.is_ok());
-    assert!(manager.recorded_chat("talk").await.unwrap().is_some());
+    assert!(manager.workspace_by_id(&split.id).await.is_ok());
+    assert!(manager.chat(&"talk".into()).await.is_ok());
 
-    let removed = manager.remove_chat("talk", None).await.unwrap();
+    let removed = manager.remove_chat(&"talk".into(), None).await.unwrap();
     assert_eq!(removed.chat.id, chat.id);
     assert_eq!(removed.children, ["split", "opened"]);
-    assert!(manager.workspace(&opened.id).await.is_err());
-    assert!(manager.workspace(&split.id).await.is_err());
-    assert!(manager.workspace(&other.id).await.is_ok());
+    assert!(manager.workspace_by_id(&opened.id).await.is_err());
+    assert!(manager.workspace_by_id(&split.id).await.is_err());
+    assert!(manager.workspace_by_id(&other.id).await.is_ok());
     assert!(manager.chats().await.unwrap().is_empty());
     // The removal stopped the chat's agent.
     assert!(!process_wait(process).success());
@@ -795,7 +810,7 @@ async fn a_workspace_whose_creation_fails_stays_below_the_chat_that_opened_it() 
         .await
         .unwrap_err();
     // It is the chat's to inspect and remove, and goes with the chat.
-    let broken = manager.workspace("broken").await.unwrap();
+    let broken = manager.workspace(&"broken".into()).await.unwrap();
     assert_eq!(broken.state, crate::state::WorkspaceState::Failed);
     assert_eq!(broken.parent.map(|parent| parent.id), Some(chat.id));
 }
@@ -879,7 +894,10 @@ async fn workspace(root: &std::path::Path, manager: &Manager) -> (Repository, Wo
 async fn the_diff_base_names_only_the_workspaces_own_worktree() {
     let (temp, manager) = manager().await;
     let (repo, workspace) = workspace(temp.path(), &manager).await;
-    let base = manager.diff_base(&workspace.name).await.unwrap();
+    let base = manager
+        .diff_base(&SpaceSelector::from(&workspace.name))
+        .await
+        .unwrap();
     assert_eq!(base.path, workspace.path);
     // A clone at its path has the same history, so only the ownership check
     // tells it apart.
@@ -887,7 +905,12 @@ async fn the_diff_base_names_only_the_workspaces_own_worktree() {
     let clone = [repo.path.as_os_str(), workspace.path.as_os_str()].map(|p| p.to_str().unwrap());
     crate::daemon::test_support::git(temp.path(), &["clone", "-q", clone[0], clone[1]]);
     crate::daemon::test_support::git(&workspace.path, &["checkout", "-q", "-b", "worker"]);
-    assert!(manager.diff_base(&workspace.name).await.is_err());
+    assert!(
+        manager
+            .diff_base(&SpaceSelector::from(&workspace.name))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -905,7 +928,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         .unwrap();
     let chat = manager
         .start_chat_in_workspace(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             "worker-chat".into(),
             "claude".into(),
             std::process::id(),
@@ -929,10 +952,10 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         })
     };
     let diff = Operation::from(WorkspaceMethod::DiffBase {
-        workspace: workspace.name.to_string(),
+        workspace: SpaceSelector::parse(&workspace.name),
     });
     let items = Operation::from(ItemMethod::SelectItems {
-        context: ItemContext::Workspace(workspace.name.to_string()),
+        context: ItemContext::Workspace(SpaceSelector::parse(&workspace.name)),
         selection: Selection::default(),
         elsewhere: false,
     });
@@ -940,7 +963,7 @@ async fn a_chat_reads_the_workspace_it_runs_in_but_does_not_change_it() {
         authorize(&manager, Some("chat"), &mut read).await.unwrap();
     }
     let mut change = Operation::from(WorkspaceMethod::SetBaseWorkspace {
-        workspace: workspace.name.to_string(),
+        workspace: SpaceSelector::parse(&workspace.name),
         base: None,
     });
     let refused = authorize(&manager, Some("chat"), &mut change).await;
@@ -958,7 +981,7 @@ async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_
     );
     let chat = manager
         .start_chat_in_workspace(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             "worker-chat".into(),
             "claude".into(),
             process.id(),
@@ -977,7 +1000,7 @@ async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_
         (&Some(repo.id.clone()), &named)
     );
     // The chat is no child of the workspace, whose agent it is not.
-    let recorded = manager.workspace(&workspace.id).await.unwrap();
+    let recorded = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert!(recorded.children.is_empty());
 
     // A stopped chat keeps naming the workspace.
@@ -1006,9 +1029,10 @@ async fn a_chat_in_a_workspace_names_it_and_restores_only_while_its_worktree_is_
 async fn a_chat_runs_only_in_a_ready_workspace_with_its_worktree() {
     let (temp, manager) = manager().await;
     let (_, workspace) = workspace(temp.path(), &manager).await;
+    let selected = SpaceSelector::id(&workspace.id);
     let start = |name: &str| {
         manager.start_chat_in_workspace(
-            &workspace.id,
+            &selected,
             name.into(),
             "claude".into(),
             std::process::id(),
@@ -1101,7 +1125,7 @@ async fn a_chats_processes_in_a_workspace_are_not_its_leftovers() {
     let _orphans = Orphans([chat_pids.clone(), stray_pid.clone()].concat());
     manager
         .start_chat_in_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "worker-chat".into(),
             "claude".into(),
             chat_pids[0],

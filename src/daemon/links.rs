@@ -24,6 +24,7 @@ pub mod wait;
 
 pub(crate) use memories::ForgeMemories;
 
+use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
@@ -42,7 +43,7 @@ use crate::{
 impl Manager {
     pub async fn link_item(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         kind: LinkKind,
         input: &str,
         relation: Relation,
@@ -71,7 +72,7 @@ impl Manager {
     /// one must be linked.
     pub async fn unlink_items(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         relation: Relation,
         kind: Option<LinkKind>,
         input: Option<&str>,
@@ -96,7 +97,7 @@ impl Manager {
     /// link only runs of their own repository.
     async fn record_run(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         relation: Relation,
         input: &str,
         scoped: bool,
@@ -118,7 +119,7 @@ impl Manager {
     /// Record an opened or related item named by number or URL.
     async fn record_item(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         relation: Relation,
         kind: LinkKind,
         input: &str,
@@ -135,7 +136,7 @@ impl Manager {
     /// which must be recorded.
     async fn forget_items(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         relation: Relation,
         kind: Option<LinkKind>,
         input: Option<&str>,
@@ -210,7 +211,7 @@ impl Manager {
 
     async fn unassign(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         kind: Option<ItemKind>,
         input: Option<&str>,
     ) -> Result<()> {
@@ -231,7 +232,11 @@ impl Manager {
 
     /// Fail unless an item of `kind` is assigned: the issue, or a PR watch or
     /// acknowledgement, which an unreadable registration counts as.
-    async fn require_assigned(&self, selector: &str, kind: Option<ItemKind>) -> Result<()> {
+    async fn require_assigned(
+        &self,
+        selector: &SpaceSelector,
+        kind: Option<ItemKind>,
+    ) -> Result<()> {
         let space = self.link_space(selector).await?;
         let id = space.id();
         let issue = kind != Some(ItemKind::Pr) && self.issue_registration(id).await?.is_some();

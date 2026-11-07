@@ -3,6 +3,7 @@
 use anyhow::Result;
 
 use super::super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{events::EventCause, notifications::NotificationKind},
     model::{Chat, SpaceKind, Workspace},
@@ -45,7 +46,7 @@ impl Manager {
                     (self.find_workspace(&ancestor.id).await?).map(CompletedAncestor::Workspace)
                 }
                 SpaceKind::Chat => {
-                    (self.recorded_chat(&ancestor.id).await?).map(CompletedAncestor::Chat)
+                    (self.chat_by_id(&ancestor.id).await?).map(CompletedAncestor::Chat)
                 }
             };
             // One removed meanwhile leaves the tree with what is below it.
@@ -73,7 +74,7 @@ impl Manager {
         let workspace = match ancestor {
             CompletedAncestor::Workspace(workspace) => workspace,
             CompletedAncestor::Chat(chat) => {
-                let recorded = self.recorded_chat(&chat.id).await?;
+                let recorded = self.chat_by_id(&chat.id).await?;
                 return Ok(recorded
                     .and_then(|chat| chat.completion)
                     .is_some_and(|completion| completion.cleanup));
@@ -102,7 +103,10 @@ impl Manager {
         if !workspace.children.is_empty() || self.keep_reason(&workspace.id).await?.is_some() {
             return Ok(());
         }
-        let (kind, message) = match self.remove_under_completed(&workspace.id, ancestor).await {
+        let (kind, message) = match self
+            .remove_under_completed(&SpaceSelector::id(&workspace.id), ancestor)
+            .await
+        {
             Ok(false) => return Ok(()),
             Ok(true) => (
                 NotificationKind::WorkspaceRemoved,

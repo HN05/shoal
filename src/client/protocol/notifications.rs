@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
@@ -24,7 +25,7 @@ pub enum NotificationMethod {
     },
     /// A message from a space's agent to the user.
     SendMessage {
-        space: String,
+        space: SpaceSelector,
         message: String,
         /// Files to send with it by absolute path, which the daemon copies.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -35,7 +36,7 @@ pub enum NotificationMethod {
     },
     /// Delete the unread message `id` the space sent the user.
     WithdrawMessage {
-        space: String,
+        space: SpaceSelector,
         id: i64,
     },
 }

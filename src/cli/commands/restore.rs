@@ -7,6 +7,7 @@ use anyhow::{Context as _, Result, ensure};
 use super::resume::Stopped;
 use crate::client::output::resume::{Queued, Reopened};
 use crate::client::recovery;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -29,7 +30,7 @@ pub(super) async fn checkpoint(
     let checkpoint: Checkpoint = ctx
         .progress(
             "Taking checkpoint",
-            recovery::checkpoint(&ctx.paths, workspace, name),
+            recovery::checkpoint(&ctx.paths, SpaceSelector::parse(&workspace), name),
         )
         .await?;
     let files = if checkpoint.files_omitted {
@@ -122,7 +123,7 @@ async fn restore_checkpoint(ctx: &Context, workspace: String, checkpoint: u64) -
     let restored: RestoredCheckpoint = ctx
         .progress(
             "Restoring checkpoint",
-            recovery::restore_checkpoint(&ctx.paths, workspace, checkpoint),
+            recovery::restore_checkpoint(&ctx.paths, SpaceSelector::parse(&workspace), checkpoint),
         )
         .await?;
     let files = if restored.checkpoint.files_omitted {
@@ -147,7 +148,7 @@ async fn reopen(ctx: &Context, workspace: String) -> Result<i32> {
     let restored = ctx
         .progress(
             "Restoring workspace",
-            crate::client::removal::restore(&ctx.paths, workspace),
+            crate::client::removal::restore(&ctx.paths, SpaceSelector::parse(&workspace)),
         )
         .await?;
     finish_reopen(ctx, *restored, "Restored", false).await

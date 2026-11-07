@@ -5,6 +5,7 @@
 use anyhow::{Context as _, Result, bail, ensure};
 
 use super::{Removal, Retention};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::output::chat::RemovedChat,
     daemon::{
@@ -24,13 +25,10 @@ impl Manager {
     /// takes. Returns the chat and the names of the spaces it took.
     pub async fn remove_chat(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         children: Option<Vec<String>>,
     ) -> Result<RemovedChat> {
-        let chat = self
-            .recorded_chat(selector)
-            .await?
-            .with_context(|| format!("no chat {selector}"))?;
+        let chat = self.chat(selector).await?;
         let unsaved = UnsavedWork::Confirmed {
             files: false,
             detached_head: None,
@@ -238,7 +236,7 @@ impl Manager {
     /// The chat `id` as recorded now, once `removal` still applies to it.
     async fn recheck_chat(&self, id: &str, removal: Removal<'_>) -> Result<Chat> {
         let chat = self
-            .recorded_chat(id)
+            .chat_by_id(id)
             .await?
             .context("the chat was removed meanwhile")?;
         self.check_chat_removal(&chat, removal).await?;

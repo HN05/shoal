@@ -17,6 +17,7 @@ use tokio::sync::watch;
 use uuid::Uuid;
 
 use super::{scope::Caller, workspace::Manager};
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::operations::{
     Ended, Failure, OperationEvent, OperationSpec, Order, Progress, Report, Stream,
 };
@@ -198,7 +199,7 @@ impl Manager {
             _ => self.workspace(spec.workspace_mut()).await?,
         }
         .id;
-        *spec.workspace_mut() = workspace.clone();
+        *spec.workspace_mut() = SpaceSelector::id(&workspace);
         let token = caller.map(|caller| self.operations.issue(caller));
         let (id, entry) = self.operations.register(workspace.clone());
         let order = Order {

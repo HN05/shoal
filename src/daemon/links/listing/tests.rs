@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{configure, git, manager, repository},
     forge::{
@@ -49,7 +50,7 @@ async fn a_scoped_chat_lists_items_as_the_agent_account() {
         ),
     )
     .await;
-    let context = ItemContext::Chat(chat.id.clone());
+    let context = ItemContext::Chat(SpaceSelector::id(&chat.id));
     let search = Search {
         state: StateFilter::Open,
         labels: Vec::new(),

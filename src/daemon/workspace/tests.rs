@@ -72,7 +72,13 @@ async fn records_report_only_running_executions() {
         .create_workspace(&repo.id, "busy".into(), None, None, None)
         .await
         .unwrap();
-    assert!(!manager.workspace(&workspace.id).await.unwrap().running);
+    assert!(
+        !manager
+            .workspace_by_id(&workspace.id)
+            .await
+            .unwrap()
+            .running
+    );
     for (state, running) in [("running", true), ("unknown", false)] {
         let id = workspace.id.clone();
         manager
@@ -87,7 +93,11 @@ async fn records_report_only_running_executions() {
             .await
             .unwrap();
         assert_eq!(
-            manager.workspace(&workspace.id).await.unwrap().running,
+            manager
+                .workspace_by_id(&workspace.id)
+                .await
+                .unwrap()
+                .running,
             running
         );
         assert_eq!(manager.list_workspaces().await.unwrap()[0].running, running);

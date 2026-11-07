@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events::{EventCause, EventItem, EventKind},
@@ -43,7 +44,7 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
     assert_eq!(commit.base_workspace, None);
     assert_eq!(
         manager
-            .workspace("middle")
+            .workspace(&"middle".into())
             .await
             .unwrap()
             .stacked_workspaces,
@@ -53,14 +54,18 @@ async fn creation_infers_the_base_and_removal_moves_stacked_workspaces_down() {
     for (removed, base) in [(&middle, Some(reference(&lower))), (&lower, None)] {
         manager
             .remove_workspace(
-                &removed.id,
+                &SpaceSelector::id(&removed.id),
                 UnsavedWork::default(),
                 InspectionPolicy::GitOnly,
             )
             .await
             .unwrap();
         assert_eq!(
-            manager.workspace("upper").await.unwrap().base_workspace,
+            manager
+                .workspace(&"upper".into())
+                .await
+                .unwrap()
+                .base_workspace,
             base
         );
     }
@@ -135,7 +140,11 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
     let set = |workspace: &str, base: Option<&str>| {
         let manager = manager.clone();
         let (workspace, base) = (workspace.to_owned(), base.map(str::to_owned));
-        async move { manager.set_base_workspace(&workspace, base).await }
+        async move {
+            manager
+                .set_base_workspace(&SpaceSelector::parse(&workspace), base)
+                .await
+        }
     };
 
     manager
@@ -150,7 +159,7 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
         .await;
     for (target, allowed) in [(&upper.name, true), (&lower.name, false)] {
         let mut method = crate::protocol::WorkspaceMethod::SetBaseWorkspace {
-            workspace: target.to_string(),
+            workspace: SpaceSelector::parse(target),
             base: Some(lower.name.to_string()),
         };
         let authorized =

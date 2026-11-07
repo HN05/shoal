@@ -9,6 +9,7 @@ use super::{
 };
 use crate::client::operations::{self, NewSplit, NewWorkspace};
 use crate::client::output::items::Revert;
+use crate::client::space_names::SpaceSelector;
 use crate::client::{forge_reads, items};
 use crate::{
     cli::{
@@ -43,10 +44,17 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
     let from = Reverting::of(ctx, space).await?;
     if from.forge_reverts(ctx).await? {
         let space = from.id().to_owned();
-        let outcome = items::revert_pull(&ctx.paths, space, selector.item, options).await?;
+        let outcome = items::revert_pull(
+            &ctx.paths,
+            SpaceSelector::parse(&space),
+            selector.item,
+            options,
+        )
+        .await?;
         return report(ctx, outcome, None);
     }
-    let merged = forge_reads::merged_pull(&ctx.paths, from.id().to_owned(), selector.item).await?;
+    let merged =
+        forge_reads::merged_pull(&ctx.paths, SpaceSelector::id(from.id()), selector.item).await?;
     let Some(reverting) = revert_workspace(ctx, &from, &merged).await? else {
         return Ok(1);
     };
@@ -89,7 +97,12 @@ impl Reverting {
         match crate::client::workspaces::present_space(&ctx.paths, &space).await? {
             Some(PresentSpace::Chat(chat)) => Ok(Self::Chat(chat)),
             _ => {
-                let workspace = crate::client::workspaces::verify(&ctx.paths, space, false).await?;
+                let workspace = crate::client::workspaces::verify(
+                    &ctx.paths,
+                    SpaceSelector::parse(&space),
+                    false,
+                )
+                .await?;
                 Ok(Self::Workspace(Box::new(workspace)))
             }
         }
@@ -105,8 +118,8 @@ impl Reverting {
     /// Whether the forge of the space's repository reverts PRs.
     async fn forge_reverts(&self, ctx: &Context) -> Result<bool> {
         let context = match self {
-            Self::Workspace(workspace) => ItemContext::Workspace(workspace.id.clone()),
-            Self::Chat(chat) => ItemContext::Chat(chat.id.clone()),
+            Self::Workspace(workspace) => ItemContext::Workspace(SpaceSelector::id(&workspace.id)),
+            Self::Chat(chat) => ItemContext::Chat(SpaceSelector::id(&chat.id)),
         };
         let capabilities = client::capabilities(&ctx.paths, context, None).await?;
         Ok(capabilities.supports(Capability::RevertPrs))
@@ -146,7 +159,7 @@ async fn revert_workspace(
         Reverting::Workspace(workspace) if crate::env::is_scoped() => {
             let start = NewSplit {
                 base,
-                ..NewSplit::new(workspace.id.clone(), Some(name))
+                ..NewSplit::new(SpaceSelector::id(&workspace.id), Some(name))
             };
             split::start_child(ctx, start).await?
         }
@@ -174,7 +187,7 @@ async fn start_workspace(
 ) -> Result<StartedWorkspace> {
     let new = NewWorkspace {
         base,
-        parent: chat,
+        parent: chat.as_deref().map(SpaceSelector::id),
         ..NewWorkspace::new(Selector::Value(repository), WorkspaceStart::Name(name))
     };
     operations::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await
@@ -191,7 +204,8 @@ async fn revert_merge(
     message: &str,
 ) -> Result<()> {
     let workspace =
-        crate::client::workspaces::verify(&ctx.paths, workspace.id.clone(), true).await?;
+        crate::client::workspaces::verify(&ctx.paths, SpaceSelector::id(&workspace.id), true)
+            .await?;
     let path = &workspace.path;
     let facts = Merged {
         merge_commit: &merged.merge_commit,
@@ -211,18 +225,29 @@ async fn revert_merge(
 }
 
 async fn remove(ctx: &Context, workspace: &Workspace) -> Result<()> {
-    crate::client::removal::remove(&ctx.paths, workspace.id.clone(), UnsavedWork::All)
-        .await
-        .map(drop)
+    crate::client::removal::remove(
+        &ctx.paths,
+        SpaceSelector::id(&workspace.id),
+        UnsavedWork::All,
+    )
+    .await
+    .map(drop)
 }
 
 /// Record the revert workspace's assignment as done, so cleanup removes it
 /// once its PR merges.
 async fn finish(ctx: &Context, workspace: &Workspace) -> Result<()> {
     let space = workspace.id.clone();
-    crate::client::assignments::mark_done(&ctx.paths, space, true, false, Vec::new(), None)
-        .await
-        .map(drop)
+    crate::client::assignments::mark_done(
+        &ctx.paths,
+        SpaceSelector::parse(&space),
+        true,
+        false,
+        Vec::new(),
+        None,
+    )
+    .await
+    .map(drop)
 }
 
 fn report(ctx: &Context, outcome: OpenOutcome, workspace: Option<&Workspace>) -> Result<i32> {

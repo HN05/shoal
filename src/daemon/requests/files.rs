@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, FileMethod};
 
 /// Every answer lists files, which no limit keeps to one frame, so each is
@@ -49,7 +50,11 @@ pub(super) async fn handle(
 }
 
 impl Scoped for FileMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         match self {
             FileMethod::AddFiles { space, .. } => Ok(Some(space)),
             FileMethod::ListFiles { space }
@@ -75,7 +80,7 @@ impl Scoped for FileMethod {
 async fn narrow_to_removed(
     manager: &Manager,
     caller: &Caller,
-    workspace: &mut String,
+    workspace: &mut SpaceSelector,
 ) -> Result<()> {
     let space = manager.file_space(workspace).await?;
     let below = match &space.parent_id {
@@ -86,7 +91,7 @@ async fn narrow_to_removed(
         below,
         "workspace processes can only access their own space and those below it"
     );
-    *workspace = space.id;
+    *workspace = SpaceSelector::id(&space.id);
     Ok(())
 }
 

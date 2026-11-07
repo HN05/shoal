@@ -6,6 +6,7 @@ use std::{fmt, str::FromStr};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::{Agent, ModelChoice},
     client::{
@@ -430,7 +431,7 @@ pub const AUTOMATED_NOTE: &str = "This review is automated and can be wrong. Eac
 /// Queue a review of `target` in `workspace` by `agent` with `model`.
 pub async fn run(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     target: ReviewTarget,
     agent: Agent,
     model: ModelChoice,
@@ -447,7 +448,7 @@ pub async fn run(
 /// Cancel the review `id`, or `workspace`'s queued or running one.
 pub async fn cancel(
     daemon: &impl Daemon,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     id: Option<i64>,
 ) -> Result<Review> {
     reassembled(daemon, ReviewMethod::CancelReview { workspace, id }).await
@@ -456,7 +457,7 @@ pub async fn cancel(
 /// The reviews of `workspace` or `repository`, or every review, newest first.
 pub async fn list(
     daemon: &impl Daemon,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     repository: Option<Selector>,
 ) -> Result<Vec<Review>> {
     let method = ReviewMethod::ListReviews {
@@ -469,7 +470,7 @@ pub async fn list(
 /// The review `id`, or `workspace`'s latest.
 pub async fn show(
     daemon: &impl Daemon,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     id: Option<i64>,
 ) -> Result<Review> {
     reassembled(daemon, ReviewMethod::ShowReview { workspace, id }).await
@@ -479,7 +480,7 @@ pub async fn show(
 /// ended, waiting across daemon restarts.
 pub async fn await_ended(
     daemon: &impl Daemon,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     id: Option<i64>,
 ) -> Result<i64> {
     let method = || ReviewMethod::AwaitReview {
@@ -515,7 +516,7 @@ pub async fn resolve(
 
 /// Refuse a PR for `workspace` that `[review] require_for_pr` holds back
 /// until a finished review covers HEAD.
-pub async fn check_pr_gate(daemon: &impl Daemon, workspace: String) -> Result<()> {
+pub async fn check_pr_gate(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<()> {
     request(daemon, ReviewMethod::CheckPrGate { workspace }).await
 }
 

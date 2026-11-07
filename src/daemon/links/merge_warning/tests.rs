@@ -3,6 +3,7 @@ use std::fs;
 use rusqlite::params;
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     links::pr::{Registration, RegistrationKind},
     test_support::{commit, manager, repository},
@@ -41,7 +42,10 @@ async fn changed_on_both_sides() -> (
     }
     fs::write(workspace.path.join("feature"), "new\n").unwrap();
     commit(&workspace.path, "feature");
-    manager.check_conflicts(&workspace.id, None).await.unwrap();
+    manager
+        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
     (root, manager, workspace)
 }
 
@@ -49,7 +53,7 @@ async fn changed_on_both_sides() -> (
 async fn a_branch_merge_warns_only_at_the_checked_head() {
     let (_root, manager, workspace) = changed_on_both_sides().await;
     let warning = manager
-        .branch_merge_warning(&workspace.id)
+        .branch_merge_warning(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .unwrap();
@@ -66,7 +70,7 @@ async fn a_branch_merge_warns_only_at_the_checked_head() {
     commit(&workspace.path, "feature");
     assert!(
         manager
-            .branch_merge_warning(&workspace.id)
+            .branch_merge_warning(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .is_none()
@@ -87,17 +91,23 @@ async fn a_branch_merge_ignores_a_check_against_a_base_workspaces_branch() {
         .await
         .unwrap();
     manager
-        .set_base_workspace(&workspace.id, Some(base.name.to_string()))
+        .set_base_workspace(
+            &SpaceSelector::id(&workspace.id),
+            Some(base.name.to_string()),
+        )
         .await
         .unwrap();
     fs::write(base.path.join("version"), "3\n").unwrap();
     commit(&base.path, "version");
-    let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
+    let check = manager
+        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
     assert_eq!(Some(check.target), base.branch);
     assert_eq!(check.changed_on_both_sides, ["version"]);
     assert!(
         manager
-            .branch_merge_warning(&workspace.id)
+            .branch_merge_warning(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .is_none()

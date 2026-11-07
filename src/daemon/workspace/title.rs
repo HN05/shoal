@@ -4,6 +4,7 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::model::RetitledWorkspace;
 
 impl Manager {
@@ -12,7 +13,7 @@ impl Manager {
     /// still show.
     pub async fn set_workspace_title(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         title: Option<String>,
     ) -> Result<RetitledWorkspace> {
         let title = title.map(|title| title.trim().to_owned());
@@ -25,7 +26,7 @@ impl Manager {
             .run(move |db| store_title(db, &titled, title.as_deref()))
             .await?;
         Ok(RetitledWorkspace {
-            workspace: self.workspace(&previous.id).await?,
+            workspace: self.workspace_by_id(&previous.id).await?,
             previous_title: previous.title,
         })
     }

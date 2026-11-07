@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::workspace_files::Attacher;
 
 #[test]
@@ -75,12 +76,17 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
             .await
             .unwrap();
         manager
-            .acquire_port(&workspace.id, "web".into(), PortRequest::default(), None)
+            .acquire_port(
+                &SpaceSelector::id(&workspace.id),
+                "web".into(),
+                PortRequest::default(),
+                None,
+            )
             .await
             .unwrap();
         manager
             .acquire_resource(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 ResourceRequest {
                     mode: None,
                     kind: None,
@@ -110,7 +116,7 @@ async fn deleted_parent_sweep_releases_leases_and_keeps_a_branch_with_work() {
 
         sweep(&manager, &mut Timers::default()).await.unwrap();
 
-        assert!(manager.workspace(&workspace.id).await.is_err());
+        assert!(manager.workspace_by_id(&workspace.id).await.is_err());
         assert!(manager.list_ports(None).await.unwrap().is_empty());
         assert!(manager.list_resources(None).await.unwrap().is_empty());
         let branch = if pending_rename {
@@ -158,7 +164,13 @@ async fn failed_step_does_not_skip_later_steps() {
     // Completion cleanup retains the dirty workspace and cannot record why.
     fs::write(done.path.join("work"), "retain").unwrap();
     manager
-        .mark_done(&done.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&done.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
@@ -213,7 +225,7 @@ async fn invalid_pr_record_does_not_block_other_workspace_cleanup() {
         .await
         .unwrap();
     manager
-        .set_pr(&merged.id, Action::Acknowledge)
+        .set_pr(&SpaceSelector::id(&merged.id), Action::Acknowledge)
         .await
         .unwrap();
     let id = invalid.id.clone();
@@ -294,7 +306,7 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
 
     manager
         .acquire_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "review".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -308,17 +320,28 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         choices: vec![],
     };
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let question = manager
-        .ask_question(&workspace.name, ask, Vec::new(), &Attacher::User)
+        .ask_question(
+            &SpaceSelector::from(&workspace.name),
+            ask,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(reason().await, CleanupReason::Held);
     manager
         .release_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "review".into(),
             crate::model::HoldPlacer::User,
         )
@@ -333,13 +356,20 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         reason().await,
         CleanupReason::Completed { integrated: false }
     );
-    manager.undo_done(&workspace.id).await.unwrap();
+    manager
+        .undo_done(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
 
     manager
         .write_local_config(&repo.id, Some("[cleanup.auto]\nenabled = false\n".into()))
         .await
         .unwrap();
-    let status = manager.worktree_status(&workspace.id).await.unwrap().0;
+    let status = manager
+        .worktree_status(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap()
+        .0;
     assert_eq!(status.cleanup_reason, CleanupReason::IdleDisabled);
 }
 
@@ -393,7 +423,11 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     // Work on the local default branch is retained without any remote.
     git_in(&repository_dir, &["merge", "--ff-only", "idle"]);
     manager
-        .acquire_resource(&workspace.id, lease("test-lock", None), None)
+        .acquire_resource(
+            &SpaceSelector::id(&workspace.id),
+            lease("test-lock", None),
+            None,
+        )
         .await
         .unwrap();
     assert!(
@@ -401,7 +435,11 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         "a resource lease must prevent automatic removal"
     );
     manager
-        .release_resource(&workspace.id, "test-lock".into(), "default".into())
+        .release_resource(
+            &SpaceSelector::id(&workspace.id),
+            "test-lock".into(),
+            "default".into(),
+        )
         .await
         .unwrap();
     let rwlock_config = workspace.path.join(".shoal.toml");
@@ -411,14 +449,22 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         crate::daemon::resources::LockMode::Write,
     ] {
         manager
-            .acquire_resource(&workspace.id, lease("cache", Some(mode)), None)
+            .acquire_resource(
+                &SpaceSelector::id(&workspace.id),
+                lease("cache", Some(mode)),
+                None,
+            )
             .await
             .unwrap();
         // Remove config so only the lease can keep this clean/pushed worktree alive.
         fs::remove_file(&rwlock_config).unwrap();
         assert!(snapshot(&manager).await.is_none());
         manager
-            .release_resource(&workspace.id, "cache".into(), "default".into())
+            .release_resource(
+                &SpaceSelector::id(&workspace.id),
+                "cache".into(),
+                "default".into(),
+            )
             .await
             .unwrap();
         fs::write(&rwlock_config, "[resources.cache]\nkind='rwlock'\n").unwrap();
@@ -427,7 +473,7 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     let original = snapshot(&manager).await.unwrap();
     manager
         .acquire_port(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "web".into(),
             PortRequest {
                 reason: Some("cleanup test".into()),
@@ -439,7 +485,12 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
         .unwrap();
     fs::write(workspace.path.join("dirty"), "retain me").unwrap();
     assert!(snapshot(&manager).await.is_none());
-    assert!(manager.remove_idle(&workspace.id, original).await.is_err());
+    assert!(
+        manager
+            .remove_idle(&SpaceSelector::id(&workspace.id), original)
+            .await
+            .is_err()
+    );
     fs::remove_file(workspace.path.join("dirty")).unwrap();
     let before_command = snapshot(&manager).await.unwrap();
     let started = manager
@@ -469,7 +520,7 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     fs::write(workspace.path.join("ignored/build-output"), "build").unwrap();
     assert!(
         manager
-            .remove_idle(&workspace.id, after_command)
+            .remove_idle(&SpaceSelector::id(&workspace.id), after_command)
             .await
             .is_err(),
         "ignored file updates must reset the timer"
@@ -532,14 +583,14 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
             .unwrap();
     }
     // An inspection failure is reported rather than read as nothing to do.
-    let broken = manager.workspace("broken").await.unwrap();
+    let broken = manager.workspace(&"broken".into()).await.unwrap();
     fs::remove_file(broken.path.join(".git")).unwrap();
-    let dirty = manager.workspace("dirty").await.unwrap();
+    let dirty = manager.workspace(&"dirty".into()).await.unwrap();
     fs::write(dirty.path.join("work"), "retain me").unwrap();
-    let held = manager.workspace("held").await.unwrap();
+    let held = manager.workspace(&"held".into()).await.unwrap();
     manager
         .acquire_hold(
-            &held.id,
+            &SpaceSelector::id(&held.id),
             "keep".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -650,7 +701,7 @@ async fn holds_block_idle_sweeps_and_release_restores_eligibility() {
     for name in ["app-one", "app-two"] {
         manager
             .acquire_hold(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 name.into(),
                 None,
                 crate::model::HoldPlacer::User,
@@ -664,7 +715,7 @@ async fn holds_block_idle_sweeps_and_release_restores_eligibility() {
     assert!(!timers.idle.contains_key(&workspace.id));
     manager
         .release_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "app-one".into(),
             crate::model::HoldPlacer::User,
         )
@@ -680,7 +731,7 @@ async fn holds_block_idle_sweeps_and_release_restores_eligibility() {
     );
     manager
         .release_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "app-two".into(),
             crate::model::HoldPlacer::User,
         )
@@ -823,12 +874,18 @@ async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_ot
         };
         let done = create("done").await.unwrap();
         manager
-            .mark_done(&done.id, true, false, vec![], &Attacher::User)
+            .mark_done(
+                &SpaceSelector::id(&done.id),
+                true,
+                false,
+                vec![],
+                &Attacher::User,
+            )
             .await
             .unwrap();
         let merged = create("merged").await.unwrap();
         manager
-            .set_pr(&merged.id, Action::Acknowledge)
+            .set_pr(&SpaceSelector::id(&merged.id), Action::Acknowledge)
             .await
             .unwrap();
         let idle = create("idle").await.unwrap();
@@ -937,12 +994,23 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_ne!(parent.path.parent(), child.path.parent());
     manager
-        .mark_done(&parent.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&parent.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.file_access.stall_rechecking(&child.path);
@@ -996,7 +1064,12 @@ async fn split_across_directories(
             .await
     } else {
         manager
-            .split_workspace(&parent.id, "child".into(), None, Default::default())
+            .split_workspace(
+                &SpaceSelector::id(&parent.id),
+                "child".into(),
+                None,
+                Default::default(),
+            )
             .await
     }
     .unwrap();
@@ -1052,7 +1125,13 @@ async fn pr_cleanup_skips_a_base_whose_stacked_workspace_elsewhere_stalled() {
 async fn a_child_keeps_while_its_completed_parent_elsewhere_stalled() {
     let (_temp, manager, parent, child) = split_across_directories(false).await;
     manager
-        .mark_done(&parent.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&parent.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.file_access.stall_rechecking(&parent.path);
@@ -1093,7 +1172,7 @@ async fn pr_cleanup_passes_over_a_stacked_workspace_it_removed_earlier() {
         .await
         .unwrap();
     manager
-        .set_pr(&stacked.id, Action::Acknowledge)
+        .set_pr(&SpaceSelector::id(&stacked.id), Action::Acknowledge)
         .await
         .unwrap();
 
@@ -1153,7 +1232,7 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
         None
     );
     process.kill();
-    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     let snapshot = (manager.chat_cleanup_snapshot(&stopped, Rule::Idle))
         .await
         .unwrap()
@@ -1185,7 +1264,7 @@ async fn idle_cleanup_removes_a_stopped_chat_with_the_workspaces_below_it() {
     );
     sweep(&manager, &mut timers).await.unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
-    assert!(manager.workspace(&opened.id).await.is_err());
+    assert!(manager.workspace_by_id(&opened.id).await.is_err());
     assert!(!opened.path.exists());
 }
 
@@ -1204,7 +1283,7 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
     manager
         .save_chats(crate::state::ChatRestore::Automatic)
         .await;
-    let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(
         manager
             .chat_cleanup_snapshot(&saved, Rule::Idle)
@@ -1223,7 +1302,7 @@ async fn a_chat_shoal_saved_or_with_assignment_state_is_kept_from_idle_cleanup()
         })
         .await
         .unwrap();
-    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     let idle = async || {
         (manager.chat_cleanup_candidacy(&stopped, Rule::Idle))
             .await
@@ -1285,7 +1364,7 @@ async fn completion_cleanup_removes_a_done_chat_whatever_prs_it_watches() {
 
     manager.sweep_completed().await.unwrap();
     assert!(manager.chats().await.unwrap().is_empty());
-    assert!(manager.workspace(&opened.id).await.is_err());
+    assert!(manager.workspace_by_id(&opened.id).await.is_err());
     assert!(!process_wait(process).success());
 }
 
@@ -1316,7 +1395,7 @@ async fn a_stopped_chat_whose_processes_run_on_starts_no_grace_period() {
         })
         .await
         .unwrap();
-    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     let snapshot = (manager.chat_cleanup_snapshot(&stopped, Rule::Merged))
         .await
         .unwrap()
@@ -1326,7 +1405,7 @@ async fn a_stopped_chat_whose_processes_run_on_starts_no_grace_period() {
         .await;
     assert!(removed.is_err());
     assert_eq!(manager.cleanup_at(&chat.id).await.unwrap(), None);
-    assert!(manager.workspace(&opened.id).await.is_ok());
+    assert!(manager.workspace_by_id(&opened.id).await.is_ok());
 }
 
 #[tokio::test]
@@ -1347,7 +1426,7 @@ async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
         .mark_chat_done(&chat.id, true, Vec::new(), &Attacher::User)
         .await
         .unwrap();
-    let chat = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let chat = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     manager.file_access.stall_rechecking(&opened.path);
     let removed = manager.remove_completed_chat(&chat, &completion).await;
     assert!(removed.is_err());
@@ -1361,7 +1440,7 @@ async fn a_stalled_directory_below_a_done_chat_starts_no_grace_period() {
             .unwrap()
     );
     assert!(manager.cleanup_at(&chat.id).await.unwrap().is_some());
-    assert!(manager.workspace(&opened.id).await.is_ok());
+    assert!(manager.workspace_by_id(&opened.id).await.is_ok());
 }
 
 #[tokio::test]
@@ -1378,12 +1457,15 @@ async fn a_stopped_chat_withdraws_its_completion_and_stays() {
     process.kill();
     manager.stop_finished_chats().await.unwrap();
 
-    let withdrawn = manager.undo_space_done(&chat.name).await.unwrap();
+    let withdrawn = manager
+        .undo_space_done(&SpaceSelector::from(&chat.name))
+        .await
+        .unwrap();
     assert!(withdrawn.cleanup);
     manager.sweep_completed().await.unwrap();
-    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(stopped.completion, None);
-    assert!(manager.workspace(&opened.id).await.is_ok());
+    assert!(manager.workspace_by_id(&opened.id).await.is_ok());
 }
 
 #[tokio::test]
@@ -1405,13 +1487,18 @@ async fn a_done_chat_something_keeps_still_takes_the_workspaces_below_it() {
         choices: Vec::new(),
     };
     manager
-        .ask_question(&chat.name, ask, Vec::new(), &Attacher::User)
+        .ask_question(
+            &SpaceSelector::from(&chat.name),
+            ask,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
 
     manager.sweep_completed().await.unwrap();
-    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
-    assert!(manager.workspace(&opened.id).await.is_err());
+    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
+    assert!(manager.workspace_by_id(&opened.id).await.is_err());
     assert!(!opened.path.exists());
 }
 
@@ -1429,11 +1516,16 @@ async fn a_chats_open_question_keeps_it_from_every_unattended_removal() {
         choices: Vec::new(),
     };
     manager
-        .ask_question(&chat.name, ask, Vec::new(), &Attacher::User)
+        .ask_question(
+            &SpaceSelector::from(&chat.name),
+            ask,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     process.kill();
-    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     for rule in [Rule::Idle, Rule::Merged] {
         assert_eq!(
             (manager.chat_cleanup_candidacy(&stopped, rule))
@@ -1453,7 +1545,7 @@ async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces
     );
     let (chat, opened) = chat_with_workspace(&temp, &manager, &process).await;
     process.kill();
-    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     let snapshot = (manager.chat_cleanup_snapshot(&stopped, Rule::Idle))
         .await
         .unwrap()
@@ -1480,8 +1572,8 @@ async fn a_link_made_while_idle_cleanup_starts_keeps_the_chat_and_its_workspaces
     drop(gate);
 
     assert!(removal.await.unwrap().is_err());
-    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
-    assert!(manager.workspace(&opened.id).await.is_ok());
+    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
+    assert!(manager.workspace_by_id(&opened.id).await.is_ok());
 }
 
 #[tokio::test]
@@ -1504,7 +1596,7 @@ async fn a_chat_in_a_workspace_keeps_it_while_it_runs_and_from_idle_cleanup_whil
     );
     let chat = manager
         .start_chat_in_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "kept-chat".into(),
             "claude".into(),
             process.id(),

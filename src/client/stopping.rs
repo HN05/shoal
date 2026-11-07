@@ -2,6 +2,7 @@
 //! keeps to restore, and its untracked processes.
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, request},
@@ -17,7 +18,7 @@ pub async fn targets(daemon: &impl Daemon) -> Result<Vec<Workspace>> {
 }
 
 /// Refuse a stop of `workspace` the caller may not make.
-pub async fn check(daemon: &impl Daemon, workspace: String) -> Result<()> {
+pub async fn check(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<()> {
     request(daemon, RemovalMethod::CheckStop { workspace }).await
 }
 
@@ -26,7 +27,7 @@ pub async fn check(daemon: &impl Daemon, workspace: String) -> Result<()> {
 /// accepts processes whose exit cannot be proven.
 pub async fn stop_workspace(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     acknowledge_unproven: bool,
     launches: QueuedLaunches,
 ) -> Result<StoppedWorkspace> {
@@ -42,7 +43,7 @@ pub async fn stop_workspace(
 /// than the process `requester` and those that started it.
 pub async fn stop_processes(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     selection: Selection,
     requester: Option<u32>,
 ) -> Result<Stopped> {

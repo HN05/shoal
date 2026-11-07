@@ -8,12 +8,13 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, DemoMethod};
 
 pub(super) async fn handle(manager: &Arc<Manager>, method: DemoMethod) -> Result<Answer> {
     Ok(Answer::Body(match method {
         DemoMethod::ListDemos { workspace } => {
-            Body::Demos(manager.demos(workspace.as_deref()).await?)
+            Body::Demos(manager.demos(workspace.as_ref()).await?)
         }
         DemoMethod::DemoProgress { workspace, launch } => {
             Body::DemoProgress(manager.demo_progress(&workspace, &launch).await?)
@@ -26,7 +27,7 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: DemoMethod) -> Result
 }
 
 impl Scoped for DemoMethod {
-    async fn scope(&mut self, _: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, _: &Manager, caller: &Caller) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             DemoMethod::ListDemos { workspace } => Some(caller.own_by_default(workspace)),
             DemoMethod::DemoProgress { workspace, .. }

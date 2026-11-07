@@ -79,6 +79,7 @@ async fn report_end(ctx: &Context, wait: &WakeWait, ended: WakeEnd) {
                     .space
             }
         };
+        let space = crate::client::space_names::SpaceSelector::parse(&space);
         crate::client::agents::report_wake_end(&ctx.paths, space, ended).await
     };
     let limit = crate::agents::hooks::MESSAGE_DAEMON_LIMIT;

@@ -4,6 +4,7 @@
 //! workspace processes may not use, and the branch a run starts on there.
 use anyhow::{Context, Result, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{links::actions::Place, workspace::Manager},
     forge::{
@@ -147,7 +148,7 @@ impl Manager {
     /// own logins.
     pub(in crate::daemon) async fn ensure_own_repository_run(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         selection: &Selection,
     ) -> Result<()> {
         let (Some(LinkKind::Ci), Some(input)) = (selection.kind, selection.input.as_deref()) else {

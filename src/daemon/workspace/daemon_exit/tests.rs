@@ -3,6 +3,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::{io::BufReader, net::UnixStream, task::JoinHandle};
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         execution_connection::{ExecutionContext, execute},
@@ -56,7 +57,7 @@ impl Running {
             1,
             manager.clone(),
             ExecutionContext {
-                workspace: workspace.id.clone(),
+                workspace: SpaceSelector::id(&workspace.id),
                 wrapper: wrapper.clone(),
                 kind: ExecutionKind::Command,
                 agent: None,
@@ -95,7 +96,11 @@ impl Running {
         )
         .unwrap();
         manager
-            .queue_stopped_restore(&workspace.id, "earlier", Default::default())
+            .queue_stopped_restore(
+                &SpaceSelector::id(&workspace.id),
+                "earlier",
+                Default::default(),
+            )
             .await
             .unwrap();
         Self {

@@ -52,7 +52,7 @@ impl Manager {
             mode: (execution.mode.clone())
                 .unwrap_or_else(|| crate::config::modes::DEFAULT.to_owned()),
         };
-        let workspace = self.workspace(&execution.workspace_id).await?;
+        let workspace = self.workspace_by_id(&execution.workspace_id).await?;
         self.keep_agent_session(&workspace, &agent, &execution.id)
             .await
     }

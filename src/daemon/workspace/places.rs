@@ -4,6 +4,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::sessions::{Origin, PlaceOwnership};
 
 /// Where an execution runs in a terminal host, as its wrapper reports it.
@@ -44,7 +45,7 @@ impl Manager {
     /// an agent's takeover or a chat moves it.
     pub(crate) async fn record_owned_place(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         mut origin: Origin,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
@@ -79,7 +80,7 @@ impl Manager {
     /// host labels it as the workspace's session.
     pub(crate) async fn place_ownership(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         place: &Origin,
     ) -> Result<PlaceOwnership> {
         let workspace = self.workspace(selector).await?;

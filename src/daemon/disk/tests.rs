@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{manager, repository},
     workspace_files::Attacher,
@@ -76,10 +77,10 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
             .await
             .unwrap();
     }
-    let held = manager.workspace("first").await.unwrap();
+    let held = manager.workspace(&"first".into()).await.unwrap();
     manager
         .acquire_hold(
-            &held.id,
+            &SpaceSelector::id(&held.id),
             "keep".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -116,7 +117,11 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
     assert_eq!(names(manager.list_workspaces().await.unwrap()), ["first"]);
     // A pass that could not free enough space waits for the interval.
     manager
-        .release_hold(&held.id, "keep".into(), crate::model::HoldPlacer::User)
+        .release_hold(
+            &SpaceSelector::id(&held.id),
+            "keep".into(),
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     monitor.check(&manager, start, above_stop).await.unwrap();
@@ -204,7 +209,7 @@ async fn cleanup_empties_unused_caches_after_removing_workspaces() {
         .unwrap();
     manager
         .acquire_hold(
-            &held.id,
+            &SpaceSelector::id(&held.id),
             "keep".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -253,7 +258,7 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
     std::fs::write(&report, "No leaks").unwrap();
     manager
         .mark_done(
-            &audit.id,
+            &SpaceSelector::id(&audit.id),
             false,
             false,
             vec![report.into()],
@@ -261,12 +266,15 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         )
         .await
         .unwrap();
-    let result = manager.attached_files(&audit.id).await.unwrap()[0]
+    let result = manager
+        .attached_files(&SpaceSelector::id(&audit.id))
+        .await
+        .unwrap()[0]
         .path
         .clone();
     manager
         .remove_workspace(
-            &audit.id,
+            &SpaceSelector::id(&audit.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
         )
@@ -303,7 +311,7 @@ async fn cleanup_reads_space_again_after_purging_leftover_caches() {
         .unwrap();
     manager
         .acquire_hold(
-            &held.id,
+            &SpaceSelector::id(&held.id),
             "keep".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -460,7 +468,7 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
         .unwrap();
     assert!(
         manager
-            .agent_messages(&workspace.id)
+            .agent_messages(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .is_empty()
@@ -470,7 +478,10 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
         .check(&manager, Instant::now(), |_: &Path| Ok(low))
         .await
         .unwrap();
-    let messages = manager.agent_messages(&workspace.id).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert_eq!(messages.len(), 1);
     assert!(
         messages[0].message.contains("10.0 GiB"),

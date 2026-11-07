@@ -2,6 +2,7 @@
 mod intent;
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{daemon::store, git, model::Workspace, state::WorkspaceState};
@@ -12,13 +13,13 @@ use rusqlite::params;
 impl Manager {
     pub async fn rename_workspace(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         branch: &str,
         caller_execution: Option<&str>,
     ) -> Result<Workspace> {
         let (initial, _completion) = self.lock_pr_gate(selector).await?;
         let (repo, _git) = self.lock_repository(&initial.repository_id).await?;
-        let workspace = self.workspace(&initial.id).await?;
+        let workspace = self.workspace_by_id(&initial.id).await?;
         let _resources = self.gates.resource_guard(
             &workspace.id,
             if caller_execution.is_some() {
@@ -71,7 +72,7 @@ impl Manager {
             .await?;
         self.touch(&workspace.id).await;
         result?;
-        self.workspace(&workspace.id).await
+        self.workspace_by_id(&workspace.id).await
     }
 
     async fn verify_rename_source(
@@ -174,7 +175,7 @@ impl Manager {
         };
         self.set_state(&workspace.id, state, error).await?;
         finished?;
-        self.workspace(&workspace.id).await
+        self.workspace_by_id(&workspace.id).await
     }
 
     /// Move a ready or failed workspace without executions other than the

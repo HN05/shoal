@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 /// Requests about the holds that keep workspaces from cleanup.
@@ -9,15 +10,15 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum HoldMethod {
     HoldAcquire {
-        workspace: String,
+        workspace: SpaceSelector,
         name: String,
         reason: Option<String>,
     },
     HoldRelease {
-        workspace: String,
+        workspace: SpaceSelector,
         name: String,
     },
     HoldList {
-        workspace: String,
+        workspace: SpaceSelector,
     },
 }

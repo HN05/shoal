@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::{Result, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{commands::workspaces, context::Context},
     client::transcripts::{self, AgentEnvironment},
@@ -54,7 +55,7 @@ pub(in crate::cli) async fn install_session_files(
     }
     let (target, workspace) = match home {
         SessionHome::Workspace(workspace) => (
-            ConfigTarget::Workspace(workspace.id.clone()),
+            ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
             Some(workspace),
         ),
         SessionHome::Repository(selector) => (ConfigTarget::Repository(selector), None),

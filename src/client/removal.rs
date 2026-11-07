@@ -3,6 +3,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         cleanup::{ManualCleanup, Selection},
@@ -303,7 +304,7 @@ fn describe_unsaved(files: bool, detached_commits: u64) -> Vec<String> {
 /// `include_changes`.
 pub async fn check(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     include_changes: bool,
 ) -> Result<RemovalCheck> {
     let method = RemovalMethod::CheckRemoval {
@@ -316,7 +317,7 @@ pub async fn check(
 /// Remove `workspace`, deleting only the `unsaved` work the caller saw.
 pub async fn remove(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     unsaved: UnsavedWork,
 ) -> Result<RemovalResult> {
     request(
@@ -342,6 +343,9 @@ pub async fn removed(daemon: &impl Daemon) -> Result<Vec<RemovedWorkspace>> {
 }
 
 /// Open the removed `workspace` again from its record.
-pub async fn restore(daemon: &impl Daemon, workspace: String) -> Result<Box<RestoredWorkspace>> {
+pub async fn restore(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+) -> Result<Box<RestoredWorkspace>> {
     request(daemon, RemovalMethod::RestoreWorkspace { workspace }).await
 }

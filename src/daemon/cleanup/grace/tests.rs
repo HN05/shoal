@@ -1,5 +1,6 @@
 use std::{fs, sync::Arc};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -57,7 +58,13 @@ async fn completion_cleanup_starts_the_grace_period_only_once_eligible() {
     let file = workspace.path.join("new-work");
     fs::write(&file, "keep").unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -69,7 +76,11 @@ async fn completion_cleanup_starts_the_grace_period_only_once_eligible() {
     manager.sweep_completed().await.unwrap();
     let cleanup_at = manager.cleanup_at(&workspace.id).await.unwrap().unwrap();
     assert!(cleanup_at >= unix_seconds() + 599 * 60);
-    let status = manager.worktree_status(&workspace.id).await.unwrap().0;
+    let status = manager
+        .worktree_status(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap()
+        .0;
     assert_eq!(status.cleanup_at, Some(cleanup_at));
     // Later attempts keep the deadline the first one set.
     manager.sweep_completed().await.unwrap();
@@ -87,11 +98,20 @@ async fn completion_cleanup_starts_the_grace_period_only_once_eligible() {
 async fn pr_cleanup_waits_for_the_grace_period() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .set_pr(&workspace.id, crate::daemon::links::pr::Action::Acknowledge)
+        .set_pr(
+            &SpaceSelector::id(&workspace.id),
+            crate::daemon::links::pr::Action::Acknowledge,
+        )
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();
@@ -106,18 +126,33 @@ async fn pr_cleanup_waits_for_the_grace_period() {
 async fn a_pass_that_no_longer_removes_the_workspace_ends_its_grace_period() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     sweep(&manager).await;
     assert!(manager.cleanup_at(&workspace.id).await.unwrap().is_some());
-    manager.undo_done(&workspace.id).await.unwrap();
+    manager
+        .undo_done(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     sweep(&manager).await;
     assert_eq!(manager.cleanup_at(&workspace.id).await.unwrap(), None);
     assert!(workspace.path.exists());
     // A later completion starts a new grace period rather than inheriting one.
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     sweep(&manager).await;
@@ -133,11 +168,16 @@ async fn idle_removal_waits_and_requests_and_disk_space_do_not() {
         .await
         .unwrap()
         .unwrap();
-    assert!(!manager.remove_idle(&workspace.id, snapshot).await.unwrap());
+    assert!(
+        !manager
+            .remove_idle(&SpaceSelector::id(&workspace.id), snapshot)
+            .await
+            .unwrap()
+    );
     assert!(manager.cleanup_at(&workspace.id).await.unwrap().is_some());
     assert!(workspace.path.exists());
     manager
-        .remove_on_request(&workspace.id, snapshot)
+        .remove_on_request(&SpaceSelector::id(&workspace.id), snapshot)
         .await
         .unwrap();
     assert!(!workspace.path.exists());
@@ -149,7 +189,7 @@ async fn idle_removal_waits_and_requests_and_disk_space_do_not() {
         .unwrap();
     let snapshot = manager.cleanup_snapshot(&other.id).await.unwrap().unwrap();
     manager
-        .remove_for_disk_space(&other.id, snapshot)
+        .remove_for_disk_space(&SpaceSelector::id(&other.id), snapshot)
         .await
         .unwrap();
     assert!(!other.path.exists());

@@ -46,6 +46,7 @@ fn changes_name_each_new_changed_and_removed_record() {
 }
 
 mod streams {
+    use crate::client::space_names::SpaceSelector;
     use crate::{
         client::{
             connection::Connector,
@@ -149,7 +150,12 @@ mod streams {
         until(&mut subscription, changed(RecordKind::Repository)).await;
 
         manager
-            .acquire_hold(&workspace.id, "quay".into(), None, HoldPlacer::User)
+            .acquire_hold(
+                &SpaceSelector::id(&workspace.id),
+                "quay".into(),
+                None,
+                HoldPlacer::User,
+            )
             .await
             .unwrap();
         until(&mut subscription, |update| {
@@ -159,7 +165,7 @@ mod streams {
 
         manager
             .link_item(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 LinkKind::Issue,
                 "40",
                 Relation::Related,
@@ -171,7 +177,12 @@ mod streams {
         until(&mut subscription, changed(RecordKind::Link)).await;
 
         let question = manager
-            .ask_question(&workspace.id, ask(), Vec::new(), &Attacher::User)
+            .ask_question(
+                &SpaceSelector::id(&workspace.id),
+                ask(),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
         until_each(
@@ -182,7 +193,7 @@ mod streams {
 
         manager
             .send_agent_message(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 "Rebase on main".into(),
                 Vec::new(),
                 &Attacher::User,
@@ -195,7 +206,7 @@ mod streams {
         .await;
         manager
             .send_message(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 "Ready for review".into(),
                 Vec::new(),
                 &Attacher::User,
@@ -218,7 +229,11 @@ mod streams {
         .await;
 
         manager
-            .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+            .remove_workspace(
+                &SpaceSelector::id(&workspace.id),
+                UnsavedWork::All,
+                InspectionPolicy::GitOnly,
+            )
             .await
             .unwrap();
         until(&mut subscription, |update| {
@@ -267,7 +282,11 @@ mod streams {
         .await;
         daemon
             .manager
-            .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+            .remove_workspace(
+                &SpaceSelector::id(&workspace.id),
+                UnsavedWork::All,
+                InspectionPolicy::GitOnly,
+            )
             .await
             .unwrap();
         let mut subscription = subscribe(daemon.connector(), &[Topic::Approvals]).await;
@@ -301,7 +320,11 @@ mod streams {
         let mut subscription = subscribe(connector, &[Topic::Approvals]).await;
         let records = snapshot(&mut subscription).await;
         assert!(records.is_empty(), "{records:?}");
-        let space = daemon.manager.link_space(&chat.id).await.unwrap();
+        let space = daemon
+            .manager
+            .link_space(&SpaceSelector::id(&chat.id))
+            .await
+            .unwrap();
         let proposal = store_issue_proposal(&daemon.manager, &space).await;
         let Update::Changed(record) = until(&mut subscription, changed(RecordKind::Approval)).await
         else {
@@ -330,7 +353,12 @@ mod streams {
             .unwrap();
         let question = daemon
             .manager
-            .ask_question(&chat.id, ask(), Vec::new(), &Attacher::User)
+            .ask_question(
+                &SpaceSelector::id(&chat.id),
+                ask(),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
         let mut subscription = subscribe(daemon.connector(), &[Topic::Questions]).await;
@@ -391,7 +419,7 @@ mod streams {
         for session in ["s1", "s2"] {
             manager
                 .set_agent_state(
-                    &workspace.id,
+                    &SpaceSelector::id(&workspace.id),
                     AgentState::Idle,
                     Some(execution.clone()),
                     Some(session.into()),
@@ -402,7 +430,12 @@ mod streams {
         }
 
         manager
-            .set_agent_state(&chat.id, AgentState::Idle, None, Some("c1".into()))
+            .set_agent_state(
+                &SpaceSelector::id(&chat.id),
+                AgentState::Idle,
+                None,
+                Some("c1".into()),
+            )
             .await
             .unwrap();
         until(&mut subscription, reported(chat.id.clone(), "c1")).await;
@@ -415,7 +448,12 @@ mod streams {
         let other = daemon.workspace("other").await;
         daemon
             .manager
-            .ask_question(&other.id, ask(), Vec::new(), &Attacher::User)
+            .ask_question(
+                &SpaceSelector::id(&other.id),
+                ask(),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
         let elsewhere =
@@ -454,13 +492,18 @@ mod streams {
         for workspace in [&own, &other] {
             daemon
                 .manager
-                .ask_question(&workspace.id, ask(), Vec::new(), &Attacher::User)
+                .ask_question(
+                    &SpaceSelector::id(&workspace.id),
+                    ask(),
+                    Vec::new(),
+                    &Attacher::User,
+                )
                 .await
                 .unwrap();
             daemon
                 .manager
                 .send_agent_message(
-                    &workspace.id,
+                    &SpaceSelector::id(&workspace.id),
                     "Rebase on main".into(),
                     Vec::new(),
                     &Attacher::User,
@@ -494,14 +537,19 @@ mod streams {
         snapshot(&mut subscription).await;
         daemon
             .manager
-            .revoke_workspace_environment(&workspace.id, token.clone())
+            .revoke_workspace_environment(&SpaceSelector::id(&workspace.id), token.clone())
             .await
             .unwrap();
         let refused = Subscription::open(connector(), vec![Topic::Workspaces]).await;
         assert_eq!(code(refused.err().unwrap()), ErrorCode::ScopeDenied);
         daemon
             .manager
-            .acquire_hold(&workspace.id, "quay".into(), None, HoldPlacer::User)
+            .acquire_hold(
+                &SpaceSelector::id(&workspace.id),
+                "quay".into(),
+                None,
+                HoldPlacer::User,
+            )
             .await
             .unwrap();
         let ended = tokio::time::timeout(HANG, subscription.next())
@@ -525,7 +573,7 @@ mod streams {
         snapshot(&mut subscription).await;
         daemon
             .manager
-            .discard_stopped_work(&workspace.id, None)
+            .discard_stopped_work(&SpaceSelector::id(&workspace.id), None)
             .await
             .unwrap();
         until(
@@ -592,7 +640,12 @@ mod streams {
         let _quiesced = daemon.manager.gates.quiesce().await;
         daemon
             .manager
-            .acquire_hold(&workspace.id, "quay".into(), None, HoldPlacer::User)
+            .acquire_hold(
+                &SpaceSelector::id(&workspace.id),
+                "quay".into(),
+                None,
+                HoldPlacer::User,
+            )
             .await
             .unwrap();
         let next = tokio::time::timeout(HANG, protocol::read_response(&mut reader))
@@ -614,7 +667,12 @@ mod streams {
         daemon.restart().await;
         daemon
             .manager
-            .acquire_hold(&workspace.id, "quay".into(), None, HoldPlacer::User)
+            .acquire_hold(
+                &SpaceSelector::id(&workspace.id),
+                "quay".into(),
+                None,
+                HoldPlacer::User,
+            )
             .await
             .unwrap();
         let update = until(&mut subscription, |update| {

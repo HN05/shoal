@@ -18,6 +18,7 @@ use super::{
     pr::RegistrationKind,
     space::{LinkSpace, require_ready_space},
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{agent_messages::AgentMessage, notifications::NotificationKind, workspace::Manager},
     forge::{
@@ -174,7 +175,7 @@ impl Manager {
     #[cfg(test)]
     pub async fn wait_prs(&self, selector: &str, seconds: Option<u64>) -> Result<Updates> {
         self.wait_items(
-            selector,
+            &SpaceSelector::parse(selector),
             &Selection {
                 kind: Some(LinkKind::Pr),
                 input: None,
@@ -186,7 +187,7 @@ impl Manager {
 
     pub async fn wait_items(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         selection: &Selection,
         seconds: Option<u64>,
     ) -> Result<Updates> {
@@ -211,7 +212,9 @@ impl Manager {
         // Subscribe before reading, so a message queued in between still wakes.
         let mut queued = self.signals.watch_agent_messages();
         let mut background = self.signals.watch_item_updates();
-        let unread = self.unread_agent_messages(&workspace.id).await?;
+        let unread = self
+            .unread_agent_messages(&SpaceSelector::id(&workspace.id))
+            .await?;
         let mut messages = unread.messages;
         if !unread.wakes {
             // A cancelled poll leaves its deliveries pending for the newer wait.
@@ -247,9 +250,11 @@ impl Manager {
 
     /// [`Self::agent_updates`] of the workspace, or [`Self::chat_updates`] of
     /// the running chat, `selector` names.
-    pub async fn space_updates(&self, selector: &str) -> Result<Updates> {
-        match self.present_space(selector).await? {
-            PresentSpace::Workspace(workspace) => self.agent_updates(&workspace.id).await,
+    pub async fn space_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
+        match self.space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                self.agent_updates(&SpaceSelector::id(&workspace.id)).await
+            }
             PresentSpace::Chat(chat) => self.chat_updates(&chat.id).await,
         }
     }
@@ -260,12 +265,17 @@ impl Manager {
     /// without a deadline finds them, a chat's as
     /// [`Self::wait_chat_messages`] does. The wake hook's wait, so the daemon
     /// logs how one ends without updates.
-    pub async fn wait_space_updates(&self, selector: &str) -> Result<Updates> {
-        let space = self.present_space(selector).await?;
+    pub async fn wait_space_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
+        let space = self.space(selector).await?;
         let log = WakeWaitLog::start(space.name());
         let updates = match space {
             PresentSpace::Workspace(workspace) => {
-                (self.wait_items(&workspace.id, &Selection::default(), None)).await
+                (self.wait_items(
+                    &SpaceSelector::id(&workspace.id),
+                    &Selection::default(),
+                    None,
+                ))
+                .await
             }
             PresentSpace::Chat(chat) => self.wait_chat_messages(&chat.id).await,
         };
@@ -280,7 +290,7 @@ impl Manager {
     /// gate across its forge requests and its removal, longer than an agent
     /// waits for its hook, so while one runs the updates wait for a later
     /// delivery.
-    pub async fn agent_updates(&self, selector: &str) -> Result<Updates> {
+    pub async fn agent_updates(&self, selector: &SpaceSelector) -> Result<Updates> {
         let workspace = self.workspace(selector).await?;
         let workspace_id = workspace.id.clone();
         let delivery = self.item_waits.start(&workspace.id);
@@ -401,7 +411,7 @@ impl Manager {
     /// [`Self::hook_cannot_wake`] says.
     pub async fn wait_agent_wake(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         due: bool,
         hooked: Option<&str>,
     ) -> Result<()> {
@@ -413,7 +423,9 @@ impl Manager {
         loop {
             // One reading decides both whether messages are due and when
             // held ones settle, which no signal announces.
-            let unread = self.unread_agent_messages(&workspace.id).await?;
+            let unread = self
+                .unread_agent_messages(&SpaceSelector::id(&workspace.id))
+                .await?;
             let hold = self.message_hold(&workspace, &unread.messages).await?;
             let messages_due = wake_messages_due(unread.wakes, hold, due);
             if self
@@ -439,9 +451,13 @@ impl Manager {
     /// the workspace's agent. While cleanup or an item change holds the PR
     /// gates of the workspaces whose activity it receives, only messages
     /// count, as in a hook delivery.
-    pub(crate) async fn updates_waiting(&self, selector: &str) -> Result<bool> {
+    pub(crate) async fn updates_waiting(&self, selector: &SpaceSelector) -> Result<bool> {
         let workspace = self.workspace(selector).await?;
-        if self.unread_agent_messages(&workspace.id).await?.wakes {
+        if self
+            .unread_agent_messages(&SpaceSelector::id(&workspace.id))
+            .await?
+            .wakes
+        {
             return Ok(true);
         }
         self.updates_deliverable(workspace).await
@@ -467,8 +483,12 @@ impl Manager {
     /// caller holding them, as cleanup does, sees every update their holders
     /// queued.
     pub(crate) async fn agent_updates_recorded(&self, workspace_id: &str) -> Result<bool> {
-        let workspace = self.workspace(workspace_id).await?;
-        if self.unread_agent_messages(&workspace.id).await?.wakes {
+        let workspace = self.workspace_by_id(workspace_id).await?;
+        if self
+            .unread_agent_messages(&SpaceSelector::id(&workspace.id))
+            .await?
+            .wakes
+        {
             return Ok(true);
         }
         self.updates_recorded(workspace).await
@@ -594,7 +614,7 @@ impl Manager {
     ) -> Result<Vec<AgentMessage>> {
         loop {
             queued.changed().await?;
-            let unread = self.unread_agent_messages(id).await?;
+            let unread = self.unread_agent_messages(&SpaceSelector::id(id)).await?;
             if unread.wakes {
                 return Ok(unread.messages);
             }
@@ -608,7 +628,7 @@ impl Manager {
             None => self.delegated_spaces(id).await?,
         };
         let guard = self.gates.lock_prs(receiving(id, &children)).await;
-        let space = self.link_space(id).await?;
+        let space = self.link_space(&SpaceSelector::id(id)).await?;
         let items = self.watched_items(&space, selection).await?;
         let report = branch_report(&items);
         let branch = watches_branch(selection).then(|| space.branch().map(str::to_owned));
@@ -621,7 +641,8 @@ impl Manager {
         let mut pending = self.fit_response(batch, 0).await?;
         if !pending.is_empty() {
             drop(guard);
-            self.summarize_failed_checks(id, &mut pending).await;
+            self.summarize_failed_checks(&SpaceSelector::id(id), &mut pending)
+                .await;
             return Ok(pending);
         }
         drop(guard);
@@ -638,7 +659,8 @@ impl Manager {
                 let mut updates = self
                     .deliver_observed(id, observations, selection, report, observed_at)
                     .await?;
-                self.summarize_failed_checks(id, &mut updates).await;
+                self.summarize_failed_checks(&SpaceSelector::id(id), &mut updates)
+                    .await;
                 Ok(updates)
             }
             // A failed item lookup must not hold back the branch's conflicts.
@@ -681,7 +703,9 @@ impl Manager {
         report: BranchReport,
     ) -> Option<(String, Snapshot)> {
         let only_sensitive = report == BranchReport::ChangedOnBothSides;
-        let check = self.watched_conflicts(id, only_sensitive).await;
+        let check = self
+            .watched_conflicts(&SpaceSelector::id(id), only_sensitive)
+            .await;
         Some((branch, branch_conflicts(check.transpose()?, report)))
     }
 
@@ -1131,11 +1155,11 @@ impl Manager {
 
     pub async fn acknowledge_pr_updates(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         deliveries: Vec<String>,
     ) -> Result<()> {
         // A chat without a repository has no checkout, but its own deliveries.
-        let id = self.present_space(selector).await?.id().to_owned();
+        let id = self.space(selector).await?.id().to_owned();
         // Without the PR gate: an agent's hook acknowledges within its timeout.
         // One transaction removes exactly the acknowledged deliveries, so
         // whatever a poll or a split queues meanwhile stays pending. A chat's

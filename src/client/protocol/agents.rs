@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
@@ -10,7 +11,7 @@ pub enum AgentMethod {
     /// and `session` as the agent session it resumes. `turn_end` comes with
     /// an idle report that ends a turn.
     SetAgentState {
-        workspace: String,
+        workspace: SpaceSelector,
         state: crate::state::AgentState,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<String>,
@@ -21,14 +22,14 @@ pub enum AgentMethod {
     /// an update, unless a stop of the caller's agent came first, which
     /// leaves the update for its restore. Answers whether the turn starts.
     StartWokenTurn {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     /// [`Self::SetAgentState`] idle for a turn `failure` ended, which may
     /// schedule a retry of the turn. An unscoped caller, such as the wrapper
     /// whose proxy ended the turn, names the reporting `execution`; a scoped
     /// one reports for its own.
     ReportTurnFailure {
-        workspace: String,
+        workspace: SpaceSelector,
         failure: crate::state::TurnFailure,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<String>,
@@ -41,19 +42,19 @@ pub enum AgentMethod {
     /// starting the agent's turn, which the daemon logs so that a missed
     /// wake can be traced.
     ReportWakeEnd {
-        space: String,
+        space: SpaceSelector,
         ended: WakeEnd,
     },
     /// A turn-state report of the caller's agent that failed with `error`,
     /// which leaves the state shown as last reported.
     ReportStateFailure {
-        workspace: String,
+        workspace: SpaceSelector,
         error: String,
     },
     /// The retry the proxy of `execution` waits to make, which its wrapper
     /// reports; `None` once the proxy succeeded or gave up.
     ReportProxyRetry {
-        workspace: String,
+        workspace: SpaceSelector,
         execution: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         retry: Option<crate::client::executions::ProxyRetry>,
@@ -62,7 +63,7 @@ pub enum AgentMethod {
     /// second `resets_at`, such as a usage limit's reset, which its wrapper
     /// reports so a retry of the agent's turn waits past it.
     ReportUpstreamReset {
-        workspace: String,
+        workspace: SpaceSelector,
         execution: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         resets_at: Option<i64>,
@@ -71,7 +72,7 @@ pub enum AgentMethod {
     /// wrapper reads from the place it runs in and reports again
     /// periodically, so a restarted daemon learns it too.
     ReportAttached {
-        workspace: String,
+        workspace: SpaceSelector,
         execution: String,
         attached: bool,
     },
@@ -81,29 +82,29 @@ pub enum AgentMethod {
     /// while that hook cannot: after an interrupt ended its last turn, or
     /// once no wait for the workspace's updates has run for a few minutes.
     AwaitAgentWake {
-        workspace: String,
+        workspace: SpaceSelector,
         due: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         hooked: Option<String>,
     },
     /// The agents connected in the workspace, with their turns and places.
     WorkspaceAgents {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     /// An interrupt the caller typed ended the turn of the agent `execution`
     /// runs in the workspace, which leaves it idle.
     InterruptTurn {
-        workspace: String,
+        workspace: SpaceSelector,
         execution: String,
     },
     /// The session of the workspace's agent that a fork starts from: the
     /// caller's own agent there, else its only one.
     AgentSession {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     /// A message to the agents of a workspace or running chat.
     SendAgentMessage {
-        space: String,
+        space: SpaceSelector,
         message: String,
         /// Files to attach by absolute path, which the daemon copies.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -128,10 +129,10 @@ pub enum AgentMethod {
     /// The undelivered messages of the agents of a workspace or running
     /// chat, oldest first.
     AgentMessages {
-        space: String,
+        space: SpaceSelector,
     },
     MarkAgentMessagesDelivered {
-        space: String,
+        space: SpaceSelector,
         ids: Vec<i64>,
     },
     /// The undelivered agent messages and queued item updates of a
@@ -139,14 +140,14 @@ pub enum AgentMethod {
     /// acknowledge them with [`Self::AcknowledgePrUpdates`]. It replaces a
     /// running watch.
     AgentUpdates {
-        space: String,
+        space: SpaceSelector,
     },
     /// Long-lived: what [`Self::AgentUpdates`] answers, once there is any.
     WaitAgentUpdates {
-        space: String,
+        space: SpaceSelector,
     },
     AcknowledgePrUpdates {
-        space: String,
+        space: SpaceSelector,
         deliveries: Vec<String>,
         /// Agent messages the watch printed.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

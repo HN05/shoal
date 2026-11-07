@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         agent_queue::tests::STARTED,
@@ -464,14 +465,20 @@ async fn completed_workspaces_and_registered_agents_release_starting_slots() {
         .await
         .unwrap();
     manager
-        .queue_attach(&first.id, &workspace.id)
+        .queue_attach(&first.id, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(!started(&second.id));
 
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -1152,13 +1159,18 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     // Without a limit the daemon still starts it rather than the caller.
     let admission = manager
         .queue_add(QueueRequest {
-            workspace: Some(child.name.to_string()),
+            workspace: Some(SpaceSelector::parse(&child.name)),
             ..request(&repo, "child", false)
         })
         .await
@@ -1176,14 +1188,17 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     );
     // Its worker may attach only the workspace it opens.
     manager
-        .queue_attach(&entry.id, &parent.id)
+        .queue_attach(&entry.id, &SpaceSelector::id(&parent.id))
         .await
         .unwrap_err();
-    manager.queue_attach(&entry.id, &child.id).await.unwrap();
+    manager
+        .queue_attach(&entry.id, &SpaceSelector::id(&child.id))
+        .await
+        .unwrap();
 
     manager
         .queue_add(QueueRequest {
-            workspace: Some(child.name.to_string()),
+            workspace: Some(SpaceSelector::parse(&child.name)),
             ..request(&other, "foreign", false)
         })
         .await
@@ -1202,7 +1217,7 @@ async fn a_launch_in_an_existing_workspace_started_now_starts_beyond_the_limit()
     assert!(add(&manager, &repo, "busy").await.start);
     let admission = manager
         .queue_add(QueueRequest {
-            workspace: Some(child.id.clone()),
+            workspace: Some(SpaceSelector::id(&child.id)),
             ..request(&repo, "child", true)
         })
         .await
@@ -1226,10 +1241,13 @@ async fn a_waiting_launch_attached_to_an_existing_workspace_opens_it() {
     assert_eq!(entry.state, QueueState::Queued);
     // Only a workspace of the launch's repository takes it.
     manager
-        .queue_attach(&entry.id, &foreign.id)
+        .queue_attach(&entry.id, &SpaceSelector::id(&foreign.id))
         .await
         .unwrap_err();
-    manager.queue_attach(&entry.id, &set_up.id).await.unwrap();
+    manager
+        .queue_attach(&entry.id, &SpaceSelector::id(&set_up.id))
+        .await
+        .unwrap();
     let entries = manager.queue_entries().await.unwrap();
     let waiting = entries.iter().find(|queued| queued.id == entry.id).unwrap();
     assert_eq!(waiting.opens.as_deref(), Some(set_up.id.as_str()));
@@ -1244,7 +1262,12 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     manager
@@ -1265,7 +1288,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     ] {
         let mut method = crate::protocol::QueueMethod::QueueAdd {
             request: QueueRequest {
-                workspace: workspace.map(ToString::to_string),
+                workspace: workspace.map(SpaceSelector::from),
                 ..request(&repo, "launch", false)
             },
         };
@@ -1275,7 +1298,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
     } // Only the user starts one regardless of the limits.
     let mut method = crate::protocol::QueueMethod::QueueAdd {
         request: QueueRequest {
-            workspace: Some(child.name.to_string()),
+            workspace: Some(SpaceSelector::parse(&child.name)),
             ..request(&repo, "launch", true)
         },
     };
@@ -1299,7 +1322,7 @@ async fn a_workspace_reserved_for_removal_refuses_queued_launches() {
         .unwrap();
     manager
         .queue_add(QueueRequest {
-            workspace: Some(child.id.clone()),
+            workspace: Some(SpaceSelector::id(&child.id)),
             ..request(&repo, "child", false)
         })
         .await
@@ -1318,7 +1341,7 @@ async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
         .unwrap();
     let entry = manager
         .queue_add(QueueRequest {
-            workspace: Some(child.id.clone()),
+            workspace: Some(SpaceSelector::id(&child.id)),
             ..request(&repo, "child", false)
         })
         .await
@@ -1356,7 +1379,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager
         .set_agent_state(
-            &idle.name,
+            &SpaceSelector::from(&idle.name),
             crate::state::AgentState::Idle,
             Some(execution.clone()),
             None,
@@ -1386,7 +1409,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     // An update makes it due; it waits for the launch's slot like a launch.
     manager
         .send_agent_message(
-            &idle.name,
+            &SpaceSelector::from(&idle.name),
             "Review requested".into(),
             Vec::new(),
             &Attacher::User,
@@ -1419,7 +1442,7 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager
         .set_agent_state(
-            &idle.name,
+            &SpaceSelector::from(&idle.name),
             crate::state::AgentState::Idle,
             Some(execution.clone()),
             None,
@@ -1437,7 +1460,7 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let restoring = await_restore(&manager, &execution).await;
     manager
         .send_agent_message(
-            &idle.name,
+            &SpaceSelector::from(&idle.name),
             "Review requested".into(),
             Vec::new(),
             &Attacher::User,
@@ -1469,12 +1492,18 @@ async fn a_oneshot_run_goes_ahead_of_launches_and_holds_its_slot() {
         .await
         .unwrap();
     manager
-        .queue_attach(&first.id, &workspace.id)
+        .queue_attach(&first.id, &SpaceSelector::id(&workspace.id))
         .await
         .unwrap();
     manager.consume_queue_entry(&first.id, &workspace.id).await;
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
 

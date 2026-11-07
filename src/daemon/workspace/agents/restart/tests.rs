@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -57,7 +58,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
     // A report from the agent is its own state, unlike one from a command.
     manager
         .set_agent_state(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             AgentState::Idle,
             Some(agent.plan.id.clone()),
             None,
@@ -143,7 +144,12 @@ async fn each_agent_keeps_its_own_turn_report_in_a_shared_workspace() {
     // The workspace keeps only the later report; each agent keeps its own.
     for (id, state) in ids.iter().zip([AgentState::Idle, AgentState::Working]) {
         manager
-            .set_agent_state(&workspace.id, state, Some(id.clone()), None)
+            .set_agent_state(
+                &SpaceSelector::id(&workspace.id),
+                state,
+                Some(id.clone()),
+                None,
+            )
             .await
             .unwrap();
     }
@@ -156,7 +162,10 @@ async fn each_agent_keeps_its_own_turn_report_in_a_shared_workspace() {
         .collect();
     assert_eq!(states[&ids[0]], Some(AgentState::Idle));
     assert_eq!(states[&ids[1]], Some(AgentState::Working));
-    let status = manager.inspect_workspace(&workspace.id).await.unwrap();
+    let status = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert_eq!(
         status.workspace.agent_state.map(|status| status.state),
         Some(AgentState::Working)
@@ -207,7 +216,7 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
     let place = Origin::created(HostName::Zmx, "agents".into());
     let execution = manager
         .begin_execution_placed(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             None,
             ExecutionKind::Command,
             None,

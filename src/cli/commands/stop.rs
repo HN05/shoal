@@ -9,6 +9,7 @@ use futures_util::future::join_all;
 use crate::client::output::agents::{
     CancelledRun, StoppedProcesses, StoppedWorkspaces, WorkspaceStopped,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, commands::agent_queue, context::Context, output::Style, ui},
     client::processes::{Selection, Stopped},
@@ -66,9 +67,10 @@ async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
     }
     let cancelled = stopped.cancelled;
     let other = stop_untracked(ctx, &workspace, Selection::Processes).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
-        .await?
-        .workspace;
+    let workspace =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
+            .await?
+            .workspace;
     let saved = !recovery::Saved::load(&ctx.paths, &workspace.id)?.is_empty();
     let mut message = "Workspace processes stopped".to_owned();
     if other.processes > 0 {
@@ -150,8 +152,13 @@ async fn ensure_spaces(ctx: &Context, selectors: &[String]) -> Result<()> {
 /// than this one and the processes that started it.
 async fn stop_untracked(ctx: &Context, space: &str, selection: Selection) -> Result<Stopped> {
     let requester = Some(std::process::id());
-    crate::client::stopping::stop_processes(&ctx.paths, space.to_owned(), selection, requester)
-        .await
+    crate::client::stopping::stop_processes(
+        &ctx.paths,
+        SpaceSelector::parse(space),
+        selection,
+        requester,
+    )
+    .await
 }
 
 /// What a stop of `selection` reports for `stopped`.
@@ -205,7 +212,7 @@ pub(super) async fn stop(
     let request_stop = |acknowledge_unproven| {
         crate::client::stopping::stop_workspace(
             &ctx.paths,
-            workspace.to_owned(),
+            SpaceSelector::parse(workspace),
             acknowledge_unproven,
             launches,
         )
@@ -235,7 +242,7 @@ async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<Stri
     let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
     let mut found: Vec<String> = Vec::new();
     for selector in selectors {
-        let id = crate::client::workspaces::inspect(&ctx.paths, selector)
+        let id = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&selector))
             .await?
             .workspace
             .id;
@@ -261,7 +268,7 @@ pub(super) async fn ensure_below(ctx: &Context, selected: &[String]) -> Result<(
     let own = crate::env::own_space().context(REFUSAL)?;
     ensure!(crate::env::is_scoped(), "{REFUSAL}");
     for selector in selected {
-        let id = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
+        let id = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
             .await?
             .workspace
             .id;
@@ -277,15 +284,17 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
     let mut workspaces = Vec::new();
     let mut refusals = Vec::new();
     for selector in selectors {
-        let workspace = match crate::client::workspaces::inspect(&ctx.paths, selector.clone()).await
-        {
-            Ok(inspection) => inspection.workspace,
-            Err(error) => {
-                refusals.push(format!("{selector}: {error:#}"));
-                continue;
-            }
-        };
-        match crate::client::stopping::check(&ctx.paths, workspace.id.clone()).await {
+        let workspace =
+            match crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
+                .await
+            {
+                Ok(inspection) => inspection.workspace,
+                Err(error) => {
+                    refusals.push(format!("{selector}: {error:#}"));
+                    continue;
+                }
+            };
+        match crate::client::stopping::check(&ctx.paths, SpaceSelector::id(&workspace.id)).await {
             Ok(()) => workspaces.push(workspace),
             Err(error) => refusals.push(format!("{}: {error:#}", workspace.name)),
         }
@@ -334,7 +343,7 @@ async fn stop_each(
     let results = join_all(workspaces.iter().map(|workspace| async {
         let stopped = crate::client::stopping::stop_workspace(
             &ctx.paths,
-            workspace.id.clone(),
+            SpaceSelector::id(&workspace.id),
             acknowledge_unproven,
             QueuedLaunches::Cancel,
         )

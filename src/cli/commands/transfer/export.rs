@@ -8,6 +8,7 @@ use std::{
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::client::output::transfer::Exported;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -211,7 +212,7 @@ impl Output {
 async fn export_removed(ctx: &Context, selector: &str, output: &Output) -> Result<ExportedSpace> {
     let exported = crate::client::transfer::export(
         &ctx.paths,
-        selector.to_owned(),
+        SpaceSelector::parse(selector),
         UnsavedWork::default(),
         output.file(),
     )
@@ -240,14 +241,18 @@ async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Resu
         Checked::Workspace(check) => {
             let space = check.workspace.id.clone();
             let unsaved = UnsavedWork::confirming(check);
-            let exported =
-                crate::client::transfer::export(&ctx.paths, space, unsaved, output.file());
+            let exported = crate::client::transfer::export(
+                &ctx.paths,
+                SpaceSelector::parse(&space),
+                unsaved,
+                output.file(),
+            );
             super::super::workspaces::leaving(ctx, &check.workspace, exported).await?
         }
         Checked::Chat(chat) => {
             crate::client::transfer::export(
                 &ctx.paths,
-                chat.id.clone(),
+                SpaceSelector::id(&chat.id),
                 UnsavedWork::default(),
                 output.file(),
             )
@@ -352,7 +357,8 @@ async fn check_workspace_export(
     workspace: &str,
     output: &Output,
 ) -> Result<RemovalCheck> {
-    let check = crate::client::removal::check(&ctx.paths, workspace.to_owned(), true).await?;
+    let check =
+        crate::client::removal::check(&ctx.paths, SpaceSelector::parse(workspace), true).await?;
     // Its removal keeps no record, which the package is built from.
     ensure!(
         !check.workspace.disposable,

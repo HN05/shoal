@@ -1,5 +1,6 @@
 use std::{fs, path::Path};
 
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{commit, git, manager, repository};
 
 #[tokio::test]
@@ -15,7 +16,10 @@ async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
         .create_workspace(&repo_id, "topic".into(), None, None, None)
         .await
         .unwrap();
-    let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
+    let check = manager
+        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
     assert_eq!(check.target, "main");
     assert!(!check.conflicts && check.files.is_empty());
 
@@ -25,7 +29,10 @@ async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
     commit(&repo, "tracked");
     fs::write(repo.join("other"), "main\n").unwrap();
     commit(&repo, "other");
-    let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
+    let check = manager
+        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
     assert!(check.conflicts);
     assert_eq!(check.files, ["tracked"]);
     assert_eq!(
@@ -44,18 +51,19 @@ async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
 
     git(&repo, &["branch", "release", "main~2"]);
     let check = manager
-        .check_conflicts(&workspace.id, Some("release".into()))
+        .check_conflicts(&SpaceSelector::id(&workspace.id), Some("release".into()))
         .await
         .unwrap();
     assert_eq!(check.target, "release");
     assert!(!check.conflicts);
     manager
-        .check_conflicts(&workspace.id, Some("missing".into()))
+        .check_conflicts(&SpaceSelector::id(&workspace.id), Some("missing".into()))
         .await
         .unwrap_err();
     let lone = git(&repo, &["commit-tree", "main^{tree}", "-m", "lone"]);
     git(&repo, &["branch", "lone", lone.trim()]);
-    let unrelated = manager.check_conflicts(&workspace.id, Some("lone".into()));
+    let selected = SpaceSelector::id(&workspace.id);
+    let unrelated = manager.check_conflicts(&selected, Some("lone".into()));
     assert!(unrelated.await.is_err());
 
     let base = manager
@@ -63,10 +71,16 @@ async fn conflicts_compare_committed_head_with_the_default_or_named_branch() {
         .await
         .unwrap();
     manager
-        .set_base_workspace(&workspace.id, Some(base.name.to_string()))
+        .set_base_workspace(
+            &SpaceSelector::id(&workspace.id),
+            Some(base.name.to_string()),
+        )
         .await
         .unwrap();
-    let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
+    let check = manager
+        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
     assert_eq!(Some(&check.target), base.branch.as_ref());
     assert_eq!(
         check.target_commit,
@@ -104,7 +118,10 @@ async fn sensitive_paths_changed_on_both_sides_are_listed_until_the_target_has_h
         &[&shared[..], &["mine", "feature"]].concat(),
     );
     change(&repo, &shared);
-    let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
+    let check = manager
+        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
     assert!(!check.conflicts);
     assert_eq!(check.changed_on_both_sides, ["migrations/2.sql", "version"]);
     assert!(!check.clean());
@@ -120,14 +137,17 @@ async fn sensitive_paths_changed_on_both_sides_are_listed_until_the_target_has_h
     // Only the default target's result is kept.
     git(&repo, &["branch", "release", "main"]);
     manager
-        .check_conflicts(&workspace.id, Some("release".into()))
+        .check_conflicts(&SpaceSelector::id(&workspace.id), Some("release".into()))
         .await
         .unwrap();
     let recorded = manager.recorded_changed_on_both_sides(&workspace.id);
     assert_eq!(recorded.await.unwrap().unwrap().target, "main");
 
     change(&repo, &["mine", "feature"]);
-    let check = manager.check_conflicts(&workspace.id, None).await.unwrap();
+    let check = manager
+        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
     assert!(check.clean(), "the target has HEAD's changes");
     let recorded = manager.recorded_changed_on_both_sides(&workspace.id);
     assert!(recorded.await.unwrap().unwrap().files.is_empty());

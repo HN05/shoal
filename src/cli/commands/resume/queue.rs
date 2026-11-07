@@ -8,6 +8,7 @@ use crate::client::output::{
     batch::Failure,
     resume::{Queued, RestoredChat},
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{context::Context, ui},
     execution::recovery::Saved,
@@ -97,12 +98,13 @@ async fn queue(
     execution: &str,
     now: bool,
 ) -> Result<QueueEntry> {
-    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone()).await?;
+    let inspection =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
     reconcile_stale_execution(ctx, &inspection, Some(execution)).await?;
     let (workspace, execution) = (workspace.id.clone(), execution.to_owned());
     crate::client::queue::restore(
         &ctx.paths,
-        workspace,
+        SpaceSelector::parse(&workspace),
         execution,
         terminal::start_environment(),
         now,

@@ -1,4 +1,5 @@
 use crate::client::resources::ResourceRequest;
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 /// Requests about leases of cooperative resources.
@@ -10,18 +11,18 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum ResourceMethod {
     ResourceAcquire {
-        workspace: String,
+        workspace: SpaceSelector,
         request: ResourceRequest,
     },
     ResourceRelease {
-        workspace: String,
+        workspace: SpaceSelector,
         pool: String,
         name: String,
     },
     ResourceOverview {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     ResourceCatalog {
-        workspace: String,
+        workspace: SpaceSelector,
     },
 }

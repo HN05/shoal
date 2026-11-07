@@ -42,3 +42,25 @@ fn reading_a_name_validates_it() {
     assert_eq!(serde_json::to_string(&name).unwrap(), "\"fix-login\"");
     assert!(serde_json::from_str::<SpaceName>("\"42\"").is_err());
 }
+
+#[test]
+fn digits_select_a_number_and_other_text_an_id_or_name() {
+    let parse = |text: &str| text.parse::<SpaceSelector>().unwrap();
+    assert_eq!(parse("3"), SpaceSelector::Number(3));
+    assert_eq!(
+        parse("fix-login"),
+        SpaceSelector::IdOrName("fix-login".into())
+    );
+    assert_eq!(parse("3a"), SpaceSelector::IdOrName("3a".into()));
+    assert!("".parse::<SpaceSelector>().is_err());
+    assert!(parse("3").selects("id", "name", 3));
+    assert!(!parse("3").selects("3", "name", 4));
+    assert!(parse("name").selects("id", "name", 4));
+    assert!(!SpaceSelector::id("name").selects("id", "name", 4));
+    let json = serde_json::to_string(&parse("3")).unwrap();
+    assert_eq!(json, "\"3\"");
+    assert_eq!(
+        serde_json::from_str::<SpaceSelector>(&json).unwrap(),
+        parse("3")
+    );
+}

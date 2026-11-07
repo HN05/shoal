@@ -13,6 +13,7 @@ use futures_util::future::BoxFuture;
 
 use super::{ChatLaunch, Launch};
 use crate::client::output::agents::{DetachedChat, DetachedSession};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::ModelChoice,
     agents::{
@@ -303,11 +304,12 @@ pub(super) async fn start_chat(
     }
     // This process holds the chat until the session runs, which is not in
     // this terminal.
+    let parent = parent.as_deref().map(SpaceSelector::id);
     let new = crate::client::chats::NewChat {
         name: chat_name,
         agent: name,
         mode,
-        parent: parent.as_deref(),
+        parent: parent.as_ref(),
     };
     let record =
         crate::client::chats::record(&ctx.paths, home, new, None, true, restores.as_deref())

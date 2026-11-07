@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, request},
@@ -142,7 +143,7 @@ pub struct ExportedSpace {
 /// package it into `file`.
 pub async fn export(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     unsaved: UnsavedWork,
     file: PathBuf,
 ) -> Result<ExportedSpace> {
@@ -161,7 +162,7 @@ pub async fn export(
 /// at its checkpoint `checkpoint`, or at a new one.
 pub async fn copy(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     checkpoint: Option<u64>,
     file: PathBuf,
 ) -> Result<ExportedSpace> {

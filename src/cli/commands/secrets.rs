@@ -5,6 +5,7 @@ use anyhow::Result;
 use super::acquisition::{Finish, obtain};
 use crate::client::leases;
 use crate::client::output::acquisition::NotAcquired;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -27,7 +28,13 @@ pub(super) async fn acquire(
             reason: reason.clone(),
             source: None,
         };
-        leases::acquire_secret(&ctx.paths, workspace.clone(), name.clone(), request).await
+        leases::acquire_secret(
+            &ctx.paths,
+            SpaceSelector::parse(&workspace),
+            name.clone(),
+            request,
+        )
+        .await
     })
     .await?;
     outcome.finish(
@@ -38,7 +45,7 @@ pub(super) async fn acquire(
 }
 
 pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<SecretCatalog> {
-    leases::secret_catalog(&ctx.paths, workspace.to_owned()).await
+    leases::secret_catalog(&ctx.paths, SpaceSelector::parse(workspace)).await
 }
 
 pub(super) fn render_catalog(catalog: &SecretCatalog, palette: Palette) {

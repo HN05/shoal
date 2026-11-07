@@ -15,6 +15,7 @@ use std::{
 
 use anyhow::{Context as _, Result, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::{Agent, ModelChoice},
     agents::{
@@ -261,7 +262,7 @@ pub(super) async fn launch_agent(
 ) -> Result<i32> {
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let integration = agent_integration(&settings, agent.name());
@@ -365,7 +366,7 @@ async fn defining_workspaces(ctx: &Context, name: &str) -> Vec<crate::model::Wor
     };
     let mut defining = Vec::new();
     for workspace in workspaces {
-        let target = ConfigTarget::Workspace(workspace.id.clone());
+        let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
         // A workspace whose configuration cannot load has no agents.
         if let Ok(settings) = crate::client::workspaces::settings(&ctx.paths, target).await
             && crate::ai::agents(&settings.tools).any(|agent| agent == name)
@@ -382,14 +383,16 @@ async fn agent_target(ctx: &Context, workspace: Option<&str>) -> Result<Option<C
     if let Some(workspace) = workspace {
         // A selector that does not resolve is the command's own error.
         let workspace = crate::cli::ui::explicit_workspace(ctx, workspace.to_owned()).await;
-        return Ok(workspace.ok().map(ConfigTarget::Workspace));
+        return Ok(workspace
+            .ok()
+            .map(|id| ConfigTarget::Workspace(SpaceSelector::id(&id))));
     }
     // Without a daemon there is no workspace context, only the machine's.
     let Ok(workspaces) = crate::client::workspaces::list(&ctx.paths).await else {
         return Ok(None);
     };
     let current = configured::current_workspace(&workspaces)?;
-    Ok(current.map(|workspace| ConfigTarget::Workspace(workspace.id.clone())))
+    Ok(current.map(|workspace| ConfigTarget::Workspace(SpaceSelector::id(&workspace.id))))
 }
 
 /// `shoal <name>` and `shoal run <name>`: agents launch with their prompts,
@@ -698,7 +701,7 @@ fn saved_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<String>> {
 async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<String>) {
     let settings = match crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await
     {

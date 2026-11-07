@@ -1,6 +1,7 @@
 use std::{fs, sync::Arc};
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{commit, git, manager, repository};
 use crate::{daemon::workspace_files::Attacher, execution::recovery, model::CleanupReason};
 
@@ -194,7 +195,11 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
     let saved = recovery::Record::load(&path).unwrap().unwrap();
     let queued = f
         .manager
-        .queue_stopped_restore(&f.workspace.id, "saved", Default::default())
+        .queue_stopped_restore(
+            &SpaceSelector::id(&f.workspace.id),
+            "saved",
+            Default::default(),
+        )
         .await
         .unwrap();
 
@@ -238,7 +243,7 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
     assert_eq!(agent.execution, "saved");
     assert_eq!(agent.record, saved);
 
-    let restored = f.manager.restore_workspace("topic").await.unwrap();
+    let restored = f.manager.restore_workspace(&"topic".into()).await.unwrap();
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
     let workspace = restored.opened.workspace;
     assert_eq!(
@@ -338,12 +343,21 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
     let manager = &f.manager;
 
     manager
-        .acquire_hold(id, "review".into(), None, crate::model::HoldPlacer::User)
+        .acquire_hold(
+            &SpaceSelector::id(id),
+            "review".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     assert!(f.kept_after(5).await);
     manager
-        .release_hold(id, "review".into(), crate::model::HoldPlacer::User)
+        .release_hold(
+            &SpaceSelector::id(id),
+            "review".into(),
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
 
@@ -354,7 +368,7 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
         choices: vec![],
     };
     let question = manager
-        .ask_question(id, ask, Vec::new(), &Attacher::User)
+        .ask_question(&SpaceSelector::id(id), ask, Vec::new(), &Attacher::User)
         .await
         .unwrap();
     assert!(f.kept_after(5).await, "an open question");
@@ -370,7 +384,7 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
         .unwrap();
     manager
         .acquire_hold(
-            &stacked.id,
+            &SpaceSelector::id(&stacked.id),
             "busy".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -378,11 +392,14 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
         .await
         .unwrap();
     manager
-        .set_base_workspace(&stacked.id, Some("topic".into()))
+        .set_base_workspace(&SpaceSelector::id(&stacked.id), Some("topic".into()))
         .await
         .unwrap();
     assert!(f.kept_after(5).await, "a base of another workspace");
-    manager.set_base_workspace(&stacked.id, None).await.unwrap();
+    manager
+        .set_base_workspace(&SpaceSelector::id(&stacked.id), None)
+        .await
+        .unwrap();
 
     let git_dir = f.workspace.git_dir.clone().unwrap();
     fs::write(git_dir.join("MERGE_HEAD"), "").unwrap();

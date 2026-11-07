@@ -11,6 +11,7 @@ use super::{
     ENTRY_COLUMNS, Grant, WaitingRestore, dependencies::Readiness, entry as queue_entry, order,
     record_waiting_restore,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::Caller,
@@ -260,7 +261,7 @@ impl Manager {
         let entry = match self.find_entry(selector, caller).await? {
             Some(entry) => entry,
             None if caller.is_some() => bail!("{selector} is not in the agent queue"),
-            None => return self.move_running_agent(selector, place).await,
+            None => return self.move_running_agent(&selector.parse()?, place).await,
         };
         ensure!(
             entry.state == QueueState::Queued,
@@ -309,7 +310,11 @@ impl Manager {
     /// its restore, which its wrapper waits for, at `place`. The place is
     /// taken before the stop, so a place that cannot be taken stops nothing;
     /// the wrapper's own queueing then keeps it.
-    async fn move_running_agent(&self, selector: &str, place: QueuePlace) -> Result<MovedEntry> {
+    async fn move_running_agent(
+        &self,
+        selector: &SpaceSelector,
+        place: QueuePlace,
+    ) -> Result<MovedEntry> {
         let workspace = self
             .workspace(selector)
             .await

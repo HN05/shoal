@@ -701,7 +701,7 @@ impl Manager {
     /// Check that a stopped agent's workspace is ready and still the
     /// recorded worktree, so a replaced one never receives the agent.
     pub(crate) async fn verify_restore_workspace(&self, workspace_id: &str) -> anyhow::Result<()> {
-        let workspace = self.workspace(workspace_id).await?;
+        let workspace = self.workspace_by_id(workspace_id).await?;
         self.verify_worktree(&workspace).await?;
         anyhow::ensure!(
             workspace.state == crate::state::WorkspaceState::Ready,

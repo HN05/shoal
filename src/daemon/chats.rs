@@ -13,6 +13,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use uuid::Uuid;
 
 use crate::client::space_names::SpaceName;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, release_decided_by},
@@ -76,7 +77,7 @@ impl Manager {
     #[cfg(test)]
     pub async fn start_chat_in_workspace(
         &self,
-        workspace: &str,
+        workspace: &SpaceSelector,
         name: SpaceName,
         agent: String,
         pid: u32,
@@ -104,7 +105,7 @@ impl Manager {
     pub async fn start_new_chat(
         &self,
         repository: Option<crate::repository::Selector>,
-        workspace: Option<&str>,
+        workspace: Option<&SpaceSelector>,
         new: NewChat,
     ) -> Result<Chat> {
         let (repository, workspace) = match (workspace, repository) {
@@ -126,14 +127,14 @@ impl Manager {
     /// go to the workspace's agent while the user attends the chat.
     pub(crate) async fn ensure_parent_not_host(
         &self,
-        workspace: Option<&str>,
-        parent: Option<&str>,
+        workspace: Option<&SpaceSelector>,
+        parent: Option<&SpaceSelector>,
     ) -> Result<()> {
         let (Some(workspace), Some(parent)) = (workspace, parent) else {
             return Ok(());
         };
         let host = self.workspace(workspace).await?;
-        let parent = self.present_space(parent).await?;
+        let parent = self.space(parent).await?;
         ensure!(
             parent.id() != host.id,
             "a chat in the worktree of {} cannot go below it; name another --parent",
@@ -144,7 +145,7 @@ impl Manager {
 
     /// The workspace `selector` names, once a chat may run in it: it is
     /// ready and its worktree is there and verified to be its own.
-    pub(crate) async fn chat_workspace(&self, selector: &str) -> Result<Workspace> {
+    pub(crate) async fn chat_workspace(&self, selector: &SpaceSelector) -> Result<Workspace> {
         let workspace = self.workspace(selector).await?;
         ensure!(
             workspace.state == crate::state::WorkspaceState::Ready,
@@ -347,21 +348,14 @@ impl Manager {
         Ok(recorded.into_iter().map(|(_, process)| process).collect())
     }
 
-    /// The running chat `selector` names, by ID or name.
-    pub(crate) async fn running_chat(&self, selector: &str) -> Result<Option<Chat>> {
-        Ok(self
-            .recorded_chat(selector)
-            .await?
-            .filter(|chat| chat.restore.is_none()))
+    /// The running chat with the ID `id`.
+    pub(crate) async fn running_chat_by_id(&self, id: &str) -> Result<Option<Chat>> {
+        Ok((self.chat_by_id(id).await?).filter(|chat| chat.restore.is_none()))
     }
 
-    /// The running or stopped chat `selector` names, by ID or name.
-    pub(crate) async fn recorded_chat(&self, selector: &str) -> Result<Option<Chat>> {
-        Ok(self
-            .chats()
-            .await?
-            .into_iter()
-            .find(|chat| chat.id == selector || chat.name == selector))
+    /// The running or stopped chat with the ID `id`.
+    pub(crate) async fn chat_by_id(&self, id: &str) -> Result<Option<Chat>> {
+        Ok(self.chats().await?.into_iter().find(|chat| chat.id == id))
     }
 
     /// Stop the running chat `id`: stop every process it owns, so none goes

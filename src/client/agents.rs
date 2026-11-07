@@ -2,6 +2,7 @@
 //! the user's interrupts, and the sessions they run.
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, request},
@@ -16,7 +17,7 @@ use crate::{
 /// `turn_end` reports the turn that ended with it.
 pub async fn set_state(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     state: AgentState,
     session: Option<String>,
     turn_end: Option<TurnEnd>,
@@ -33,7 +34,7 @@ pub async fn set_state(
 /// Record the agent of `workspace` working on the turn a wake starts.
 /// Whether the turn starts: a stop of the agent that came first leaves the
 /// update for its restore.
-pub async fn start_woken_turn(daemon: &impl Daemon, workspace: String) -> Result<bool> {
+pub async fn start_woken_turn(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<bool> {
     let turn: WokenTurn = request(daemon, AgentMethod::StartWokenTurn { workspace }).await?;
     Ok(turn.starts)
 }
@@ -42,7 +43,7 @@ pub async fn start_woken_turn(daemon: &impl Daemon, workspace: String) -> Result
 /// `failure` ended.
 pub async fn report_turn_failure(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     failure: TurnFailure,
     session: Option<String>,
     turn_end: TurnEnd,
@@ -60,7 +61,7 @@ pub async fn report_turn_failure(
 /// Tell the user that a report from `workspace` failed with `error`.
 pub async fn report_state_failure(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     error: String,
 ) -> Result<()> {
     request(daemon, AgentMethod::ReportStateFailure { workspace, error }).await
@@ -68,7 +69,11 @@ pub async fn report_state_failure(
 
 /// Tell the daemon that the wake hook of `space`'s agent ended for `ended`
 /// without starting the agent's turn.
-pub async fn report_wake_end(daemon: &impl Daemon, space: String, ended: WakeEnd) -> Result<()> {
+pub async fn report_wake_end(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    ended: WakeEnd,
+) -> Result<()> {
     request(daemon, AgentMethod::ReportWakeEnd { space, ended }).await
 }
 
@@ -76,7 +81,7 @@ pub async fn report_wake_end(daemon: &impl Daemon, space: String, ended: WakeEnd
 /// ended its agent's turn.
 pub async fn interrupt_turn(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     execution: String,
 ) -> Result<AgentStatus> {
     request(
@@ -128,7 +133,7 @@ pub async fn of_chats(daemon: &impl Daemon) -> Result<Vec<RunningAgent>> {
 /// Returns the place the chat runs in again, when it runs in a terminal host.
 pub async fn restart_chat(
     daemon: &impl Daemon,
-    chat: String,
+    chat: SpaceSelector,
     join: Option<PendingRestart>,
     run: Option<String>,
 ) -> Result<Option<Origin>> {
@@ -136,11 +141,11 @@ pub async fn restart_chat(
 }
 
 /// The agents connected in `workspace`.
-pub async fn running(daemon: &impl Daemon, workspace: String) -> Result<Vec<RunningAgent>> {
+pub async fn running(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Vec<RunningAgent>> {
     request(daemon, AgentMethod::WorkspaceAgents { workspace }).await
 }
 
 /// The session of the agent in `workspace`, which a fork starts from.
-pub async fn session(daemon: &impl Daemon, workspace: String) -> Result<AgentSession> {
+pub async fn session(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<AgentSession> {
     request(daemon, AgentMethod::AgentSession { workspace }).await
 }

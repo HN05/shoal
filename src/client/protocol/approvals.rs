@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::client::item_numbers::ItemNumber;
+use crate::client::space_names::SpaceSelector;
 
 /// Requests about approval requests and their decisions.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApprovalMethod {
     ListApprovals {
-        space: Option<String>,
+        space: Option<SpaceSelector>,
     },
     ShowApproval {
         number: ItemNumber,
@@ -30,7 +31,7 @@ pub enum ApprovalMethod {
     /// Pass a request the space `space` decides on to the space above it, or
     /// to the user.
     EscalateApproval {
-        space: String,
+        space: SpaceSelector,
         number: ItemNumber,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         shown: Option<Box<crate::client::approvals::ApprovalRequest>>,
@@ -38,18 +39,18 @@ pub enum ApprovalMethod {
     /// Withdraw the pending approval request `number` of the space
     /// `space`, which its agent no longer needs.
     WithdrawApproval {
-        space: String,
+        space: SpaceSelector,
         number: ItemNumber,
     },
     /// Whether `[permissions] push` holds back the push of the workspace's
     /// branch that `shoal pr open` would run.
     BranchPush {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     /// Push `push` from the workspace at once, or record it for the user's
     /// approval; `git push` from an agent asks this.
     RequestPush {
-        workspace: String,
+        workspace: SpaceSelector,
         push: crate::client::approvals::PushSpecification,
     },
     /// The push approval `key` started has ended, failed with `failure`

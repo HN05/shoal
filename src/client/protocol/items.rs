@@ -3,6 +3,7 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
+use crate::client::space_names::SpaceSelector;
 use crate::forge::download::Download;
 
 /// Requests about the issues and PRs of a workspace's repository and the ones it links.
@@ -10,14 +11,14 @@ use crate::forge::download::Download;
 #[serde(rename_all = "snake_case")]
 pub enum ItemMethod {
     SetIssue {
-        space: String,
+        space: SpaceSelector,
         url: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         title: Option<String>,
     },
     /// Link an issue or PR by number or URL with a relation.
     LinkItem {
-        space: String,
+        space: SpaceSelector,
         kind: crate::forge::items::link::LinkKind,
         url: String,
         relation: crate::model::Relation,
@@ -26,28 +27,28 @@ pub enum ItemMethod {
     },
     /// Unlink the relation's items, optionally only one kind or one item.
     UnlinkItems {
-        space: String,
+        space: SpaceSelector,
         relation: crate::model::Relation,
         kind: Option<crate::forge::items::link::LinkKind>,
         url: Option<String>,
     },
     SetPr {
-        space: String,
+        space: SpaceSelector,
         #[serde(flatten)]
         action: crate::client::links::pr::Action,
     },
     PrWait {
-        workspace: String,
+        workspace: SpaceSelector,
         timeout_secs: Option<u64>,
     },
     WatchItems {
-        space: String,
+        space: SpaceSelector,
         selection: crate::forge::items::link::Selection,
         timeout_secs: Option<u64>,
     },
     /// Link the open PR of the workspace's branch, or open one and link it.
     OpenPull {
-        workspace: String,
+        workspace: SpaceSelector,
         options: crate::forge::items::create::PullOptions,
         /// `[permissions] push` held back the branch's push, which approving
         /// the PR runs first.
@@ -57,12 +58,15 @@ pub enum ItemMethod {
     /// Have the forge open the revert of a merged PR: the one `item` names,
     /// or the workspace's linked one.
     RevertPull {
-        space: String,
+        space: SpaceSelector,
         item: Option<String>,
         options: crate::forge::items::create::PullOptions,
     },
     /// A merged PR with what reverting its merge with Git needs.
-    MergedPull { space: String, item: Option<String> },
+    MergedPull {
+        space: SpaceSelector,
+        item: Option<String>,
+    },
     /// Open an issue in the context's repository, or the one `repository`
     /// names, linking it to the workspace when `link` is set.
     OpenIssue {
@@ -259,14 +263,17 @@ pub struct ViewPiece(pub String);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemContext {
-    /// The workspace, by its ID.
-    Workspace(String),
-    /// The running chat, by its ID, which acts in its repository's
-    /// registered checkout.
-    Chat(String),
+    /// The workspace.
+    Workspace(SpaceSelector),
+    /// The running chat, which acts in its repository's registered
+    /// checkout.
+    Chat(SpaceSelector),
     /// The chat without a repository `chat` acting in the registered
-    /// checkout of `repository`, which counts as its own, by their IDs.
-    ChatIn { chat: String, repository: String },
+    /// checkout of `repository`, by its ID, which counts as its own.
+    ChatIn {
+        chat: SpaceSelector,
+        repository: String,
+    },
     /// The registered checkout of a repository, by its ID, for a request
     /// that needs only the repository.
     Checkout(String),

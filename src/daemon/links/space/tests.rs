@@ -1,4 +1,5 @@
 //! A chat without a repository acting in each registered repository.
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::repo::Opening,
     daemon::test_support::manager,
@@ -53,7 +54,7 @@ async fn chat(
 /// The context of `chat` acting in `repository`.
 fn acting_in(chat: &Chat, repository: &Repository) -> ItemContext {
     ItemContext::ChatIn {
-        chat: chat.id.clone(),
+        chat: SpaceSelector::id(&chat.id),
         repository: repository.id.clone(),
     }
 }
@@ -183,7 +184,10 @@ async fn a_change_from_a_checkout_is_made_by_a_chat_without_a_repository_acting_
     let ItemContext::ChatIn { chat, repository } = context else {
         panic!("expected the chat acting in the checkout: {context:?}");
     };
-    assert_eq!((chat, repository), (master.id, repos[0].id.clone()));
+    assert_eq!(
+        (chat, repository),
+        (SpaceSelector::id(&master.id), repos[0].id.clone())
+    );
     let scoped = manager.chat_scope(&planning.id).await.unwrap();
     let refused = crate::daemon::scope::authorize(&manager, Some(&scoped), &mut open()).await;
     assert!(refused.is_err());
@@ -216,7 +220,10 @@ async fn a_chat_without_a_repository_follows_ci_in_a_registered_checkout_as_itse
     let ItemContext::ChatIn { chat, repository } = context else {
         panic!("expected the chat acting in the checkout: {context:?}");
     };
-    assert_eq!((chat, repository), (master.id, repos[1].id.clone()));
+    assert_eq!(
+        (chat, repository),
+        (SpaceSelector::id(&master.id), repos[1].id.clone())
+    );
     let scoped = manager.chat_scope(&planning.id).await.unwrap();
     let refused = crate::daemon::scope::authorize(&manager, Some(&scoped), &mut list()).await;
     assert!(refused.is_err());
@@ -239,7 +246,7 @@ async fn a_chat_without_a_repository_opens_no_issue_elsewhere_unless_allowed_dir
         crate::daemon::test_support::configure(&manager, &config).await;
         let opened = manager
             .open_issue(
-                &ItemContext::Chat(master.id.clone()),
+                &ItemContext::Chat(SpaceSelector::id(&master.id)),
                 issue(),
                 Some("https://github.com/other/unregistered".into()),
                 false,

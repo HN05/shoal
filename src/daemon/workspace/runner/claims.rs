@@ -16,6 +16,7 @@ use anyhow::{Context, Result, bail};
 use rusqlite::params;
 
 use super::{Registration, runner_labels};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::resources::ResourceRequest,
     config::Runner,
@@ -215,7 +216,10 @@ impl Manager {
             reason: None,
             queue: false,
         };
-        match self.acquire_resource(&workspace.id, request, None).await? {
+        match self
+            .acquire_resource(&SpaceSelector::id(&workspace.id), request, None)
+            .await?
+        {
             Allocation::Granted(_) => Ok(true),
             Allocation::Busy(_) => Ok(false),
             Allocation::Approval(_) => {
@@ -410,7 +414,7 @@ impl Manager {
     /// Remove a job's workspace whatever it holds; its claim goes with it.
     pub(super) async fn remove_job_workspace(&self, workspace_id: &str) -> Result<()> {
         self.remove_workspace(
-            workspace_id,
+            &SpaceSelector::id(workspace_id),
             crate::removal::UnsavedWork::All,
             InspectionPolicy::GitOnly,
         )

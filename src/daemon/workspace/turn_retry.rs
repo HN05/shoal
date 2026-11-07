@@ -14,6 +14,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use self::unretried::Unretried;
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{agent_messages, log},
     state::{AgentState, TurnFailure},
@@ -367,7 +368,7 @@ impl Manager {
     /// Failures only log, since the report still records the agent idle.
     pub(super) async fn retry_failed_turn(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         failure: TurnFailure,
         execution: &str,
     ) {
@@ -378,7 +379,7 @@ impl Manager {
 
     async fn schedule_turn_retry(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         failure: TurnFailure,
         execution: &str,
     ) -> Result<()> {

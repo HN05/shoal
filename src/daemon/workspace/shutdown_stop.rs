@@ -6,6 +6,7 @@ use anyhow::Result;
 use futures_util::future::join_all;
 
 use super::{Manager, StopRequest};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         log,
@@ -77,7 +78,7 @@ impl Manager {
             self.stop_every_target(shutdown.moment(), |workspace| async move {
                 // A CI job's run ends on its forge, before its runner stops.
                 self.cancel_job_before_stopping(&workspace).await;
-                self.stop_keeping_restores(&workspace, shutdown.request())
+                self.stop_keeping_restores(&SpaceSelector::id(&workspace), shutdown.request())
                     .await
             }),
             self.save_chats(ChatRestore::Automatic)

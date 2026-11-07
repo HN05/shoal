@@ -2,6 +2,7 @@
 //! its workspace from no cleanup; removal cancels it and keeps the agent for
 //! `shoal work restore`.
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{daemon::workspace_files::Attacher, model::CleanupReason, state::AgentState};
 
 #[tokio::test]
@@ -24,7 +25,7 @@ async fn cleanup_removes_a_workspace_whose_idle_agent_waits_for_an_update() {
             .unwrap()
             .is_some()
     );
-    bounded(manager.remove_on_request(&workspace.id, snapshot))
+    bounded(manager.remove_on_request(&SpaceSelector::id(&workspace.id), snapshot))
         .await
         .unwrap();
     // Removal cancelled the restore, so the waiting wrapper exits.
@@ -35,7 +36,10 @@ async fn cleanup_removes_a_workspace_whose_idle_agent_waits_for_an_update() {
     assert_eq!(agents.len(), 1);
     assert_eq!(agents[0].execution, id);
     assert_eq!(agents[0].record.turn, Some(AgentState::Idle));
-    let restored = manager.restore_workspace(&workspace.name).await.unwrap();
+    let restored = manager
+        .restore_workspace(&SpaceSelector::from(&workspace.name))
+        .await
+        .unwrap();
     let stopped =
         crate::execution::recovery::stopped_agents(&manager.paths, &restored.opened.workspace.id)
             .unwrap();
@@ -77,7 +81,11 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
         .unwrap();
     let removal = tokio::spawn({
         let (manager, id) = (manager.clone(), workspace.id.clone());
-        async move { manager.remove_on_request(&id, snapshot).await }
+        async move {
+            manager
+                .remove_on_request(&SpaceSelector::id(&id), snapshot)
+                .await
+        }
     });
     // The hook runs once removal has reserved the workspace and cancelled
     // the restore, before its final check.
@@ -89,7 +97,7 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     .await;
     let refused = manager
         .send_agent_message(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             "Review requested".into(),
             Vec::new(),
             &Attacher::User,
@@ -122,7 +130,7 @@ async fn a_restore_of_an_agent_stopped_mid_turn_keeps_its_workspace() {
             .unwrap()
             .is_none()
     );
-    bounded(manager.stop_workspace(&workspace.name, StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::from(&workspace.name), StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
@@ -156,14 +164,19 @@ async fn stop_agent_in(
     turn: AgentState,
 ) -> String {
     let id = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions[0]
         .id
         .clone();
     manager
-        .set_agent_state(&workspace.name, turn, Some(id.clone()), None)
+        .set_agent_state(
+            &SpaceSelector::from(&workspace.name),
+            turn,
+            Some(id.clone()),
+            None,
+        )
         .await
         .unwrap();
     assert!(

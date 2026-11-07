@@ -10,6 +10,7 @@ use super::super::{
     scope::{Caller, Scoped, inspect_owner},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, QuestionMethod};
 
 pub(super) async fn handle(
@@ -48,7 +49,7 @@ pub(super) async fn handle(
             Body::Ok
         }
         QuestionMethod::ListQuestions { space } => {
-            Body::Questions(manager.questions(space.as_deref()).await?)
+            Body::Questions(manager.questions(space.as_ref()).await?)
         }
         QuestionMethod::ShowQuestion { number } => {
             Body::Question(show_question(manager, caller, number).await?)
@@ -72,7 +73,11 @@ pub(super) async fn handle(
 }
 
 impl Scoped for QuestionMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             QuestionMethod::AskQuestion { space, .. }
             | QuestionMethod::AskInChat { space }

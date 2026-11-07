@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
+use crate::client::space_names::SpaceSelector;
 use crate::reviews::{FindingId, Outcome, ReviewTarget};
 
 /// Requests about local reviews and the answers to their findings. Reviews
@@ -10,7 +11,7 @@ use crate::reviews::{FindingId, Outcome, ReviewTarget};
 pub enum ReviewMethod {
     /// Queue a review of the workspace, or return the one already queued.
     RunReview {
-        workspace: String,
+        workspace: SpaceSelector,
         target: ReviewTarget,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<crate::agent::Agent>,
@@ -21,7 +22,7 @@ pub enum ReviewMethod {
     /// Cancel review `id`, else the workspace's queued or running one.
     CancelReview {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<i64>,
     },
@@ -29,14 +30,14 @@ pub enum ReviewMethod {
     /// repository's, or of all, in as many frames as they need.
     ListReviews {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         repository: Option<crate::client::repository::Selector>,
     },
     /// Review `id`, else the workspace's newest.
     ShowReview {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<i64>,
     },
@@ -44,24 +45,24 @@ pub enum ReviewMethod {
     /// once it ends.
     AwaitReview {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<i64>,
     },
     /// `workspace` is the finding's, which scope checks fill in.
     ReplyToFinding {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         finding: FindingId,
         body: String,
     },
     /// Refuse `shoal pr open` of a new PR before it pushes when the
     /// workspace's review gate would; only workspace processes are gated.
-    CheckPrGate { workspace: String },
+    CheckPrGate { workspace: SpaceSelector },
     /// Resolve a finding with `outcome`, or reopen it without one.
     ResolveFinding {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         finding: FindingId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         outcome: Option<Outcome>,

@@ -10,6 +10,7 @@ use super::super::{
     scope::{Caller, Scoped, denied, inspect_owner},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::links::BranchPush,
     protocol::{ApprovalMethod, Body},
@@ -25,7 +26,7 @@ pub(super) async fn handle(
             Body::ApprovalRequest(Box::new(manager.withdraw_approval(&space, number).await?))
         }
         ApprovalMethod::ListApprovals { space } => {
-            Body::ApprovalRequests(manager.approval_requests(space.as_deref()).await?)
+            Body::ApprovalRequests(manager.approval_requests(space.as_ref()).await?)
         }
         ApprovalMethod::ShowApproval { number } => {
             Body::ApprovalRequest(Box::new(show_approval(manager, caller, number).await?))
@@ -70,7 +71,11 @@ pub(super) async fn handle(
 }
 
 impl Scoped for ApprovalMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             ApprovalMethod::ListApprovals { space } => Some(caller.own_by_default(space)),
             ApprovalMethod::ShowApproval { number } => {

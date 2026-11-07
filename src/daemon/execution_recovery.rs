@@ -11,6 +11,7 @@ use tokio::{
 };
 
 use super::workspace::{Grant, Manager, Pause, Protection, StopRequest};
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
 use crate::{
     execution::recovery,
@@ -364,7 +365,9 @@ async fn resume(
     workspace_id: &str,
     grant: Option<Grant>,
 ) -> Result<Action> {
-    let ports = manager.list_ports(Some(workspace_id)).await?;
+    let ports = manager
+        .list_ports(Some(&SpaceSelector::id(workspace_id)))
+        .await?;
     if manager.resume_agent_execution(execution_id, grant).await? {
         Ok(Action::Resume(ports))
     } else {

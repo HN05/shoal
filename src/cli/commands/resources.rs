@@ -7,6 +7,7 @@ use super::{
 };
 use crate::client::leases;
 use crate::client::output::acquisition::NotAcquired;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -30,7 +31,14 @@ pub(super) async fn acquire(
         ctx,
         &format!("pool {}", request.pool),
         request.queue,
-        async || leases::acquire_resource(&ctx.paths, workspace.clone(), request.clone()).await,
+        async || {
+            leases::acquire_resource(
+                &ctx.paths,
+                SpaceSelector::parse(&workspace),
+                request.clone(),
+            )
+            .await
+        },
     )
     .await?;
     outcome.finish(
@@ -123,7 +131,7 @@ pub(super) async fn fetch_overview(
     workspace: String,
     members: Members,
 ) -> Result<Overview> {
-    let mut overview = leases::resources(&ctx.paths, workspace).await?;
+    let mut overview = leases::resources(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
     members.retain(&mut overview);
     Ok(overview)
 }
@@ -133,7 +141,7 @@ pub(super) async fn fetch_catalog(
     workspace: &str,
     members: Members,
 ) -> Result<Catalog> {
-    let mut catalog = leases::resource_catalog(&ctx.paths, workspace.to_owned()).await?;
+    let mut catalog = leases::resource_catalog(&ctx.paths, SpaceSelector::parse(workspace)).await?;
     members.retain_catalog(&mut catalog);
     Ok(catalog)
 }

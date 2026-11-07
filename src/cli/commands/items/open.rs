@@ -3,6 +3,7 @@
 use anyhow::Result;
 
 use super::{content::read_content, context::select_open_context};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::changes::OpenPullArgs,
@@ -58,7 +59,14 @@ pub(super) async fn publish(
     workspace: String,
     options: PullOptions,
 ) -> Result<OpenOutcome> {
-    operations::run(ctx, OperationSpec::OpenPull { workspace, options }).await
+    operations::run(
+        ctx,
+        OperationSpec::OpenPull {
+            workspace: SpaceSelector::parse(&workspace),
+            options,
+        },
+    )
+    .await
 }
 
 /// In an operation's worker: verify the worktree before anything leaves it,
@@ -71,16 +79,20 @@ pub(in crate::cli::commands) async fn push_and_open(
     options: PullOptions,
     reporter: &Reporter<'_>,
 ) -> Result<OpenOutcome> {
-    let workspace = crate::client::workspaces::verify(&ctx.paths, workspace, true).await?;
+    let workspace =
+        crate::client::workspaces::verify(&ctx.paths, SpaceSelector::parse(&workspace), true)
+            .await?;
     workspace.require_branch("shoal pr open")?;
-    crate::client::reviews::check_pr_gate(&ctx.paths, workspace.id.clone()).await?;
-    let held = crate::client::approvals::push_held(&ctx.paths, workspace.id.clone()).await?;
+    crate::client::reviews::check_pr_gate(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
+    let held =
+        crate::client::approvals::push_held(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
     if !held {
         reporter.step(Step::PushStarted).await?;
         push(ctx, &workspace).await?;
         reporter.step(Step::Pushed).await?;
     }
-    crate::client::items::open_pull(&ctx.paths, workspace.id, options, held).await
+    crate::client::items::open_pull(&ctx.paths, SpaceSelector::id(&workspace.id), options, held)
+        .await
 }
 
 /// Push to the branch's push remote as a tracked command under the agent

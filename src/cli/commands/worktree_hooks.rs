@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, de::DeserializeOwned};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{cli::context::Context, model::Workspace};
 
 /// What `WorktreeCreate` passes besides the common fields.
@@ -33,7 +34,8 @@ pub(super) async fn create(ctx: &Context) -> Result<i32> {
     let input: Create = hook_input()?;
     let workspaces = crate::client::workspaces::list(&ctx.paths).await?;
     let parent = enclosing(&workspaces, &input.cwd)?.id.clone();
-    let start = crate::client::operations::NewSplit::new(parent, Some(input.name));
+    let start =
+        crate::client::operations::NewSplit::new(SpaceSelector::parse(&parent), Some(input.name));
     let child = super::split::start_child(ctx, start).await?;
     let Some(child) = super::split::follow_preparation(ctx, child).await? else {
         return Ok(1);
@@ -61,7 +63,7 @@ pub(super) async fn remove(ctx: &Context) -> Result<i32> {
 
 /// Whether `child`'s assignment is already marked done at its current HEAD.
 async fn done_at_head(ctx: &Context, child: &Workspace) -> Result<bool> {
-    let completion = crate::client::workspaces::inspect(&ctx.paths, child.id.clone())
+    let completion = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&child.id))
         .await?
         .completion;
     let Some(completion) = completion else {

@@ -1,5 +1,6 @@
 use std::{fs, os::unix::process::CommandExt, path::Path, sync::Arc};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -69,7 +70,7 @@ async fn written_pid(file: &Path) -> u32 {
 async fn export(manager: &Manager, selector: &str, file: &Path) -> anyhow::Result<ExportedSpace> {
     manager
         .export_space(
-            selector,
+            &SpaceSelector::parse(selector),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             file.to_owned(),
@@ -292,7 +293,7 @@ async fn a_chat_in_a_workspace_is_not_moved() {
         .unwrap();
     let chat = manager
         .start_chat_in_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "worker-chat".into(),
             "claude".into(),
             std::process::id(),
@@ -304,7 +305,7 @@ async fn a_chat_in_a_workspace_is_not_moved() {
     let file = root.path().join("worker-chat.shoal");
     assert!(export(&manager, &chat.name, &file).await.is_err());
     assert!(!file.exists());
-    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
+    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
 }
 
 #[tokio::test]
@@ -321,7 +322,7 @@ async fn a_workspace_with_a_chat_in_it_is_not_moved() {
         .unwrap();
     let chat = manager
         .start_chat_in_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "reading".into(),
             "claude".into(),
             std::process::id(),
@@ -340,7 +341,7 @@ async fn a_workspace_with_a_chat_in_it_is_not_moved() {
             .unwrap()
             .is_some()
     );
-    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
+    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
 }
 
 #[tokio::test]
@@ -356,7 +357,12 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
         .await
         .unwrap();
     let split = manager
-        .split_workspace(&workspace.id, "split".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&workspace.id),
+            "split".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     // The export checked and listed what its removal takes, then a chat
@@ -364,7 +370,7 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
     let taking = [split.id.clone()];
     let chat = manager
         .start_chat_in_workspace(
-            &split.id,
+            &SpaceSelector::id(&split.id),
             "reading".into(),
             "claude".into(),
             std::process::id(),
@@ -375,14 +381,14 @@ async fn a_chat_that_starts_after_the_export_checked_keeps_everything() {
         .unwrap();
     let removed = manager
         .remove_workspace_taking(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             &taking,
         )
         .await;
     assert!(removed.is_err());
-    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_some());
+    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_some());
     for kept in [&workspace, &split] {
         assert!(manager.find_workspace(&kept.id).await.unwrap().is_some());
         assert!(kept.path.exists());
@@ -398,7 +404,11 @@ async fn a_chat_copy_keeps_the_chat_running() {
         .await
         .unwrap();
     let refused = manager
-        .copy_space("plan-cache", Some(1), root.path().join("refused.shoal"))
+        .copy_space(
+            &"plan-cache".into(),
+            Some(1),
+            root.path().join("refused.shoal"),
+        )
         .await
         .unwrap_err();
     assert!(
@@ -408,7 +418,7 @@ async fn a_chat_copy_keeps_the_chat_running() {
     let file = root.path().join("plan-cache.shoal");
 
     let exported = manager
-        .copy_space("plan-cache", None, file.clone())
+        .copy_space(&"plan-cache".into(), None, file.clone())
         .await
         .unwrap();
     assert!(exported.manifest.copy.is_some());
@@ -428,7 +438,7 @@ async fn a_chat_without_a_session_has_none_to_fork() {
 
     assert!(
         manager
-            .copy_space("talk", None, file.clone())
+            .copy_space(&"talk".into(), None, file.clone())
             .await
             .is_err()
     );

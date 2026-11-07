@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::{self, Caller},
@@ -27,7 +28,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
         .unwrap();
     let hold = manager
         .acquire_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "app-thread".into(),
             Some("Open thread".into()),
             HoldPlacer::User,
@@ -37,7 +38,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
     assert_eq!(
         manager
             .acquire_hold(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 hold.name.clone(),
                 Some("Changed reason".into()),
                 HoldPlacer::User
@@ -65,14 +66,14 @@ async fn holds_are_idempotent_persistent_and_scoped() {
     for target in [&workspace.name.to_string(), &other.id] {
         let own = workspace.name == *target;
         let mut list = HoldMethod::HoldList {
-            workspace: target.clone(),
+            workspace: SpaceSelector::parse(target),
         };
         let mut release = HoldMethod::HoldRelease {
-            workspace: target.clone(),
+            workspace: SpaceSelector::parse(target),
             name: "app".into(),
         };
         let mut acquire = HoldMethod::HoldAcquire {
-            workspace: target.clone(),
+            workspace: SpaceSelector::parse(target),
             name: "app".into(),
             reason: None,
         };
@@ -87,19 +88,28 @@ async fn holds_are_idempotent_persistent_and_scoped() {
     }
     // Releasing one the user placed is the user's.
     manager
-        .release_hold(&workspace.id, hold.name.clone(), HoldPlacer::Agent)
+        .release_hold(
+            &SpaceSelector::id(&workspace.id),
+            hold.name.clone(),
+            HoldPlacer::Agent,
+        )
         .await
         .unwrap_err();
     assert!(
         manager
-            .acquire_hold(&workspace.id, "bad name".into(), None, HoldPlacer::User)
+            .acquire_hold(
+                &SpaceSelector::id(&workspace.id),
+                "bad name".into(),
+                None,
+                HoldPlacer::User
+            )
             .await
             .is_err()
     );
     assert!(
         manager
             .acquire_hold(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 "valid".into(),
                 Some("bad\nreason".into()),
                 HoldPlacer::User
@@ -112,7 +122,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
     drop(manager);
     let reopened = Manager::open(paths).await.unwrap();
     assert_eq!(
-        reopened.workspace(&workspace.id).await.unwrap().holds,
+        reopened.workspace_by_id(&workspace.id).await.unwrap().holds,
         vec![hold]
     );
     assert_eq!(
@@ -147,13 +157,18 @@ async fn lifecycle_reservation_excludes_new_holds() {
         .unwrap();
     assert!(
         manager
-            .acquire_hold(&workspace.id, "too-late".into(), None, HoldPlacer::User)
+            .acquire_hold(
+                &SpaceSelector::id(&workspace.id),
+                "too-late".into(),
+                None,
+                HoldPlacer::User
+            )
             .await
             .is_err()
     );
     assert!(
         manager
-            .workspace(&workspace.id)
+            .workspace_by_id(&workspace.id)
             .await
             .unwrap()
             .holds
@@ -175,7 +190,12 @@ async fn release_remains_available_during_lifecycle_operations_and_hooks() {
         .unwrap();
     for name in ["first", "second"] {
         manager
-            .acquire_hold(&workspace.id, name.into(), None, HoldPlacer::User)
+            .acquire_hold(
+                &SpaceSelector::id(&workspace.id),
+                name.into(),
+                None,
+                HoldPlacer::User,
+            )
             .await
             .unwrap();
     }
@@ -188,7 +208,11 @@ async fn release_remains_available_during_lifecycle_operations_and_hooks() {
         .resource_guard(&workspace.id, GuardMode::Exclusive)
         .unwrap();
     manager
-        .release_hold(&workspace.id, "first".into(), HoldPlacer::User)
+        .release_hold(
+            &SpaceSelector::id(&workspace.id),
+            "first".into(),
+            HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager
@@ -196,16 +220,24 @@ async fn release_remains_available_during_lifecycle_operations_and_hooks() {
         .await
         .unwrap();
     manager
-        .release_hold(&workspace.id, "second".into(), HoldPlacer::User)
+        .release_hold(
+            &SpaceSelector::id(&workspace.id),
+            "second".into(),
+            HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager
-        .release_hold(&workspace.id, "second".into(), HoldPlacer::User)
+        .release_hold(
+            &SpaceSelector::id(&workspace.id),
+            "second".into(),
+            HoldPlacer::User,
+        )
         .await
         .unwrap();
     assert!(
         manager
-            .workspace(&workspace.id)
+            .workspace_by_id(&workspace.id)
             .await
             .unwrap()
             .holds
@@ -226,7 +258,12 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for (token, workspace) in [("parent", &parent), ("child", &child)] {
@@ -242,7 +279,7 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
             .await;
     }
     let mut acquire = HoldMethod::HoldAcquire {
-        workspace: child.name.to_string(),
+        workspace: SpaceSelector::parse(&child.name),
         name: "review".into(),
         reason: Some("Waiting for the parent's merge".into()),
     };
@@ -250,12 +287,17 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .await
         .unwrap();
     manager
-        .acquire_hold(&child.id, "review".into(), None, HoldPlacer::Agent)
+        .acquire_hold(
+            &SpaceSelector::id(&child.id),
+            "review".into(),
+            None,
+            HoldPlacer::Agent,
+        )
         .await
         .unwrap();
     // An agent hold leaves the parent's agent free to remove the child.
     let mut remove = crate::protocol::RemovalMethod::RemoveWorkspace {
-        workspace: child.name.to_string(),
+        workspace: SpaceSelector::parse(&child.name),
         unsaved: Default::default(),
     };
     scope::authorize(&manager, Some("parent"), &mut remove)
@@ -263,12 +305,17 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .unwrap();
     // The child's own agent may release it, but not the user's.
     manager
-        .acquire_hold(&child.id, "editor".into(), None, HoldPlacer::User)
+        .acquire_hold(
+            &SpaceSelector::id(&child.id),
+            "editor".into(),
+            None,
+            HoldPlacer::User,
+        )
         .await
         .unwrap();
     for name in ["review", "editor"] {
         let mut release = HoldMethod::HoldRelease {
-            workspace: child.name.to_string(),
+            workspace: SpaceSelector::parse(&child.name),
             name: name.into(),
         };
         scope::authorize(&manager, Some("child"), &mut release)
@@ -276,14 +323,22 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
             .unwrap();
     }
     manager
-        .release_hold(&child.id, "review".into(), HoldPlacer::Agent)
+        .release_hold(
+            &SpaceSelector::id(&child.id),
+            "review".into(),
+            HoldPlacer::Agent,
+        )
         .await
         .unwrap();
     manager
-        .release_hold(&child.id, "editor".into(), HoldPlacer::Agent)
+        .release_hold(
+            &SpaceSelector::id(&child.id),
+            "editor".into(),
+            HoldPlacer::Agent,
+        )
         .await
         .unwrap_err();
-    let held = manager.workspace(&child.id).await.unwrap().holds;
+    let held = manager.workspace_by_id(&child.id).await.unwrap().holds;
     assert_eq!(
         held.iter()
             .map(|hold| hold.name.as_str())
@@ -308,9 +363,10 @@ async fn an_agent_places_its_own_hold_only_while_approved() {
         .create_workspace(&repo.id, "worker".into(), None, None, None)
         .await
         .unwrap();
+    let selected = SpaceSelector::id(&workspace.id);
     let place = || {
         manager.place_hold(
-            &workspace.id,
+            &selected,
             "review".into(),
             None,
             HoldPlacer::Agent,
@@ -318,7 +374,11 @@ async fn an_agent_places_its_own_hold_only_while_approved() {
         )
     };
     let Ok(crate::daemon::allocation::Allocation::Approval(requested)) = manager
-        .request_hold(&workspace.id, "review".into(), Some("Keep it".into()))
+        .request_hold(
+            &SpaceSelector::id(&workspace.id),
+            "review".into(),
+            Some("Keep it".into()),
+        )
         .await
     else {
         panic!("holding its own workspace needs approval");
@@ -332,13 +392,17 @@ async fn an_agent_places_its_own_hold_only_while_approved() {
         .unwrap();
     place().await.unwrap();
     manager
-        .release_hold(&workspace.id, "review".into(), HoldPlacer::Agent)
+        .release_hold(
+            &SpaceSelector::id(&workspace.id),
+            "review".into(),
+            HoldPlacer::Agent,
+        )
         .await
         .unwrap();
     assert!(place().await.is_err());
     assert!(
         manager
-            .workspace(&workspace.id)
+            .workspace_by_id(&workspace.id)
             .await
             .unwrap()
             .holds

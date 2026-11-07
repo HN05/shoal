@@ -4,6 +4,7 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result, ensure};
 
 use crate::client::output::workspaces::InChat;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::coordination::QuestionsArgs,
@@ -54,7 +55,14 @@ pub(super) async fn ask(
     let attachments = super::messages::attachments(&attach)?;
     crate::client::files::check_sent(&attachments)?;
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let question = questions::ask(&ctx.paths, space, ask, attachments, crate::env::chat()).await?;
+    let question = questions::ask(
+        &ctx.paths,
+        SpaceSelector::parse(&space),
+        ask,
+        attachments,
+        crate::env::chat(),
+    )
+    .await?;
     if !wait && question.is_open() {
         ctx.emit(
             &format!(
@@ -79,7 +87,7 @@ pub(super) async fn ask(
 /// Mark the caller's agent's turn as asking the user in its conversation.
 pub(super) async fn ask_in_chat(ctx: &Context, space: Option<String>) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
-    questions::ask_in_chat(&ctx.paths, space).await?;
+    questions::ask_in_chat(&ctx.paths, SpaceSelector::parse(&space)).await?;
     ctx.emit(
         "Ask your question as your final message and end your turn; it also reaches the user's questions.",
         InChat { in_chat: true },
@@ -102,7 +110,12 @@ async fn print_answer(ctx: &Context, space: String, question: &Question) -> Resu
     let Some(id) = question.message_id else {
         return Ok(());
     };
-    crate::client::agent_messages::mark_delivered(&ctx.paths, space, vec![id]).await
+    crate::client::agent_messages::mark_delivered(
+        &ctx.paths,
+        SpaceSelector::parse(&space),
+        vec![id],
+    )
+    .await
 }
 
 /// The question a wait follows: its number within its space and what it
@@ -148,7 +161,7 @@ fn resume_arguments(space: &str, item: u32) -> Vec<OsString> {
 }
 
 pub(super) async fn list(ctx: &Context, space: Option<String>) -> Result<i32> {
-    let listing = questions::list(&ctx.paths, space).await?;
+    let listing = questions::list(&ctx.paths, space.as_deref().map(SpaceSelector::id)).await?;
     if ctx.interactive_output() && !listing.questions.is_empty() {
         let question = pick_question(ctx, listing.questions)?;
         return show(ctx, question).await;

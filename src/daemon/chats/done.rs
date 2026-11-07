@@ -84,7 +84,7 @@ impl Manager {
         let gated = self.completed_ancestor(&listed.id).await?;
         let gates = std::iter::once(listed.id.as_str()).chain(gated.as_ref().map(|a| a.id()));
         let _guard = self.gates.lock_prs(gates).await;
-        let Some(chat) = self.recorded_chat(&listed.id).await? else {
+        let Some(chat) = self.chat_by_id(&listed.id).await? else {
             return Ok(());
         };
         if let Some(ancestor) = self.completed_ancestor(&chat.id).await? {
@@ -129,18 +129,17 @@ impl Manager {
         Ok(())
     }
 
-    /// Withdraw the completion the chat `selector` names recorded.
-    pub async fn undo_chat_done(&self, selector: &str) -> Result<Completion> {
+    /// Withdraw the completion the chat `id` recorded.
+    pub async fn undo_chat_done(&self, id: &str) -> Result<Completion> {
         // A stopped chat withdraws it too, so completion cleanup leaves it.
-        let chat =
-            (self.recorded_chat(selector).await?).with_context(|| format!("no chat {selector}"))?;
+        let chat = (self.chat_by_id(id).await?).with_context(|| format!("no chat {id}"))?;
         let _guard = self.gates.lock_prs([&chat.id]).await;
         let id = chat.id.clone();
         self.store.run(move |db| take_completion(db, &id)).await
     }
 
-    async fn done_chat(&self, selector: &str) -> Result<Chat> {
-        (self.running_chat(selector).await?).with_context(|| format!("no running chat {selector}"))
+    async fn done_chat(&self, id: &str) -> Result<Chat> {
+        (self.running_chat_by_id(id).await?).with_context(|| format!("no running chat {id}"))
     }
 
     /// The HEAD of `chat`'s checkout, which its completion records; empty

@@ -5,12 +5,16 @@
 use anyhow::{Result, ensure};
 
 use super::super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::model::{AgentStatus, RunningAgent};
 
 impl Manager {
     /// The agents connected in the workspace `selector` names, with the
     /// turns they reported and the places they run in.
-    pub(crate) async fn workspace_agents(&self, selector: &str) -> Result<Vec<RunningAgent>> {
+    pub(crate) async fn workspace_agents(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<Vec<RunningAgent>> {
         let workspace = self.workspace(selector).await?;
         Ok(self
             .running_agents()
@@ -24,7 +28,7 @@ impl Manager {
     /// runs in the workspace `selector` names.
     pub(crate) async fn interrupt_turn(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: String,
     ) -> Result<AgentStatus> {
         let workspace = self.workspace(selector).await?;
@@ -37,7 +41,8 @@ impl Manager {
             "no connected agent of {} runs execution {execution}",
             workspace.name
         );
-        self.end_interrupted_turn(&workspace.id, execution).await
+        self.end_interrupted_turn(&SpaceSelector::id(&workspace.id), execution)
+            .await
     }
 
     /// Whether the agent of `execution` idles after an interrupt ended its

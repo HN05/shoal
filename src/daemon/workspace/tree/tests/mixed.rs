@@ -1,5 +1,6 @@
 //! Trees that mix workspaces and chats: every walk passes spaces of either
 //! kind alike.
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         approvals::{ApprovalRequest, Lifetime, SecretSpecification, Specification, Target},
@@ -53,7 +54,12 @@ async fn mixed_tree(
         .unwrap();
     for workspace in [&root, &worker] {
         manager
-            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .set_agent_state(
+                &SpaceSelector::id(&workspace.id),
+                AgentState::Working,
+                None,
+                None,
+            )
             .await
             .unwrap();
     }
@@ -110,10 +116,10 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         .await
         .unwrap();
     let (root, chat, worker, process) = mixed_tree(&manager, &repo.id).await;
-    let listed = manager.workspace(&worker.id).await.unwrap();
+    let listed = manager.workspace_by_id(&worker.id).await.unwrap();
     let parent = listed.parent.unwrap();
     assert_eq!((parent.id, parent.kind), (chat.id.clone(), SpaceKind::Chat));
-    let children = manager.workspace(&root.id).await.unwrap().children;
+    let children = manager.workspace_by_id(&root.id).await.unwrap().children;
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].kind, SpaceKind::Chat);
     assert_eq!(
@@ -127,7 +133,12 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         Some(chat.id.clone())
     );
     manager
-        .send_message(&worker.id, "first".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&worker.id),
+            "first".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let told = manager.chat_messages(&chat.id).await.unwrap();
@@ -143,10 +154,18 @@ async fn a_chat_below_a_workspace_decides_and_coordinates_for_the_spaces_below_i
         Some(root.id.clone())
     );
     manager
-        .send_message(&worker.id, "second".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&worker.id),
+            "second".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
-    let received = manager.agent_messages(&root.id).await.unwrap();
+    let received = manager
+        .agent_messages(&SpaceSelector::id(&root.id))
+        .await
+        .unwrap();
     assert_eq!(received.last().unwrap().message, "worker: second");
     let delegated = manager.delegated_spaces(&root.id).await.unwrap();
     assert_eq!(
@@ -165,16 +184,23 @@ async fn removing_a_workspace_removes_a_chat_below_it_and_what_is_below_that() {
         .unwrap();
     let (root, chat, worker, process) = mixed_tree(&manager, &repo.id).await;
     stop_chat(&manager, &chat, process).await;
-    let check = manager.check_manual_removal(&root.id, false).await.unwrap();
+    let check = manager
+        .check_manual_removal(&SpaceSelector::id(&root.id), false)
+        .await
+        .unwrap();
     let below: Vec<_> = check.children.iter().map(|space| &space.id).collect();
     assert_eq!(below, [&worker.id, &chat.id], "deepest first");
 
     let removed = manager
-        .remove_workspace(&root.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&root.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert_eq!(removed.children, ["worker", "planning"]);
-    assert!(manager.recorded_chat(&chat.id).await.unwrap().is_none());
+    assert!(manager.chat_by_id(&chat.id).await.unwrap().is_none());
     for workspace in [&root, &worker] {
         let found = manager.find_workspace(&workspace.id).await.unwrap();
         assert!(found.is_none(), "{}", workspace.name);
@@ -192,7 +218,14 @@ async fn a_space_never_takes_one_above_it_as_its_child() {
     let (root, chat, _, _process) = mixed_tree(&manager, &repo.id).await;
     let assigned = manager.assign_parent(&root.id, Some(chat.id.clone())).await;
     assert!(assigned.is_err());
-    assert!(manager.workspace(&root.id).await.unwrap().parent.is_none());
+    assert!(
+        manager
+            .workspace_by_id(&root.id)
+            .await
+            .unwrap()
+            .parent
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -230,7 +263,7 @@ async fn a_chat_opens_workspaces_only_in_its_own_repository() {
         .await;
     assert!(created.is_err());
     // Refused before anything was created.
-    assert!(manager.workspace("foreign").await.is_err());
+    assert!(manager.workspace(&"foreign".into()).await.is_err());
 }
 
 /// Start the chat `name` in the worktree of `workspace`, running as a
@@ -239,7 +272,7 @@ async fn chat_in(manager: &Manager, workspace: &Workspace, name: &str) -> (Chat,
     let process = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat_in_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             name.into(),
             "claude".into(),
             process.id(),
@@ -278,7 +311,10 @@ async fn removing_a_workspace_removes_the_chats_in_it_first() {
     stop_chat(&manager, &earlier, earlier_process).await;
 
     // The removal lists what it takes, deepest first.
-    let check = manager.check_manual_removal(&host.id, false).await.unwrap();
+    let check = manager
+        .check_manual_removal(&SpaceSelector::id(&host.id), false)
+        .await
+        .unwrap();
     let mut taken: Vec<_> = check.children.iter().map(|space| &space.name).collect();
     assert_eq!(taken.remove(0), "opened");
     taken.sort();
@@ -288,17 +324,27 @@ async fn removing_a_workspace_removes_the_chats_in_it_first() {
     // A chat started in it after the confirmation keeps it all.
     let (late, late_process) = chat_in(&manager, &host, "late").await;
     let removed = manager
-        .remove_workspace(&host.id, confirmed, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&host.id),
+            confirmed,
+            InspectionPolicy::GitOnly,
+        )
         .await;
     assert!(removed.is_err());
     assert_eq!(manager.chats().await.unwrap().len(), 3);
-    manager.remove_chat(&late.id, None).await.unwrap();
+    manager
+        .remove_chat(&SpaceSelector::id(&late.id), None)
+        .await
+        .unwrap();
     drop(late_process);
 
-    let check = manager.check_manual_removal(&host.id, false).await.unwrap();
+    let check = manager
+        .check_manual_removal(&SpaceSelector::id(&host.id), false)
+        .await
+        .unwrap();
     let removed = manager
         .remove_workspace(
-            &host.id,
+            &SpaceSelector::id(&host.id),
             UnsavedWork::confirming(&check),
             InspectionPolicy::GitOnly,
         )
@@ -327,7 +373,12 @@ async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
         .await
         .unwrap();
     let split = manager
-        .split_workspace(&host.id, "split".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&host.id),
+            "split".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let (watching, _process) = chat_in(&manager, &split, "watching").await;
@@ -336,15 +387,24 @@ async fn a_chat_never_takes_a_workspace_it_runs_in_or_one_above_it() {
         .assign_parent(&host.id, Some(watching.id.clone()))
         .await;
     assert!(assigned.is_err());
-    assert!(manager.workspace(&host.id).await.unwrap().parent.is_none());
+    assert!(
+        manager
+            .workspace_by_id(&host.id)
+            .await
+            .unwrap()
+            .parent
+            .is_none()
+    );
     // A split workspace stays below the one it was split from.
     manager
         .assign_parent(&split.id, Some(watching.id.clone()))
         .await
         .unwrap();
-    let parent = manager.workspace(&split.id).await.unwrap().parent;
+    let parent = manager.workspace_by_id(&split.id).await.unwrap().parent;
     assert_eq!(parent.map(|parent| parent.id), Some(host.id.clone()));
-    let below: Vec<_> = (manager.check_manual_removal(&host.id, false).await)
+    let below: Vec<_> = (manager
+        .check_manual_removal(&SpaceSelector::id(&host.id), false)
+        .await)
         .unwrap()
         .children
         .into_iter()
@@ -376,7 +436,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     let start = |workspace: &Workspace| crate::protocol::ChatMethod::StartChat {
         mode: None,
         repository: Some(repo.id.clone().into()),
-        workspace: Some(workspace.name.to_string()),
+        workspace: Some(SpaceSelector::parse(&workspace.name)),
         name: "auditing".into(),
         agent: "claude".into(),
         pid: process.id(),
@@ -402,7 +462,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     else {
         unreachable!("the method stays a chat start");
     };
-    assert_eq!(workspace.as_deref(), Some(worker.id.as_str()));
+    assert_eq!(workspace, Some(SpaceSelector::id(&worker.id)));
     let new = crate::daemon::chats::NewChat {
         mode: "chat".into(),
         name: "auditing".into(),
@@ -410,10 +470,10 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         pid: process.id(),
         origin: None,
         hands_over: false,
-        parent,
+        parent: parent.map(|parent| parent.to_string()),
     };
     let auditing = manager
-        .start_new_chat(repository, workspace.as_deref(), new)
+        .start_new_chat(repository, workspace.as_ref(), new)
         .await
         .unwrap();
     assert_eq!(
@@ -432,7 +492,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         pid: process.id(),
         origin: None,
         hands_over: false,
-        parent: Some(parent.name.to_string()),
+        parent: Some(SpaceSelector::parse(&parent.name)),
     };
     let mut method = below(&worker);
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
@@ -441,7 +501,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     let crate::protocol::ChatMethod::StartChat { parent, .. } = method else {
         unreachable!("the method stays a chat start");
     };
-    assert_eq!(parent, Some(worker.id.clone()));
+    assert_eq!(parent, Some(SpaceSelector::id(&worker.id)));
     let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut below(&root))
         .await
         .unwrap_err();
@@ -458,7 +518,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
         git_profile: None,
         path: None,
         options: Default::default(),
-        parent: Some(parent.name.to_string()),
+        parent: Some(SpaceSelector::parse(&parent.name)),
     };
     let mut method = check(&worker);
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
@@ -467,7 +527,7 @@ async fn a_scoped_chat_runs_chats_only_in_the_worktrees_of_its_tree() {
     let crate::protocol::WorkspaceMethod::CheckCreation { parent, .. } = method else {
         unreachable!("the method stays a creation check");
     };
-    assert_eq!(parent, Some(worker.id));
+    assert_eq!(parent, Some(SpaceSelector::id(&worker.id)));
     assert!(
         crate::daemon::scope::authorize(&manager, Some("scope"), &mut check(&root))
             .await

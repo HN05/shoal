@@ -27,7 +27,7 @@ impl Manager {
         run: Option<String>,
         stopped_by: Option<String>,
     ) -> Result<Option<Origin>> {
-        let chat = self.running_chat(id).await?;
+        let chat = self.running_chat_by_id(id).await?;
         let resumes = match &chat {
             Some(chat) => self.chat_resumes(chat).await?,
             None => false,
@@ -57,7 +57,7 @@ impl Manager {
         of_run: Option<String>,
         run: Option<String>,
     ) -> Result<Option<Origin>> {
-        let name = match self.recorded_chat(id).await? {
+        let name = match self.chat_by_id(id).await? {
             Some(chat) => chat.name.into(),
             None => id.to_owned(),
         };
@@ -127,7 +127,7 @@ impl Manager {
         restored
             .and_then(|ended| ended)
             .map_err(|error| anyhow!("{error}; restore it with shoal resume {}", chat.name))?;
-        let restored = self.recorded_chat(&chat.id).await?;
+        let restored = self.chat_by_id(&chat.id).await?;
         Ok(restored.and_then(|chat| chat.origin))
     }
 }

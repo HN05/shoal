@@ -12,6 +12,7 @@ pub(crate) use crate::client::resources::{
     ResourceConfig, ResourceKind, ResourceLease, ResourceRequest, ResourceStatus, Scope,
     definitions,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         allocation::Allocation,
@@ -336,7 +337,7 @@ impl Manager {
 
     pub async fn acquire_resource(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         request: ResourceRequest,
         caller: Option<&Caller>,
     ) -> Result<Allocation<ResourceLease>> {
@@ -420,12 +421,20 @@ impl Manager {
         Ok(acquisition)
     }
 
-    pub async fn list_resources(&self, selector: Option<&str>) -> Result<Vec<ResourceLease>> {
+    pub async fn list_resources(
+        &self,
+        selector: Option<&SpaceSelector>,
+    ) -> Result<Vec<ResourceLease>> {
         let owner = self.workspace_filter(selector).await?;
         self.store.run(move |db| leases(db, owner.as_deref())).await
     }
 
-    pub async fn release_resource(&self, selector: &str, pool: String, name: String) -> Result<()> {
+    pub async fn release_resource(
+        &self,
+        selector: &SpaceSelector,
+        pool: String,
+        name: String,
+    ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.touch(&workspace.id).await;
         let hook = self
@@ -473,7 +482,7 @@ impl Manager {
         Ok(())
     }
 
-    pub async fn resource_catalog(&self, selector: &str) -> Result<Catalog> {
+    pub async fn resource_catalog(&self, selector: &SpaceSelector) -> Result<Catalog> {
         let workspace = self.workspace(selector).await?;
         let pools = self
             .resource_definitions(&workspace)
@@ -488,7 +497,7 @@ impl Manager {
         Ok(Catalog { pools })
     }
 
-    pub async fn resource_overview(&self, selector: &str) -> Result<Overview> {
+    pub async fn resource_overview(&self, selector: &SpaceSelector) -> Result<Overview> {
         let workspace = self.workspace(selector).await?;
         let definitions = self.resource_definitions(&workspace).await?;
         self.store

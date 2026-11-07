@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use std::fmt;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         item_numbers::{self, ItemKind, ItemNumber},
@@ -663,10 +664,10 @@ impl Manager {
     /// notification while unread; once shown, its decider is told instead.
     pub async fn withdraw_approval(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         number: ItemNumber,
     ) -> Result<ApprovalRequest> {
-        let space = self.present_space(selector).await?;
+        let space = self.space(selector).await?;
         let space_id = space.id().to_owned();
         let selected = self
             .store
@@ -745,9 +746,12 @@ impl Manager {
 
     /// Every request, or those of the workspace `selector` names, or those
     /// the chat it names made or decides.
-    pub async fn approval_requests(&self, selector: Option<&str>) -> Result<Vec<ApprovalRequest>> {
+    pub async fn approval_requests(
+        &self,
+        selector: Option<&SpaceSelector>,
+    ) -> Result<Vec<ApprovalRequest>> {
         if let Some(selector) = selector
-            && let PresentSpace::Chat(chat) = self.present_space(selector).await?
+            && let PresentSpace::Chat(chat) = self.space(selector).await?
         {
             return self.store.run(move |db| list_of_chat(db, &chat.id)).await;
         }
@@ -999,11 +1003,11 @@ impl Manager {
     /// refused.
     pub async fn escalate_approval(
         &self,
-        space: &str,
+        space: &SpaceSelector,
         number: ItemNumber,
         shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
-        let space = self.present_space(space).await?;
+        let space = self.space(space).await?;
         let request = self.show_approval(number).await?;
         crate::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),

@@ -3,6 +3,7 @@ use anyhow::Result;
 
 use crate::client::assignments;
 use crate::client::output::workspaces::Withdrawn;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -30,7 +31,7 @@ enum Selected {
 
 pub(in crate::cli::commands) async fn undone(ctx: &Context, space: Option<String>) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    let withdrawn = assignments::undo_done(&ctx.paths, space).await?;
+    let withdrawn = assignments::undo_done(&ctx.paths, SpaceSelector::parse(&space)).await?;
     ctx.emit(
         "Completion withdrawn; run shoal done when finished.",
         Withdrawn { withdrawn },
@@ -77,7 +78,7 @@ pub(in crate::cli::commands) async fn done(
     };
     let completion = assignments::mark_done(
         &ctx.paths,
-        space,
+        SpaceSelector::parse(&space),
         options.cleanup,
         options.integrated,
         options.results,
@@ -97,7 +98,7 @@ pub(in crate::cli::commands) async fn done(
 }
 
 async fn stop_demos(ctx: &Context, workspace: &str) -> Result<()> {
-    crate::client::demos::stop(&ctx.paths, workspace.to_owned(), None).await
+    crate::client::demos::stop(&ctx.paths, SpaceSelector::parse(workspace), None).await
 }
 
 fn done_message(completion: &Completion) -> String {

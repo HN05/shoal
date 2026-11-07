@@ -7,6 +7,7 @@ use std::ffi::OsString;
 use anyhow::Result;
 
 use super::finish::{holding, report_queued_in};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     agent_queue::{AddPlan, ResolvedAddAgent},
@@ -81,7 +82,7 @@ enum Placement {
 async fn place(ctx: &Context, workspace: &Workspace, launch: QueuedLaunch) -> Result<Placement> {
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let agent: Agent = launch.agent.parse()?;

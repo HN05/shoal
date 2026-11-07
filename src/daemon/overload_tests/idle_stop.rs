@@ -1,6 +1,7 @@
 //! An idle agent Shoal stops to free memory comes back when an update arrives,
 //! even in a done workspace and whatever the overload recovery policy says.
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{daemon::workspace_files::Attacher, state::AgentState};
 
 /// Report the workspace's running agent idle, then hold the workspace and
@@ -10,19 +11,24 @@ async fn idle_in_held_done_workspace(
     workspace: &crate::model::Workspace,
 ) -> String {
     let id = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions[0]
         .id
         .clone();
     manager
-        .set_agent_state(&workspace.name, AgentState::Idle, Some(id.clone()), None)
+        .set_agent_state(
+            &SpaceSelector::from(&workspace.name),
+            AgentState::Idle,
+            Some(id.clone()),
+            None,
+        )
         .await
         .unwrap();
     manager
         .acquire_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "app".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -30,7 +36,13 @@ async fn idle_in_held_done_workspace(
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, true, false, Vec::new(), &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            false,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     id
@@ -60,7 +72,7 @@ async fn an_update_restores_an_idle_agent_stopped_in_a_held_done_workspace() {
     manager.config_state.publish_disk_reading(Some(generation));
     manager
         .send_agent_message(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             "Review requested".into(),
             Vec::new(),
             &Attacher::User,
@@ -83,7 +95,7 @@ async fn an_idle_agent_with_a_background_command_keeps_running() {
     sweep(&manager).await;
     assert!(manager.agent_overload(&id).await.is_none());
     assert!(crate::process::identity::alive(&background).unwrap());
-    bounded(manager.stop_workspace(&workspace.name, StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::from(&workspace.name), StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();

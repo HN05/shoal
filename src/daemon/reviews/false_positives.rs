@@ -72,7 +72,10 @@ impl Manager {
             Some(Outcome::FalsePositive { reason }) => Some(entry(review, finding, reason)?),
             _ => None,
         };
-        let repository_id = self.workspace(&review.workspace_id).await?.repository_id;
+        let repository_id = self
+            .workspace_by_id(&review.workspace_id)
+            .await?
+            .repository_id;
         let path = match entry {
             Some(_) => Some(self.false_positives_path_reserved(&repository_id).await?),
             None => self.false_positives_path(&repository_id).await?,

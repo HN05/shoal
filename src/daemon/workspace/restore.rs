@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{
     daemon::events::EventCause,
@@ -32,7 +33,7 @@ impl Manager {
             .await?;
         // Removal refuses link changes, so links read now are final, unlike
         // those of the snapshot taken before it started.
-        let links = self.workspace(&workspace.id).await?.links;
+        let links = self.workspace_by_id(&workspace.id).await?.links;
         // Removal has stopped every agent, and deletes the state their
         // records are in.
         let agents = crate::execution::recovery::stopped_agents(&self.paths, &workspace.id)?;
@@ -109,7 +110,7 @@ impl Manager {
     /// its unsaved files, checkpoints, linked issue, opened and related items,
     /// and stopped agents; the caller sets it up and links its PRs. The
     /// record goes once the files are back.
-    pub async fn restore_workspace(&self, selector: &str) -> Result<RestoredWorkspace> {
+    pub async fn restore_workspace(&self, selector: &SpaceSelector) -> Result<RestoredWorkspace> {
         let removed = self.claim_removed_workspace(selector).await?;
         let checkpoint = &removed.checkpoint;
         let files = (checkpoint.commit != checkpoint.head).then(|| RestoredFiles {
@@ -203,7 +204,7 @@ impl Manager {
             let (repo, _git) = self.lock_repository(&repo.id).await?;
             self.record_import(&repo, bundle, removed, copy).await?
         };
-        self.restore_workspace(&removed.workspace_id)
+        self.restore_workspace(&SpaceSelector::id(&removed.workspace_id))
             .await
             .with_context(|| {
                 format!(
@@ -316,7 +317,11 @@ impl Manager {
         let mut warnings = Vec::new();
         if let Some(url) = &links.issue
             && let Err(error) = self
-                .set_issue(workspace_id, url, links.issue_title.clone())
+                .set_issue(
+                    &SpaceSelector::id(workspace_id),
+                    url,
+                    links.issue_title.clone(),
+                )
                 .await
         {
             warnings.push(format!("cannot link issue {url}: {error:#}"));
@@ -341,8 +346,13 @@ impl Manager {
     /// The removal record to reopen, kept with its checkpoints for at least
     /// [`RESTORE_CLAIM`] in the same transaction, so expiry cannot delete
     /// them while the restore runs.
-    pub(super) async fn claim_removed_workspace(&self, selector: &str) -> Result<RemovedWorkspace> {
-        let name = selector.to_owned();
+    pub(super) async fn claim_removed_workspace(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<RemovedWorkspace> {
+        let name = (selector.id_or_name().map(str::to_owned)).with_context(|| {
+            format!("no restorable workspace {selector}; a removed workspace has no number, so name it by name or ID")
+        })?;
         self.store
             .run(move |db| claim(db, &name))
             .await?

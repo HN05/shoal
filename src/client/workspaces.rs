@@ -6,6 +6,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         chats,
@@ -22,7 +23,7 @@ use crate::{
 };
 
 /// `workspace` with its links, completion, executions, places and leases.
-pub async fn inspect(daemon: &impl Daemon, workspace: String) -> Result<Inspection> {
+pub async fn inspect(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Inspection> {
     request(daemon, WorkspaceMethod::InspectWorkspace { workspace }).await
 }
 
@@ -54,7 +55,7 @@ pub struct PlannedWorkspace {
     pub git_profile: Option<String>,
     pub path: Option<PathBuf>,
     /// The chat the workspace is created in.
-    pub parent: Option<String>,
+    pub parent: Option<SpaceSelector>,
     pub options: CreationOptions,
 }
 
@@ -102,7 +103,7 @@ pub async fn check_dependencies(
 pub async fn create_at_commit(
     daemon: &impl Daemon,
     repository: Selector,
-    parent: Option<String>,
+    parent: Option<SpaceSelector>,
     start: CommitStart,
     options: CreationOptions,
 ) -> Result<Workspace> {
@@ -132,7 +133,11 @@ pub async fn adopt(
 }
 
 /// Rename `workspace`'s branch to `branch`.
-pub async fn rename(daemon: &impl Daemon, workspace: String, branch: String) -> Result<Workspace> {
+pub async fn rename(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    branch: String,
+) -> Result<Workspace> {
     request(
         daemon,
         WorkspaceMethod::RenameWorkspace { workspace, branch },
@@ -143,7 +148,7 @@ pub async fn rename(daemon: &impl Daemon, workspace: String, branch: String) -> 
 /// Give `workspace` the title its places show.
 pub async fn set_title(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     title: String,
 ) -> Result<RetitledWorkspace> {
     let method = WorkspaceMethod::SetWorkspaceTitle {
@@ -157,7 +162,7 @@ pub async fn set_title(
 /// without one.
 pub async fn set_base(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     base: Option<String>,
 ) -> Result<Workspace> {
     request(
@@ -169,7 +174,11 @@ pub async fn set_base(
 
 /// `workspace`, once its worktree is verified as its own, and on its branch
 /// when `on_branch`.
-pub async fn verify(daemon: &impl Daemon, workspace: String, on_branch: bool) -> Result<Workspace> {
+pub async fn verify(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    on_branch: bool,
+) -> Result<Workspace> {
     request(
         daemon,
         WorkspaceMethod::VerifyWorkspace {
@@ -181,7 +190,11 @@ pub async fn verify(daemon: &impl Daemon, workspace: String, on_branch: bool) ->
 }
 
 /// Fast-forward `workspace` to `branch`; whether it moved.
-pub async fn fast_forward(daemon: &impl Daemon, workspace: String, branch: String) -> Result<bool> {
+pub async fn fast_forward(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    branch: String,
+) -> Result<bool> {
     request(
         daemon,
         WorkspaceMethod::FastForwardWorkspace { workspace, branch },
@@ -195,7 +208,7 @@ pub async fn find_spaces(daemon: &impl Daemon, target: SpaceTarget) -> Result<Ve
 }
 
 /// What `space` is doing: its links, agents, leases and assignment.
-pub async fn status(daemon: &impl Daemon, space: String) -> Result<SpaceStatus> {
+pub async fn status(daemon: &impl Daemon, space: SpaceSelector) -> Result<SpaceStatus> {
     let status: Box<SpaceStatus> = request(daemon, WorkspaceMethod::SpaceStatus { space }).await?;
     Ok(*status)
 }
@@ -211,7 +224,7 @@ pub async fn owned_places(daemon: &impl Daemon) -> Result<Vec<OwnedPlace>> {
 }
 
 /// The places Shoal created for `workspace`.
-pub async fn places(daemon: &impl Daemon, workspace: String) -> Result<Vec<OwnedPlace>> {
+pub async fn places(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<Vec<OwnedPlace>> {
     request(daemon, WorkspaceMethod::WorkspacePlaces { workspace }).await
 }
 
@@ -225,7 +238,7 @@ pub async fn record_owned_place(
     call(
         daemon,
         WorkspaceMethod::RecordOwnedPlace {
-            workspace: workspace.to_owned(),
+            workspace: SpaceSelector::parse(workspace),
             origin,
         },
     )
@@ -243,7 +256,7 @@ pub async fn place_ownership(
     request(
         daemon,
         WorkspaceMethod::PlaceOwnership {
-            workspace: workspace.to_owned(),
+            workspace: SpaceSelector::parse(workspace),
             place: place.clone(),
         },
     )
@@ -260,7 +273,7 @@ pub async fn close_owned_place(
     request(
         daemon,
         WorkspaceMethod::CloseOwnedPlace {
-            workspace: workspace.to_owned(),
+            workspace: SpaceSelector::parse(workspace),
             place: place.clone(),
         },
     )
@@ -270,7 +283,7 @@ pub async fn close_owned_place(
 /// The environment `workspace`'s configuration gives its commands.
 pub async fn environment(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
 ) -> Result<BTreeMap<String, String>> {
     request(daemon, WorkspaceMethod::WorkspaceEnv { workspace }).await
 }
@@ -278,7 +291,7 @@ pub async fn environment(
 /// Revoke the environment `token` handed out for `workspace`.
 pub async fn revoke_environment(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     token: String,
 ) -> Result<()> {
     request(
@@ -298,7 +311,7 @@ pub async fn keep_agent_environment(
     call(
         daemon,
         WorkspaceMethod::KeepAgentEnvironment {
-            workspace: workspace.to_owned(),
+            workspace: SpaceSelector::parse(workspace),
             environment,
         },
     )
@@ -309,7 +322,7 @@ pub async fn keep_agent_environment(
 /// The command of `workspace`'s hook of `kind`, if its configuration has one.
 pub async fn hook(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     kind: HookKind,
 ) -> Result<Option<PathBuf>> {
     request(daemon, WorkspaceMethod::WorkspaceHook { workspace, kind }).await
@@ -344,7 +357,7 @@ pub async fn configuration(
 }
 
 /// The commit `workspace`'s changes are counted from.
-pub async fn diff_base(daemon: &impl Daemon, workspace: String) -> Result<DiffBase> {
+pub async fn diff_base(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<DiffBase> {
     request(daemon, WorkspaceMethod::DiffBase { workspace }).await
 }
 
@@ -352,7 +365,7 @@ pub async fn diff_base(daemon: &impl Daemon, workspace: String) -> Result<DiffBa
 /// default its base.
 pub async fn conflicts(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     target: Option<String>,
 ) -> Result<ConflictCheck> {
     request(daemon, WorkspaceMethod::Conflicts { workspace, target }).await
@@ -362,7 +375,7 @@ pub async fn conflicts(
 /// would do.
 pub async fn preview_merge(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     push: bool,
 ) -> Result<MergePreview> {
     request(daemon, WorkspaceMethod::PreviewMerge { workspace, push }).await

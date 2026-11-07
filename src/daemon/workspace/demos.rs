@@ -10,6 +10,7 @@ use super::{
     Manager,
     executions::{Save, StopPolicy, StopRequest},
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     demos::{Launch, Progress, Running},
     model::{Execution, PresentSpace},
@@ -19,9 +20,9 @@ use crate::{
 impl Manager {
     /// The running demos of `selector`'s workspace, none of a chat's, or
     /// those of every workspace.
-    pub async fn demos(&self, selector: Option<&str>) -> Result<Vec<Running>> {
+    pub async fn demos(&self, selector: Option<&SpaceSelector>) -> Result<Vec<Running>> {
         let workspace = match selector {
-            Some(selector) => match self.present_space(selector).await? {
+            Some(selector) => match self.space(selector).await? {
                 PresentSpace::Workspace(workspace) => Some(workspace.id),
                 PresentSpace::Chat(_) => return Ok(Vec::new()),
             },
@@ -33,7 +34,7 @@ impl Manager {
     }
 
     /// How far the start of `launch` in `selector`'s workspace got.
-    pub async fn demo_progress(&self, selector: &str, launch: &str) -> Result<Progress> {
+    pub async fn demo_progress(&self, selector: &SpaceSelector, launch: &str) -> Result<Progress> {
         let recorded = self
             .demos(Some(selector))
             .await?
@@ -77,13 +78,13 @@ impl Manager {
     /// records go once their wrappers finish; a demo whose wrapper has not
     /// reconnected since a daemon restart has its verified processes stopped
     /// as `shoal stop` stops them.
-    pub async fn stop_demos(&self, selector: &str, name: Option<String>) -> Result<()> {
+    pub async fn stop_demos(&self, selector: &SpaceSelector, name: Option<String>) -> Result<()> {
         if let Some(name) = &name {
             crate::demos::validate_name(name)?;
         }
         let workspace = self.workspace(selector).await?.id;
         let executions: Vec<String> = self
-            .demos(Some(&workspace))
+            .demos(Some(&SpaceSelector::id(&workspace)))
             .await?
             .into_iter()
             .filter(|demo| name.as_ref().is_none_or(|name| *name == demo.launch.name))

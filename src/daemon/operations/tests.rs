@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use super::{Entry, RETAIN, fake};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -33,7 +34,7 @@ async fn registered(root: &std::path::Path, manager: &Manager) -> Repository {
 
 fn setup(workspace: &Workspace) -> OperationSpec {
     OperationSpec::Prepare {
-        workspace: workspace.name.to_string(),
+        workspace: SpaceSelector::parse(&workspace.name),
         steps: Preparation {
             setup: true,
             ..Default::default()
@@ -83,7 +84,7 @@ async fn the_reported_end_takes_effect_once_the_worker_exits_after_its_output() 
     else {
         panic!("expected the setup order: {:?}", worker.order);
     };
-    assert_eq!(id_in_order, &workspace.id);
+    assert_eq!(*id_in_order, SpaceSelector::id(&workspace.id));
     assert_eq!(worker.token, None);
     let entry = manager.operation(&id, None).await.unwrap();
     let step = Report::Step(Step::SetupStarted);
@@ -176,7 +177,10 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     let repository = registered(root.path(), &manager).await;
     let own = workspace(&manager, &repository, "own").await;
     let other = workspace(&manager, &repository, "other").await;
-    let environment = manager.workspace_environment(&own.id).await.unwrap();
+    let environment = manager
+        .workspace_environment(&SpaceSelector::id(&own.id))
+        .await
+        .unwrap();
     let token = &environment[crate::env::SCOPE_TOKEN];
     let caller = manager.caller(token).await.unwrap().unwrap();
     let id = manager
@@ -189,7 +193,7 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
     let issued = worker.token.clone().unwrap();
     assert_ne!(&issued, token);
     manager
-        .revoke_workspace_environment(&own.id, token.clone())
+        .revoke_workspace_environment(&SpaceSelector::id(&own.id), token.clone())
         .await
         .unwrap();
     let acting = manager.caller(&issued).await.unwrap().unwrap();

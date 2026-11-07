@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{spaces::status::Records, store},
     forge::{ForgeRepo, IssueInput, items::link},
@@ -14,7 +15,7 @@ impl Manager {
     /// worktree, and what the workspace records about its links and work.
     pub(crate) async fn worktree_status(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
     ) -> Result<(WorktreeStatus, Records)> {
         let Inspection {
             issue,
@@ -97,7 +98,7 @@ impl Manager {
     /// What the workspace changed since its base.
     async fn diff_summary(&self, workspace: &Workspace) -> Result<DiffSummary> {
         self.verify_worktree(workspace).await?;
-        let base = self.diff_base(&workspace.id).await?;
+        let base = self.diff_base(&SpaceSelector::id(&workspace.id)).await?;
         let numstat = git::diff::numstat(&workspace.path, &base.commit).await?;
         parse_numstat(&numstat)
     }

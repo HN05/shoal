@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 /// Requests about a space's assignment: completion, ready marks and a
@@ -11,7 +12,7 @@ pub enum AssignmentMethod {
     /// HEAD's work under other commits; a chat has neither. `results` are
     /// files to hand back by absolute path, which the daemon copies.
     MarkDone {
-        space: String,
+        space: SpaceSelector,
         cleanup: bool,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         integrated: bool,
@@ -22,21 +23,21 @@ pub enum AssignmentMethod {
         sender_chat: Option<String>,
     },
     /// Withdraw the completion of a workspace or running chat.
-    UndoDone { space: String },
+    UndoDone { space: SpaceSelector },
     MarkReady {
-        space: String,
+        space: SpaceSelector,
         selection: crate::forge::items::link::Selection,
     },
     /// `draft` overrides `[pr] draft_on_unready` when set.
     ClearReady {
-        space: String,
+        space: SpaceSelector,
         selection: crate::forge::items::link::Selection,
         draft: Option<bool>,
     },
     /// Forget the workspace's stopped work, only `execution`'s when given,
     /// or else its last session.
     DiscardStoppedWork {
-        workspace: String,
+        workspace: SpaceSelector,
         execution: Option<String>,
     },
 }

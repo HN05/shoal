@@ -18,6 +18,7 @@ use tokio::time::{Instant, sleep};
 pub(crate) use crate::client::cleanup::{
     CacheCleanup, Kept, ManualCleanup, Pick, Retained, Selection,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         caches::Emptying, events::EventCause, file_access, log, notifications::NotificationKind,
@@ -371,7 +372,9 @@ async fn sweep_workspace(
         timers.start(&workspace.id, snapshot, now);
         return Ok(());
     }
-    let removal = manager.remove_idle(&workspace.id, snapshot).await;
+    let removal = manager
+        .remove_idle(&SpaceSelector::id(&workspace.id), snapshot)
+        .await;
     if matches!(removal, Ok(false)) {
         return Ok(());
     }
@@ -646,7 +649,10 @@ async fn remove_on_request(
             report.removed.push(workspace.name.into());
             continue;
         }
-        match manager.remove_on_request(&workspace.id, snapshot).await {
+        match manager
+            .remove_on_request(&SpaceSelector::id(&workspace.id), snapshot)
+            .await
+        {
             Ok(()) => {
                 log!("manual cleanup removed {}", workspace.name);
                 report.removed.push(workspace.name.into());
@@ -732,7 +738,10 @@ async fn remove_deleted(manager: &Manager, workspace: &Workspace) {
             return;
         }
     }
-    let (kind, message) = match manager.remove_deleted(&workspace.id).await {
+    let (kind, message) = match manager
+        .remove_deleted(&SpaceSelector::id(&workspace.id))
+        .await
+    {
         Ok(_) => {
             log!("forgot deleted worktree {}", workspace.name);
             (

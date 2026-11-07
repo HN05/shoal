@@ -3,6 +3,7 @@ use std::time::Instant;
 use tokio::io::{AsyncReadExt, BufReader};
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::RepositoryMethod::ListRepositories;
 use crate::{
     daemon::{
@@ -61,7 +62,12 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         choices: Vec::new(),
     };
     let question = manager
-        .ask_question(&workspace.name, ask.clone(), Vec::new(), &Attacher::User)
+        .ask_question(
+            &SpaceSelector::from(&workspace.name),
+            ask.clone(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let socket = &manager.paths.socket.clone();
@@ -84,7 +90,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         }
     });
     let await_answer = || QuestionMethod::AwaitAnswer {
-        space: workspace.name.to_string(),
+        space: SpaceSelector::parse(&workspace.name),
         item: question.number.item,
         ask: ask.clone(),
     };
@@ -102,7 +108,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     let execute = ExecutionMethod::Execute {
         mode: None,
         model: Default::default(),
-        workspace: workspace.name.to_string(),
+        workspace: SpaceSelector::parse(&workspace.name),
         wrapper: wrapper.clone(),
         kind: crate::daemon::workspace::ExecutionKind::Command,
         agent: None,

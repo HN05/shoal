@@ -3,14 +3,18 @@
 use anyhow::Result;
 
 use super::{Manager, PrGuard};
+use crate::client::space_names::SpaceSelector;
 use crate::model::Workspace;
 
 impl Manager {
     /// The workspace `selector` names, read again once its PR gate is held.
-    pub(crate) async fn lock_pr_gate(&self, selector: &str) -> Result<(Workspace, PrGuard)> {
+    pub(crate) async fn lock_pr_gate(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<(Workspace, PrGuard)> {
         let id = self.workspace(selector).await?.id;
         let guard = self.gates.lock_prs([&id]).await;
-        Ok((self.workspace(&id).await?, guard))
+        Ok((self.workspace_by_id(&id).await?, guard))
     }
 
     /// Hold the PR gates of the space `id`, of every space below it and of

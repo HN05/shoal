@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{ProcessGroup, git, manager, repository},
     forge::items::link::{LinkKind, Selection},
@@ -28,10 +29,15 @@ async fn a_stopped_chat_reads_in_its_repositorys_checkout() {
         .unwrap();
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    assert!(manager.running_chat(&chat.id).await.unwrap().is_none());
+    assert!(
+        manager
+            .running_chat(&SpaceSelector::id(&chat.id))
+            .await
+            .is_err()
+    );
 
     let forge = manager
-        .context_forge(&ItemContext::Chat(chat.id))
+        .context_forge(&ItemContext::Chat(SpaceSelector::id(&chat.id)))
         .await
         .unwrap();
     assert!(forge == manager.forge(origin).await.unwrap());

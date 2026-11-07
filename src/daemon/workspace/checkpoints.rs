@@ -6,6 +6,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{log, scope::Caller},
     git,
@@ -20,13 +21,13 @@ impl Manager {
     /// `shoal work checkpoint`: keep the workspace's current state.
     pub async fn take_checkpoint(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         name: Option<String>,
     ) -> Result<Checkpoint> {
         let workspace = self.workspace(selector).await?;
         // A repository move holds this gate; the workspace may have moved.
         let (_repo, _git) = self.lock_repository(&workspace.repository_id).await?;
-        let workspace = self.workspace(&workspace.id).await?;
+        let workspace = self.workspace_by_id(&workspace.id).await?;
         ensure!(
             matches!(
                 workspace.state,
@@ -50,14 +51,14 @@ impl Manager {
     /// in another lifecycle operation or removed meanwhile takes none, and a
     /// failure is only logged.
     pub(crate) async fn checkpoint_after_agent(&self, workspace_id: &str) {
-        let Ok(workspace) = self.workspace(workspace_id).await else {
+        let Ok(workspace) = self.workspace_by_id(workspace_id).await else {
             return;
         };
         // A repository move holds this gate; the workspace may have moved.
         let Ok((_repo, _git)) = self.lock_repository(&workspace.repository_id).await else {
             return;
         };
-        let Ok(workspace) = self.workspace(workspace_id).await else {
+        let Ok(workspace) = self.workspace_by_id(workspace_id).await else {
             return;
         };
         if !matches!(
@@ -173,7 +174,7 @@ impl Manager {
     /// `None` when no workspace has that name or ID.
     pub async fn checkpoints(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         after: Option<u64>,
     ) -> Result<Option<Vec<Checkpoint>>> {
         let Ok(workspace) = self.workspace(selector).await else {
@@ -208,7 +209,7 @@ impl Manager {
     /// own execution.
     pub async fn restore_checkpoint(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         number: u64,
         caller: Option<&Caller>,
     ) -> Result<RestoredCheckpoint> {
@@ -237,7 +238,7 @@ impl Manager {
         let replaced = result?;
         self.touch(&workspace.id).await;
         Ok(RestoredCheckpoint {
-            workspace: self.workspace(&workspace.id).await?,
+            workspace: self.workspace_by_id(&workspace.id).await?,
             checkpoint,
             replaced,
         })

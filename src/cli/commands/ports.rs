@@ -2,6 +2,7 @@
 use anyhow::{Result, ensure};
 
 use crate::client::output::leases::Suggested;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -25,9 +26,13 @@ pub(super) async fn acquire(
     mut request: PortRequest,
 ) -> Result<i32> {
     loop {
-        let acquired =
-            leases::acquire_port(&ctx.paths, workspace.clone(), name.clone(), request.clone())
-                .await?;
+        let acquired = leases::acquire_port(
+            &ctx.paths,
+            SpaceSelector::parse(&workspace),
+            name.clone(),
+            request.clone(),
+        )
+        .await?;
         match acquired {
             PortAcquisition::Reserved(reservation) => {
                 ctx.emit(
@@ -96,12 +101,12 @@ pub(super) async fn overview(ctx: &Context, scope: WorkspaceScope) -> Result<i32
     let Some(workspace) = ui::select_workspace_filter(ctx, scope).await? else {
         return workspace_overviews(
             ctx,
-            async |workspace| leases::ports(&ctx.paths, workspace.id.clone()).await,
+            async |workspace| leases::ports(&ctx.paths, SpaceSelector::id(&workspace.id)).await,
             render_overview,
         )
         .await;
     };
-    let overview = leases::ports(&ctx.paths, workspace).await?;
+    let overview = leases::ports(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
     ctx.show(&overview, |overview| {
         render_overview(overview, Palette::stdout(ctx.json))
     })?;
@@ -140,7 +145,7 @@ pub(super) fn render_overview(overview: &PortOverview, palette: Palette) {
 }
 
 pub(super) async fn fetch_catalog(ctx: &Context, workspace: &str) -> Result<PortCatalog> {
-    leases::port_catalog(&ctx.paths, workspace.to_owned()).await
+    leases::port_catalog(&ctx.paths, SpaceSelector::parse(workspace)).await
 }
 
 pub(super) fn render_catalog(catalog: &PortCatalog, palette: Palette) {

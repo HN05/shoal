@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 /// Requests about the files attached to spaces: workspaces and chats.
@@ -9,10 +10,10 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum FileMethod {
     /// The files attached to a workspace or chat, oldest first.
-    ListFiles { space: String },
+    ListFiles { space: SpaceSelector },
     /// Attach copies of files to a workspace or chat without a message.
     AddFiles {
-        space: String,
+        space: SpaceSelector,
         /// The files by absolute path, which the daemon copies.
         files: Vec<crate::client::files::NewFile>,
         /// The chat whose agent sends the request, which attaches them.
@@ -24,7 +25,7 @@ pub enum FileMethod {
     /// those of every workspace without a running agent or command and of
     /// every removed chat.
     RemoveFiles {
-        space: Option<String>,
+        space: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         names: Vec<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

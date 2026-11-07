@@ -4,6 +4,7 @@
 use anyhow::Result;
 
 use super::listing::ListFilter;
+use crate::client::space_names::SpaceSelector;
 use crate::client::{queue, space_names::SpaceName};
 use crate::{
     agent_queue::AddPlan,
@@ -88,7 +89,12 @@ pub(super) fn starts_when(entry: &QueueEntry) -> String {
 /// Record the workspace a starting entry opened, or the existing one a
 /// waiting launch opens.
 pub(super) async fn attach(ctx: &Context, entry: &str, workspace: &Workspace) -> Result<()> {
-    queue::attach(&ctx.paths, entry.to_owned(), workspace.id.clone()).await
+    queue::attach(
+        &ctx.paths,
+        entry.to_owned(),
+        SpaceSelector::id(&workspace.id),
+    )
+    .await
 }
 
 /// Free a starting entry's slot after its launch failed; the daemon notifies
@@ -135,9 +141,10 @@ pub(super) async fn start(ctx: &Context, entry: String) -> Result<i32> {
 async fn start_launch(ctx: &Context, entry: &str) -> Result<()> {
     let (queued, plan) = plan(ctx, entry).await?;
     if let Some(workspace) = &queued.entry.opens {
-        let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
-            .await?
-            .workspace;
+        let workspace =
+            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace))
+                .await?
+                .workspace;
         anyhow::ensure!(
             plan.opens(&workspace),
             "the queued launch does not open workspace {}",

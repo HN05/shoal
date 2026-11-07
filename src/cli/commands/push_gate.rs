@@ -11,6 +11,7 @@ use std::io::{BufRead as _, Write as _};
 
 use anyhow::{Context as _, Result, bail};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         client,
@@ -157,7 +158,14 @@ impl Session {
     async fn request(&self, ctx: &Context, workspace: &str, refspec: &str) -> Result<PushOutcome> {
         let push = self.specification(refspec).await?;
         let workspace = workspace.to_owned();
-        client::request(&ctx.paths, ApprovalMethod::RequestPush { workspace, push }).await
+        client::request(
+            &ctx.paths,
+            ApprovalMethod::RequestPush {
+                workspace: SpaceSelector::parse(&workspace),
+                push,
+            },
+        )
+        .await
     }
 
     /// What pushing `refspec` changes on the remote: the object its source

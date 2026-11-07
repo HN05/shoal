@@ -4,6 +4,7 @@
 use anyhow::{Result, bail, ensure};
 
 use super::{proposals::OpenOutcome, space::LinkSpace};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::repo::{Opening, Pushes},
     daemon::{scope::Caller, workspace::Manager},
@@ -25,7 +26,7 @@ impl Manager {
     /// not assigned.
     pub async fn revert_pull(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         input: Option<String>,
         options: PullOptions,
         caller: Option<&Caller>,
@@ -38,7 +39,7 @@ impl Manager {
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the revert and recording it.
         let _gate = self.gates.lock_prs([&id]).await;
-        let space = self.link_space(&id).await?;
+        let space = self.link_space(&SpaceSelector::id(&id)).await?;
         self.verify_space(&space).await?;
         let settings = match &space {
             LinkSpace::Workspace(workspace) => {
@@ -100,7 +101,11 @@ impl Manager {
 
     /// The merged PR `input` names, or the space's linked PR, with what
     /// reverting its merge with Git needs, read as the agent account.
-    pub async fn merged_pull(&self, selector: &str, input: Option<String>) -> Result<MergedPull> {
+    pub async fn merged_pull(
+        &self,
+        selector: &SpaceSelector,
+        input: Option<String>,
+    ) -> Result<MergedPull> {
         let space = self.link_space(selector).await?;
         self.verify_space(&space).await?;
         let (forge, account) = (self.space_forge(&space).await?, self.agent_account());

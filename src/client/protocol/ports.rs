@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use crate::model::PortRequest;
 use serde::{Deserialize, Serialize};
 
@@ -10,18 +11,18 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum PortMethod {
     PortAcquire {
-        workspace: String,
+        workspace: SpaceSelector,
         name: String,
         request: PortRequest,
     },
     PortRelease {
-        workspace: String,
+        workspace: SpaceSelector,
         name: String,
     },
     PortOverview {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     PortCatalog {
-        workspace: String,
+        workspace: SpaceSelector,
     },
 }

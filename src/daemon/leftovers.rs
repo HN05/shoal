@@ -10,6 +10,7 @@ use std::{
 use anyhow::Result;
 
 pub(crate) use crate::client::processes::Leftover;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{space_processes::WorktreeTies, workspace::Manager},
     fsutil::off_runtime,
@@ -142,9 +143,13 @@ impl Manager {
 
     /// Remember that the agent of the workspace or running chat `selector`
     /// names was told about the leftovers `pids` name.
-    pub(crate) async fn acknowledge_leftovers(&self, selector: &str, pids: &[u32]) -> Result<()> {
+    pub(crate) async fn acknowledge_leftovers(
+        &self,
+        selector: &SpaceSelector,
+        pids: &[u32],
+    ) -> Result<()> {
         if !pids.is_empty() {
-            let space = self.present_space(selector).await?;
+            let space = self.space(selector).await?;
             self.leftovers.delivered(space.id(), pids);
         }
         Ok(())

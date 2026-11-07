@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{commit, git, manager, repository},
     model::{BranchTarget, Repository},
@@ -54,7 +55,7 @@ async fn kept(manager: &Manager, repo: &Repository, name: &str) -> String {
     commit(&workspace.path, name);
     let removed = manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )

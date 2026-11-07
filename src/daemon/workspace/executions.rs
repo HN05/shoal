@@ -4,6 +4,7 @@ mod completion;
 mod reregistration;
 
 use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace, stopped_work::Stopper};
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
 use crate::{
     config::repo::Cache,
@@ -370,8 +371,14 @@ impl Manager {
             demo,
             ..Default::default()
         };
-        self.begin_execution_placed(selector, wrapper, kind, caller, request)
-            .await
+        self.begin_execution_placed(
+            &SpaceSelector::parse(selector),
+            wrapper,
+            kind,
+            caller,
+            request,
+        )
+        .await
     }
 
     /// Register an execution and issue its scope token, recording the demo it
@@ -379,7 +386,7 @@ impl Manager {
     /// when the workspace asks its commands to stop.
     pub(crate) async fn begin_execution_placed(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         wrapper: Option<Identity>,
         kind: ExecutionKind,
         caller: Option<&Caller>,
@@ -448,7 +455,7 @@ impl Manager {
     ) -> Result<RegisteredExecution> {
         let mut connections = self.executions.connections().await;
         connections.ensure_accepting()?;
-        let workspace = self.workspace(workspace_id).await?;
+        let workspace = self.workspace_by_id(workspace_id).await?;
         ensure!(
             off_runtime::is_dir(&workspace.path).await?,
             "workspace directory is missing"
@@ -595,7 +602,7 @@ impl Manager {
 
     async fn prepare_execution(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         wrapper: Option<&Identity>,
         kind: ExecutionKind,
         scoped: bool,
@@ -630,7 +637,10 @@ impl Manager {
             ExecutionKind::Merge => {
                 let guard = self.gates.lock_git(&workspace.repository_id).await;
                 let merge = self
-                    .prepare_merge(&workspace.id, &merge.unwrap_or_default())
+                    .prepare_merge(
+                        &SpaceSelector::id(&workspace.id),
+                        &merge.unwrap_or_default(),
+                    )
                     .await?;
                 if scoped {
                     self.authorize_scoped_merge(&merge).await?;
@@ -643,7 +653,9 @@ impl Manager {
             }
             ExecutionKind::Unmerge => {
                 let guard = self.gates.lock_git(&workspace.repository_id).await;
-                let unmerge = self.prepare_unmerge(&workspace.id).await?;
+                let unmerge = self
+                    .prepare_unmerge(&SpaceSelector::id(&workspace.id))
+                    .await?;
                 if scoped {
                     self.authorize_scoped_unmerge(&unmerge).await?;
                 }
@@ -826,7 +838,7 @@ impl Manager {
             "execution is already connected"
         );
         let (workspace_id, agent) = self.authorize_reattachment(request).await?;
-        let workspace = self.workspace(&workspace_id).await?;
+        let workspace = self.workspace_by_id(&workspace_id).await?;
         // Before protection can know the agent again and save a new stop.
         // A wrapper awaiting a restore has received its stop.
         if request.awaiting_restore.is_none() {
@@ -989,7 +1001,11 @@ impl Manager {
     }
 
     /// Stop every execution, cancelling agents' waiting restores.
-    pub async fn stop_workspace(&self, selector: &str, request: StopRequest) -> Result<()> {
+    pub async fn stop_workspace(
+        &self,
+        selector: &SpaceSelector,
+        request: StopRequest,
+    ) -> Result<()> {
         self.stop_workspace_executions(
             selector,
             request,
@@ -1011,7 +1027,7 @@ impl Manager {
     /// run on the forge instead, whose runner then stops it.
     pub async fn stop_workspace_manually(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         acknowledge_unproven: bool,
         stopped_by: Option<&str>,
         launches: QueuedLaunches,
@@ -1048,7 +1064,7 @@ impl Manager {
 
     /// Stop executions other than agents that protection already stopped,
     /// saving records as `shoal stop` does.
-    pub async fn stop_unprotected(&self, selector: &str, reason: String) -> Result<()> {
+    pub async fn stop_unprotected(&self, selector: &SpaceSelector, reason: String) -> Result<()> {
         let request = StopRequest {
             reason,
             save: Save::Everything,
@@ -1061,7 +1077,7 @@ impl Manager {
     /// request.
     pub(super) async fn stop_keeping_restores(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         request: StopRequest,
     ) -> Result<()> {
         self.stop_workspace_executions(
@@ -1081,7 +1097,7 @@ impl Manager {
     /// the waiting launches `keep` cancels.
     async fn stop_workspace_executions(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         request: StopRequest,
         protected: Protected,
         policy: StopPolicy,
@@ -1117,8 +1133,11 @@ impl Manager {
                     workspace,
                     executions: stopping,
                 });
-                self.keep_stopped_as_last_sessions(&workspace.id, stopper.as_ref())
-                    .await?;
+                self.keep_stopped_as_last_sessions(
+                    &SpaceSelector::id(&workspace.id),
+                    stopper.as_ref(),
+                )
+                .await?;
             }
             anyhow::Ok(cancelled)
         }
@@ -1211,14 +1230,14 @@ impl Manager {
         execution: &Execution,
         scan: &process::Scan,
     ) -> Result<Processes> {
-        let workspace = self.workspace(&execution.workspace_id).await?;
+        let workspace = self.workspace_by_id(&execution.workspace_id).await?;
         Processes::inspect(execution, &workspace.path, scan).await
     }
 
     /// Fail while processes use the workspace's directory: an acknowledgement
     /// that an unprovable execution ended cannot cover a visible process.
     async fn ensure_directory_unused(&self, workspace_id: &str) -> Result<()> {
-        let path = self.workspace(workspace_id).await?.path;
+        let path = self.workspace_by_id(workspace_id).await?.path;
         let users = if off_runtime::is_dir(&path).await? {
             crate::process::in_directory(&path).await?
         } else {

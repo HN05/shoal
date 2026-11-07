@@ -12,6 +12,7 @@ use anyhow::{Context as _, Result};
 use clap::{Command, CommandFactory};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents,
@@ -339,7 +340,7 @@ impl Typed {
                     // workspace is incomplete or unknown.
                     .or_else(|| context.resolve(None, false, ScopeOrder::AfterDirectory))
                     .context("no current workspace")?;
-                let target = ConfigTarget::Workspace(workspace.id.clone());
+                let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
                 crate::client::workspaces::config_layers(&paths, target).await
             }));
             if let Ok(found) = layer {
@@ -477,7 +478,7 @@ impl Typed {
         let mut names = vec![];
         match target {
             Target::Pools | Target::Members | Target::ResourceNames => {
-                let overview = leases::resources(&paths, workspace).await?;
+                let overview = leases::resources(&paths, SpaceSelector::parse(&workspace)).await?;
                 match target {
                     Target::Pools => names.extend(overview.pools.into_iter().map(|p| p.name)),
                     Target::Members => names.extend(
@@ -498,14 +499,17 @@ impl Typed {
             }
             Target::Ports | Target::ReservedPorts => {
                 if matches!(target, Target::Ports) {
-                    let catalog = leases::port_catalog(&paths, workspace.clone()).await?;
+                    let catalog =
+                        leases::port_catalog(&paths, SpaceSelector::parse(&workspace)).await?;
                     names.extend(catalog.configured.into_keys());
                 }
-                let overview = leases::ports(&paths, workspace).await?;
+                let overview = leases::ports(&paths, SpaceSelector::parse(&workspace)).await?;
                 names.extend(overview.reserved.into_iter().map(|p| p.name));
             }
             Target::SimNames => {
-                let simulators = leases::simulator_devices(&paths, Some(workspace)).await?;
+                let simulators =
+                    leases::simulator_devices(&paths, Some(SpaceSelector::parse(&workspace)))
+                        .await?;
                 names.extend(simulators.into_iter().filter_map(|s| s.lease_name));
             }
             Target::Commands

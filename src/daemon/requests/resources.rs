@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, ResourceMethod};
 
 pub(super) async fn handle(
@@ -38,7 +39,7 @@ pub(super) async fn handle(
 }
 
 impl Scoped for ResourceMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             ResourceMethod::ResourceAcquire { workspace, .. }
             | ResourceMethod::ResourceRelease { workspace, .. }

@@ -6,6 +6,7 @@ use tokio::time::Instant;
 
 use crate::cli::{commands::messages, context::Context};
 use crate::client::items;
+use crate::client::space_names::SpaceSelector;
 
 pub(in crate::cli::commands) async fn watch_items(
     ctx: &Context,
@@ -49,7 +50,7 @@ pub(in crate::cli::commands) async fn watch_items(
     let messages = updates.messages.iter().map(|message| message.id).collect();
     crate::client::agent_messages::acknowledge(
         &ctx.paths,
-        workspace,
+        SpaceSelector::parse(&workspace),
         deliveries,
         messages,
         Vec::new(),

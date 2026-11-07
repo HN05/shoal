@@ -9,6 +9,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, ChatMethod};
 
 pub(super) async fn handle(
@@ -28,6 +29,9 @@ pub(super) async fn handle(
             hands_over,
             parent,
         } => {
+            if caller.is_none() {
+                (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
+            }
             let new = NewChat {
                 name,
                 agent,
@@ -35,35 +39,43 @@ pub(super) async fn handle(
                 pid,
                 origin,
                 hands_over,
-                parent,
+                parent: manager.space_id(parent.as_ref()).await?,
             };
-            let workspace = workspace.as_deref();
-            if caller.is_none() {
-                (manager.ensure_parent_not_host(workspace, new.parent.as_deref())).await?;
-            }
-            Body::Chat(manager.start_new_chat(repository, workspace, new).await?)
+            Body::Chat(
+                manager
+                    .start_new_chat(repository, workspace.as_ref(), new)
+                    .await?,
+            )
         }
         ChatMethod::RestoreChat {
             chat,
             pid,
             origin,
             hands_over,
-        } => Body::Chat(manager.restore_chat(&chat, pid, origin, hands_over).await?),
+        } => {
+            let id = manager.chat(&chat).await?.id;
+            Body::Chat(manager.restore_chat(&id, pid, origin, hands_over).await?)
+        }
         ChatMethod::CheckChatRestore { .. } => Body::Ok,
         ChatMethod::SaveChat { chat, pid, error } => {
+            let id = manager.chat(&chat).await?.id;
             let stopped_by = caller.map(|caller| caller.space_id.as_str());
             manager
-                .return_to_saved(&chat, pid, &error, stopped_by)
+                .return_to_saved(&id, pid, &error, stopped_by)
                 .await?;
             Body::Ok
         }
         ChatMethod::RemoveChat { chat, children } => {
             Body::RemovedChat(manager.remove_chat(&chat, children).await?)
         }
-        ChatMethod::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),
+        ChatMethod::MoveChat { chat, pid } => {
+            let id = manager.chat(&chat).await?.id;
+            Body::Chat(manager.move_chat(&id, pid).await?)
+        }
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
         ChatMethod::RenameChat { chat, name } => {
-            Body::RenamedChat(manager.rename_chat(chat, name).await?)
+            let id = manager.chat(&chat).await?.id;
+            Body::RenamedChat(manager.rename_chat(id, name).await?)
         }
         ChatMethod::CheckChatName { name } => {
             manager.check_chat_name(name).await?;
@@ -75,8 +87,9 @@ pub(super) async fn handle(
             parent,
         } => {
             if caller.is_none() {
-                (manager.ensure_parent_not_host(workspace.as_deref(), parent.as_deref())).await?;
+                (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
             }
+            let parent = manager.space_id(parent.as_ref()).await?;
             (manager.ensure_parent_takes(repository.as_ref(), parent.as_deref())).await?;
             Body::Ok
         }
@@ -84,25 +97,45 @@ pub(super) async fn handle(
         ChatMethod::ChatRoot => Body::ChatRoot(crate::protocol::ChatRoot {
             path: manager.prepare_chat_root().await?,
         }),
-        ChatMethod::ChatScope { chat } => Body::ScopeToken(crate::protocol::ScopeToken {
-            token: manager.chat_scope(&chat).await?,
-        }),
+        ChatMethod::ChatScope { chat } => {
+            let id = manager.chat(&chat).await?.id;
+            Body::ScopeToken(crate::protocol::ScopeToken {
+                token: manager.chat_scope(&id).await?,
+            })
+        }
         ChatMethod::ChatAgents => {
             let agents = manager.running_chat_agents().await?;
             Body::RunningAgents(manager.visible_agents(caller, agents).await?)
         }
-        ChatMethod::RestartChat { chat, join, run } => Body::RestartedPlace(match join {
-            Some(joined) => manager.join_chat_restart(&chat, joined.run, run).await?,
-            None => {
-                let stopped_by = caller.map(|caller| caller.space_id.clone());
-                manager.restart_chat(&chat, run, stopped_by).await?
-            }
-        }),
+        ChatMethod::RestartChat { chat, join, run } => {
+            let id = restarted_chat(manager, chat).await?;
+            Body::RestartedPlace(match join {
+                Some(joined) => manager.join_chat_restart(&id, joined.run, run).await?,
+                None => {
+                    let stopped_by = caller.map(|caller| caller.space_id.clone());
+                    manager.restart_chat(&id, run, stopped_by).await?
+                }
+            })
+        }
     }))
 }
 
+/// The ID of the chat a restart names, or of one that ended meanwhile,
+/// which a joined restart answers for as it did.
+async fn restarted_chat(manager: &Manager, chat: SpaceSelector) -> Result<String> {
+    match (manager.chat(&chat).await, chat) {
+        (Ok(chat), _) => Ok(chat.id),
+        (Err(_), SpaceSelector::IdOrName(id) | SpaceSelector::Id(id)) => Ok(id),
+        (Err(error), SpaceSelector::Number(_)) => Err(error),
+    }
+}
+
 impl Scoped for ChatMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             ChatMethod::ListChats => None,
             // A chat's agent chooses its chat's name.
@@ -119,7 +152,7 @@ impl Scoped for ChatMethod {
             ChatMethod::StartChat {
                 parent, workspace, ..
             } => {
-                (manager.ensure_parent_not_host(workspace.as_deref(), parent.as_deref())).await?;
+                (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
                 manager.parent_below(caller, parent).await?;
                 workspace.as_mut()
             }
@@ -127,7 +160,7 @@ impl Scoped for ChatMethod {
             ChatMethod::CheckChatParent {
                 parent, workspace, ..
             } => {
-                (manager.ensure_parent_not_host(workspace.as_deref(), parent.as_deref())).await?;
+                (manager.ensure_parent_not_host(workspace.as_ref(), parent.as_ref())).await?;
                 manager.parent_below(caller, parent).await?;
                 None
             }

@@ -3,6 +3,7 @@ use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::configured,
@@ -31,15 +32,17 @@ pub(in crate::cli::commands) async fn edit(
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let settings =
-        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
-            .await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(SpaceSelector::parse(&workspace)),
+    )
+    .await?;
     if settings.commands.contains_key(EDIT) {
         return configured::run(ctx, EDIT, Some(workspace), args).await;
     }
     let mut command = editor([std::env::var_os("VISUAL"), std::env::var_os("EDITOR")])?;
     command.push(
-        crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
             .await?
             .workspace
             .path

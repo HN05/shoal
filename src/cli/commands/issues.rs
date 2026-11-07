@@ -1,6 +1,7 @@
 //! Resolve issue context before workspace creation and agent launch.
 use anyhow::{Context as _, Result, bail, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{client, context::Context, ui},
     forge::{
@@ -321,8 +322,10 @@ pub(in crate::cli) async fn read_context(ctx: &Context, repo: &Repository) -> Re
         && space.repository_id() == Some(repo.id.as_str())
     {
         return Ok(match space {
-            PresentSpace::Workspace(workspace) => ItemContext::Workspace(workspace.id),
-            PresentSpace::Chat(chat) => ItemContext::Chat(chat.id),
+            PresentSpace::Workspace(workspace) => {
+                ItemContext::Workspace(SpaceSelector::id(&workspace.id))
+            }
+            PresentSpace::Chat(chat) => ItemContext::Chat(SpaceSelector::id(&chat.id)),
         });
     }
     Ok(ItemContext::Checkout(repo.id.clone()))

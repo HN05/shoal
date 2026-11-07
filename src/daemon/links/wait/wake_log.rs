@@ -6,6 +6,7 @@ use anyhow::Result;
 
 use super::Updates;
 use crate::{
+    client::space_names::SpaceSelector,
     daemon::{log::log, workspace::Manager},
     protocol::WakeEnd,
 };
@@ -13,8 +14,12 @@ use crate::{
 impl Manager {
     /// Log that the wake hook of the agent of the workspace or running chat
     /// `selector` names ended for `ended` without starting the agent's turn.
-    pub(crate) async fn report_wake_end(&self, selector: &str, ended: &WakeEnd) -> Result<()> {
-        let space = self.present_space(selector).await?;
+    pub(crate) async fn report_wake_end(
+        &self,
+        selector: &SpaceSelector,
+        ended: &WakeEnd,
+    ) -> Result<()> {
+        let space = self.space(selector).await?;
         let name = space.name();
         match ended {
             WakeEnd::AgentExited => log!("wake hook of {name} ended: its agent exited"),

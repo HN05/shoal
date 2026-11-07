@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use serde_json::json;
 
 #[tokio::test]
@@ -35,12 +36,18 @@ async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
         }).await.unwrap();
     assert!(
         manager
-            .set_pr(&workspace.id, Action::Unwatch { url: "3".into() })
+            .set_pr(
+                &SpaceSelector::id(&workspace.id),
+                Action::Unwatch { url: "3".into() }
+            )
             .await
             .is_err()
     );
     manager
-        .set_pr(&workspace.id, Action::Unwatch { url: "1".into() })
+        .set_pr(
+            &SpaceSelector::id(&workspace.id),
+            Action::Unwatch { url: "1".into() },
+        )
         .await
         .unwrap();
     assert!(
@@ -48,7 +55,10 @@ async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
             RegistrationKind::Watch { urls, .. } if urls == ["https://github.com/team/repo/pull/2"])
     );
     manager
-        .set_pr(&workspace.id, Action::Unwatch { url: "2".into() })
+        .set_pr(
+            &SpaceSelector::id(&workspace.id),
+            Action::Unwatch { url: "2".into() },
+        )
         .await
         .unwrap();
     assert!(

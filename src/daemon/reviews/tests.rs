@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::model::Workspace;
 use crate::{
     daemon::test_support::{configure, install_test_script, manager, repository, until_tests_end},
@@ -65,7 +66,12 @@ impl Fixture {
         let mut ended = self.manager.reviews.ended.subscribe();
         let queued = self
             .manager
-            .queue_review(workspace, ReviewTarget::Workspace, None, Default::default())
+            .queue_review(
+                &SpaceSelector::parse(workspace),
+                ReviewTarget::Workspace,
+                None,
+                Default::default(),
+            )
             .await
             .unwrap();
         ended.changed().await.unwrap();
@@ -87,7 +93,7 @@ async fn a_reviewer_runs_with_the_requested_or_configured_model_and_effort() {
     let queued = fixture
         .manager
         .queue_review(
-            &fixture.workspace.id,
+            &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             None,
             model.clone(),
@@ -183,7 +189,7 @@ async fn a_review_protection_stops_is_queued_again() {
     let manager = &fixture.manager;
     let queued = manager
         .queue_review(
-            &fixture.workspace.id,
+            &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             None,
             Default::default(),
@@ -229,7 +235,7 @@ async fn cancelling_stops_the_reviewer_and_removes_its_checkout() {
     let manager = &fixture.manager;
     let queued = manager
         .queue_review(
-            &fixture.workspace.id,
+            &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             None,
             Default::default(),
@@ -243,7 +249,7 @@ async fn cancelling_stops_the_reviewer_and_removes_its_checkout() {
     let mut ended = manager.reviews.ended.subscribe();
     let cancelled = manager
         .cancel_review(
-            Some(&fixture.workspace.id),
+            Some(&SpaceSelector::id(&fixture.workspace.id)),
             None,
             Some(fixture.workspace.id.clone()),
         )
@@ -262,7 +268,7 @@ async fn a_reviewer_needs_a_review_template() {
     let refused = fixture
         .manager
         .queue_review(
-            &fixture.workspace.id,
+            &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             Some("pi".parse().unwrap()),
             Default::default(),
@@ -272,7 +278,7 @@ async fn a_reviewer_needs_a_review_template() {
     let unset = fixture
         .manager
         .queue_review(
-            &fixture.workspace.id,
+            &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             None,
             Default::default(),
@@ -435,7 +441,7 @@ async fn removing_the_workspace_stops_its_review() {
     let manager = &fixture.manager;
     let queued = manager
         .queue_review(
-            &fixture.workspace.id,
+            &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             None,
             Default::default(),
@@ -449,7 +455,7 @@ async fn removing_the_workspace_stops_its_review() {
     let mut ended = manager.reviews.ended.subscribe();
     manager
         .remove_workspace(
-            &fixture.workspace.id,
+            &SpaceSelector::id(&fixture.workspace.id),
             crate::removal::UnsavedWork::All,
             crate::removal::InspectionPolicy::GitOnly,
         )
@@ -632,13 +638,16 @@ async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
     .await;
     let manager = &fixture.manager;
     fixture.review().await;
-    let messages = manager.agent_messages(&fixture.workspace.id).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&fixture.workspace.id))
+        .await
+        .unwrap();
     assert_eq!(messages.len(), 1, "{messages:?}");
 
     // A reviewer that runs until it is cancelled.
     let queued = manager
         .queue_review(
-            &fixture.workspace.id,
+            &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             Some("slow".parse().unwrap()),
             Default::default(),
@@ -646,7 +655,7 @@ async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
         .await
         .unwrap();
     let before = manager
-        .agent_messages(&fixture.workspace.id)
+        .agent_messages(&SpaceSelector::id(&fixture.workspace.id))
         .await
         .unwrap()
         .len();
@@ -656,7 +665,7 @@ async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
         .unwrap();
     assert_eq!(
         manager
-            .agent_messages(&fixture.workspace.id)
+            .agent_messages(&SpaceSelector::id(&fixture.workspace.id))
             .await
             .unwrap()
             .len(),
@@ -664,7 +673,7 @@ async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
     );
     let queued = manager
         .queue_review(
-            &fixture.workspace.id,
+            &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             Some("slow".parse().unwrap()),
             Default::default(),
@@ -675,7 +684,10 @@ async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
         .cancel_review(None, Some(queued.id), None)
         .await
         .unwrap();
-    let messages = manager.agent_messages(&fixture.workspace.id).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&fixture.workspace.id))
+        .await
+        .unwrap();
     assert_eq!(messages.len(), before + 1, "{messages:?}");
 }
 
@@ -686,18 +698,28 @@ async fn the_coordinating_agent_hears_one_line() {
     let manager = &fixture.manager;
     let parent = &fixture.workspace;
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for workspace in [&parent.id, &child.id] {
         manager
-            .set_agent_state(workspace, AgentState::Working, None, None)
+            .set_agent_state(
+                &SpaceSelector::parse(workspace),
+                AgentState::Working,
+                None,
+                None,
+            )
             .await
             .unwrap();
     }
     fixture.review_of(&child.id).await;
     let received: Vec<String> = manager
-        .agent_messages(&parent.id)
+        .agent_messages(&SpaceSelector::id(&parent.id))
         .await
         .unwrap()
         .into_iter()
@@ -719,7 +741,12 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
     let manager = &fixture.manager;
     let parent = &fixture.workspace;
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let parent_review = fixture.review().await;
@@ -780,7 +807,9 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
     authorize(manager, Some("child-scope"), &mut own)
         .await
         .unwrap();
-    assert!(matches!(own, ReviewMethod::ShowReview { workspace: Some(id), .. } if id == child.id));
+    assert!(
+        matches!(own, ReviewMethod::ShowReview { workspace: Some(id), .. } if id == SpaceSelector::id(&child.id))
+    );
 }
 
 #[tokio::test]
@@ -810,7 +839,10 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     );
     ended.changed().await.unwrap();
 
-    let review = manager.latest_review(&workspace.id).await.unwrap();
+    let review = manager
+        .latest_review(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     let refused = manager
         .require_review(workspace, Gate::Ready, &head)
         .await
@@ -822,7 +854,11 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     );
     // Unresolved findings at HEAD need answers, not another review.
     assert_eq!(
-        manager.latest_review(&workspace.id).await.unwrap().id,
+        manager
+            .latest_review(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap()
+            .id,
         review.id
     );
 
@@ -841,7 +877,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
         .unwrap();
     // A workspace process's mark checks the HEAD it records.
     let marks = manager
-        .mark_ready(&workspace.id, Default::default(), true)
+        .mark_ready(&SpaceSelector::id(&workspace.id), Default::default(), true)
         .await
         .unwrap()
         .marks;
@@ -964,7 +1000,7 @@ async fn removing_the_repository_stops_its_reviews_first() {
     let manager = &fixture.manager;
     let queued = manager
         .queue_review(
-            &fixture.workspace.id,
+            &SpaceSelector::id(&fixture.workspace.id),
             ReviewTarget::Workspace,
             None,
             Default::default(),
@@ -1018,11 +1054,18 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o500)).unwrap();
     manager.recover_reviews().await.unwrap();
     let workspace = &fixture.workspace.id;
-    let delivered = manager.agent_messages(workspace).await.unwrap().len();
+    let delivered = manager
+        .agent_messages(&SpaceSelector::parse(workspace))
+        .await
+        .unwrap()
+        .len();
     assert_eq!(delivered, 1);
     // A later start that still cannot remove it delivers the review once.
     manager.recover_reviews().await.unwrap();
-    let messages = manager.agent_messages(workspace).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::parse(workspace))
+        .await
+        .unwrap();
     assert_eq!(messages.len(), delivered);
     // Nothing runs there, so only the checkout is held, not a slot.
     assert!(manager.agent_queue.admitted_oneshots().is_empty());
@@ -1155,7 +1198,12 @@ async fn a_pr_review_reads_the_head_its_workspace_moved_to_while_it_waited() {
         post: false,
     };
     let queued = manager
-        .queue_review(&workspace.id, target, None, Default::default())
+        .queue_review(
+            &SpaceSelector::id(&workspace.id),
+            target,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     // The review read the workspace and waits for the slot.

@@ -43,9 +43,9 @@ async fn a_chat_runs_until_its_stop_finishes() {
                     let running = |listed: Option<crate::model::Chat>| {
                         listed.is_some_and(|chat| chat.restore.is_none())
                     };
-                    let listed = running(manager.recorded_chat(&chat.id).await?);
+                    let listed = running(manager.chat_by_id(&chat.id).await?);
                     manager.stop_finished_chats().await?;
-                    let swept = running(manager.recorded_chat(&chat.id).await?);
+                    let swept = running(manager.chat_by_id(&chat.id).await?);
                     *between_rounds.lock().unwrap() = Some((listed, swept, tmp_dir.exists()));
                 }
                 Ok(())
@@ -56,7 +56,7 @@ async fn a_chat_runs_until_its_stop_finishes() {
 
     assert_eq!(rounds.load(Ordering::SeqCst), 2);
     assert_eq!(*between_rounds.lock().unwrap(), Some((true, true, true)));
-    let stopped = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let stopped = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(stopped.restore, Some(crate::state::ChatRestore::Resume));
     assert!(tmp_dir.exists());
     for mut child in started.into_inner().unwrap() {

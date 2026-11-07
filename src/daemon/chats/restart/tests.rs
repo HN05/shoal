@@ -29,7 +29,7 @@ async fn a_restart_saves_a_chat_and_restores_it_as_shoal_resume_does() {
 
     // Its agent stopped, and the daemon ran `shoal resume` for the saved chat.
     assert!(!process.wait().unwrap().success());
-    let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.restore, Some(ChatRestore::Resume));
     assert!(manager.chat_saved(&chat.id).await.unwrap());
     assert!(RESUMED.lock().unwrap().contains(&chat.id));
@@ -62,7 +62,7 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
         "{error:#}"
     );
     assert!(!process.wait().unwrap().success());
-    let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let saved = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.restore, Some(ChatRestore::Resume));
     // The space whose process asked for the restart stopped it.
     let stopper = manager.chat_stopped_by(&chat.id).await.unwrap();
@@ -208,7 +208,7 @@ async fn a_chat_whose_agent_cannot_resume_its_session_keeps_running() {
             .await
             .is_err()
     );
-    let running = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    let running = manager.chat_by_id(&chat.id).await.unwrap().unwrap();
     assert_eq!(running.restore, None);
     assert!(!RESUMED.lock().unwrap().contains(&chat.id));
 }

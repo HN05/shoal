@@ -94,22 +94,22 @@ fn cancellation() -> Result<watch::Receiver<bool>> {
 async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Result<Outcome> {
     match spec {
         OperationSpec::Prepare { workspace, steps } => {
-            workspaces::prepare(ctx, workspace, steps, reporter)
+            workspaces::prepare(ctx, workspace.to_string(), steps, reporter)
                 .await
                 .map(Outcome::Prepared)
         }
         OperationSpec::OpenPull { workspace, options } => {
-            items::push_and_open(ctx, workspace, options, reporter)
+            items::push_and_open(ctx, workspace.to_string(), options, reporter)
                 .await
                 .map(Outcome::Opened)
         }
         OperationSpec::Merge { workspace, options } => {
-            workspaces::merge_branch(ctx, workspace, options, reporter)
+            workspaces::merge_branch(ctx, workspace.to_string(), options, reporter)
                 .await
                 .map(Outcome::Merged)
         }
         OperationSpec::Unmerge { workspace } => {
-            workspaces::unmerge_branch(ctx, workspace, reporter)
+            workspaces::unmerge_branch(ctx, workspace.to_string(), reporter)
                 .await
                 .map(Outcome::Unmerged)
         }
@@ -117,7 +117,7 @@ async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Re
             workspace,
             approval,
             push,
-        } => approvals::push_approved(ctx, workspace, approval, push, reporter)
+        } => approvals::push_approved(ctx, workspace.to_string(), approval, push, reporter)
             .await
             .map(Outcome::Decided),
     }

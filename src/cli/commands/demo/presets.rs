@@ -8,6 +8,7 @@ use anyhow::{Context as _, Result};
 use super::Chosen;
 use crate::client::leases::{self, Acquisition, PortAcquisition};
 use crate::client::output::acquisition::NotAcquired;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::{
@@ -121,8 +122,13 @@ async fn reserve_port(
         reason: None,
         on_conflict: Some(ConflictPolicy::Auto),
     };
-    let acquired =
-        leases::acquire_port(&ctx.paths, workspace.id.clone(), name.to_owned(), request).await?;
+    let acquired = leases::acquire_port(
+        &ctx.paths,
+        SpaceSelector::id(&workspace.id),
+        name.to_owned(),
+        request,
+    )
+    .await?;
     match acquired {
         PortAcquisition::Reserved(reservation) => Ok(Ok(reservation)),
         PortAcquisition::Approval(request) => Ok(Err(approvals::declined(ctx, &request)?)),
@@ -150,7 +156,12 @@ async fn lease_simulator(
         queue,
     };
     let outcome = obtain(ctx, "a simulator", queue, async || {
-        leases::acquire_simulator(&ctx.paths, workspace.id.clone(), request.clone()).await
+        leases::acquire_simulator(
+            &ctx.paths,
+            SpaceSelector::id(&workspace.id),
+            request.clone(),
+        )
+        .await
     })
     .await?;
     match outcome {

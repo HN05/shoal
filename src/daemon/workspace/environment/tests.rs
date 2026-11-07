@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{scope, test_support},
     protocol::{ExecutionMethod, NotificationMethod, Operation, WorkspaceMethod},
@@ -18,15 +19,18 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
         .await
         .unwrap();
     let first = manager
-        .workspace_environment(&workspace.name)
+        .workspace_environment(&SpaceSelector::from(&workspace.name))
         .await
         .unwrap();
-    let second = manager.workspace_environment(&workspace.id).await.unwrap();
+    let second = manager
+        .workspace_environment(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     let token = &first[env::SCOPE_TOKEN];
     assert_ne!(token, &second[env::SCOPE_TOKEN]);
     assert!(
         manager
-            .inspect_workspace(&workspace.id)
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .executions
@@ -38,10 +42,10 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
     assert!(caller.execution.is_none());
     for mut method in [
         Operation::from(WorkspaceMethod::WorkspaceEnv {
-            workspace: workspace.id.clone(),
+            workspace: SpaceSelector::id(&workspace.id),
         }),
         WorkspaceMethod::RevokeWorkspaceEnv {
-            workspace: workspace.id.clone(),
+            workspace: SpaceSelector::id(&workspace.id),
             token: token.clone(),
         }
         .into(),
@@ -62,7 +66,7 @@ async fn exported_scopes_are_persistent_independent_and_untracked() {
     let restored = Manager::open(manager.paths.clone()).await.unwrap();
     assert!(restored.caller(token).await.unwrap().is_some());
     restored
-        .revoke_workspace_environment(&workspace.id, token.clone())
+        .revoke_workspace_environment(&SpaceSelector::id(&workspace.id), token.clone())
         .await
         .unwrap();
     assert!(restored.caller(token).await.unwrap().is_none());
@@ -107,7 +111,12 @@ async fn exporting_requires_ready_verified_worktree_without_minting_on_failure()
         .set_state(&workspace.id, WorkspaceState::Failed, None)
         .await
         .unwrap();
-    assert!(manager.workspace_environment(&workspace.id).await.is_err());
+    assert!(
+        manager
+            .workspace_environment(&SpaceSelector::id(&workspace.id))
+            .await
+            .is_err()
+    );
     manager
         .set_state(&workspace.id, WorkspaceState::Ready, None)
         .await
@@ -117,7 +126,12 @@ async fn exporting_requires_ready_verified_worktree_without_minting_on_failure()
         workspace.path.join(".git.saved"),
     )
     .unwrap();
-    assert!(manager.workspace_environment(&workspace.id).await.is_err());
+    assert!(
+        manager
+            .workspace_environment(&SpaceSelector::id(&workspace.id))
+            .await
+            .is_err()
+    );
     assert_eq!(
         manager
             .store

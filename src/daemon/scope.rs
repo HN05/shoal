@@ -1,6 +1,7 @@
 //! Cooperative caller scope. The daemon validates every scoped request,
 //! including direct protocol clients; this is not a security boundary against
 //! the OS user.
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::{ExecutionKind, Manager},
     protocol::{ItemMethod, Operation},
@@ -47,7 +48,7 @@ pub(crate) async fn authorize(
         .ok_or_else(|| anyhow::anyhow!("expired or unknown workspace scope"))?;
     let reads_only = method.reads_space();
     if let Some(target) = method.scope(manager, &caller).await? {
-        let id = manager.present_space(target).await?.id().to_owned();
+        let id = manager.space(target).await?.id().to_owned();
         if !manager.reaches(&caller, &id).await? {
             let home = manager.chat_home(&caller.space_id).await?;
             ensure!(
@@ -59,7 +60,7 @@ pub(crate) async fn authorize(
                 "a chat only reads the workspace it runs in; ask the user, or the workspace's agent, to change it"
             );
         }
-        *target = id;
+        *target = SpaceSelector::id(&id);
     }
     Ok(Some(caller))
 }
@@ -69,7 +70,11 @@ pub(crate) trait Scoped {
     /// Refuse what `caller`'s scope does not allow and narrow the rest to
     /// it, returning the space the request targets, which must be the
     /// caller's own or one below it.
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>>;
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>>;
 
     /// Whether the request only reads the space it targets, which a chat
     /// may do in the workspace it runs in.
@@ -79,7 +84,11 @@ pub(crate) trait Scoped {
 }
 
 impl Scoped for Operation {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         match self {
             Operation::Daemon(method) => method.scope(manager, caller).await,
             Operation::Repository(method) => method.scope(manager, caller).await,
@@ -130,8 +139,11 @@ impl Caller {
 
     /// The space an optional filter names, which defaults to the caller's
     /// own.
-    pub(super) fn own_by_default<'a>(&self, workspace: &'a mut Option<String>) -> &'a mut String {
-        workspace.get_or_insert_with(|| self.space_id.clone())
+    pub(super) fn own_by_default<'a>(
+        &self,
+        workspace: &'a mut Option<SpaceSelector>,
+    ) -> &'a mut SpaceSelector {
+        workspace.get_or_insert_with(|| SpaceSelector::id(&self.space_id))
     }
 }
 

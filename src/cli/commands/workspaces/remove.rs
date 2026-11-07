@@ -3,6 +3,7 @@ use anyhow::{Result, ensure};
 
 use super::removal::{ensure_batch_removable, leaving};
 use crate::client::output::workspaces::{Removals, Removed};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::{agent_queue, chat::removal as chats},
@@ -73,8 +74,12 @@ async fn check_removals(
     let several = workspaces.len() > 1;
     for workspace in workspaces {
         let include_changes = ctx.interactive() && !yes;
-        let checked =
-            crate::client::removal::check(&ctx.paths, workspace.clone(), include_changes).await;
+        let checked = crate::client::removal::check(
+            &ctx.paths,
+            SpaceSelector::parse(&workspace),
+            include_changes,
+        )
+        .await;
         if !several {
             checks.push(checked?);
             continue;
@@ -166,7 +171,7 @@ async fn remove_checked(ctx: &Context, check: &RemovalCheck) -> Result<RemovalRe
     let result = leaving(
         ctx,
         &check.workspace,
-        crate::client::removal::remove(&ctx.paths, check.workspace.id.clone(), unsaved),
+        crate::client::removal::remove(&ctx.paths, SpaceSelector::id(&check.workspace.id), unsaved),
     )
     .await?;
     if let Some(error) = &result.hook_error {

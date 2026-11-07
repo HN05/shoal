@@ -1,5 +1,6 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::{Manager, RemovalRules, executions::StopPolicy};
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::space_processes::WorktreeTies;
 use crate::refusal::{Reason, Refusal};
 use crate::{
@@ -440,7 +441,7 @@ impl Manager {
     /// removal archives them when `include_changes` is set and it has any.
     pub async fn check_manual_removal(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         include_changes: bool,
     ) -> Result<RemovalCheck> {
         let mut check = self
@@ -450,7 +451,7 @@ impl Manager {
         check.children.reverse();
         for child in &check.children {
             if child.kind == crate::model::SpaceKind::Workspace
-                && self.workspace(&child.id).await?.disposable
+                && self.workspace_by_id(&child.id).await?.disposable
             {
                 check.disposable_children.push(child.id.clone());
             }
@@ -464,7 +465,7 @@ impl Manager {
 
     pub async fn check_removal(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         policy: InspectionPolicy,
     ) -> Result<RemovalCheck> {
         let workspace = self.workspace(selector).await?;
@@ -535,7 +536,7 @@ impl Manager {
 
     pub async fn remove_workspace(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
     ) -> Result<RemovalResult> {
@@ -557,7 +558,7 @@ impl Manager {
     /// it meanwhile retains them all.
     pub(crate) async fn remove_workspace_taking(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
         taking: &[String],
@@ -579,7 +580,7 @@ impl Manager {
     /// while it has holds, which are the user's and host apps'.
     pub async fn remove_unheld_workspace(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
     ) -> Result<RemovalResult> {
@@ -606,7 +607,7 @@ impl Manager {
         id: &str,
         users: &process::DirectoryUsers,
     ) -> Result<Option<u64>> {
-        let path = self.workspace(id).await?.path;
+        let path = self.workspace_by_id(id).await?.path;
         self.check_access(&path, self.timer_signals(id, &path, users))
             .await
     }
@@ -727,7 +728,7 @@ impl Manager {
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Result<(PathBuf, u64), CleanupReason>> {
-        let path = self.workspace(id).await?.path;
+        let path = self.workspace_by_id(id).await?.path;
         self.check_access(&path, self.cleanup_candidate(id, cancelled, users))
             .await
     }
@@ -748,7 +749,7 @@ impl Manager {
         // Git state rules out most workspaces, so lsof only scans for safe ones.
         let mut check = self
             .inspect_removal(
-                self.workspace(id).await?,
+                self.workspace_by_id(id).await?,
                 InspectionPolicy::GitOnly,
                 executions,
             )
@@ -771,7 +772,7 @@ impl Manager {
         cancelled: &[IdleRestore],
         users: &process::DirectoryUsers,
     ) -> Result<Option<(PathBuf, u64)>> {
-        let path = self.workspace(id).await?.path;
+        let path = self.workspace_by_id(id).await?.path;
         self.check_access(&path, self.merged_candidate(id, cancelled, users))
             .await
     }
@@ -796,7 +797,7 @@ impl Manager {
         }
         let mut check = self
             .inspect_removal(
-                self.workspace(id).await?,
+                self.workspace_by_id(id).await?,
                 InspectionPolicy::GitOnly,
                 executions,
             )
@@ -949,7 +950,7 @@ impl Manager {
 
     /// Assignment state whose own cleanup path decides removal.
     async fn assignment_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
-        let workspace = self.workspace(id).await?;
+        let workspace = self.workspace_by_id(id).await?;
         if let Some(ancestor) = self.completed_ancestor(&workspace.id).await? {
             return Ok(Some(CleanupReason::AncestorCompleted {
                 workspace: ancestor.name().to_owned(),
@@ -979,7 +980,11 @@ impl Manager {
         if executions.running > 0 {
             return Ok(Some(CleanupReason::RunningCommands));
         }
-        if !self.list_resources(Some(id)).await?.is_empty() {
+        if !self
+            .list_resources(Some(&SpaceSelector::id(id)))
+            .await?
+            .is_empty()
+        {
             return Ok(Some(CleanupReason::Permits));
         }
         if self
@@ -994,18 +999,26 @@ impl Manager {
     }
 
     /// `Ok(false)` while the grace period runs, as for every unattended removal.
-    pub async fn remove_idle(&self, selector: &str, snapshot: Snapshot) -> Result<bool> {
+    pub async fn remove_idle(&self, selector: &SpaceSelector, snapshot: Snapshot) -> Result<bool> {
         self.remove_unused(selector, snapshot, EventCause::Idle)
             .await
     }
 
-    pub async fn remove_merged_idle(&self, selector: &str, snapshot: Snapshot) -> Result<bool> {
+    pub async fn remove_merged_idle(
+        &self,
+        selector: &SpaceSelector,
+        snapshot: Snapshot,
+    ) -> Result<bool> {
         self.remove_unused(selector, snapshot, EventCause::Merged)
             .await
     }
 
     /// Remove an idle cleanup candidate without waiting for its idle delay.
-    pub async fn remove_for_disk_space(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
+    pub async fn remove_for_disk_space(
+        &self,
+        selector: &SpaceSelector,
+        snapshot: Snapshot,
+    ) -> Result<()> {
         self.remove_unused(selector, snapshot, EventCause::DiskSpace)
             .await
             .map(|_| ())
@@ -1013,7 +1026,11 @@ impl Manager {
 
     /// Remove an idle cleanup candidate on the user's request, without
     /// waiting for its idle delay.
-    pub async fn remove_on_request(&self, selector: &str, snapshot: Snapshot) -> Result<()> {
+    pub async fn remove_on_request(
+        &self,
+        selector: &SpaceSelector,
+        snapshot: Snapshot,
+    ) -> Result<()> {
         self.remove_unused(selector, snapshot, EventCause::Manual)
             .await
             .map(|_| ())
@@ -1021,23 +1038,26 @@ impl Manager {
 
     async fn remove_unused(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         snapshot: Snapshot,
         cause: EventCause,
     ) -> Result<bool> {
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
-        self.remove_after_grace(&workspace.id, Removal::Automatic { snapshot, cause })
-            .await
+        self.remove_after_grace(
+            &SpaceSelector::id(&workspace.id),
+            Removal::Automatic { snapshot, cause },
+        )
+        .await
     }
 
-    pub async fn remove_merged(&self, selector: &str, head: &str) -> Result<bool> {
+    pub async fn remove_merged(&self, selector: &SpaceSelector, head: &str) -> Result<bool> {
         self.remove_after_grace(selector, Removal::Merged { head })
             .await
     }
 
     pub(super) async fn remove_completed(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         completion: &crate::model::Completion,
         cause: EventCause,
     ) -> Result<bool> {
@@ -1053,7 +1073,7 @@ impl Manager {
     /// stands, after the grace period.
     pub(super) async fn remove_under_completed(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         ancestor: &super::done::CompletedAncestor,
     ) -> Result<bool> {
         // A chat's workspaces could leave it, and the workspace with them,
@@ -1067,7 +1087,11 @@ impl Manager {
     }
 
     /// Remove the workspace unless its grace period is still running.
-    async fn remove_after_grace(&self, selector: &str, removal: Removal<'_>) -> Result<bool> {
+    async fn remove_after_grace(
+        &self,
+        selector: &SpaceSelector,
+        removal: Removal<'_>,
+    ) -> Result<bool> {
         let workspace = self.workspace(selector).await?;
         if self.grace_running(&workspace, removal).await? {
             return Ok(false);
@@ -1091,11 +1115,15 @@ impl Manager {
     }
 
     /// Forget a workspace whose directory was deleted outside Shoal.
-    pub async fn remove_deleted(&self, selector: &str) -> Result<RemovalResult> {
+    pub async fn remove_deleted(&self, selector: &SpaceSelector) -> Result<RemovalResult> {
         self.remove(selector, Removal::Deleted).await
     }
 
-    async fn remove(&self, selector: &str, removal: Removal<'_>) -> Result<RemovalResult> {
+    async fn remove(
+        &self,
+        selector: &SpaceSelector,
+        removal: Removal<'_>,
+    ) -> Result<RemovalResult> {
         let Reserved {
             workspace,
             present,
@@ -1164,12 +1192,16 @@ impl Manager {
     /// it was interrupted; it waits on the repository's Git gate for that
     /// creation to end and reads the workspace again, which creation has
     /// since finished recording.
-    async fn reserve_removal(&self, selector: &str, removal: Removal<'_>) -> Result<Reserved> {
+    async fn reserve_removal(
+        &self,
+        selector: &SpaceSelector,
+        removal: Removal<'_>,
+    ) -> Result<Reserved> {
         let manual = matches!(removal, Removal::Manual { .. });
         let mut workspace = self.workspace(selector).await?;
         let _created = if manual && workspace.state == WorkspaceState::Preparing {
             let created = self.gates.lock_git(&workspace.repository_id).await;
-            workspace = self.workspace(&workspace.id).await?;
+            workspace = self.workspace_by_id(&workspace.id).await?;
             Some(created)
         } else {
             None
@@ -1365,7 +1397,10 @@ impl Manager {
         let release_hook = self
             .workspace_hook(workspace, HookKind::PreResourceRelease)
             .await?;
-        for lease in self.list_resources(Some(&workspace.id)).await? {
+        for lease in self
+            .list_resources(Some(&SpaceSelector::id(&workspace.id)))
+            .await?
+        {
             self.run_resource_release_hook(workspace, &lease, release_hook.as_deref())
                 .await?;
         }
@@ -1425,7 +1460,7 @@ impl Manager {
         let executions = self.cleanup_executions(&workspace.id, cancelled).await?;
         let check = self
             .inspect_removal(
-                self.workspace(&workspace.id).await?,
+                self.workspace_by_id(&workspace.id).await?,
                 removal.inspection(),
                 executions,
             )
@@ -1505,7 +1540,7 @@ impl Manager {
         while let Some(child) = pending.pop() {
             // A chat has no directory of its own; those below it may.
             if child.kind == SpaceKind::Workspace {
-                let workspace = self.workspace(&child.id).await?;
+                let workspace = self.workspace_by_id(&child.id).await?;
                 ensure!(
                     self.file_access.stalled(&workspace.path).is_none(),
                     "file access stalled in the directory of {}, below it; retaining workspace",
@@ -1597,10 +1632,12 @@ impl Manager {
         let mut removed = Vec::new();
         for child in children {
             let below = match child.kind {
-                SpaceKind::Workspace => Box::pin(self.remove(&child.id, removal.of_child()))
-                    .await
-                    .map(|result| result.children),
-                SpaceKind::Chat => match self.recorded_chat(&child.id).await? {
+                SpaceKind::Workspace => {
+                    Box::pin(self.remove(&SpaceSelector::id(&child.id), removal.of_child()))
+                        .await
+                        .map(|result| result.children)
+                }
+                SpaceKind::Chat => match self.chat_by_id(&child.id).await? {
                     Some(chat) => Box::pin(self.remove_chat_for(&chat, removal.of_child())).await,
                     None => continue,
                 },

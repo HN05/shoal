@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::{
@@ -27,7 +28,14 @@ pub(in crate::cli::commands) async fn unmerge(
     workspace: Option<String>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    match operations::run(ctx, OperationSpec::Unmerge { workspace }).await {
+    match operations::run(
+        ctx,
+        OperationSpec::Unmerge {
+            workspace: SpaceSelector::parse(&workspace),
+        },
+    )
+    .await
+    {
         Ok(unmerged) => {
             show_unmerged(ctx, &unmerged)?;
             Ok(0)

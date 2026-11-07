@@ -6,6 +6,7 @@ use std::fmt::Write as _;
 use anyhow::{Result, bail};
 
 use super::store;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,
     model::Workspace,
@@ -74,7 +75,7 @@ impl Manager {
             None if reviewed.is_none() => {
                 match self
                     .queue_review(
-                        &workspace.id,
+                        &SpaceSelector::id(&workspace.id),
                         ReviewTarget::Workspace,
                         None,
                         Default::default(),

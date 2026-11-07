@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped, denied},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::spotlight::Layout,
     protocol::{Body, RepositoryMethod},
@@ -88,7 +89,11 @@ pub(super) async fn handle(
 }
 
 impl Scoped for RepositoryMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             RepositoryMethod::ListRepositories => None,
             RepositoryMethod::SyncRepository { repository } => {

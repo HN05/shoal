@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -53,7 +54,7 @@ async fn agent(
         .await;
     manager
         .set_agent_state(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             setup.state,
             Some(execution.plan.id.clone()),
             None,
@@ -63,7 +64,7 @@ async fn agent(
     if setup.held {
         manager
             .acquire_hold(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 "app".into(),
                 None,
                 crate::model::HoldPlacer::User,
@@ -73,7 +74,13 @@ async fn agent(
     }
     if setup.done {
         manager
-            .mark_done(&workspace.id, true, false, Vec::new(), &Attacher::User)
+            .mark_done(
+                &SpaceSelector::id(&workspace.id),
+                true,
+                false,
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }
@@ -242,7 +249,12 @@ async fn a_turn_during_the_final_read_of_the_turns_keeps_the_agent() {
     // idle with the cache it had before.
     for state in [AgentState::Working, AgentState::Idle] {
         manager
-            .set_agent_state(&workspace.name, state, Some(id.clone()), None)
+            .set_agent_state(
+                &SpaceSelector::from(&workspace.name),
+                state,
+                Some(id.clone()),
+                None,
+            )
             .await
             .unwrap();
     }
@@ -263,7 +275,7 @@ async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
     manager.stop_idle_agents().await.unwrap();
     assert!(*execution.stop.borrow());
     let woken = manager
-        .start_woken_turn(&workspace.name, Some(id))
+        .start_woken_turn(&SpaceSelector::from(&workspace.name), Some(id))
         .await
         .unwrap();
     assert!(!woken, "the stop came first");

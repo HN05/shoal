@@ -3,6 +3,7 @@ use std::time::Duration;
 use anyhow::Context;
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -102,7 +103,7 @@ async fn retry(manager: &Manager, workspace: &Workspace) -> Option<TurnRetry> {
 async fn fail(manager: &Manager, workspace: &Workspace, execution: &str, failure: TurnFailure) {
     let status = manager
         .report_turn_failure(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             failure,
             Some(execution.into()),
             None,
@@ -115,7 +116,12 @@ async fn fail(manager: &Manager, workspace: &Workspace, execution: &str, failure
 
 async fn report(manager: &Manager, workspace: &Workspace, execution: &str, state: AgentState) {
     manager
-        .set_agent_state(&workspace.name, state, Some(execution.into()), None)
+        .set_agent_state(
+            &SpaceSelector::from(&workspace.name),
+            state,
+            Some(execution.into()),
+            None,
+        )
         .await
         .unwrap();
 }
@@ -132,7 +138,7 @@ fn now() -> i64 {
 
 async fn messages(manager: &Manager, workspace: &Workspace) -> Vec<String> {
     manager
-        .agent_messages(&workspace.name)
+        .agent_messages(&SpaceSelector::from(&workspace.name))
         .await
         .unwrap()
         .into_iter()
@@ -205,12 +211,21 @@ async fn a_finished_assignment_cancels_its_retry() {
     let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
     manager
-        .mark_done(&workspace.name, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::from(&workspace.name),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(retry(&manager, &workspace).await, None);
     // Withdrawing completion does not bring the old retry back.
-    manager.undo_done(&workspace.name).await.unwrap();
+    manager
+        .undo_done(&SpaceSelector::from(&workspace.name))
+        .await
+        .unwrap();
     assert_eq!(deliver_now(&manager).await, None);
     assert!(messages(&manager, &workspace).await.is_empty());
 }
@@ -222,7 +237,7 @@ async fn a_full_message_queue_defers_only_its_own_retry() {
     for n in 0..crate::daemon::agent_messages::MAX_UNREAD {
         manager
             .send_agent_message(
-                &full.name,
+                &SpaceSelector::from(&full.name),
                 format!("unread {n}"),
                 Vec::new(),
                 &Attacher::User,
@@ -321,7 +336,11 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let reset = 4_000_000_000_000;
     // The proxy's report arrives first, as it does for Codex.
     manager
-        .report_upstream_reset(&workspace.name, execution.clone(), Some(reset))
+        .report_upstream_reset(
+            &SpaceSelector::from(&workspace.name),
+            execution.clone(),
+            Some(reset),
+        )
         .await
         .unwrap();
     fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
@@ -335,7 +354,11 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let early = retry(&manager, &other).await.unwrap();
     assert!(early.due_at < reset, "{early:?}");
     manager
-        .report_upstream_reset(&other.name, execution.clone(), Some(reset))
+        .report_upstream_reset(
+            &SpaceSelector::from(&other.name),
+            execution.clone(),
+            Some(reset),
+        )
         .await
         .unwrap();
     let held = retry(&manager, &other).await.unwrap();
@@ -345,13 +368,17 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     );
     // A reset that has passed holds nothing back.
     manager
-        .report_upstream_reset(&other.name, execution.clone(), Some(0))
+        .report_upstream_reset(
+            &SpaceSelector::from(&other.name),
+            execution.clone(),
+            Some(0),
+        )
         .await
         .unwrap();
     assert_eq!(retry(&manager, &other).await.unwrap().due_at, held.due_at);
     // Once the upstream answers again, a later failure backs off as its own.
     manager
-        .report_upstream_reset(&other.name, execution.clone(), None)
+        .report_upstream_reset(&SpaceSelector::from(&other.name), execution.clone(), None)
         .await
         .unwrap();
     assert_eq!(stored_reset(&manager, &execution).await, None);
@@ -360,7 +387,11 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
     let transient = retry(&manager, &other).await.unwrap();
     assert!(transient.due_at < reset, "{transient:?}");
     manager
-        .report_upstream_reset(&other.name, execution.clone(), Some(reset))
+        .report_upstream_reset(
+            &SpaceSelector::from(&other.name),
+            execution.clone(),
+            Some(reset),
+        )
         .await
         .unwrap();
     assert_eq!(stored_reset(&manager, &execution).await, Some(reset));
@@ -377,7 +408,11 @@ async fn a_lost_connection_keeps_the_reset_and_an_ended_execution_drops_it() {
     let (_temp, manager, workspace, execution, _connection) = agent("").await;
     let reset = 4_000_000_000_000;
     manager
-        .report_upstream_reset(&workspace.name, execution.clone(), Some(reset))
+        .report_upstream_reset(
+            &SpaceSelector::from(&workspace.name),
+            execution.clone(),
+            Some(reset),
+        )
         .await
         .unwrap();
     // The wrapper, with its proxy, may reattach.

@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::manager,
@@ -34,12 +35,17 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let launch = manager
         .queue_add(QueueRequest {
-            workspace: Some(child.name.to_string()),
+            workspace: Some(SpaceSelector::parse(&child.name)),
             ..request(&repo, "child", false)
         })
         .await
@@ -66,13 +72,23 @@ async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
     assert!(targets(QueuedLaunches::Keep).await.is_empty());
 
     let kept = manager
-        .stop_workspace_manually(&child.id, false, None, QueuedLaunches::Keep)
+        .stop_workspace_manually(
+            &SpaceSelector::id(&child.id),
+            false,
+            None,
+            QueuedLaunches::Keep,
+        )
         .await
         .unwrap();
     assert!(kept.cancelled.is_empty());
     assert_eq!(waiting(&manager).await, ["child", "later"]);
     let cancelled = manager
-        .stop_workspace_manually(&child.id, false, None, QueuedLaunches::Cancel)
+        .stop_workspace_manually(
+            &SpaceSelector::id(&child.id),
+            false,
+            None,
+            QueuedLaunches::Cancel,
+        )
         .await
         .unwrap();
     let cancelled: Vec<_> = cancelled
@@ -240,12 +256,17 @@ async fn workspace_processes_cancel_and_move_back_only_entries_below_theirs() {
     let mut children = Vec::new();
     for name in ["one", "two"] {
         let child = manager
-            .split_workspace(&parent.id, name.into(), None, Default::default())
+            .split_workspace(
+                &SpaceSelector::id(&parent.id),
+                name.into(),
+                None,
+                Default::default(),
+            )
             .await
             .unwrap();
         manager
             .queue_add(QueueRequest {
-                workspace: Some(child.id.clone()),
+                workspace: Some(SpaceSelector::id(&child.id)),
                 ..request(&repo, name, false)
             })
             .await

@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
@@ -13,7 +14,7 @@ pub enum QueueMethod {
     /// message, once it can run there; the daemon starts it detached in the
     /// default host once the queue admits it. Answers with the entry.
     QueueAgent {
-        workspace: String,
+        workspace: SpaceSelector,
         agent: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         prompt: Option<String>,
@@ -46,7 +47,7 @@ pub enum QueueMethod {
     /// waiting launch opens.
     QueueAttach {
         entry: String,
-        workspace: String,
+        workspace: SpaceSelector,
     },
     /// End a starting entry that could not start its agent.
     QueueFail {
@@ -56,7 +57,7 @@ pub enum QueueMethod {
     /// Queue the restore of a stopped agent, which the daemon starts with
     /// `env` once admitted, or with `now` at once, regardless of the limits.
     QueueRestore {
-        workspace: String,
+        workspace: SpaceSelector,
         execution: String,
         env: std::collections::BTreeMap<String, String>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]

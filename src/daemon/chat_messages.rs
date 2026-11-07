@@ -2,11 +2,12 @@
 //! user. Like agent messages, delivery deletes them; a chat removed before
 //! receiving them gives them to the user as the notifications they would
 //! have been.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 
 use std::path::{Path, PathBuf};
 
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     agent_messages::{self, AgentMessage, MAX_UNREAD, MAX_UNREAD_BYTES},
     links::wait::{RESPONSE_LIMIT, Updates},
@@ -26,7 +27,7 @@ impl Manager {
     /// are the message. It is dropped if the chat is removed first.
     pub async fn send_chat_message(
         &self,
-        chat: &str,
+        chat: &SpaceSelector,
         message: String,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
@@ -34,10 +35,7 @@ impl Manager {
         if !message.is_empty() || attachments.is_empty() {
             crate::validate::agent_message(&message)?;
         }
-        let chat = self
-            .recorded_chat(chat)
-            .await?
-            .with_context(|| format!("no chat {chat}"))?;
+        let chat = self.chat(chat).await?;
         if attachments.is_empty() {
             return self
                 .queue_chat_message(&chat.id, None, None, None, message, Vec::new())

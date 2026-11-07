@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     ports::PortRequest,
     test_support::{install_test_script, manager, repository},
@@ -85,7 +86,13 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert!(manager.signals.cleanup_woken().now_or_never().is_some());
@@ -102,7 +109,7 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
         .await
         .unwrap();
     assert!(!workspace.path.exists());
-    assert!(manager.workspace(&workspace.id).await.is_err());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
 }
 
 #[tokio::test]
@@ -219,7 +226,10 @@ async fn inspection_and_agent_list_report_an_agent_awaiting_its_restore() {
         )
         .await;
     let stopped = || async {
-        let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+        let inspection = manager
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap();
         let listed = manager.running_agents().await.unwrap();
         (
             inspection.executions[0].stopped.clone(),
@@ -254,7 +264,12 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
         .await
         .unwrap();
     manager
-        .acquire_port(&workspace.id, "web".into(), PortRequest::default(), None)
+        .acquire_port(
+            &SpaceSelector::id(&workspace.id),
+            "web".into(),
+            PortRequest::default(),
+            None,
+        )
         .await
         .unwrap();
     std::fs::write(workspace.path.join("unfinished"), "work in progress").unwrap();
@@ -299,7 +314,10 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
     assert!(*second.stop.borrow());
     assert!(!*first.stop.borrow());
     assert!(!*command.stop.borrow());
-    let retained = manager.inspect_workspace(&workspace.id).await.unwrap();
+    let retained = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert_eq!(retained.workspace.state, workspace.state);
     assert_eq!(retained.ports.len(), 1);
     assert_eq!(retained.executions.len(), 3);
@@ -367,7 +385,7 @@ async fn overload_stops_the_agent_idle_longest_before_working_ones() {
             .await;
         manager
             .set_agent_state(
-                &workspace.name,
+                &SpaceSelector::from(&workspace.name),
                 state,
                 Some(execution.plan.id.clone()),
                 None,
@@ -447,11 +465,16 @@ async fn overload_stops_attached_agents_only_after_the_others() {
             _ => AgentState::Idle,
         };
         manager
-            .set_agent_state(&workspace.name, state, Some(id.clone()), None)
+            .set_agent_state(
+                &SpaceSelector::from(&workspace.name),
+                state,
+                Some(id.clone()),
+                None,
+            )
             .await
             .unwrap();
         manager
-            .report_attached(&workspace.name, &id, attached)
+            .report_attached(&SpaceSelector::from(&workspace.name), &id, attached)
             .await
             .unwrap();
         executions.push(execution);
@@ -496,7 +519,8 @@ async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
             Duration::ZERO,
         )
         .await;
-    let report = |state| manager.set_agent_state(&workspace.name, state, Some(id.clone()), None);
+    let selected = SpaceSelector::from(&workspace.name);
+    let report = |state| manager.set_agent_state(&selected, state, Some(id.clone()), None);
     report(AgentState::Idle).await.unwrap();
     let turns = manager.agent_turns().await.unwrap();
     assert!(turns[&id].idle());
@@ -550,7 +574,7 @@ async fn an_agent_records_its_mode_with_its_execution_workspace_and_last_session
             std::time::Duration::ZERO,
         )
         .await;
-    let recorded = manager.workspace(&workspace.id).await.unwrap();
+    let recorded = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(recorded.mode.as_deref(), Some("plan"));
     let executions = manager.workspace_executions(&workspace.id).await.unwrap();
     assert_eq!(executions[0].mode.as_deref(), Some("plan"));

@@ -1,5 +1,6 @@
 use super::notifications::NotificationKind;
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{
         install_test_script,
@@ -87,7 +88,7 @@ async fn built_in_restore_child() {
             );
         // The restored session is told its mode's rules again, after its
         // resume arguments.
-        let target = crate::protocol::ConfigTarget::Workspace(workspace.id.clone());
+        let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
         let settings = crate::client::workspaces::settings(&manager.paths, target)
             .await
             .unwrap();
@@ -469,7 +470,7 @@ async fn an_agent_whose_terminal_closes_is_saved_as_stopped() {
     wait_started(&manager, &workspace).await;
     report_session(&manager, &workspace, "closed-session").await;
     let wrapper = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions[0]
@@ -500,7 +501,7 @@ async fn an_agent_whose_session_ends_is_saved_before_it_stops() {
     wait_started(&manager, &workspace).await;
     report_session(&manager, &workspace, "ending-session").await;
     let execution = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions
@@ -584,7 +585,7 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     );
     assert!(
         manager
-            .inspect_workspace(&workspace.id)
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .executions
@@ -611,7 +612,7 @@ async fn a_restore_its_wrapper_fails_to_start_waits_in_the_agent_queue() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let execution = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions
@@ -656,7 +657,7 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let id = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions[0]
@@ -664,7 +665,7 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
         .clone();
     manager
         .set_agent_state(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             crate::state::AgentState::Idle,
             Some(id.clone()),
             None,
@@ -693,7 +694,7 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     manager.config_state.publish_disk_reading(Some(generation));
     manager
         .send_agent_message(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             "Review requested".into(),
             Vec::new(),
             &Attacher::User,
@@ -768,7 +769,7 @@ async fn agent_exit_stops_commands_outside_the_agent_group() {
     assert!(!crate::process::identity::alive(&background).unwrap());
     assert!(
         manager
-            .inspect_workspace(&workspace.id)
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .executions
@@ -812,7 +813,7 @@ async fn overload_without_recovery_stops_commands_outside_the_agent_group() {
     // The execution ended proven, so `shoal resume` can select its record.
     assert!(
         manager
-            .inspect_workspace(&workspace.id)
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .executions
@@ -837,7 +838,7 @@ async fn cancelling_a_restore_still_stops_commands_outside_the_agent_group() {
     assert!(!crate::process::identity::alive(&background).unwrap());
     assert!(
         manager
-            .inspect_workspace(&workspace.id)
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .executions
@@ -877,7 +878,7 @@ async fn unproven_stop_keeps_the_agent_waiting_until_proof_then_restores_it() {
     wait_started(&manager, &workspace).await;
     // An incomplete launch identity stands in for survivors Shoal cannot stop.
     let group = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions[0]
@@ -930,7 +931,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
     );
     wait_paused(&manager, &workspace).await;
     wait_restore_queued(&manager).await;
-    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
@@ -1000,7 +1001,7 @@ async fn failed_restore_expansion_does_not_block_launch_or_manual_recovery_recor
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert!(
         manager
-            .inspect_workspace(&workspace.id)
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .executions
@@ -1029,7 +1030,7 @@ async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_reco
     bounded(launched).await.unwrap().unwrap();
     assert!(
         manager
-            .inspect_workspace(&workspace.id)
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .executions
@@ -1047,7 +1048,13 @@ async fn a_done_workspace_does_not_restore_its_stopped_agent() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert!(
@@ -1075,7 +1082,13 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
     wait_paused(&manager, &workspace).await;
     wait_restore_queued(&manager).await;
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     publish_recovery(&manager);
@@ -1147,7 +1160,10 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
     launched.abort();
     bounded(async {
         loop {
-            let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+            let inspection = manager
+                .inspect_workspace(&SpaceSelector::id(&workspace.id))
+                .await
+                .unwrap();
             if inspection
                 .executions
                 .iter()
@@ -1170,7 +1186,7 @@ async fn recovery_disconnect_closes_the_connection_without_forgetting_ownership(
     );
     assert!(
         !reopened
-            .inspect_workspace(&workspace.id)
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap()
             .executions

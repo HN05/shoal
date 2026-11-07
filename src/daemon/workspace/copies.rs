@@ -7,6 +7,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{Manager, NewWorkspace, restore::RestoredFiles};
+use crate::client::space_names::SpaceSelector;
 use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{
     git::{self, worktrunk},
@@ -153,7 +154,7 @@ impl Manager {
 
     /// Checkpoint `number` of the removed workspace `selector` names, with
     /// the diff base its removal record keeps.
-    async fn removed_source(&self, selector: &str, number: u64) -> Result<Source> {
+    async fn removed_source(&self, selector: &SpaceSelector, number: u64) -> Result<Source> {
         let removed = self.claim_removed_workspace(selector).await?;
         let checkpoint = self
             .copied_checkpoint(&removed.workspace_id, &removed.name, number)

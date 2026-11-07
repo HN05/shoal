@@ -7,6 +7,7 @@
 //! closed question keeps its number until the space goes so that a late
 //! answer is refused. A question an agent asked in its conversation closes
 //! the same way when the user replies there.
+use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
@@ -649,14 +650,14 @@ impl Manager {
     /// about a new one.
     pub async fn ask_question(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         ask: Ask,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Question> {
         ask.validate()?;
         workspace_files::check_sent(&attachments)?;
-        let space = self.present_space(selector).await?;
+        let space = self.space(selector).await?;
         let question = ask.question.clone();
         let asked = (self.send_with_files(
             &space.clone().into(),
@@ -675,11 +676,11 @@ impl Manager {
     /// tell the user about it.
     pub(crate) async fn ask_in_chat(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         turn: Turn,
         message: Option<&str>,
     ) -> Result<Option<Question>> {
-        let space = self.present_space(selector).await?;
+        let space = self.space(selector).await?;
         let asking = Asking {
             ask: Ask::in_chat(message),
             files: Vec::new(),
@@ -729,7 +730,7 @@ impl Manager {
 
     /// The newest open questions that fit one response, oldest first, of
     /// every space unless `selector` names one.
-    pub async fn questions(&self, selector: Option<&str>) -> Result<Listing> {
+    pub async fn questions(&self, selector: Option<&SpaceSelector>) -> Result<Listing> {
         let owner = match selector {
             Some(selector) => Some(self.asking_space(selector).await?),
             None => None,
@@ -752,8 +753,8 @@ impl Manager {
 
     /// The ID of the workspace or chat `selector` names, whose questions a
     /// listing keeps: a stopped chat keeps its open questions too.
-    async fn asking_space(&self, selector: &str) -> Result<String> {
-        Ok(self.present_space(selector).await?.id().to_owned())
+    async fn asking_space(&self, selector: &SpaceSelector) -> Result<String> {
+        Ok(self.space(selector).await?.id().to_owned())
     }
 
     /// Every open question, oldest first, which subscription snapshots page.
@@ -830,11 +831,11 @@ impl Manager {
     /// the user or the coordinating agent is told instead.
     pub async fn withdraw_question(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         number: ItemNumber,
         shown: Option<Question>,
     ) -> Result<Question> {
-        let space = self.present_space(selector).await?;
+        let space = self.space(selector).await?;
         let _gate = self.gates.lock_announcements().await;
         let (question, retracted) = self
             .store
@@ -868,10 +869,10 @@ impl Manager {
     /// the mark of `turn`, and return their numbers.
     pub(crate) async fn close_chat_questions(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         turn: Option<Turn>,
     ) -> Result<Vec<ItemNumber>> {
-        let space = self.present_space(selector).await?;
+        let space = self.space(selector).await?;
         let _gate = self.gates.lock_announcements().await;
         let closed = self
             .store
@@ -905,8 +906,13 @@ impl Manager {
     /// What it asks tells it from a later question reusing the number; a
     /// later identical question asks the same, so its answer serves the wait
     /// too.
-    pub async fn await_answer(&self, selector: &str, item: u32, ask: &Ask) -> Result<Question> {
-        let space = self.present_space(selector).await?;
+    pub async fn await_answer(
+        &self,
+        selector: &SpaceSelector,
+        item: u32,
+        ask: &Ask,
+    ) -> Result<Question> {
+        let space = self.space(selector).await?;
         let number = ItemNumber {
             space: space.number(),
             item,

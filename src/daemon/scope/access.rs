@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 
 use super::Caller;
 use crate::{
+    client::space_names::SpaceSelector,
     daemon::{
         approvals::ApprovalRequest, item_numbers::ItemNumber, questions::Question,
         workspace::Manager,
@@ -23,11 +24,11 @@ impl Manager {
     pub(in crate::daemon) async fn parent_below(
         &self,
         caller: &Caller,
-        parent: &mut Option<String>,
+        parent: &mut Option<SpaceSelector>,
     ) -> Result<()> {
-        let id = match parent.as_deref() {
+        let id = match parent.as_ref() {
             Some(named) => {
-                let id = self.present_space(named).await?.id().to_owned();
+                let id = self.space(named).await?.id().to_owned();
                 ensure!(
                     self.within_subtree(&caller.space_id, &id).await?,
                     "workspace processes start spaces only below their own space and those below it"
@@ -36,7 +37,7 @@ impl Manager {
             }
             None => caller.space_id.clone(),
         };
-        *parent = Some(id);
+        *parent = Some(SpaceSelector::id(&id));
         Ok(())
     }
 
@@ -54,7 +55,7 @@ impl Manager {
             self.reaches(caller, &workspace.id).await?,
             "workspace processes copy only their own workspace and those below it"
         );
-        source.workspace = workspace.id;
+        source.workspace = SpaceSelector::id(&workspace.id);
         Ok(())
     }
 
@@ -88,7 +89,7 @@ impl Manager {
         &self,
         caller: &Caller,
     ) -> Result<Option<String>> {
-        let space = self.present_space(&caller.space_id).await?;
+        let space = self.space_by_id(&caller.space_id).await?;
         Ok(space.repository_id().map(str::to_owned))
     }
 
@@ -112,11 +113,11 @@ impl Manager {
     pub(in crate::daemon) async fn own_workspace<'a>(
         &self,
         caller: &Caller,
-        space: &'a mut String,
+        space: &'a mut SpaceSelector,
         refusal: &str,
-    ) -> Result<&'a mut String> {
+    ) -> Result<&'a mut SpaceSelector> {
         ensure!(
-            self.present_space(space).await?.id() == caller.space_id,
+            self.space(space).await?.id() == caller.space_id,
             "{refusal}"
         );
         Ok(space)
@@ -128,11 +129,11 @@ impl Manager {
     pub(in crate::daemon) async fn workspace_below<'a>(
         &self,
         caller: &Caller,
-        space: &'a mut String,
+        space: &'a mut SpaceSelector,
         refusal: &str,
-    ) -> Result<&'a mut String> {
+    ) -> Result<&'a mut SpaceSelector> {
         ensure!(
-            self.present_space(space).await?.id() != caller.space_id,
+            self.space(space).await?.id() != caller.space_id,
             "{refusal}"
         );
         Ok(space)
@@ -145,9 +146,9 @@ impl Manager {
     pub(in crate::daemon) async fn stopped_below<'a>(
         &self,
         caller: &Caller,
-        workspace: &'a mut String,
+        workspace: &'a mut SpaceSelector,
         execution: &str,
-    ) -> Result<&'a mut String> {
+    ) -> Result<&'a mut SpaceSelector> {
         let workspace = self
             .workspace_below(
                 caller,
@@ -174,8 +175,8 @@ impl Manager {
     pub(in crate::daemon) async fn stopped_chat_below<'a>(
         &self,
         caller: &Caller,
-        chat: &'a mut String,
-    ) -> Result<&'a mut String> {
+        chat: &'a mut SpaceSelector,
+    ) -> Result<&'a mut SpaceSelector> {
         let chat = self
             .workspace_below(
                 caller,
@@ -183,7 +184,7 @@ impl Manager {
                 "scoped processes resume only the chats below their own space",
             )
             .await?;
-        let id = self.present_space(chat).await?.id().to_owned();
+        let id = self.space(chat).await?.id().to_owned();
         let ours = match self.chat_stopped_by(&id).await? {
             Some(stopper) => self.within_subtree(&caller.space_id, &stopper).await?,
             None => false,
@@ -201,11 +202,11 @@ impl Manager {
     pub(in crate::daemon) async fn unheld_workspace_below<'a>(
         &self,
         caller: &Caller,
-        workspace: &'a mut String,
+        workspace: &'a mut SpaceSelector,
         refusal: &str,
-    ) -> Result<&'a mut String> {
+    ) -> Result<&'a mut SpaceSelector> {
         let workspace = self.workspace_below(caller, workspace, refusal).await?;
-        let id = self.present_space(workspace).await?.id().to_owned();
+        let id = self.space(workspace).await?.id().to_owned();
         for id in self.subtree(&id).await? {
             // A chat below has no holds.
             let Some(held) = self.find_workspace(&id).await? else {
@@ -314,7 +315,7 @@ impl Manager {
         &self,
         caller: &Caller,
         request: &'a mut QueueRequest,
-    ) -> Result<&'a mut String> {
+    ) -> Result<&'a mut SpaceSelector> {
         const REFUSAL: &str =
             "workspace processes can start agents only in the workspaces split from theirs";
         ensure!(!request.now, NOT_NOW);

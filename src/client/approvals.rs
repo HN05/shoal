@@ -5,6 +5,7 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, request},
@@ -581,7 +582,10 @@ impl fmt::Display for Undecided {
 impl std::error::Error for Undecided {}
 
 /// The approval requests of `space`, or of every space the caller decides.
-pub async fn list(daemon: &impl Daemon, space: Option<String>) -> Result<Vec<ApprovalRequest>> {
+pub async fn list(
+    daemon: &impl Daemon,
+    space: Option<SpaceSelector>,
+) -> Result<Vec<ApprovalRequest>> {
     request(daemon, ApprovalMethod::ListApprovals { space }).await
 }
 
@@ -615,7 +619,7 @@ pub async fn decide(
 /// or to the user.
 pub async fn escalate(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     number: ItemNumber,
     shown: Option<Box<ApprovalRequest>>,
 ) -> Result<Box<ApprovalRequest>> {
@@ -630,14 +634,14 @@ pub async fn escalate(
 /// Withdraw `space`'s pending request `number`.
 pub async fn withdraw(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     number: ItemNumber,
 ) -> Result<Box<ApprovalRequest>> {
     request(daemon, ApprovalMethod::WithdrawApproval { space, number }).await
 }
 
 /// Whether `[permissions] push` holds back the push of `workspace`'s branch.
-pub async fn push_held(daemon: &impl Daemon, workspace: String) -> Result<bool> {
+pub async fn push_held(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<bool> {
     let BranchPush { held } = request(daemon, ApprovalMethod::BranchPush { workspace }).await?;
     Ok(held)
 }

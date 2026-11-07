@@ -62,7 +62,7 @@ async fn view(
     let read = views::read(&ctx.paths, context.clone(), selection, !no_comments);
     let mut views = ctx.progress("Reading items", read).await?;
     if plain && let ItemContext::Workspace(workspace) = &context {
-        let latest = super::review::show::latest(ctx, workspace).await;
+        let latest = super::review::show::latest(ctx, &workspace.to_string()).await;
         views.extend(latest.map(|review| {
             Shown::Review(ShownReview {
                 kind: "review".into(),

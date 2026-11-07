@@ -7,6 +7,7 @@ use super::{
     space::LinkSpace,
     wait::{OwnChange, record_received_change},
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{repo::Opening, resolve::Effective},
     daemon::{events, reviews::gate::Gate, scope::Caller, workspace::Manager},
@@ -369,7 +370,7 @@ impl Manager {
     /// on its own.
     pub async fn open_pull(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         options: PullOptions,
         push_held: bool,
         caller: Option<&Caller>,
@@ -471,14 +472,18 @@ impl Manager {
     /// that its head is the workspace branch.
     pub(super) async fn link_open_pull(&self, workspace: &Workspace, item: &Item) -> Result<()> {
         ensure_branch_head(workspace, item)?;
-        self.set_pr_gated(&workspace.id, watch(item), super::pr::WatchCheck::Known)
-            .await
-            .with_context(|| format!("{} is open, but linking it failed", item.url))
+        self.set_pr_gated(
+            &SpaceSelector::id(&workspace.id),
+            watch(item),
+            super::pr::WatchCheck::Known,
+        )
+        .await
+        .with_context(|| format!("{} is open, but linking it failed", item.url))
     }
 
     /// Whether `shoal pr open` from a workspace process would open a new PR
     /// that its review gate refuses; checked before anything is pushed.
-    pub(crate) async fn check_pr_review_gate(&self, selector: &str) -> Result<()> {
+    pub(crate) async fn check_pr_review_gate(&self, selector: &SpaceSelector) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         let Some(branch) = workspace.branch.clone() else {
             return Ok(());
@@ -529,11 +534,13 @@ impl Manager {
         let linked = match kind {
             ItemKind::Issue => {
                 let title = Some(item.title.clone());
-                self.set_issue_gated(space, &item.url, title).await
+                self.set_issue_gated(&SpaceSelector::id(space), &item.url, title)
+                    .await
             }
             ItemKind::Pr => {
                 let check = super::pr::WatchCheck::Known;
-                self.set_pr_gated(space, watch(item), check).await
+                self.set_pr_gated(&SpaceSelector::id(space), watch(item), check)
+                    .await
             }
         };
         match linked {

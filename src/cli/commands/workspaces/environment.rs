@@ -4,6 +4,7 @@ use std::{collections::BTreeMap, ffi::OsString};
 use anyhow::{Context as _, Result};
 
 use crate::client::output::workspaces::Revoked;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -22,14 +23,21 @@ pub(in crate::cli::commands) async fn environment(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     if let Some(token) = revoke {
-        crate::client::workspaces::revoke_environment(&ctx.paths, workspace, token).await?;
+        crate::client::workspaces::revoke_environment(
+            &ctx.paths,
+            SpaceSelector::parse(&workspace),
+            token,
+        )
+        .await?;
         ctx.emit_styled(
             Style::Success,
             "Workspace environment revoked",
             Revoked { revoked: true },
         )?;
     } else {
-        let values = crate::client::workspaces::environment(&ctx.paths, workspace).await?;
+        let values =
+            crate::client::workspaces::environment(&ctx.paths, SpaceSelector::parse(&workspace))
+                .await?;
         let values = crate::env::export_configured(values, std::env::var_os("PATH"))?;
         ctx.show(&values, |values| {
             for (name, value) in values {
@@ -48,7 +56,7 @@ pub(in crate::cli) async fn configured_environment(
 ) -> Result<BTreeMap<String, OsString>> {
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let repo = crate::client::repositories::list(&ctx.paths)
@@ -60,7 +68,7 @@ pub(in crate::cli) async fn configured_environment(
         &settings.env,
         workspace,
         repository::name(&repo),
-        &crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone())
+        &crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id))
             .await?
             .ports,
         // Only the daemon creates them; tools create a missing cache, and

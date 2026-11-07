@@ -5,6 +5,7 @@ use anyhow::{Context, Result, bail};
 use rusqlite::OptionalExtension;
 
 use super::{clean_checkout, local_commit, records::RecordedMerge};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,
     git::{
@@ -21,12 +22,14 @@ use crate::{
 impl Manager {
     /// The workspace `selector` names for an unmerge, which runs in it: one
     /// cleanup removed has to be restored first.
-    pub(crate) async fn unmerge_workspace(&self, selector: &str) -> Result<Workspace> {
+    pub(crate) async fn unmerge_workspace(&self, selector: &SpaceSelector) -> Result<Workspace> {
         let error = match self.workspace(selector).await {
             Ok(workspace) => return Ok(workspace),
             Err(error) => error,
         };
-        let selector = selector.to_owned();
+        let Some(selector) = selector.id_or_name().map(str::to_owned) else {
+            return Err(error);
+        };
         match self
             .store
             .run(move |db| removed_name(db, &selector))
@@ -42,7 +45,7 @@ impl Manager {
     /// Plan undoing the latest merge of the workspace `selector` names while
     /// the caller holds the repository Git gate. The gate must stay held
     /// until the tracked execution completes.
-    pub async fn prepare_unmerge(&self, selector: &str) -> Result<UnmergePlan> {
+    pub async fn prepare_unmerge(&self, selector: &SpaceSelector) -> Result<UnmergePlan> {
         let workspace = self.workspace(selector).await?;
         let repo = self.repository(&workspace.repository_id).await?;
         let default =

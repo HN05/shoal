@@ -8,6 +8,7 @@ use tokio::{
 };
 
 use super::{Server, connections::Capacity, workspace::Manager};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::connection::Connector,
     daemon::test_support::{git, manager, repository},
@@ -80,7 +81,7 @@ impl TestDaemon {
     pub async fn scope_token(&self, workspace: &Workspace) -> String {
         let environment = self
             .manager
-            .workspace_environment(&workspace.id)
+            .workspace_environment(&SpaceSelector::id(&workspace.id))
             .await
             .unwrap();
         environment[crate::env::SCOPE_TOKEN].clone()

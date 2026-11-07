@@ -7,6 +7,7 @@ use super::{SimRequest, Simulator};
 pub(crate) use crate::client::sim::{
     AuditEntry, CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{allocation::Allocation, approvals::DecisionStatus, workspace::Manager},
     model::Workspace,
@@ -166,7 +167,7 @@ impl Manager {
     /// them, newest first.
     pub async fn clean_history(
         &self,
-        selector: Option<&str>,
+        selector: Option<&SpaceSelector>,
         limit: u32,
         before: Option<i64>,
     ) -> Result<Vec<AuditEntry>> {

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, Result, ensure};
 
 use super::recovery::{issues, reconcile};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::repositories,
@@ -109,7 +110,7 @@ async fn reclaim(ctx: &Context, workspace: Workspace) -> Result<i32> {
             Palette::stdout(ctx.json).paint(Style::Heading, &workspace.name),
             workspace.path.display()
         ),
-        crate::client::workspaces::inspect(&ctx.paths, workspace.id)
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id))
             .await?
             .workspace,
     )?;

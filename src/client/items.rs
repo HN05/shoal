@@ -3,6 +3,7 @@
 use anyhow::Result;
 use tokio::time::Instant;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, await_reply, request},
@@ -26,7 +27,7 @@ pub async fn link(
     item: &LinkedItem,
 ) -> Result<()> {
     let method = ItemMethod::LinkItem {
-        space: space.to_owned(),
+        space: SpaceSelector::parse(space),
         kind: item.kind,
         url: item.url.clone(),
         relation,
@@ -39,7 +40,7 @@ pub async fn link(
 /// `url` names when given.
 pub async fn unlink(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     relation: Relation,
     kind: Option<LinkKind>,
     url: Option<String>,
@@ -54,7 +55,7 @@ pub async fn unlink(
 }
 
 /// Link and watch the PR `url` as the one `space` was opened on.
-pub async fn watch_pr(daemon: &impl Daemon, space: String, url: String) -> Result<()> {
+pub async fn watch_pr(daemon: &impl Daemon, space: SpaceSelector, url: String) -> Result<()> {
     let action = PrAction::Watch { url };
     request(daemon, ItemMethod::SetPr { space, action }).await
 }
@@ -71,7 +72,7 @@ pub async fn await_updates(
     restarted: bool,
 ) -> Result<Updates> {
     let method = || ItemMethod::WatchItems {
-        space: space.to_owned(),
+        space: SpaceSelector::parse(space),
         selection: selection.clone(),
         timeout_secs: seconds_left(deadline),
     };
@@ -102,7 +103,7 @@ pub fn seconds_left(deadline: Option<Instant>) -> Option<u64> {
 /// `[permissions] push` held the branch's push back for approval.
 pub async fn open_pull(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     options: PullOptions,
     push_held: bool,
 ) -> Result<OpenOutcome> {
@@ -136,7 +137,7 @@ pub async fn open_issue(
 /// `space`'s linked one.
 pub async fn revert_pull(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     item: Option<String>,
     options: PullOptions,
 ) -> Result<OpenOutcome> {

@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         links::pr::Action,
@@ -24,7 +25,13 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
         .resource_guard(&workspace.id, GuardMode::Exclusive)
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
@@ -35,7 +42,13 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap_err();
     assert!(
@@ -49,7 +62,13 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
     drop(resources);
     assert!(
         manager
-            .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+            .mark_done(
+                &SpaceSelector::id(&workspace.id),
+                true,
+                false,
+                vec![],
+                &Attacher::User
+            )
             .await
             .unwrap()
             .cleanup
@@ -62,7 +81,13 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
     let repo = manager.repository(&workspace.repository_id).await.unwrap();
     assert!(
         manager
-            .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+            .mark_done(
+                &SpaceSelector::id(&workspace.id),
+                false,
+                false,
+                vec![],
+                &Attacher::User
+            )
             .await
             .unwrap()
             .cleanup
@@ -73,26 +98,44 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
         .unwrap();
     assert!(
         !manager
-            .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+            .mark_done(
+                &SpaceSelector::id(&workspace.id),
+                false,
+                false,
+                vec![],
+                &Attacher::User
+            )
             .await
             .unwrap()
             .cleanup
     );
     assert!(
         manager
-            .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+            .mark_done(
+                &SpaceSelector::id(&workspace.id),
+                true,
+                false,
+                vec![],
+                &Attacher::User
+            )
             .await
             .unwrap()
             .cleanup
     );
     let kept = manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert!(!kept.cleanup);
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
     let completion = reopened
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .completion
@@ -121,17 +164,29 @@ async fn repeating_an_unchanged_completion_is_refused() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap_err();
     // Repeating it closes a question asked since.
     manager
         .ask_question(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             crate::daemon::questions::Ask {
                 question: "Anything more?".into(),
                 recommendation: "No".into(),
@@ -144,14 +199,26 @@ async fn repeating_an_unchanged_completion_is_refused() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert!(!manager.has_open_questions(&workspace.id).await.unwrap());
     // Another cleanup choice or HEAD replaces the recorded completion.
     assert!(
         manager
-            .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+            .mark_done(
+                &SpaceSelector::id(&workspace.id),
+                true,
+                false,
+                vec![],
+                &Attacher::User
+            )
             .await
             .unwrap()
             .cleanup
@@ -159,7 +226,13 @@ async fn repeating_an_unchanged_completion_is_refused() {
     fs::write(workspace.path.join("more-work"), "more").unwrap();
     commit(&workspace.path, "more-work");
     let newer = manager
-        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -193,12 +266,24 @@ async fn repeating_a_completion_reruns_a_configured_hook() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // After the hook failed, the same completion runs it again.
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(fs::read_to_string(&runs).unwrap(), "xx");
@@ -229,11 +314,17 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
         .await
         .unwrap();
     manager
-        .set_pr(&workspace.id, Action::Acknowledge)
+        .set_pr(&SpaceSelector::id(&workspace.id), Action::Acknowledge)
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
@@ -248,7 +339,13 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
     reopened.sweep_prs().await.unwrap();
     assert!(workspace.path.exists());
     reopened
-        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     reopened.sweep_prs().await.unwrap();
@@ -263,14 +360,26 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     let file = workspace.path.join("new-work");
     fs::write(&file, "keep").unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
     assert_retained(&manager, &workspace).await;
     commit(&workspace.path, "new-work");
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -299,7 +408,13 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     );
     assert_eq!(fs::read_to_string(&file).unwrap(), "newer");
     reopened
-        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     reopened.sweep_completed().await.unwrap();
@@ -330,7 +445,13 @@ async fn completion_rechecks_work_after_removal_hooks() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -366,7 +487,13 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let sweep = tokio::spawn({
@@ -381,10 +508,18 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
     .await;
     assert!(manager.gates.try_lock_prs([&workspace.id]).is_none());
     // Another workspace's commands do not wait for the removal.
-    bounded(manager.mark_done(&other.id, false, false, vec![], &Attacher::User))
+    bounded(manager.mark_done(
+        &SpaceSelector::id(&other.id),
+        false,
+        false,
+        vec![],
+        &Attacher::User,
+    ))
+    .await
+    .unwrap();
+    bounded(manager.undo_done(&SpaceSelector::id(&other.id)))
         .await
         .unwrap();
-    bounded(manager.undo_done(&other.id)).await.unwrap();
     assert!(!sweep.is_finished());
     fs::write(&release, "").unwrap();
     bounded(sweep).await.unwrap().unwrap();
@@ -402,12 +537,24 @@ async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {
 async fn undone_withdraws_completion_without_blocking_cleanup() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
-    let withdrawn = manager.undo_done(&workspace.id).await.unwrap();
+    let withdrawn = manager
+        .undo_done(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert!(withdrawn.cleanup);
-    manager.undo_done(&workspace.id).await.unwrap_err();
+    manager
+        .undo_done(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap_err();
     assert!(manager.completion(&workspace.id).await.unwrap().is_none());
     // Without completion, links or holds the workspace is an idle candidate again.
     assert!(
@@ -420,7 +567,7 @@ async fn undone_withdraws_completion_without_blocking_cleanup() {
     // A hold, not the withdrawn completion, keeps a merged workspace.
     manager
         .acquire_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "review".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -428,14 +575,14 @@ async fn undone_withdraws_completion_without_blocking_cleanup() {
         .await
         .unwrap();
     manager
-        .set_pr(&workspace.id, Action::Acknowledge)
+        .set_pr(&SpaceSelector::id(&workspace.id), Action::Acknowledge)
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();
     assert!(workspace.path.exists());
     manager
         .release_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "review".into(),
             crate::model::HoldPlacer::User,
         )
@@ -464,12 +611,18 @@ async fn explicit_done_releases_only_the_hold_migrated_from_continuation() {
         .await
         .unwrap();
     let names = || async {
-        let holds = manager.workspace(&workspace.id).await.unwrap().holds;
+        let holds = manager.workspace_by_id(&workspace.id).await.unwrap().holds;
         holds.into_iter().map(|hold| hold.name).collect::<Vec<_>>()
     };
     assert_eq!(names().await, ["continue", "thread"]);
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(names().await, ["thread"]);
@@ -490,7 +643,12 @@ async fn undone_keeps_an_unreadable_completion() {
         })
         .await
         .unwrap();
-    assert!(manager.undo_done(&workspace.id).await.is_err());
+    assert!(
+        manager
+            .undo_done(&SpaceSelector::id(&workspace.id))
+            .await
+            .is_err()
+    );
     assert!(manager.completion(&workspace.id).await.is_err());
 }
 
@@ -521,17 +679,29 @@ async fn issue_and_watch_completion_wait_for_explicit_done() {
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();
-    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    let inspection = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert!(inspection.completion.is_none());
     assert!(inspection.issue.unwrap().error.is_none());
     assert!(inspection.pr_cleanup.unwrap().error.is_none());
     // Explicit completion applies the watch's merge checks.
     manager
-        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();
-    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    let inspection = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert!(inspection.pr_cleanup.unwrap().error.is_some());
     assert!(workspace.path.exists());
 }
@@ -541,7 +711,7 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
     let (_root, manager, workspace) = fixture().await;
     manager
         .acquire_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "app".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -549,7 +719,13 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
         .await
         .unwrap();
     let completed = manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -559,7 +735,11 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
     assert!(completion.error.is_none());
     assert!(workspace.path.exists());
     manager
-        .release_hold(&workspace.id, "app".into(), crate::model::HoldPlacer::User)
+        .release_hold(
+            &SpaceSelector::id(&workspace.id),
+            "app".into(),
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -578,7 +758,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     // Done closes the questions asked before it.
     manager
         .ask_question(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             ask("Anything else?"),
             Vec::new(),
             &Attacher::User,
@@ -586,12 +766,18 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let question = manager
         .ask_question(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             ask("Anything more?"),
             Vec::new(),
             &Attacher::User,
@@ -601,7 +787,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     manager.sweep_completed().await.unwrap();
     assert!(workspace.path.exists());
     manager
-        .set_pr(&workspace.id, Action::Acknowledge)
+        .set_pr(&SpaceSelector::id(&workspace.id), Action::Acknowledge)
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();
@@ -610,11 +796,15 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
     assert!(completion.error.is_none());
     // A question asked after a sweep checked for one still stops its removal.
     manager
-        .remove_completed(&workspace.id, &completion, EventCause::Completion)
+        .remove_completed(
+            &SpaceSelector::id(&workspace.id),
+            &completion,
+            EventCause::Completion,
+        )
         .await
         .unwrap_err();
     manager
-        .remove_merged(&workspace.id, &completion.head)
+        .remove_merged(&SpaceSelector::id(&workspace.id), &completion.head)
         .await
         .unwrap_err();
     assert!(workspace.path.exists());
@@ -642,7 +832,13 @@ async fn completion_cleans_up_commits_the_start_branch_took_unchanged() {
             .is_some()
     );
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -662,14 +858,26 @@ async fn completion_retains_commits_the_start_branch_took_adapted() {
         Err(CleanupReason::Unpushed { commits: 1 })
     );
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
     assert_retained(&manager, &workspace).await;
     // Marking the same HEAD integrated updates the completion.
     let completion = manager
-        .mark_done(&workspace.id, false, true, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            true,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert!(completion.integrated && completion.error.is_none());
@@ -690,7 +898,13 @@ async fn an_integrated_completion_retains_dirty_and_newer_work() {
     commit(&workspace.path, "new-work");
     fs::write(workspace.path.join("unsaved"), "keep").unwrap();
     manager
-        .mark_done(&workspace.id, false, true, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            true,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -708,7 +922,7 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
     commit(&workspace.path, "new-work");
     manager
         .acquire_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "app".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -716,16 +930,32 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, true, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            true,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let completion = manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert!(!completion.integrated);
     manager
-        .release_hold(&workspace.id, "app".into(), crate::model::HoldPlacer::User)
+        .release_hold(
+            &SpaceSelector::id(&workspace.id),
+            "app".into(),
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -791,7 +1021,12 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
         let manager = manager.clone();
         async move {
             manager
-                .split_workspace(&parent, name.into(), None, Default::default())
+                .split_workspace(
+                    &SpaceSelector::parse(&parent),
+                    name.into(),
+                    None,
+                    Default::default(),
+                )
                 .await
                 .unwrap()
         }
@@ -802,7 +1037,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
     let held = split("held", parent.id.clone()).await;
     manager
         .acquire_hold(
-            &held.id,
+            &SpaceSelector::id(&held.id),
             "review".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -813,7 +1048,13 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
     let leaf = split("leaf", nested.id.clone()).await;
 
     manager
-        .mark_done(&parent.id, false, false, Vec::new(), &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&parent.id),
+            false,
+            false,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -848,7 +1089,7 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
     let (_root, manager, parent) = fixture().await;
     manager
         .acquire_hold(
-            &parent.id,
+            &SpaceSelector::id(&parent.id),
             "review".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -881,15 +1122,21 @@ async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
     }
 
     manager
-        .mark_done(&parent.id, false, false, Vec::new(), &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&parent.id),
+            false,
+            false,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // The nested chat goes first, then the chat it was below.
     manager.sweep_completed().await.unwrap();
-    assert!(manager.recorded_chat(&chats[1].id).await.unwrap().is_none());
-    assert!(manager.recorded_chat(&chats[0].id).await.unwrap().is_some());
+    assert!(manager.chat_by_id(&chats[1].id).await.unwrap().is_none());
+    assert!(manager.chat_by_id(&chats[0].id).await.unwrap().is_some());
     manager.sweep_completed().await.unwrap();
-    assert!(manager.recorded_chat(&chats[0].id).await.unwrap().is_none());
+    assert!(manager.chat_by_id(&chats[0].id).await.unwrap().is_none());
     assert!(manager.find_workspace(&parent.id).await.unwrap().is_some());
 }
 
@@ -898,7 +1145,12 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     let (_root, manager, parent) = fixture().await;
     commit_file(&parent.path, "parent-work");
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     // Without cleanup the completion leaves them.
@@ -910,22 +1162,43 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
         .await
         .unwrap();
     manager
-        .mark_done(&parent.id, false, false, Vec::new(), &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&parent.id),
+            false,
+            false,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
     assert!(child.path.exists());
     // Nor once it is withdrawn.
     manager
-        .mark_done(&parent.id, true, false, Vec::new(), &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&parent.id),
+            true,
+            false,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
-    manager.undo_done(&parent.id).await.unwrap();
+    manager
+        .undo_done(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     manager.sweep_completed().await.unwrap();
     assert!(child.path.exists());
     // Nor once the parent committed after it.
     manager
-        .mark_done(&parent.id, true, false, Vec::new(), &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&parent.id),
+            true,
+            false,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     commit_file(&parent.path, "parent-work");
@@ -949,7 +1222,12 @@ fn commit_file(path: &std::path::Path, name: &str) {
 async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cleanup() {
     let (_root, manager, parent) = fixture().await;
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let other = manager
@@ -957,7 +1235,13 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
         .await
         .unwrap();
     manager
-        .mark_done(&other.id, false, false, Vec::new(), &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&other.id),
+            false,
+            false,
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let id = parent.id.clone();
@@ -1043,10 +1327,10 @@ async fn a_worker_opened_outside_its_done_chat_after_the_sweep_chose_it_stays() 
     // The user opens it outside the chat before the removal reserves it.
     manager.assign_parent(&worker.id, None).await.unwrap();
     manager
-        .remove_under_completed(&worker.id, &ancestor)
+        .remove_under_completed(&SpaceSelector::id(&worker.id), &ancestor)
         .await
         .unwrap_err();
-    assert!(manager.workspace(&worker.id).await.is_ok());
+    assert!(manager.workspace_by_id(&worker.id).await.is_ok());
 }
 
 #[tokio::test]
@@ -1082,7 +1366,12 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
         .await
         .unwrap();
     let split = manager
-        .split_workspace(&root.id, "split".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&root.id),
+            "split".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     manager
@@ -1094,7 +1383,7 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
         )
         .await
         .unwrap();
-    let split = manager.workspace(&split.id).await.unwrap();
+    let split = manager.workspace_by_id(&split.id).await.unwrap();
     let ancestor = manager
         .completed_ancestor(&split.id)
         .await
@@ -1108,10 +1397,10 @@ async fn a_removal_under_a_done_chat_keeps_the_chats_workspaces_below_it() {
     manager.assign_parent(&root.id, None).await.unwrap_err();
     // ...and the removal takes that hold itself, so another one waits.
     manager
-        .remove_under_completed(&split.id, &ancestor)
+        .remove_under_completed(&SpaceSelector::id(&split.id), &ancestor)
         .await
         .unwrap_err();
-    assert!(manager.workspace(&split.id).await.is_ok());
+    assert!(manager.workspace_by_id(&split.id).await.is_ok());
     drop(held);
     manager.assign_parent(&root.id, None).await.unwrap();
 }

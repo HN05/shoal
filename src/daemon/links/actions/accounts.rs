@@ -135,8 +135,7 @@ impl Manager {
                 Place::Workspace(Box::new(workspace))
             }
             ItemContext::Chat(selector) => {
-                let chat = (self.running_chat(selector).await?)
-                    .with_context(|| format!("no running chat {selector}"))?;
+                let chat = self.running_chat(selector).await?;
                 let checkout = self.chat_own_checkout(&chat).await?;
                 Place::Chat {
                     id: chat.id,

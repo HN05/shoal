@@ -1,4 +1,5 @@
 //! Persist issue associations.
+use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use std::path::Path;
 
@@ -46,19 +47,20 @@ impl Manager {
     /// Linking the same issue again records a newly known title.
     pub async fn set_issue(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         input: &str,
         title: Option<String>,
     ) -> Result<()> {
         let id = self.link_space(selector).await?.id().to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
-        self.set_issue_gated(&id, input, title).await
+        self.set_issue_gated(&SpaceSelector::id(&id), input, title)
+            .await
     }
 
     /// [`Self::set_issue`] for a caller already holding the space's PR gate.
     pub(crate) async fn set_issue_gated(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         input: &str,
         title: Option<String>,
     ) -> Result<()> {
@@ -85,10 +87,10 @@ impl Manager {
             .await
     }
 
-    pub async fn clear_issue(&self, selector: &str, input: Option<&str>) -> Result<()> {
+    pub async fn clear_issue(&self, selector: &SpaceSelector, input: Option<&str>) -> Result<()> {
         let id = self.link_space(selector).await?.id().to_owned();
         let _guard = self.gates.lock_prs([&id]).await;
-        let space = self.link_space(&id).await?;
+        let space = self.link_space(&SpaceSelector::id(&id)).await?;
         let selected = match input {
             Some(input) => Some(self.issue_forge(space.origin_path(), input).await?.2),
             None => None,

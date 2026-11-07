@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
 
 use super::{GuardMode, Manager};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::Effective,
     daemon::{
@@ -78,7 +79,7 @@ impl Manager {
     /// the marks record.
     pub async fn mark_ready(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         selection: Selection,
         gated: bool,
     ) -> Result<ReadyMarks> {
@@ -87,7 +88,7 @@ impl Manager {
         }
         let id = self.workspace(selector).await?.id;
         let _guard = self.lock_change_gates(&id, &[]).await?;
-        let workspace = self.workspace(&id).await?;
+        let workspace = self.workspace_by_id(&id).await?;
         workspace.require_branch("shoal ready")?;
         let settings = self.workspace_settings(&workspace).await?;
         let command = HookKind::PostReady
@@ -270,13 +271,13 @@ impl Manager {
     /// failure there keeps the marks, so the withdrawal can be retried.
     pub async fn clear_ready(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         selection: Selection,
         draft: Option<bool>,
     ) -> Result<Vec<ReviewMark>> {
         let id = self.link_space(selector).await?.id().to_owned();
         let _guard = self.lock_change_gates(&id, &[]).await?;
-        let space = self.link_space(&id).await?;
+        let space = self.link_space(&SpaceSelector::id(&id)).await?;
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(space.origin_path(), &selection).await?);
         let selected = self.selected_marks(space.id(), kind, explicit).await?;

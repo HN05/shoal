@@ -74,7 +74,7 @@ impl Manager {
             .reserve_lifecycle(&workspace.id, WorkspaceState::Reconciling)
             .await?;
         // Another operation may have changed the workspace since it was listed.
-        let current = self.workspace(&workspace.id).await?;
+        let current = self.workspace_by_id(&workspace.id).await?;
         let verified = failed_at_startup(&Workspace {
             state: previous,
             ..current.clone()

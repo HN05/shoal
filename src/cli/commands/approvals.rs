@@ -10,6 +10,7 @@ pub(super) use push::push_approved;
 
 use super::EXIT_BUSY;
 use crate::client::output::acquisition::NotAcquired;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::approvals::ApprovalsArgs,
@@ -98,7 +99,7 @@ async fn can_decide(ctx: &Context, request: &ApprovalRequest) -> Result<bool> {
         Some(chat) => chat,
         None => {
             let owner = ui::select_workspace(ctx, None, ui::Fallback::OwnWorkspace).await?;
-            crate::client::workspaces::inspect(&ctx.paths, owner)
+            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&owner))
                 .await?
                 .workspace
                 .id
@@ -297,7 +298,8 @@ async fn escalate(
 ) -> Result<i32> {
     ensure_scope_token(ctx)?;
     let space = ui::select_space(ctx, None, ui::Fallback::OwnWorkspace).await?;
-    let request = approvals::escalate(&ctx.paths, space, number, shown).await?;
+    let request =
+        approvals::escalate(&ctx.paths, SpaceSelector::parse(&space), number, shown).await?;
     let decider = match &request.decider {
         Some(_) => "the space above",
         None => "the user",
@@ -322,7 +324,7 @@ pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
 /// longer needs.
 pub(super) async fn withdraw(ctx: &Context, number: ItemNumber) -> Result<i32> {
     let space = numbered(ctx, number).await?.space_id;
-    let request = approvals::withdraw(&ctx.paths, space, number).await?;
+    let request = approvals::withdraw(&ctx.paths, SpaceSelector::parse(&space), number).await?;
     ctx.emit(&outcome(&request), &request)?;
     Ok(0)
 }
@@ -347,7 +349,7 @@ pub(super) async fn list_requests(
     ctx: &Context,
     space: Option<String>,
 ) -> Result<Vec<ApprovalRequest>> {
-    approvals::list(&ctx.paths, space).await
+    approvals::list(&ctx.paths, space.as_deref().map(SpaceSelector::id)).await
 }
 
 /// What a request asks for, and why when its agent said.

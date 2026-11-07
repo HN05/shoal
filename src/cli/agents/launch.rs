@@ -5,6 +5,7 @@ use std::ffi::{OsStr, OsString};
 use anyhow::Result;
 
 use super::{Launch, LaunchOptions};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     agents::{Integration, Wake, ensure_available},
@@ -25,9 +26,11 @@ pub(super) async fn shortcut_workspace(
     workspace: Option<String>,
 ) -> Result<Workspace> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    Ok(crate::client::workspaces::inspect(&ctx.paths, workspace)
-        .await?
-        .workspace)
+    Ok(
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
+            .await?
+            .workspace,
+    )
 }
 
 /// Start `agent` in the workspace a shortcut names, as

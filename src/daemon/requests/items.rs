@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     forge::items::action::Action,
     protocol::{self, Body, ItemContext, ItemMethod, ViewPiece},
@@ -247,7 +248,11 @@ pub(super) async fn handle(
 }
 
 impl Scoped for ItemMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             ItemMethod::WatchItems {
                 space: workspace,
@@ -336,7 +341,7 @@ impl Scoped for ItemMethod {
 
 /// The workspace `context` names: a workspace process acts on items from its
 /// workspace, never from a registered checkout.
-pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut String> {
+pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut SpaceSelector> {
     match context {
         ItemContext::Workspace(space)
         | ItemContext::Chat(space)
@@ -356,12 +361,12 @@ pub(super) async fn change_context_space<'a>(
     manager: &Manager,
     caller: &Caller,
     context: &'a mut ItemContext,
-) -> Result<&'a mut String> {
+) -> Result<&'a mut SpaceSelector> {
     if let ItemContext::Checkout(repository) = context
         && manager.reach_root(Some(caller)).await?.is_none()
     {
         *context = ItemContext::ChatIn {
-            chat: caller.space_id.clone(),
+            chat: SpaceSelector::id(&caller.space_id),
             repository: repository.clone(),
         };
     }
@@ -376,7 +381,7 @@ async fn read_context_space<'a>(
     manager: &Manager,
     caller: &Caller,
     context: &'a mut ItemContext,
-) -> Result<Option<&'a mut String>> {
+) -> Result<Option<&'a mut SpaceSelector>> {
     if let ItemContext::Checkout(_) = context
         && manager.reach_root(Some(caller)).await?.is_none()
     {
@@ -398,7 +403,7 @@ fn json_pieces(value: &impl serde::Serialize) -> Result<Vec<ViewPiece>> {
 /// The workspace's next PR updates.
 async fn pr_updates(
     manager: Arc<Manager>,
-    workspace: String,
+    workspace: SpaceSelector,
     timeout_secs: Option<u64>,
 ) -> Result<Body> {
     let selection = crate::forge::items::link::Selection {
@@ -411,7 +416,7 @@ async fn pr_updates(
 /// The workspace's next updates of the selected items.
 async fn item_updates(
     manager: Arc<Manager>,
-    workspace: String,
+    workspace: SpaceSelector,
     selection: crate::forge::items::link::Selection,
     timeout_secs: Option<u64>,
 ) -> Result<Body> {

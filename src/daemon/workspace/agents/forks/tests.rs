@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -40,7 +41,7 @@ async fn agent(
 
 async fn refused(manager: &Manager, workspace: &Workspace, caller: Option<&str>) -> bool {
     manager
-        .agent_session(&workspace.name, caller)
+        .agent_session(&SpaceSelector::from(&workspace.name), caller)
         .await
         .is_err()
 }
@@ -68,7 +69,10 @@ async fn a_fork_starts_from_the_callers_agent_or_the_only_one() {
         session: "s1".into(),
     };
     assert_eq!(
-        manager.agent_session(&workspace.name, None).await.unwrap(),
+        manager
+            .agent_session(&SpaceSelector::from(&workspace.name), None)
+            .await
+            .unwrap(),
         only
     );
 
@@ -78,7 +82,7 @@ async fn a_fork_starts_from_the_callers_agent_or_the_only_one() {
     assert!(refused(&manager, &workspace, Some("elsewhere")).await);
     assert_eq!(
         manager
-            .agent_session(&workspace.name, Some(&own))
+            .agent_session(&SpaceSelector::from(&workspace.name), Some(&own))
             .await
             .unwrap(),
         AgentSession {

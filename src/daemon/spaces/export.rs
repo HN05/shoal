@@ -3,6 +3,7 @@
 //! writes what continues it on another machine.
 use anyhow::{Context, Result, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::transcripts::Environments,
     config::Effective,
@@ -36,13 +37,13 @@ impl Manager {
     /// differ from the caller's.
     pub async fn export_space(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
         file: std::path::PathBuf,
     ) -> Result<ExportedSpace> {
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let ended = match self.present_space(selector).await {
+        let ended = match self.space(selector).await {
             Ok(PresentSpace::Chat(chat)) => self.end_chat_for_export(chat).await?,
             _ => {
                 self.remove_for_export(selector, unsaved, inspection)
@@ -57,7 +58,7 @@ impl Manager {
     /// checkpoint `checkpoint`, or at a new one, or a chat with its session.
     pub async fn copy_space(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         checkpoint: Option<u64>,
         file: std::path::PathBuf,
     ) -> Result<ExportedSpace> {
@@ -123,7 +124,7 @@ impl Manager {
     /// latest removal record with that name or ID when none exists.
     async fn remove_for_export(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
     ) -> Result<Prepared> {
@@ -140,7 +141,12 @@ impl Manager {
                 // Its own config may describe its agents, and goes with it.
                 let settings = self.workspace_settings(&workspace).await;
                 let removal = self
-                    .remove_workspace_taking(&workspace.id, unsaved, inspection, &taking)
+                    .remove_workspace_taking(
+                        &SpaceSelector::id(&workspace.id),
+                        unsaved,
+                        inspection,
+                        &taking,
+                    )
                     .await?;
                 (Some((workspace.id.clone(), removal)), Some(settings))
             }
@@ -152,7 +158,7 @@ impl Manager {
             .into_iter()
             .find(|removed| match &removal {
                 Some((id, _)) => &removed.workspace_id == id,
-                None => removed.workspace_id == selector || removed.name == selector,
+                None => selector.names(&removed.workspace_id, &removed.name),
             })
             .with_context(|| format!("no space or restorable workspace {selector}"))?;
         ensure!(
@@ -230,7 +236,8 @@ impl Manager {
         );
         let id = chat.id.clone();
         let manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
-        self.remove_chat(&id, Some(Vec::new())).await?;
+        self.remove_chat(&SpaceSelector::id(&id), Some(Vec::new()))
+            .await?;
         Ok(Prepared {
             repo,
             manifest,

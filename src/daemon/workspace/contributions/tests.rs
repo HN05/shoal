@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -166,7 +167,11 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
     );
 
     manager
-        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     manager.sweep_contributions().await.unwrap();
@@ -233,7 +238,7 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
     std::fs::write(&report, "Plan").unwrap();
     manager
         .add_attached_files(
-            &chat.id,
+            &SpaceSelector::id(&chat.id),
             vec![report.into()],
             &crate::daemon::workspace_files::Attacher::User,
         )
@@ -241,7 +246,10 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
         .unwrap();
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    manager.remove_chat(&chat.id, None).await.unwrap();
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
     manager.sweep_contributions().await.unwrap();
     assert!(
         registered(&manager, &repo).await,

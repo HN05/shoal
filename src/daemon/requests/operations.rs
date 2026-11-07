@@ -13,6 +13,7 @@ use super::super::{
     scope::{Caller, Scoped, denied},
     workspace::{Manager, NewWorkspace},
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{
     Body, ErrorCode, OperationMethod, Response,
     operations::{Started, WorkspaceStart},
@@ -60,7 +61,7 @@ pub(super) async fn handle(
                     options,
                     ..Default::default()
                 },
-                parent,
+                parent: manager.space_id(parent.as_ref()).await?,
             };
             let preparing = Preparing {
                 issue,
@@ -116,7 +117,11 @@ pub(super) async fn handle(
 /// A scoped caller starts operations in its own tree, and reaches only the
 /// operations of that tree.
 impl Scoped for OperationMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             OperationMethod::StartOperation { spec, .. } => Some(spec.workspace_mut()),
             OperationMethod::StartSplit {

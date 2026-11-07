@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         events::{EventCause, EventItem, EventKind},
@@ -43,13 +44,18 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
         .await
         .unwrap();
     let middle = manager
-        .split_workspace(&root.name, "middle".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::from(&root.name),
+            "middle".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     // A base naming the parent's branch stacks the child on it too.
     let leaf = manager
         .split_workspace(
-            &middle.id,
+            &SpaceSelector::id(&middle.id),
             "leaf".into(),
             Some("middle".into()),
             Default::default(),
@@ -60,7 +66,7 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
     assert_eq!(leaf.parent, Some(space(&middle)));
     assert_eq!(leaf.base_workspace, Some(reference(&middle)));
     assert_eq!(
-        manager.workspace("root").await.unwrap().children,
+        manager.workspace(&"root".into()).await.unwrap().children,
         [space(&middle)]
     );
     assert_eq!(
@@ -74,7 +80,7 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
     // keeps the file.
     manager
         .acquire_hold(
-            &leaf.id,
+            &SpaceSelector::id(&leaf.id),
             "editor".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -83,7 +89,11 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
         .unwrap();
     std::fs::write(leaf.path.join("draft.txt"), "draft").unwrap();
     let removed = manager
-        .remove_workspace(&root.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&root.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert_eq!(removed.children, ["leaf", "middle"]);
@@ -141,7 +151,12 @@ async fn a_child_that_cannot_go_retains_its_parent() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     manager
@@ -150,13 +165,13 @@ async fn a_child_that_cannot_go_retains_its_parent() {
         .unwrap();
     let removed = manager
         .remove_workspace(
-            &parent.id,
+            &SpaceSelector::id(&parent.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
         .await;
     assert!(removed.is_err());
-    let kept = manager.workspace(&parent.id).await.unwrap();
+    let kept = manager.workspace_by_id(&parent.id).await.unwrap();
     assert_eq!(kept.state, crate::state::WorkspaceState::Ready);
     assert!(kept.path.exists());
     assert_eq!(kept.children, [space(&child)]);
@@ -174,7 +189,12 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     manager
@@ -207,11 +227,16 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         assert_eq!(authorized.is_ok(), allowed, "{target}");
     }
     let grandchild = manager
-        .split_workspace(&child.id, "grandchild".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&child.id),
+            "grandchild".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let mut done = AssignmentMethod::MarkDone {
-        space: grandchild.name.to_string(),
+        space: SpaceSelector::parse(&grandchild.name),
         cleanup: false,
         integrated: false,
         results: vec![],
@@ -221,7 +246,9 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         .await
         .unwrap();
     // Targets resolve to the named workspace, not the caller's own.
-    assert!(matches!(&done, AssignmentMethod::MarkDone { space, .. } if *space == grandchild.id));
+    assert!(
+        matches!(&done, AssignmentMethod::MarkDone { space, .. } if *space == SpaceSelector::id(&grandchild.id))
+    );
 }
 
 #[tokio::test]
@@ -236,7 +263,12 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     manager
@@ -275,7 +307,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     // Removal would release the user's holds.
     manager
         .acquire_hold(
-            &child.id,
+            &SpaceSelector::id(&child.id),
             "editor".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -290,16 +322,25 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     }
     // Removing it would release the holds of the workspaces below it too.
     manager
-        .release_hold(&child.id, "editor".into(), crate::model::HoldPlacer::User)
+        .release_hold(
+            &SpaceSelector::id(&child.id),
+            "editor".into(),
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let grandchild = manager
-        .split_workspace(&child.id, "grandchild".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&child.id),
+            "grandchild".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     manager
         .acquire_hold(
-            &grandchild.id,
+            &SpaceSelector::id(&grandchild.id),
             "editor".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -311,7 +352,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     assert!(authorized.is_err());
     manager
         .acquire_hold(
-            &child.id,
+            &SpaceSelector::id(&child.id),
             "editor".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -320,10 +361,14 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         .unwrap();
     // So does the removal itself, for a hold acquired after authorization.
     let removed = manager
-        .remove_unheld_workspace(&child.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .remove_unheld_workspace(
+            &SpaceSelector::id(&child.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await;
     assert!(removed.is_err());
-    let kept = manager.workspace(&child.id).await.unwrap();
+    let kept = manager.workspace_by_id(&child.id).await.unwrap();
     assert_eq!(kept.state, crate::state::WorkspaceState::Ready);
     assert!(kept.path.exists());
 }
@@ -340,11 +385,21 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let grandchild = manager
-        .split_workspace(&child.id, "grandchild".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&child.id),
+            "grandchild".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     manager
@@ -453,7 +508,12 @@ async fn workspace_processes_list_their_subtree_with_their_own_workspace_first()
     create("sibling").await.unwrap();
     // The child sorts before its parent by name.
     manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let names = |workspaces: Vec<Workspace>| {
@@ -485,12 +545,17 @@ async fn children_never_keep_their_parent_and_go_with_it() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     manager
         .acquire_hold(
-            &child.id,
+            &SpaceSelector::id(&child.id),
             "editor".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -506,7 +571,7 @@ async fn children_never_keep_their_parent_and_go_with_it() {
 
     let snapshot = manager.cleanup_snapshot(&parent.id).await.unwrap().unwrap();
     manager
-        .remove_for_disk_space(&parent.id, snapshot)
+        .remove_for_disk_space(&SpaceSelector::id(&parent.id), snapshot)
         .await
         .unwrap();
     for workspace in [&parent, &child] {
@@ -570,13 +635,18 @@ async fn a_parent_reserved_for_removal_refuses_splits() {
         .await
         .unwrap();
     let split = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await;
     assert!(split.is_err());
-    assert!(manager.workspace("child").await.is_err());
+    assert!(manager.workspace(&"child".into()).await.is_err());
     assert!(
         manager
-            .workspace(&parent.id)
+            .workspace_by_id(&parent.id)
             .await
             .unwrap()
             .children
@@ -602,7 +672,12 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let chat = manager
@@ -636,7 +711,7 @@ async fn scoped_lookups_find_items_and_leases_in_the_subtree() {
     for workspace in [&child, &sibling] {
         manager
             .acquire_resource(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 crate::daemon::resources::ResourceRequest {
                     mode: None,
                     kind: None,
@@ -703,11 +778,21 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let helper = manager
-        .split_workspace(&parent.id, "helper".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "helper".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let user = || async {
@@ -721,7 +806,7 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
     };
     let received = || async {
         manager
-            .agent_messages(&parent.id)
+            .agent_messages(&SpaceSelector::id(&parent.id))
             .await
             .unwrap()
             .into_iter()
@@ -729,28 +814,48 @@ async fn coordinating_agents_receive_their_childrens_events_instead_of_the_user(
             .collect::<Vec<_>>()
     };
     manager
-        .set_agent_state(&child.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&child.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     // Without an agent above, the user hears the child's agent.
     manager
-        .send_message(&child.id, "first".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&child.id),
+            "first".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(user().await, ["first"]);
 
     manager
-        .set_agent_state(&parent.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&parent.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
-        .send_message(&child.id, "second".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&child.id),
+            "second".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // A child without an agent of its own is the coordinator's own work.
     manager
         .send_message(
-            &helper.id,
+            &SpaceSelector::id(&helper.id),
             "from the parent".into(),
             Vec::new(),
             &Attacher::User,
@@ -782,12 +887,22 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
     let parent = create("parent").await.unwrap();
     let sibling = create("sibling").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for workspace in [&parent, &child] {
         manager
-            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .set_agent_state(
+                &SpaceSelector::id(&workspace.id),
+                AgentState::Working,
+                None,
+                None,
+            )
             .await
             .unwrap();
     }
@@ -798,19 +913,37 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         choices: vec![],
     };
     let below = manager
-        .ask_question(&child.id, ask("Use SQLite?"), Vec::new(), &Attacher::User)
+        .ask_question(
+            &SpaceSelector::id(&child.id),
+            ask("Use SQLite?"),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let own = manager
-        .ask_question(&parent.id, ask("Merge now?"), Vec::new(), &Attacher::User)
+        .ask_question(
+            &SpaceSelector::id(&parent.id),
+            ask("Merge now?"),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let beside = manager
-        .ask_question(&sibling.id, ask("Rename it?"), Vec::new(), &Attacher::User)
+        .ask_question(
+            &SpaceSelector::id(&sibling.id),
+            ask("Rename it?"),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // Only the question asked below the parent reaches it.
-    let messages = manager.agent_messages(&parent.id).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     assert_eq!(messages.len(), 1, "{messages:?}");
     manager
         .executions
@@ -872,7 +1005,12 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     // Custom and Happy agents report no turn state; the daemon tracks them.
@@ -901,14 +1039,17 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
     }
     manager
         .send_message(
-            &child.id,
+            &SpaceSelector::id(&child.id),
             "done with the API".into(),
             Vec::new(),
             &Attacher::User,
         )
         .await
         .unwrap();
-    let received = manager.agent_messages(&parent.id).await.unwrap();
+    let received = manager
+        .agent_messages(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     assert_eq!(received[0].message, "child: done with the API");
     assert!(manager.notifications(false, 10).await.unwrap().is_empty());
     // The child's own agent receives its activity instead of the parent's.
@@ -934,7 +1075,12 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let started = manager
@@ -981,7 +1127,12 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
     let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
     let parent = create("parent").await.unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let ask = |question: &str| Ask {
@@ -991,7 +1142,12 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         choices: vec![],
     };
     let asked = manager
-        .ask_question(&child.id, ask("Use SQLite?"), Vec::new(), &Attacher::User)
+        .ask_question(
+            &SpaceSelector::id(&child.id),
+            ask("Use SQLite?"),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
@@ -1028,11 +1184,19 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         .await
         .unwrap();
     manager
-        .mark_agent_messages_delivered(&child.id, vec![answered.message_id.unwrap()])
+        .mark_agent_messages_delivered(
+            &SpaceSelector::id(&child.id),
+            vec![answered.message_id.unwrap()],
+        )
         .await
         .unwrap();
     let reused = manager
-        .ask_question(&child.id, ask("Rename it?"), Vec::new(), &Attacher::User)
+        .ask_question(
+            &SpaceSelector::id(&child.id),
+            ask("Rename it?"),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(reused.number, asked.number);
@@ -1065,17 +1229,34 @@ async fn a_launch_reopens_only_its_recorded_workspace() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
-    let opened = manager.reopen_workspace(&child.id).await.unwrap();
+    let opened = manager
+        .reopen_workspace(&SpaceSelector::id(&child.id))
+        .await
+        .unwrap();
     assert!(opened.reused && opened.workspace.id == child.id);
     // Removed during the handoff, the child is not created again from its branch.
     manager
-        .remove_workspace(&child.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&child.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
-    assert!(manager.reopen_workspace(&child.id).await.is_err());
+    assert!(
+        manager
+            .reopen_workspace(&SpaceSelector::id(&child.id))
+            .await
+            .is_err()
+    );
     assert_eq!(manager.list_workspaces().await.unwrap().len(), 1);
 }
 
@@ -1098,16 +1279,31 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .await
         .unwrap();
     let parent = manager
-        .split_workspace(&root.id, "parent".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&root.id),
+            "parent".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for workspace in [&root, &parent, &child] {
         manager
-            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .set_agent_state(
+                &SpaceSelector::id(&workspace.id),
+                AgentState::Working,
+                None,
+                None,
+            )
             .await
             .unwrap();
     }
@@ -1152,7 +1348,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         let manager = &manager;
         async move {
             manager
-                .agent_messages(&id)
+                .agent_messages(&SpaceSelector::id(&id))
                 .await
                 .unwrap()
                 .into_iter()
@@ -1234,13 +1430,13 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
         .unwrap();
     let told = messages(&root).await.len();
     let escalated = manager
-        .escalate_approval(&parent.id, requested.number, None)
+        .escalate_approval(&SpaceSelector::id(&parent.id), requested.number, None)
         .await
         .unwrap();
     assert_eq!(escalated.decider.as_deref(), Some(root.id.as_str()));
     assert_eq!(messages(&root).await.len(), told + 1);
     let escalated = manager
-        .escalate_approval(&root.id, requested.number, None)
+        .escalate_approval(&SpaceSelector::id(&root.id), requested.number, None)
         .await
         .unwrap();
     assert_eq!(escalated.decider, None);
@@ -1248,7 +1444,7 @@ async fn approval_requests_go_to_the_direct_parent_which_approves_only_with_a_gr
     assert_eq!(user().await, 1);
     assert!(
         manager
-            .escalate_approval(&root.id, requested.number, None)
+            .escalate_approval(&SpaceSelector::id(&root.id), requested.number, None)
             .await
             .is_err()
     );
@@ -1284,16 +1480,31 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
         .await
         .unwrap();
     let parent = manager
-        .split_workspace(&root.id, "parent".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&root.id),
+            "parent".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for workspace in [&root, &parent, &child] {
         manager
-            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .set_agent_state(
+                &SpaceSelector::id(&workspace.id),
+                AgentState::Working,
+                None,
+                None,
+            )
             .await
             .unwrap();
     }
@@ -1317,14 +1528,19 @@ async fn a_request_passed_up_to_a_full_inbox_reports_the_user_deciding() {
     // the reply says.
     let mut n = 0;
     while manager
-        .send_agent_message(&root.id, format!("note {n}"), Vec::new(), &Attacher::User)
+        .send_agent_message(
+            &SpaceSelector::id(&root.id),
+            format!("note {n}"),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .is_ok()
     {
         n += 1;
     }
     let escalated = manager
-        .escalate_approval(&parent.id, requested.number, None)
+        .escalate_approval(&SpaceSelector::id(&parent.id), requested.number, None)
         .await
         .unwrap();
     assert_eq!(escalated.decider, None);
@@ -1350,7 +1566,12 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
         .await
         .unwrap();
     manager
-        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&worker.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let requested = manager
@@ -1371,7 +1592,7 @@ async fn a_request_withdrawn_once_given_back_notifies_nobody() {
     // Given back as an ending chat gives it, then withdrawn before the user
     // is told.
     manager
-        .withdraw_approval(&worker.id, requested.number)
+        .withdraw_approval(&SpaceSelector::id(&worker.id), requested.number)
         .await
         .unwrap();
     manager
@@ -1421,7 +1642,12 @@ async fn a_saved_chat_leaves_its_workspaces_requests_to_the_user() {
         .await
         .unwrap();
     manager
-        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&worker.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     // Saved, the chat keeps its workspace but has no agent to tell.
@@ -1496,7 +1722,12 @@ async fn saving_a_chat_gives_the_requests_it_decides_back_to_the_user() {
         .await
         .unwrap();
     manager
-        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&worker.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let requested = manager
@@ -1580,11 +1811,21 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&root.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&root.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     manager
-        .set_agent_state(&child.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&child.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let requested = manager
@@ -1631,7 +1872,10 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
         })
         .await
         .unwrap();
-    let listed = manager.approval_requests(Some(&chat.name)).await.unwrap();
+    let listed = manager
+        .approval_requests(Some(&SpaceSelector::from(&chat.name)))
+        .await
+        .unwrap();
     assert_eq!(listed.len(), 1);
 
     // Retrying the request once the chat exited tells it without ending it
@@ -1684,12 +1928,22 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for workspace in [&parent, &child] {
         manager
-            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .set_agent_state(
+                &SpaceSelector::id(&workspace.id),
+                AgentState::Working,
+                None,
+                None,
+            )
             .await
             .unwrap();
     }
@@ -1797,7 +2051,12 @@ async fn a_coordinator_approves_only_what_a_grant_covers_and_full_inboxes_reach_
     // A coordinator whose messages are full cannot be told; the user decides.
     let mut n = 0;
     while manager
-        .send_agent_message(&parent.id, format!("note {n}"), Vec::new(), &Attacher::User)
+        .send_agent_message(
+            &SpaceSelector::id(&parent.id),
+            format!("note {n}"),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .is_ok()
     {
@@ -1838,12 +2097,22 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for workspace in [&parent, &child] {
         manager
-            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .set_agent_state(
+                &SpaceSelector::id(&workspace.id),
+                AgentState::Working,
+                None,
+                None,
+            )
             .await
             .unwrap();
     }
@@ -1943,7 +2212,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             DecisionStatus::Pending
         );
         manager
-            .withdraw_approval(&child.id, replacement.number)
+            .withdraw_approval(&SpaceSelector::id(&child.id), replacement.number)
             .await
             .unwrap();
     }
@@ -1966,7 +2235,12 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let other = manager
@@ -2001,7 +2275,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             .unwrap();
         let question = manager
             .ask_question(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 Ask {
                     question: "Which database?".into(),
                     recommendation: "SQLite".into(),
@@ -2096,12 +2370,22 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for workspace in [&parent, &child] {
         manager
-            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .set_agent_state(
+                &SpaceSelector::id(&workspace.id),
+                AgentState::Working,
+                None,
+                None,
+            )
             .await
             .unwrap();
         manager
@@ -2116,17 +2400,23 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
             .await;
     }
     let mut acquire = Operation::Hold(HoldMethod::HoldAcquire {
-        workspace: child.name.to_string(),
+        workspace: SpaceSelector::parse(&child.name),
         name: "review".into(),
         reason: None,
     });
     crate::daemon::scope::authorize(&manager, Some("child"), &mut acquire)
         .await
         .unwrap();
-    let unexplained = manager.request_hold(&child.id, "review".into(), None).await;
+    let unexplained = manager
+        .request_hold(&SpaceSelector::id(&child.id), "review".into(), None)
+        .await;
     assert!(unexplained.is_err(), "a request needs a reason");
     let Allocation::Approval(requested) = manager
-        .request_hold(&child.id, "review".into(), Some("Keep my notes".into()))
+        .request_hold(
+            &SpaceSelector::id(&child.id),
+            "review".into(),
+            Some("Keep my notes".into()),
+        )
         .await
         .unwrap()
     else {
@@ -2139,7 +2429,14 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .unwrap()
         .unwrap();
     assert_eq!(routed.decider.as_deref(), Some(parent.id.as_str()));
-    assert!(manager.workspace(&child.id).await.unwrap().holds.is_empty());
+    assert!(
+        manager
+            .workspace_by_id(&child.id)
+            .await
+            .unwrap()
+            .holds
+            .is_empty()
+    );
     // A decision stands only with its hold, so a running resource hook,
     // which excludes placing it, refuses the decision.
     let hook = manager
@@ -2163,12 +2460,12 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .unwrap();
     assert_eq!(decided.status, DecisionStatus::Approved);
     // Approval placed the hold, which asking again returns.
-    let holds = manager.workspace(&child.id).await.unwrap().holds;
+    let holds = manager.workspace_by_id(&child.id).await.unwrap().holds;
     assert_eq!(holds.len(), 1);
     assert_eq!(holds[0].placed_by, HoldPlacer::Agent);
     assert_eq!(holds[0].reason.as_deref(), Some("Keep my notes"));
     let Allocation::Granted(hold) = manager
-        .request_hold(&child.id, "review".into(), None)
+        .request_hold(&SpaceSelector::id(&child.id), "review".into(), None)
         .await
         .unwrap()
     else {
@@ -2183,19 +2480,27 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .unwrap();
     assert!(
         manager
-            .request_hold(&child.id, "review".into(), None)
+            .request_hold(&SpaceSelector::id(&child.id), "review".into(), None)
             .await
             .is_err()
     );
     drop(hook);
     // Releasing it ends the approval, so holding it again asks again.
     manager
-        .release_hold(&child.id, "review".into(), HoldPlacer::Agent)
+        .release_hold(
+            &SpaceSelector::id(&child.id),
+            "review".into(),
+            HoldPlacer::Agent,
+        )
         .await
         .unwrap();
     assert!(matches!(
         manager
-            .request_hold(&child.id, "review".into(), Some("Again".into()))
+            .request_hold(
+                &SpaceSelector::id(&child.id),
+                "review".into(),
+                Some("Again".into())
+            )
             .await
             .unwrap(),
         Allocation::Approval(_)
@@ -2203,7 +2508,11 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
 
     // Without a coordinator the user decides.
     let Allocation::Approval(requested) = manager
-        .request_hold(&parent.id, "review".into(), Some("Keep it".into()))
+        .request_hold(
+            &SpaceSelector::id(&parent.id),
+            "review".into(),
+            Some("Keep it".into()),
+        )
         .await
         .unwrap()
     else {
@@ -2219,7 +2528,15 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .decide_approval(requested.number, true, None, Default::default(), None)
         .await
         .unwrap();
-    assert_eq!(manager.workspace(&parent.id).await.unwrap().holds.len(), 1);
+    assert_eq!(
+        manager
+            .workspace_by_id(&parent.id)
+            .await
+            .unwrap()
+            .holds
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -2235,11 +2552,16 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let check = manager
-        .check_manual_removal(&parent.id, false)
+        .check_manual_removal(&SpaceSelector::id(&parent.id), false)
         .await
         .unwrap();
     assert_eq!(check.children, [space(&child)]);
@@ -2247,11 +2569,20 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
     // Splits after the confirmation, directly or below a confirmed child,
     // keep the whole tree.
     let late = manager
-        .split_workspace(&child.id, "late".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&child.id),
+            "late".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let removed = manager
-        .remove_workspace(&parent.id, confirmed.clone(), InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&parent.id),
+            confirmed.clone(),
+            InspectionPolicy::GitOnly,
+        )
         .await;
     assert!(removed.is_err());
     for workspace in [&parent, &child, &late] {
@@ -2266,12 +2597,12 @@ async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
     }
     // Confirmed again, the removal takes them all.
     let check = manager
-        .check_manual_removal(&parent.id, false)
+        .check_manual_removal(&SpaceSelector::id(&parent.id), false)
         .await
         .unwrap();
     let removed = manager
         .remove_workspace(
-            &parent.id,
+            &SpaceSelector::id(&parent.id),
             UnsavedWork::confirming(&check),
             InspectionPolicy::GitOnly,
         )

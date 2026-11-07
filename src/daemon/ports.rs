@@ -8,6 +8,7 @@ use std::{
     ops::RangeInclusive,
 };
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{Ports, repo::ConflictPolicy},
     daemon::{
@@ -120,7 +121,7 @@ fn validate_env_var(env_var: &str, default: &str) -> Result<()> {
 impl Manager {
     pub async fn acquire_port(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         name: String,
         request: PortRequest,
         caller: Option<&Caller>,
@@ -150,16 +151,18 @@ impl Manager {
         Ok(outcome)
     }
 
-    pub async fn port_overview(&self, selector: &str) -> Result<PortOverview> {
+    pub async fn port_overview(&self, selector: &SpaceSelector) -> Result<PortOverview> {
         let workspace = self.workspace(selector).await?;
-        let reserved = self.list_ports(Some(&workspace.id)).await?;
+        let reserved = self
+            .list_ports(Some(&SpaceSelector::id(&workspace.id)))
+            .await?;
         Ok(PortOverview {
             workspace,
             reserved,
         })
     }
 
-    pub async fn port_catalog(&self, selector: &str) -> Result<PortCatalog> {
+    pub async fn port_catalog(&self, selector: &SpaceSelector) -> Result<PortCatalog> {
         let workspace = self.workspace(selector).await?;
         let ports = self
             .workspace_settings(&workspace)
@@ -175,14 +178,17 @@ impl Manager {
         })
     }
 
-    pub async fn list_ports(&self, selector: Option<&str>) -> Result<Vec<PortReservation>> {
+    pub async fn list_ports(
+        &self,
+        selector: Option<&SpaceSelector>,
+    ) -> Result<Vec<PortReservation>> {
         let workspace_id = self.workspace_filter(selector).await?;
         self.store
             .run(move |db| store::ports(db, workspace_id.as_deref()))
             .await
     }
 
-    pub async fn release_port(&self, selector: &str, name: String) -> Result<()> {
+    pub async fn release_port(&self, selector: &SpaceSelector, name: String) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.touch(&workspace.id).await;
         self.store

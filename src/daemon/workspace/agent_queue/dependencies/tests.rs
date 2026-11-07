@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{commit, global_config, manager},
@@ -44,7 +45,7 @@ fn work(name: &str) -> Dependency {
 async fn remove(manager: &Manager, workspace: &Workspace) {
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
         )
@@ -63,7 +64,13 @@ async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     assert_eq!(ui.waiting_for, ["api"]);
 
     manager
-        .mark_done(&api.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&api.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     std::fs::write(api.path.join("more"), "more\n").unwrap();
@@ -74,7 +81,13 @@ async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     assert_eq!(entry(&manager, &ui.id).await.waiting_for, ["api"]);
 
     manager
-        .mark_done(&api.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&api.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -101,7 +114,10 @@ async fn a_launch_dependency_follows_the_workspace_it_opens_until_removal() {
     assert_eq!(second.waiting_for, ["first"]);
 
     let opened = create(&manager, &repo, "first").await;
-    manager.queue_attach(&first.id, &opened.id).await.unwrap();
+    manager
+        .queue_attach(&first.id, &SpaceSelector::id(&opened.id))
+        .await
+        .unwrap();
     assert_eq!(entry(&manager, &second.id).await.waiting_for, ["first"]);
     // A removed dependency leaves nothing to wait for, so the launch starts
     // from the default branch in the slot the removal freed.
@@ -150,7 +166,13 @@ async fn issue_dependencies_wait_for_closure_or_a_done_workspace_linking_them() 
         ["fix or pending"]
     );
     manager
-        .mark_done(&fix.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&fix.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -189,7 +211,13 @@ async fn done_dependencies_build_on_the_one_that_contains_the_others() {
     .await;
     for workspace in [&lower, &separate, &upper] {
         manager
-            .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+            .mark_done(
+                &SpaceSelector::id(&workspace.id),
+                false,
+                false,
+                vec![],
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }

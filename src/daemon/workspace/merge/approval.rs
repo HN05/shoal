@@ -72,7 +72,7 @@ impl Manager {
                 request.number
             );
         };
-        let workspace = self.workspace(&request.space_id).await?;
+        let workspace = self.workspace_by_id(&request.space_id).await?;
         let head = git::status::local_branch_commit(&workspace.path, &merge.branch)
             .await
             .with_context(|| format!("could not check {} for approval", merge.branch))?;

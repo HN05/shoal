@@ -3,6 +3,7 @@ use std::time::Duration;
 use tokio::{io::BufReader, net::UnixStream};
 
 use super::{super::ExecutionKind, *};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         execution_connection::{ExecutionContext, execute},
@@ -42,7 +43,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: workspace.id.clone(),
+            workspace: SpaceSelector::id(&workspace.id),
             wrapper: wrapper.clone(),
             kind: ExecutionKind::Command,
             agent: None,
@@ -82,7 +83,11 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
     )
     .unwrap();
     manager
-        .queue_stopped_restore(&workspace.id, "earlier", Default::default())
+        .queue_stopped_restore(
+            &SpaceSelector::id(&workspace.id),
+            "earlier",
+            Default::default(),
+        )
         .await
         .unwrap();
 

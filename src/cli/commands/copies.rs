@@ -1,6 +1,7 @@
 //! The workspace `--copy` and `--checkpoint` start a new one from.
 use anyhow::{Context as _, Result};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         args::create::CopyArgs,
@@ -45,7 +46,7 @@ pub(super) async fn source(ctx: &Context, args: CopyArgs) -> Result<Option<Copie
         None => anyhow::bail!("no workspace {selector}"),
     };
     let source = CopySource {
-        workspace,
+        workspace: SpaceSelector::parse(&workspace),
         checkpoint: args.checkpoint,
     };
     Ok(Some(Copied {

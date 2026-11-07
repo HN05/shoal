@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::sessions::PlaceOwnership;
 use crate::{
     daemon::{
@@ -24,7 +25,7 @@ async fn an_execution_reports_where_it_runs() -> Result<()> {
     origin.group = Some("session:1".into());
     let _started = manager
         .begin_execution_placed(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             None,
             ExecutionKind::Command,
             None,
@@ -37,7 +38,10 @@ async fn an_execution_reports_where_it_runs() -> Result<()> {
             },
         )
         .await?;
-    let executions = manager.inspect_workspace(&workspace.id).await?.executions;
+    let executions = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await?
+        .executions;
     assert_eq!(executions.len(), 1);
     assert_eq!(executions[0].origin, Some(origin));
     Ok(())
@@ -70,17 +74,17 @@ async fn a_later_instance_under_a_reused_id_takes_its_record() -> Result<()> {
             .and_then(|(owner, _)| owner))
     };
     manager
-        .record_owned_place(&workspaces[0], session("1:1"))
+        .record_owned_place(&SpaceSelector::parse(&workspaces[0]), session("1:1"))
         .await?;
     // The session ended and another under its name began, before any agent
     // registered in it.
     manager
-        .record_owned_place(&workspaces[1], session("2:2"))
+        .record_owned_place(&SpaceSelector::parse(&workspaces[1]), session("2:2"))
         .await?;
     assert_eq!(owner().await?.as_ref(), Some(&workspaces[1]));
     // A late record of the same instance keeps the owner it has.
     manager
-        .record_owned_place(&workspaces[2], session("2:2"))
+        .record_owned_place(&SpaceSelector::parse(&workspaces[2]), session("2:2"))
         .await?;
     assert_eq!(owner().await?.as_ref(), Some(&workspaces[1]));
     Ok(())
@@ -107,7 +111,7 @@ async fn closing_an_earlier_instance_keeps_the_record_that_replaced_it() -> Resu
         ..Origin::created(HostName::Zmx, "shared".into())
     };
     manager
-        .record_owned_place(&workspaces[0], session("1:1"))
+        .record_owned_place(&SpaceSelector::parse(&workspaces[0]), session("1:1"))
         .await?;
     // A close read the first record, then a later session's record replaced
     // it before the close forgot what it read.
@@ -116,7 +120,7 @@ async fn closing_an_earlier_instance_keeps_the_record_that_replaced_it() -> Resu
         .await?
         .context("the first record")?;
     manager
-        .record_owned_place(&workspaces[1], session("2:2"))
+        .record_owned_place(&SpaceSelector::parse(&workspaces[1]), session("2:2"))
         .await?;
     manager.forget_owned_place(closed).await?;
     let (owner, kept) = manager
@@ -142,11 +146,13 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
         .create_workspace(&repo.id, "other".into(), None, None, None)
         .await?;
     let pane = Origin::created(HostName::Herdr, "w1:p9".into());
-    manager.record_owned_place(&tabbed.id, pane.clone()).await?;
+    manager
+        .record_owned_place(&SpaceSelector::id(&tabbed.id), pane.clone())
+        .await?;
     assert!(
         manager
             .place_ownership(
-                &tabbed.id,
+                &SpaceSelector::id(&tabbed.id),
                 &Origin::created(HostName::Herdr, "w1:p9".into())
             )
             .await?
@@ -154,13 +160,19 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
     );
     assert!(
         manager
-            .place_ownership(&other.id, &Origin::created(HostName::Herdr, "w1:p9".into()))
+            .place_ownership(
+                &SpaceSelector::id(&other.id),
+                &Origin::created(HostName::Herdr, "w1:p9".into())
+            )
             .await?
             != PlaceOwnership::Workspace
     );
     assert!(
         manager
-            .place_ownership(&tabbed.id, &Origin::created(HostName::Rex, "w1:p9".into()))
+            .place_ownership(
+                &SpaceSelector::id(&tabbed.id),
+                &Origin::created(HostName::Rex, "w1:p9".into())
+            )
             .await?
             != PlaceOwnership::Workspace
     );
@@ -168,7 +180,7 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
     assert_eq!(
         manager
             .place_ownership(
-                &tabbed.id,
+                &SpaceSelector::id(&tabbed.id),
                 &Origin::created(HostName::Herdr, "w1:p8".into())
             )
             .await?,
@@ -179,7 +191,7 @@ async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
     assert_eq!(
         manager
             .place_ownership(
-                &tabbed.id,
+                &SpaceSelector::id(&tabbed.id),
                 &Origin::created(HostName::Herdr, "w1:p9".into())
             )
             .await?,

@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::transcripts::{ReportedSession, SpaceSessions},
     daemon::workspace::Manager,
@@ -17,8 +18,8 @@ impl Manager {
     /// The sessions the agents of the workspace or chat `selector` names
     /// reported, with the tools its settings give them and the environments
     /// its repository's agents ran with.
-    pub async fn space_sessions(&self, selector: &str) -> Result<SpaceSessions> {
-        let space = self.present_space(selector).await?;
+    pub async fn space_sessions(&self, selector: &SpaceSelector) -> Result<SpaceSessions> {
+        let space = self.space(selector).await?;
         let sessions = self.reported_sessions(&space).await?;
         let settings = self.present_space_settings(&space).await?;
         let integrations = sessions

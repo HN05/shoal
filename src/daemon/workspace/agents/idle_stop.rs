@@ -88,7 +88,9 @@ impl Manager {
         if self.completion(id).await?.is_some() && self.keep_reason(id).await?.is_some() {
             return Ok(Some(Protection::idle_held()));
         }
-        let settings = self.workspace_settings(&self.workspace(id).await?).await?;
+        let settings = self
+            .workspace_settings(&self.workspace_by_id(id).await?)
+            .await?;
         Ok(settings.idle_stop.enabled.then(Protection::idle_expired))
     }
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     approvals::proposals::PR,
     test_support::{manager, repository},
@@ -136,7 +137,7 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
     // The original is decided and its workspace's next proposal takes its
     // number while the duplicate decision waits for the gates.
     manager.forget_proposal(original.key.clone()).await.unwrap();
-    let workspace = manager.workspace(&original.space_id).await.unwrap();
+    let workspace = manager.workspace_by_id(&original.space_id).await.unwrap();
     let reused = store_issue_proposal(&manager, &workspace.clone().into()).await;
     assert_eq!(reused.number, original.number);
     let added = manager
@@ -165,7 +166,7 @@ async fn a_proposal_keeps_its_number_and_reserves_its_removed_space() {
     assert_eq!(proposed.number.space, proposer.number);
     manager
         .remove_workspace(
-            &proposer.id,
+            &SpaceSelector::id(&proposer.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
         )
@@ -262,7 +263,7 @@ async fn a_withdrawn_issue_proposal_goes_with_its_unread_notification() {
     manager.save_proposal(edited).await.unwrap();
 
     let withdrawn = manager
-        .withdraw_approval(&workspace.name, proposed.number)
+        .withdraw_approval(&SpaceSelector::from(&workspace.name), proposed.number)
         .await
         .unwrap();
     assert_eq!(withdrawn.status, DecisionStatus::Withdrawn);
@@ -289,12 +290,17 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for id in [&parent.id, &child.id] {
         manager
-            .set_agent_state(id, AgentState::Working, None, None)
+            .set_agent_state(&SpaceSelector::id(id), AgentState::Working, None, None)
             .await
             .unwrap();
     }
@@ -389,7 +395,11 @@ async fn a_parent_workspace_denies_a_routed_proposal_or_passes_it_up() {
     manager.notify_approval(&child.name, &pending).await;
     for id in [&child.id, &parent.id] {
         manager
-            .remove_workspace(id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+            .remove_workspace(
+                &SpaceSelector::id(id),
+                UnsavedWork::default(),
+                InspectionPolicy::GitOnly,
+            )
             .await
             .unwrap();
     }

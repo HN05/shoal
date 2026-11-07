@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::super::{ExecutionKind, Manager};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::list_status::ListStatus,
     daemon::test_support::{ProcessGroup, manager, repository},
@@ -21,7 +22,12 @@ async fn split_child(manager: &Manager, root: &std::path::Path) -> (Workspace, W
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     (parent, child)
@@ -73,7 +79,7 @@ async fn listed(manager: &Manager, workspace: &Workspace) -> ListStatus {
 
 async fn report(manager: &Manager, workspace: &Workspace, state: AgentState) {
     manager
-        .set_agent_state(&workspace.id, state, None, None)
+        .set_agent_state(&SpaceSelector::id(&workspace.id), state, None, None)
         .await
         .unwrap();
 }
@@ -87,7 +93,12 @@ async fn a_child_without_an_agent_lists_as_its_coordinators_work() {
     assert_eq!(listed(&manager, &child).await, ListStatus::ParentWorking);
     // A grandchild split from it is the same agent's work.
     let grandchild = manager
-        .split_workspace(&child.id, "grandchild".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&child.id),
+            "grandchild".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_eq!(

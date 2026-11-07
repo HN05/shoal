@@ -1,4 +1,5 @@
 use crate::client::removal::UnsavedWork;
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 /// What a stop at the user's request does with the agent launches waiting
@@ -21,7 +22,7 @@ pub enum RemovalMethod {
     /// The workspaces `stop --all` stops.
     StopTargets,
     StopWorkspace {
-        workspace: String,
+        workspace: SpaceSelector,
         /// The user checked that executions Shoal cannot prove ended did.
         #[serde(default)]
         acknowledge_unproven: bool,
@@ -31,23 +32,23 @@ pub enum RemovalMethod {
     },
     /// Refuse now what stopping `workspace` would refuse, so a batch checks
     /// every target before stopping any.
-    CheckStop { workspace: String },
+    CheckStop { workspace: SpaceSelector },
     /// Stop the untracked processes of the workspace or chat `space` that
     /// `selection` takes, other than process `requester` and the processes
     /// that started it.
     StopProcesses {
-        space: String,
+        space: SpaceSelector,
         selection: crate::client::processes::Selection,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         requester: Option<u32>,
     },
     CheckRemoval {
-        workspace: String,
+        workspace: SpaceSelector,
         #[serde(default)]
         include_changes: bool,
     },
     RemoveWorkspace {
-        workspace: String,
+        workspace: SpaceSelector,
         unsaved: UnsavedWork,
     },
     /// Remove idle and merged cleanup candidates without waiting for their
@@ -60,12 +61,12 @@ pub enum RemovalMethod {
     /// Removed workspaces that can still be restored.
     RemovedWorkspaces,
     /// Open a removed workspace again from its removal record.
-    RestoreWorkspace { workspace: String },
+    RestoreWorkspace { workspace: SpaceSelector },
     /// End a space here, removing a workspace or stopping a chat's agent,
     /// or take a removed workspace, and write it for another Shoal to the
     /// new file `file`.
     ExportSpace {
-        space: String,
+        space: SpaceSelector,
         unsaved: UnsavedWork,
         file: std::path::PathBuf,
     },

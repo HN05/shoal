@@ -7,6 +7,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 use super::{Wake, Work};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,
     execution::recovery,
@@ -175,7 +176,10 @@ impl Manager {
     /// Whether an update waits for the agent of `workspace_id` and free disk
     /// space allows restoring it.
     async fn update_due(&self, workspace_id: &str) -> Result<bool> {
-        Ok(self.restore_disk_ready() && self.updates_waiting(workspace_id).await?)
+        Ok(self.restore_disk_ready()
+            && self
+                .updates_waiting(&SpaceSelector::id(workspace_id))
+                .await?)
     }
 
     /// Whether disk space allows a restore an update woke: with disk

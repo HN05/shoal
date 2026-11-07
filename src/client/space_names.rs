@@ -1,5 +1,6 @@
-//! How spaces are named: a space's name, which is never all digits, since a
-//! number alone selects a space by its number.
+//! How spaces are named and selected: a space's name, which is never all
+//! digits, since a number alone selects a space by its number, and the
+//! selector a command names a space with.
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
@@ -173,6 +174,141 @@ impl PartialEq<SpaceName> for &str {
 impl PartialEq<SpaceName> for String {
     fn eq(&self, other: &SpaceName) -> bool {
         *self == other.0
+    }
+}
+
+/// What names a space where a command takes one: its number, when all
+/// digits, else its ID or name. Text reads as one of those two. Within one
+/// process, a stored ID that code passes on selects by ID alone, so it never
+/// reads as a name; sent to the daemon, it is text again.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub enum SpaceSelector {
+    Number(u32),
+    IdOrName(String),
+    Id(String),
+}
+
+impl SpaceSelector {
+    /// What `text` selects: its number when all digits, else its ID or
+    /// name. Empty text selects nothing.
+    pub fn parse(text: &str) -> Self {
+        match text.parse() {
+            Ok(number) if all_digits(text) => Self::Number(number),
+            _ => Self::IdOrName(text.to_owned()),
+        }
+    }
+
+    /// The space with the ID `id`.
+    pub fn id(id: &str) -> Self {
+        Self::Id(id.to_owned())
+    }
+
+    /// The ID or name it gives; none for a number, which selects only a
+    /// space that exists, never a removed one.
+    pub fn id_or_name(&self) -> Option<&str> {
+        match self {
+            Self::Number(_) => None,
+            Self::IdOrName(text) | Self::Id(text) => Some(text),
+        }
+    }
+
+    /// Whether it gives this ID or name, as it selects a removed space,
+    /// which has no number.
+    pub fn names(&self, id: &str, name: &str) -> bool {
+        match self {
+            Self::Number(_) => false,
+            Self::IdOrName(text) => text == id || text == name,
+            Self::Id(text) => text == id,
+        }
+    }
+
+    /// Whether it selects the space with this ID, name and number.
+    pub fn selects(&self, id: &str, name: &str, number: u32) -> bool {
+        match self {
+            Self::Number(selected) => *selected == number,
+            _ => self.names(id, name),
+        }
+    }
+}
+
+impl std::fmt::Display for SpaceSelector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Number(number) => write!(f, "{number}"),
+            Self::IdOrName(text) | Self::Id(text) => f.write_str(text),
+        }
+    }
+}
+
+impl std::str::FromStr for SpaceSelector {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        anyhow::ensure!(
+            !value.is_empty(),
+            "a space is named by its number, name or ID"
+        );
+        Ok(Self::parse(value))
+    }
+}
+
+impl TryFrom<String> for SpaceSelector {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self> {
+        value.parse()
+    }
+}
+
+impl From<SpaceSelector> for String {
+    fn from(selector: SpaceSelector) -> Self {
+        selector.to_string()
+    }
+}
+
+impl From<&SpaceName> for SpaceSelector {
+    fn from(name: &SpaceName) -> Self {
+        Self::IdOrName(name.0.clone())
+    }
+}
+
+impl From<SpaceName> for SpaceSelector {
+    fn from(name: SpaceName) -> Self {
+        Self::IdOrName(name.0)
+    }
+}
+
+/// Selectors tests compare with the text that names them.
+#[cfg(test)]
+impl PartialEq<str> for SpaceSelector {
+    fn eq(&self, other: &str) -> bool {
+        match self {
+            Self::Number(number) => other.parse() == Ok(*number),
+            Self::IdOrName(text) | Self::Id(text) => text == other,
+        }
+    }
+}
+
+#[cfg(test)]
+impl PartialEq<&str> for SpaceSelector {
+    fn eq(&self, other: &&str) -> bool {
+        <Self as PartialEq<str>>::eq(self, other)
+    }
+}
+
+#[cfg(test)]
+impl PartialEq<String> for SpaceSelector {
+    fn eq(&self, other: &String) -> bool {
+        <Self as PartialEq<str>>::eq(self, other)
+    }
+}
+
+/// Selectors tests write as literals.
+#[cfg(test)]
+impl From<&str> for SpaceSelector {
+    fn from(value: &str) -> Self {
+        Self::parse(value)
     }
 }
 

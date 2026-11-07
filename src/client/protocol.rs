@@ -455,7 +455,7 @@ impl Response {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigTarget {
-    Workspace(String),
+    Workspace(crate::client::space_names::SpaceSelector),
     Repository(crate::client::repository::Selector),
     Global,
 }

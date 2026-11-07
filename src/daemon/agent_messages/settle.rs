@@ -7,6 +7,7 @@ use std::time::Duration;
 use anyhow::Result;
 
 use super::AgentMessage;
+use crate::client::space_names::SpaceSelector;
 use crate::{daemon::workspace::Manager, model::Workspace};
 
 mod clock;
@@ -52,7 +53,9 @@ impl Manager {
     ) -> Result<Vec<AgentMessage>> {
         while let Some(hold) = self.message_hold(workspace, &messages).await? {
             self.settle_clock.sleep(hold).await;
-            messages = self.agent_messages(&workspace.id).await?;
+            messages = self
+                .agent_messages(&SpaceSelector::id(&workspace.id))
+                .await?;
         }
         Ok(messages)
     }
@@ -63,7 +66,9 @@ impl Manager {
         &self,
         workspace: &Workspace,
     ) -> Result<Vec<AgentMessage>> {
-        let messages = self.agent_messages(&workspace.id).await?;
+        let messages = self
+            .agent_messages(&SpaceSelector::id(&workspace.id))
+            .await?;
         if self.message_hold(workspace, &messages).await?.is_some() {
             return Ok(Vec::new());
         }

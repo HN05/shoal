@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -59,7 +60,14 @@ async fn send_to_space(
     attachments: Vec<NewFile>,
 ) -> Result<i32> {
     let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
-    agent_messages::send(&ctx.paths, space, message, attachments, crate::env::chat()).await?;
+    agent_messages::send(
+        &ctx.paths,
+        SpaceSelector::parse(&space),
+        message,
+        attachments,
+        crate::env::chat(),
+    )
+    .await?;
     ctx.emit("Message queued.", ())?;
     Ok(0)
 }
@@ -219,7 +227,7 @@ async fn report_reply(ctx: &Context, deadline: tokio::time::Instant) -> Result<(
     let reply = async {
         let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
         let space = inbox.space.clone();
-        crate::client::questions::replied_in_chat(&ctx.paths, space).await
+        crate::client::questions::replied_in_chat(&ctx.paths, SpaceSelector::parse(&space)).await
     };
     tokio::time::timeout_at(deadline, reply)
         .await
@@ -300,12 +308,12 @@ impl Inbox {
     }
 
     async fn messages(&self, ctx: &Context) -> Result<Vec<AgentMessage>> {
-        agent_messages::undelivered(&ctx.paths, self.space.clone()).await
+        agent_messages::undelivered(&ctx.paths, SpaceSelector::parse(&self.space)).await
     }
 
     /// Undelivered messages and queued item updates, without waiting.
     async fn updates(&self, ctx: &Context) -> Result<Updates> {
-        agent_messages::updates(&ctx.paths, self.space.clone()).await
+        agent_messages::updates(&ctx.paths, SpaceSelector::parse(&self.space)).await
     }
 
     /// The next messages or item updates, waiting for them; `restarted` says
@@ -342,7 +350,7 @@ impl Inbox {
             return Ok(());
         }
         let ids = messages.iter().map(|message| message.id).collect();
-        agent_messages::mark_delivered(&ctx.paths, self.space.clone(), ids).await
+        agent_messages::mark_delivered(&ctx.paths, SpaceSelector::parse(&self.space), ids).await
     }
 }
 
@@ -422,7 +430,14 @@ pub(super) fn hook_output(input: &str, context: &str) -> String {
 async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Result<()> {
     let messages = updates.messages.iter().map(|message| message.id).collect();
     let (deliveries, leftovers) = (deliveries(updates), leftover_pids(updates));
-    agent_messages::acknowledge(&ctx.paths, workspace, deliveries, messages, leftovers).await
+    agent_messages::acknowledge(
+        &ctx.paths,
+        SpaceSelector::parse(&workspace),
+        deliveries,
+        messages,
+        leftovers,
+    )
+    .await
 }
 
 /// The deliveries of the item updates `updates` tells about.

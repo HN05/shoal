@@ -2,6 +2,7 @@
 //! forgetting the stopped work it leaves.
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, request},
@@ -19,7 +20,7 @@ use crate::{
 /// its agent completes, attaches its files.
 pub async fn mark_done(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     cleanup: bool,
     integrated: bool,
     results: Vec<NewFile>,
@@ -36,14 +37,14 @@ pub async fn mark_done(
 }
 
 /// Withdraw `space`'s completion.
-pub async fn undo_done(daemon: &impl Daemon, space: String) -> Result<Completion> {
+pub async fn undo_done(daemon: &impl Daemon, space: SpaceSelector) -> Result<Completion> {
     request(daemon, AssignmentMethod::UndoDone { space }).await
 }
 
 /// Mark the items of `space` that `selection` selects ready for review.
 pub async fn mark_ready(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     selection: Selection,
 ) -> Result<Vec<ReadyOutcome>> {
     request(daemon, AssignmentMethod::MarkReady { space, selection }).await
@@ -53,7 +54,7 @@ pub async fn mark_ready(
 /// `selection` selects; `draft` overrides `[pr] draft_on_unready`.
 pub async fn clear_ready(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     selection: Selection,
     draft: Option<bool>,
 ) -> Result<Vec<ReviewMark>> {
@@ -69,7 +70,7 @@ pub async fn clear_ready(
 /// when given.
 pub async fn discard_stopped_work(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     execution: Option<String>,
 ) -> Result<Discarded> {
     let method = AssignmentMethod::DiscardStoppedWork {

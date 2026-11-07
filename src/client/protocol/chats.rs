@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
 use crate::client::space_names::SpaceName;
+use crate::client::space_names::SpaceSelector;
 
 /// Requests about chats in registered checkouts.
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,7 +15,7 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         repository: Option<crate::client::repository::Selector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         name: SpaceName,
         agent: String,
         /// The mode its agent starts in; `chat` when omitted.
@@ -31,12 +32,12 @@ pub enum ChatMethod {
         /// The space the chat goes below, which must be in the repository;
         /// none puts it at the top.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        parent: Option<String>,
+        parent: Option<SpaceSelector>,
     },
     /// Run the stopped chat `chat`, by ID, again as process `pid`, as
     /// [`Self::StartChat`] records a new one.
     RestoreChat {
-        chat: String,
+        chat: SpaceSelector,
         pid: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<crate::client::sessions::Origin>,
@@ -46,20 +47,20 @@ pub enum ChatMethod {
     /// Refuse the restore of the stopped chat `chat`, by ID, that
     /// [`Self::RestoreChat`] would refuse the caller.
     CheckChatRestore {
-        chat: String,
+        chat: SpaceSelector,
     },
     /// Process `pid` could not restore the stopped chat `chat`, failing with
     /// `error`; the chat waits for `shoal resume` again if `pid` had taken
     /// it over.
     SaveChat {
-        chat: String,
+        chat: SpaceSelector,
         pid: u32,
         error: String,
     },
     /// Record that `chat`'s agent now runs as process `pid`, for an agent
     /// started detached instead of in place of the recording process.
     MoveChat {
-        chat: String,
+        chat: SpaceSelector,
         pid: u32,
     },
     ListChats,
@@ -67,14 +68,14 @@ pub enum ChatMethod {
     /// the spaces below it, of which `children`, when given, are the IDs the
     /// caller saw and the only ones it takes.
     RemoveChat {
-        chat: String,
+        chat: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         children: Option<Vec<String>>,
     },
     /// Give the running chat `chat`, by ID or name, the name `name`; the
     /// reply also names the chat as it was before.
     RenameChat {
-        chat: String,
+        chat: SpaceSelector,
         name: SpaceName,
     },
     /// Refuse a name a new chat could not take now.
@@ -87,10 +88,10 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         repository: Option<crate::client::repository::Selector>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         /// As [`Self::StartChat`]'s parent.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        parent: Option<String>,
+        parent: Option<SpaceSelector>,
     },
     /// `name`, or its lowest `-2`, `-3`, ... variant, that a new chat could
     /// take now.
@@ -100,7 +101,7 @@ pub enum ChatMethod {
     /// The scope token the agent of the chat `chat`, by ID, carries, which
     /// confines it to the chat and the spaces below it.
     ChatScope {
-        chat: String,
+        chat: SpaceSelector,
     },
     /// The agents of the running chats, and of those a restart stopped to
     /// start again, each by its chat's ID, as `ListAgents` lists agents.
@@ -111,7 +112,7 @@ pub enum ChatMethod {
     /// With `join`, only wait for that restart the run selected, which may
     /// have ended already. `run` names the `shoal restart` run that asks.
     RestartChat {
-        chat: String,
+        chat: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         join: Option<crate::model::PendingRestart>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

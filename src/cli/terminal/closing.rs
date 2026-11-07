@@ -16,6 +16,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{client, context::Context, installed},
     daemon::ownership,
@@ -93,7 +94,8 @@ fn spawn_detached(ctx: &Context, argv: &[std::ffi::OsString]) -> std::io::Result
 
 /// The HEAD of `workspace`'s kept completion, if it has one.
 async fn kept_completion(ctx: &Context, workspace: &str) -> Result<Option<String>> {
-    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.into()).await?;
+    let inspection =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace)).await?;
     Ok(inspection
         .completion
         .filter(|completion| !completion.cleanup)
@@ -422,7 +424,7 @@ impl Lifecycle {
 }
 
 async fn workspace_lifecycle(ctx: &Context, workspace: &str) -> Result<Lifecycle> {
-    match crate::client::workspaces::inspect(&ctx.paths, workspace.into()).await {
+    match crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace)).await {
         // Completion cleanup keeps the place until removal, after its grace period.
         Ok(Inspection {
             completion: Some(completion),

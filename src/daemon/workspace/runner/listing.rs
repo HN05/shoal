@@ -40,7 +40,7 @@ impl Manager {
                 continue;
             }
             // A job that ended meanwhile is gone with its workspace.
-            let Ok(mut workspace) = self.workspace(&job.workspace_id).await else {
+            let Ok(mut workspace) = self.workspace_by_id(&job.workspace_id).await else {
                 continue;
             };
             workspace.usage = self.workspace_usage(&workspace.id);

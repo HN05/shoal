@@ -1,4 +1,5 @@
 use crate::client::sim::SimRequest;
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 /// Requests about simulator leases.
@@ -10,25 +11,25 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum SimulatorMethod {
     SimCatalog {
-        workspace: String,
+        workspace: SpaceSelector,
     },
     SimOverview {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
     /// Lease records for completion, without loading repository configuration.
     SimList {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
     },
     SimAcquire {
-        workspace: String,
+        workspace: SpaceSelector,
         request: SimRequest,
     },
     SimRelease {
-        workspace: String,
+        workspace: SpaceSelector,
         name: String,
     },
     SimHistory {
-        workspace: Option<String>,
+        workspace: Option<SpaceSelector>,
         limit: u32,
         before: Option<i64>,
     },

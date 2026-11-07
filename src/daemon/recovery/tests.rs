@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{git, manager, repository};
 use anyhow::Context;
 use std::{sync::Arc, time::Duration};
@@ -38,11 +39,16 @@ async fn recovery_reads_only_its_executions_without_inspection_details() -> Resu
                 Ok(())
             })
             .await?;
-        assert!(manager.inspect_workspace(&workspace.id).await.is_err());
+        assert!(
+            manager
+                .inspect_workspace(&SpaceSelector::id(&workspace.id))
+                .await
+                .is_err()
+        );
 
         let report = manager
             .reconcile(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 ReconcileOptions {
                     repair: stop,
                     stop,
@@ -101,7 +107,7 @@ async fn failed_repair_restores_the_state_it_reserved_from() -> Result<()> {
     let second = {
         let manager = manager.clone();
         let id = workspace.id.clone();
-        tokio::spawn(async move { manager.reconcile(&id, repair).await })
+        tokio::spawn(async move { manager.reconcile(&SpaceSelector::id(&id), repair).await })
     };
     timeout(Duration::from_secs(60), async {
         while Arc::strong_count(&gate) == queued {
@@ -119,7 +125,7 @@ async fn failed_repair_restores_the_state_it_reserved_from() -> Result<()> {
         .await?
         .expect_err("the unfinished rename cannot be repaired");
     assert_eq!(
-        manager.workspace(&workspace.id).await?.state,
+        manager.workspace_by_id(&workspace.id).await?.state,
         WorkspaceState::Failed
     );
     Ok(())

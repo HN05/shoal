@@ -2,6 +2,7 @@
 use anyhow::{Result, ensure};
 use std::collections::HashSet;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::{Manager, StopRequest},
     fsutil::off_runtime,
@@ -41,7 +42,7 @@ impl Manager {
     /// becomes an issue in its report rather than aborting the rest.
     pub async fn reconcile_workspaces(
         &self,
-        selector: Option<&str>,
+        selector: Option<&SpaceSelector>,
         options: ReconcileOptions,
     ) -> Result<Vec<Report>> {
         let workspaces = match selector {
@@ -50,22 +51,31 @@ impl Manager {
         };
         let mut reports = Vec::with_capacity(workspaces.len());
         for workspace in workspaces {
-            reports.push(match self.reconcile(&workspace.id, options).await {
-                Ok(report) => report,
-                Err(error) => Report::failed(workspace, &error),
-            });
+            reports.push(
+                match self
+                    .reconcile(&SpaceSelector::id(&workspace.id), options)
+                    .await
+                {
+                    Ok(report) => report,
+                    Err(error) => Report::failed(workspace, &error),
+                },
+            );
         }
         Ok(reports)
     }
 
-    pub async fn reconcile(&self, selector: &str, options: ReconcileOptions) -> Result<Report> {
+    pub async fn reconcile(
+        &self,
+        selector: &SpaceSelector,
+        options: ReconcileOptions,
+    ) -> Result<Report> {
         Self::validate_reconcile_options(options)?;
         let queued = self.workspace(selector).await?;
         // Serializes with branch creation and main updates; state reservation below
         // prevents new executions, removal, stop, and resource claims during repair.
         let _guard = self.gates.lock_git(&queued.repository_id).await;
         // Read again: a repair that held the gate meanwhile may have changed it.
-        let workspace = self.workspace(&queued.id).await?;
+        let workspace = self.workspace_by_id(&queued.id).await?;
         let mut report = Report::new(workspace.clone());
         let reserved_from = self
             .prepare_reconcile(&workspace, options, &mut report)
@@ -127,7 +137,7 @@ impl Manager {
         if running
             && quiescent
             && let Err(error) = self
-                .stop_workspace(&workspace.id, StopRequest::repair())
+                .stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::repair())
                 .await
         {
             report.issues.push(format!("connected stop: {error:#}"));
@@ -156,7 +166,7 @@ impl Manager {
             .or_else(|| (!report.issues.is_empty()).then(|| report.issues.join("; ")));
         self.set_state(&workspace.id, state, error).await?;
         self.touch(&workspace.id).await;
-        report.workspace = self.workspace(&workspace.id).await?;
+        report.workspace = self.workspace_by_id(&workspace.id).await?;
         Ok(())
     }
 
@@ -179,7 +189,7 @@ impl Manager {
                     .changes
                     .push("Reconciled interrupted branch rename".into());
             }
-            self.workspace(&workspace.id).await?
+            self.workspace_by_id(&workspace.id).await?
         } else {
             self.ensure_no_pending_rename(&workspace.id).await?;
             workspace.clone()

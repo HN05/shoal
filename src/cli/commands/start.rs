@@ -8,6 +8,7 @@ use super::{
     links::{self, AddInput},
     workspaces,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     agent_queue::{CopyCreation, Creation},
@@ -401,7 +402,7 @@ async fn in_workspace(ctx: &Context, args: StartArgs, mode: ModeChoice) -> Resul
         None => None,
     };
     let copy = super::copies::source(ctx, args.copy).await?;
-    let copied = copy.as_ref().map(|copy| copy.source.workspace.clone());
+    let copied = copy.as_ref().map(|copy| copy.source.workspace.to_string());
     let (parent, agent, fork) = match args.fork {
         true => fork_from(ctx, copied, args.parent, args.agent).await?,
         false => (args.parent, args.agent, None),
@@ -490,12 +491,12 @@ async fn forked(
         agent: running,
         session,
         ..
-    } = crate::client::agents::session(&ctx.paths, parent.clone()).await?;
+    } = crate::client::agents::session(&ctx.paths, SpaceSelector::parse(&parent)).await?;
     let agent = match agent {
         Some(agent) => agent,
         None => running.parse()?,
     };
-    let target = ConfigTarget::Workspace(parent.clone());
+    let target = ConfigTarget::Workspace(SpaceSelector::parse(&parent));
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     crate::agents::ensure_forks(&settings, agent.name())?;
     Ok((parent, agent, session))

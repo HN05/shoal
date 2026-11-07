@@ -5,6 +5,7 @@ use crate::client::assignments;
 use crate::client::output::resume::{
     DiscardedWork, Queued, Resumed, ResumedAgent, StoppedCommands,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, commands::turns::Continuation, context::Context, terminal, ui},
     client::recovery::ReconcileOptions,
@@ -194,7 +195,7 @@ async fn queue_below(ctx: &Context, selected: Selected, execution: Option<String
         stopped.push(stopped_agents(ctx, selector, execution.as_deref()).await?);
     }
     for chat in &selected.chats {
-        crate::client::chats::check_restore(&ctx.paths, chat.id.clone()).await?;
+        crate::client::chats::check_restore(&ctx.paths, &chat.id).await?;
     }
     let (chats, failed) = chats::restore_each(ctx, &selected.chats).await;
     queue::queue_all(ctx, stopped, chats, failed, false).await
@@ -209,9 +210,10 @@ pub(super) type Stopped = std::collections::BTreeMap<String, std::collections::B
 pub(super) async fn queue_stopped(ctx: &Context, stopped: &Stopped) -> Result<Queued> {
     let mut queued = Vec::new();
     for (workspace, executions) in stopped {
-        let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
-            .await?
-            .workspace;
+        let workspace =
+            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace))
+                .await?
+                .workspace;
         let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
         saved.retain(|id| executions.contains(id));
         if !(saved.agents.is_empty() && saved.sessions.is_empty()) {
@@ -229,7 +231,7 @@ async fn stopped_agents(
     selector: String,
     execution: Option<&str>,
 ) -> Result<(Workspace, Saved)> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector)
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&selector))
         .await?
         .workspace;
     let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
@@ -257,9 +259,10 @@ async fn queue_workspace(
     execution: Option<String>,
     queuing: Queuing,
 ) -> Result<i32> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
-        .await?
-        .workspace;
+    let workspace =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
+            .await?
+            .workspace;
     let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
     if let Some(execution) = &execution {
         saved.retain_execution(execution, true);
@@ -292,7 +295,7 @@ async fn ensure_daemon_starts(ctx: &Context, stopped: &[(Workspace, Saved)]) -> 
         }
         let settings = crate::client::workspaces::settings(
             &ctx.paths,
-            ConfigTarget::Workspace(workspace.id.clone()),
+            ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
         )
         .await?;
         terminal::ensure_background(&settings).with_context(|| {
@@ -343,12 +346,12 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
     let (Some(workspace), Some(execution)) = (&entry.workspace_id, &entry.execution) else {
         anyhow::bail!("the queued restore names no stopped agent");
     };
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.clone())
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace))
         .await?
         .workspace;
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let record = crate::execution::recovery::saved_path(&ctx.paths, &workspace.id, execution);
@@ -394,7 +397,8 @@ pub async fn run(
     if discard {
         return discard_work(ctx, workspace, execution).await;
     }
-    let mut inspection = crate::client::workspaces::inspect(&ctx.paths, workspace).await?;
+    let mut inspection =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
     let workspace_id = inspection.workspace.id.clone();
     let mut saved = Saved::load(&ctx.paths, &workspace_id)?;
     if let Some(execution) = &execution {
@@ -411,7 +415,8 @@ pub async fn run(
         .as_deref()
         .or_else(|| (saved.agents.len() == 1).then(|| saved.agents[0].0.as_str()));
     reconcile_stale_execution(ctx, &inspection, recovery_id).await?;
-    inspection = crate::client::workspaces::inspect(&ctx.paths, workspace_id).await?;
+    inspection =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace_id)).await?;
     let workspace = &inspection.workspace;
     let active = |id: &str| inspection.executions.iter().any(|e| e.id == id);
     if saved.agents.is_empty() {
@@ -444,7 +449,9 @@ pub async fn run(
 /// Forget the workspace's stopped work and last sessions, only
 /// `execution`'s when given.
 async fn discard_work(ctx: &Context, workspace: String, execution: Option<String>) -> Result<i32> {
-    let discarded = assignments::discard_stopped_work(&ctx.paths, workspace, execution).await?;
+    let discarded =
+        assignments::discard_stopped_work(&ctx.paths, SpaceSelector::parse(&workspace), execution)
+            .await?;
     let forgotten = DiscardedWork {
         discarded: discarded.executions,
         chats: Vec::new(),
@@ -567,7 +574,7 @@ async fn start_copied(
     let agent = &session.agent;
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let fork = session
@@ -630,7 +637,7 @@ async fn launch(
     }
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let agent = recovery.tracked();
@@ -743,7 +750,7 @@ async fn reconcile_stale_execution(
     }
     let reports = crate::client::recovery::reconcile(
         &ctx.paths,
-        Some(inspection.workspace.id.clone()),
+        Some(SpaceSelector::id(&inspection.workspace.id)),
         ReconcileOptions {
             repair: true,
             // A protection handoff is persisted only after Shoal has
@@ -896,7 +903,7 @@ async fn start_session(
 ) -> Result<Started> {
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     let args = ["resume", &workspace.id, "--execution", id, "--focus"].map(OsString::from);
@@ -957,8 +964,12 @@ async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> R
     let mut ids = Vec::new();
     for execution in saved.execution_ids() {
         let workspace = workspace.id.clone();
-        let discarded =
-            assignments::discard_stopped_work(&ctx.paths, workspace, Some(execution)).await?;
+        let discarded = assignments::discard_stopped_work(
+            &ctx.paths,
+            SpaceSelector::parse(&workspace),
+            Some(execution),
+        )
+        .await?;
         ids.extend(discarded.executions);
     }
     Ok(ids)
@@ -969,9 +980,10 @@ async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> R
 async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspace, Saved)>> {
     let mut stopped = Vec::new();
     for selector in selectors {
-        let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.clone())
-            .await?
-            .workspace;
+        let workspace =
+            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
+                .await?
+                .workspace;
         let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
         saved.retain_unattended();
         ensure!(

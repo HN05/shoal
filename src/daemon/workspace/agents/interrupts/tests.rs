@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -46,7 +47,10 @@ async fn workspace(manager: &Manager, root: &std::path::Path, name: &str) -> Wor
 
 /// The turn state and interruption of the workspace's only agent.
 async fn turn(manager: &Manager, workspace: &Workspace) -> (Option<AgentState>, bool) {
-    let agents = manager.workspace_agents(&workspace.name).await.unwrap();
+    let agents = manager
+        .workspace_agents(&SpaceSelector::from(&workspace.name))
+        .await
+        .unwrap();
     let [agent] = agents.as_slice() else {
         panic!("expected one agent: {agents:?}");
     };
@@ -58,7 +62,8 @@ async fn an_interrupt_leaves_the_agent_idle_until_a_turn_starts_or_ends() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&manager, temp.path(), "fix").await;
     let id = agent(&manager, &workspace, "claude").await;
-    let report = |state| manager.set_agent_state(&workspace.id, state, Some(id.clone()), None);
+    let selected = SpaceSelector::id(&workspace.id);
+    let report = |state| manager.set_agent_state(&selected, state, Some(id.clone()), None);
     report(AgentState::Working).await.unwrap();
     assert_eq!(
         turn(&manager, &workspace).await,
@@ -66,7 +71,7 @@ async fn an_interrupt_leaves_the_agent_idle_until_a_turn_starts_or_ends() {
     );
 
     let status = manager
-        .interrupt_turn(&workspace.name, id.clone())
+        .interrupt_turn(&SpaceSelector::from(&workspace.name), id.clone())
         .await
         .unwrap();
     assert_eq!(status.state, AgentState::Idle);
@@ -86,11 +91,16 @@ async fn an_interrupt_leaves_the_agent_idle_until_a_turn_starts_or_ends() {
     );
 
     manager
-        .interrupt_turn(&workspace.name, id.clone())
+        .interrupt_turn(&SpaceSelector::from(&workspace.name), id.clone())
         .await
         .unwrap();
     manager
-        .end_agent_turn(&workspace.id, Some(id.clone()), None, TurnEnd::default())
+        .end_agent_turn(
+            &SpaceSelector::id(&workspace.id),
+            Some(id.clone()),
+            None,
+            TurnEnd::default(),
+        )
         .await
         .unwrap();
     assert!(!manager.turn_interrupted(&id).await);
@@ -102,7 +112,7 @@ async fn an_interrupt_names_an_agent_of_the_workspace() {
     let workspace = workspace(&manager, temp.path(), "fix").await;
     let other = workspace_with_agent(&manager, temp.path()).await;
     manager
-        .interrupt_turn(&workspace.name, other)
+        .interrupt_turn(&SpaceSelector::from(&workspace.name), other)
         .await
         .unwrap_err();
 }
@@ -118,12 +128,17 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
     let workspace = workspace(&manager, temp.path(), "fix").await;
     let id = agent(&manager, &workspace, "claude").await;
     manager
-        .end_agent_turn(&workspace.id, Some(id.clone()), None, TurnEnd::default())
+        .end_agent_turn(
+            &SpaceSelector::id(&workspace.id),
+            Some(id.clone()),
+            None,
+            TurnEnd::default(),
+        )
         .await
         .unwrap();
     manager
         .send_agent_message(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
             &Attacher::User,
@@ -131,20 +146,26 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
         .await
         .unwrap();
     // A hang guard only: each wait answers the state it is given.
+    let selected = SpaceSelector::id(&workspace.id);
     let wait = |due| {
         tokio::time::timeout(
             Duration::from_secs(60),
-            manager.wait_agent_wake(&workspace.id, due, Some(&id)),
+            manager.wait_agent_wake(&selected, due, Some(&id)),
         )
     };
     // Its hook wakes an agent whose turn ended normally.
     wait(false).await.expect("wait ended").unwrap();
     manager
-        .set_agent_state(&workspace.id, AgentState::Working, Some(id.clone()), None)
+        .set_agent_state(
+            &SpaceSelector::id(&workspace.id),
+            AgentState::Working,
+            Some(id.clone()),
+            None,
+        )
         .await
         .unwrap();
     manager
-        .interrupt_turn(&workspace.name, id.clone())
+        .interrupt_turn(&SpaceSelector::from(&workspace.name), id.clone())
         .await
         .unwrap();
     wait(true).await.expect("wait ended").unwrap();

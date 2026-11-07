@@ -2,6 +2,7 @@
 //! asking its agent to.
 use anyhow::{Result, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::turns,
@@ -24,7 +25,9 @@ pub(in crate::cli::commands) async fn title(
     // Refuse an invalid title before a picker asks for the workspace.
     crate::validate::title(title.trim())?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let retitled = crate::client::workspaces::set_title(&ctx.paths, workspace, title).await?;
+    let retitled =
+        crate::client::workspaces::set_title(&ctx.paths, SpaceSelector::parse(&workspace), title)
+            .await?;
     // The title is recorded; a place left with its old label only warns.
     if let Err(error) = relabel(ctx, &retitled).await {
         eprintln!(
@@ -49,9 +52,10 @@ async fn relabel(ctx: &Context, retitled: &RetitledWorkspace) -> Result<()> {
         workspace,
         previous_title,
     } = retitled;
-    let places = crate::client::workspaces::places(&ctx.paths, workspace.id.clone()).await?;
+    let places =
+        crate::client::workspaces::places(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
     let places: Vec<_> = places.into_iter().map(|owned| owned.origin).collect();
-    let target = ConfigTarget::Workspace(workspace.id.clone());
+    let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     let labels = terminal::Retitled::new(ctx, workspace, previous_title.as_deref());
     terminal::relabel_space(&settings, &places, async |host| labels.labels(host).await).await;
@@ -73,8 +77,14 @@ pub(in crate::cli::commands) async fn request_title(
         name = workspace.name
     );
     let message = TITLE_REQUEST.into();
-    crate::client::agent_messages::send(&ctx.paths, workspace.id, message, Vec::new(), None)
-        .await?;
+    crate::client::agent_messages::send(
+        &ctx.paths,
+        SpaceSelector::id(&workspace.id),
+        message,
+        Vec::new(),
+        None,
+    )
+    .await?;
     ctx.emit("Asked the workspace's agent to choose its title.", ())?;
     Ok(0)
 }

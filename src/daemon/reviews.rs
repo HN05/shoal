@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail, ensure};
 use tokio::sync::watch;
 
 use super::{log, workspace::Manager};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     config::Effective,
@@ -111,7 +112,7 @@ impl Manager {
     /// another.
     pub async fn queue_review(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         target: ReviewTarget,
         agent: Option<Agent>,
         model: crate::agent::ModelChoice,
@@ -135,7 +136,7 @@ impl Manager {
     /// process of workspace `by` when one asked.
     pub async fn cancel_review(
         &self,
-        selector: Option<&str>,
+        selector: Option<&SpaceSelector>,
         id: Option<i64>,
         by: Option<String>,
     ) -> Result<Review> {
@@ -158,7 +159,7 @@ impl Manager {
     }
 
     /// The ID of the workspace's queued or running review.
-    async fn active_review(&self, selector: &str) -> Result<i64> {
+    async fn active_review(&self, selector: &SpaceSelector) -> Result<i64> {
         let workspace = self.workspace(selector).await?;
         let id = workspace.id.clone();
         let active = self.store.run(move |db| store::active(db, &id)).await?;
@@ -177,7 +178,7 @@ impl Manager {
     }
 
     /// The workspace's newest review.
-    pub async fn latest_review(&self, selector: &str) -> Result<Review> {
+    pub async fn latest_review(&self, selector: &SpaceSelector) -> Result<Review> {
         let workspace = self.workspace(selector).await?;
         let id = workspace.id.clone();
         let latest = self.store.run(move |db| store::latest(db, &id)).await?;
@@ -196,7 +197,7 @@ impl Manager {
     /// repository's, else every workspace.
     pub async fn review_workspaces(
         &self,
-        workspace: Option<&str>,
+        workspace: Option<&SpaceSelector>,
         repository: Option<crate::repository::Selector>,
     ) -> Result<Vec<String>> {
         if let Some(workspace) = workspace {
@@ -300,7 +301,7 @@ impl Manager {
                 continue;
             };
             if !heads.contains_key(&review.workspace_id) {
-                let head = match self.workspace(&review.workspace_id).await {
+                let head = match self.workspace_by_id(&review.workspace_id).await {
                     Ok(workspace) => crate::daemon::links::pr::current_head(&workspace)
                         .await
                         .ok(),

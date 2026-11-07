@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
 /// Requests to fetch the secrets a repository configures.
@@ -11,15 +12,15 @@ pub enum SecretMethod {
     /// Confirm the caller may fetch a configured secret, requesting approval
     /// when it is gated; the daemon never sees the value.
     SecretAcquire {
-        workspace: String,
+        workspace: SpaceSelector,
         name: String,
         request: crate::client::secrets::SecretRequest,
     },
     SecretRelease {
-        workspace: String,
+        workspace: SpaceSelector,
         name: String,
     },
     SecretCatalog {
-        workspace: String,
+        workspace: SpaceSelector,
     },
 }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{manager, repository};
 use tokio::io::BufReader;
 
@@ -30,7 +31,7 @@ async fn scoped_merge_answers_with_its_approval_request() {
         3,
         manager.clone(),
         ExecutionContext {
-            workspace: workspace.id.clone(),
+            workspace: SpaceSelector::id(&workspace.id),
             wrapper: crate::process::identity::capture(std::process::id())
                 .unwrap()
                 .unwrap(),
@@ -127,7 +128,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
         8,
         manager.clone(),
         ExecutionContext {
-            workspace: workspace.id.clone(),
+            workspace: SpaceSelector::id(&workspace.id),
             wrapper: wrapper.clone(),
             kind: ExecutionKind::Command,
             agent: None,
@@ -185,7 +186,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
     assert!(!manager.executions.has_unattachable());
     // The detached execution awaits reattachment; the stopped one is gone.
     let executions = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions;
@@ -215,7 +216,7 @@ async fn running_executions_leave_daemon_operations_idle() {
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: workspace.id.clone(),
+            workspace: SpaceSelector::id(&workspace.id),
             wrapper: wrapper.clone(),
             kind: ExecutionKind::Command,
             agent: None,
@@ -257,7 +258,7 @@ async fn running_executions_leave_daemon_operations_idle() {
     bounded(executing).await.unwrap().unwrap();
     drop(update);
     let executions = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions;
@@ -287,7 +288,7 @@ async fn a_wrapper_registers_again_from_where_it_runs() {
         1,
         manager.clone(),
         ExecutionContext {
-            workspace: workspace.id.clone(),
+            workspace: SpaceSelector::id(&workspace.id),
             wrapper,
             kind: ExecutionKind::Command,
             agent: None,
@@ -322,7 +323,7 @@ async fn a_wrapper_registers_again_from_where_it_runs() {
     assert_eq!(plan.scope_token, registered.scope_token);
     assert_eq!(plan.environment, registered.environment);
     let executions = manager
-        .inspect_workspace(&workspace.id)
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
         .await
         .unwrap()
         .executions;

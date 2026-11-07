@@ -7,6 +7,7 @@ use super::{
     workspace_files::{Attacher, NewFile},
 };
 use crate::{
+    client::space_names::SpaceSelector,
     config::Effective,
     daemon::notifications::NotificationKind,
     model::{Completion, PresentSpace, SpaceKind},
@@ -22,19 +23,6 @@ pub(crate) struct About<'a> {
 }
 
 impl Manager {
-    /// The workspace or chat `selector` names, by name or ID; the error is
-    /// the workspace lookup's when neither has it.
-    pub(crate) async fn present_space(&self, selector: &str) -> Result<PresentSpace> {
-        let error = match self.workspace(selector).await {
-            Ok(workspace) => return Ok(PresentSpace::Workspace(workspace)),
-            Err(error) => error,
-        };
-        match self.recorded_chat(selector).await? {
-            Some(chat) => Ok(PresentSpace::Chat(chat)),
-            None => Err(error),
-        }
-    }
-
     /// The settings of `space`: a workspace's own, or a chat's
     /// repository's.
     pub(crate) async fn present_space_settings(&self, space: &PresentSpace) -> Result<Effective> {
@@ -49,15 +37,22 @@ impl Manager {
     /// workspace has the branch `integrated` is about.
     pub async fn mark_space_done(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         cleanup: bool,
         integrated: bool,
         results: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Completion> {
-        match self.present_space(selector).await? {
+        match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => {
-                (self.mark_done(&workspace.id, cleanup, integrated, results, attacher)).await
+                (self.mark_done(
+                    &SpaceSelector::id(&workspace.id),
+                    cleanup,
+                    integrated,
+                    results,
+                    attacher,
+                ))
+                .await
             }
             PresentSpace::Chat(chat) => {
                 ensure!(
@@ -105,9 +100,11 @@ impl Manager {
 
     /// Withdraw the completion the workspace or chat `selector`
     /// names recorded.
-    pub async fn undo_space_done(&self, selector: &str) -> Result<Completion> {
-        match self.present_space(selector).await? {
-            PresentSpace::Workspace(workspace) => self.undo_done(&workspace.id).await,
+    pub async fn undo_space_done(&self, selector: &SpaceSelector) -> Result<Completion> {
+        match self.space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                self.undo_done(&SpaceSelector::id(&workspace.id)).await
+            }
             PresentSpace::Chat(chat) => self.undo_chat_done(&chat.id).await,
         }
     }
@@ -128,5 +125,6 @@ pub(crate) fn space_kind(db: &rusqlite::Connection, id: &str) -> Result<Option<S
 
 mod export;
 mod find;
+mod selection;
 mod sessions;
 pub(crate) mod status;

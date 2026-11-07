@@ -4,6 +4,7 @@
 //! `shoal start` starts one.
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::client::{operations::NewSplit, output::split::Child};
 use crate::{
     cli::{
@@ -56,7 +57,7 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
         base: split.base,
         options: split.options,
         issue: issue.as_ref().map(|issue| issue.url.clone()),
-        ..NewSplit::new(parent, name)
+        ..NewSplit::new(SpaceSelector::parse(&parent), name)
     };
     let child = start_child(ctx, start).await?;
     let Some(child) = follow_preparation(ctx, child).await? else {
@@ -85,9 +86,14 @@ pub(super) async fn at_commit(
         Some(copy) => CommitStart::Copy(copy.source),
         None => CommitStart::Revision(base),
     };
-    let created =
-        crate::client::workspaces::create_at_commit(&ctx.paths, repository, parent, start, options)
-            .await?;
+    let created = crate::client::workspaces::create_at_commit(
+        &ctx.paths,
+        repository,
+        parent.as_deref().map(SpaceSelector::id),
+        start,
+        options,
+    )
+    .await?;
     let Some(child) = prepare(ctx, created).await? else {
         return Ok(1);
     };
@@ -193,7 +199,7 @@ fn report(ctx: &Context, child: &Workspace) -> Result<()> {
 
 /// The issue `input` names in the parent workspace's repository.
 async fn load_issue(ctx: &Context, parent: &str, input: &str) -> Result<Issue> {
-    let context = ItemContext::Workspace(parent.to_owned());
+    let context = ItemContext::Workspace(SpaceSelector::parse(parent));
     super::issues::load(ctx, context, input).await
 }
 

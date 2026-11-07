@@ -15,6 +15,7 @@ use std::{
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::client::{
     ai::IntegrationKind,
     connection::{Daemon, request},
@@ -66,7 +67,10 @@ pub struct Transcript {
 
 /// The sessions the agents of the workspace or chat `space` reported, each
 /// with its files on this machine.
-pub async fn space_transcripts(daemon: &impl Daemon, space: String) -> Result<Vec<Transcript>> {
+pub async fn space_transcripts(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+) -> Result<Vec<Transcript>> {
     let sessions: SpaceSessions = request(daemon, WorkspaceMethod::SpaceSessions { space }).await?;
     let home = daemon.paths().home.clone();
     tokio::task::spawn_blocking(move || locate(&home, &sessions))

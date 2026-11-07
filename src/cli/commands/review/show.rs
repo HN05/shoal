@@ -3,6 +3,7 @@
 use anyhow::Result;
 
 use crate::client::reviews;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -39,7 +40,12 @@ pub(in crate::cli::commands) async fn list(
         Some(repository) => Some(ui::repository_selector(repository)?),
         None => None,
     };
-    let reviews = reviews::list(&ctx.paths, workspace, repository).await?;
+    let reviews = reviews::list(
+        &ctx.paths,
+        workspace.as_deref().map(SpaceSelector::id),
+        repository,
+    )
+    .await?;
     ctx.show(&reviews, |reviews| render_list(reviews, ctx.json))?;
     Ok(0)
 }
@@ -52,7 +58,7 @@ pub(in crate::cli::commands) async fn view(
     workspace: Option<String>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
-    let review = reviews::show(&ctx.paths, workspace, id).await?;
+    let review = reviews::show(&ctx.paths, workspace.as_deref().map(SpaceSelector::id), id).await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
 }
@@ -68,7 +74,7 @@ pub(in crate::cli::commands) async fn watch(
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
     let executable = Executable::current();
-    let id = reviews::await_ended(&ctx.paths, workspace, id)
+    let id = reviews::await_ended(&ctx.paths, workspace.as_deref().map(SpaceSelector::id), id)
         .await
         .map_err(|error| executable.resume_or(error, arguments))?;
     let review = reviews::show(&ctx.paths, None, Some(id)).await?;
@@ -79,7 +85,7 @@ pub(in crate::cli::commands) async fn watch(
 /// The workspace's newest review for `shoal view`, if it has one; a lookup
 /// that fails leaves it out.
 pub(in crate::cli::commands) async fn latest(ctx: &Context, workspace: &str) -> Option<Review> {
-    reviews::show(&ctx.paths, Some(workspace.to_owned()), None)
+    reviews::show(&ctx.paths, Some(SpaceSelector::parse(workspace)), None)
         .await
         .ok()
 }

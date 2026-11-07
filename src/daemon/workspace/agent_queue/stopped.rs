@@ -14,6 +14,7 @@ use anyhow::{Context as _, Result, ensure};
 use rusqlite::{Connection, params};
 
 use super::Start;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,
     execution::recovery,
@@ -239,7 +240,7 @@ impl Manager {
     /// and the agent no longer waits for an update there.
     pub async fn queue_stopped_restore(
         &self,
-        workspace: &str,
+        workspace: &SpaceSelector,
         execution: &str,
         env: BTreeMap<String, String>,
     ) -> Result<QueueEntry> {
@@ -251,7 +252,7 @@ impl Manager {
     /// start it at once, regardless of the limits.
     pub async fn start_stopped_restore(
         &self,
-        workspace: &str,
+        workspace: &SpaceSelector,
         execution: &str,
         env: BTreeMap<String, String>,
     ) -> Result<QueueEntry> {
@@ -263,7 +264,7 @@ impl Manager {
     /// `workspace`, starting it at once when `now`, and return its entry.
     async fn add_stopped_restore(
         &self,
-        workspace: &str,
+        workspace: &SpaceSelector,
         execution: &str,
         env: BTreeMap<String, String>,
         now: bool,

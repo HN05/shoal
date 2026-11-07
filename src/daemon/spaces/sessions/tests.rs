@@ -59,7 +59,10 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
     let workspace = manager
         .create_workspace(&repo.id, "work".into(), None, None, None)
         .await?;
-    assert_eq!(manager.space_sessions("work").await?.sessions, Vec::new());
+    assert_eq!(
+        manager.space_sessions(&"work".into()).await?.sessions,
+        Vec::new()
+    );
 
     // A wrapper waiting to start or restore its agent runs no session.
     let waiting = agent(&manager, &workspace, "codex", "s2").await?;
@@ -86,7 +89,7 @@ async fn a_workspace_lists_each_reported_session_once_the_running_ones_first() -
         .write(&manager.paths, &workspace.id)?;
     }
 
-    let sessions = manager.space_sessions("work").await?;
+    let sessions = manager.space_sessions(&"work".into()).await?;
     assert_eq!(
         sessions.sessions,
         vec![
@@ -118,15 +121,20 @@ async fn a_chat_lists_the_session_its_hooks_reported() -> Result<()> {
         )
         .await?;
     assert_eq!(
-        manager.space_sessions("planning").await?.sessions,
+        manager.space_sessions(&"planning".into()).await?.sessions,
         Vec::new()
     );
 
     manager
-        .set_agent_state("planning", AgentState::Idle, None, Some("c1".into()))
+        .set_agent_state(
+            &"planning".into(),
+            AgentState::Idle,
+            None,
+            Some("c1".into()),
+        )
         .await?;
     assert_eq!(
-        manager.space_sessions("planning").await?.sessions,
+        manager.space_sessions(&"planning".into()).await?.sessions,
         vec![ReportedSession {
             agent: "claude".into(),
             session: "c1".into(),

@@ -4,6 +4,7 @@
 use anyhow::{Result, ensure};
 
 use super::Prepared;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{events::EventCause, workspace::Manager},
     execution::recovery::{self, Copied, LastSession, Record, StoppedAgent},
@@ -15,8 +16,8 @@ use crate::{
 impl Manager {
     /// The workspace or running chat `selector` names, refusing a removed
     /// workspace, which runs nothing to keep.
-    pub(super) async fn running_space(&self, selector: &str) -> Result<PresentSpace> {
-        let error = match self.present_space(selector).await {
+    pub(super) async fn running_space(&self, selector: &SpaceSelector) -> Result<PresentSpace> {
+        let error = match self.space(selector).await {
             Ok(space) => return Ok(space),
             Err(error) => error,
         };
@@ -24,7 +25,7 @@ impl Manager {
             .removed_workspaces()
             .await?
             .into_iter()
-            .find(|removed| removed.workspace_id == selector || removed.name == selector);
+            .find(|removed| selector.names(&removed.workspace_id, &removed.name));
         match removed {
             Some(removed) => anyhow::bail!(
                 "workspace {name} was removed, so nothing runs to keep; export it without --keep, or shoal work restore {name} opens it again",
@@ -45,7 +46,10 @@ impl Manager {
     ) -> Result<Prepared> {
         let checkpoint = match number {
             Some(number) => self.numbered_checkpoint(&workspace, number).await?,
-            None => self.take_checkpoint(&workspace.id, None).await?,
+            None => {
+                self.take_checkpoint(&SpaceSelector::id(&workspace.id), None)
+                    .await?
+            }
         };
         ensure!(
             !checkpoint.files_omitted,

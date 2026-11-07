@@ -9,6 +9,7 @@ use anyhow::{Context as _, Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 
 pub(crate) use crate::client::agent_messages::AgentMessage;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::output::messages::Reached,
     daemon::{
@@ -179,7 +180,7 @@ impl Manager {
     /// message. An identical unread message is not repeated.
     pub async fn send_agent_message(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         message: String,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
@@ -204,18 +205,23 @@ impl Manager {
     /// [`Self::send_chat_message`] to the chat, `selector` names.
     pub async fn send_space_message(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         message: String,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<()> {
-        match self.present_space(selector).await? {
+        match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => {
-                self.send_agent_message(&workspace.id, message, attachments, attacher)
-                    .await
+                self.send_agent_message(
+                    &SpaceSelector::id(&workspace.id),
+                    message,
+                    attachments,
+                    attacher,
+                )
+                .await
             }
             PresentSpace::Chat(chat) => {
-                self.send_chat_message(&chat.id, message, attachments, attacher)
+                self.send_chat_message(&SpaceSelector::id(&chat.id), message, attachments, attacher)
                     .await
             }
         }
@@ -239,7 +245,7 @@ impl Manager {
         let (workspaces, chats) = self.recipients(repository, below, sender_chat).await?;
         for workspace in &workspaces {
             self.send_agent_message(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 message.clone(),
                 attachments.clone(),
                 attacher,
@@ -248,9 +254,14 @@ impl Manager {
             .with_context(|| format!("message {}", workspace.name))?;
         }
         for chat in &chats {
-            self.send_chat_message(&chat.id, message.clone(), attachments.clone(), attacher)
-                .await
-                .with_context(|| format!("message {}", chat.name))?;
+            self.send_chat_message(
+                &SpaceSelector::id(&chat.id),
+                message.clone(),
+                attachments.clone(),
+                attacher,
+            )
+            .await
+            .with_context(|| format!("message {}", chat.name))?;
         }
         Ok(Reached {
             workspaces: workspaces
@@ -290,7 +301,7 @@ impl Manager {
             if below.as_ref().is_some_and(|below| !below.contains(&id)) {
                 continue;
             }
-            let workspace = self.workspace(&id).await?;
+            let workspace = self.workspace_by_id(&id).await?;
             if in_repository(Some(&workspace.repository_id))
                 && workspace.state != WorkspaceState::Removing
             {
@@ -392,15 +403,17 @@ impl Manager {
 
     /// [`Self::agent_messages`] of the workspace, or [`Self::chat_messages`]
     /// of the running chat, `selector` names.
-    pub async fn space_messages(&self, selector: &str) -> Result<Vec<AgentMessage>> {
-        match self.present_space(selector).await? {
-            PresentSpace::Workspace(workspace) => self.agent_messages(&workspace.id).await,
+    pub async fn space_messages(&self, selector: &SpaceSelector) -> Result<Vec<AgentMessage>> {
+        match self.space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                self.agent_messages(&SpaceSelector::id(&workspace.id)).await
+            }
             PresentSpace::Chat(chat) => self.chat_messages(&chat.id).await,
         }
     }
 
     /// Unread messages, oldest first. They stay unread until delivered.
-    pub async fn agent_messages(&self, selector: &str) -> Result<Vec<AgentMessage>> {
+    pub async fn agent_messages(&self, selector: &SpaceSelector) -> Result<Vec<AgentMessage>> {
         let workspace = self.workspace(selector).await?;
         Ok(self.read_unread(workspace.id).await?.0.messages)
     }
@@ -408,7 +421,7 @@ impl Manager {
     /// Unread messages, oldest first, and whether one of them wakes an idle
     /// agent now. One queued [`Delivery::WhileWorkRuns`] wakes it only while
     /// work it could stop runs, or when that cannot be read.
-    pub(crate) async fn unread_agent_messages(&self, selector: &str) -> Result<Unread> {
+    pub(crate) async fn unread_agent_messages(&self, selector: &SpaceSelector) -> Result<Unread> {
         let workspace = self.workspace(selector).await?;
         let (mut unread, while_work_runs) = self.read_unread(workspace.id.clone()).await?;
         if !unread.wakes && while_work_runs {
@@ -459,7 +472,7 @@ impl Manager {
     /// workspace or running chat `selector` names received.
     pub async fn acknowledge_space_delivery(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         deliveries: Vec<String>,
         messages: Vec<i64>,
         leftovers: &[u32],
@@ -475,10 +488,15 @@ impl Manager {
     /// [`Self::mark_agent_messages_delivered`] for the workspace, or
     /// [`Self::mark_chat_messages_delivered`] for the running chat,
     /// `selector` names.
-    pub async fn mark_space_messages_delivered(&self, selector: &str, ids: Vec<i64>) -> Result<()> {
-        match self.present_space(selector).await? {
+    pub async fn mark_space_messages_delivered(
+        &self,
+        selector: &SpaceSelector,
+        ids: Vec<i64>,
+    ) -> Result<()> {
+        match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => {
-                self.mark_agent_messages_delivered(&workspace.id, ids).await
+                self.mark_agent_messages_delivered(&SpaceSelector::id(&workspace.id), ids)
+                    .await
             }
             PresentSpace::Chat(chat) => self.mark_chat_messages_delivered(&chat.id, ids).await,
         }
@@ -486,7 +504,11 @@ impl Manager {
 
     /// Delete exactly these messages once an agent has received them, with
     /// the questions whose answers they carried.
-    pub async fn mark_agent_messages_delivered(&self, selector: &str, ids: Vec<i64>) -> Result<()> {
+    pub async fn mark_agent_messages_delivered(
+        &self,
+        selector: &SpaceSelector,
+        ids: Vec<i64>,
+    ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.store
             .run(move |db| {

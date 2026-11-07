@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, SimulatorMethod};
 
 pub(super) async fn handle(
@@ -20,10 +21,10 @@ pub(super) async fn handle(
             Body::SimCatalog(manager.simulator_catalog(&workspace).await?)
         }
         SimulatorMethod::SimOverview { workspace } => {
-            Body::SimOverview(manager.simulator_overview(workspace.as_deref()).await?)
+            Body::SimOverview(manager.simulator_overview(workspace.as_ref()).await?)
         }
         SimulatorMethod::SimList { workspace } => {
-            Body::Simulators(manager.selected_simulators(workspace.as_deref()).await?)
+            Body::Simulators(manager.selected_simulators(workspace.as_ref()).await?)
         }
         SimulatorMethod::SimAcquire { workspace, request } => manager
             .acquire_simulator(&workspace, request, caller)
@@ -39,14 +40,14 @@ pub(super) async fn handle(
             before,
         } => Body::SimHistory(
             manager
-                .clean_history(workspace.as_deref(), limit, before)
+                .clean_history(workspace.as_ref(), limit, before)
                 .await?,
         ),
     }))
 }
 
 impl Scoped for SimulatorMethod {
-    async fn scope(&mut self, _: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, _: &Manager, caller: &Caller) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             SimulatorMethod::SimCatalog { workspace }
             | SimulatorMethod::SimAcquire { workspace, .. }

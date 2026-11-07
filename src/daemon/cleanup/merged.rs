@@ -14,6 +14,7 @@ use anyhow::Result;
 use tokio::time::Instant;
 
 use super::{Rule, Snapshot, Tree, change_time};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{events::EventCause, log, notifications::NotificationKind, workspace::Manager},
     model::{Chat, Workspace},
@@ -151,7 +152,9 @@ async fn sweep_workspace(
     let Some(snapshot) = idle_candidate(manager, state, workspace, now, users).await else {
         return Ok(());
     };
-    let (kind, message, recorded) = match manager.remove_merged_idle(&workspace.id, snapshot).await
+    let (kind, message, recorded) = match manager
+        .remove_merged_idle(&SpaceSelector::id(&workspace.id), snapshot)
+        .await
     {
         Ok(false) => return Ok(()),
         Ok(true) => {

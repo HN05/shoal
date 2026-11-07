@@ -11,6 +11,7 @@ use super::{
     reviewer::{self, Ended, Files, Reviewer},
     store,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::ModelChoice,
     config::{Effective, templates},
@@ -137,13 +138,13 @@ impl Manager {
         let Some(review) = self.queued_review(id).await? else {
             return Ok(Pass::Ended);
         };
-        let workspace = self.workspace(&review.workspace_id).await?;
+        let workspace = self.workspace_by_id(&review.workspace_id).await?;
         let Some(slot) = self.await_slot(id, &workspace, cancel, cancelled).await? else {
             return Ok(Pass::Ended);
         };
         // The workspace may have moved while the review waited, as a fork
         // PR's moves to the PR's new head.
-        let workspace = self.workspace(&review.workspace_id).await?;
+        let workspace = self.workspace_by_id(&review.workspace_id).await?;
         // Its configuration and commits are read only from the worktree
         // that is this workspace's.
         self.verify_worktree(&workspace).await?;
@@ -410,7 +411,10 @@ impl Manager {
         match target {
             ReviewTarget::Workspace => {
                 let head = crate::daemon::links::pr::current_head(workspace).await?;
-                let base = self.diff_base(&workspace.id).await?.commit;
+                let base = self
+                    .diff_base(&SpaceSelector::id(&workspace.id))
+                    .await?
+                    .commit;
                 Ok(Commits { head, base })
             }
             ReviewTarget::Pr { head, base, .. } => {

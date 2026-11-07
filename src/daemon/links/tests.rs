@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::events::{EventItem, LinkEvent},
     daemon::test_support::{git, manager, repository},
@@ -51,12 +52,19 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
     let issue = "https://github.com/team/repo/issues/40";
     let pr = "https://github.com/team/repo/pull/41";
     manager
-        .link_item(&id, LinkKind::Issue, "40", Relation::Opened, None, false)
+        .link_item(
+            &SpaceSelector::id(&id),
+            LinkKind::Issue,
+            "40",
+            Relation::Opened,
+            None,
+            false,
+        )
         .await
         .unwrap();
     manager
         .link_item(
-            &id,
+            &SpaceSelector::id(&id),
             LinkKind::Issue,
             issue,
             Relation::Opened,
@@ -66,15 +74,29 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
         .await
         .unwrap();
     manager
-        .link_item(&id, LinkKind::Pr, "41", Relation::Related, None, false)
+        .link_item(
+            &SpaceSelector::id(&id),
+            LinkKind::Pr,
+            "41",
+            Relation::Related,
+            None,
+            false,
+        )
         .await
         .unwrap();
     manager
-        .link_item(&id, LinkKind::Issue, "40", Relation::Related, None, false)
+        .link_item(
+            &SpaceSelector::id(&id),
+            LinkKind::Issue,
+            "40",
+            Relation::Related,
+            None,
+            false,
+        )
         .await
         .unwrap();
 
-    let links = manager.workspace(&id).await.unwrap().links;
+    let links = manager.workspace_by_id(&id).await.unwrap().links;
     assert_eq!(links.issue, None);
     assert!(links.prs.is_empty());
     assert_eq!(
@@ -94,7 +116,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
     assert!(
         manager
             .link_item(
-                &id,
+                &SpaceSelector::id(&id),
                 LinkKind::Issue,
                 "https://github.com/other/repo/issues/1",
                 Relation::Related,
@@ -106,26 +128,36 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
     );
 
     manager
-        .unlink_items(&id, Relation::Related, Some(LinkKind::Pr), Some("41"))
+        .unlink_items(
+            &SpaceSelector::id(&id),
+            Relation::Related,
+            Some(LinkKind::Pr),
+            Some("41"),
+        )
         .await
         .unwrap();
     assert!(
         manager
-            .unlink_items(&id, Relation::Related, Some(LinkKind::Pr), Some("41"))
+            .unlink_items(
+                &SpaceSelector::id(&id),
+                Relation::Related,
+                Some(LinkKind::Pr),
+                Some("41")
+            )
             .await
             .is_err()
     );
     manager
-        .unlink_items(&id, Relation::Related, None, None)
+        .unlink_items(&SpaceSelector::id(&id), Relation::Related, None, None)
         .await
         .unwrap();
     assert!(
         manager
-            .unlink_items(&id, Relation::Related, None, None)
+            .unlink_items(&SpaceSelector::id(&id), Relation::Related, None, None)
             .await
             .is_err()
     );
-    let links = manager.workspace(&id).await.unwrap().links;
+    let links = manager.workspace_by_id(&id).await.unwrap().links;
     assert!(links.related.is_empty());
     assert_eq!(links.opened.len(), 1);
     let unlinked = link_events(&manager, EventKind::Unlinked).await;
@@ -143,7 +175,7 @@ async fn assigned_relation_uses_the_issue_link() {
     let issue = "https://github.com/team/repo/issues/7";
     manager
         .link_item(
-            &id,
+            &SpaceSelector::id(&id),
             LinkKind::Issue,
             "7",
             Relation::Assigned,
@@ -152,7 +184,7 @@ async fn assigned_relation_uses_the_issue_link() {
         )
         .await
         .unwrap();
-    let links = manager.workspace(&id).await.unwrap().links;
+    let links = manager.workspace_by_id(&id).await.unwrap().links;
     assert_eq!(links.issue.as_deref(), Some(issue));
     assert!(links.opened.is_empty() && links.related.is_empty());
     assert_eq!(
@@ -160,13 +192,21 @@ async fn assigned_relation_uses_the_issue_link() {
         Relation::Assigned
     );
     manager
-        .unlink_items(&id, Relation::Assigned, Some(LinkKind::Issue), None)
+        .unlink_items(
+            &SpaceSelector::id(&id),
+            Relation::Assigned,
+            Some(LinkKind::Issue),
+            None,
+        )
         .await
         .unwrap();
-    assert_eq!(manager.workspace(&id).await.unwrap().links.issue, None);
+    assert_eq!(
+        manager.workspace_by_id(&id).await.unwrap().links.issue,
+        None
+    );
     for kind in [Some(LinkKind::Issue), None] {
         let unlinked = manager
-            .unlink_items(&id, Relation::Assigned, kind, None)
+            .unlink_items(&SpaceSelector::id(&id), Relation::Assigned, kind, None)
             .await;
         assert!(unlinked.is_err());
     }
@@ -175,17 +215,24 @@ async fn assigned_relation_uses_the_issue_link() {
 #[tokio::test]
 async fn a_moved_worktree_takes_no_recorded_relations() {
     let (_root, manager, id) = workspace_with_origin().await;
-    let path = manager.workspace(&id).await.unwrap().path;
+    let path = manager.workspace_by_id(&id).await.unwrap().path;
     std::fs::remove_dir_all(&path).unwrap();
     assert!(
         manager
-            .link_item(&id, LinkKind::Issue, "40", Relation::Related, None, false)
+            .link_item(
+                &SpaceSelector::id(&id),
+                LinkKind::Issue,
+                "40",
+                Relation::Related,
+                None,
+                false
+            )
             .await
             .is_err()
     );
     assert!(
         manager
-            .unlink_items(&id, Relation::Related, None, None)
+            .unlink_items(&SpaceSelector::id(&id), Relation::Related, None, None)
             .await
             .is_err()
     );

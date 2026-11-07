@@ -75,6 +75,7 @@ pub(crate) use tree::{
     set_parent, spaces_above,
 };
 
+use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use crate::{client::space_names::SpaceName, model::SpaceKind};
 use crate::{
@@ -314,7 +315,7 @@ impl Manager {
         let mut workspaces = self.list_workspaces_within(owner).await?;
         if let Some(owner) = owner {
             if let Some(home) = self.chat_home(owner).await? {
-                workspaces.push(self.workspace(&home).await?);
+                workspaces.push(self.workspace(&SpaceSelector::id(&home)).await?);
             }
             workspaces.sort_by_key(|w| w.id != owner);
         }
@@ -363,23 +364,23 @@ impl Manager {
             .await
     }
 
-    /// Look a workspace up by ID or name.
-    pub async fn workspace(&self, selector: &str) -> Result<Workspace> {
-        let selector = selector.to_owned();
+    /// The workspace with the ID `id`, which is never read as a name.
+    pub async fn workspace_by_id(&self, id: &str) -> Result<Workspace> {
+        let id = id.to_owned();
         self.store
             .run(move |db| {
                 let mut workspace = db
                     .query_row(
                         &format!(
-                            "SELECT {} FROM workspaces WHERE id=?1 OR name=?1",
+                            "SELECT {} FROM workspaces WHERE id=?1",
                             store::WORKSPACE_COLUMNS
                         ),
-                        [&selector],
+                        [&id],
                         store::workspace,
                     )
                     .optional()?
                     .ok_or_else(|| {
-                        Refusal::new(Reason::NotFound, format!("unknown workspace: {selector}"))
+                        Refusal::new(Reason::NotFound, format!("unknown workspace: {id}"))
                     })?;
                 load_details(db, &mut workspace)?;
                 Ok(workspace)
@@ -395,20 +396,23 @@ impl Manager {
             .run(move |db| store::exists(db, "SELECT 1 FROM workspaces WHERE id=?1", [owned]))
             .await?;
         Ok(match exists {
-            true => Some(self.workspace(id).await?),
+            true => Some(self.workspace_by_id(id).await?),
             false => None,
         })
     }
 
     /// Resolve an optional selector to a workspace ID filter.
-    pub async fn workspace_filter(&self, selector: Option<&str>) -> Result<Option<String>> {
+    pub async fn workspace_filter(
+        &self,
+        selector: Option<&SpaceSelector>,
+    ) -> Result<Option<String>> {
         match selector {
             Some(selector) => Ok(Some(self.workspace(selector).await?.id)),
             None => Ok(None),
         }
     }
 
-    pub async fn inspect_workspace(&self, selector: &str) -> Result<Inspection> {
+    pub async fn inspect_workspace(&self, selector: &SpaceSelector) -> Result<Inspection> {
         let mut workspace = self.workspace(selector).await?;
         self.annotate_review(&mut workspace, review::check_deadline())
             .await;
@@ -611,7 +615,7 @@ impl Manager {
                 );
             }
         }
-        self.workspace(&workspace.id).await
+        self.workspace_by_id(&workspace.id).await
     }
 
     /// Record a new workspace, stacked on the workspace that owns `base_branch`

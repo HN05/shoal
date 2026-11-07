@@ -4,6 +4,7 @@
 use std::collections::{HashMap, HashSet};
 
 pub(crate) use crate::client::availability::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::terminal,
     model::{RunningAgent, Workspace},
@@ -173,7 +174,7 @@ async fn workspace_settings<'a>(
         if settings.contains_key(workspace) {
             continue;
         }
-        let target = crate::protocol::ConfigTarget::Workspace(workspace.to_owned());
+        let target = crate::protocol::ConfigTarget::Workspace(SpaceSelector::parse(workspace));
         let layers = crate::client::workspaces::config_layers(paths, target).await;
         if let Ok(resolved) = layers.and_then(|layers| config.resolve(&layers)) {
             settings.insert(workspace.to_owned(), resolved);

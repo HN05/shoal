@@ -1,5 +1,6 @@
 use std::{fs, path::Path, sync::Arc};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{commit, git, manager, repository},
@@ -68,7 +69,7 @@ async fn export_removed(manager: &Manager, workspace: &str) -> Vec<u8> {
     let file = directory.path().join("workspace.shoal");
     let exported = manager
         .export_space(
-            workspace,
+            &SpaceSelector::parse(workspace),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             file.clone(),
@@ -80,7 +81,7 @@ async fn export_removed(manager: &Manager, workspace: &str) -> Vec<u8> {
     assert!(
         manager
             .export_space(
-                workspace,
+                &SpaceSelector::parse(workspace),
                 UnsavedWork::All,
                 InspectionPolicy::GitOnly,
                 file.clone(),
@@ -191,7 +192,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     assert_eq!(fs::read_to_string(path.join("scratch")).unwrap(), "notes\n");
     assert!(importing.removed_workspaces().await.unwrap().is_empty());
     let checkpoints = importing
-        .checkpoints(&restored.opened.workspace.id, None)
+        .checkpoints(&SpaceSelector::id(&restored.opened.workspace.id), None)
         .await
         .unwrap()
         .unwrap();
@@ -282,14 +283,14 @@ async fn export_the_daemon_cannot_write_keeps_the_workspace() {
 
     let exported = exporting
         .export_space(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
             blocked.join("workspace.shoal"),
         )
         .await;
     assert!(exported.is_err());
-    assert!(exporting.workspace(&workspace.id).await.is_ok());
+    assert!(exporting.workspace_by_id(&workspace.id).await.is_ok());
     assert!(workspace.path.exists());
 }
 
@@ -336,12 +337,12 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
     let file = directory.path().join("topic.shoal");
 
     let exported = manager
-        .copy_space(&workspace.name, None, file.clone())
+        .copy_space(&SpaceSelector::from(&workspace.name), None, file.clone())
         .await
         .unwrap();
     assert!(exported.removal.is_none());
     assert_eq!(exported.manifest.copy, Some(Copied::default()));
-    let kept = manager.workspace(&workspace.id).await.unwrap();
+    let kept = manager.workspace_by_id(&workspace.id).await.unwrap();
     assert_eq!(kept.path, workspace.path);
     assert_eq!(
         recovery::Saved::load(&manager.paths, &workspace.id)
@@ -362,7 +363,7 @@ async fn a_copy_keeps_the_workspace_and_imports_on_a_branch_of_its_own() {
         fs::read_to_string(copy.path.join("scratch")).unwrap(),
         "notes\n"
     );
-    let links = manager.workspace(&copy.id).await.unwrap().links;
+    let links = manager.workspace_by_id(&copy.id).await.unwrap().links;
     assert!(links.opened.is_empty(), "{links:?}");
     assert_eq!(links.related, [issue]);
     // Its agent starts from a fork of the session it reported here, which
@@ -386,13 +387,20 @@ async fn a_copy_of_an_earlier_checkpoint_marks_its_sessions_newer() {
         .create_workspace(&repo.id, "topic".into(), None, None, None)
         .await
         .unwrap();
-    let first = manager.take_checkpoint(&workspace.id, None).await.unwrap();
+    let first = manager
+        .take_checkpoint(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
     fs::write(workspace.path.join("later"), "later\n").unwrap();
     let directory = tempfile::tempdir().unwrap();
     let file = directory.path().join("topic.shoal");
 
     let exported = manager
-        .copy_space(&workspace.name, Some(first.number), file.clone())
+        .copy_space(
+            &SpaceSelector::from(&workspace.name),
+            Some(first.number),
+            file.clone(),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -406,7 +414,7 @@ async fn a_copy_of_an_earlier_checkpoint_marks_its_sessions_newer() {
     assert!(
         manager
             .copy_space(
-                &workspace.name,
+                &SpaceSelector::from(&workspace.name),
                 Some(99),
                 directory.path().join("missing.shoal")
             )
@@ -423,12 +431,16 @@ async fn a_removed_workspace_has_nothing_to_copy() {
         .await
         .unwrap();
     manager
-        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let directory = tempfile::tempdir().unwrap();
     let refused = manager
-        .copy_space("topic", None, directory.path().join("topic.shoal"))
+        .copy_space(&"topic".into(), None, directory.path().join("topic.shoal"))
         .await
         .unwrap_err();
     assert!(
@@ -447,7 +459,7 @@ async fn concurrent_imports_of_a_copy_take_branches_of_their_own() {
     let directory = tempfile::tempdir().unwrap();
     let file = directory.path().join("topic.shoal");
     manager
-        .copy_space(&workspace.name, None, file.clone())
+        .copy_space(&SpaceSelector::from(&workspace.name), None, file.clone())
         .await
         .unwrap();
     let bytes = fs::read(&file).unwrap();

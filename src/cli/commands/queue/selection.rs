@@ -3,6 +3,7 @@
 //! rest.
 use anyhow::{Context as _, Result, bail, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::{agent_queue, restart::skip_reason},
@@ -99,7 +100,7 @@ async fn move_target(ctx: &Context, selector: &str) -> Result<Option<QueueEntry>
 /// Refuse a workspace `selector` names unless the one agent running there
 /// can restore in place, as the daemon checks again before stopping it.
 async fn movable_agent(ctx: &Context, selector: &str) -> Result<()> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector.to_owned())
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(selector))
         .await
         .with_context(|| format!("{selector} is not in the agent queue"))?
         .workspace;

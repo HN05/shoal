@@ -121,7 +121,7 @@ async fn empty_workspace_overviews_make_no_requests() {
 async fn workspace_overviews_account_for_request_timeouts() {
     let workspaces = workspaces(WORKSPACE_OVERVIEW_CONCURRENCY * 2);
     let overviews = collect_workspace_overviews(&workspaces, async |workspace| {
-        if workspace.name == "0" {
+        if workspace.name == "w0" {
             tokio::time::timeout(Duration::from_millis(1), std::future::pending::<()>())
                 .await
                 .context("daemon request timed out")?;

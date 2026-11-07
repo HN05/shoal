@@ -7,6 +7,7 @@
 use anyhow::{Context as _, Result};
 
 use crate::client::output::agents::{Agent, Continued, Interrupted};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{agents, context::Context, terminal, ui},
     config::Effective,
@@ -75,7 +76,8 @@ async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()
     let target = &interruption.target;
     crate::terminal::send_keys(&target.place, interruption.key).await?;
     let (workspace, execution) = (target.workspace_id.clone(), target.execution.clone());
-    crate::client::agents::interrupt_turn(&ctx.paths, workspace, execution).await?;
+    crate::client::agents::interrupt_turn(&ctx.paths, SpaceSelector::parse(&workspace), execution)
+        .await?;
     Ok(())
 }
 
@@ -141,17 +143,21 @@ pub(super) async fn agents_of(
     ctx: &Context,
     selector: String,
 ) -> Result<(Workspace, Vec<RunningAgent>)> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, selector)
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&selector))
         .await?
         .workspace;
-    let agents = crate::client::agents::running(&ctx.paths, workspace.id.clone()).await?;
+    let agents =
+        crate::client::agents::running(&ctx.paths, SpaceSelector::id(&workspace.id)).await?;
     Ok((workspace, agents))
 }
 
 /// The settings that choose the integration of each agent of `workspace`.
 async fn settings(ctx: &Context, workspace: &Workspace) -> Result<Effective> {
-    crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone()))
-        .await
+    crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
+    )
+    .await
 }
 
 /// An agent Shoal types into, by workspace and name as output shows it, with

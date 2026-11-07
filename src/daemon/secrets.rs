@@ -3,6 +3,7 @@
 use anyhow::{Result, anyhow, ensure};
 
 pub(crate) use crate::client::secrets::{CatalogSecret, SecretCatalog, SecretGrant, SecretRequest};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         allocation::Allocation,
@@ -15,7 +16,7 @@ use crate::{
 };
 
 impl Manager {
-    pub async fn secret_catalog(&self, selector: &str) -> Result<SecretCatalog> {
+    pub async fn secret_catalog(&self, selector: &SpaceSelector) -> Result<SecretCatalog> {
         let workspace = self.workspace(selector).await?;
         let secrets = self
             .workspace_settings(&workspace)
@@ -38,7 +39,7 @@ impl Manager {
     /// the secret's effective source.
     pub async fn acquire_secret(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         name: String,
         request: SecretRequest,
         caller: Option<&Caller>,
@@ -79,7 +80,7 @@ impl Manager {
 
     /// Cancel the secret's request or end its lease grant; a workspace grant
     /// stays reusable until the workspace is removed.
-    pub async fn release_secret(&self, selector: &str, name: String) -> Result<()> {
+    pub async fn release_secret(&self, selector: &SpaceSelector, name: String) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         self.touch(&workspace.id).await;
         let target = Target::Secret(name.clone());

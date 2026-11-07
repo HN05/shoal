@@ -9,6 +9,7 @@ use anyhow::{Context as _, Result};
 use clap::{CommandFactory, Parser};
 
 use crate::cli::args::Invocation;
+use crate::client::space_names::SpaceSelector;
 
 use crate::client::output::configured::{BareName, CommandDefinition};
 use crate::{
@@ -95,7 +96,11 @@ async fn current_layers(ctx: &Context) -> Result<ConfigLayers> {
 }
 
 async fn workspace_layers(ctx: &Context, workspace: String) -> Result<ConfigLayers> {
-    crate::client::workspaces::config_layers(&ctx.paths, ConfigTarget::Workspace(workspace)).await
+    crate::client::workspaces::config_layers(
+        &ctx.paths,
+        ConfigTarget::Workspace(SpaceSelector::parse(&workspace)),
+    )
+    .await
 }
 
 /// The name `shoal <name>` runs.
@@ -223,7 +228,7 @@ pub(in crate::cli) fn current_workspace(workspaces: &[Workspace]) -> Result<Opti
 }
 
 async fn defines(ctx: &Context, workspace: &str, name: &str) -> Result<bool> {
-    let target = ConfigTarget::Workspace(workspace.to_owned());
+    let target = ConfigTarget::Workspace(SpaceSelector::parse(workspace));
     Ok(crate::client::workspaces::settings(&ctx.paths, target)
         .await?
         .commands
@@ -271,10 +276,13 @@ pub(super) async fn run_defined(
         Definition::Elsewhere(defining) => ui::pick_workspace(ctx, defining, "workspace").await?,
     };
     recent::record(ctx, &workspace).await;
-    let settings =
-        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
-            .await?;
-    let inspection = crate::client::workspaces::inspect(&ctx.paths, workspace.clone()).await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(SpaceSelector::parse(&workspace)),
+    )
+    .await?;
+    let inspection =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace)).await?;
     let command = expand(
         &ctx.paths,
         &settings.commands,

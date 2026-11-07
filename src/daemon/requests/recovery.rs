@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped, denied},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, RecoveryMethod};
 
 pub(super) async fn handle(
@@ -32,14 +33,14 @@ pub(super) async fn handle(
         ),
         RecoveryMethod::Reconcile { workspace, options } => Body::Reconciled(
             manager
-                .reconcile_workspaces(workspace.as_deref(), options)
+                .reconcile_workspaces(workspace.as_ref(), options)
                 .await?,
         ),
     }))
 }
 
 impl Scoped for RecoveryMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             RecoveryMethod::Checkpoint { workspace, .. }
             | RecoveryMethod::Checkpoints { workspace, .. }

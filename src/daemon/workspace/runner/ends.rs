@@ -10,6 +10,7 @@ use std::{collections::HashSet, time::Duration};
 use anyhow::Result;
 use rusqlite::params;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -159,7 +160,7 @@ impl Manager {
     /// Cancel on the forge the run of the job running in the workspace
     /// `selector` names, returning the run's URL, or `None` when the
     /// workspace runs no job.
-    pub(crate) async fn cancel_job_in(&self, selector: &str) -> Result<Option<String>> {
+    pub(crate) async fn cancel_job_in(&self, selector: &SpaceSelector) -> Result<Option<String>> {
         let workspace = self.workspace(selector).await?;
         let Some(job) = self.workspace_claim(&workspace.id).await? else {
             return Ok(None);
@@ -230,7 +231,7 @@ impl Manager {
     /// checked again on the next pass; a launch whose identity was never
     /// recorded proves nothing and keeps the job.
     async fn job_execution_runs(&self, workspace_id: &str, id: &str) -> Result<bool> {
-        let workspace = self.workspace(workspace_id).await?;
+        let workspace = self.workspace_by_id(workspace_id).await?;
         let execution = self
             .workspace_executions(workspace_id)
             .await?

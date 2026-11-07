@@ -6,6 +6,7 @@ use anyhow::{Result, ensure};
 
 use super::environment::configured_environment;
 use super::link_pull::link_or_warn;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent_queue::queued_agent_request,
     agents::check_queued_launch,
@@ -31,9 +32,10 @@ pub(in crate::cli::commands) async fn prepare(
     steps: Preparation,
     reporter: &Reporter<'_>,
 ) -> Result<Prepared> {
-    let mut workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
-        .await?
-        .workspace;
+    let mut workspace =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
+            .await?
+            .workspace;
     if steps.setup {
         reporter.step(Step::SetupStarted).await?;
         workspace = run_setup(ctx, &workspace).await?;
@@ -77,9 +79,10 @@ async fn run_setup(ctx: &Context, workspace: &Workspace) -> Result<Workspace> {
     if let Some(message) = failure {
         return Err(Failed(Failure::SetupFailed { message }).into());
     }
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.id.clone())
-        .await?
-        .workspace;
+    let workspace =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id))
+            .await?
+            .workspace;
     ensure!(
         workspace.state == WorkspaceState::Ready,
         "workspace setup did not complete"
@@ -94,9 +97,12 @@ async fn run_post_setup_hook(
     workspace: &Workspace,
     reporter: &Reporter<'_>,
 ) -> Result<()> {
-    let command =
-        crate::client::workspaces::hook(&ctx.paths, workspace.id.clone(), HookKind::PostSetup)
-            .await?;
+    let command = crate::client::workspaces::hook(
+        &ctx.paths,
+        SpaceSelector::id(&workspace.id),
+        HookKind::PostSetup,
+    )
+    .await?;
     if let Some(command) = command {
         let configured_env = configured_environment(ctx, workspace).await?;
         hooks::run_until(
@@ -126,9 +132,11 @@ async fn link_pr(
         return Ok(workspace);
     }
     reporter.reached(Step::PrLinked).await?;
-    Ok(crate::client::workspaces::inspect(&ctx.paths, workspace.id)
-        .await?
-        .workspace)
+    Ok(
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&workspace.id))
+            .await?
+            .workspace,
+    )
 }
 
 /// Queue `launch` in the ready workspace, which the agent queue starts
@@ -143,7 +151,7 @@ async fn queue_agent(
 ) -> Result<QueueEntry> {
     let settings = crate::client::workspaces::settings(
         &ctx.paths,
-        ConfigTarget::Workspace(workspace.id.clone()),
+        ConfigTarget::Workspace(SpaceSelector::id(&workspace.id)),
     )
     .await?;
     reporter.ensure_running()?;

@@ -8,6 +8,7 @@ use super::{
     executions::{Save, StopRequest},
     shutdown_stop::Shutdown,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     protocol::{Exit, QueuedLaunches},
     state::ChatRestore,
@@ -69,10 +70,17 @@ impl Manager {
                         reason: "the Shoal daemon stopped".into(),
                         save: Save::Everything,
                     };
-                    return self.stop_workspace(&workspace, request).await;
+                    return self
+                        .stop_workspace(&SpaceSelector::id(&workspace), request)
+                        .await;
                 }
-                self.stop_workspace_manually(&workspace, false, None, QueuedLaunches::Keep)
-                    .await?;
+                self.stop_workspace_manually(
+                    &SpaceSelector::id(&workspace),
+                    false,
+                    None,
+                    QueuedLaunches::Keep,
+                )
+                .await?;
                 Ok(())
             }),
             self.save_chats(ChatRestore::Resume)

@@ -9,6 +9,7 @@ use std::{
 };
 
 pub(crate) use crate::client::secrets::{Secret, Secrets, validate};
+use crate::client::space_names::SpaceSelector;
 use crate::{client::approvals::SecretSpecification, env, paths::Paths};
 
 /// What a grant for `secret` binds: the command that fetches it and the tools
@@ -219,7 +220,7 @@ async fn confirm_grant(paths: &Paths, tool: &str, name: &str, secret: &Secret) -
     let workspace = std::env::var(env::WORKSPACE_ID)
         .with_context(|| format!("{tool} needs secrets.{name}, but its workspace is unknown"))?;
     let method = SecretMethod::SecretAcquire {
-        workspace,
+        workspace: SpaceSelector::parse(&workspace),
         name: name.to_owned(),
         request: SecretRequest {
             reason: None,

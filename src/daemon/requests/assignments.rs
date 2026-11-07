@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{AssignmentMethod, Body};
 
 pub(super) async fn handle(
@@ -51,7 +52,11 @@ pub(super) async fn handle(
 }
 
 impl Scoped for AssignmentMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             AssignmentMethod::MarkDone { space, .. }
             | AssignmentMethod::UndoDone { space }

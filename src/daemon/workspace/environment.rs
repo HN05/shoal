@@ -1,5 +1,6 @@
 //! Persistent scope for processes whose lifetime belongs to an external caller.
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{scope::Caller, store},
     env,
@@ -40,13 +41,13 @@ impl Manager {
 
     pub(crate) async fn workspace_environment(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
     ) -> Result<BTreeMap<String, String>> {
         let workspace = self.workspace(selector).await?;
         self.reserve_repository_directory(&workspace.repository_id)
             .await?;
         let _guard = self.gates.lock_git(&workspace.repository_id).await;
-        let workspace = self.workspace(&workspace.id).await?;
+        let workspace = self.workspace_by_id(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
         let settings = self.workspace_settings(&workspace).await?.into_settings();
         let repository = self.repository(&workspace.repository_id).await?;
@@ -94,7 +95,7 @@ impl Manager {
 
     pub(crate) async fn revoke_workspace_environment(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         token: String,
     ) -> Result<()> {
         let workspace_id = self.workspace(selector).await?.id;

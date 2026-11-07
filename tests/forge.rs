@@ -552,7 +552,7 @@ fn apps_read_forge_items_through_the_daemon() {
         scope: None,
     };
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let workspace = || ItemContext::Workspace("topic".into());
+    let workspace = || ItemContext::Workspace("topic".parse().unwrap());
     let checkout = || ItemContext::Checkout(fixture.repo.to_str().unwrap().into());
     let pr_8 = || Selection {
         kind: Some(LinkKind::Pr),

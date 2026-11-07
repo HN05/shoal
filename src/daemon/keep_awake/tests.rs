@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{manager, repository};
 
 async fn has_work(manager: &Manager) -> bool {
@@ -34,7 +35,7 @@ async fn workspace(manager: &Manager, temp: &tempfile::TempDir) -> crate::model:
 
 async fn report(manager: &Manager, workspace: &crate::model::Workspace, state: AgentState) {
     manager
-        .set_agent_state(&workspace.name, state, None, None)
+        .set_agent_state(&SpaceSelector::from(&workspace.name), state, None, None)
         .await
         .unwrap();
 }
@@ -96,7 +97,12 @@ async fn an_idle_agent_has_work_from_a_child_without_its_own_agent() {
     let (temp, manager) = manager().await;
     let parent = workspace(&manager, &temp).await;
     let child = manager
-        .split_workspace(&parent.name, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::from(&parent.name),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     report(&manager, &parent, AgentState::Idle).await;
@@ -190,7 +196,7 @@ async fn a_chats_agent_has_work_as_a_workspaces_does() {
         .unwrap();
     for (state, work) in [(AgentState::Working, true), (AgentState::Idle, false)] {
         manager
-            .set_agent_state(&chat.id, state, None, None)
+            .set_agent_state(&SpaceSelector::id(&chat.id), state, None, None)
             .await
             .unwrap();
         assert_eq!(has_work(&manager).await, work, "{state}");

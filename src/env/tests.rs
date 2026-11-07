@@ -69,7 +69,7 @@ fn preset_directories_go_first_on_the_path_a_process_gets() {
 fn configured_values_render_identity_and_only_reserved_ports_once() {
     let workspace = Workspace::new_record(
         "repo".into(),
-        "task-{branch}".into(),
+        "task".into(),
         PathBuf::from("/tmp/{repo}/$(false) 日本語"),
         Some("feature/session".into()),
         crate::state::WorkspaceState::Ready,
@@ -106,7 +106,7 @@ fn configured_values_render_identity_and_only_reserved_ports_once() {
     );
     assert_eq!(
         rendered["SESSION"],
-        "project-{workspace}:task-{branch}:feature/session"
+        "project-{workspace}:task:feature/session"
     );
     assert_eq!(
         rendered["PROFILE"],

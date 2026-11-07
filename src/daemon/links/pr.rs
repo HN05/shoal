@@ -1,4 +1,5 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
+use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
@@ -52,14 +53,18 @@ impl Manager {
             .await
     }
 
-    pub async fn set_pr(&self, selector: &str, action: Action) -> Result<()> {
+    pub async fn set_pr(&self, selector: &SpaceSelector, action: Action) -> Result<()> {
         let space = self.link_space(selector).await?;
         if let LinkSpace::Chat { .. } = space {
             return self.set_chat_pr(&space, action).await;
         }
-        let (workspace, _guard) = self.lock_pr_gate(space.id()).await?;
-        self.set_pr_gated(&workspace.id, action, WatchCheck::Lookup)
-            .await
+        let (workspace, _guard) = self.lock_pr_gate(&SpaceSelector::id(space.id())).await?;
+        self.set_pr_gated(
+            &SpaceSelector::id(&workspace.id),
+            action,
+            WatchCheck::Lookup,
+        )
+        .await
     }
 
     /// [`Self::set_pr`] for a chat, whose PR watches drive no cleanup and
@@ -101,7 +106,7 @@ impl Manager {
     /// [`Self::set_pr`] for a caller already holding the workspace's PR gate.
     pub(crate) async fn set_pr_gated(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         action: Action,
         check: WatchCheck,
     ) -> Result<()> {
@@ -368,7 +373,10 @@ impl Manager {
             {
                 return Ok(false);
             }
-            if !self.remove_merged(&workspace.id, &head).await? {
+            if !self
+                .remove_merged(&SpaceSelector::id(&workspace.id), &head)
+                .await?
+            {
                 return Ok(false);
             }
             log!("PR cleanup removed {}", workspace.name);

@@ -1,5 +1,6 @@
 //! Trees below a chat without a repository, which takes children in every
 //! repository and whose scope reaches every space.
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         chats::NewChat,
@@ -69,7 +70,12 @@ async fn worked(
         .await
         .unwrap();
     manager
-        .set_agent_state(&workspace.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&workspace.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     workspace
@@ -84,7 +90,7 @@ async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir()
     assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());
     let root_dir = manager.config().root_dir(&manager.paths).unwrap();
     assert_eq!(tmp_dir, root_dir.join(".tmp").join(&master.id));
-    let listed = manager.recorded_chat(&master.id).await.unwrap().unwrap();
+    let listed = manager.chat_by_id(&master.id).await.unwrap().unwrap();
     assert_eq!(listed.tmp_dir, Some(tmp_dir.clone()));
     // A daemon with another state directory sharing root_dir neither lists
     // nor takes it.
@@ -99,7 +105,7 @@ async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir()
     let moved = std::fs::canonicalize(temp.path()).unwrap().join("moved");
     crate::daemon::test_support::configure(&manager, &format!("[machine]\nroot_dir = {moved:?}\n"))
         .await;
-    let listed = manager.recorded_chat(&master.id).await.unwrap().unwrap();
+    let listed = manager.chat_by_id(&master.id).await.unwrap().unwrap();
     assert_eq!(listed.tmp_dir, Some(tmp_dir.clone()));
     assert_eq!(listed.root_dir, Some(root_dir.clone()));
     let directory = manager.chat_checkout_path(&listed).await.unwrap();
@@ -108,7 +114,10 @@ async fn a_chat_without_a_repository_keeps_its_temporary_directory_in_root_dir()
     assert_eq!(space.directories, std::slice::from_ref(&tmp_dir));
     manager.sweep_tmp_dirs().await.unwrap();
     assert!(tmp_dir.is_dir(), "{}", tmp_dir.display());
-    manager.remove_chat(&master.id, None).await.unwrap();
+    manager
+        .remove_chat(&SpaceSelector::id(&master.id), None)
+        .await
+        .unwrap();
     assert!(!tmp_dir.exists(), "{}", tmp_dir.display());
 }
 
@@ -132,7 +141,7 @@ async fn a_chat_without_a_repository_takes_children_in_every_repository() {
     let first = worked(&manager, &repos[0], "first", Some(&master.id)).await;
     let second = worked(&manager, &repos[1], "second", Some(&master.id)).await;
     for workspace in [&first, &second] {
-        let parent = manager.workspace(&workspace.id).await.unwrap().parent;
+        let parent = manager.workspace_by_id(&workspace.id).await.unwrap().parent;
         assert_eq!(parent.map(|parent| parent.id), Some(master.id.clone()));
     }
     // A chat without a repository goes below another one.
@@ -178,10 +187,18 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
 
     // Its hooks receive what the space below it sends, and acknowledge it.
     manager
-        .send_message(&below.id, "done".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&below.id),
+            "done".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
-    let delivered = manager.space_updates(&master.id).await.unwrap();
+    let delivered = manager
+        .space_updates(&SpaceSelector::id(&master.id))
+        .await
+        .unwrap();
     let last = delivered
         .messages
         .last()
@@ -196,10 +213,13 @@ async fn activity_reaches_a_chat_without_a_repository_only_from_below_it() {
         .map(|message| message.id)
         .collect();
     manager
-        .acknowledge_space_delivery(&master.id, deliveries, messages, &[])
+        .acknowledge_space_delivery(&SpaceSelector::id(&master.id), deliveries, messages, &[])
         .await
         .unwrap();
-    let again = manager.space_updates(&master.id).await.unwrap();
+    let again = manager
+        .space_updates(&SpaceSelector::id(&master.id))
+        .await
+        .unwrap();
     assert!(again.messages.is_empty(), "{again:?}");
 }
 
@@ -211,11 +231,14 @@ async fn removing_a_chat_without_a_repository_removes_its_children_in_every_repo
     let first = worked(&manager, &repos[0], "first", Some(&master.id)).await;
     let second = worked(&manager, &repos[1], "second", Some(&master.id)).await;
     super::mixed::stop_chat(&manager, &master, process).await;
-    let removed = manager.remove_chat(&master.id, None).await.unwrap();
+    let removed = manager
+        .remove_chat(&SpaceSelector::id(&master.id), None)
+        .await
+        .unwrap();
     let mut children: Vec<_> = removed.children.iter().map(String::as_str).collect();
     children.sort_unstable();
     assert_eq!(children, ["first", "second"]);
-    assert!(manager.recorded_chat(&master.id).await.unwrap().is_none());
+    assert!(manager.chat_by_id(&master.id).await.unwrap().is_none());
     for workspace in [&first, &second] {
         let found = manager.find_workspace(&workspace.id).await.unwrap();
         assert!(found.is_none(), "{}", workspace.name);
@@ -268,11 +291,11 @@ async fn a_chat_without_a_repository_copies_a_workspace_of_any_repository() {
         execution: None,
     };
     let mut source = crate::protocol::CopySource {
-        workspace: user.name.to_string(),
+        workspace: SpaceSelector::parse(&user.name),
         checkpoint: None,
     };
     manager.copy_within(&caller, &mut source).await.unwrap();
-    assert_eq!(source.workspace, user.id);
+    assert_eq!(source.workspace, SpaceSelector::id(&user.id));
 }
 
 #[tokio::test]
@@ -311,7 +334,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     let AgentMethod::SendAgentMessage { space, .. } = method else {
         unreachable!("the method stays a message");
     };
-    assert_eq!(space, user.id);
+    assert_eq!(space, SpaceSelector::id(&user.id));
     // A chat of a repository reaches only its own tree.
     let scoped = manager.chat_scope(&chat.id).await.unwrap();
     let refused = crate::daemon::scope::authorize(&manager, Some(&scoped), &mut message()).await;
@@ -361,7 +384,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
     };
     assert_eq!(
         (acting, repository),
-        (master.id.clone(), repos[1].id.clone())
+        (SpaceSelector::id(&master.id), repos[1].id.clone())
     );
 
     // It resumes the agent of a space it reaches only when it or a space
@@ -373,7 +396,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
         .unwrap();
         last.write(&manager.paths, &user.id).unwrap();
         QueueMethod::QueueRestore {
-            workspace: user.id.clone(),
+            workspace: SpaceSelector::id(&user.id),
             execution: "e1".into(),
             env: Default::default(),
             now: false,
@@ -389,7 +412,7 @@ async fn the_scope_of_a_chat_without_a_repository_reaches_every_space_it_may_cha
 
     // What the scope keeps from every agent stays the user's.
     let mut merge = ItemMethod::ItemAction {
-        context: ItemContext::Chat(master.id.clone()),
+        context: ItemContext::Chat(SpaceSelector::id(&master.id)),
         kind: crate::forge::items::link::ItemKind::Pr,
         item: Some("1".into()),
         action: crate::forge::items::action::Action::CancelAutoMerge,

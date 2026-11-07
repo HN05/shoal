@@ -3,6 +3,7 @@
 use anyhow::Result;
 
 use crate::client::space_names::SpaceName;
+use crate::client::space_names::SpaceSelector;
 
 use crate::{
     client::{
@@ -24,7 +25,7 @@ pub struct NewChat<'a> {
     pub mode: &'a str,
     /// The space it goes below; a scoped caller's daemon puts it below the
     /// caller's own space without one.
-    pub parent: Option<&'a str>,
+    pub parent: Option<&'a SpaceSelector>,
 }
 
 /// Record the `chat` whose agent replaces this process at `home`, running
@@ -41,14 +42,16 @@ pub async fn start(
         daemon,
         ChatMethod::StartChat {
             repository: home.repository_id().map(|id| id.to_owned().into()),
-            workspace: home.workspace().map(|workspace| workspace.id.clone()),
+            workspace: home
+                .workspace()
+                .map(|workspace| SpaceSelector::id(&workspace.id)),
             name: chat.name.clone(),
             agent: chat.agent.to_owned(),
             mode: Some(chat.mode.to_owned()),
             pid: std::process::id(),
             origin,
             hands_over,
-            parent: chat.parent.map(str::to_owned),
+            parent: chat.parent.cloned(),
         },
     )
     .await
@@ -65,20 +68,21 @@ pub async fn check_name(daemon: &impl Daemon, name: &SpaceName) -> Result<()> {
 pub async fn check_parent(
     daemon: &impl Daemon,
     repository: Option<Selector>,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     parent: String,
 ) -> Result<()> {
     let method = ChatMethod::CheckChatParent {
         repository,
         workspace,
-        parent: Some(parent),
+        parent: Some(SpaceSelector::parse(&parent)),
     };
     request::<()>(daemon, method).await
 }
 
 /// Refuse the restore of the stopped chat `chat`, by ID, that the daemon
 /// would refuse this process, before anything opens a place for it.
-pub async fn check_restore(daemon: &impl Daemon, chat: String) -> Result<()> {
+pub async fn check_restore(daemon: &impl Daemon, chat: &str) -> Result<()> {
+    let chat = SpaceSelector::id(chat);
     request::<()>(daemon, ChatMethod::CheckChatRestore { chat }).await
 }
 
@@ -96,7 +100,7 @@ pub async fn free_name(daemon: &impl Daemon, name: String) -> Result<SpaceName> 
 
 /// The scope token `chat`'s agent carries.
 pub async fn scope(daemon: &impl Daemon, chat: &Chat) -> Result<String> {
-    let chat = chat.id.clone();
+    let chat = SpaceSelector::id(&chat.id);
     let scope: ScopeToken = request(daemon, ChatMethod::ChatScope { chat }).await?;
     Ok(scope.token)
 }
@@ -106,7 +110,7 @@ pub async fn move_to(daemon: &impl Daemon, chat: &Chat, pid: u32) -> Result<Chat
     request(
         daemon,
         ChatMethod::MoveChat {
-            chat: chat.id.clone(),
+            chat: SpaceSelector::id(&chat.id),
             pid,
         },
     )
@@ -114,7 +118,11 @@ pub async fn move_to(daemon: &impl Daemon, chat: &Chat, pid: u32) -> Result<Chat
 }
 
 /// Rename `chat` to `name`.
-pub async fn rename(daemon: &impl Daemon, chat: String, name: SpaceName) -> Result<RenamedChat> {
+pub async fn rename(
+    daemon: &impl Daemon,
+    chat: SpaceSelector,
+    name: SpaceName,
+) -> Result<RenamedChat> {
     request(daemon, ChatMethod::RenameChat { chat, name }).await
 }
 
@@ -157,7 +165,7 @@ pub async fn restore(
     request(
         daemon,
         ChatMethod::RestoreChat {
-            chat: chat.to_owned(),
+            chat: SpaceSelector::parse(chat),
             pid: std::process::id(),
             origin,
             hands_over,
@@ -172,7 +180,7 @@ pub async fn save(daemon: &impl Daemon, chat: &str, error: &anyhow::Error) -> Re
     request::<()>(
         daemon,
         ChatMethod::SaveChat {
-            chat: chat.to_owned(),
+            chat: SpaceSelector::parse(chat),
             pid: std::process::id(),
             error: format!("{error:#}"),
         },
@@ -207,7 +215,7 @@ pub async fn remove(
     request(
         daemon,
         ChatMethod::RemoveChat {
-            chat: chat.to_owned(),
+            chat: SpaceSelector::parse(chat),
             children,
         },
     )

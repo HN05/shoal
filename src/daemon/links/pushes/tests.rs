@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         approvals::proposals::PR,
@@ -66,14 +67,18 @@ async fn only_scoped_pushes_wait_where_the_repository_asks() {
     let (_root, manager, workspace, caller) = setup().await;
     let push = branch(&workspace).await;
     let outcome = manager
-        .request_push(&workspace.id, push.clone(), None)
+        .request_push(&SpaceSelector::id(&workspace.id), push.clone(), None)
         .await
         .unwrap();
     assert!(matches!(outcome, PushOutcome::Direct));
 
     let request = proposed(
         manager
-            .request_push(&workspace.id, push.clone(), Some(&caller))
+            .request_push(
+                &SpaceSelector::id(&workspace.id),
+                push.clone(),
+                Some(&caller),
+            )
             .await
             .unwrap(),
     );
@@ -87,7 +92,11 @@ async fn only_scoped_pushes_wait_where_the_repository_asks() {
     // Pushing the same again names the same request.
     let again = proposed(
         manager
-            .request_push(&workspace.id, push.clone(), Some(&caller))
+            .request_push(
+                &SpaceSelector::id(&workspace.id),
+                push.clone(),
+                Some(&caller),
+            )
             .await
             .unwrap(),
     );
@@ -100,7 +109,11 @@ async fn only_scoped_pushes_wait_where_the_repository_asks() {
     commit(&workspace.path, "tracked");
     let newer = proposed(
         manager
-            .request_push(&workspace.id, branch(&workspace).await, Some(&caller))
+            .request_push(
+                &SpaceSelector::id(&workspace.id),
+                branch(&workspace).await,
+                Some(&caller),
+            )
             .await
             .unwrap(),
     );
@@ -119,7 +132,11 @@ async fn a_pr_proposal_that_pushes_takes_the_place_of_its_push_request() {
     let push = branch(&workspace).await;
     let separate = proposed(
         manager
-            .request_push(&workspace.id, push.clone(), Some(&caller))
+            .request_push(
+                &SpaceSelector::id(&workspace.id),
+                push.clone(),
+                Some(&caller),
+            )
             .await
             .unwrap(),
     );
@@ -155,7 +172,7 @@ async fn a_pr_proposal_that_pushes_takes_the_place_of_its_push_request() {
     // Pushing the branch again while the PR waits names the PR's request.
     let again = proposed(
         manager
-            .request_push(&workspace.id, push, Some(&caller))
+            .request_push(&SpaceSelector::id(&workspace.id), push, Some(&caller))
             .await
             .unwrap(),
     );
@@ -167,7 +184,11 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
     let (_root, manager, workspace, caller) = setup().await;
     let request = proposed(
         manager
-            .request_push(&workspace.id, branch(&workspace).await, Some(&caller))
+            .request_push(
+                &SpaceSelector::id(&workspace.id),
+                branch(&workspace).await,
+                Some(&caller),
+            )
             .await
             .unwrap(),
     );
@@ -180,11 +201,13 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
     assert!(approve().await.is_err());
     let denied = manager.decide_approval(request.number, false, None, Default::default(), None);
     assert!(denied.await.is_err());
-    let withdrawn = manager.withdraw_approval(&workspace.id, request.number);
+    let selected = SpaceSelector::id(&workspace.id);
+    let withdrawn = manager.withdraw_approval(&selected, request.number);
     assert!(withdrawn.await.is_err());
     std::fs::write(workspace.path.join("tracked"), "changed\n").unwrap();
     commit(&workspace.path, "tracked");
-    let replaced = manager.request_push(&workspace.id, branch(&workspace).await, Some(&caller));
+    let selected = SpaceSelector::id(&workspace.id);
+    let replaced = manager.request_push(&selected, branch(&workspace).await, Some(&caller));
     assert!(replaced.await.is_err());
 
     // A failed push leaves the request to approve again.
@@ -212,7 +235,14 @@ async fn approving_a_push_runs_it_and_its_end_decides_the_request() {
             .unwrap()
             .is_none()
     );
-    assert_eq!(manager.agent_messages("worker").await.unwrap().len(), 1);
+    assert_eq!(
+        manager
+            .agent_messages(&"worker".into())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -220,7 +250,11 @@ async fn approving_a_push_of_a_branch_that_moved_outdates_it() {
     let (_root, manager, workspace, caller) = setup().await;
     let request = proposed(
         manager
-            .request_push(&workspace.id, branch(&workspace).await, Some(&caller))
+            .request_push(
+                &SpaceSelector::id(&workspace.id),
+                branch(&workspace).await,
+                Some(&caller),
+            )
             .await
             .unwrap(),
     );
@@ -237,7 +271,14 @@ async fn approving_a_push_of_a_branch_that_moved_outdates_it() {
         .unwrap();
     assert_eq!(outdated.status, DecisionStatus::Outdated);
     assert!(outdated.operation.is_none());
-    assert_eq!(manager.agent_messages("worker").await.unwrap().len(), 1);
+    assert_eq!(
+        manager
+            .agent_messages(&"worker".into())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -250,15 +291,22 @@ async fn deny_refuses_scoped_pushes_and_lets_the_user_push() {
         &["remote", "add", "origin", remote.to_str().unwrap()],
     );
     let push = branch(&workspace).await;
-    let requested = manager.request_push(&workspace.id, push.clone(), Some(&caller));
+    let selected = SpaceSelector::id(&workspace.id);
+    let requested = manager.request_push(&selected, push.clone(), Some(&caller));
     assert!(requested.await.is_err());
-    let held = manager.branch_push_held(&workspace.id, Some(&caller));
+    let selected = SpaceSelector::id(&workspace.id);
+    let held = manager.branch_push_held(&selected, Some(&caller));
     assert!(held.await.is_err());
     let outcome = manager
-        .request_push(&workspace.id, push, None)
+        .request_push(&SpaceSelector::id(&workspace.id), push, None)
         .await
         .unwrap();
     assert!(matches!(outcome, PushOutcome::Direct));
-    assert!(!manager.branch_push_held(&workspace.id, None).await.unwrap());
+    assert!(
+        !manager
+            .branch_push_held(&SpaceSelector::id(&workspace.id), None)
+            .await
+            .unwrap()
+    );
     assert!(manager.approval_requests(None).await.unwrap().is_empty());
 }

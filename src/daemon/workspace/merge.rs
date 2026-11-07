@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail, ensure};
 
 use super::{Manager, branches::UpstreamPolicy};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     fsutil::off_runtime,
     git::{
@@ -42,7 +43,11 @@ impl Manager {
     /// What merging the workspace `selector` names does, after the checks the
     /// merge makes before it changes anything; with `push`, the merge pushes
     /// the default branch afterwards.
-    pub async fn preview_merge(&self, selector: &str, push: bool) -> Result<MergePreview> {
+    pub async fn preview_merge(
+        &self,
+        selector: &SpaceSelector,
+        push: bool,
+    ) -> Result<MergePreview> {
         let merge = self.validate_merge(selector, push).await?;
         let default_commit = local_commit(&merge.repo, &merge.default).await?;
         self.merge_preview(
@@ -59,10 +64,16 @@ impl Manager {
     /// Validate and refresh a merge that runs as `options` say while the
     /// caller holds the repository Git gate. The gate must stay held until the
     /// tracked execution completes.
-    pub async fn prepare_merge(&self, selector: &str, options: &MergeOptions) -> Result<MergePlan> {
+    pub async fn prepare_merge(
+        &self,
+        selector: &SpaceSelector,
+        options: &MergeOptions,
+    ) -> Result<MergePlan> {
         let merge = self.validate_merge(selector, options.push).await?;
         if let Some(confirmed) = &options.confirmed {
-            let warning = self.branch_merge_warning(&merge.workspace.id).await?;
+            let warning = self
+                .branch_merge_warning(&SpaceSelector::id(&merge.workspace.id))
+                .await?;
             let warned = warning.map(|warning| warning.files).unwrap_or_default();
             ensure_confirmed(&merge, confirmed, &warned).await?;
         }
@@ -108,7 +119,7 @@ impl Manager {
 
     /// The checks a merge makes before it changes anything. A merge that
     /// pushes needs an upstream for the default branch.
-    async fn validate_merge(&self, selector: &str, push: bool) -> Result<MergeSource> {
+    async fn validate_merge(&self, selector: &SpaceSelector, push: bool) -> Result<MergeSource> {
         let workspace = self.workspace(selector).await?;
         self.ensure_merging_enabled(&workspace).await?;
         let repo = self.repository(&workspace.repository_id).await?;
@@ -191,7 +202,9 @@ impl Manager {
             .store
             .run(move |db| crate::daemon::links::wait::open_prs(db, &id))
             .await?;
-        let warning = self.branch_merge_warning(&workspace.id).await?;
+        let warning = self
+            .branch_merge_warning(&SpaceSelector::id(&workspace.id))
+            .await?;
         Ok(MergePreview {
             workspace_id: workspace.id.clone(),
             branch: branch.to_owned(),

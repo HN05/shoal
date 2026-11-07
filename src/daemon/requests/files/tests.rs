@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{manager, repository},
     workspace_files::Attacher,
@@ -36,7 +37,7 @@ async fn long_file_listings_go_in_pages() {
     let answer = handle(
         &manager,
         FileMethod::ListFiles {
-            space: workspace.name.to_string(),
+            space: SpaceSelector::parse(&workspace.name),
         },
         None,
     )
@@ -72,7 +73,11 @@ async fn deleting_by_name_needs_a_workspace() {
     let file = temp.path().join("notes.md");
     std::fs::write(&file, "plan").unwrap();
     manager
-        .add_attached_files(&workspace.name, vec![file.into()], &Attacher::User)
+        .add_attached_files(
+            &SpaceSelector::from(&workspace.name),
+            vec![file.into()],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let refused = handle(
@@ -90,7 +95,11 @@ async fn deleting_by_name_needs_a_workspace() {
         "deleting by name without a workspace was accepted"
     );
     assert_eq!(
-        manager.attached_files(&workspace.name).await.unwrap().len(),
+        manager
+            .attached_files(&SpaceSelector::from(&workspace.name))
+            .await
+            .unwrap()
+            .len(),
         1
     );
 }

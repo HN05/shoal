@@ -6,6 +6,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     execution::recovery,
     model::{AgentStatus, Execution, PresentSpace},
@@ -127,7 +128,7 @@ impl Manager {
     /// after every tool call, and a repeated state keeps its start.
     pub async fn set_agent_state(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         state: AgentState,
         execution: Option<String>,
         session: Option<String>,
@@ -141,7 +142,7 @@ impl Manager {
     /// and ask the user the question the turn asked in its chat.
     pub async fn end_agent_turn(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: Option<String>,
         session: Option<String>,
         turn_end: TurnEnd,
@@ -164,7 +165,7 @@ impl Manager {
     /// for the agent's restore. Whether the turn starts.
     pub(crate) async fn start_woken_turn(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: Option<String>,
     ) -> Result<bool> {
         if let Some(id) = &execution
@@ -188,7 +189,7 @@ impl Manager {
     /// turns.
     pub(crate) async fn end_interrupted_turn(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: String,
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
@@ -209,7 +210,7 @@ impl Manager {
     /// lifetime.
     async fn prompt_cache(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: Option<&str>,
         turn_end: &TurnEnd,
     ) -> Duration {
@@ -223,8 +224,12 @@ impl Manager {
     /// The AI tool of the agent in the space `selector` names, as the
     /// space's settings resolve it: a chat's own agent, or the one
     /// `execution` runs in a workspace.
-    async fn agent_tool(&self, selector: &str, execution: Option<&str>) -> Option<crate::ai::Tool> {
-        let space = self.present_space(selector).await.ok()?;
+    async fn agent_tool(
+        &self,
+        selector: &SpaceSelector,
+        execution: Option<&str>,
+    ) -> Option<crate::ai::Tool> {
+        let space = self.space(selector).await.ok()?;
         let agent = match (&space, execution) {
             (PresentSpace::Chat(chat), _) => chat.agent.clone(),
             (PresentSpace::Workspace(_), Some(execution)) => self.agent_name(execution).await?,
@@ -238,13 +243,13 @@ impl Manager {
     /// `ending` says how it ends the agent's turn.
     async fn record_agent_state(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         state: AgentState,
         execution: Option<String>,
         session: Option<String>,
         ending: TurnEnding,
     ) -> Result<AgentStatus> {
-        let space = self.present_space(selector).await?;
+        let space = self.space(selector).await?;
         if let Some(execution) = &execution {
             self.record_agent_turn(execution, state, ending.interrupted_after(state))
                 .await;
@@ -304,7 +309,7 @@ impl Manager {
     /// first, since the agent going idle finishes a delivered one.
     pub async fn report_turn_failure(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         failure: TurnFailure,
         execution: Option<String>,
         session: Option<String>,

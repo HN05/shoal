@@ -6,6 +6,7 @@ use anyhow::{Context as _, Result, bail, ensure};
 use super::workspaces::{self, AgentLaunch};
 use crate::client::assignments;
 use crate::client::output::workspaces::Registered;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     agent_queue::Creation,
@@ -185,8 +186,14 @@ async fn pick_open_item(
 pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let (items, relation) = items.split()?;
     let (space, selected) = select(ctx, items).await?;
-    crate::client::items::unlink(&ctx.paths, space, relation, selected.kind, selected.input)
-        .await?;
+    crate::client::items::unlink(
+        &ctx.paths,
+        SpaceSelector::parse(&space),
+        relation,
+        selected.kind,
+        selected.input,
+    )
+    .await?;
     let unlinked = Registered {
         registered: false,
         relation: None,
@@ -208,7 +215,8 @@ pub(super) async fn watch(
 pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
     let (space, selection) = select(ctx, items).await?;
     let itself = space_kind(ctx, &space).await?;
-    let outcomes = assignments::mark_ready(&ctx.paths, space, selection).await?;
+    let outcomes =
+        assignments::mark_ready(&ctx.paths, SpaceSelector::parse(&space), selection).await?;
     let ReadyMarks { marks, skipped } = outcomes.into();
     for skipped in &skipped {
         eprintln!("Skipped PR {}: {}", skipped.url, skipped.reason);
@@ -227,7 +235,9 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
 pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
     let (space, selection) = select(ctx, items).await?;
     let itself = space_kind(ctx, &space).await?;
-    let marks = assignments::clear_ready(&ctx.paths, space, selection, draft).await?;
+    let marks =
+        assignments::clear_ready(&ctx.paths, SpaceSelector::parse(&space), selection, draft)
+            .await?;
     let message = format!(
         "Ready-for-review marks cleared:\n{}",
         review_lines(&marks, itself)

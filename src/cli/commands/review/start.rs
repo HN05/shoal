@@ -5,6 +5,7 @@ use std::{ffi::OsString, path::Path};
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::client::operations::NewWorkspace;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::{Agent, ModelChoice},
     cli::{
@@ -119,7 +120,8 @@ pub(super) async fn start(
             super::Space::Chat(chat) => {
                 let (repo, url) = chat_pull(ctx, &chat).await?;
                 check_reviewer(ctx, &repo, &reviewer, post, &model).await?;
-                let pull = read_pull(ctx, ItemContext::Chat(chat.id), url).await?;
+                let pull =
+                    read_pull(ctx, ItemContext::Chat(SpaceSelector::id(&chat.id)), url).await?;
                 pull_request(ctx, &repo, pull, reviewer, post, model, args).await
             }
             super::Space::Workspace(workspace) => {
@@ -313,7 +315,9 @@ async fn fork_pull_workspace(
         head: super::super::links::fork_head(repo, pull).await?,
     };
     let new = NewWorkspace {
-        parent: crate::cli::ui::current_chat(&None),
+        parent: crate::cli::ui::current_chat(&None)
+            .as_deref()
+            .map(SpaceSelector::id),
         options: CreationOptions {
             skip_setup: true,
             ..Default::default()
@@ -343,9 +347,12 @@ async fn update_to_head(
     head: &str,
 ) -> Result<()> {
     let tracking = fetch_pull_branch(repo, "head", head).await?;
-    let updated =
-        crate::client::workspaces::fast_forward(&ctx.paths, workspace.id.clone(), head.to_owned())
-            .await?;
+    let updated = crate::client::workspaces::fast_forward(
+        &ctx.paths,
+        SpaceSelector::id(&workspace.id),
+        head.to_owned(),
+    )
+    .await?;
     if updated {
         eprintln!("Updated workspace {} to {tracking}", workspace.name);
     }
@@ -375,9 +382,11 @@ async fn run(
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let settings =
-        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
-            .await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(SpaceSelector::parse(&workspace)),
+    )
+    .await?;
     let post = match &subject {
         Subject::Changes => None,
         Subject::Pull { post, .. } => *post,
@@ -420,7 +429,7 @@ async fn run(
 /// the PR head it was opened at: the review command reads the checkout, so
 /// it would review commits the PR does not have.
 async fn ensure_at_pull_head(ctx: &Context, workspace: &str) -> Result<()> {
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace.to_owned())
+    let workspace = crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(workspace))
         .await?
         .workspace;
     let Some(at) = &workspace.at else {
@@ -465,7 +474,14 @@ async fn queue(
     // Refused here, before the daemon queues a review it could not run.
     super::super::chat::check_model(settings, &agent, &model)?;
     crate::cli::agents::ensure_reviewer_available(agent.name(), settings)?;
-    let review = crate::client::reviews::run(&ctx.paths, workspace, target, agent, model).await?;
+    let review = crate::client::reviews::run(
+        &ctx.paths,
+        SpaceSelector::parse(&workspace),
+        target,
+        agent,
+        model,
+    )
+    .await?;
     let message = format!(
         "Review {id} of {} is queued for {}; its findings arrive as a message. Wait for it with \
          shoal watch review {id}.",

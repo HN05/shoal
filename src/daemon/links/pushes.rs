@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::links::PushOutcome,
     config::repo::Pushes,
@@ -34,7 +35,11 @@ impl Manager {
     /// waits for the user: one from a scoped caller under `[permissions]
     /// push = "propose"`, unless the remote has the branch's commit already.
     /// `"deny"` refuses it.
-    pub async fn branch_push_held(&self, selector: &str, caller: Option<&Caller>) -> Result<bool> {
+    pub async fn branch_push_held(
+        &self,
+        selector: &SpaceSelector,
+        caller: Option<&Caller>,
+    ) -> Result<bool> {
         let workspace = self.workspace(selector).await?;
         let pushes = self.scoped_pushes(&workspace, caller).await?;
         if pushes == Pushes::Direct {
@@ -88,7 +93,7 @@ impl Manager {
     /// approval.
     pub async fn request_push(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         push: PushSpecification,
         caller: Option<&Caller>,
     ) -> Result<PushOutcome> {
@@ -133,7 +138,9 @@ impl Manager {
     /// request whose push runs. The caller holds the workspace's PR gate,
     /// under which approved pushes start.
     pub(super) async fn ensure_workspace_not_pushing(&self, workspace: &Workspace) -> Result<()> {
-        let requests = self.approval_requests(Some(&workspace.id)).await?;
+        let requests = self
+            .approval_requests(Some(&SpaceSelector::id(&workspace.id)))
+            .await?;
         requests
             .iter()
             .filter(|request| request.status == DecisionStatus::Pending)
@@ -180,7 +187,7 @@ impl Manager {
             .context("the approval request has no push")?
             .clone();
         let spec = OperationSpec::Push {
-            workspace: workspace.id.clone(),
+            workspace: SpaceSelector::id(&workspace.id),
             approval: request.key.clone(),
             push,
         };

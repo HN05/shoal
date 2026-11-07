@@ -1,6 +1,7 @@
 use std::{fs, sync::Arc};
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope::Caller,
@@ -50,7 +51,7 @@ impl Fixture {
 
     async fn copy(&self, checkpoint: Option<u64>, place: CopyPlace) -> Result<Workspace> {
         let source = CopySource {
-            workspace: self.source.name.to_string(),
+            workspace: SpaceSelector::parse(&self.source.name),
             checkpoint,
         };
         let repository = self.source.repository_id.as_str().into();
@@ -61,7 +62,7 @@ impl Fixture {
 
     async fn unsaved_work(&self, workspace: &Workspace) -> Vec<String> {
         let check = (self.manager)
-            .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+            .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
             .await
             .unwrap();
         let mut work = check.unsaved_work();
@@ -139,7 +140,7 @@ async fn a_copy_takes_the_suffix_its_branch_takes_on_a_parent_component() {
         &["update-ref", "refs/remotes/origin/fix", head.trim()],
     );
     let request = CopySource {
-        workspace: source.name.to_string(),
+        workspace: SpaceSelector::parse(&source.name),
         checkpoint: None,
     };
     let copy = f.manager.create_copy(
@@ -178,7 +179,11 @@ async fn a_source_in_a_git_operation_is_refused() {
 #[tokio::test]
 async fn a_copy_starts_from_a_checkpoint_of_a_live_or_removed_workspace() {
     let f = Fixture::new().await;
-    let checkpoint = f.manager.take_checkpoint("topic", None).await.unwrap();
+    let checkpoint = f
+        .manager
+        .take_checkpoint(&"topic".into(), None)
+        .await
+        .unwrap();
     let kept = git(&f.source.path, &["diff", "HEAD"]);
     fs::write(f.source.path.join("untracked"), "changed later\n").unwrap();
     let live = f
@@ -199,7 +204,11 @@ async fn a_copy_starts_from_a_checkpoint_of_a_live_or_removed_workspace() {
     );
 
     f.manager
-        .remove_workspace(&f.source.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&f.source.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let removed = f
@@ -221,7 +230,11 @@ async fn a_copy_starts_from_a_checkpoint_of_a_live_or_removed_workspace() {
 #[tokio::test]
 async fn a_checkpoint_that_kept_head_only_is_refused() {
     let f = Fixture::new().await;
-    let checkpoint = f.manager.take_checkpoint("topic", None).await.unwrap();
+    let checkpoint = f
+        .manager
+        .take_checkpoint(&"topic".into(), None)
+        .await
+        .unwrap();
     let id = f.source.id.clone();
     f.manager
         .store
@@ -284,7 +297,11 @@ async fn an_untouched_copy_goes_without_consent_and_a_changed_one_does_not() {
         let manager = f.manager.clone();
         async move {
             manager
-                .remove_workspace(&id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+                .remove_workspace(
+                    &SpaceSelector::id(&id),
+                    UnsavedWork::default(),
+                    InspectionPolicy::GitOnly,
+                )
                 .await
         }
     };
@@ -303,7 +320,12 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&f.source.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&f.source.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let caller = Caller {
@@ -312,22 +334,29 @@ async fn agents_copy_only_live_workspaces_of_their_own_tree() {
     };
     for (workspace, allowed) in [(&f.source, true), (&child, true), (&other, false)] {
         let mut source = CopySource {
-            workspace: workspace.name.to_string(),
+            workspace: SpaceSelector::parse(&workspace.name),
             checkpoint: None,
         };
         let result = manager.copy_within(&caller, &mut source).await;
         assert_eq!(result.is_ok(), allowed, "{}", workspace.name);
         if allowed {
-            assert_eq!(source.workspace, workspace.id);
+            assert_eq!(source.workspace, SpaceSelector::id(&workspace.id));
         }
     }
-    let checkpoint = manager.take_checkpoint("other", None).await.unwrap();
+    let checkpoint = manager
+        .take_checkpoint(&"other".into(), None)
+        .await
+        .unwrap();
     manager
-        .remove_workspace(&other.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&other.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let mut removed = CopySource {
-        workspace: other.name.to_string(),
+        workspace: SpaceSelector::parse(&other.name),
         checkpoint: Some(checkpoint.number),
     };
     assert!(manager.copy_within(&caller, &mut removed).await.is_err());
@@ -339,13 +368,17 @@ async fn removing_an_untouched_copy_keeps_its_branch_when_only_it_has_the_commit
     git(&f.source.path, &["commit", "-m", "the source's own"]);
     let copy = f.copy(None, CopyPlace::Branch(None)).await.unwrap();
     let check = (f.manager)
-        .check_removal(&copy.id, InspectionPolicy::GitOnly)
+        .check_removal(&SpaceSelector::id(&copy.id), InspectionPolicy::GitOnly)
         .await
         .unwrap();
     assert_eq!(check.unpushed_commits, 1);
     assert!(check.commits_kept() && !check.branch_preserved());
     f.manager
-        .remove_workspace(&copy.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&copy.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let branches = git(&f.source.path, &["branch", "--list", "topic-copy"]);
@@ -391,7 +424,11 @@ async fn removal_keeps_starting_files_above_the_archive_limit() {
     crate::daemon::test_support::configure(&f.manager, "[cleanup.restore]\narchive_max_mb = 0\n")
         .await;
     f.manager
-        .remove_workspace(&copy.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&copy.id),
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     let removed = f.manager.removed_workspaces().await.unwrap();

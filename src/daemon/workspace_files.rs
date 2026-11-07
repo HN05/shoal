@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, ensure};
 use tokio::sync::OwnedMutexGuard;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
     model::{Chat, HandedBack, PresentSpace, Repository, Workspace},
@@ -235,41 +236,39 @@ impl Manager {
         }
     }
 
-    /// The running chat `sender_chat` as an attacher, else the user, as for
-    /// a chat that is stopped or a request from outside any chat.
+    /// The running chat `sender_chat`, by ID or name, as an attacher, else
+    /// the user, as for a chat that is stopped or a request from outside any
+    /// chat.
     async fn chat_attacher(&self, sender_chat: Option<&str>) -> Attacher {
-        let running = match sender_chat {
-            Some(chat) => self.running_chat(chat).await,
-            None => return Attacher::User,
+        let Some(chat) = sender_chat else {
+            return Attacher::User;
         };
-        match running {
-            Ok(Some(chat)) => Attacher::Chat {
+        match self.running_chat(&SpaceSelector::parse(chat)).await {
+            Ok(chat) => Attacher::Chat {
                 agent: chat.agent,
                 chat: chat.id,
             },
-            Ok(None) => Attacher::User,
-            Err(error) => {
-                crate::daemon::log!("attaching chat unknown: {error:#}");
-                Attacher::User
-            }
+            Err(_) => Attacher::User,
         }
     }
 
     /// The files attached to the workspace or chat `selector` names, or
     /// kept for a removed space of that name, oldest first.
-    pub async fn attached_files(&self, selector: &str) -> Result<Vec<AttachedFile>> {
+    pub async fn attached_files(&self, selector: &SpaceSelector) -> Result<Vec<AttachedFile>> {
         let space = self.file_space(selector).await?;
         self.store.run(move |db| records::list(db, &space.id)).await
     }
 
     /// The workspace or chat `selector` names, or else the latest removed
     /// space of that name or ID whose files are kept.
-    pub(crate) async fn file_space(&self, selector: &str) -> Result<Space> {
-        let error = match self.present_space(selector).await {
+    pub(crate) async fn file_space(&self, selector: &SpaceSelector) -> Result<Space> {
+        let error = match self.space(selector).await {
             Ok(space) => return Ok(space.into()),
             Err(error) => error,
         };
-        let selector = selector.to_owned();
+        let Some(selector) = selector.id_or_name().map(str::to_owned) else {
+            return Err(error);
+        };
         let gone = self
             .store
             .run(move |db| records::gone_space(db, &selector))
@@ -359,7 +358,7 @@ impl Manager {
     /// not have deletes nothing.
     pub async fn remove_attached_files(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         names: Vec<String>,
         ids: Vec<i64>,
     ) -> Result<Vec<AttachedFile>> {
@@ -433,12 +432,12 @@ impl Manager {
     /// title.
     pub async fn add_attached_files(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         files: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Vec<AttachedFile>> {
         ensure!(!files.is_empty(), "give the files to add");
-        let space: Space = self.present_space(selector).await?.into();
+        let space: Space = self.space(selector).await?.into();
         let (layout, _files) = self.lock_files(&space).await?;
         let kept = keep(layout, &space.id, ADDED, files).await?;
         self.record_or_discard(&space.id, FileSource::Added, attacher, kept)
@@ -537,12 +536,12 @@ impl Manager {
     /// Refuse attaching files to the space `space_id` once the
     /// workspace is being removed or is gone, or the chat was removed.
     async fn ensure_attachable(&self, space_id: &str) -> Result<()> {
-        match self.workspace(space_id).await {
+        match self.workspace_by_id(space_id).await {
             Ok(workspace) => ensure!(
                 workspace.state != WorkspaceState::Removing,
                 "the workspace is being removed"
             ),
-            Err(error) if self.recorded_chat(space_id).await?.is_none() => return Err(error),
+            Err(error) if self.chat_by_id(space_id).await?.is_none() => return Err(error),
             Err(_) => {}
         }
         Ok(())

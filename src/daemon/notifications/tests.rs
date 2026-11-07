@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::manager;
 
 #[tokio::test]
@@ -110,7 +111,12 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     for invalid in ["", "  ", "two\nlines", "bell\x07", &"x".repeat(513)] {
         assert!(
             manager
-                .send_message(&workspace.id, invalid.into(), Vec::new(), &Attacher::User)
+                .send_message(
+                    &SpaceSelector::id(&workspace.id),
+                    invalid.into(),
+                    Vec::new(),
+                    &Attacher::User
+                )
                 .await
                 .is_err(),
             "{invalid:?}"
@@ -119,7 +125,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     for _ in 0..2 {
         manager
             .send_message(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 "PR #12 is ready to merge".into(),
                 Vec::new(),
                 &Attacher::User,
@@ -145,13 +151,13 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         for mut method in [
             NotificationMethod::SendMessage {
-                space: target.to_string(),
+                space: SpaceSelector::parse(target),
                 message: "hello".into(),
                 attachments: Vec::new(),
                 sender_chat: None,
             },
             NotificationMethod::WithdrawMessage {
-                space: target.to_string(),
+                space: SpaceSelector::parse(target),
                 id: 1,
             },
         ] {
@@ -197,7 +203,12 @@ async fn senders_withdraw_their_own_messages_until_shown() {
         .unwrap();
     let send = async |message: &str| {
         manager
-            .send_message(&sender.id, message.into(), Vec::new(), &Attacher::User)
+            .send_message(
+                &SpaceSelector::id(&sender.id),
+                message.into(),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap()
             .notification
@@ -211,10 +222,18 @@ async fn senders_withdraw_their_own_messages_until_shown() {
         .await;
     let busy = manager.notifications(true, 50).await.unwrap()[1].id;
     for (workspace, id) in [(&other.id, sent), (&sender.id, busy)] {
-        assert!(manager.withdraw_message(workspace, id).await.is_err());
+        assert!(
+            manager
+                .withdraw_message(&SpaceSelector::parse(workspace), id)
+                .await
+                .is_err()
+        );
     }
 
-    let withdrawn = manager.withdraw_message(&sender.id, sent).await.unwrap();
+    let withdrawn = manager
+        .withdraw_message(&SpaceSelector::id(&sender.id), sent)
+        .await
+        .unwrap();
     assert_eq!(withdrawn.message, "PR #12 is ready to merge");
     let unread = manager.notifications(true, 50).await.unwrap();
     assert_eq!(unread.len(), 1);
@@ -222,13 +241,18 @@ async fn senders_withdraw_their_own_messages_until_shown() {
 
     let shown = send("PR #13 is ready to merge").await;
     manager.mark_notifications_read(vec![shown]).await.unwrap();
-    assert!(manager.withdraw_message(&sender.id, shown).await.is_err());
+    assert!(
+        manager
+            .withdraw_message(&SpaceSelector::id(&sender.id), shown)
+            .await
+            .is_err()
+    );
 
     // The sender keeps its messages across a rename, and a later
     // workspace taking its name gets none of them.
     let unread = send("PR #14 is ready to merge").await;
     let renamed = manager
-        .rename_workspace(&sender.id, "renamed", None)
+        .rename_workspace(&SpaceSelector::id(&sender.id), "renamed", None)
         .await
         .unwrap();
     // The renamed workspace keeps its directory, so the new one needs another.
@@ -240,7 +264,7 @@ async fn senders_withdraw_their_own_messages_until_shown() {
     // The same message from it is its own, not collapsed into the earlier one.
     let own = manager
         .send_message(
-            &successor.id,
+            &SpaceSelector::id(&successor.id),
             "PR #14 is ready to merge".into(),
             Vec::new(),
             &Attacher::User,
@@ -252,11 +276,14 @@ async fn senders_withdraw_their_own_messages_until_shown() {
     assert_ne!(own, unread);
     assert!(
         manager
-            .withdraw_message(&successor.id, unread)
+            .withdraw_message(&SpaceSelector::id(&successor.id), unread)
             .await
             .is_err()
     );
-    manager.withdraw_message(&renamed.id, unread).await.unwrap();
+    manager
+        .withdraw_message(&SpaceSelector::id(&renamed.id), unread)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -276,7 +303,7 @@ async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
     // the message is recorded.
     let about = About::workspace(&sender.name, &sender.id);
     manager
-        .rename_workspace(&sender.id, "renamed", None)
+        .rename_workspace(&SpaceSelector::id(&sender.id), "renamed", None)
         .await
         .unwrap();
     let path = Some(temp.path().join("successor"));
@@ -289,8 +316,16 @@ async fn a_message_stays_its_sender_s_through_a_rename_while_it_is_recorded() {
         .await
         .unwrap()
         .unwrap();
-    assert!(manager.withdraw_message(&successor.id, id).await.is_err());
-    manager.withdraw_message(&sender.id, id).await.unwrap();
+    assert!(
+        manager
+            .withdraw_message(&SpaceSelector::id(&successor.id), id)
+            .await
+            .is_err()
+    );
+    manager
+        .withdraw_message(&SpaceSelector::id(&sender.id), id)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -338,7 +373,7 @@ async fn a_failed_state_report_alerts_one_line_that_fits() {
         .unwrap();
     let error = format!("first\nsecond {}", "x".repeat(600));
     manager
-        .report_state_failure(&workspace.id, &error)
+        .report_state_failure(&SpaceSelector::id(&workspace.id), &error)
         .await
         .unwrap();
     let unread = manager.notifications(true, 50).await.unwrap();
@@ -367,7 +402,12 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let shot = temp.path().join("layout.png");
@@ -380,7 +420,12 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
     };
     for _ in 0..2 {
         manager
-            .send_message(&child.id, "Which layout?".into(), attach(), &Attacher::User)
+            .send_message(
+                &SpaceSelector::id(&child.id),
+                "Which layout?".into(),
+                attach(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }
@@ -397,7 +442,10 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
         ("layout.png", Some("Layout"))
     );
     assert_eq!(std::fs::read_to_string(&file.path).unwrap(), "png");
-    let attached = manager.attached_files(&child.name).await.unwrap();
+    let attached = manager
+        .attached_files(&SpaceSelector::from(&child.name))
+        .await
+        .unwrap();
     assert_eq!(
         attached
             .iter()
@@ -408,19 +456,37 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
 
     // A coordinating agent receives the files with the message.
     manager
-        .set_agent_state(&child.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&child.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
-        .set_agent_state(&parent.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&parent.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let sent = manager
-        .send_message(&child.id, "Done".into(), attach(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&child.id),
+            "Done".into(),
+            attach(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(sent.notification, None);
-    let received = manager.agent_messages(&parent.id).await.unwrap();
+    let received = manager
+        .agent_messages(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     let [message] = received.as_slice() else {
         panic!("{received:?}");
     };
@@ -432,7 +498,7 @@ async fn files_sent_with_a_message_are_listed_with_it_after_removal_too() {
 
     manager
         .remove_workspace(
-            &child.id,
+            &SpaceSelector::id(&child.id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
         )
@@ -465,12 +531,17 @@ async fn a_message_to_the_user_sends_a_limited_number_of_files() {
     std::fs::write(&shot, "png").unwrap();
     let files = vec![NewFile::from(shot); crate::client::files::MAX_SENT + 1];
     let sent = manager
-        .send_message(&workspace.id, "Look".into(), files, &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&workspace.id),
+            "Look".into(),
+            files,
+            &Attacher::User,
+        )
         .await;
     assert!(sent.is_err());
     assert!(
         manager
-            .attached_files(&workspace.name)
+            .attached_files(&SpaceSelector::from(&workspace.name))
             .await
             .unwrap()
             .is_empty()

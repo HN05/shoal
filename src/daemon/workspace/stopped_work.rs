@@ -5,6 +5,7 @@ pub use crate::client::executions::Discarded;
 use anyhow::{Result, ensure};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::execution::recovery::{self, Saved};
 
 /// A workspace process that stopped another workspace's executions, which
@@ -38,7 +39,7 @@ impl Manager {
     /// holds, stays stopped work.
     pub(super) async fn keep_stopped_as_last_sessions(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         stopper: Option<&Stopper<'_>>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
@@ -65,7 +66,7 @@ impl Manager {
     /// the one of `execution` when given.
     pub async fn discard_stopped_work(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: Option<String>,
     ) -> Result<Discarded> {
         let workspace = self.workspace(selector).await?;

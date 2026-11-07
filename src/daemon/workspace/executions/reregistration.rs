@@ -32,7 +32,7 @@ impl Manager {
         workspace_id: &str,
         place: Option<ExecutionPlace>,
     ) -> Result<ExecutionPlan> {
-        let workspace = self.workspace(workspace_id).await?;
+        let workspace = self.workspace_by_id(workspace_id).await?;
         let settings = self.workspace_settings(&workspace).await?;
         let repository = self.repository(&workspace.repository_id).await?;
         // A place's ownership moves only under the lock its closes hold.

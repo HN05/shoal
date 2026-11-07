@@ -4,6 +4,7 @@ use std::{fs, os::unix::fs::PermissionsExt};
 
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::executions::ExecutionKind,
     daemon::{
@@ -73,7 +74,7 @@ async fn stop_child() {
     crate::client::connection::request::<crate::model::StoppedWorkspace>(
         &paths,
         RemovalMethod::StopWorkspace {
-            workspace: id,
+            workspace: SpaceSelector::id(&id),
             acknowledge_unproven: false,
             launches: crate::protocol::QueuedLaunches::Cancel,
         },
@@ -150,7 +151,7 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases_body() {
     let (_root, manager, workspace, serving) = fixture().await;
     manager
         .acquire_port(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "web".into(),
             crate::model::PortRequest::default(),
             None,
@@ -173,7 +174,10 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases_body() {
     );
     bounded(agent).await.unwrap().unwrap();
     bounded(command).await.unwrap().unwrap();
-    let retained = manager.inspect_workspace(&workspace.id).await.unwrap();
+    let retained = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert_eq!(retained.workspace.state, workspace.state);
     assert_eq!(retained.ports.len(), 1);
     assert!(retained.executions.is_empty());
@@ -233,7 +237,7 @@ async fn a_restored_stopped_agent_is_told_the_commands_stopped_with_it_body() {
     wait_launched(&manager, &workspace, "command-started", 2).await;
     // A stop other than `shoal stop`, such as a daemon shutdown's, keeps the
     // agent as stopped work.
-    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(agent).await.unwrap().unwrap();
@@ -276,7 +280,7 @@ async fn resume_without_an_agent_reports_stopped_commands_once_body() {
         "daemon::overload_tests::tracked_command_child",
     );
     wait_launched(&manager, &workspace, "command-started", 1).await;
-    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(command).await.unwrap().unwrap();
@@ -350,7 +354,13 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     // forgets it.
     assert!(!last().is_empty());
     manager
-        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(last(), []);
@@ -386,7 +396,7 @@ async fn discard_clears_pending_recovery_without_launching_an_agent_body() {
             .unwrap(),
         0
     );
-    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();
@@ -428,7 +438,7 @@ async fn manual_resume_consumes_the_record_on_start_even_if_other_commands_run_o
             .await
     );
     wait_paused(&manager, &workspace).await;
-    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
+    bounded(manager.stop_workspace(&SpaceSelector::id(&workspace.id), StopRequest::manual()))
         .await
         .unwrap();
     bounded(launched).await.unwrap().unwrap();

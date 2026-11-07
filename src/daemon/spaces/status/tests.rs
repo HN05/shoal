@@ -30,7 +30,7 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
         .await
         .unwrap();
     let unread = |status: SpaceStatus| status.attention.unread_notifications;
-    let before = unread(manager.space_status("own").await.unwrap());
+    let before = unread(manager.space_status(&"own".into()).await.unwrap());
 
     for (workspace, message) in [
         (Some("own"), "own"),
@@ -42,13 +42,18 @@ async fn status_counts_only_the_spaces_own_unread_notifications() {
             .await;
     }
     manager
-        .send_message("planning", "chat".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &"planning".into(),
+            "chat".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
-    let status = manager.space_status("own").await.unwrap();
+    let status = manager.space_status(&"own".into()).await.unwrap();
     assert_eq!(unread(status), before + 1);
 
-    let status = manager.space_status("planning").await.unwrap();
+    let status = manager.space_status(&"planning".into()).await.unwrap();
     let SpaceDetail::Chat { chat: shown } = &status.space else {
         panic!("expected a chat: {:?}", status.space);
     };
@@ -86,14 +91,17 @@ async fn status_counts_the_spaces_own_open_questions() {
         choices: Vec::new(),
     };
     manager
-        .ask_question("planning", ask, Vec::new(), &Attacher::User)
+        .ask_question(&"planning".into(), ask, Vec::new(), &Attacher::User)
         .await
         .unwrap();
 
     let questions = |status: SpaceStatus| status.attention.open_questions;
     assert_eq!(
-        questions(manager.space_status("planning").await.unwrap()),
+        questions(manager.space_status(&"planning".into()).await.unwrap()),
         1
     );
-    assert_eq!(questions(manager.space_status("own").await.unwrap()), 0);
+    assert_eq!(
+        questions(manager.space_status(&"own".into()).await.unwrap()),
+        0
+    );
 }

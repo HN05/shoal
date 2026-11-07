@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 
 #[test]
 fn owner_lease_reads_search_existing_index() -> Result<()> {
@@ -227,7 +228,10 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
             reason: None,
             queue,
         };
-        match manager.acquire_resource(&workspace, request, None).await {
+        match manager
+            .acquire_resource(&SpaceSelector::parse(&workspace), request, None)
+            .await
+        {
             Ok(Allocation::Granted(lease)) => Ok(lease.name),
             Ok(Allocation::Busy(message)) => Err(message),
             Ok(Allocation::Approval(_)) => panic!("no approval configured"),
@@ -250,7 +254,7 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
     };
     assert!(
         manager
-            .acquire_resource(&workspace, request, None)
+            .acquire_resource(&SpaceSelector::parse(&workspace), request, None)
             .await
             .is_err()
     );
@@ -265,7 +269,11 @@ async fn queued_requests_take_freed_capacity_in_arrival_order() {
     let queued = acquire("second", true).await.unwrap_err();
     assert!(queued.starts_with("1 earlier"), "{queued}");
     manager
-        .release_resource(&workspace, "lock".into(), "held".into())
+        .release_resource(
+            &SpaceSelector::parse(&workspace),
+            "lock".into(),
+            "held".into(),
+        )
         .await
         .unwrap();
     let late = acquire("late", false).await.unwrap_err();

@@ -7,6 +7,7 @@ use super::{
     },
     paths::matches_recorded_worktree_path,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
 use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
@@ -60,11 +61,14 @@ impl Manager {
     /// Validate and reactivate an owned workspace being reopened by branch or path.
     /// Reopen the recorded workspace `selector` for a launch in it; a removed
     /// workspace fails rather than being created again.
-    pub async fn reopen_workspace(&self, selector: &str) -> Result<crate::model::OpenedWorkspace> {
+    pub async fn reopen_workspace(
+        &self,
+        selector: &SpaceSelector,
+    ) -> Result<crate::model::OpenedWorkspace> {
         let workspace = self.workspace(selector).await?;
         let (_repo, _guard) = self.lock_repository(&workspace.repository_id).await?;
         // The workspace may have gone while waiting for the repository.
-        let workspace = self.workspace(&workspace.id).await?;
+        let workspace = self.workspace_by_id(&workspace.id).await?;
         self.reopen_owned_workspace(&workspace, workspace.branch.as_deref())
             .await?;
         Ok(crate::model::OpenedWorkspace {
@@ -129,7 +133,7 @@ impl Manager {
     /// `on_branch` once it is on its recorded branch.
     pub(crate) async fn verify_workspace(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         on_branch: bool,
     ) -> Result<Workspace> {
         let workspace = self.workspace(selector).await?;
@@ -196,7 +200,7 @@ impl Manager {
         }
         self.release_stale_owner(&git_dir, &workspace.id).await?;
         self.record_worktree_identity(workspace).await?;
-        self.verify_worktree(&self.workspace(&workspace.id).await?)
+        self.verify_worktree(&self.workspace_by_id(&workspace.id).await?)
             .await
     }
 

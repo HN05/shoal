@@ -3,6 +3,7 @@
 use anyhow::{Result, ensure};
 
 pub(super) use crate::client::output::agents::Skipped;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{args::SpaceTargets, context::Context, ui},
     model::{PendingRestart, PresentSpace, RunningAgent, Spaces, Workspace},
@@ -201,7 +202,9 @@ async fn in_order(
         let space = match spaces.find(&selector) {
             Some(space) => space,
             None => {
-                let inspection = crate::client::workspaces::inspect(&ctx.paths, selector).await?;
+                let inspection =
+                    crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&selector))
+                        .await?;
                 PresentSpace::Workspace(inspection.workspace)
             }
         };

@@ -8,6 +8,7 @@
 use anyhow::{Context as _, Result};
 use tokio::sync::OnceCell;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent_queue::AddPlan,
     cli::{
@@ -89,7 +90,7 @@ async fn place_name(ctx: &Context, workspace: &Workspace) -> Result<PlaceName> {
         .context("repository is no longer registered")?;
     let issue = match &workspace.links.issue {
         Some(url) => {
-            let context = ItemContext::Workspace(workspace.id.clone());
+            let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
             Some(issues::load(ctx, context, url).await?)
         }
         None => None,

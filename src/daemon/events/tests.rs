@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -158,7 +159,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
     manager.observe_workspace_branch(&workspace).await.unwrap();
     assert_eq!(
         manager
-            .workspace(&workspace.id)
+            .workspace_by_id(&workspace.id)
             .await
             .unwrap()
             .branch
@@ -205,7 +206,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
             EventCause::Manual => {
                 manager
                     .remove_workspace(
-                        &workspace.id,
+                        &SpaceSelector::id(&workspace.id),
                         UnsavedWork::default(),
                         InspectionPolicy::GitOnly,
                     )
@@ -218,7 +219,10 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
                     .await
                     .unwrap()
                     .unwrap();
-                manager.remove_idle(&workspace.id, snapshot).await.unwrap();
+                manager
+                    .remove_idle(&SpaceSelector::id(&workspace.id), snapshot)
+                    .await
+                    .unwrap();
             }
             EventCause::Merged => {
                 let snapshot = manager
@@ -227,13 +231,13 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
                     .unwrap()
                     .unwrap();
                 manager
-                    .remove_merged_idle(&workspace.id, snapshot)
+                    .remove_merged_idle(&SpaceSelector::id(&workspace.id), snapshot)
                     .await
                     .unwrap();
             }
             EventCause::Pr => {
                 manager
-                    .set_pr(&workspace.id, Action::Acknowledge)
+                    .set_pr(&SpaceSelector::id(&workspace.id), Action::Acknowledge)
                     .await
                     .unwrap();
                 manager.sweep_prs().await.unwrap();
@@ -246,7 +250,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
             }
             _ => unreachable!(),
         }
-        assert!(manager.workspace(&workspace.id).await.is_err());
+        assert!(manager.workspace_by_id(&workspace.id).await.is_err());
         let events = manager.workspace_events(None, 100).await.unwrap();
         assert!(events.iter().any(|e| matches!(e, EventItem::Event(e) if e.details.workspace_id == workspace.id && e.details.kind == EventKind::Removed && e.details.cause == Some(cause))));
     }
@@ -256,7 +260,13 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .unwrap();
     std::fs::write(workspace.path.join("dirty"), "keep this work").unwrap();
     manager
-        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            false,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();

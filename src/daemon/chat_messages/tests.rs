@@ -1,3 +1,4 @@
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         notifications::NotificationKind,
@@ -57,31 +58,56 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
     let (temp, manager) = manager().await;
     let (chat, worker) = chat_and_worker(&temp, &manager).await;
     let helper = manager
-        .split_workspace(&worker.id, "helper".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&worker.id),
+            "helper".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     // Without an agent of its own, the worker is the chat's or the user's
     // own work, which the user hears about.
     manager
-        .send_message(&worker.id, "first".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&worker.id),
+            "first".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
-        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&worker.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
-        .set_agent_state(&helper.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&helper.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
-        .send_message(&worker.id, "second".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&worker.id),
+            "second".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // The worker's agent coordinates the helper below it, not the chat.
     manager
         .send_message(
-            &helper.id,
+            &SpaceSelector::id(&helper.id),
             "to the worker".into(),
             Vec::new(),
             &Attacher::User,
@@ -89,7 +115,10 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .await
         .unwrap();
     assert_eq!(received(&manager, &chat).await, ["worker: second"]);
-    let worker_messages = manager.agent_messages(&worker.id).await.unwrap();
+    let worker_messages = manager
+        .agent_messages(&SpaceSelector::id(&worker.id))
+        .await
+        .unwrap();
     assert_eq!(worker_messages[0].message, "helper: to the worker");
     assert_eq!(
         user(&manager).await,
@@ -113,7 +142,7 @@ async fn a_chat_coordinates_the_workspaces_it_owns_below_their_agents() {
         .unwrap();
     manager
         .send_message(
-            &helper.id,
+            &SpaceSelector::id(&helper.id),
             "to the chat".into(),
             Vec::new(),
             &Attacher::User,
@@ -131,7 +160,12 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
     let (temp, manager) = manager().await;
     let (chat, worker) = chat_and_worker(&temp, &manager).await;
     manager
-        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&worker.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -142,7 +176,7 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
     });
     manager
         .send_message(
-            &worker.id,
+            &SpaceSelector::id(&worker.id),
             "done with the tests".into(),
             Vec::new(),
             &Attacher::User,
@@ -179,7 +213,12 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
     );
     assert!(waiting.await.unwrap().unwrap().superseded);
     manager
-        .send_message(&worker.id, "next".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&worker.id),
+            "next".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let delivered = manager.chat_updates(&chat.id).await.unwrap();
@@ -197,7 +236,7 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
     });
     manager
         .send_chat_message(
-            &chat.name,
+            &SpaceSelector::from(&chat.name),
             "Pick a new name".into(),
             Vec::new(),
             &Attacher::User,
@@ -210,7 +249,7 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
     // Sent again before the chat reads it, by ID this time, it collapses.
     manager
         .send_chat_message(
-            &chat.id,
+            &SpaceSelector::id(&chat.id),
             "Pick a new name".into(),
             Vec::new(),
             &Attacher::User,
@@ -221,7 +260,7 @@ async fn the_user_messages_a_chat_without_naming_a_workspace() {
 
     manager
         .send_chat_message(
-            "missing",
+            &"missing".into(),
             "Pick a new name".into(),
             Vec::new(),
             &Attacher::User,
@@ -253,11 +292,21 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
         .await
         .unwrap();
     manager
-        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&worker.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
-        .send_message(&worker.id, "unread".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&worker.id),
+            "unread".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // Ready marks reach only a coordinator, never the user.
@@ -287,7 +336,10 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
         ["worker: unread", "worker: marked ready"]
     );
     assert!(user(&manager).await.is_empty());
-    manager.remove_chat(&chat.id, None).await.unwrap();
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
     assert!(received(&manager, &chat).await.is_empty());
     let unread = (
         Some("worker".to_owned()),
@@ -296,7 +348,7 @@ async fn a_removed_chat_gives_the_user_the_events_it_had_not_received() {
     );
     assert_eq!(user(&manager).await, [unread]);
     // The worker went first, with the chat it was below.
-    assert!(manager.workspace(&worker.id).await.is_err());
+    assert!(manager.workspace_by_id(&worker.id).await.is_err());
 }
 
 #[tokio::test]
@@ -322,17 +374,27 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
     manager
-        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&worker.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     manager
-        .send_message(&worker.id, "unread".into(), Vec::new(), &Attacher::User)
+        .send_message(
+            &SpaceSelector::id(&worker.id),
+            "unread".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // The worker is renamed and a new workspace takes its name before the
     // chat is removed.
     manager
-        .rename_workspace(&worker.id, "renamed", None)
+        .rename_workspace(&SpaceSelector::id(&worker.id), "renamed", None)
         .await
         .unwrap();
     let successor = manager
@@ -351,12 +413,23 @@ async fn a_removed_chat_keeps_who_sent_the_events_it_hands_over() {
     // Opened outside the chat, the worker is the user's and stays when the
     // chat is removed.
     manager.assign_parent(&worker.id, None).await.unwrap();
-    manager.remove_chat(&chat.id, None).await.unwrap();
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
     let handed = manager.notifications(true, 50).await.unwrap();
     assert_eq!(handed.len(), 1);
     let id = handed[0].id;
-    assert!(manager.withdraw_message(&successor.id, id).await.is_err());
-    manager.withdraw_message(&worker.id, id).await.unwrap();
+    assert!(
+        manager
+            .withdraw_message(&SpaceSelector::id(&successor.id), id)
+            .await
+            .is_err()
+    );
+    manager
+        .withdraw_message(&SpaceSelector::id(&worker.id), id)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -382,14 +455,19 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
         .await
         .unwrap();
     manager
-        .set_agent_state(&worker.id, AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&worker.id),
+            AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let shot = temp.path().join("layout.png");
     std::fs::write(&shot, "png").unwrap();
     manager
         .send_message(
-            &worker.id,
+            &SpaceSelector::id(&worker.id),
             "Which layout?".into(),
             vec![shot.into()],
             &Attacher::User,
@@ -434,7 +512,10 @@ async fn an_ended_chat_hands_over_the_files_sent_with_its_events_where_they_move
     process.kill();
     manager.stop_finished_chats().await.unwrap();
     manager.assign_parent(&worker.id, None).await.unwrap();
-    manager.remove_chat(&chat.id, None).await.unwrap();
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
     let notifications = manager.notifications(false, 100).await.unwrap();
     let [notification] = notifications.as_slice() else {
         panic!("{notifications:?}");

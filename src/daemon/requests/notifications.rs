@@ -9,6 +9,7 @@ use super::super::{
     scope::{Caller, Scoped, denied},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{self, Body, NotificationMethod, Response};
 
 pub(super) async fn handle(
@@ -53,7 +54,7 @@ pub(super) async fn handle(
 }
 
 impl Scoped for NotificationMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             NotificationMethod::SendMessage { space, .. }
             | NotificationMethod::WithdrawMessage { space, .. } => Some(space),

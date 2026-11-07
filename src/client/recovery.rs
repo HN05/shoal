@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, request},
@@ -62,7 +63,7 @@ pub struct Report {
 /// Keep `workspace`'s HEAD and unsaved files as a checkpoint named `name`.
 pub async fn checkpoint(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     name: Option<String>,
 ) -> Result<Checkpoint> {
     request(daemon, RecoveryMethod::Checkpoint { workspace, name }).await
@@ -77,7 +78,7 @@ pub async fn checkpoints(daemon: &impl Daemon, workspace: &str) -> Result<Option
             .last()
             .map(|checkpoint: &Checkpoint| checkpoint.number);
         let method = RecoveryMethod::Checkpoints {
-            workspace: workspace.to_owned(),
+            workspace: SpaceSelector::parse(workspace),
             after,
         };
         let Some(page) = request::<Option<Vec<Checkpoint>>>(daemon, method).await? else {
@@ -94,7 +95,7 @@ pub async fn checkpoints(daemon: &impl Daemon, workspace: &str) -> Result<Option
 /// state in a new one first.
 pub async fn restore_checkpoint(
     daemon: &impl Daemon,
-    workspace: String,
+    workspace: SpaceSelector,
     checkpoint: u64,
 ) -> Result<RestoredCheckpoint> {
     let method = RecoveryMethod::RestoreCheckpoint {
@@ -107,7 +108,7 @@ pub async fn restore_checkpoint(
 /// Inspect `workspace`, or every workspace, and repair what `options` asks.
 pub async fn reconcile(
     daemon: &impl Daemon,
-    workspace: Option<String>,
+    workspace: Option<SpaceSelector>,
     options: ReconcileOptions,
 ) -> Result<Vec<Report>> {
     request(daemon, RecoveryMethod::Reconcile { workspace, options }).await

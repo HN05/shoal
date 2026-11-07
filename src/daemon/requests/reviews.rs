@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{self, Body, ReviewMethod, ReviewPiece};
 
 pub(super) async fn handle(
@@ -40,7 +41,7 @@ pub(super) async fn handle(
         } => pieces(manager.queue_review(&workspace, target, agent, model).await),
         ReviewMethod::CancelReview { workspace, id } => {
             let by = caller.map(|caller| caller.space_id.clone());
-            pieces(manager.cancel_review(workspace.as_deref(), id, by).await)
+            pieces(manager.cancel_review(workspace.as_ref(), id, by).await)
         }
         ReviewMethod::ListReviews {
             workspace,
@@ -48,7 +49,7 @@ pub(super) async fn handle(
         } => pieces(
             async {
                 let ids = manager
-                    .review_workspaces(workspace.as_deref(), repository)
+                    .review_workspaces(workspace.as_ref(), repository)
                     .await?;
                 manager.reviews(ids).await
             }
@@ -82,19 +83,23 @@ fn pieces<T: serde::Serialize>(shown: Result<T>) -> Result<Vec<ReviewPiece>> {
 }
 
 /// The workspace a request without a review ID names.
-fn named(workspace: Option<String>) -> Result<String> {
+fn named(workspace: Option<SpaceSelector>) -> Result<SpaceSelector> {
     workspace.ok_or_else(|| anyhow::anyhow!("name a review or a workspace"))
 }
 
 impl Scoped for ReviewMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             // A review named by ID is checked as its own workspace's.
             ReviewMethod::CancelReview { workspace, id }
             | ReviewMethod::ShowReview { workspace, id }
             | ReviewMethod::AwaitReview { workspace, id } => {
                 if let Some(id) = id {
-                    *workspace = Some(manager.review_workspace(*id).await?);
+                    *workspace = Some(SpaceSelector::id(&manager.review_workspace(*id).await?));
                 }
                 Some(caller.own_by_default(workspace))
             }
@@ -103,7 +108,10 @@ impl Scoped for ReviewMethod {
             }
             | ReviewMethod::ResolveFinding {
                 workspace, finding, ..
-            } => Some(workspace.insert(manager.review_workspace(finding.review).await?)),
+            } => {
+                let id = manager.review_workspace(finding.review).await?;
+                Some(workspace.insert(SpaceSelector::id(&id)))
+            }
             ReviewMethod::RunReview { workspace, .. } | ReviewMethod::CheckPrGate { workspace } => {
                 Some(workspace)
             }

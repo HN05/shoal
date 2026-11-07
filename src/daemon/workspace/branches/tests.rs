@@ -1,5 +1,6 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         scope,
@@ -107,7 +108,7 @@ async fn names_suffix_only_conflicts_and_serialize_concurrent_adds() {
     commit(&workspace.path, "work");
     f.manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
         )
@@ -143,13 +144,20 @@ async fn remote_default_controls_creation_diff_and_removal() {
         );
         assert!(
             f.manager
-                .check_removal(&workspace.id, InspectionPolicy::IncludeDirectoryProcesses)
+                .check_removal(
+                    &SpaceSelector::id(&workspace.id),
+                    InspectionPolicy::IncludeDirectoryProcesses
+                )
                 .await
                 .unwrap()
                 .branch_preserved()
         );
         assert_eq!(
-            f.manager.diff_base(&workspace.id).await.unwrap().commit,
+            f.manager
+                .diff_base(&SpaceSelector::id(&workspace.id))
+                .await
+                .unwrap()
+                .commit,
             expected.trim()
         );
     }
@@ -464,7 +472,7 @@ async fn branch_compatibility_preserves_allocation_and_existing_branch_policies(
         );
         f.manager
             .remove_workspace(
-                &allocated.id,
+                &SpaceSelector::id(&allocated.id),
                 crate::removal::UnsavedWork::All,
                 InspectionPolicy::IncludeDirectoryProcesses,
             )
@@ -586,7 +594,7 @@ async fn existing_branch_records_an_explicit_base_for_new_worktrees() {
     );
     assert_eq!(
         f.manager
-            .diff_base(&opened.workspace.id)
+            .diff_base(&SpaceSelector::id(&opened.workspace.id))
             .await
             .unwrap()
             .commit,
@@ -624,7 +632,7 @@ async fn existing_branch_refuses_other_checkouts_and_name_collisions() {
     assert_eq!(main.workspace.branch.as_deref(), Some("main"));
     f.manager
         .remove_workspace(
-            &main.workspace.id,
+            &SpaceSelector::id(&main.workspace.id),
             crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
         )
@@ -974,7 +982,11 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
     )
     .unwrap();
     commit(&opened.workspace.path, "new-work");
-    let diff = f.manager.diff_base(&opened.workspace.id).await.unwrap();
+    let diff = f
+        .manager
+        .diff_base(&SpaceSelector::id(&opened.workspace.id))
+        .await
+        .unwrap();
     assert_eq!(diff.commit, opening.trim());
     assert_eq!(
         git(
@@ -988,7 +1000,7 @@ async fn existing_default_branch_survives_normal_workspace_removal() {
     let removed = f
         .manager
         .remove_workspace(
-            &opened.workspace.id,
+            &SpaceSelector::id(&opened.workspace.id),
             crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
         )
@@ -1044,7 +1056,10 @@ async fn merge_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
     // Merged work counts as retained, and the merged branch is redundant.
     let check = f
         .manager
-        .check_removal(&workspace.id, InspectionPolicy::IncludeDirectoryProcesses)
+        .check_removal(
+            &SpaceSelector::id(&workspace.id),
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
         .await
         .unwrap();
     assert_eq!(check.unpushed_commits, 0);
@@ -1065,7 +1080,10 @@ async fn merge_fast_forwards_merges_and_aborts_conflicts_without_a_remote() {
     );
     let check = f
         .manager
-        .check_removal(&workspace.id, InspectionPolicy::IncludeDirectoryProcesses)
+        .check_removal(
+            &SpaceSelector::id(&workspace.id),
+            InspectionPolicy::IncludeDirectoryProcesses,
+        )
         .await
         .unwrap();
     assert_eq!(check.unpushed_commits, 1);
@@ -1084,7 +1102,7 @@ async fn squash_merge_on_the_remote_default_branch_counts_as_retained() {
     }
     let check = async || {
         f.manager
-            .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+            .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
             .await
             .unwrap()
     };
@@ -1206,7 +1224,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
             (DaemonMethod::ReloadConfig.into(), true),
             (
                 RemovalMethod::StopWorkspace {
-                    workspace: workspace.id.clone(),
+                    workspace: SpaceSelector::id(&workspace.id),
                     acknowledge_unproven: false,
                     launches: crate::protocol::QueuedLaunches::Cancel,
                 }
@@ -1226,7 +1244,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                 let mut method = ExecutionMethod::Execute {
                     mode: None,
                     model: Default::default(),
-                    workspace: target.name.to_string(),
+                    workspace: SpaceSelector::parse(&target.name),
                     kind: requested,
                     agent: None,
                     recover: false,
@@ -1253,7 +1271,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                     else {
                         unreachable!()
                     };
-                    assert_eq!(target, workspace.id);
+                    assert_eq!(target, SpaceSelector::id(&workspace.id));
                 }
             }
         }
@@ -1325,7 +1343,7 @@ async fn incomplete_removal_allows_refresh_recovery_and_diagnosis() {
     let report = f
         .manager
         .reconcile(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             crate::daemon::recovery::ReconcileOptions {
                 repair: true,
                 ..Default::default()
@@ -1429,7 +1447,7 @@ async fn begin_merge_as_agent(
     };
     f.manager
         .begin_execution_placed(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             None,
             ExecutionKind::Merge,
             Some(&caller),
@@ -1502,7 +1520,12 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
             .collect()
     };
     assert_eq!(
-        statuses(f.manager.approval_requests(Some("worker")).await.unwrap()),
+        statuses(
+            f.manager
+                .approval_requests(Some(&"worker".into()))
+                .await
+                .unwrap()
+        ),
         [
             (pending.number, DecisionStatus::Outdated),
             (next.number, DecisionStatus::Pending)
@@ -1517,13 +1540,18 @@ async fn scoped_merge_waits_for_approval_of_its_commit() {
         .await
         .unwrap_err();
     assert_eq!(
-        statuses(f.manager.approval_requests(Some("worker")).await.unwrap()),
+        statuses(
+            f.manager
+                .approval_requests(Some(&"worker".into()))
+                .await
+                .unwrap()
+        ),
         [
             (pending.number, DecisionStatus::Outdated),
             (next.number, DecisionStatus::Outdated)
         ]
     );
-    let messages = f.manager.agent_messages("worker").await.unwrap();
+    let messages = f.manager.agent_messages(&"worker".into()).await.unwrap();
     assert!(
         messages
             .iter()
@@ -1566,13 +1594,23 @@ async fn approving_a_merge_request_keeps_it_when_the_branch_cannot_be_read() {
         .await
         .unwrap_err();
     fs::write(&reference, saved).unwrap();
-    let requests = f.manager.approval_requests(Some("worker")).await.unwrap();
+    let requests = f
+        .manager
+        .approval_requests(Some(&"worker".into()))
+        .await
+        .unwrap();
     assert_eq!(requests.len(), 1);
     assert_eq!(
         requests[0].status,
         crate::daemon::approvals::DecisionStatus::Pending
     );
-    assert!(f.manager.agent_messages("worker").await.unwrap().is_empty());
+    assert!(
+        f.manager
+            .agent_messages(&"worker".into())
+            .await
+            .unwrap()
+            .is_empty()
+    );
     f.manager
         .decide_approval(pending.number, true, None, Default::default(), None)
         .await
@@ -1593,7 +1631,7 @@ async fn scoped_merge_skips_approval_when_configured() {
     assert!(started.plan.merge.is_some());
     assert!(
         f.manager
-            .approval_requests(Some("worker"))
+            .approval_requests(Some(&"worker".into()))
             .await
             .unwrap()
             .is_empty()
@@ -1668,7 +1706,11 @@ async fn scoped_merge_approval_binds_and_describes_its_push() {
         watched.reason
     );
     // The local request no longer covers a merge that pushes.
-    let requests = f.manager.approval_requests(Some("worker")).await.unwrap();
+    let requests = f
+        .manager
+        .approval_requests(Some(&"worker".into()))
+        .await
+        .unwrap();
     let replaced = requests
         .iter()
         .find(|request| request.number == local.number);
@@ -1713,7 +1755,7 @@ async fn a_merge_warning_recorded_after_approval_needs_another_decision() {
     fs::write(f.repo.join("version"), "3\n").unwrap();
     commit(&f.repo, "version");
     f.manager
-        .check_conflicts(&workspace.id, None)
+        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
     let warned = undecided_merge(&f, &workspace).await;
@@ -1799,7 +1841,11 @@ async fn unpushed_commits_count_against_a_remapped_upstream() {
     git(&author, &["push", "origin", "HEAD:other"]);
     git(&f.repo, &["fetch", "origin"]);
     git(&f.repo, &["merge", "--ff-only", "origin/cache-other"]);
-    let preview = f.manager.preview_merge("worker", true).await.unwrap();
+    let preview = f
+        .manager
+        .preview_merge(&"worker".into(), true)
+        .await
+        .unwrap();
     assert_eq!(preview.unpushed, 1);
     assert!(preview.unpushed_default().is_some());
 }
@@ -1815,14 +1861,17 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
         push: true,
         confirmed: Some(
             f.manager
-                .preview_merge("worker", true)
+                .preview_merge(&"worker".into(), true)
                 .await
                 .unwrap()
                 .confirmation(),
         ),
     };
     let refused = async |options: &crate::model::MergeOptions| {
-        f.manager.prepare_merge("worker", options).await.is_err()
+        f.manager
+            .prepare_merge(&"worker".into(), options)
+            .await
+            .is_err()
     };
     // An agent commits while the question is open.
     let options = confirmed().await;
@@ -1842,7 +1891,12 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
     commit(&author, "upstream");
     git(&author, &["push", "origin", "HEAD:main"]);
     git(&f.repo, &["pull", "--ff-only"]);
-    assert!(f.manager.prepare_merge("worker", &options).await.is_ok());
+    assert!(
+        f.manager
+            .prepare_merge(&"worker".into(), &options)
+            .await
+            .is_ok()
+    );
     // The default branch's upstream moves to another branch.
     let options = confirmed().await;
     git(&f.repo, &["push", "origin", "main:release"]);
@@ -1852,7 +1906,10 @@ async fn a_confirmed_merge_refuses_a_moved_branch_or_destination() {
         &["branch", "--set-upstream-to=origin/release", "main"],
     );
     assert!(refused(&options).await);
-    let plan = f.manager.prepare_merge("worker", &confirmed().await).await;
+    let plan = f
+        .manager
+        .prepare_merge(&"worker".into(), &confirmed().await)
+        .await;
     assert!(plan.unwrap().push.is_some());
 }
 
@@ -1876,7 +1933,7 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
         push: false,
         confirmed: Some(
             f.manager
-                .preview_merge("worker", false)
+                .preview_merge(&"worker".into(), false)
                 .await
                 .unwrap()
                 .confirmation(),
@@ -1886,18 +1943,23 @@ async fn a_confirmed_merge_refuses_a_warning_recorded_after_the_question() {
     // the branch, main and the push unchanged.
     let options = confirmed().await;
     f.manager
-        .check_conflicts(&workspace.id, None)
+        .check_conflicts(&SpaceSelector::id(&workspace.id), None)
         .await
         .unwrap();
     f.manager
-        .prepare_merge("worker", &options)
+        .prepare_merge(&"worker".into(), &options)
         .await
         .unwrap_err();
     // A question that named them lets the merge go ahead.
     let options = confirmed().await;
     let named = options.confirmed.as_ref().unwrap();
     assert_eq!(named.changed_on_both_sides, ["version"]);
-    assert!(f.manager.prepare_merge("worker", &options).await.is_ok());
+    assert!(
+        f.manager
+            .prepare_merge(&"worker".into(), &options)
+            .await
+            .is_ok()
+    );
 }
 
 #[tokio::test]
@@ -1914,7 +1976,7 @@ async fn merge_turned_off_refuses_runs_and_agent_requests() {
     merge_as_agent(&f, &workspace).await.unwrap_err();
     assert!(
         f.manager
-            .approval_requests(Some("worker"))
+            .approval_requests(Some(&"worker".into()))
             .await
             .unwrap()
             .is_empty()
@@ -2007,13 +2069,17 @@ impl Manager {
         selector: &str,
         push: bool,
     ) -> anyhow::Result<crate::model::MergedBranch> {
-        let workspace = self.workspace(selector).await?;
+        let workspace = self.workspace(&SpaceSelector::parse(selector)).await?;
         let _guard = self.gates.lock_git(&workspace.repository_id).await;
         let options = crate::model::MergeOptions {
             push,
             confirmed: None,
         };
-        crate::git::repo::finish_merge(self.prepare_merge(selector, &options).await?).await
+        crate::git::repo::finish_merge(
+            self.prepare_merge(&SpaceSelector::parse(selector), &options)
+                .await?,
+        )
+        .await
     }
 }
 
@@ -2067,7 +2133,10 @@ async fn adoption_replaces_markers_of_forgotten_workspaces_only() {
         .unwrap();
     assert_eq!(fs::read_to_string(&marker).unwrap(), format!("{}\n", w.id));
     // It reports the number it took.
-    assert_eq!(w.number, f.manager.workspace(&w.id).await.unwrap().number);
+    assert_eq!(
+        w.number,
+        f.manager.workspace_by_id(&w.id).await.unwrap().number
+    );
     assert_ne!(w.number, 0);
     // One naming a recorded workspace refuses adoption and stays in place.
     let (path, marker) = marked("adopt/owned", &w.id);
@@ -2124,7 +2193,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     assert_eq!(f.manager.usage.activity(&w.id), 1);
     let restored = Manager::open(Paths::for_test(f.root.path())).await.unwrap();
     assert_eq!(
-        restored.workspace(&w.id).await.unwrap().git_dir_id,
+        restored.workspace_by_id(&w.id).await.unwrap().git_dir_id,
         w.git_dir_id
     );
     assert!(restored.verify_worktree(&w).await.is_ok());
@@ -2262,7 +2331,7 @@ async fn adoption_of_default_branch_uses_opening_commit_and_retains_branch() {
     );
     f.manager
         .remove_workspace(
-            &w.id,
+            &SpaceSelector::id(&w.id),
             crate::removal::UnsavedWork::default(),
             InspectionPolicy::IncludeDirectoryProcesses,
         )

@@ -1,6 +1,7 @@
 use serde_json::json;
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::git,
     workspace::runner::tests::{admit_and_claim, github_fixture, github_job, launched},
@@ -43,7 +44,7 @@ async fn a_job_of_the_claimed_run_goes_on_and_its_claim_names_it() {
         (claimed.job.job.id, claimed.job.job.name.as_str()),
         (12, "docs")
     );
-    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.head
@@ -62,7 +63,7 @@ async fn a_job_of_another_run_waits_until_its_workspace_is_at_that_runs_commit()
     let (job, directory) = report(manager, 2).await;
     manager.follow_taken_jobs().await.unwrap();
     assert!(directory.join("prepared").exists());
-    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.topic
@@ -84,7 +85,7 @@ async fn a_workspace_that_cannot_move_fails_the_job() {
     // Run 3 cannot be read, and stopping the job still cancels it.
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.ends_with("/actions/runs/3"));
-    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.head
@@ -97,7 +98,7 @@ async fn a_job_of_the_claimed_run_keeps_the_checkout_its_steps_made() {
     let manager = &fixture.manager;
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     let (job, directory) = report(manager, 1).await;
-    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     git(
         &workspace.path,
         &["checkout", "-q", "--detach", &fixture.topic],
@@ -121,7 +122,7 @@ async fn a_job_whose_commit_cannot_be_fetched_still_names_its_run() {
     // Stopping the job cancels the run it took, not the claimed one.
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.ends_with("/actions/runs/4"));
-    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.head
@@ -139,7 +140,7 @@ async fn a_job_whose_name_cannot_be_read_still_runs_at_its_runs_commit() {
     let claimed = manager.claimed_jobs().await.unwrap().remove(0);
     assert!(claimed.job.run.url.ends_with("/actions/runs/5"));
     assert_eq!(claimed.job.job.id, 11);
-    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.topic
@@ -166,7 +167,7 @@ async fn a_report_recorded_before_a_restart_still_moves_the_workspace() {
 
     manager.follow_taken_jobs().await.unwrap();
     assert!(directory.join("prepared").exists());
-    let workspace = manager.workspace(&job.workspace_id).await.unwrap();
+    let workspace = manager.workspace_by_id(&job.workspace_id).await.unwrap();
     assert_eq!(
         git(&workspace.path, &["rev-parse", "HEAD"]).trim(),
         fixture.topic
@@ -179,7 +180,10 @@ async fn stopping_a_job_before_its_report_is_followed_cancels_the_reported_run()
     let manager = &fixture.manager;
     fixture.state.lock().unwrap().queued = vec![github_job(11, 1)];
     let (job, _) = report(manager, 2).await;
-    let cancelled = manager.cancel_job_in(&job.workspace_id).await.unwrap();
+    let cancelled = manager
+        .cancel_job_in(&SpaceSelector::id(&job.workspace_id))
+        .await
+        .unwrap();
     assert!(cancelled.unwrap().ends_with("/actions/runs/2"));
     assert_eq!(fixture.state.lock().unwrap().cancelled, ["2"]);
 }

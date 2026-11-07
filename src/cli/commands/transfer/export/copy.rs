@@ -8,6 +8,7 @@ use super::{
     super::STANDARD_STREAM, DirectoryReport, ExportDirectory, Output, ensure_unscoped_export,
     repository_spaces, selected_spaces, warn,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         context::Context,
@@ -105,7 +106,9 @@ pub(in super::super) async fn copy(
     checkpoint: Option<u64>,
     file: PathBuf,
 ) -> Result<ExportedSpace> {
-    let exported = crate::client::transfer::copy(&ctx.paths, space, checkpoint, file).await?;
+    let exported =
+        crate::client::transfer::copy(&ctx.paths, SpaceSelector::parse(&space), checkpoint, file)
+            .await?;
     warn(&exported);
     if let Some(number) = checkpoint {
         eprintln!(

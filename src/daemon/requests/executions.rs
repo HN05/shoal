@@ -9,6 +9,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::{ExecutionKind, Manager},
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, ExecutionMethod};
 
 pub(super) async fn handle(
@@ -78,7 +79,11 @@ pub(super) async fn handle(
 }
 
 impl Scoped for ExecutionMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             // The handler narrows the list to the agents below the caller's
             // space, the ones it may restart.

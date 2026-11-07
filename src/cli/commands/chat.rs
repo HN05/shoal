@@ -13,6 +13,7 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use super::{configured, listing::ListFilter};
+use crate::client::space_names::SpaceSelector;
 use crate::client::{output::chat::BackgroundChat, space_names::SpaceName};
 use crate::{
     agent::{Agent, ModelChoice},
@@ -173,7 +174,13 @@ async fn check_parent(
     };
     let workspace = workspace.map(|workspace| workspace.id.clone());
     let repository = repo.map(|repo| repo.id.clone().into());
-    crate::client::chats::check_parent(&ctx.paths, repository, workspace, parent.to_owned()).await
+    crate::client::chats::check_parent(
+        &ctx.paths,
+        repository,
+        workspace.as_deref().map(SpaceSelector::id),
+        parent.to_owned(),
+    )
+    .await
 }
 
 /// `topic` in `repo` started on the issue `issue` names, if any.
@@ -614,11 +621,12 @@ pub(super) async fn launch(
         return Ok(Started::Exited(0));
     }
     agents::trust_chat(ctx, &settings, agent.name(), repo.registered(), home).await;
+    let parent = parent.as_deref().map(SpaceSelector::id);
     let new = crate::client::chats::NewChat {
         name: &name,
         agent: agent.name(),
         mode: &topic.mode,
-        parent: parent.as_deref(),
+        parent: parent.as_ref(),
     };
     let chat = crate::client::chats::record(
         &ctx.paths,

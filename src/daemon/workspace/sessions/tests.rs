@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::sessions::PlaceOwnership;
 use crate::{
     daemon::test_support::{manager, repository},
@@ -170,7 +171,11 @@ async fn removal_closes_every_owned_session_and_orphan_sweep_preserves_live_owne
             std::fs::remove_dir_all(&workspace.path)?;
         }
         manager
-            .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+            .remove_workspace(
+                &SpaceSelector::id(&workspace.id),
+                UnsavedWork::All,
+                InspectionPolicy::GitOnly,
+            )
             .await?;
         assert_eq!(host.closed()?, ["agent", "shell"]);
         manager.cleanup_orphan_sessions().await;
@@ -187,7 +192,7 @@ async fn refused_removal_keeps_sessions() -> Result<()> {
     assert!(
         manager
             .remove_workspace(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 UnsavedWork::default(),
                 InspectionPolicy::GitOnly
             )
@@ -207,7 +212,11 @@ async fn failed_session_close_does_not_block_removal_or_other_sessions_and_is_re
     host.add("good", &workspace.id)?;
     host.fail.store(true, Ordering::Relaxed);
     manager
-        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
         .await?;
     assert_eq!(host.closed()?, ["good"]);
     assert!(manager.find_workspace(&workspace.id).await?.is_none());
@@ -277,7 +286,12 @@ async fn demos_close_their_session_after_completion_or_verified_forgetting() -> 
             }
         }
         assert_eq!(host.closed()?, ["connected", "disconnected"]);
-        assert!(manager.demos(Some(&workspace.id)).await?.is_empty());
+        assert!(
+            manager
+                .demos(Some(&SpaceSelector::id(&workspace.id)))
+                .await?
+                .is_empty()
+        );
         assert!(manager.find_workspace(&workspace.id).await?.is_some());
     }
     Ok(())
@@ -351,7 +365,12 @@ async fn failed_demo_closes_survive_restart_and_retry_without_removing_the_works
                     .await?
             );
         }
-        assert!(manager.demos(Some(&workspace.id)).await?.is_empty());
+        assert!(
+            manager
+                .demos(Some(&SpaceSelector::id(&workspace.id)))
+                .await?
+                .is_empty()
+        );
         assert!(host.closed()?.is_empty());
         assert_eq!(
             manager
@@ -432,7 +451,13 @@ async fn failed_execution_deletion_does_not_commit_a_pending_close() -> Result<(
         })
         .await?;
     assert!(manager.forget_execution(&started.plan.id).await.is_err());
-    assert_eq!(manager.demos(Some(&workspace.id)).await?.len(), 1);
+    assert_eq!(
+        manager
+            .demos(Some(&SpaceSelector::id(&workspace.id)))
+            .await?
+            .len(),
+        1
+    );
     assert!(
         manager
             .store
@@ -452,7 +477,7 @@ async fn rex_fixture(
     for block in owned {
         manager
             .record_owned_place(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 Origin::created(HostName::Rex, (*block).into()),
             )
             .await?;
@@ -510,7 +535,7 @@ async fn places_of_hosts_without_cleanup_are_forgotten_with_their_workspace() ->
     let (_root, manager, workspace, host) = fixture().await?;
     manager
         .record_owned_place(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             Origin::created(HostName::Terminal, "w1:p1".into()),
         )
         .await?;
@@ -531,7 +556,7 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
     host.add("shared", &workspace.id)?;
     let _started = manager
         .begin_execution_placed(
-            &taker.id,
+            &SpaceSelector::id(&taker.id),
             None,
             ExecutionKind::Command,
             None,
@@ -547,7 +572,7 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
     // A creation record that arrives late does not take the block back.
     manager
         .record_owned_place(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             Origin::created(HostName::Rex, "shared".into()),
         )
         .await?;
@@ -587,7 +612,7 @@ async fn a_recorded_place_the_daemon_cannot_close_is_left_to_its_host() -> Resul
     let (_root, manager, workspace, host) = rex_fixture(&[]).await?;
     manager
         .record_owned_place(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             Origin::created(HostName::Terminal, "w1:p9".into()),
         )
         .await?;
@@ -618,7 +643,7 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
     // A parent agent's `shoal run --workspace child` runs in the parent's block.
     let _nested = manager
         .begin_execution_placed(
-            &child.id,
+            &SpaceSelector::id(&child.id),
             None,
             ExecutionKind::Command,
             None,
@@ -676,7 +701,7 @@ async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<
     assert!(
         manager
             .place_ownership(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 &Origin::created(HostName::Zmx, "labelled".into())
             )
             .await?
@@ -685,7 +710,7 @@ async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<
     assert!(
         manager
             .place_ownership(
-                &other.id,
+                &SpaceSelector::id(&other.id),
                 &Origin::created(HostName::Zmx, "labelled".into())
             )
             .await?
@@ -694,7 +719,7 @@ async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<
     assert!(
         manager
             .place_ownership(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 &Origin::created(HostName::Zmx, "unlabelled".into())
             )
             .await?
@@ -703,7 +728,7 @@ async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<
     assert!(
         manager
             .place_ownership(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 &Origin::created(HostName::Rex, "labelled".into())
             )
             .await?
@@ -726,7 +751,7 @@ async fn panes_of_different_servers_under_one_id_are_different_places() -> Resul
         pane
     };
     manager
-        .record_owned_place(&workspace.id, on("first"))
+        .record_owned_place(&SpaceSelector::id(&workspace.id), on("first"))
         .await?;
     host.add("w1:p1", &workspace.id)?;
     // An agent in the user's pane of the same ID on another server takes
@@ -735,7 +760,7 @@ async fn panes_of_different_servers_under_one_id_are_different_places() -> Resul
     users.owned = false;
     let _started = manager
         .begin_execution_placed(
-            &taker.id,
+            &SpaceSelector::id(&taker.id),
             None,
             ExecutionKind::Command,
             None,
@@ -749,14 +774,32 @@ async fn panes_of_different_servers_under_one_id_are_different_places() -> Resul
         )
         .await?;
     assert!(
-        manager.place_ownership(&workspace.id, &on("first")).await? == PlaceOwnership::Workspace
+        manager
+            .place_ownership(&SpaceSelector::id(&workspace.id), &on("first"))
+            .await?
+            == PlaceOwnership::Workspace
     );
     // A variable of the pane's that names no server leaves it the same place.
     let mut shell = on("first");
     shell.data.insert("HERDR_THEME".into(), "dark".into());
-    assert!(manager.place_ownership(&workspace.id, &shell).await? == PlaceOwnership::Workspace);
-    assert!(manager.place_ownership(&taker.id, &on("first")).await? != PlaceOwnership::Workspace);
-    assert!(manager.place_ownership(&workspace.id, &users).await? != PlaceOwnership::Workspace);
+    assert!(
+        manager
+            .place_ownership(&SpaceSelector::id(&workspace.id), &shell)
+            .await?
+            == PlaceOwnership::Workspace
+    );
+    assert!(
+        manager
+            .place_ownership(&SpaceSelector::id(&taker.id), &on("first"))
+            .await?
+            != PlaceOwnership::Workspace
+    );
+    assert!(
+        manager
+            .place_ownership(&SpaceSelector::id(&workspace.id), &users)
+            .await?
+            != PlaceOwnership::Workspace
+    );
     manager.close_owned_places(Some(taker.id.clone())).await;
     assert!(host.closed()?.is_empty());
     manager.close_owned_places(Some(workspace.id.clone())).await;

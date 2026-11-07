@@ -64,7 +64,7 @@ impl Manager {
         let target = forge.pull_request(&self.user_account(), url).await?.base;
         // Reload: they may have moved since. The caller holds the PR gates of
         // those stacked when it read `base`, so one stacked since waits.
-        let stacked = self.workspace(&base.id).await?.stacked_workspaces;
+        let stacked = self.workspace_by_id(&base.id).await?.stacked_workspaces;
         let held = |id: &str| base.stacked_workspaces.iter().any(|held| held.id == id);
         if !stacked.iter().all(|stacked| held(&stacked.id)) {
             return Ok(Some(anyhow::anyhow!(
@@ -96,7 +96,7 @@ impl Manager {
         head: &str,
     ) -> Result<()> {
         let base_branch = base.require_branch("restacking")?;
-        let workspace = self.workspace(&stacked.id).await?;
+        let workspace = self.workspace_by_id(&stacked.id).await?;
         self.verify_checked(&workspace).await?;
         let id = workspace.id.clone();
         let items = self

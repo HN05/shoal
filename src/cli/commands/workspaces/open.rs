@@ -3,6 +3,7 @@ use std::ffi::OsString;
 
 use anyhow::{Result, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents,
@@ -27,9 +28,10 @@ pub(in crate::cli::commands) async fn open(
         agents::ensure_opens(agents::app(name), &args)?;
     }
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let workspace = crate::client::workspaces::inspect(&ctx.paths, workspace)
-        .await?
-        .workspace;
+    let workspace =
+        crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::parse(&workspace))
+            .await?
+            .workspace;
     let app = agents::app(match name {
         Some(name) => name,
         None => default_app(ctx, &workspace).await?,
@@ -41,7 +43,7 @@ pub(in crate::cli::commands) async fn open(
 /// The app `shoal open` opens in `workspace` without `--app`: its
 /// `app.default`, else the only one installed, else one the user picks.
 async fn default_app(ctx: &Context, workspace: &Workspace) -> Result<DesktopApp> {
-    let target = ConfigTarget::Workspace(workspace.id.clone());
+    let target = ConfigTarget::Workspace(SpaceSelector::id(&workspace.id));
     let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
     match settings.app.default {
         Some(name) => Ok(name),

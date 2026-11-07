@@ -7,6 +7,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{OptionalExtension, params};
 
 pub(crate) use crate::client::notifications::{Cleared, Notification, NotificationKind, Sent};
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
 use crate::daemon::workspace::{Manager, Source};
 use crate::daemon::workspace_files::{self, Attacher, FileSource, NewFile, SentFile, sent_files};
@@ -265,14 +266,14 @@ impl Manager {
     /// are returned.
     pub async fn send_message(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         message: String,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Sent> {
         crate::validate::message(&message)?;
         workspace_files::check_sent(&attachments)?;
-        let space = self.present_space(selector).await?;
+        let space = self.space(selector).await?;
         let about = About::workspace(space.name(), space.id());
         let (kind, text) = (NotificationKind::AgentMessage, message.clone());
         let notification = (self.send_with_files(
@@ -289,14 +290,14 @@ impl Manager {
 
     /// The workspace or running chat `selector` names, as its messages to
     /// the user name their sender.
-    async fn space_about(&self, selector: &str) -> Result<About> {
-        let space = self.present_space(selector).await?;
+    async fn space_about(&self, selector: &SpaceSelector) -> Result<About> {
+        let space = self.space(selector).await?;
         Ok(About::workspace(space.name(), space.id()))
     }
 
     /// Tell the user that a turn-state report of the workspace's agent failed
     /// with `error`, so the state shown for the agent may be out of date.
-    pub async fn report_state_failure(&self, selector: &str, error: &str) -> Result<()> {
+    pub async fn report_state_failure(&self, selector: &SpaceSelector, error: &str) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         let about = About::workspace(&workspace.name, &workspace.id);
         let error = error.replace(char::is_control, " ");
@@ -311,7 +312,11 @@ impl Manager {
 
     /// Delete the message `id` the space sent the user, which the user need
     /// not see after all. A shown message stays; a correction follows it.
-    pub async fn withdraw_message(&self, selector: &str, id: i64) -> Result<Notification> {
+    pub async fn withdraw_message(
+        &self,
+        selector: &SpaceSelector,
+        id: i64,
+    ) -> Result<Notification> {
         let space = self.space_about(selector).await?;
         self.store
             .run(move |db| {

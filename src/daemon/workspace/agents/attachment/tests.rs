@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::{
     test_support::{manager, repository},
     workspace::ExecutionKind,
@@ -45,12 +46,12 @@ async fn only_the_agents_workspace_reports_its_attachment() {
     assert_eq!(attached().await, Some(None));
     // Another workspace cannot report for the agent.
     manager
-        .report_attached(&other.name, &id, true)
+        .report_attached(&SpaceSelector::from(&other.name), &id, true)
         .await
         .unwrap();
     assert_eq!(attached().await, Some(None));
     manager
-        .report_attached(&workspace.name, &id, true)
+        .report_attached(&SpaceSelector::from(&workspace.name), &id, true)
         .await
         .unwrap();
     assert_eq!(attached().await, Some(Some(true)));

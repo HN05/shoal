@@ -3,6 +3,7 @@
 use anyhow::{Context as _, Result, bail};
 
 use super::super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     execution::recovery,
     model::{AgentSession, Workspace},
@@ -14,7 +15,7 @@ impl Manager {
     /// only agent.
     pub(crate) async fn agent_session(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         caller: Option<&str>,
     ) -> Result<AgentSession> {
         let workspace = self.workspace(selector).await?;

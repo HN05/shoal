@@ -16,6 +16,7 @@ use super::{
     Manager,
     capacity::{self, Activity, Agents},
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{RunLimit, overload::Overload},
     daemon::notifications::NotificationKind,
@@ -1165,7 +1166,7 @@ impl Manager {
     /// Record the workspace a starting entry opened, or the existing one a
     /// waiting launch opens once admitted, which the daemon then starts as
     /// it starts any launch in an existing workspace.
-    pub async fn queue_attach(&self, id: &str, workspace: &str) -> Result<()> {
+    pub async fn queue_attach(&self, id: &str, workspace: &SpaceSelector) -> Result<()> {
         let workspace = self.workspace(workspace).await?;
         let opens = Self::ensure_holds_agents(&workspace).is_ok();
         let id = id.to_owned();
@@ -1223,7 +1224,11 @@ impl Manager {
 
     /// The ID of the workspace of `repository_id` a launch opens; the
     /// insertion requires it ready.
-    async fn launch_target(&self, workspace: &str, repository_id: &str) -> Result<String> {
+    async fn launch_target(
+        &self,
+        workspace: &SpaceSelector,
+        repository_id: &str,
+    ) -> Result<String> {
         let workspace = self.workspace(workspace).await?;
         Self::ensure_holds_agents(&workspace)?;
         ensure!(
@@ -1282,7 +1287,7 @@ impl Manager {
         workspace_id: &str,
     ) -> Result<()> {
         let restore = WaitingRestore {
-            workspace: self.workspace(workspace_id).await?,
+            workspace: self.workspace_by_id(workspace_id).await?,
             execution: execution.to_owned(),
             agent: agent.to_owned(),
         };

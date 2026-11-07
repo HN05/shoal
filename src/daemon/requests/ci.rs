@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{Body, CiMethod, ItemContext};
 
 pub(super) async fn handle(
@@ -78,7 +79,11 @@ pub(super) async fn handle(
 }
 
 impl Scoped for CiMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             CiMethod::ApproveCiRuns { .. } => {
                 bail!("approving CI runs is the user's decision; ask them with shoal alerts send")
@@ -109,7 +114,7 @@ impl Scoped for CiMethod {
 async fn own_context(manager: &Manager, caller: &Caller) -> Result<ItemContext> {
     let space = caller.space_id.clone();
     Ok(match manager.caller_is_chat(caller).await? {
-        true => ItemContext::Chat(space),
-        false => ItemContext::Workspace(space),
+        true => ItemContext::Chat(SpaceSelector::id(&space)),
+        false => ItemContext::Workspace(SpaceSelector::id(&space)),
     })
 }

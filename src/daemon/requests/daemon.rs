@@ -9,6 +9,7 @@ use super::super::{
     scope::{self, Caller, Scoped, denied},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitRequest, Response};
 
 /// The daemon's own requests, which read how it runs.
@@ -23,7 +24,7 @@ pub(super) async fn handle(server: &Server, method: DaemonMethod) -> Result<Answ
 }
 
 impl Scoped for DaemonMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
         // Reloading applies the config on disk and stops nothing, so a
         // setup agent may apply the config it wrote.
         Ok(match self {
@@ -33,7 +34,7 @@ impl Scoped for DaemonMethod {
 }
 
 impl Scoped for ExitRequest {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
         Err(denied())
     }
 }

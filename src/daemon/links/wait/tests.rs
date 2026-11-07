@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{manager, repository},
@@ -181,7 +182,7 @@ async fn agent_messages_end_a_watch_before_item_activity() {
     // Waiting would fail without a linked PR; a queued message answers first.
     manager
         .send_agent_message(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
             &Attacher::User,
@@ -192,7 +193,10 @@ async fn agent_messages_end_a_watch_before_item_activity() {
     assert!(updates.updates.is_empty() && !updates.timed_out);
     assert_eq!(updates.messages[0].message, "Rebase onto main");
     manager
-        .mark_agent_messages_delivered(&workspace.id, vec![updates.messages[0].id])
+        .mark_agent_messages_delivered(
+            &SpaceSelector::id(&workspace.id),
+            vec![updates.messages[0].id],
+        )
         .await
         .unwrap();
     assert!(manager.wait_prs(&workspace.id, Some(60)).await.is_err());
@@ -205,7 +209,7 @@ async fn agent_messages_end_a_watch_before_item_activity() {
     };
     manager
         .send_agent_message(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "Stop the dev server".into(),
             Vec::new(),
             &Attacher::User,
@@ -340,7 +344,7 @@ async fn background_activity_queues_for_the_agents_hooks() {
     assert!(queued.has_changed().unwrap());
     manager
         .send_agent_message(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
             &Attacher::User,
@@ -349,20 +353,32 @@ async fn background_activity_queues_for_the_agents_hooks() {
         .unwrap();
     // Handing them to the agent's hook replaces the running watch.
     let watch = manager.item_waits.start(&workspace.id);
-    let delivered = manager.agent_updates(&workspace.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     watch.superseded.notified().await;
     assert!(!watch.is_current());
     assert_eq!(delivered.updates[0].kind, UpdateKind::Comment);
     assert_eq!(delivered.messages[0].message, "Rebase onto main");
     manager
-        .mark_agent_messages_delivered(&workspace.id, vec![delivered.messages[0].id])
+        .mark_agent_messages_delivered(
+            &SpaceSelector::id(&workspace.id),
+            vec![delivered.messages[0].id],
+        )
         .await
         .unwrap();
     manager
-        .acknowledge_pr_updates(&workspace.id, vec![delivered.updates[0].delivery.clone()])
+        .acknowledge_pr_updates(
+            &SpaceSelector::id(&workspace.id),
+            vec![delivered.updates[0].delivery.clone()],
+        )
         .await
         .unwrap();
-    let after = manager.agent_updates(&workspace.id).await.unwrap();
+    let after = manager
+        .agent_updates(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert!(after.updates.is_empty() && after.messages.is_empty());
 }
 
@@ -410,7 +426,10 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
     assert!(!watch.is_current());
     assert_eq!(delivered.updates, woken.updates);
     manager
-        .acknowledge_pr_updates(&chat.id, vec![delivered.updates[0].delivery.clone()])
+        .acknowledge_pr_updates(
+            &SpaceSelector::id(&chat.id),
+            vec![delivered.updates[0].delivery.clone()],
+        )
         .await
         .unwrap();
     assert!(
@@ -469,7 +488,7 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
     // A newer watch in the workspace below keeps what the chat acknowledges.
     let worker_wait = manager.item_waits.start(&worker.id);
     manager
-        .acknowledge_pr_updates(&chat.id, deliveries.clone())
+        .acknowledge_pr_updates(&SpaceSelector::id(&chat.id), deliveries.clone())
         .await
         .unwrap();
     assert_eq!(pending().await, 1);
@@ -477,13 +496,13 @@ async fn a_chat_receives_the_activity_of_the_workspaces_below_it_without_an_agen
     // And a newer wait in the chat keeps what the workspace acknowledges.
     let chat_wait = manager.chat_waits.start(&chat.id);
     manager
-        .acknowledge_pr_updates(&worker.id, deliveries.clone())
+        .acknowledge_pr_updates(&SpaceSelector::id(&worker.id), deliveries.clone())
         .await
         .unwrap();
     assert_eq!(pending().await, 1);
     drop(chat_wait);
     manager
-        .acknowledge_pr_updates(&chat.id, deliveries)
+        .acknowledge_pr_updates(&SpaceSelector::id(&chat.id), deliveries)
         .await
         .unwrap();
     assert!(
@@ -568,26 +587,35 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
         .unwrap();
     manager
         .send_agent_message(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
             &Attacher::User,
         )
         .await
         .unwrap();
-    let queued = manager.agent_updates(&workspace.id).await.unwrap();
+    let queued = manager
+        .agent_updates(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     let delivery = queued.updates[0].delivery.clone();
     // Cleanup holds the gate across forge requests and removals.
     let gate = manager.gates.lock_prs([&workspace.id]).await;
-    let delivered = manager.agent_updates(&workspace.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert!(delivered.updates.is_empty());
     assert_eq!(delivered.messages[0].message, "Rebase onto main");
     manager
-        .acknowledge_pr_updates(&workspace.id, vec![delivery])
+        .acknowledge_pr_updates(&SpaceSelector::id(&workspace.id), vec![delivery])
         .await
         .unwrap();
     drop(gate);
-    let after = manager.agent_updates(&workspace.id).await.unwrap();
+    let after = manager
+        .agent_updates(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert!(after.updates.is_empty());
 }
 
@@ -608,7 +636,12 @@ async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     register_watch(&manager, &child.id, "child-pr").await;
@@ -621,14 +654,20 @@ async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
         .await
         .unwrap();
     let unrelated = manager.gates.lock_prs([&other.id]).await;
-    let delivered = manager.agent_updates(&parent.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     assert_eq!(delivered.updates.len(), 1);
     assert_eq!(delivered.updates[0].workspace.as_deref(), Some("child"));
     drop(unrelated);
     // The parent's agent receives the child's updates, so delivery waits
     // for work on the child.
     let read = manager.gates.lock_prs([&child.id]).await;
-    let delivered = manager.agent_updates(&parent.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     assert!(delivered.updates.is_empty());
     drop(read);
 }
@@ -646,11 +685,21 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let grandchild = manager
-        .split_workspace(&child.id, "grandchild".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&child.id),
+            "grandchild".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let watched = [(&child, "child-pr"), (&grandchild, "grandchild-pr")];
@@ -672,7 +721,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         async move {
             tokio::time::timeout(
                 Duration::from_secs(60),
-                manager.wait_items(&id, &selection, None),
+                manager.wait_items(&SpaceSelector::id(&id), &selection, None),
             )
             .await
             .expect("watch ended")
@@ -705,7 +754,10 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     let now = crate::time::unix_seconds();
     let queued = manager.queue_background_updates(&child.id, observation, now);
     queued.await.unwrap();
-    let delivered = manager.agent_updates(&parent.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     let received: Vec<_> = delivered
         .updates
         .iter()
@@ -728,26 +780,34 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
 
     // An agent of the child's own takes over the child's subtree.
     manager
-        .set_agent_state(&child.id, crate::state::AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&child.id),
+            crate::state::AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert!(
         manager
-            .agent_updates(&parent.id)
+            .agent_updates(&SpaceSelector::id(&parent.id))
             .await
             .unwrap()
             .updates
             .is_empty()
     );
     assert!(watch(prs.clone()).await.is_err());
-    let own = manager.agent_updates(&child.id).await.unwrap();
+    let own = manager
+        .agent_updates(&SpaceSelector::id(&child.id))
+        .await
+        .unwrap();
     assert_eq!(own.updates.len(), 3);
     assert_eq!(own.updates[0].workspace, None);
     assert_eq!(own.updates[1].workspace, None);
     assert_eq!(own.updates[2].workspace.as_deref(), Some("grandchild"));
     manager
         .acknowledge_pr_updates(
-            &child.id,
+            &SpaceSelector::id(&child.id),
             own.updates
                 .iter()
                 .map(|update| update.delivery.clone())
@@ -757,7 +817,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
         .unwrap();
     assert!(
         manager
-            .agent_updates(&child.id)
+            .agent_updates(&SpaceSelector::id(&child.id))
             .await
             .unwrap()
             .updates
@@ -765,7 +825,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     );
     assert!(
         manager
-            .agent_updates(&grandchild.id)
+            .agent_updates(&SpaceSelector::id(&grandchild.id))
             .await
             .unwrap()
             .updates
@@ -786,7 +846,12 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     for (workspace, url) in [(&parent, "parent-pr"), (&child, "child-pr")] {
@@ -800,7 +865,10 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
             .await
             .unwrap();
     }
-    let delivered = manager.agent_updates(&parent.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     assert_eq!(delivered.updates.len(), 2);
     let deliveries = delivered
         .updates
@@ -810,7 +878,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     // A newer watch in the parent receives the child's updates as well.
     let parent_wait = manager.item_waits.start(&parent.id);
     manager
-        .acknowledge_pr_updates(&parent.id, deliveries.clone())
+        .acknowledge_pr_updates(&SpaceSelector::id(&parent.id), deliveries.clone())
         .await
         .unwrap();
     assert_eq!(
@@ -825,7 +893,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     // A watch in the child starts before the parent acknowledges.
     let child_wait = manager.item_waits.start(&child.id);
     manager
-        .acknowledge_pr_updates(&parent.id, deliveries.clone())
+        .acknowledge_pr_updates(&SpaceSelector::id(&parent.id), deliveries.clone())
         .await
         .unwrap();
     assert!(
@@ -844,7 +912,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     // watch runs, leaves the parent's watch the child's updates.
     let parent_wait = manager.item_waits.start(&parent.id);
     manager
-        .acknowledge_pr_updates(&child.id, deliveries.clone())
+        .acknowledge_pr_updates(&SpaceSelector::id(&child.id), deliveries.clone())
         .await
         .unwrap();
     assert_eq!(
@@ -853,7 +921,7 @@ async fn acknowledging_child_updates_leaves_them_to_a_running_child_wait() {
     );
     drop(parent_wait);
     manager
-        .acknowledge_pr_updates(&parent.id, deliveries)
+        .acknowledge_pr_updates(&SpaceSelector::id(&parent.id), deliveries)
         .await
         .unwrap();
     assert!(
@@ -912,7 +980,12 @@ async fn hook_responses_fit_messages_and_updates_together() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     register_watch(&manager, &child.id, "child-pr").await;
@@ -931,7 +1004,7 @@ async fn hook_responses_fit_messages_and_updates_together() {
     for n in 0..50 {
         manager
             .send_agent_message(
-                &parent.id,
+                &SpaceSelector::id(&parent.id),
                 format!("{n:02}{}", "m".repeat(498)),
                 Vec::new(),
                 &Attacher::User,
@@ -939,7 +1012,10 @@ async fn hook_responses_fit_messages_and_updates_together() {
             .await
             .unwrap();
     }
-    let delivered = manager.agent_updates(&parent.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     assert_eq!(delivered.messages.len(), 50);
     assert!(!delivered.updates.is_empty());
     let response = crate::protocol::Response::new(1, crate::protocol::Body::PrUpdates(delivered));
@@ -959,7 +1035,12 @@ async fn a_delivery_too_large_for_one_response_arrives_in_parts() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     register_watch(&manager, &child.id, "child-pr").await;
@@ -976,12 +1057,15 @@ async fn a_delivery_too_large_for_one_response_arrives_in_parts() {
         .unwrap();
     let mut received = Vec::new();
     while received.len() < 63 {
-        let delivered = manager.agent_updates(&parent.id).await.unwrap();
+        let delivered = manager
+            .agent_updates(&SpaceSelector::id(&parent.id))
+            .await
+            .unwrap();
         assert!(!delivered.updates.is_empty() && delivered.updates.len() < 63);
         assert!(serde_json::to_vec(&delivered).unwrap().len() < crate::protocol::MAX_FRAME,);
         manager
             .acknowledge_pr_updates(
-                &parent.id,
+                &SpaceSelector::id(&parent.id),
                 delivered
                     .updates
                     .iter()
@@ -1018,7 +1102,12 @@ async fn deliveries_left_out_of_a_response_stay_pending_whole() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     register_watch(&manager, &child.id, "child-pr").await;
@@ -1033,11 +1122,14 @@ async fn deliveries_left_out_of_a_response_stay_pending_whole() {
         })
         .await
         .unwrap();
-    let first = manager.agent_updates(&parent.id).await.unwrap();
+    let first = manager
+        .agent_updates(&SpaceSelector::id(&parent.id))
+        .await
+        .unwrap();
     assert!(first.updates.len() < 63);
     manager
         .acknowledge_pr_updates(
-            &parent.id,
+            &SpaceSelector::id(&parent.id),
             first
                 .updates
                 .iter()
@@ -1072,7 +1164,11 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
     let wait = |due| {
         let manager = manager.clone();
         let id = workspace.id.clone();
-        tokio::spawn(async move { manager.wait_agent_wake(&id, due, None).await })
+        tokio::spawn(async move {
+            manager
+                .wait_agent_wake(&SpaceSelector::id(&id), due, None)
+                .await
+        })
     };
     // A hang guard only: each wait ends on the change before it.
     let finish = |task: tokio::task::JoinHandle<Result<()>>| async {
@@ -1082,11 +1178,12 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
             .unwrap()
             .unwrap();
     };
-    let state = |state| manager.set_agent_state(&workspace.id, state, None, None);
+    let selected = SpaceSelector::id(&workspace.id);
+    let state = |state| manager.set_agent_state(&selected, state, None, None);
     state(crate::state::AgentState::Working).await.unwrap();
     manager
         .send_agent_message(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "Rebase onto main".into(),
             Vec::new(),
             &Attacher::User,
@@ -1097,9 +1194,12 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
     state(crate::state::AgentState::Idle).await.unwrap();
     finish(due).await;
     let taken = wait(false);
-    let messages = manager.agent_messages(&workspace.id).await.unwrap();
+    let messages = manager
+        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     manager
-        .mark_agent_messages_delivered(&workspace.id, vec![messages[0].id])
+        .mark_agent_messages_delivered(&SpaceSelector::id(&workspace.id), vec![messages[0].id])
         .await
         .unwrap();
     finish(taken).await;
@@ -1118,7 +1218,12 @@ async fn a_hooked_agent_is_due_a_wake_once_no_wait_has_run_for_a_while() {
         .await
         .unwrap();
     manager
-        .set_agent_state(&workspace.id, crate::state::AgentState::Idle, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&workspace.id),
+            crate::state::AgentState::Idle,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let due = async || {
@@ -1195,7 +1300,11 @@ async fn an_idle_agent_wakes_once_for_a_heads_passing_checks() {
             )
             .await
             .unwrap();
-        manager.agent_updates(&workspace.id).await.unwrap().updates
+        manager
+            .agent_updates(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap()
+            .updates
     };
     let pending = [("fmt", "pending"), ("lint", "pending"), ("test", "pending")];
     assert!(poll(checks_at("a", &pending)).await.is_empty());
@@ -1260,11 +1369,14 @@ async fn passes_held_past_one_response_are_delivered_in_parts() {
     }
     let mut received = Vec::new();
     while received.len() < names.len() {
-        let delivered = manager.agent_updates(&workspace.id).await.unwrap();
+        let delivered = manager
+            .agent_updates(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap();
         assert!(!delivered.updates.is_empty() && delivered.updates.len() < names.len());
         manager
             .acknowledge_pr_updates(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 delivered
                     .updates
                     .iter()
@@ -1301,7 +1413,10 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
         .await
         .unwrap();
     manager
-        .acknowledge_pr_updates(&workspace.id, vec![first[0].delivery.clone()])
+        .acknowledge_pr_updates(
+            &SpaceSelector::id(&workspace.id),
+            vec![first[0].delivery.clone()],
+        )
         .await
         .unwrap();
     let id = workspace.id.clone();
@@ -1423,7 +1538,12 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     register_watch(&manager, &child.id, "child-pr").await;
@@ -1462,13 +1582,19 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
     };
     let delivered = |id: String| {
         let manager = &manager;
-        async move { manager.agent_updates(&id).await.unwrap().updates }
+        async move {
+            manager
+                .agent_updates(&SpaceSelector::id(&id))
+                .await
+                .unwrap()
+                .updates
+        }
     };
     observe("main").await.unwrap();
     let first = delivered(parent.id.clone()).await;
     manager
         .acknowledge_pr_updates(
-            &parent.id,
+            &SpaceSelector::id(&parent.id),
             first.iter().map(|update| update.delivery.clone()).collect(),
         )
         .await
@@ -1489,7 +1615,12 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
 
     // Once the child has an agent of its own, that agent hears of it.
     manager
-        .set_agent_state(&child.id, crate::state::AgentState::Working, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&child.id),
+            crate::state::AgentState::Working,
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert!(child_gate_held().await);
@@ -1591,7 +1722,7 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
         .unwrap();
     let deliveries = updates.into_iter().map(|update| update.delivery).collect();
     manager
-        .acknowledge_pr_updates(&workspace.id, deliveries)
+        .acknowledge_pr_updates(&SpaceSelector::id(&workspace.id), deliveries)
         .await
         .unwrap();
     // A closed issue may reopen while the assignment goes on.
@@ -1634,7 +1765,12 @@ async fn messages_waiting_for_work_come_with_the_next_updates() {
         )
         .await
         .unwrap();
-    assert!(!manager.updates_waiting(&workspace.id).await.unwrap());
+    assert!(
+        !manager
+            .updates_waiting(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap()
+    );
     assert!(!manager.agent_updates_recorded(&workspace.id).await.unwrap());
     manager
         .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
@@ -1659,7 +1795,12 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         .await
         .unwrap();
     let child = manager
-        .split_workspace(&parent.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&parent.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     register_watch(&manager, &child.id, "child-pr").await;
@@ -1673,7 +1814,11 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
     let wait = tokio::spawn({
         let manager = manager.clone();
         let id = parent.id.clone();
-        async move { manager.wait_items(&id, &prs, None).await }
+        async move {
+            manager
+                .wait_items(&SpaceSelector::id(&id), &prs, None)
+                .await
+        }
     });
     tokio::time::timeout(Duration::from_secs(60), async {
         while manager.gates.pr_gates_in_use() < 2 {
@@ -1728,7 +1873,12 @@ async fn recorded_updates_count_while_the_pr_gate_is_held() {
         .unwrap();
     // Cleanup holds the gate while it decides whether updates wait.
     let _gate = manager.gates.lock_prs([&workspace.id]).await;
-    assert!(!manager.updates_waiting(&workspace.id).await.unwrap());
+    assert!(
+        !manager
+            .updates_waiting(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap()
+    );
     assert!(manager.agent_updates_recorded(&workspace.id).await.unwrap());
 }
 
@@ -1775,11 +1925,17 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
         .unwrap();
     assert_eq!(pending.len(), 1);
     manager
-        .acknowledge_pr_updates(&workspace.id, vec![pending[0].delivery.clone()])
+        .acknowledge_pr_updates(
+            &SpaceSelector::id(&workspace.id),
+            vec![pending[0].delivery.clone()],
+        )
         .await
         .unwrap();
     manager
-        .set_pr(&workspace.id, super::super::pr::Action::Clear)
+        .set_pr(
+            &SpaceSelector::id(&workspace.id),
+            super::super::pr::Action::Clear,
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -1801,7 +1957,10 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
             .unwrap()
             .is_empty()
     );
-    manager.clear_issue(&workspace.id, None).await.unwrap();
+    manager
+        .clear_issue(&SpaceSelector::id(&workspace.id), None)
+        .await
+        .unwrap();
     assert!(
         manager
             .pending_activity(&workspace.id, &["issue".into()])
@@ -1920,7 +2079,10 @@ async fn acknowledgement_keeps_queued_updates_and_those_a_newer_wait_needs() {
         .unwrap();
     let newer = manager.item_waits.start(&workspace.id);
     manager
-        .acknowledge_pr_updates(&workspace.id, vec![delivered[0].delivery.clone()])
+        .acknowledge_pr_updates(
+            &SpaceSelector::id(&workspace.id),
+            vec![delivered[0].delivery.clone()],
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -1929,7 +2091,10 @@ async fn acknowledgement_keeps_queued_updates_and_those_a_newer_wait_needs() {
     );
     drop(newer);
     manager
-        .acknowledge_pr_updates(&workspace.id, vec![delivered[0].delivery.clone()])
+        .acknowledge_pr_updates(
+            &SpaceSelector::id(&workspace.id),
+            vec![delivered[0].delivery.clone()],
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -1981,7 +2146,10 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         first
     );
     restarted
-        .acknowledge_pr_updates(&workspace.id, vec!["stale-delivery".into()])
+        .acknowledge_pr_updates(
+            &SpaceSelector::id(&workspace.id),
+            vec!["stale-delivery".into()],
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -1989,7 +2157,10 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         first
     );
     restarted
-        .acknowledge_pr_updates(&workspace.id, vec![first[0].delivery.clone()])
+        .acknowledge_pr_updates(
+            &SpaceSelector::id(&workspace.id),
+            vec![first[0].delivery.clone()],
+        )
         .await
         .unwrap();
     assert!(
@@ -2011,7 +2182,10 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
         1
     );
     restarted
-        .set_pr(&workspace.id, super::super::pr::Action::Clear)
+        .set_pr(
+            &SpaceSelector::id(&workspace.id),
+            super::super::pr::Action::Clear,
+        )
         .await
         .unwrap();
     let id = workspace.id.clone();
@@ -2049,7 +2223,10 @@ async fn cursors_survive_restart_are_workspace_owned_and_clear_on_unwatch() {
             .is_empty()
     );
     restarted
-        .set_pr(&workspace.id, super::super::pr::Action::Clear)
+        .set_pr(
+            &SpaceSelector::id(&workspace.id),
+            super::super::pr::Action::Clear,
+        )
         .await
         .unwrap();
     assert!(restarted.wait_prs(&workspace.id, Some(0)).await.is_err());
@@ -2098,7 +2275,10 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
     let recorded = manager.record_activity(&workspace.id, observation, &all);
     assert!(recorded.await.unwrap().is_empty());
     manager
-        .set_pr(&workspace.id, super::super::pr::Action::Clear)
+        .set_pr(
+            &SpaceSelector::id(&workspace.id),
+            super::super::pr::Action::Clear,
+        )
         .await
         .unwrap();
 
@@ -2123,7 +2303,10 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         "unacknowledged updates replay"
     );
     manager
-        .acknowledge_pr_updates(&workspace.id, vec![updates[0].delivery.clone()])
+        .acknowledge_pr_updates(
+            &SpaceSelector::id(&workspace.id),
+            vec![updates[0].delivery.clone()],
+        )
         .await
         .unwrap();
     assert!(
@@ -2215,7 +2398,10 @@ async fn sensitive_files_changed_on_both_sides_are_reported_beside_a_linked_pr()
     // from a watch and from the background poll.
     let linked = &workspaces[1];
     register_watch(&manager, &linked.id, "pr").await;
-    let space = manager.link_space(&linked.id).await.unwrap();
+    let space = manager
+        .link_space(&SpaceSelector::id(&linked.id))
+        .await
+        .unwrap();
     let polled = manager.poll_space_item_activity(&space).await;
     assert!(polled.is_err(), "the PR lookup fails");
     let queued = manager.queued_updates(linked.clone()).await.unwrap();
@@ -2254,7 +2440,10 @@ async fn a_stalled_worktree_fails_the_background_branch_check_at_once() {
     assert!(stalled.is_err());
 
     // Even reading which files the repository lists waits for the worktree.
-    let space = manager.link_space(&workspace.id).await.unwrap();
+    let space = manager
+        .link_space(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     let polled = manager.poll_space_item_activity(&space).await;
     assert!(polled.is_err(), "the PR lookup fails");
     let queued = manager.queued_updates(workspace.clone()).await.unwrap();
@@ -2297,7 +2486,7 @@ async fn branch_conflicts_with_a_target_that_has_heads_changes_are_not_reported(
     crate::daemon::test_support::commit(&repo_path, "tracked");
     assert!(
         manager
-            .check_conflicts(&workspace.id, None)
+            .check_conflicts(&SpaceSelector::id(&workspace.id), None)
             .await
             .unwrap()
             .conflicts
@@ -2333,14 +2522,23 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
         crate::daemon::test_support::commit(repo, "tracked");
     }
     manager
-        .mark_done(&workspace.id, false, true, vec![], &Attacher::User)
+        .mark_done(
+            &SpaceSelector::id(&workspace.id),
+            false,
+            true,
+            vec![],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let all = Selection::default();
     let poll = || manager.poll_item_activity(&workspace.id, &all);
     assert!(poll().await.unwrap().is_empty());
     // Withdrawing the completion reports the conflict again.
-    manager.undo_done(&workspace.id).await.unwrap();
+    manager
+        .undo_done(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     let updates = poll().await.unwrap();
     assert_eq!(updates.len(), 1);
     assert_eq!(updates[0].kind, UpdateKind::MergeConflict);
@@ -2410,7 +2608,7 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         .unwrap();
     assert_eq!(delivered.len(), 1, "{delivered:?}");
     manager
-        .acknowledge_pr_updates(&id, vec![delivered[0].delivery.clone()])
+        .acknowledge_pr_updates(&SpaceSelector::id(&id), vec![delivered[0].delivery.clone()])
         .await
         .unwrap();
     let (watched, polled) = manager
@@ -2475,7 +2673,11 @@ async fn background_polls_a_finished_run_until_its_finish_is_queued() {
         .await
         .unwrap();
     assert!(polled().await.unwrap().is_empty());
-    let queued = manager.agent_updates(&id).await.unwrap().updates;
+    let queued = manager
+        .agent_updates(&SpaceSelector::id(&id))
+        .await
+        .unwrap()
+        .updates;
     assert_eq!(queued[0].kind, UpdateKind::CiCompleted, "{queued:?}");
 }
 
@@ -2516,7 +2718,10 @@ async fn updates_leave_settling_messages_for_a_later_delivery() {
     let updates = manager.wait_prs(&workspace.id, Some(60)).await.unwrap();
     assert_eq!(updates.updates.len(), 1);
     assert!(updates.messages.is_empty(), "{updates:?}");
-    let unread = manager.agent_messages(&workspace.id).await.unwrap();
+    let unread = manager
+        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert_eq!(unread.len(), 1);
 }
 
@@ -2526,7 +2731,7 @@ async fn a_watch_times_out_while_its_messages_settle() {
     let workspace = settling_workspace(&root, &manager).await;
     manager
         .send_agent_message(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "Request 1 approved".into(),
             Vec::new(),
             &Attacher::User,
@@ -2534,14 +2739,21 @@ async fn a_watch_times_out_while_its_messages_settle() {
         .await
         .unwrap();
     let updates = manager
-        .wait_items(&workspace.id, &Selection::default(), Some(1))
+        .wait_items(
+            &SpaceSelector::id(&workspace.id),
+            &Selection::default(),
+            Some(1),
+        )
         .await
         .unwrap();
     assert!(
         updates.timed_out && updates.messages.is_empty(),
         "{updates:?}"
     );
-    let unread = manager.agent_messages(&workspace.id).await.unwrap();
+    let unread = manager
+        .agent_messages(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert_eq!(unread.len(), 1);
 }
 
@@ -2667,7 +2879,11 @@ async fn the_background_poll_reads_spaces_together() {
     for (number, workspace) in workspaces {
         let issue = format!("http://{host}/team/repo/issues/{number}");
         manager
-            .set_issue(&workspace.id, &issue, Some("Fix".into()))
+            .set_issue(
+                &SpaceSelector::id(&workspace.id),
+                &issue,
+                Some("Fix".into()),
+            )
             .await
             .unwrap();
     }

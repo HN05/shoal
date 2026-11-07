@@ -7,6 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::Effective,
     daemon::{store, workspace::Manager},
@@ -88,12 +89,12 @@ impl LinkSpace {
     /// chat's checkout, the one it acts in for a chat without a repository.
     pub(crate) fn item_context(&self) -> ItemContext {
         match self {
-            Self::Workspace(workspace) => ItemContext::Workspace(workspace.id.clone()),
+            Self::Workspace(workspace) => ItemContext::Workspace(SpaceSelector::id(&workspace.id)),
             Self::Chat { chat, checkout } if chat.repository_id.is_none() => ItemContext::ChatIn {
-                chat: chat.id.clone(),
+                chat: SpaceSelector::id(&chat.id),
                 repository: checkout.id.clone(),
             },
-            Self::Chat { chat, .. } => ItemContext::Chat(chat.id.clone()),
+            Self::Chat { chat, .. } => ItemContext::Chat(SpaceSelector::id(&chat.id)),
         }
     }
 
@@ -117,8 +118,8 @@ impl LinkSpace {
 
 impl Manager {
     /// The workspace or running chat `selector` names, by ID or name.
-    pub(crate) async fn link_space(&self, selector: &str) -> Result<LinkSpace> {
-        Ok(match self.present_space(selector).await? {
+    pub(crate) async fn link_space(&self, selector: &SpaceSelector) -> Result<LinkSpace> {
+        Ok(match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => LinkSpace::Workspace(Box::new(workspace)),
             PresentSpace::Chat(chat) => {
                 let checkout = self.chat_own_checkout(&chat).await?;
@@ -153,7 +154,7 @@ impl Manager {
 
     /// The chat without a repository `chat` names, acting in the registered
     /// repository `repository` names, which counts as its own.
-    async fn chat_in(&self, chat: &str, repository: &str) -> Result<LinkSpace> {
+    async fn chat_in(&self, chat: &SpaceSelector, repository: &str) -> Result<LinkSpace> {
         let (chat, checkout) = self.chat_acting_in(chat, repository).await?;
         Ok(LinkSpace::Chat { chat, checkout })
     }
@@ -162,10 +163,10 @@ impl Manager {
     /// registered repository `repository` names, which it acts in.
     pub(crate) async fn chat_acting_in(
         &self,
-        chat: &str,
+        chat: &SpaceSelector,
         repository: &str,
     ) -> Result<(Chat, Repository)> {
-        let chat = (self.recorded_chat(chat).await?).with_context(|| format!("no chat {chat}"))?;
+        let chat = self.chat(chat).await?;
         anyhow::ensure!(
             chat.repository_id.is_none(),
             "chat {} acts only in its own repository",
@@ -188,11 +189,11 @@ impl Manager {
         if kind.is_none() {
             return Ok(None);
         }
-        let outside =
-            (self.recorded_chat(id).await?).is_some_and(|chat| chat.repository_id.is_none());
+        let outside = (self.chat_by_id(id).await?).is_some_and(|chat| chat.repository_id.is_none());
+        let space = SpaceSelector::id(id);
         match repository.filter(|_| outside) {
-            Some(repository) => self.chat_in(id, repository).await.map(Some),
-            None => self.link_space(id).await.map(Some),
+            Some(repository) => self.chat_in(&space, repository).await.map(Some),
+            None => self.link_space(&space).await.map(Some),
         }
     }
 
@@ -215,8 +216,7 @@ impl Manager {
                 Ok(self.chat_acting_in(chat, repository).await?.1)
             }
             ItemContext::Chat(selector) => {
-                let chat = (self.running_chat(selector).await?)
-                    .with_context(|| format!("no running chat {selector}"))?;
+                let chat = self.running_chat(selector).await?;
                 self.chat_own_checkout(&chat).await
             }
             ItemContext::Workspace(_) => bail!("a workspace acts in its worktree"),

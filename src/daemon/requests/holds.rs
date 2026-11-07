@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     model::HoldPlacer,
     protocol::{Body, HoldMethod},
@@ -29,10 +30,12 @@ pub(super) async fn handle(
             workspace,
             name,
             reason,
-        } if caller.is_some_and(|caller| caller.space_id == workspace) => manager
-            .request_hold(&workspace, name, reason)
-            .await?
-            .into_body(Body::Hold),
+        } if caller.is_some_and(|caller| SpaceSelector::id(&caller.space_id) == workspace) => {
+            manager
+                .request_hold(&workspace, name, reason)
+                .await?
+                .into_body(Body::Hold)
+        }
         HoldMethod::HoldAcquire {
             workspace,
             name,
@@ -53,7 +56,7 @@ pub(super) async fn handle(
 impl Scoped for HoldMethod {
     /// Holding the caller's own workspace needs approval, which
     /// [`handle`] requests.
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut SpaceSelector>> {
         Ok(Some(match self {
             HoldMethod::HoldList { workspace }
             | HoldMethod::HoldRelease { workspace, .. }

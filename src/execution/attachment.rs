@@ -2,6 +2,7 @@
 //! reports to the daemon while the agent runs.
 use std::{io::IsTerminal, time::Duration};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::Effective, model::ExecutionPlan, paths::Paths, protocol::AgentMethod, sessions::Origin,
     terminal::Attachment,
@@ -59,7 +60,7 @@ pub(super) fn start(paths: &Paths, plan: &ExecutionPlan, shown: Shown) -> Monito
         loop {
             if let Some(attached) = shown.attached().await {
                 let report = AgentMethod::ReportAttached {
-                    workspace: workspace.clone(),
+                    workspace: SpaceSelector::parse(&workspace),
                     execution: execution.clone(),
                     attached,
                 };

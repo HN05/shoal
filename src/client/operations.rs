@@ -6,6 +6,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 use anyhow::Result;
 use tokio::{io::BufReader, net::UnixStream};
 
+use crate::client::space_names::SpaceSelector;
 use crate::client::{
     connection::{self, Daemon},
     protocol::{
@@ -95,7 +96,7 @@ pub struct NewWorkspace {
     pub path: Option<PathBuf>,
     pub git_profile: Option<String>,
     /// The chat the workspace is created in.
-    pub parent: Option<String>,
+    pub parent: Option<SpaceSelector>,
     pub options: CreationOptions,
     /// The issue to link, by URL.
     pub issue: Option<String>,
@@ -161,7 +162,7 @@ pub async fn start_workspace(
 /// A child workspace for the daemon to split and prepare in an operation.
 pub struct NewSplit {
     /// The workspace it is split from.
-    pub workspace: String,
+    pub workspace: SpaceSelector,
     /// Its new branch; a copy's defaults to one named after the copied
     /// workspace's.
     pub name: Option<String>,
@@ -179,7 +180,7 @@ pub struct NewSplit {
 impl NewSplit {
     /// A child of `workspace` on a new branch `name`, with defaults for
     /// everything else.
-    pub fn new(workspace: String, name: Option<String>) -> Self {
+    pub fn new(workspace: SpaceSelector, name: Option<String>) -> Self {
         Self {
             workspace,
             name,

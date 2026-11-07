@@ -9,6 +9,7 @@ use super::super::{
     scope::{Caller, Scoped, denied},
     workspace::{self, Manager},
 };
+use crate::client::space_names::SpaceSelector;
 use crate::protocol::{self, Body, ConfigTarget, ErrorCode, Response, WorkspaceMethod};
 
 pub(super) async fn handle(
@@ -40,7 +41,14 @@ pub(super) async fn handle(
             };
             Body::OpenedWorkspace(
                 manager
-                    .open_branch_below(repository, &branch, base, new, parent, caller.is_some())
+                    .open_branch_below(
+                        repository,
+                        &branch,
+                        base,
+                        new,
+                        manager.space_id(parent.as_ref()).await?,
+                        caller.is_some(),
+                    )
                     .await?,
             )
         }
@@ -61,7 +69,13 @@ pub(super) async fn handle(
             };
             Body::Workspace(
                 manager
-                    .create_workspace_below(repository, name, base, new, parent)
+                    .create_workspace_below(
+                        repository,
+                        name,
+                        base,
+                        new,
+                        manager.space_id(parent.as_ref()).await?,
+                    )
                     .await?,
             )
         }
@@ -72,7 +86,12 @@ pub(super) async fn handle(
             options,
         } => Body::Workspace(
             manager
-                .create_commit_workspace(repository, parent, start, options)
+                .create_commit_workspace(
+                    repository,
+                    manager.space_id(parent.as_ref()).await?,
+                    start,
+                    options,
+                )
                 .await?,
         ),
         WorkspaceMethod::OpenPullHead {
@@ -83,7 +102,14 @@ pub(super) async fn handle(
             options,
         } => Body::OpenedWorkspace(
             manager
-                .open_pull_head(repository, url, head, parent, options, caller.is_some())
+                .open_pull_head(
+                    repository,
+                    url,
+                    head,
+                    manager.space_id(parent.as_ref()).await?,
+                    options,
+                    caller.is_some(),
+                )
                 .await?,
         ),
         WorkspaceMethod::ReopenWorkspace { workspace } => {
@@ -109,6 +135,7 @@ pub(super) async fn handle(
             options,
             parent,
         } => {
+            let parent = manager.space_id(parent.as_ref()).await?;
             (manager.ensure_parent_repository(&repository, parent.as_deref())).await?;
             manager
                 .check_creation(
@@ -196,6 +223,11 @@ pub(super) async fn handle(
             Body::MergePreview(manager.preview_merge(&workspace, push).await?)
         }
         WorkspaceMethod::CloseOwnedPlace { workspace, place } => {
+            // The workspace may be removed already, so its ID stays as given.
+            let workspace = match workspace {
+                SpaceSelector::Number(_) => manager.workspace(&workspace).await?.id,
+                SpaceSelector::IdOrName(id) | SpaceSelector::Id(id) => id,
+            };
             Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)
         }
         WorkspaceMethod::PlaceOwnership { workspace, place } => {
@@ -244,7 +276,11 @@ async fn owned_places(manager: &Manager, workspace: Option<String>) -> Result<Bo
 }
 
 impl Scoped for WorkspaceMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         if let WorkspaceMethod::CreateCommitWorkspace {
             start: crate::protocol::CommitStart::Copy(source),
             ..
@@ -275,7 +311,7 @@ impl Scoped for WorkspaceMethod {
                 ..
             }
             | WorkspaceMethod::OpenPullHead { parent, .. } => {
-                *parent = Some(caller.space_id.clone());
+                *parent = Some(SpaceSelector::id(&caller.space_id));
                 None
             }
             // A start it checks goes where the start would: below its own

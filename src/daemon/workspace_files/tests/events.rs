@@ -1,4 +1,5 @@
 use super::{Attacher, FileSource, chat, workspace};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::events::{EventItem, FileEventDetails, FileEventKind},
     daemon::{test_support::manager, workspace::Manager},
@@ -29,7 +30,7 @@ fn summary(events: &[FileEventDetails]) -> Vec<(FileEventKind, &str, FileSource)
 async fn remove(manager: &Manager, id: &str) {
     manager
         .remove_workspace(
-            id,
+            &SpaceSelector::id(id),
             crate::removal::UnsavedWork::default(),
             crate::removal::InspectionPolicy::GitOnly,
         )
@@ -49,7 +50,7 @@ async fn every_route_records_one_added_event_per_file() {
     for _ in 0..2 {
         manager
             .send_agent_message(
-                &workspace.name,
+                &SpaceSelector::from(&workspace.name),
                 "See".into(),
                 vec![log.clone().into(), shot.clone().into()],
                 &Attacher::User,
@@ -59,7 +60,7 @@ async fn every_route_records_one_added_event_per_file() {
     }
     manager
         .add_attached_files(
-            &workspace.name,
+            &SpaceSelector::from(&workspace.name),
             vec![crate::daemon::workspace_files::NewFile {
                 path: log.clone(),
                 title: Some("Crash log".into()),
@@ -70,7 +71,7 @@ async fn every_route_records_one_added_event_per_file() {
         .unwrap();
     manager
         .mark_done(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             false,
             false,
             vec![shot.into()],
@@ -89,7 +90,10 @@ async fn every_route_records_one_added_event_per_file() {
             (Added, "shot.png", FileSource::Result),
         ]
     );
-    let listed = manager.attached_files(&workspace.name).await.unwrap();
+    let listed = manager
+        .attached_files(&SpaceSelector::from(&workspace.name))
+        .await
+        .unwrap();
     let added = &events[2];
     assert_eq!(added.workspace_id.as_deref(), Some(workspace.id.as_str()));
     assert_eq!(added.chat_id, None);
@@ -117,7 +121,12 @@ async fn every_deletion_records_one_removed_event_per_file() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
     let child = manager
-        .split_workspace(&workspace.id, "audit".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&workspace.id),
+            "audit".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let file = |name: &str| {
@@ -130,7 +139,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
         let manager = &manager;
         async move {
             manager
-                .add_attached_files(&space, vec![file], &Attacher::User)
+                .add_attached_files(&SpaceSelector::parse(&space), vec![file], &Attacher::User)
                 .await
                 .unwrap();
         }
@@ -143,7 +152,7 @@ async fn every_deletion_records_one_removed_event_per_file() {
     for result in ["expired.md", "low-disk.md"] {
         let audit = manager
             .split_workspace(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 result.trim_end_matches(".md").into(),
                 None,
                 Default::default(),
@@ -151,7 +160,13 @@ async fn every_deletion_records_one_removed_event_per_file() {
             .await
             .unwrap();
         manager
-            .mark_done(&audit.id, false, false, vec![file(result)], &Attacher::User)
+            .mark_done(
+                &SpaceSelector::id(&audit.id),
+                false,
+                false,
+                vec![file(result)],
+                &Attacher::User,
+            )
             .await
             .unwrap();
         remove(&manager, &audit.id).await;
@@ -159,13 +174,17 @@ async fn every_deletion_records_one_removed_event_per_file() {
 
     // `shoal files rm`
     manager
-        .remove_attached_files(&workspace.name, vec!["deleted.md".into()], vec![])
+        .remove_attached_files(
+            &SpaceSelector::from(&workspace.name),
+            vec!["deleted.md".into()],
+            vec![],
+        )
         .await
         .unwrap();
     // Removal deletes all but the results.
     manager
         .mark_done(
-            &child.id,
+            &SpaceSelector::id(&child.id),
             false,
             false,
             vec![file("kept.md")],
@@ -243,12 +262,19 @@ async fn a_chats_file_events_name_the_chat() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
     manager
-        .add_attached_files(&chat.name, vec![report.into()], &Attacher::User)
+        .add_attached_files(
+            &SpaceSelector::from(&chat.name),
+            vec![report.into()],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    manager.remove_chat(&chat.id, None).await.unwrap();
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
     manager
         .store
         .run(|db| {
@@ -293,12 +319,19 @@ async fn the_file_events_of_a_chat_without_a_repository_name_none() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
     manager
-        .add_attached_files(&chat.name, vec![report.into()], &Attacher::User)
+        .add_attached_files(
+            &SpaceSelector::from(&chat.name),
+            vec![report.into()],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     process.kill();
     manager.stop_finished_chats().await.unwrap();
-    manager.remove_chat(&chat.id, None).await.unwrap();
+    manager
+        .remove_chat(&SpaceSelector::id(&chat.id), None)
+        .await
+        .unwrap();
     manager
         .store
         .run(|db| {

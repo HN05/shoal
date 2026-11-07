@@ -1,6 +1,7 @@
 use std::fs;
 
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{commit, git, manager, repository},
     model::CheckpointCause,
@@ -78,7 +79,11 @@ async fn removal_checkpoint_keeps_files_workspace_processes_write_as_they_stop()
     .expect("workspace process did not start");
 
     manager
-        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
 
@@ -124,7 +129,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
 
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
@@ -172,7 +177,7 @@ async fn removal_keeps_a_checkpoint_and_record_until_they_expire() {
         .await
         .unwrap();
     assert!(manager.removed_workspaces().await.unwrap().is_empty());
-    assert!(manager.restore_workspace("topic").await.is_err());
+    assert!(manager.restore_workspace(&"topic".into()).await.is_err());
     let id = workspace.id.clone();
     manager
         .store
@@ -259,7 +264,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
     let status = git(&workspace.path, &["status", "--porcelain"]);
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
@@ -276,7 +281,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
             "https://github.com/acme/repo.git",
         ],
     );
-    let restored = manager.restore_workspace("topic").await.unwrap();
+    let restored = manager.restore_workspace(&"topic".into()).await.unwrap();
     assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
     let path = &restored.opened.workspace.path;
     assert!(!restored.opened.reused);
@@ -284,7 +289,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
     assert_eq!(git(path, &["rev-parse", "HEAD"]), head);
     assert_eq!(git(path, &["status", "--porcelain"]), status);
     assert_eq!(fs::read_to_string(path.join("scratch")).unwrap(), "notes\n");
-    let workspace = manager.workspace("topic").await.unwrap();
+    let workspace = manager.workspace(&"topic".into()).await.unwrap();
     assert_eq!(
         workspace.links.issue.as_deref(),
         Some("https://github.com/acme/repo/issues/1")
@@ -308,12 +313,19 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
     );
     assert!(manager.removed_workspaces().await.unwrap().is_empty());
     // The removal's checkpoint belongs to the new workspace.
-    let checkpoints = manager.checkpoints("topic", None).await.unwrap().unwrap();
+    let checkpoints = manager
+        .checkpoints(&"topic".into(), None)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(checkpoints.len(), 1);
     assert_eq!(checkpoints[0].workspace_id, workspace.id);
     assert_eq!(checkpoints[0].cause, CheckpointCause::Removal);
     // Its numbering continues after the moved checkpoints.
-    let next = manager.take_checkpoint("topic", None).await.unwrap();
+    let next = manager
+        .take_checkpoint(&"topic".into(), None)
+        .await
+        .unwrap();
     assert_eq!(next.number, checkpoints[0].number + 1);
     assert!(
         checkpoint_refs(&checkout).contains(&git::checkpoint::reference(&checkpoints[0].commit))
@@ -335,7 +347,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
     fs::write(workspace.path.join("scratch"), "notes\n").unwrap();
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
@@ -362,7 +374,10 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
         .await
         .unwrap();
     let floor = crate::time::unix_seconds() + RESTORE_CLAIM.as_secs();
-    let claimed = manager.claim_removed_workspace("topic").await.unwrap();
+    let claimed = manager
+        .claim_removed_workspace(&"topic".into())
+        .await
+        .unwrap();
     assert!(claimed.expires_at >= floor);
     assert!(claimed.checkpoint.expires_at >= floor);
     let saved = record(&manager, &workspace.id).await.unwrap();
@@ -381,7 +396,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_and_checkpoints() {
         .await
         .unwrap();
     assert_eq!(checkpoint_expiry as u64, claimed.checkpoint.expires_at);
-    manager.restore_workspace("topic").await.unwrap();
+    manager.restore_workspace(&"topic".into()).await.unwrap();
 }
 
 #[tokio::test]
@@ -400,7 +415,7 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
     commit(&workspace.path, "work");
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
@@ -408,13 +423,13 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
         .unwrap();
     // The kept branch was reset elsewhere, losing the removed commit.
     git(&checkout, &["branch", "-f", "topic", "main"]);
-    assert!(manager.restore_workspace("topic").await.is_err());
+    assert!(manager.restore_workspace(&"topic".into()).await.is_err());
     git(&checkout, &["branch", "-D", "topic"]);
     manager
         .create_workspace(&repo.id, "topic".into(), None, None, None)
         .await
         .unwrap();
-    assert!(manager.restore_workspace("topic").await.is_err());
+    assert!(manager.restore_workspace(&"topic".into()).await.is_err());
     assert_eq!(manager.removed_workspaces().await.unwrap().len(), 1);
 }
 
@@ -438,7 +453,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
     );
     manager
         .link_item(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             LinkKind::Pr,
             "3",
             Relation::Related,
@@ -449,7 +464,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .unwrap();
     manager
         .link_item(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             LinkKind::Pr,
             "4",
             Relation::Related,
@@ -460,7 +475,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .unwrap();
     manager
         .unlink_items(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             Relation::Related,
             Some(LinkKind::Pr),
             Some("4"),
@@ -469,7 +484,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         .unwrap();
     manager
         .link_item(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             LinkKind::Issue,
             "7",
             Relation::Assigned,
@@ -485,7 +500,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
     assert!(
         manager
             .unlink_items(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 Relation::Assigned,
                 Some(LinkKind::Issue),
                 None
@@ -496,7 +511,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
     assert!(
         manager
             .link_item(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 LinkKind::Pr,
                 "5",
                 Relation::Related,
@@ -508,7 +523,12 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
     );
     assert!(
         manager
-            .unlink_items(&workspace.id, Relation::Related, None, None)
+            .unlink_items(
+                &SpaceSelector::id(&workspace.id),
+                Relation::Related,
+                None,
+                None
+            )
             .await
             .is_err()
     );
@@ -559,11 +579,11 @@ async fn a_removal_interrupted_after_deleting_files_stays_restorable() {
     crate::daemon::cleanup::sweep(&manager, &mut Default::default())
         .await
         .unwrap();
-    assert!(manager.workspace(&workspace.id).await.is_err());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     manager.expire_checkpoints().await.unwrap();
     assert_eq!(manager.removed_workspaces().await.unwrap().len(), 1);
 
-    let restored = manager.restore_workspace("topic").await.unwrap();
+    let restored = manager.restore_workspace(&"topic".into()).await.unwrap();
     let path = &restored.opened.workspace.path;
     assert_eq!(fs::read_to_string(path.join("scratch")).unwrap(), "notes\n");
     assert_eq!(fs::read_to_string(path.join("work")).unwrap(), "work\n");
@@ -589,7 +609,7 @@ async fn a_failed_removal_keeps_its_checkpoint() {
     fs::write(&config, "not [valid toml").unwrap();
     let removed = manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
@@ -633,14 +653,14 @@ async fn restore_keeps_the_recorded_base_and_its_stack() {
     assert_eq!(upper.base_ref.as_deref(), Some("refs/heads/lower"));
     manager
         .remove_workspace(
-            &upper.id,
+            &SpaceSelector::id(&upper.id),
             UnsavedWork::All,
             InspectionPolicy::IncludeDirectoryProcesses,
         )
         .await
         .unwrap();
-    manager.restore_workspace("upper").await.unwrap();
-    let restored = manager.workspace("upper").await.unwrap();
+    manager.restore_workspace(&"upper".into()).await.unwrap();
+    let restored = manager.workspace(&"upper".into()).await.unwrap();
     assert_eq!(restored.base_ref.as_deref(), Some("refs/heads/lower"));
     assert_eq!(
         restored.base_workspace.map(|base| base.name).as_deref(),

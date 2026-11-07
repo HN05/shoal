@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         commands::{
@@ -34,9 +35,11 @@ pub(in crate::cli::commands) async fn merge(
     yes: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let settings =
-        crate::client::workspaces::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone()))
-            .await?;
+    let settings = crate::client::workspaces::settings(
+        &ctx.paths,
+        ConfigTarget::Workspace(SpaceSelector::parse(&workspace)),
+    )
+    .await?;
     let push = push.unwrap_or(settings.merge.push);
     let confirmed = match yes {
         true => None,
@@ -48,7 +51,10 @@ pub(in crate::cli::commands) async fn merge(
         }
     };
     let options = MergeOptions { push, confirmed };
-    let spec = OperationSpec::Merge { workspace, options };
+    let spec = OperationSpec::Merge {
+        workspace: SpaceSelector::parse(&workspace),
+        options,
+    };
     match operations::run(ctx, spec).await {
         Ok(merged) => {
             show_merged(ctx, &merged)?;
@@ -73,7 +79,8 @@ async fn confirm_merge(
     pushing: bool,
 ) -> Result<Option<MergeConfirmation>> {
     let preview =
-        crate::client::workspaces::preview_merge(&ctx.paths, workspace.to_owned(), push).await?;
+        crate::client::workspaces::preview_merge(&ctx.paths, SpaceSelector::parse(workspace), push)
+            .await?;
     if !pushing && preview.warning.is_none() {
         return Ok(None);
     }

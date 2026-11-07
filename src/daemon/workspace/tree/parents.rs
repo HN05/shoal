@@ -4,6 +4,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, params};
 
 use super::super::{Manager, NewWorkspace};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{chats::Removing, spaces, store},
     model::{OpenedWorkspace, SpaceKind, Workspace},
@@ -47,7 +48,9 @@ impl Manager {
                 opened.workspace.name
             );
         }
-        opened.workspace = self.give_to_parent(&opened.workspace.id, parent).await?;
+        opened.workspace = self
+            .give_to_parent(&SpaceSelector::id(&opened.workspace.id), parent)
+            .await?;
         Ok(opened)
     }
 
@@ -70,7 +73,8 @@ impl Manager {
         let workspace = self
             .create_workspace_with(repository, name, base, new)
             .await?;
-        self.give_to_parent(&workspace.id, parent).await
+        self.give_to_parent(&SpaceSelector::id(&workspace.id), parent)
+            .await
     }
 
     /// Refuse a space below `parent` in another repository than the
@@ -109,11 +113,12 @@ impl Manager {
     /// Assign `workspace` to `parent` and read it again.
     pub(crate) async fn give_to_parent(
         &self,
-        workspace: &str,
+        workspace: &SpaceSelector,
         parent: Option<String>,
     ) -> Result<Workspace> {
-        self.assign_parent(workspace, parent).await?;
-        self.workspace(workspace).await
+        let id = self.workspace(workspace).await?.id;
+        self.assign_parent(&id, parent).await?;
+        self.workspace_by_id(&id).await
     }
 }
 

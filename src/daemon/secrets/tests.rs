@@ -31,7 +31,7 @@ async fn acquire(
 ) -> Result<Allocation<SecretGrant>> {
     manager
         .acquire_secret(
-            "worker",
+            &"worker".into(),
             name.into(),
             SecretRequest {
                 reason: reason.map(Into::into),
@@ -120,17 +120,19 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
     };
     assert!(
         manager
-            .acquire_secret("worker", "OPEN".into(), stale, scoped)
+            .acquire_secret(&"worker".into(), "OPEN".into(), stale, scoped)
             .await
             .is_err(),
         "a stale source must be refused"
     );
     configure(&manager, "token", Lifetime::Lease);
-    manager.release_secret("worker", "GATED".into()).await?;
+    manager
+        .release_secret(&"worker".into(), "GATED".into())
+        .await?;
     assert!(acquire(&manager, scoped, "GATED", None).await.is_err());
     assert!(
         manager
-            .release_secret("worker", "GATED".into())
+            .release_secret(&"worker".into(), "GATED".into())
             .await
             .is_err()
     );
@@ -156,7 +158,9 @@ async fn workspace_grants_outlast_release() -> Result<()> {
     manager
         .decide_approval(request.number, true, None, Default::default(), None)
         .await?;
-    manager.release_secret("worker", "GATED".into()).await?;
+    manager
+        .release_secret(&"worker".into(), "GATED".into())
+        .await?;
     assert_eq!(
         granted(acquire(&manager, scoped, "GATED", None).await?),
         Some(true)

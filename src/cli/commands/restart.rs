@@ -9,6 +9,7 @@ use anyhow::{Result, ensure};
 use tokio::time::{Instant, sleep, sleep_until};
 
 use crate::client::output::agents::Restarted;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::Agent,
     cli::{args::SpaceTargets, context::Context},
@@ -132,7 +133,13 @@ impl Restart {
         match &self.space {
             // The daemon names how to restore a chat whose restart failed.
             PresentSpace::Chat(chat) => {
-                agents::restart_chat(&ctx.paths, chat.id.clone(), self.joins.clone(), run).await
+                agents::restart_chat(
+                    &ctx.paths,
+                    SpaceSelector::id(&chat.id),
+                    self.joins.clone(),
+                    run,
+                )
+                .await
             }
             PresentSpace::Workspace(workspace) => {
                 self.restart_agent(ctx, workspace, run, in_place).await

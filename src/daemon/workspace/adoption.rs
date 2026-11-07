@@ -121,7 +121,7 @@ impl Manager {
         let workspace = self.insert_workspace(workspace, None, None).await?;
         let result = self.materialize_copy(repo, source, &workspace).await;
         match result {
-            Ok(()) => self.workspace(&workspace.id).await,
+            Ok(()) => self.workspace_by_id(&workspace.id).await,
             Err(error) => {
                 // Worktrunk can report an error after Git has created the
                 // worktree. Capture its identity before retaining the failure.

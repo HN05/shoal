@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         test_support::{git, install_test_script, manager, repository},
@@ -70,7 +71,12 @@ async fn corrupt_completion(manager: &Manager, workspace: &Workspace) {
         })
         .await
         .unwrap();
-    assert!(manager.inspect_workspace(&workspace.id).await.is_err());
+    assert!(
+        manager
+            .inspect_workspace(&SpaceSelector::id(&workspace.id))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -98,7 +104,10 @@ async fn removal_check_counts_only_its_executions_without_inspection_details() {
             .await
             .unwrap();
         let check = manager
-            .check_removal(&workspace.name, InspectionPolicy::GitOnly)
+            .check_removal(
+                &SpaceSelector::from(&workspace.name),
+                InspectionPolicy::GitOnly,
+            )
             .await
             .unwrap();
         assert_eq!(check.running_commands, 0);
@@ -118,7 +127,10 @@ async fn removal_check_counts_only_its_executions_without_inspection_details() {
             .await
             .unwrap();
         let check = manager
-            .check_removal(&workspace.name, InspectionPolicy::GitOnly)
+            .check_removal(
+                &SpaceSelector::from(&workspace.name),
+                InspectionPolicy::GitOnly,
+            )
             .await
             .unwrap();
         assert_eq!(check.running_commands, 2);
@@ -146,7 +158,9 @@ async fn deleted_removal_checks_executions_without_inspection_details() {
                 .unwrap();
         }
         fs::remove_dir_all(&workspace.path).unwrap();
-        let result = manager.remove_deleted(&workspace.id).await;
+        let result = manager
+            .remove_deleted(&SpaceSelector::id(&workspace.id))
+            .await;
         if has_executions {
             assert!(result.is_err());
             assert!(
@@ -161,7 +175,7 @@ async fn deleted_removal_checks_executions_without_inspection_details() {
             assert!(!result.branch_outcome.is_deleted());
         }
         assert_eq!(
-            manager.workspace(&workspace.id).await.is_ok(),
+            manager.workspace_by_id(&workspace.id).await.is_ok(),
             has_executions
         );
     }
@@ -182,7 +196,7 @@ async fn lifecycle_reservation_returns_replaced_state() {
 
     assert_eq!(previous, WorkspaceState::Failed);
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().state,
+        manager.workspace_by_id(&workspace.id).await.unwrap().state,
         WorkspaceState::Removing
     );
 }
@@ -201,7 +215,7 @@ async fn lifecycle_check_refuses_what_reserving_would_and_reserves_nothing() {
     drop(hook);
     manager.check_lifecycle(&workspace.id).await.unwrap();
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().state,
+        manager.workspace_by_id(&workspace.id).await.unwrap().state,
         WorkspaceState::Ready
     );
     manager
@@ -230,16 +244,12 @@ async fn the_users_removal_takes_a_workspace_whose_setup_never_started() {
         })
         .await
         .unwrap();
-    let remove = || {
-        manager.remove_workspace(
-            &workspace.id,
-            UnsavedWork::default(),
-            InspectionPolicy::GitOnly,
-        )
-    };
+    let selected = SpaceSelector::id(&workspace.id);
+    let remove =
+        || manager.remove_workspace(&selected, UnsavedWork::default(), InspectionPolicy::GitOnly);
     assert!(remove().await.is_err());
     assert_eq!(
-        manager.workspace(&workspace.id).await.unwrap().state,
+        manager.workspace_by_id(&workspace.id).await.unwrap().state,
         WorkspaceState::Preparing
     );
 
@@ -253,7 +263,7 @@ async fn the_users_removal_takes_a_workspace_whose_setup_never_started() {
         .unwrap();
     assert!(remove().await.unwrap().removed);
     assert!(!workspace.path.exists());
-    assert!(manager.workspace(&workspace.id).await.is_err());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
 }
 
 #[tokio::test]
@@ -281,7 +291,11 @@ async fn removal_waiting_for_creation_keeps_what_creation_recorded() {
         let id = workspace.id.clone();
         async move {
             manager
-                .remove_workspace(&id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+                .remove_workspace(
+                    &SpaceSelector::id(&id),
+                    UnsavedWork::default(),
+                    InspectionPolicy::GitOnly,
+                )
                 .await
         }
     });
@@ -332,9 +346,14 @@ async fn idle_removal_rechecks_head_and_ignored_activity_after_hooks() {
             .await
             .unwrap()
             .unwrap();
-        assert!(manager.remove_idle(&workspace.id, snapshot).await.is_err());
+        assert!(
+            manager
+                .remove_idle(&SpaceSelector::id(&workspace.id), snapshot)
+                .await
+                .is_err()
+        );
         assert!(workspace.path.exists());
-        assert!(manager.workspace(&workspace.id).await.is_ok());
+        assert!(manager.workspace_by_id(&workspace.id).await.is_ok());
         assert!(!git(&workspace.path, &["rev-parse", "refs/heads/policy"]).is_empty());
     }
 }
@@ -349,7 +368,7 @@ async fn unattended_removal_refuses_retention_its_sweep_missed() {
         .unwrap();
     manager
         .acquire_hold(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             "app".into(),
             None,
             crate::model::HoldPlacer::User,
@@ -360,7 +379,12 @@ async fn unattended_removal_refuses_retention_its_sweep_missed() {
         snapshot,
         cause: EventCause::Idle,
     };
-    assert!(manager.remove(&workspace.id, removal).await.is_err());
+    assert!(
+        manager
+            .remove(&SpaceSelector::id(&workspace.id), removal)
+            .await
+            .is_err()
+    );
     assert!(workspace.path.exists());
 
     let unsaved = UnsavedWork::default();
@@ -370,7 +394,10 @@ async fn unattended_removal_refuses_retention_its_sweep_missed() {
         release_holds: true,
         taking: None,
     };
-    manager.remove(&workspace.id, removal).await.unwrap();
+    manager
+        .remove(&SpaceSelector::id(&workspace.id), removal)
+        .await
+        .unwrap();
     assert!(!workspace.path.exists());
 }
 
@@ -399,9 +426,14 @@ git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
                 taking: None,
             },
         };
-        assert!(manager.remove(&workspace.id, removal).await.is_err());
+        assert!(
+            manager
+                .remove(&SpaceSelector::id(&workspace.id), removal)
+                .await
+                .is_err()
+        );
         assert!(workspace.path.exists());
-        assert!(manager.workspace(&workspace.id).await.is_ok());
+        assert!(manager.workspace_by_id(&workspace.id).await.is_ok());
     }
 }
 
@@ -417,21 +449,25 @@ async fn removal_retains_session_logs_until_ownership_is_released() {
     assert!(
         manager
             .remove_workspace(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 UnsavedWork::default(),
                 InspectionPolicy::GitOnly
             )
             .await
             .is_err()
     );
-    assert!(manager.workspace(&workspace.id).await.is_ok());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_ok());
     assert_eq!(fs::read_to_string(&log).unwrap(), "session output");
 
     manager
-        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
-    assert!(manager.workspace(&workspace.id).await.is_err());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     assert!(!state.exists());
 }
 
@@ -445,14 +481,14 @@ async fn removal_needs_consent_to_delete_commits_on_a_detached_head() {
 
     let removed = manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
         .await;
     assert!(removed.is_err());
     assert!(workspace.path.is_dir());
-    assert!(manager.workspace(&workspace.id).await.is_ok());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_ok());
     assert_eq!(git(&workspace.path, &["rev-parse", "HEAD"]), head);
     assert_eq!(
         fs::read_to_string(workspace.path.join("detached-work")).unwrap(),
@@ -460,11 +496,15 @@ async fn removal_needs_consent_to_delete_commits_on_a_detached_head() {
     );
 
     manager
-        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert!(!workspace.path.exists());
-    assert!(manager.workspace(&workspace.id).await.is_err());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
 }
 
 #[tokio::test]
@@ -472,7 +512,7 @@ async fn consent_covers_only_the_unsaved_work_it_saw() {
     let (_root, manager, workspace) = fixture().await;
     fs::write(workspace.path.join("draft"), "draft\n").unwrap();
     let check = manager
-        .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+        .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
         .await
         .unwrap();
     let files_only = UnsavedWork::confirming(&check);
@@ -482,18 +522,22 @@ async fn consent_covers_only_the_unsaved_work_it_saw() {
     crate::daemon::test_support::commit(&workspace.path, "later");
 
     let removed = manager
-        .remove_workspace(&workspace.id, files_only, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            files_only,
+            InspectionPolicy::GitOnly,
+        )
         .await;
     assert!(removed.is_err());
     assert!(workspace.path.join("draft").exists());
 
     let check = manager
-        .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+        .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
         .await
         .unwrap();
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::confirming(&check),
             InspectionPolicy::GitOnly,
         )
@@ -517,13 +561,21 @@ async fn removal_keeps_files_it_promised_to_restore_when_the_checkpoint_cannot()
         .await;
 
     let removed = manager
-        .remove_workspace(&workspace.id, promised(true), InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            promised(true),
+            InspectionPolicy::GitOnly,
+        )
         .await;
     assert!(removed.is_err());
     assert!(workspace.path.join("draft").exists());
 
     manager
-        .remove_workspace(&workspace.id, promised(false), InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            promised(false),
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
     assert!(!workspace.path.exists());
@@ -538,14 +590,14 @@ async fn removal_of_a_detached_head_without_unpushed_commits_keeps_the_branch() 
 
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
         .await
         .unwrap();
     assert!(!workspace.path.exists());
-    assert!(manager.workspace(&workspace.id).await.is_err());
+    assert!(manager.workspace_by_id(&workspace.id).await.is_err());
     assert_eq!(
         git(&repo.path, &["rev-parse", "--verify", "refs/heads/policy"]),
         head
@@ -596,7 +648,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
             .spawn()
             .unwrap();
         let check = manager
-            .check_removal(&workspace.id, removal.inspection())
+            .check_removal(&SpaceSelector::id(&workspace.id), removal.inspection())
             .await
             .unwrap();
         assert_eq!(!check.processes.is_empty(), scans_directory);
@@ -612,7 +664,9 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
             Removal::Merged { .. } => Removal::Merged { head: head.trim() },
             other => other,
         };
-        let result = manager.remove(&workspace.id, removal).await;
+        let result = manager
+            .remove(&SpaceSelector::id(&workspace.id), removal)
+            .await;
         assert_eq!(
             result.is_err(),
             matches!(removal, Removal::Automatic { .. })
@@ -667,7 +721,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
             }
             let error = manager
                 .stop_workspace(
-                    &workspace.id,
+                    &SpaceSelector::id(&workspace.id),
                     crate::daemon::workspace::StopRequest::manual(),
                 )
                 .await
@@ -692,20 +746,25 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
             assert_eq!(stopped.is_err(), retained);
             assert_eq!(
                 manager
-                    .inspect_workspace(&workspace.id)
+                    .inspect_workspace(&SpaceSelector::id(&workspace.id))
                     .await
                     .unwrap()
                     .executions
                     .len(),
                 1
             );
-            let result = manager.remove(&workspace.id, removal).await;
+            let result = manager
+                .remove(&SpaceSelector::id(&workspace.id), removal)
+                .await;
             assert_eq!(result.is_err(), retained);
-            assert_eq!(manager.workspace(&workspace.id).await.is_ok(), retained);
+            assert_eq!(
+                manager.workspace_by_id(&workspace.id).await.is_ok(),
+                retained
+            );
             if retained {
                 assert_eq!(
                     manager
-                        .inspect_workspace(&workspace.id)
+                        .inspect_workspace(&SpaceSelector::id(&workspace.id))
                         .await
                         .unwrap()
                         .executions
@@ -748,7 +807,7 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
     // Waiting for confirmation is not a failure the workspace records.
     let unproven = manager
         .stop_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             crate::daemon::workspace::StopRequest::manual(),
         )
         .await
@@ -758,7 +817,10 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
             .downcast_ref::<crate::daemon::workspace::UnprovenStop>()
             .is_some()
     );
-    assert_eq!(manager.workspace(&workspace.id).await.unwrap().error, None);
+    assert_eq!(
+        manager.workspace_by_id(&workspace.id).await.unwrap().error,
+        None
+    );
     // A process using the directory blocks even an acknowledged stop.
     let mut user = tokio::process::Command::new("sleep")
         .arg("60")
@@ -767,19 +829,35 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
         .spawn()
         .unwrap();
     let blocked = manager
-        .stop_workspace_manually(&workspace.id, true, None, QueuedLaunches::Cancel)
+        .stop_workspace_manually(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            None,
+            QueuedLaunches::Cancel,
+        )
         .await;
     assert!(blocked.is_err());
-    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    let inspection = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert_eq!(inspection.executions.len(), 1);
     user.kill().await.unwrap();
     user.wait().await.unwrap();
 
     manager
-        .stop_workspace_manually(&workspace.id, true, None, QueuedLaunches::Cancel)
+        .stop_workspace_manually(
+            &SpaceSelector::id(&workspace.id),
+            true,
+            None,
+            QueuedLaunches::Cancel,
+        )
         .await
         .unwrap();
-    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    let inspection = manager
+        .inspect_workspace(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert!(inspection.executions.is_empty());
 }
 
@@ -812,20 +890,25 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
         }).await.unwrap();
         let stopped = manager
             .stop_workspace(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 crate::daemon::workspace::StopRequest::manual(),
             )
             .await;
         assert!(stopped.is_err());
         // The user's acknowledgement never covers a live process.
         let acknowledged = manager
-            .stop_workspace_manually(&workspace.id, true, None, QueuedLaunches::Cancel)
+            .stop_workspace_manually(
+                &SpaceSelector::id(&workspace.id),
+                true,
+                None,
+                QueuedLaunches::Cancel,
+            )
             .await;
         assert!(acknowledged.is_err());
         assert!(identity::alive(&live).unwrap());
         assert_eq!(
             manager
-                .inspect_workspace(&workspace.id)
+                .inspect_workspace(&SpaceSelector::id(&workspace.id))
                 .await
                 .unwrap()
                 .executions
@@ -843,7 +926,10 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
                 taking: None,
             }
         };
-        manager.remove(&workspace.id, removal).await.unwrap();
+        manager
+            .remove(&SpaceSelector::id(&workspace.id), removal)
+            .await
+            .unwrap();
         // Removal may discard the record, but an unverified group is never a target.
         assert!(identity::alive(&live).unwrap());
         child.kill().await.unwrap();
@@ -873,7 +959,7 @@ async fn removal_stops_processes_carrying_the_workspace_identity() {
 
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
@@ -903,7 +989,7 @@ async fn removal_stops_processes_its_post_remove_hook_leaves() {
 
     let outcome = manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
@@ -944,7 +1030,7 @@ async fn removal_deletes_a_branch_a_remote_has_and_keeps_unpushed_work() {
     for (workspace, deleted) in [(&pushed, true), (&unpushed, false)] {
         let removed = manager
             .remove_workspace(
-                &workspace.id,
+                &SpaceSelector::id(&workspace.id),
                 UnsavedWork::default(),
                 InspectionPolicy::GitOnly,
             )
@@ -977,7 +1063,7 @@ async fn branch_removal_uses_the_inspected_default_branch() {
             &["symbolic-ref", "HEAD", &git::local_ref(inspected_default)],
         );
         let check = manager
-            .check_removal(&workspace.id, InspectionPolicy::GitOnly)
+            .check_removal(&SpaceSelector::id(&workspace.id), InspectionPolicy::GitOnly)
             .await
             .unwrap();
         assert_eq!(check.default_branch.as_deref(), Some(inspected_default));
@@ -1030,7 +1116,7 @@ async fn automatic_removal_keeps_branch_when_default_branch_is_unknown() {
         .unwrap();
     let removed = manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
@@ -1055,7 +1141,7 @@ async fn removal_stops_detached_processes_running_from_the_worktree() {
 
     manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
@@ -1088,7 +1174,11 @@ async fn removal_stops_detached_programs_built_in_the_worktree() {
     .await;
 
     manager
-        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .remove_workspace(
+            &SpaceSelector::id(&workspace.id),
+            UnsavedWork::All,
+            InspectionPolicy::GitOnly,
+        )
         .await
         .unwrap();
 
@@ -1122,7 +1212,10 @@ async fn automatic_removal_stops_detached_programs_built_in_the_worktree() {
         .unwrap()
         .unwrap();
 
-    manager.remove_idle(&workspace.id, snapshot).await.unwrap();
+    manager
+        .remove_idle(&SpaceSelector::id(&workspace.id), snapshot)
+        .await
+        .unwrap();
 
     assert!(!workspace.path.exists());
     assert!(!identity::alive(&detached.identity).unwrap());
@@ -1149,7 +1242,7 @@ while [ ! -e '{pids}' ]; do sleep 1; done"#,
 
     let removed = manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
@@ -1174,18 +1267,28 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .await
         .unwrap();
     let middle = manager
-        .split_workspace(&top.id, "middle".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&top.id),
+            "middle".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let bottom = manager
-        .split_workspace(&middle.id, "bottom".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&middle.id),
+            "bottom".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let report = temp.path().join("report.md");
     fs::write(&report, "No leaks").unwrap();
     manager
         .mark_done(
-            &bottom.id,
+            &SpaceSelector::id(&bottom.id),
             false,
             false,
             vec![report.into()],
@@ -1195,7 +1298,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .unwrap();
     manager
         .remove_workspace(
-            &bottom.id,
+            &SpaceSelector::id(&bottom.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )
@@ -1225,11 +1328,16 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
 async fn a_clean_confirmation_naming_children_removes_clean_only() {
     let (_root, manager, workspace) = fixture().await;
     let child = manager
-        .split_workspace(&workspace.id, "child".into(), None, Default::default())
+        .split_workspace(
+            &SpaceSelector::id(&workspace.id),
+            "child".into(),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let check = manager
-        .check_manual_removal(&workspace.id, false)
+        .check_manual_removal(&SpaceSelector::id(&workspace.id), false)
         .await
         .unwrap();
     let confirmed = UnsavedWork::confirming(&check);
@@ -1308,7 +1416,7 @@ async fn a_disposable_workspace_deletes_only_its_own_new_branch() {
     git(&workspace.path, &["switch", "-q", "kept"]);
     let removed = manager
         .remove_workspace(
-            &workspace.id,
+            &SpaceSelector::id(&workspace.id),
             UnsavedWork::default(),
             InspectionPolicy::GitOnly,
         )

@@ -3,6 +3,7 @@
 //! lives only in memory: the proxy lives and dies with the wrapper, so a
 //! restart that forgets it loses nothing that still runs. The reset is kept
 //! with the turn retries it holds back.
+use crate::client::space_names::SpaceSelector;
 use anyhow::Result;
 
 use super::Manager;
@@ -13,7 +14,7 @@ impl Manager {
     /// waits to make, or forget it once there is none.
     pub async fn report_proxy_retry(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: String,
         retry: Option<ProxyRetry>,
     ) -> Result<()> {
@@ -32,7 +33,7 @@ impl Manager {
     /// it, so a later failure backs off as its own.
     pub async fn report_upstream_reset(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: String,
         resets_at: Option<i64>,
     ) -> Result<()> {

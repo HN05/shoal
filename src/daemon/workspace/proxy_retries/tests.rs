@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{manager, repository},
     state::TurnFailure,
@@ -28,7 +29,7 @@ async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {
     let execution = started.plan.id.clone();
     let executions = || async {
         manager
-            .inspect_workspace(&workspace.name)
+            .inspect_workspace(&SpaceSelector::from(&workspace.name))
             .await
             .unwrap()
             .executions
@@ -39,7 +40,11 @@ async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {
         next_at: 1_000,
     };
     manager
-        .report_proxy_retry(&workspace.name, execution.clone(), Some(retry.clone()))
+        .report_proxy_retry(
+            &SpaceSelector::from(&workspace.name),
+            execution.clone(),
+            Some(retry.clone()),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -47,13 +52,21 @@ async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {
         Some(retry.clone())
     );
     manager
-        .report_proxy_retry(&workspace.name, execution.clone(), None)
+        .report_proxy_retry(
+            &SpaceSelector::from(&workspace.name),
+            execution.clone(),
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(manager.proxy_retry(&executions().await), None);
 
     manager
-        .report_proxy_retry(&workspace.name, execution.clone(), Some(retry))
+        .report_proxy_retry(
+            &SpaceSelector::from(&workspace.name),
+            execution.clone(),
+            Some(retry),
+        )
         .await
         .unwrap();
     manager

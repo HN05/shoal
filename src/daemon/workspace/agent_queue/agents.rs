@@ -2,6 +2,7 @@
 //! queues one in a ready workspace.
 use anyhow::{Context as _, Result};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent_queue::queued_agent_request, agents::check_queued_launch, daemon::workspace::Manager,
     model::QueueEntry, protocol::operations::QueuedLaunch,
@@ -12,7 +13,7 @@ impl Manager {
     /// first message, once it can run there.
     pub(crate) async fn queue_agent(
         &self,
-        workspace: &str,
+        workspace: &SpaceSelector,
         agent: String,
         prompt: Option<String>,
     ) -> Result<QueueEntry> {

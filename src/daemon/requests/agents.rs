@@ -8,6 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     protocol::{AgentMethod, Body, WokenTurn},
     state::AgentState,
@@ -187,7 +188,11 @@ pub(super) async fn handle(
 }
 
 impl Scoped for AgentMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(
+        &mut self,
+        manager: &Manager,
+        caller: &Caller,
+    ) -> Result<Option<&mut SpaceSelector>> {
         Ok(match self {
             AgentMethod::AwaitAgentWake { workspace, .. }
             | AgentMethod::AgentSession { workspace } => Some(workspace),

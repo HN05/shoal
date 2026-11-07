@@ -2,6 +2,7 @@
 //! account of the workspace or registered checkout.
 use anyhow::{Context as _, Result, bail};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{links::space::LinkSpace, workspace::Manager},
     forge::{
@@ -17,7 +18,11 @@ use crate::{
 impl Manager {
     /// Log failures stay on their CI update and never hide other activity;
     /// a check without a CI job gets no pointer to a log it does not have.
-    pub(crate) async fn summarize_failed_checks(&self, space: &str, updates: &mut [Update]) {
+    pub(crate) async fn summarize_failed_checks(
+        &self,
+        space: &SpaceSelector,
+        updates: &mut [Update],
+    ) {
         // Logs are read in the space's own context: a chat reads them from
         // its repository's checkout.
         let Ok(space) = self.link_space(space).await else {

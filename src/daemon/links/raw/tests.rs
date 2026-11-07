@@ -1,5 +1,6 @@
 use serde_json::json;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::test_support::{configure, git, manager, repository},
     forge::{
@@ -32,7 +33,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         &format!("[machine.forges.\"{host}\"]\ntype = \"github\"\nagent_token = \"agent\"\n"),
     )
     .await;
-    let context = ItemContext::Workspace(workspace.id.clone());
+    let context = ItemContext::Workspace(SpaceSelector::id(&workspace.id));
     let request = |method| RawRequest {
         method,
         path: "repos/{owner}/{repo}".into(),
@@ -132,7 +133,7 @@ async fn a_chats_agent_reads_as_its_account_and_writes_only_when_allowed() {
         ),
     )
     .await;
-    let context = ItemContext::Chat(chat.id.clone());
+    let context = ItemContext::Chat(SpaceSelector::id(&chat.id));
     let request = |method| RawRequest {
         method,
         path: "repos/{owner}/{repo}".into(),
@@ -223,7 +224,7 @@ async fn agents_download_from_their_forge_as_their_account() {
 
     let download = manager
         .forge_download(
-            &ItemContext::Workspace(workspace.id.clone()),
+            &ItemContext::Workspace(SpaceSelector::id(&workspace.id)),
             url,
             None,
             true,
@@ -234,7 +235,7 @@ async fn agents_download_from_their_forge_as_their_account() {
     assert_eq!(download.bytes, b"PNG");
     manager
         .forge_download(
-            &ItemContext::Workspace(workspace.id.clone()),
+            &ItemContext::Workspace(SpaceSelector::id(&workspace.id)),
             "https://example.com/shot.png",
             None,
             true,

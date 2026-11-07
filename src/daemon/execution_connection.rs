@@ -19,6 +19,7 @@ use super::{
         StartedExecution, StopRequest, places::ExecutionPlace,
     },
 };
+use crate::client::space_names::SpaceSelector;
 use crate::{
     execution::TrackedAgent,
     model::Workspace,
@@ -27,7 +28,7 @@ use crate::{
 };
 
 pub(super) struct ExecutionContext {
-    pub workspace: String,
+    pub workspace: SpaceSelector,
     pub wrapper: Identity,
     pub kind: ExecutionKind,
     pub agent: Option<TrackedAgent>,

@@ -5,6 +5,7 @@ use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{
         repo::{Opening, OtherRepositories},
@@ -151,7 +152,7 @@ impl Manager {
         let ItemContext::Chat(selector) = context else {
             return Ok(None);
         };
-        let chat = self.recorded_chat(selector).await?;
+        let chat = self.chat(selector).await.ok();
         Ok(chat.filter(|chat| chat.repository_id.is_none()))
     }
 
@@ -202,7 +203,7 @@ impl Manager {
     /// `[permissions] issue_other_repositories`, says so.
     async fn open_workspace_issue(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         issue: NewIssue,
         repository: Option<String>,
         link: bool,

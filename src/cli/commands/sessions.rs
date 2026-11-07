@@ -2,6 +2,7 @@
 //! terminal to one of a workspace's or a running chat's.
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
         agents,
@@ -98,7 +99,8 @@ impl Target {
     }
 
     async fn inspected(ctx: &Context, id: String) -> Result<Self> {
-        let inspection = crate::client::workspaces::inspect(&ctx.paths, id).await?;
+        let inspection =
+            crate::client::workspaces::inspect(&ctx.paths, SpaceSelector::id(&id)).await?;
         Ok(Self::Workspace(Box::new(inspection)))
     }
 
@@ -137,7 +139,9 @@ impl Target {
     /// Whose settings choose the hosts to look in.
     fn config(&self) -> ConfigTarget {
         match self {
-            Self::Workspace(inspection) => ConfigTarget::Workspace(inspection.workspace.id.clone()),
+            Self::Workspace(inspection) => {
+                ConfigTarget::Workspace(SpaceSelector::id(&inspection.workspace.id))
+            }
             Self::Chat(chat) => ConfigTarget::chat(chat),
         }
     }

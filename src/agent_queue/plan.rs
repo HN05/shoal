@@ -6,6 +6,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Result;
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     agent::{Agent, ModelChoice},
     model::{QueueRequest, Workspace},
@@ -85,7 +86,7 @@ pub(crate) fn queued_agent_request(
         plan: serde_json::to_string(&plan)?,
         env,
         now,
-        workspace: Some(workspace.id.clone()),
+        workspace: Some(SpaceSelector::id(&workspace.id)),
         after: Vec::new(),
     })
 }

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{
         connection::{Daemon, await_reply, request},
@@ -31,7 +32,7 @@ pub struct AgentMessage {
 /// `sender_chat` names, when its agent sends it, attaches its files.
 pub async fn send(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     message: String,
     attachments: Vec<NewFile>,
     sender_chat: Option<String>,
@@ -64,12 +65,16 @@ pub async fn send_to_all(
 }
 
 /// The undelivered messages for the agents of `space`.
-pub async fn undelivered(daemon: &impl Daemon, space: String) -> Result<Vec<AgentMessage>> {
+pub async fn undelivered(daemon: &impl Daemon, space: SpaceSelector) -> Result<Vec<AgentMessage>> {
     request(daemon, AgentMethod::AgentMessages { space }).await
 }
 
 /// Mark the messages `ids` of `space` delivered, so they do not come back.
-pub async fn mark_delivered(daemon: &impl Daemon, space: String, ids: Vec<i64>) -> Result<()> {
+pub async fn mark_delivered(
+    daemon: &impl Daemon,
+    space: SpaceSelector,
+    ids: Vec<i64>,
+) -> Result<()> {
     request(
         daemon,
         AgentMethod::MarkAgentMessagesDelivered { space, ids },
@@ -79,7 +84,7 @@ pub async fn mark_delivered(daemon: &impl Daemon, space: String, ids: Vec<i64>) 
 
 /// The undelivered messages and queued item updates of `space`, without
 /// waiting.
-pub async fn updates(daemon: &impl Daemon, space: String) -> Result<Updates> {
+pub async fn updates(daemon: &impl Daemon, space: SpaceSelector) -> Result<Updates> {
     request(daemon, AgentMethod::AgentUpdates { space }).await
 }
 
@@ -88,7 +93,7 @@ pub async fn updates(daemon: &impl Daemon, space: String) -> Result<Updates> {
 /// began.
 pub async fn await_updates(daemon: &impl Daemon, space: &str, restarted: bool) -> Result<Updates> {
     let method = || AgentMethod::WaitAgentUpdates {
-        space: space.to_owned(),
+        space: SpaceSelector::parse(space),
     };
     Updates::try_from(await_reply(daemon, method, restarted).await?)
 }
@@ -97,7 +102,7 @@ pub async fn await_updates(daemon: &impl Daemon, space: &str, restarted: bool) -
 /// processes `leftovers` of `space` shown, so they do not come back.
 pub async fn acknowledge(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     deliveries: Vec<String>,
     messages: Vec<i64>,
     leftovers: Vec<u32>,

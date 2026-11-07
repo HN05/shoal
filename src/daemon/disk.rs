@@ -21,6 +21,7 @@ use super::{
     warnings::{self, Signal, Warnings},
     workspace::{Manager, Protection, agent_queue::OneShotStop},
 };
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::log;
 use crate::{
     caches::Layout,
@@ -283,7 +284,10 @@ async fn free_space(
         let Some(snapshot) = super::cleanup::candidate(manager, workspace, &users).await else {
             continue;
         };
-        let (kind, message) = match manager.remove_for_disk_space(&workspace.id, snapshot).await {
+        let (kind, message) = match manager
+            .remove_for_disk_space(&SpaceSelector::id(&workspace.id), snapshot)
+            .await
+        {
             Ok(()) => {
                 log!("disk space cleanup removed {}", workspace.name);
                 (
@@ -458,8 +462,8 @@ async fn stop_executions(
     let workspaces = workspaces_with_unprotected_executions(manager).await?;
     let (low, reason) = (&low, &protection.reason);
     let stops = workspaces.into_iter().map(|id| async move {
-        let workspace = manager.workspace(&id).await?;
-        let (kind, message) = match manager.stop_unprotected(&id, reason.clone()).await {
+        let workspace = manager.workspace_by_id(&id).await?;
+        let (kind, message) = match manager.stop_unprotected(&SpaceSelector::id(&id), reason.clone()).await {
             Ok(()) => {
                 log!("disk space protection stopped commands in {}: {low}", workspace.name);
                 (

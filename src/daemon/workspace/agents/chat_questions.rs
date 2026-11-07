@@ -5,6 +5,7 @@
 use anyhow::{Context, Result, ensure};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::questions::{Turn, set_chat_mark},
     model::{Chat, PresentSpace, Workspace},
@@ -17,10 +18,10 @@ impl Manager {
     /// turns.
     pub(crate) async fn mark_chat_question(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: Option<&str>,
     ) -> Result<()> {
-        let (turn, agent, settings) = match self.present_space(selector).await? {
+        let (turn, agent, settings) = match self.space(selector).await? {
             PresentSpace::Workspace(workspace) => {
                 self.workspace_turn(&workspace, execution).await?
             }
@@ -75,7 +76,7 @@ impl Manager {
     /// so a failure is only logged.
     pub(crate) async fn ask_marked_chat_question(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: Option<&str>,
         final_message: Option<String>,
     ) {
@@ -97,7 +98,7 @@ impl Manager {
     /// mark of a turn underway, and return the closed questions' numbers.
     pub(crate) async fn reply_in_chat(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: Option<&str>,
     ) -> Result<Vec<crate::daemon::item_numbers::ItemNumber>> {
         let turn = self.marked_turn(selector, execution).await?;
@@ -106,8 +107,12 @@ impl Manager {
 
     /// The turn that may carry a mark: the chat's for a chat, else the one
     /// of the agent `execution` runs, if any.
-    async fn marked_turn(&self, selector: &str, execution: Option<&str>) -> Result<Option<Turn>> {
-        Ok(match self.present_space(selector).await? {
+    async fn marked_turn(
+        &self,
+        selector: &SpaceSelector,
+        execution: Option<&str>,
+    ) -> Result<Option<Turn>> {
+        Ok(match self.space(selector).await? {
             PresentSpace::Chat(chat) => Some(Turn::Chat(chat.id)),
             PresentSpace::Workspace(_) => execution.map(|id| Turn::Execution(id.to_owned())),
         })

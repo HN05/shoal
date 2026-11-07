@@ -1,4 +1,5 @@
 use super::*;
+use crate::client::space_names::SpaceSelector;
 use crate::daemon::test_support::{manager, repository};
 use crate::daemon::workspace_files::Attacher;
 use crate::forge::items::link::Selection;
@@ -70,7 +71,8 @@ async fn age_messages(manager: &Manager, workspace: &Workspace, seconds: i64) {
 /// Return once a wake prompt is due for the workspace's agent.
 async fn wake_due(manager: &Manager, workspace: &Workspace) {
     // A hang guard only: the wake settles within two seconds.
-    let wait = manager.wait_agent_wake(&workspace.id, true, None);
+    let selected = SpaceSelector::id(&workspace.id);
+    let wait = manager.wait_agent_wake(&selected, true, None);
     tokio::time::timeout(std::time::Duration::from_secs(60), wait)
         .await
         .expect("the wake was due")
@@ -90,7 +92,12 @@ async fn settle_while<T>(manager: &Manager, wait: impl std::future::Future<Outpu
 
 async fn idle_agent(manager: &Manager, workspace: &Workspace) {
     manager
-        .set_agent_state(&workspace.id, crate::state::AgentState::Idle, None, None)
+        .set_agent_state(
+            &SpaceSelector::id(&workspace.id),
+            crate::state::AgentState::Idle,
+            None,
+            None,
+        )
         .await
         .unwrap();
 }
@@ -98,7 +105,12 @@ async fn idle_agent(manager: &Manager, workspace: &Workspace) {
 async fn send(manager: &Manager, workspace: &Workspace, messages: &[&str]) {
     for &message in messages {
         manager
-            .send_agent_message(&workspace.id, message.into(), Vec::new(), &Attacher::User)
+            .send_agent_message(
+                &SpaceSelector::id(&workspace.id),
+                message.into(),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }
@@ -115,17 +127,27 @@ async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
         &["Request 1 approved", "Request 2 approved"],
     )
     .await;
-    let delivered = manager.agent_updates(&workspace.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     assert!(delivered.messages.is_empty(), "{delivered:?}");
     // `shoal messages` reads a run before it settles.
     assert_eq!(
-        manager.agent_messages(&workspace.id).await.unwrap().len(),
+        manager
+            .agent_messages(&SpaceSelector::id(&workspace.id))
+            .await
+            .unwrap()
+            .len(),
         2
     );
 
     age_messages(&manager, &workspace, 60).await;
     wake_due(&manager, &workspace).await;
-    let delivered = manager.agent_updates(&workspace.id).await.unwrap();
+    let delivered = manager
+        .agent_updates(&SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap();
     let messages = delivered.messages.iter().map(|message| &message.message);
     assert_eq!(
         messages.collect::<Vec<_>>(),
@@ -145,7 +167,8 @@ async fn a_wait_returns_a_run_once_it_settles() {
     )
     .await;
     let selection = Selection::default();
-    let wait = manager.wait_items(&workspace.id, &selection, None);
+    let selected = SpaceSelector::id(&workspace.id);
+    let wait = manager.wait_items(&selected, &selection, None);
     let updates = settle_while(&manager, wait).await.unwrap();
     assert_eq!(updates.messages.len(), 2, "{updates:?}");
 }
@@ -158,7 +181,8 @@ async fn a_wake_prompt_follows_a_run_that_settles_while_it_waits() {
     manager.settle_clock.stop();
     send(&manager, &workspace, &["Request 1 approved"]).await;
     // No signal announces that the run settles.
-    let wake = manager.wait_agent_wake(&workspace.id, true, None);
+    let selected = SpaceSelector::id(&workspace.id);
+    let wake = manager.wait_agent_wake(&selected, true, None);
     settle_while(&manager, wake).await.unwrap();
 }
 

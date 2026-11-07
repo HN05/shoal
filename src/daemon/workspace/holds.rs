@@ -3,6 +3,7 @@ use anyhow::{Result, anyhow, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{GuardMode, Manager, ResourceGuard};
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::{
         allocation::Allocation,
@@ -21,7 +22,7 @@ impl Manager {
     /// hold as it was placed.
     pub async fn acquire_hold(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         name: String,
         reason: Option<String>,
         placed_by: HoldPlacer,
@@ -34,7 +35,7 @@ impl Manager {
     /// transaction that places the hold.
     async fn place_hold(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         name: String,
         reason: Option<String>,
         placed_by: HoldPlacer,
@@ -61,7 +62,7 @@ impl Manager {
     /// again returns it.
     pub async fn request_hold(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         name: String,
         reason: Option<String>,
     ) -> Result<Allocation<WorkspaceHold>> {
@@ -71,7 +72,7 @@ impl Manager {
         if workspace.holds.iter().any(|hold| hold.name == name) {
             return Ok(Allocation::Granted(
                 self.place_hold(
-                    &workspace.id,
+                    &SpaceSelector::id(&workspace.id),
                     name,
                     reason,
                     HoldPlacer::Agent,
@@ -101,7 +102,7 @@ impl Manager {
             Some(pending) => Allocation::Approval(Box::new(pending)),
             None => Allocation::Granted(
                 self.place_hold(
-                    &workspace.id,
+                    &SpaceSelector::id(&workspace.id),
                     name,
                     reason,
                     HoldPlacer::Agent,
@@ -126,7 +127,7 @@ impl Manager {
         if !approve || !matches!(request.target, Target::Hold(_)) {
             return Ok(None);
         }
-        let workspace = self.workspace(&request.space_id).await?;
+        let workspace = self.workspace_by_id(&request.space_id).await?;
         let guard = self
             .gates
             .resource_guard(&workspace.id, GuardMode::Shared)?;
@@ -138,7 +139,7 @@ impl Manager {
     /// the holds agents placed.
     pub async fn release_hold(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         name: String,
         released_by: HoldPlacer,
     ) -> Result<()> {
@@ -153,7 +154,7 @@ impl Manager {
         Ok(())
     }
 
-    pub async fn holds(&self, selector: &str) -> Result<Vec<WorkspaceHold>> {
+    pub async fn holds(&self, selector: &SpaceSelector) -> Result<Vec<WorkspaceHold>> {
         Ok(self.workspace(selector).await?.holds)
     }
 

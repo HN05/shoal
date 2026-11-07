@@ -9,6 +9,7 @@ use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
+use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::notifications::NotificationKind,
     model::{SpaceRef, Workspace, WorkspaceRef},
@@ -32,7 +33,7 @@ impl Manager {
     /// its parent.
     pub(crate) async fn split_workspace(
         &self,
-        parent: &str,
+        parent: &SpaceSelector,
         name: String,
         base: Option<String>,
         options: crate::protocol::CreationOptions,

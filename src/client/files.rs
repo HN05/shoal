@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
+use crate::client::space_names::SpaceSelector;
 use crate::{
     client::connection::{Daemon, pages},
     protocol::FileMethod,
@@ -198,7 +199,7 @@ pub struct AttachedFile {
 }
 
 /// The files attached to `space`.
-pub async fn list(daemon: &impl Daemon, space: String) -> Result<Vec<AttachedFile>> {
+pub async fn list(daemon: &impl Daemon, space: SpaceSelector) -> Result<Vec<AttachedFile>> {
     pages(daemon, FileMethod::ListFiles { space }).await
 }
 
@@ -206,7 +207,7 @@ pub async fn list(daemon: &impl Daemon, space: String) -> Result<Vec<AttachedFil
 /// its agent attaches them, attaches its own files.
 pub async fn add(
     daemon: &impl Daemon,
-    space: String,
+    space: SpaceSelector,
     files: Vec<NewFile>,
     sender_chat: Option<String>,
 ) -> Result<Vec<AttachedFile>> {
@@ -222,7 +223,7 @@ pub async fn add(
 /// `names` and `ids` select.
 pub async fn remove(
     daemon: &impl Daemon,
-    space: Option<String>,
+    space: Option<SpaceSelector>,
     names: Vec<String>,
     ids: Vec<i64>,
 ) -> Result<Vec<AttachedFile>> {

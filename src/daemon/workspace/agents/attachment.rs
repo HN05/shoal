@@ -1,5 +1,6 @@
 //! Whether a terminal shows each tracked agent, as its wrapper reports, so
 //! protection stops the agents the user is not working with first.
+use crate::client::space_names::SpaceSelector;
 use anyhow::Result;
 
 use super::Manager;
@@ -10,7 +11,7 @@ impl Manager {
     /// longer tracks there changes nothing.
     pub(crate) async fn report_attached(
         &self,
-        selector: &str,
+        selector: &SpaceSelector,
         execution: &str,
         attached: bool,
     ) -> Result<()> {
