@@ -11,13 +11,17 @@ use crate::{
     state::states,
 };
 
+/// The shared cache the `cargo` preset keeps its files in.
+pub const CARGO_CACHE: &str = "preset.cargo";
 /// The shared cache the `xcode` preset keeps its files in.
 pub const XCODE_CACHE: &str = "preset.xcode";
 
 states!(
     /// A build tool whose usual setup Shoal knows.
     Preset {
-        /// Cargo: seeds `target`.
+        /// Cargo: builds workspace crates without their directory in
+        /// rustc's options, so the incremental state in `target` serves
+        /// every workspace, and seeds `target`.
         Cargo => "cargo",
         /// npm: seeds `node_modules`.
         Npm => "npm",
@@ -74,11 +78,16 @@ impl Preset {
     }
 
     /// Variables the preset sets where `[env]` does not, rendered like
-    /// `[env]`. Go's cache keys include a package's directory unless paths
-    /// are trimmed; ccache's, the compiler's working directory and paths
-    /// outside its base directory.
+    /// `[env]`. rustc discards incremental state built in another working
+    /// directory, and Go's cache keys include a package's directory unless
+    /// paths are trimmed; ccache's, the compiler's working directory and
+    /// paths outside its base directory.
     fn environment(self) -> &'static [(&'static str, &'static str)] {
         match self {
+            Self::Cargo => &[(
+                "RUSTC_WORKSPACE_WRAPPER",
+                "{cache.preset.cargo}/rustc-workspace-wrapper",
+            )],
             Self::Go => &[("GOFLAGS", "-trimpath")],
             Self::Xcode => &[
                 ("XCODE_XCCONFIG_FILE", "{cache.preset.xcode}/shoal.xcconfig"),
@@ -99,6 +108,7 @@ impl Preset {
     /// names cannot contain a dot, so only the preset prepares it.
     fn cache(self) -> Option<&'static str> {
         match self {
+            Self::Cargo => Some(CARGO_CACHE),
             Self::Xcode => Some(XCODE_CACHE),
             Self::Zig => Some("preset.zig"),
             _ => None,

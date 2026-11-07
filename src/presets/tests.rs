@@ -29,3 +29,14 @@ fn the_xcode_preset_keeps_its_files_in_a_shared_cache() {
         format!("{{cache.{XCODE_CACHE}}}/{}", xcode::BIN)
     );
 }
+
+#[test]
+fn the_cargo_preset_runs_workspace_crates_through_its_wrapper() {
+    let root = tempfile::tempdir().unwrap();
+    prepare_cache(CARGO_CACHE, root.path()).unwrap();
+    assert!(root.path().join(cargo::WRAPPER).is_file());
+    assert_eq!(
+        environment(&[Preset::Cargo], BTreeMap::new())["RUSTC_WORKSPACE_WRAPPER"],
+        format!("{{cache.{CARGO_CACHE}}}/{}", cargo::WRAPPER)
+    );
+}

@@ -3154,7 +3154,7 @@ presets = ["cargo", "bun"]
 
 | Preset | Sets up |
 |---|---|
-| `cargo` | A [seed](#seed-builds) running `cargo build --all-targets`, `cargo test --no-run` and `cargo check --all-targets`, keeping `target` |
+| `cargo` | A rustc wrapper that keeps the workspace crates' incremental state reusable, and a [seed](#seed-builds) running `cargo build --all-targets`, `cargo test --no-run` and `cargo check --all-targets`, keeping `target` |
 | `npm` | A seed running `npm ci`, keeping `node_modules` |
 | `pnpm` | A seed running `pnpm install --frozen-lockfile`, keeping `node_modules` |
 | `yarn` | A seed running `yarn install --frozen-lockfile`, keeping `node_modules` |
@@ -3169,6 +3169,24 @@ sets takes precedence over a preset's. Go's build cache is shared by every
 checkout, but it keys a package by its directory unless paths are trimmed; with
 `-trimpath`, binaries, panics and `runtime.Caller` report module paths instead
 of file system paths. The seed fills that cache from the default branch.
+
+The `cargo` preset keeps a [shared cache](#shared-caches) named `preset.cargo`
+holding a rustc wrapper, and sets `RUSTC_WORKSPACE_WRAPPER` to it, so Cargo runs
+the workspace's own crates through it. rustc ignores incremental state built in
+another working directory, and the seed and every workspace build in
+directories of their own. For each crate it builds, the wrapper adds
+`-Zremap-cwd-prefix=.`, which leaves rustc's options the same in every
+directory. It also adds the crate to `RUSTC_BOOTSTRAP`, which lets stable
+rustc take that flag for that crate alone, so dependencies and build scripts
+see a stable compiler. rustc also regenerates all of a crate's code when its
+output directory moves, so the wrapper passes `--out-dir` relative to the
+workspace root when it lies inside it. Debug info of the workspace's crates
+records `.` as their working directory. The wrapper leaves rustc's arguments unchanged under
+`RUSTC_BOOTSTRAP=-1` or when rustc no longer takes the flag. `cargo clippy`,
+which sets its own wrapper, and a `RUSTC_WORKSPACE_WRAPPER` in `[env]` run
+without it. Cargo keeps separate builds of the workspace's crates for each
+wrapper, so a Cargo command run without the preset's environment, such as from
+a shell `shoal work env` did not set up, builds them from scratch.
 
 The `ccache` preset needs ccache installed and CMake 3.17 or later, and applies
 when a build directory is first configured. With the workspace as ccache's base
@@ -3236,6 +3254,13 @@ test binary was compiled with, names the seed worktree until it is rebuilt, and
 the seed worktree moves on with the default branch; read such paths at run time.
 A failed build or clone records a `seed_failed` notification, and the workspace
 starts without the seed.
+
+For a Cargo repository with the `cargo` preset, a new workspace's first build
+reuses the seed's dependency builds as they are and the incremental state of
+the workspace's own crates. It recompiles only the code its branch changed,
+plus whatever depends on that code. Without the preset's
+[wrapper](#build-tool-presets), rustc ignores the seed's incremental state, and
+the workspace's own crates build from scratch.
 
 Removing the repository or its `[setup.seed]` stops a running build and deletes the
 seed worktree, snapshot and log, keeping anything else in `.seed`. Shoal marks

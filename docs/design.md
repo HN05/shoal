@@ -949,7 +949,17 @@ sccache, which needs another tool and gives up incremental builds, and the Node
 package managers. Cargo's seed also runs `cargo test`, which builds a proc-macro
 member with other settings than `cargo build --all-targets` does, and `cargo
 check`, which makes the dependency builds `cargo clippy` uses too; clippy's own
-results for the workspace crates change with each branch, so it has no step. Preset seeds run the default branch's own build code, as
+results for the workspace crates change with each branch, so it has no step.
+A seed serves the workspace crates only if their incremental state survives
+the move, but rustc reuses it only under the same compiler options, which
+include the working directory, and reuses generated code only for the same
+output directory. So the Cargo preset runs the workspace's own crates through
+a wrapper that adds `-Zremap-cwd-prefix=.` and passes the output directory
+relative to the workspace root. Cargo's `trim-paths` does not help: its flags
+name each package's directory. Stable rustc takes the unstable flag only for
+the crates `RUSTC_BOOTSTRAP` names, so the wrapper names each crate it builds,
+which leaves dependencies and build script probes on a stable compiler, and it
+drops the flag for a rustc that no longer takes it. Preset seeds run the default branch's own build code, as
 `setup.seed.command` would. Tools whose caches already serve every checkout get only what
 makes their cache keys independent of the workspace path, or one cache where
 each checkout keeps its own: Go trims paths, ccache takes the workspace as its
