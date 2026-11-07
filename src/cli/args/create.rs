@@ -59,9 +59,10 @@ pub enum CreateCommand {
 // Arguments of `shoal start`.
 #[derive(Debug, Default, Args)]
 pub struct StartArgs {
-    /// The mode the agent starts in; on a terminal, worker for an issue
-    /// labelled [issue] planned_label, plan for one labelled plan_label, else
-    /// a picker; else chat with --chat or --in, else worker.
+    /// The mode the agent starts in; on a terminal, a picker, which an issue
+    /// labelled [issue] planned_label or plan_label answers with worker or
+    /// plan when the arguments ask for neither kind of space; else chat with
+    /// --chat or --in, else worker.
     #[arg(long)]
     pub mode: Option<String>,
     /// Start in a chat, whatever the mode's kind.
