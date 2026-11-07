@@ -106,15 +106,20 @@ pub(crate) fn record_base_changed(db: &Connection, id: &str, cause: EventCause) 
     Ok(())
 }
 
-/// A workspace of the repository named by ID, name or branch.
+/// A workspace of the repository named by number, ID or name, else by
+/// branch.
 fn base_workspace(db: &Connection, repository_id: &str, selector: &str) -> Result<String> {
-    let named = db
-        .query_row(
-            "SELECT id,repository_id FROM workspaces WHERE id=?1 OR name=?1",
-            [selector],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-        )
-        .optional()?;
+    let named = match crate::daemon::spaces::selected(db, &SpaceSelector::parse(selector))? {
+        Some((crate::model::SpaceKind::Workspace, id)) => {
+            let repository = db.query_row(
+                "SELECT repository_id FROM workspaces WHERE id=?1",
+                [&id],
+                |row| row.get::<_, String>(0),
+            )?;
+            Some((id, repository))
+        }
+        _ => None,
+    };
     if let Some((id, repository)) = named {
         ensure!(
             repository == repository_id,

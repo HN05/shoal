@@ -34,7 +34,8 @@ pub enum BranchCommand {
 pub enum BaseCommand {
     /// Record the workspace whose branch this workspace builds on.
     Set {
-        /// Workspace name or branch in the same repository; omit to choose one.
+        /// Workspace number, name or ID, or a branch, in the same repository;
+        /// omit to choose one.
         base: Option<String>,
         #[arg(short = 'w', long)]
         workspace: Option<SpaceSelector>,

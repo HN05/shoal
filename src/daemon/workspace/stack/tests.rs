@@ -207,4 +207,8 @@ async fn setting_a_base_rejects_cycles_and_other_repositories_and_journals_chang
             (upper.id.clone(), Some(EventCause::Manual), Some(None)),
         ]
     );
+    // A base is also named by its space's number.
+    let number = lower.number.to_string();
+    let stacked = set("upper", Some(&number)).await.unwrap();
+    assert_eq!(stacked.base_workspace, Some(reference(lower)));
 }

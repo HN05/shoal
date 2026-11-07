@@ -83,7 +83,10 @@ fn other_kind(space: &PresentSpace, needed: SpaceKind) -> anyhow::Error {
 }
 
 /// The kind and ID of the space `selector` names.
-fn selected(db: &Connection, selector: &SpaceSelector) -> Result<Option<(SpaceKind, String)>> {
+pub(crate) fn selected(
+    db: &Connection,
+    selector: &SpaceSelector,
+) -> Result<Option<(SpaceKind, String)>> {
     let (id, name, number) = match selector {
         SpaceSelector::Number(number) => (None, None, Some(*number)),
         SpaceSelector::IdOrName(text) => (Some(text.as_str()), Some(text.as_str()), None),
