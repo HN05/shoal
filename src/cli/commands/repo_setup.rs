@@ -53,8 +53,10 @@ pub(super) async fn start(
         return Ok(0);
     };
     let local_config = local_config(ctx, selector).await?;
+    // The user waits for this agent, so it skips the queue.
     let add = workspaces::AddOptions {
         here: options.here,
+        now: true,
         model: options.model,
         mode: Some(ModeChoice::Named(modes::SETUP.to_owned())),
         prompt: Some(subject(repository::name(&repo), &local_config)),

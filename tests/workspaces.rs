@@ -27088,6 +27088,45 @@ fn repository_setup_starts_a_setup_agent_on_the_setup_branch() {
 }
 
 #[test]
+fn repository_setup_starts_its_agent_past_max_agents() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    install_recording_agent(&fixture, "claude");
+    let repo = fixture.repo.to_str().unwrap();
+    let mut first = fixture
+        .command()
+        .args(["start", repo, "first", "--here", "--agent", "waiter"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the first agent start", || {
+        fixture
+            .ok(&["work"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
+            && fixture.ok(&["queue"]) == serde_json::json!([])
+    });
+
+    let output = fixture
+        .command()
+        .args(["repo", "setup", repo, "--agent", "claude", "--here"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    // The setup agent ran instead of waiting for the first agent's slot.
+    assert!(!chat_args(&fixture).is_empty());
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
+
+    fixture.ok(&["stop", "first"]);
+    first.wait().unwrap();
+}
+
+#[test]
 fn repository_setup_refuses_named_arguments_before_any_picker() {
     let fixture = Fixture::new();
     let repo = fixture.repo.to_str().unwrap();
