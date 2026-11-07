@@ -152,7 +152,7 @@ impl Manager {
             .workspace_below(
                 caller,
                 workspace,
-                "workspace processes resume agents only in the workspaces below theirs",
+                "scoped processes resume agents only in the workspaces below their own space",
             )
             .await?;
         let id = self.workspace(workspace).await?.id;
@@ -163,7 +163,7 @@ impl Manager {
         };
         ensure!(
             ours,
-            "workspace processes resume only the agents that they or the workspaces below them stopped with shoal stop; ask the user to resume this one"
+            "scoped processes resume only the agents that they or the spaces below them stopped with shoal stop; ask the user to resume this one"
         );
         Ok(workspace)
     }

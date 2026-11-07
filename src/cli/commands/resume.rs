@@ -130,17 +130,17 @@ async fn continue_turns(ctx: &Context, selected: &mut Selected) -> Result<Option
     continuation.submit(ctx).await.map(Some)
 }
 
-/// Refuse a resume in a workspace process that does not name the spaces
-/// below its own or restores in this terminal, `here`: it only queues the
-/// restores of the agents it stopped there, which the daemon starts, and
-/// restores the chats it stopped in a background place, or discards their
-/// stopped work.
+/// Refuse a resume in a scoped process, a workspace's or a chat's agent,
+/// that does not name the spaces below its own or restores in this terminal,
+/// `here`: it only queues the restores of the agents it stopped there, which
+/// the daemon starts, and restores the chats it stopped in a background
+/// place, or discards their stopped work.
 fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
     // The daemon checks that each space is below the caller's, which needs
     // the scope token: a process that cleared it stays refused.
     ensure!(
         crate::env::is_scoped() && !targets.all && !targets.space.is_empty() && !here,
-        "workspace processes resume only the spaces below theirs, by name and without --now or --focus: shoal resume <space> [--discard]"
+        "scoped processes resume only the spaces below theirs, by name and without --now or --focus: shoal resume <space> [--discard]"
     );
     Ok(())
 }
