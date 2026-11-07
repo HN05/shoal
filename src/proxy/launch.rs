@@ -312,10 +312,11 @@ impl Reporter {
     /// may report, waits past it. The same reset, a second off for the time
     /// it took to arrive, is not sent again.
     async fn reset(&mut self, resets_at: UnixTime) {
-        let second = std::time::Duration::from_secs(1);
-        if self.sent.reset.is_some_and(|sent| {
-            sent.duration_since(resets_at) <= second && resets_at.duration_since(sent) <= second
-        }) {
+        if self
+            .sent
+            .reset
+            .is_some_and(|sent| sent.abs_diff(resets_at) <= std::time::Duration::from_secs(1))
+        {
             return;
         }
         let delivered = self

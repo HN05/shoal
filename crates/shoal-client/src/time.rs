@@ -63,6 +63,11 @@ impl UnixTime {
         Duration::from_secs(self.0.saturating_sub(earlier.0).try_into().unwrap_or(0))
     }
 
+    /// How far apart this and `other` are, whichever is later.
+    pub fn abs_diff(self, other: Self) -> Duration {
+        Duration::from_secs(self.0.abs_diff(other.0))
+    }
+
     /// `YYYY-MM-DD HH:MM` in the local time zone.
     pub fn local_minutes(self) -> String {
         self.local(false)
