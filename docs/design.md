@@ -1617,9 +1617,9 @@ Agent shortcuts use the execution wrapper: by default Codex CLI and Claude run w
 own sandbox and approval settings. Every Codex launch, chats included, turns on its
 workspace-write sandbox's network access, which reaching the daemon's socket needs since
 Codex allows a single socket only along with the network, whatever the configured
-command. A workspace's Claude agent gets permission to run the Shoal commands that
+command. Every Claude agent, chats included, gets permission to run the Shoal commands that
 finish its assignment, so completion never
-depends on Claude Code's auto-mode check. Its settings also tell auto mode, in
+depends on Claude Code's auto-mode check. A workspace agent's settings also tell auto mode, in
 an `autoMode.environment` entry after Claude Code's own, that the workspace's
 branch, commits and PR are the agent's own work, since the classifier reads
 settings but not the agent's instructions; it then allows the

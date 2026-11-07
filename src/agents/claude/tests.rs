@@ -69,8 +69,8 @@ fn a_chat_agent_runs_a_workspace_agents_hooks_without_what_needs_a_worktree() {
         assert!(shared.remove(event).is_some(), "{event}");
     }
     assert_eq!(chat["hooks"], Value::Object(shared));
-    // A chat has no worktree, branch or assignment.
-    assert!(chat.get("permissions").is_none(), "{chat}");
+    // It may run the commands that finish its assignment, but has no branch.
+    assert_eq!(chat["permissions"], workspace["permissions"]);
     assert!(chat.get("autoMode").is_none(), "{chat}");
 }
 

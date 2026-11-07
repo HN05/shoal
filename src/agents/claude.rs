@@ -98,27 +98,27 @@ impl Integration for Claude {
 
 /// One `--settings` carries every hook; Claude Code merges it with the user's
 /// own settings, and a later `--settings` would replace it. Every agent
-/// reports its turn's state; a workspace's agent also gets the worktree and
-/// subagent hooks, may run the commands that finish its assignment and
-/// tells auto mode that its branch is its own. For a proxied agent the
+/// reports its turn's state and may run the commands that finish its
+/// assignment; a workspace's agent also gets the worktree and subagent hooks
+/// and tells auto mode that its branch is its own. For a proxied agent the
 /// wrapper merges these with any others into the one that names the
 /// proxy's URL, since these settings win over the user's own `env` and the
 /// inherited environment.
 fn settings(space: AgentSpace) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
     let workspace = space.workspace();
-    let (subagents, allow) = match workspace {
-        Some(_) => (subagent_hooks(&shoal), lifecycle_rules()),
-        None => (Vec::new(), Vec::new()),
+    let subagents = match workspace {
+        Some(_) => subagent_hooks(&shoal),
+        None => Vec::new(),
     };
     let groups = hooks::messages(&shoal)
         .chain(state_hooks(&shoal))
         .chain(subagents)
         .chain(wake_hooks(&shoal));
-    let mut settings = json!({"hooks": hooks::by_event(groups)});
-    if !allow.is_empty() {
-        settings["permissions"] = json!({"allow": allow});
-    }
+    let mut settings = json!({
+        "hooks": hooks::by_event(groups),
+        "permissions": {"allow": lifecycle_rules()},
+    });
     if let Some(own) = workspace.and_then(own_branch) {
         settings["autoMode"] = json!({"environment": ["$defaults", own]});
     }
@@ -141,8 +141,8 @@ fn own_branch(workspace: AgentWorkspace) -> Option<String> {
     ))
 }
 
-/// The Shoal commands with which a workspace's agent reports on and finishes
-/// its own assignment, and stops the processes its commands left behind.
+/// The Shoal commands with which an agent reports on and finishes its own
+/// assignment, and stops the processes its commands left behind.
 /// Claude Code's auto mode may refuse them as writes to an outside system;
 /// the daemon still limits them to the agent's scope. Plain `stop` is not
 /// among them: in the agent's own workspace it stops the agent.

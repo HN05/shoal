@@ -1661,10 +1661,11 @@ Otherwise, for AI tool launches, `{prompt}` combines the rendered system text an
 issue prompt, separated by a blank line. Without that placeholder, nonempty context
 becomes the first forwarded argument. Substitutions happen once; user arguments
 remain literal. Claude and Codex, and their launch profiles, also get Shoal's
-hooks and trust entries, which other tools do without. A workspace's Claude Code agent is also allowed to run the
+hooks and trust entries, which other tools do without. A Claude Code agent, in
+a workspace or a chat, is also allowed to run the
 `shoal` commands that report on and finish its assignment, and `shoal stop
 --processes` and `--leftovers`, with or without `--json`;
-the daemon still limits them to its scope. Its settings also add an
+the daemon still limits them to its scope. A workspace agent's settings also add an
 `autoMode.environment` entry, after Claude Code's own (`"$defaults"`), that
 names the workspace's branch, its commits and its PR as the agent's own work,
 so auto mode lets it push the rebased branch with `git push --force-with-lease`.
