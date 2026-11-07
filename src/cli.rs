@@ -210,7 +210,7 @@ impl Command {
             Command::Workspace(WorkspaceCommand::Work {
                 command: Some(WorkCommand::Status { .. }),
                 ..
-            }) => "status".into(),
+            }) => "work status".into(),
             Command::Run {
                 name: None, args, ..
             } if !args.is_empty() => "run".into(),
