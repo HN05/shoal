@@ -20236,16 +20236,18 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
-        serde_json::from_slice::<Value>(&output.stdout).unwrap()["id"].clone()
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
 
     let renamed = rename_in(&opened["path"], "Child work");
-    assert_eq!(renamed, opened["id"]);
+    assert_eq!(renamed["id"], opened["id"]);
     let renamed = rename_in(&deeper["path"], "Nested work");
-    assert_eq!(renamed, deeper["id"]);
-    // A workspace not below the chat leaves the command to the chat.
-    let renamed = rename_in(&other["path"], "replanning");
-    assert_eq!(renamed, chat.as_str());
+    assert_eq!(renamed["id"], deeper["id"]);
+    // A workspace not below the chat leaves the command to the chat, which
+    // takes a title's words as its name.
+    let renamed = rename_in(&other["path"], "Plan: next steps");
+    assert_eq!(renamed["id"], chat.as_str());
+    assert_eq!(renamed["name"], "plan-next-steps");
     assert_eq!(
         fixture.ok(&["status", "other"])["workspace"]["title"],
         Value::Null

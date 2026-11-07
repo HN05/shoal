@@ -44,6 +44,24 @@ impl SpaceName {
         Self(name.chars().take(MAX_NAME_LEN).collect())
     }
 
+    /// The name a space of `kind` takes from a title, such as
+    /// `plan-summary-with-shoal-done` from "Plan: summary with shoal done":
+    /// its ASCII letters and digits in lowercase, with a single `-` for each
+    /// run of other characters. `None` when the title has neither.
+    pub fn from_title(kind: SpaceKind, title: &str) -> Option<Self> {
+        let words: Vec<String> = title
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .map(str::to_ascii_lowercase)
+            .collect();
+        if words.is_empty() {
+            return None;
+        }
+        let joined = words.join("-");
+        let cut = joined[..joined.len().min(MAX_NAME_LEN)].trim_end_matches('-');
+        Some(Self::derive(kind, cut))
+    }
+
     /// This name, or with `-<suffix>` from 2 on, shortened to fit the name
     /// limit; the suffix keeps it from being all digits.
     pub fn suffixed(&self, suffix: u64) -> Self {

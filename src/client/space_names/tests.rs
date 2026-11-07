@@ -26,6 +26,23 @@ fn a_derived_name_that_would_be_all_digits_takes_its_kind() {
 }
 
 #[test]
+fn a_title_gives_its_words_as_a_name() {
+    let from_title = |title| SpaceName::from_title(SpaceKind::Chat, title).map(|n| n.to_string());
+    assert_eq!(
+        from_title("Plan: summary with shoal done").as_deref(),
+        Some("plan-summary-with-shoal-done")
+    );
+    assert_eq!(
+        from_title(" Fix_login—now! ").as_deref(),
+        Some("fix-login-now")
+    );
+    assert_eq!(from_title("2115").as_deref(), Some("chat-2115"));
+    assert_eq!(from_title("Æ ø å"), None);
+    let long = from_title(&format!("{} b", "a".repeat(MAX_NAME_LEN - 1))).unwrap();
+    assert_eq!(long, "a".repeat(MAX_NAME_LEN - 1));
+}
+
+#[test]
 fn a_suffix_fits_the_limit() {
     let name = SpaceName::parse("chat").unwrap();
     assert_eq!(name.suffixed(1), name);

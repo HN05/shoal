@@ -151,7 +151,9 @@ scoped callers cannot read them.
 ## Space title
 
 `shoal work rename "<title>"` names the space's work; the tabs and windows
-Shoal opens for it show the title instead of its branch or issue number.
+Shoal opens for it show the title instead of its branch or issue number. A
+chat takes the title's words as its new name: `"Plan: done summary"` renames
+it `plan-done-summary`.
 
 ## Issues and pull requests
 

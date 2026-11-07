@@ -1901,7 +1901,10 @@ Shoal, which nothing keeps, removes its chats first and stops their agents;
 never moves to another directory: one about another workspace is a new chat.
 
 `shoal work rename [chat] NAME` gives a running chat a new name that is free as
-a new chat's would be, and frees the old one. Without a space it gives the
+a new chat's would be, and frees the old one. A title that is not a valid name
+renames the chat to its ASCII letters and digits in lowercase, with a hyphen
+for each run of other characters: `"Plan: done summary"` renames it
+`plan-done-summary`. Without a space it gives the
 current workspace a title, else renames the chat it runs in, else the current
 checkout's only running chat, else offers a picker. A Happy chat's log and saved first
 message move to the new name, so it is refused until its session runs. The zmx session keeps the name it started with,

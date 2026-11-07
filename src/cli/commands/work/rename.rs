@@ -10,7 +10,7 @@ use crate::{
         ui::{self, Fallback},
     },
     client::space_names::SpaceName,
-    model::PresentSpace,
+    model::{PresentSpace, SpaceKind},
 };
 
 /// Title the named workspace, or rename the named chat, else the space this
@@ -26,11 +26,18 @@ pub(super) async fn rename(
         SpaceName::parse(&title).map_err(|_| error)?;
     }
     match chosen_chat(ctx, space).await? {
-        Ok(chat) => chat::rename(ctx, chat, SpaceName::parse(&title)?).await,
+        Ok(chat) => chat::rename(ctx, chat, chat_name(&title)?).await,
         Err(workspace) => {
             workspaces::title(ctx, Some(SpaceSelector::parse(&workspace)), title).await
         }
     }
+}
+
+/// The name a chat takes from `text`: `text` itself when it is a valid name,
+/// else the name its words give as a title.
+fn chat_name(text: &str) -> Result<SpaceName> {
+    SpaceName::parse(text)
+        .or_else(|refused| SpaceName::from_title(SpaceKind::Chat, text.trim()).ok_or(refused))
 }
 
 /// Ask the agent of the named space, else the one this runs in or a picked

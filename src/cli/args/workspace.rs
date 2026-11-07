@@ -118,7 +118,9 @@ pub enum WorkCommand {
     Rename {
         space: Option<SpaceSelector>,
         /// A workspace's title of at most 40 characters on one line, or a
-        /// chat's name, free among workspaces and running chats.
+        /// chat's name, free among workspaces and running chats. A title
+        /// that is not a valid name renames a chat to its words, in
+        /// lowercase and joined by hyphens.
         #[arg(required_unless_present = "request")]
         title: Option<String>,
         /// Ask the space's agent to choose the title or name; a single
