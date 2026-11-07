@@ -944,7 +944,10 @@ that tool needs to stop repeating work across workspaces, so common stacks need
 no script. Tools whose build outputs survive a move into another path get a
 seed: Cargo, whose seed covers it better than a shared compiler cache such as
 sccache, which needs another tool and gives up incremental builds, and the Node
-package managers. Preset seeds run the default branch's own build code, as
+package managers. Cargo's seed also runs `cargo test`, which builds a proc-macro
+member with other settings than `cargo build --all-targets` does, and `cargo
+check`, which makes the dependency builds `cargo clippy` uses too; clippy's own
+results for the workspace crates change with each branch, so it has no step. Preset seeds run the default branch's own build code, as
 `setup.seed.command` would. Tools whose caches already serve every checkout get only what
 makes their cache keys independent of the workspace path, or one cache where
 each checkout keeps its own: Go trims paths, ccache takes the workspace as its
