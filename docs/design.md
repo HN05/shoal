@@ -2251,7 +2251,10 @@ environment. Debug builds are development builds that share the user's home
 with the installed Shoal, so unless tests in a temporary home set
 `SHOAL_DEV_USER_FILES=1`, they change no user-level files outside their state
 directory, skills included, and refuse the user's own state directory, whose
-daemon serves every running agent, however it is selected; the password
+daemon serves every running agent, however it is selected, and writes of the
+global config and the files beside it in the user's own config directory, from
+which running agents read their settings; unit tests refuse that directory
+whatever they inherit; the password
 database names the user's home, so a temporary `HOME` does not. A changed or removed skill stays as the user left it until an
 explicit install, which restores removed skills, asks about changed ones in a
 terminal like a package manager's modified configuration files, and with

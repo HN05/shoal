@@ -621,6 +621,7 @@ fn global_config_dir(chat: &Chat, home: &Path) -> Option<PathBuf> {
 /// The directory of the config file `file`, created when missing and
 /// resolved as agents compare paths, so a setup agent may write there.
 pub(in crate::cli) fn writable_config_dir(file: &Path) -> Result<PathBuf> {
+    crate::config_file::refuse_user_config(file)?;
     let directory = file.parent().context("the config file has no directory")?;
     std::fs::create_dir_all(directory)
         .and_then(|()| std::fs::canonicalize(directory))

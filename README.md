@@ -527,8 +527,10 @@ Create releases through **Actions → release** ([setup](docs/releases.md)).
 Requires Rust at least as new as `package.rust-version` in [Cargo.toml](Cargo.toml)
 and the [runtime dependencies](#runtime-dependencies).
 Integration tests also use Bash, Zsh, and Python 3. Debug builds leave the
-user's state directory and user-level files outside their own, such as installed
-skills, to the installed Shoal: run them with a temporary `--state-dir`. Tests in a
+user's state directory, config directory and user-level files outside their own,
+such as installed skills, to the installed Shoal: run them with a temporary
+`--state-dir`, and with a temporary `HOME`, holding `XDG_CONFIG_HOME` if it is
+set, to change the config. Tests in a
 temporary `HOME` set `SHOAL_DEV_USER_FILES=1` to change user-level files.
 
 ```sh

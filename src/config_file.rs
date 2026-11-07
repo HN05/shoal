@@ -1,5 +1,6 @@
 //! The config files on disk: edits hold a lock, check the whole result
-//! before saving and keep the previous file as a backup.
+//! before saving and keep the previous file as a backup. A development build
+//! leaves the user's own config directory to the installed Shoal.
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -14,6 +15,10 @@ use crate::config::{
     edit::{self, Change},
 };
 use crate::paths::Paths;
+
+mod user_config;
+
+pub use user_config::refuse_user_config;
 
 /// Apply `changes` to the file at `path` and save the result once `check`
 /// accepts it.
@@ -33,6 +38,7 @@ pub fn edit(
 
 /// Hold `path`'s edit lock while the returned file lives.
 pub fn lock(path: &Path) -> Result<fs::File> {
+    refuse_user_config(path)?;
     fs::create_dir_all(path.parent().context("config path has no parent")?)?;
     let file = fs::OpenOptions::new()
         .create(true)
@@ -46,6 +52,7 @@ pub fn lock(path: &Path) -> Result<fs::File> {
 /// Replace `path` with `text`, keeping the previous file as `<path>.backup`.
 /// Returns the path and the backup, if one was made.
 pub fn replace(path: PathBuf, text: &str) -> Result<(PathBuf, Option<PathBuf>)> {
+    refuse_user_config(&path)?;
     let parent = path.parent().context("config path has no parent")?;
     fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     // Prepare the complete replacement before touching the user's current file.
@@ -99,6 +106,7 @@ fn keep_backup(path: &Path, backup: &Path) -> std::io::Result<bool> {
 /// Write `packaged` at `path` unless a file already exists there. Whether
 /// this call created it.
 fn install_at(path: &Path, packaged: &str) -> Result<bool> {
+    refuse_user_config(path)?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
@@ -143,7 +151,8 @@ pub(crate) trait ConfigExt: Sized {
     fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)>;
 
     /// [`Self::load`] under the edit lock, so a concurrent edit is read whole
-    /// rather than while its file is moved aside.
+    /// rather than while its file is moved aside. A build that may not write
+    /// the file reads it without the lock, whose file it would create there.
     fn load_settled(paths: &Paths) -> Result<Self>;
 }
 
@@ -175,7 +184,11 @@ impl ConfigExt for Config {
     }
 
     fn load_settled(paths: &Paths) -> Result<Self> {
-        let _lock = lock(&Self::path(paths))?;
+        let path = Self::path(paths);
+        let _lock = refuse_user_config(&path)
+            .is_ok()
+            .then(|| lock(&path))
+            .transpose()?;
         Self::load(paths)
     }
 }
