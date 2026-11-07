@@ -27,6 +27,11 @@ const LOCK: &str = "lock";
 /// from.
 const TEMPORARY: &str = ".tmp-";
 
+/// Whether this process runs from a release copy it holds the lock of.
+pub(crate) fn holds_locks() -> bool {
+    inherited::locks().next().is_some()
+}
+
 /// The directory of the release copies.
 pub(crate) struct Releases {
     root: PathBuf,

@@ -22,6 +22,7 @@ use crate::{
     model::ExecutionPlan,
     paths::Paths,
     protocol::{Control, ExecutionEvent, timing},
+    releases::{Invoked, Releases, Replacement},
     sessions::Origin,
     workers::{Worker, internal_command},
 };
@@ -125,7 +126,9 @@ fn continue_with(
             log,
         },
     )?;
-    let mut command = std::process::Command::new(installed);
+    // The replacement holds the new copy's lock open until the exec.
+    let replacement = replacement(paths, installed)?;
+    let mut command = running(replacement.as_ref(), installed);
     command.args(&argv[1..]);
     // This process took the marker out of its environment as it started.
     if env::ends_launch_session() {
@@ -135,6 +138,40 @@ fn continue_with(
     // The installed binary writes to the same output after this.
     let _ = std::io::Write::flush(&mut std::io::stdout());
     Ok(command.exec())
+}
+
+/// What a wrapper that runs from a release copy replaces itself with to
+/// continue from `installed`: a copy of that release, so that removing it
+/// later leaves the agent its access. The wrapper keeps the lock on the copy
+/// it started from as well, since macOS may keep judging the process by the
+/// program it started with. None for a wrapper that runs its release itself.
+fn replacement(paths: &Paths, installed: &Path) -> Result<Option<Replacement>> {
+    if !crate::releases::holds_locks() {
+        return Ok(None);
+    }
+    let releases = Releases::new(paths.releases());
+    let invoked = Invoked::at(installed.to_owned());
+    Ok(Some(Replacement::of(
+        Some(&releases),
+        installed.to_owned(),
+        &invoked,
+    )?))
+}
+
+/// The command that runs `replacement` with the variables it hands over, or
+/// `installed` itself.
+fn running(replacement: Option<&Replacement>, installed: &Path) -> std::process::Command {
+    let Some(replacement) = replacement else {
+        return std::process::Command::new(installed);
+    };
+    let mut command = std::process::Command::new(&replacement.program);
+    command.envs(
+        replacement
+            .variables
+            .iter()
+            .map(|(name, value)| (*name, value)),
+    );
+    command
 }
 
 /// The daemon connection a wrapper handed over at descriptor `fd`, closed to
