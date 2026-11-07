@@ -28799,7 +28799,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
 #[test]
 fn queue_start_attaches_to_the_started_agents_session() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.missing]\ncommand = ['shoal-test-missing-agent']\n",
     ));
     let home = fixture.root.path();
     install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -28863,6 +28863,27 @@ fn queue_start_attaches_to_the_started_agents_session() {
         .rfind(|call| call[0] == "attach")
         .unwrap();
     assert_eq!(attached, ["attach", opened[1].as_str()]);
+
+    // A start that fails ends the wait at once: this one's agent is gone
+    // by the time the queue starts it.
+    let missing = home.join("bin/shoal-test-missing-agent");
+    install_test_script(&missing, "#!/bin/sh\n");
+    let output = fixture
+        .command()
+        .args(["--json", "start", repo, "third", "--agent", "missing"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    fs::remove_file(&missing).unwrap();
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .args(["queue", "start", "--attach", "third"]),
+        "",
+        true,
+    );
+    assert!(!output.status.success(), "{output:?}\n{transcript}");
+    assert!(transcript.contains("did not start"), "{transcript}");
 
     fixture.ok(&["stop", "second"]);
     fixture.ok(&["stop", "first"]);
