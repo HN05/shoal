@@ -529,9 +529,8 @@ impl Manager {
     /// that ran that long without a delivery leaves no wait behind it either,
     /// so the hook starting as it ends gets the delay too.
     async fn hook_cannot_wake(&self, id: &str, execution: &str, idle: &AgentStatus) -> bool {
-        let idle_for = crate::time::unix_seconds().saturating_sub(idle.since.max(0) as u64);
         self.turn_interrupted(execution).await
-            || (idle_for >= UNWATCHED_WAKE_DELAY.as_secs()
+            || (idled_for(idle, UNWATCHED_WAKE_DELAY)
                 && self.item_waits.unwatched_for(id, UNWATCHED_WAKE_DELAY))
     }
 
@@ -1753,6 +1752,12 @@ fn watches_branch(selection: &Selection) -> bool {
 /// a message arriving meanwhile cannot end that wait and prompt it again.
 fn wake_messages_due(wakes: bool, hold: Option<Duration>, arming: bool) -> bool {
     wakes && (hold.is_none() || !arming)
+}
+
+/// Whether the agent `idle` reports idle has idled for `delay`.
+fn idled_for(idle: &AgentStatus, delay: Duration) -> bool {
+    let since = u64::try_from(idle.since).unwrap_or(0);
+    crate::time::unix_seconds().saturating_sub(since) >= delay.as_secs()
 }
 
 /// When a watch with a timeout of `seconds` started now ends.

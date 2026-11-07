@@ -51,12 +51,19 @@ pub(in crate::cli::commands) async fn wake(
         report_end(ctx, &wait, WakeEnd::Stopped).await;
         return Ok(0);
     }
-    eprintln!("{}", inbox.hook_context(&updates));
+    deliver(ctx, &inbox, &updates).await?;
+    Ok(2)
+}
+
+/// Print `updates` for Claude Code, which starts the agent's turn with them
+/// once the hook exits 2, and acknowledge them.
+async fn deliver(ctx: &Context, inbox: &Inbox, updates: &Updates) -> Result<()> {
+    eprintln!("{}", inbox.hook_context(updates));
     std::io::Write::flush(&mut std::io::stderr())?;
-    if let Err(error) = inbox.acknowledge(ctx, &updates).await {
+    if let Err(error) = inbox.acknowledge(ctx, updates).await {
         eprintln!("shoal: these updates may be delivered again: {error:#}");
     }
-    Ok(2)
+    Ok(())
 }
 
 /// Tell the daemon why the hook ends without starting the agent's turn, so

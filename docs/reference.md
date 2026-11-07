@@ -4957,10 +4957,8 @@ otherwise is tried again after a delay that doubles up to a minute, so the
 agent is never left idle without one; only its first failure is printed. Its command
 passes Claude Code's process ID as `--agent "$PPID"`, and it exits with that
 process: Claude Code runs hooks outside its process group, so stopping the
-agent would otherwise leave the hook behind. When the hook ends without starting a
-turn, because a newer delivery took its updates, its agent exited, a stop came
-first or a signal ended it, or when its wait fails or ends unanswered, the
-daemon's diagnostics say so. Codex cannot
+agent would otherwise leave the hook behind. The daemon's diagnostics record why
+a wake hook ends without starting a turn. Codex cannot
 be woken by a hook: when a Codex in a zmx session, Rex block or Herdr pane reports its turn
 finished and has undelivered messages or activity, Shoal types `Shoal: new
 messages or activity on this workspace's issues and PRs.` into the session and
