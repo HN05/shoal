@@ -192,14 +192,11 @@ impl Config {
         Self::path_for_home(&paths.home)
     }
 
+    /// `XDG_CONFIG_HOME` belongs to the home `HOME` names: another home, such
+    /// as a test's temporary one, keeps its config under its own `.config`.
     pub fn path_for_home(home: &std::path::Path) -> PathBuf {
-        // Unit tests inherit the developer's environment; keep them in their
-        // temporary home instead of the real config.
-        let config_home = if cfg!(test) {
-            None
-        } else {
-            std::env::var_os("XDG_CONFIG_HOME")
-        };
+        let own_home = crate::client::paths::home_dir().is_ok_and(|own| own == home);
+        let config_home = std::env::var_os("XDG_CONFIG_HOME").filter(|_| own_home);
         config_home
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
