@@ -144,3 +144,47 @@ async fn a_ref_records_the_tree_head_state_reads() {
     assert!(super::records_tree(&repo, "copy", &tree).await);
     assert!(!super::records_tree(&repo, "main~1", &tree).await);
 }
+
+#[tokio::test]
+async fn default_refs_list_the_existing_local_upstream_and_remote_branch() {
+    let root = tempfile::tempdir().unwrap();
+    let upstream = repository(root.path(), "upstream");
+    let clone = root.path().join("clone");
+    let (upstream_path, clone_path) = (upstream.to_str().unwrap(), clone.to_str().unwrap());
+    git(root.path(), &["clone", "-q", upstream_path, clone_path]);
+    let refs = async |name| super::default_refs(&clone, name).await.unwrap();
+    assert_eq!(
+        refs("main").await,
+        ["refs/heads/main", "refs/remotes/origin/main"]
+    );
+    // A local branch tracking another remote's branch adds that upstream.
+    git(&clone, &["remote", "add", "fork", upstream_path]);
+    git(&clone, &["fetch", "-q", "fork"]);
+    git(
+        &clone,
+        &["branch", "-q", "--set-upstream-to=fork/main", "main"],
+    );
+    assert_eq!(
+        refs("main").await,
+        [
+            "refs/heads/main",
+            "refs/remotes/fork/main",
+            "refs/remotes/origin/main"
+        ]
+    );
+    // Only the refs that exist count, not those below the name.
+    git(&clone, &["branch", "-q", "--unset-upstream", "main"]);
+    git(
+        &clone,
+        &["update-ref", "refs/remotes/origin/trunk/old", "HEAD"],
+    );
+    assert_eq!(refs("trunk").await, Vec::<String>::new());
+    git(&clone, &["branch", "-q", "trunk"]);
+    assert_eq!(refs("trunk").await, ["refs/heads/trunk"]);
+    // A broken ref fails rather than counting as missing.
+    let refs_dir = clone.join(".git/refs");
+    fs::write(refs_dir.join("remotes/origin/main"), "broken\n").unwrap();
+    super::default_refs(&clone, "main").await.unwrap_err();
+    fs::write(refs_dir.join("heads/trunk"), "broken\n").unwrap();
+    super::default_refs(&clone, "trunk").await.unwrap_err();
+}

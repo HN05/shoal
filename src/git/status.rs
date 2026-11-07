@@ -5,7 +5,7 @@ use std::{
     sync::{LazyLock, Mutex, PoisonError},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use super::run;
 use crate::fsutil::off_runtime;
@@ -131,10 +131,10 @@ pub async fn operation_in_progress(repo: &Path) -> Result<bool> {
 /// upstream, and the default remote's remote-tracking branch, which a clone
 /// keeps even without a local branch.
 pub async fn default_refs(repo: &Path, name: &str) -> Result<Vec<String>> {
+    let local = super::local_ref(name);
     let mut candidates = Vec::new();
-    if let Some(local) = local_branch(repo, name).await? {
-        let upstream = run(repo, &["for-each-ref", "--format=%(upstream)", &local]).await?;
-        candidates.extend([local, upstream.trim().to_owned()]);
+    if let Some(upstream) = upstream_of(repo, &local).await? {
+        candidates.extend([local, upstream]);
     }
     if let Some(remote) = super::default_branch::remote(repo).await? {
         candidates.push(super::remote_ref(&remote, name));
@@ -143,12 +143,59 @@ pub async fn default_refs(repo: &Path, name: &str) -> Result<Vec<String>> {
     for reference in candidates {
         if (reference.starts_with(super::LOCAL_REFS) || reference.starts_with(super::REMOTE_REFS))
             && !refs.contains(&reference)
-            && super::ref_exists(repo, &reference, super::command).await?
         {
             refs.push(reference);
         }
     }
+    let existing = existing_refs(repo, &refs).await?;
+    refs.retain(|reference| existing.contains(reference));
     Ok(refs)
+}
+
+/// The upstream the existing local branch `reference` tracks, empty when it
+/// tracks none, or `None` when the branch does not exist.
+async fn upstream_of(repo: &Path, reference: &str) -> Result<Option<String>> {
+    let listed = run(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(refname)%00%(upstream)",
+            reference,
+        ],
+    )
+    .await?;
+    let upstream = listed.lines().find_map(|line| {
+        let (name, upstream) = line.split_once('\0')?;
+        (name == reference).then(|| upstream.to_owned())
+    });
+    // for-each-ref skips a broken ref with only a warning, where `show-ref`
+    // fails, so `show-ref` confirms a branch the listing left out.
+    if upstream.is_none() && super::ref_exists(repo, reference, super::command).await? {
+        bail!("git for-each-ref did not list {reference}");
+    }
+    Ok(upstream)
+}
+
+/// Which of the full ref names in `references` exist, from one listing.
+async fn existing_refs(repo: &Path, references: &[String]) -> Result<Vec<String>> {
+    // Without patterns, for-each-ref would list every ref.
+    if references.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut args = vec!["for-each-ref", "--format=%(refname)"];
+    args.extend(references.iter().map(String::as_str));
+    let listed = run(repo, &args).await?;
+    let mut existing = Vec::new();
+    for reference in references {
+        // A pattern also matches the refs below it, so only exact names
+        // count; `show-ref` confirms a ref the listing left out, as above.
+        if listed.lines().any(|name| name == reference)
+            || super::ref_exists(repo, reference, super::command).await?
+        {
+            existing.push(reference.clone());
+        }
+    }
+    Ok(existing)
 }
 
 /// Whether any of `references` retains `revision`, whose tree is `tree`, by

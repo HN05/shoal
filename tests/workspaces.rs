@@ -23334,7 +23334,7 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
             ],
         ),
         ("--is-ancestor", vec!["rm", "worker", "--yes"]),
-        ("show-ref", vec!["rm", "worker", "--yes"]),
+        ("for-each-ref", vec!["rm", "worker", "--yes"]),
     ] {
         fs::write(fixture.root.path().join("git-failure"), failure).unwrap();
         let output = fixture.run(&args);
