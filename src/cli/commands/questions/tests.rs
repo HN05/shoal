@@ -17,11 +17,7 @@ fn question(text: &str, in_chat: bool) -> Question {
             reason: None,
             choices: Vec::new(),
         },
-        answer: None,
-        answered_at: None,
-        message_id: None,
-        closed_at: None,
-        withdrawn: false,
+        status: crate::client::questions::QuestionStatus::Open,
         in_chat,
         files: Vec::new(),
     }

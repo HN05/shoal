@@ -127,13 +127,13 @@ async fn answers_resolve_choices_and_reach_the_agents_once() {
         .answer_question(question.number, "2".into(), None)
         .await
         .unwrap();
-    assert_eq!(answered.answer.as_deref(), Some("Postgres"));
+    assert_eq!(answered.status.answer(), Some("Postgres"));
     let messages = manager
         .agent_messages(&SpaceSelector::from(&workspace.name))
         .await
         .unwrap();
     assert_eq!(messages.len(), 1);
-    assert_eq!(answered.message_id, Some(messages[0].id));
+    assert_eq!(answer_message(&answered), messages[0].id);
     assert!(
         messages[0].message.contains("Postgres"),
         "{}",
@@ -180,7 +180,7 @@ async fn recommended_numeric_answers_are_literal_and_bound_to_the_shown_question
         .accept_question_recommendation(question.number, Some(question))
         .await
         .unwrap();
-    assert_eq!(answered.answer.as_deref(), Some("2"));
+    assert_eq!(answered.status.answer(), Some("2"));
     assert_eq!(
         manager
             .agent_messages(&SpaceSelector::id(&workspace.id))
@@ -212,7 +212,7 @@ async fn free_text_answers_may_span_lines() {
         .await
         .unwrap();
     assert_eq!(
-        answered.answer.as_deref(),
+        answered.status.answer(),
         Some("Postgres,\nsince staging has it")
     );
 }
@@ -244,7 +244,7 @@ async fn asking_again_returns_an_undelivered_answer_then_asks_anew() {
         .unwrap();
     assert_eq!(again, answered);
 
-    let message = answered.message_id.unwrap();
+    let message = answer_message(&answered);
     manager
         .mark_agent_messages_delivered(&SpaceSelector::from(&workspace.name), vec![message])
         .await
@@ -309,7 +309,7 @@ async fn questions_take_the_smallest_free_number_of_their_space() {
     manager
         .mark_agent_messages_delivered(
             &SpaceSelector::from(&other.name),
-            vec![answered.message_id.unwrap()],
+            vec![answer_message(&answered)],
         )
         .await
         .unwrap();
@@ -367,7 +367,7 @@ async fn a_wait_returns_the_answer() {
         .await
         .unwrap();
     let answered = waiter.await.unwrap().unwrap();
-    assert_eq!(answered.answer.as_deref(), Some("Postgres"));
+    assert_eq!(answered.status.answer(), Some("Postgres"));
 
     let other = manager
         .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
@@ -390,7 +390,7 @@ async fn a_wait_returns_the_answer() {
     manager
         .mark_agent_messages_delivered(
             &SpaceSelector::from(&workspace.name),
-            vec![answered.message_id.unwrap()],
+            vec![answer_message(&answered)],
         )
         .await
         .unwrap();
@@ -711,8 +711,7 @@ async fn done_closes_open_questions_for_good() {
     );
     // The undelivered answer still reaches the agents.
     let delivered = manager.question(answered.number).await.unwrap();
-    assert_eq!(delivered.answer.as_deref(), Some("Postgres"));
-    assert!(delivered.closed_at.is_none());
+    assert_eq!(delivered.status.answer(), Some("Postgres"));
 
     assert!(
         manager
@@ -769,7 +768,7 @@ async fn withdrawing_a_displayed_question_refuses_a_reused_number() {
     manager
         .mark_agent_messages_delivered(
             &SpaceSelector::id(&workspace.id),
-            vec![answered.message_id.unwrap()],
+            vec![answer_message(&answered)],
         )
         .await
         .unwrap();
@@ -804,7 +803,7 @@ async fn withdrawing_a_displayed_question_refuses_a_reused_number() {
         )
         .await
         .unwrap();
-    assert!(withdrawn.withdrawn);
+    assert!(matches!(withdrawn.status, QuestionStatus::Withdrawn { .. }));
 }
 
 #[tokio::test]
@@ -844,7 +843,7 @@ async fn withdrawing_closes_a_question_and_takes_back_its_unread_notification() 
         .withdraw_question(&SpaceSelector::from(&workspace.name), question.number, None)
         .await
         .unwrap();
-    assert!(withdrawn.withdrawn && !withdrawn.is_open());
+    assert!(matches!(withdrawn.status, QuestionStatus::Withdrawn { .. }));
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
     assert_ne!(
         manager.cleanup_reason(&workspace).await,
@@ -1048,4 +1047,18 @@ async fn a_question_sends_a_limited_number_of_files() {
             .is_empty()
     );
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
+}
+
+/// The agent message carrying the answer to `question`.
+fn answer_message(question: &Question) -> i64 {
+    match question.status {
+        QuestionStatus::Answered {
+            message_id: Some(id),
+            ..
+        } => id,
+        ref status => panic!(
+            "question {} has no answer message: {status:?}",
+            question.number
+        ),
+    }
 }

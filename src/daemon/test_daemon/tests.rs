@@ -203,7 +203,7 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
     let answered: Question = connection::request(&app, answer(Some(question.clone())))
         .await
         .unwrap();
-    assert_eq!(answered.answer.as_deref(), Some("Postgres"));
+    assert_eq!(answered.status.answer(), Some("Postgres"));
 
     let request = ApprovalRequest::new(
         &workspace.id,

@@ -165,7 +165,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     let Body::Question(delivered) = reply(&mut waiting).await else {
         panic!("expected the wait to receive the answer");
     };
-    assert_eq!(delivered.answer.as_deref(), Some("SQLite"));
+    assert_eq!(delivered.status.answer(), Some("SQLite"));
     serving.abort();
 }
 

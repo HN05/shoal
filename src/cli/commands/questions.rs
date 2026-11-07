@@ -2,7 +2,7 @@
 use crate::daemon::questions::QuestionExt;
 use std::ffi::OsString;
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::client::output::workspaces::InChat;
 use crate::client::space_names::SpaceSelector;
@@ -16,7 +16,7 @@ use crate::{
         ui::{self, Cell, Entries, Fallback, WidthLimit},
     },
     client::item_numbers::ItemNumber,
-    client::questions::{self, Ask, Question},
+    client::questions::{self, Ask, Question, QuestionStatus},
     installed::Executable,
 };
 
@@ -112,9 +112,15 @@ pub(super) async fn resume(
 
 /// Printed here, the answer's message need not reach the agent again.
 async fn print_answer(ctx: &Context, space: String, question: &Question) -> Result<()> {
-    ctx.emit(question.answer.as_deref().unwrap_or_default(), question)?;
+    let QuestionStatus::Answered {
+        answer, message_id, ..
+    } = &question.status
+    else {
+        bail!("question {} has no answer", question.number);
+    };
+    ctx.emit(answer, question)?;
     crate::stdout::flush()?;
-    let Some(id) = question.message_id else {
+    let Some(id) = *message_id else {
         return Ok(());
     };
     crate::client::agent_messages::mark_delivered(
@@ -266,7 +272,7 @@ fn answered(question: &Question) -> String {
         "Question {} answered: {}\n  Answer: {}",
         question.number,
         question.ask.question,
-        question.answer.as_deref().unwrap_or_default()
+        question.status.answer().unwrap_or_default()
     )
 }
 
@@ -369,7 +375,7 @@ fn details(question: &Question, palette: Palette) -> String {
         let label = if index == 0 { "Files" } else { "" };
         row(label, &file.path.display().to_string());
     }
-    if let Some(answer) = &question.answer {
+    if let Some(answer) = question.status.answer() {
         row("Answer", answer);
     }
     let mut lines = vec![palette.paint(Style::Heading, heading)];
@@ -388,14 +394,11 @@ fn details(question: &Question, palette: Palette) -> String {
 }
 
 fn status(question: &Question) -> &'static str {
-    if question.withdrawn {
-        "withdrawn"
-    } else if question.closed_at.is_some() {
-        "closed"
-    } else if question.is_open() {
-        "open"
-    } else {
-        "answered"
+    match question.status {
+        QuestionStatus::Open => "open",
+        QuestionStatus::Answered { .. } => "answered",
+        QuestionStatus::Closed { .. } => "closed",
+        QuestionStatus::Withdrawn { .. } => "withdrawn",
     }
 }
 
@@ -419,7 +422,7 @@ fn render(question: &Question, palette: Palette) -> String {
     for file in &question.files {
         lines.push(format!("  Attached file: {}", file.path.display()));
     }
-    if let Some(answer) = &question.answer {
+    if let Some(answer) = question.status.answer() {
         lines.push(format!("  Answer: {answer}"));
     }
     lines.join("\n")

@@ -9,11 +9,11 @@
 //! the same way when the user replies there.
 use crate::client::space_names::SpaceSelector;
 use crate::refusal::{Reason, Refusal};
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, Transaction, params};
 use std::time::Duration;
 
-pub(crate) use crate::client::questions::{Ask, Listing, Question};
+pub(crate) use crate::client::questions::{Ask, Listing, Question, QuestionStatus};
 use crate::{
     daemon::{
         agent_messages, chat_messages,
@@ -24,6 +24,9 @@ use crate::{
     },
     model::PresentSpace,
 };
+use status::{OPEN, StatusColumns};
+
+mod status;
 
 /// Longest answer, in bytes; answers may span lines.
 pub const MAX_ANSWER_LEN: usize = 4096;
@@ -134,26 +137,21 @@ impl QuestionExt for Question {
     }
 
     fn is_open(&self) -> bool {
-        self.answer.is_none() && self.closed_at.is_none()
+        self.status == QuestionStatus::Open
     }
 
     fn ensure_open(&self) -> Result<()> {
-        ensure!(
-            self.answer.is_none(),
-            "question {} is already answered",
-            self.number
-        );
-        ensure!(
-            !self.withdrawn,
-            "question {} was withdrawn: its agent no longer needs an answer",
-            self.number
-        );
-        ensure!(
-            self.closed_at.is_none(),
-            "question {} is closed: its workspace's assignment was marked done",
-            self.number
-        );
-        Ok(())
+        let number = self.number;
+        match self.status {
+            QuestionStatus::Open => Ok(()),
+            QuestionStatus::Answered { .. } => bail!("question {number} is already answered"),
+            QuestionStatus::Withdrawn { .. } => {
+                bail!("question {number} was withdrawn: its agent no longer needs an answer")
+            }
+            QuestionStatus::Closed { .. } => {
+                bail!("question {number} is closed: its workspace's assignment was marked done")
+            }
+        }
     }
 
     fn is_same(&self, other: &Question) -> bool {
@@ -260,11 +258,7 @@ fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
                 reason: row.get(7)?,
                 choices: Vec::new(),
             },
-            answer: row.get(9)?,
-            answered_at: row.get(10)?,
-            message_id: row.get(11)?,
-            closed_at: row.get(12)?,
-            withdrawn: row.get(13)?,
+            status: StatusColumns::read(row, 9)?,
             in_chat: row.get(14)?,
             files: crate::daemon::store::json_column(row, "files")?.unwrap_or_default(),
         },
@@ -316,11 +310,16 @@ fn repeated(
         &format!("WHERE {SPACE}=?1 AND q.question=?2"),
         params![space_id, ask.question],
     )?;
-    let Some(question) = candidates
-        .into_iter()
-        .rev()
-        .find(|question| question.is_open() || question.message_id.is_some())
-    else {
+    let Some(question) = candidates.into_iter().rev().find(|question| {
+        matches!(
+            question.status,
+            QuestionStatus::Open
+                | QuestionStatus::Answered {
+                    message_id: Some(_),
+                    ..
+                }
+        )
+    }) else {
         return Ok(None);
     };
     let ids = |files: &[SentFile]| files.iter().map(|file| file.id).collect::<Vec<_>>();
@@ -374,48 +373,33 @@ fn open_question(tx: &Transaction<'_>, number: ItemNumber) -> Result<Question> {
     Ok(question)
 }
 
-/// Close `question` at `closed_at`, withdrawn when its agent or the chat
-/// closed it.
-fn store_closed(
-    tx: &Transaction<'_>,
-    question: &Question,
-    closed_at: crate::time::UnixTime,
-    withdrawn: bool,
-) -> Result<()> {
-    tx.execute(
-        "UPDATE questions SET closed_at=?3,withdrawn=?4 WHERE space_number=?1 AND number=?2",
-        params![
-            question.number.space,
-            question.number.item,
-            closed_at,
-            withdrawn
-        ],
-    )?;
-    Ok(())
-}
-
-/// Persist `answer` and the message carrying it on `question`.
-fn store_answer(
+/// Persist `status` as the status of `question`.
+fn store_status(
     tx: &Transaction<'_>,
     question: &mut Question,
-    answer: String,
-    message_id: Option<i64>,
+    status: QuestionStatus,
 ) -> Result<()> {
-    let answered_at = crate::time::UnixTime::now();
+    let StatusColumns {
+        answer,
+        answered_at,
+        message_id,
+        closed_at,
+        withdrawn,
+    } = StatusColumns::from(&status);
     tx.execute(
-        "UPDATE questions SET answer=?3,answered_at=?4,message_id=?5
+        "UPDATE questions SET answer=?3,answered_at=?4,message_id=?5,closed_at=?6,withdrawn=?7
             WHERE space_number=?1 AND number=?2",
         params![
             question.number.space,
             question.number.item,
             answer,
             answered_at,
-            message_id
+            message_id,
+            closed_at,
+            withdrawn
         ],
     )?;
-    question.answer = Some(answer);
-    question.answered_at = Some(answered_at);
-    question.message_id = message_id;
+    question.status = status;
     Ok(())
 }
 
@@ -452,8 +436,12 @@ fn record_answer(
     )?;
     let answer = answer.resolve(&question.ask)?;
     let message = question.answer_message(&answer);
-    let message_id = queue_answer(tx, &question, &message)?;
-    store_answer(tx, &mut question, answer, message_id)?;
+    let status = QuestionStatus::Answered {
+        answer,
+        answered_at: crate::time::UnixTime::now(),
+        message_id: queue_answer(tx, &question, &message)?,
+    };
+    store_status(tx, &mut question, status)?;
     Ok(question)
 }
 
@@ -475,8 +463,7 @@ fn queue_answer(tx: &Transaction<'_>, question: &Question, message: &str) -> Res
 /// How many questions of the workspace or chat `space_id` are open.
 pub(crate) fn open_count(db: &Connection, space_id: &str) -> Result<usize> {
     let count: i64 = db.query_row(
-        "SELECT COUNT(*) FROM questions
-            WHERE COALESCE(workspace_id,chat_id)=?1 AND answer IS NULL AND closed_at IS NULL",
+        &format!("SELECT COUNT(*) FROM questions q WHERE {SPACE}=?1 AND {OPEN}"),
         [space_id],
         |row| row.get(0),
     )?;
@@ -487,19 +474,11 @@ pub(crate) fn open_count(db: &Connection, space_id: &str) -> Result<usize> {
 /// longer waits on, and return their numbers.
 pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<ItemNumber>> {
     let closed_at = crate::time::UnixTime::now();
-    let mut numbers = tx
-        .prepare(
-            "UPDATE questions SET closed_at=?2
-                WHERE COALESCE(workspace_id,chat_id)=?1 AND answer IS NULL AND closed_at IS NULL
-                RETURNING space_number,number",
-        )?
-        .query_map(params![space_id, closed_at], |row| {
-            Ok(ItemNumber {
-                space: row.get(0)?,
-                item: row.get(1)?,
-            })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut numbers = Vec::new();
+    for mut question in query(tx, &format!("WHERE {SPACE}=?1 AND {OPEN}"), [space_id])? {
+        store_status(tx, &mut question, QuestionStatus::Closed { closed_at })?;
+        numbers.push(question.number);
+    }
     numbers.sort_unstable();
     Ok(numbers)
 }
@@ -524,10 +503,12 @@ fn withdraw(
         shown.is_none_or(|shown| question.number == shown.number && question.is_same(shown)),
         format_args!("question {number}"),
     )?;
-    let closed_at = crate::time::UnixTime::now();
-    store_closed(tx, &question, closed_at, true)?;
-    question.closed_at = Some(closed_at);
-    question.withdrawn = true;
+    let withdrawn_at = crate::time::UnixTime::now();
+    store_status(
+        tx,
+        &mut question,
+        QuestionStatus::Withdrawn { withdrawn_at },
+    )?;
     Ok(question)
 }
 
@@ -624,13 +605,17 @@ pub(crate) fn set_chat_mark(db: &Connection, turn: &Turn, marked: bool) -> Resul
 fn close_in_chat(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<(Question, bool)>> {
     let open = query(
         tx,
-        &format!("WHERE {SPACE}=?1 AND q.in_chat AND q.answer IS NULL AND q.closed_at IS NULL"),
+        &format!("WHERE {SPACE}=?1 AND q.in_chat AND {OPEN}"),
         [space_id],
     )?;
-    let closed_at = crate::time::UnixTime::now();
+    let withdrawn_at = crate::time::UnixTime::now();
     open.into_iter()
-        .map(|question| {
-            store_closed(tx, &question, closed_at, true)?;
+        .map(|mut question| {
+            store_status(
+                tx,
+                &mut question,
+                QuestionStatus::Withdrawn { withdrawn_at },
+            )?;
             let retracted = notifications::retract(
                 tx,
                 space_id,
@@ -771,10 +756,7 @@ impl Manager {
             .run(move |db| {
                 query(
                     db,
-                    &format!(
-                        "WHERE (?1 IS NULL OR {SPACE}=?1) AND q.answer IS NULL
-                            AND q.closed_at IS NULL"
-                    ),
+                    &format!("WHERE (?1 IS NULL OR {SPACE}=?1) AND {OPEN}"),
                     [owner],
                 )
             })
@@ -791,7 +773,7 @@ impl Manager {
     /// Every open question, oldest first, which subscription snapshots page.
     pub(crate) async fn open_questions(&self) -> Result<Vec<Question>> {
         self.store
-            .run(|db| query(db, "WHERE q.answer IS NULL AND q.closed_at IS NULL", []))
+            .run(|db| query(db, &format!("WHERE {OPEN}"), []))
             .await
     }
 
@@ -805,9 +787,10 @@ impl Manager {
             .run(move |db| {
                 crate::daemon::store::exists(
                     db,
-                    "SELECT 1 FROM questions
-                        WHERE (workspace_id=?1 OR chat_id=?1)
-                            AND answer IS NULL AND closed_at IS NULL",
+                    &format!(
+                        "SELECT 1 FROM questions q
+                            WHERE (q.workspace_id=?1 OR q.chat_id=?1) AND {OPEN}"
+                    ),
                     [id],
                 )
             })
@@ -962,7 +945,7 @@ impl Manager {
                         space.name()
                     )
                 })?;
-            if question.answer.is_some() {
+            if let QuestionStatus::Answered { .. } = question.status {
                 return Ok(question);
             }
             // A closed question is never answered.

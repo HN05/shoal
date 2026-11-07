@@ -44,11 +44,7 @@ fn a_question_notes_its_recommendation_and_files() {
             reason: None,
             choices: Vec::new(),
         },
-        answer: None,
-        answered_at: None,
-        message_id: None,
-        closed_at: None,
-        withdrawn: false,
+        status: crate::client::questions::QuestionStatus::Open,
         in_chat: false,
         files: vec![file(1, "a.png"), file(2, "b.png")],
     };

@@ -1,3 +1,4 @@
+use crate::client::questions::QuestionStatus;
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::approvals::ApprovalRequestExt;
 use crate::execution::recovery::LastSessionExt;
@@ -1186,7 +1187,13 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
     manager
         .mark_agent_messages_delivered(
             &SpaceSelector::id(&child.id),
-            vec![answered.message_id.unwrap()],
+            vec![match answered.status {
+                QuestionStatus::Answered {
+                    message_id: Some(id),
+                    ..
+                } => id,
+                ref status => panic!("no answer message: {status:?}"),
+            }],
         )
         .await
         .unwrap();
@@ -1211,7 +1218,8 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
             .question(reused.number)
             .await
             .unwrap()
-            .answer
+            .status
+            .answer()
             .is_none()
     );
 }

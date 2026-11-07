@@ -34,18 +34,8 @@ pub struct Question {
     pub created_at: crate::time::UnixTime,
     #[serde(flatten)]
     pub ask: Ask,
-    /// `None` while the question is open.
-    pub answer: Option<String>,
-    pub answered_at: Option<crate::time::UnixTime>,
-    /// The agent message carrying the answer; delivering it deletes the question.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message_id: Option<i64>,
-    /// When `done` or withdrawal closed the unanswered question.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub closed_at: Option<crate::time::UnixTime>,
-    /// Whether the asking agent closed it, needing no answer after all.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub withdrawn: bool,
+    #[serde(flatten)]
+    pub status: QuestionStatus,
     /// Whether the agent asked it in its chat, whose message is the
     /// question; it recommends nothing.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -53,6 +43,40 @@ pub struct Question {
     /// The files the agent sent with it, such as screenshots of the choices.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<crate::files::SentFile>,
+}
+
+/// Whether a question waits for an answer, and how it stopped waiting.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum QuestionStatus {
+    Open,
+    Answered {
+        answer: String,
+        answered_at: crate::time::UnixTime,
+        /// The agent message carrying the answer, until it is delivered;
+        /// delivering it deletes the question.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message_id: Option<i64>,
+    },
+    /// `done` closed it unanswered.
+    Closed {
+        closed_at: crate::time::UnixTime,
+    },
+    /// The asking agent closed it, needing no answer after all, or the user
+    /// replied in the chat it was asked in.
+    Withdrawn {
+        withdrawn_at: crate::time::UnixTime,
+    },
+}
+
+impl QuestionStatus {
+    /// The user's answer, once there is one.
+    pub fn answer(&self) -> Option<&str> {
+        match self {
+            Self::Answered { answer, .. } => Some(answer),
+            Self::Open | Self::Closed { .. } | Self::Withdrawn { .. } => None,
+        }
+    }
 }
 
 /// Questions that fit one response, and how many older ones were left out.
@@ -154,3 +178,6 @@ pub async fn accept_recommendation(daemon: &impl Daemon, shown: Question) -> Res
     };
     request(daemon, method).await
 }
+
+#[cfg(test)]
+mod tests;
