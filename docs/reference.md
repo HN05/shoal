@@ -3105,7 +3105,7 @@ presets = ["cargo", "bun"]
 
 | Preset | Sets up |
 |---|---|
-| `cargo` | A [seed](#seed-builds) running `cargo build --all-targets`, keeping `target` |
+| `cargo` | A [seed](#seed-builds) running `cargo build --all-targets`, `cargo test --no-run` and `cargo check --all-targets`, keeping `target` |
 | `npm` | A seed running `npm ci`, keeping `node_modules` |
 | `pnpm` | A seed running `pnpm install --frozen-lockfile`, keeping `node_modules` |
 | `yarn` | A seed running `yarn install --frozen-lockfile`, keeping `node_modules` |
@@ -3115,7 +3115,10 @@ presets = ["cargo", "bun"]
 | `zig` | The shared cache `preset.zig` as `ZIG_LOCAL_CACHE_DIR`, and a seed running `zig build` |
 | `ccache` | ccache as the compiler launcher of CMake builds, with the workspace as its base directory |
 
-Presets that keep the same seed output cannot be combined. A variable `[env]`
+Presets that keep the same seed output cannot be combined. The Cargo seed runs
+`cargo test` because it builds a proc-macro member with other settings than
+`cargo build --all-targets` does, and `cargo check` because it makes the
+dependency builds `cargo clippy` uses too. A variable `[env]`
 sets takes precedence over a preset's. Go's build cache is shared by every
 checkout, but it keys a package by its directory unless paths are trimmed; with
 `-trimpath`, binaries, panics and `runtime.Caller` report module paths instead

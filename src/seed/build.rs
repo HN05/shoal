@@ -32,7 +32,7 @@ impl Build {
         let building: Vec<_> = presets
             .iter()
             .copied()
-            .filter(|preset| preset.seed_command().is_some())
+            .filter(|preset| !preset.seed_commands().is_empty())
             .collect();
         match &seed.command {
             Some(command) => Some(Self::Script(worktree.join(command))),
@@ -48,7 +48,11 @@ impl Build {
                 label: "setup.seed.command".into(),
                 argv: vec![command.into()],
             }],
-            Self::Presets(presets) => presets.iter().filter_map(|preset| step(*preset)).collect(),
+            Self::Presets(presets) => presets
+                .iter()
+                .flat_map(|preset| preset.seed_commands())
+                .map(|argv| step(argv))
+                .collect(),
         }
     }
 }
@@ -65,12 +69,11 @@ pub fn outputs(seed: &Seed, presets: &[Preset]) -> Vec<String> {
         .collect()
 }
 
-fn step(preset: Preset) -> Option<Step> {
-    let argv = preset.seed_command()?;
-    Some(Step {
+fn step(argv: &[&str]) -> Step {
+    Step {
         label: argv.join(" "),
         argv: argv.iter().map(OsString::from).collect(),
-    })
+    }
 }
 
 #[cfg(test)]

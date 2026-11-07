@@ -20,7 +20,12 @@ fn presets_build_and_keep_what_their_tools_use() {
     let build = Build::of(&presets.setup.seed, named(&presets), worktree).unwrap();
     assert_eq!(
         labels(&build),
-        ["cargo build --all-targets", "bun install --frozen-lockfile"]
+        [
+            "cargo build --all-targets",
+            "cargo test --no-run",
+            "cargo check --all-targets",
+            "bun install --frozen-lockfile"
+        ]
     );
     assert_eq!(
         outputs(&presets.setup.seed, named(&presets)),

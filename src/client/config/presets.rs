@@ -40,21 +40,28 @@ states!(
 );
 
 impl Preset {
-    /// The seed build's command, which reproduces the committed lockfile
-    /// exactly and fails without one. Yarn 2 and later read
-    /// `--frozen-lockfile` as `--immutable`.
-    pub fn seed_command(self) -> Option<&'static [&'static str]> {
+    /// The seed build's commands, in order, or none when the preset has no
+    /// usual build. The package managers' commands reproduce the committed
+    /// lockfile exactly and fail without one; Yarn 2 and later read
+    /// `--frozen-lockfile` as `--immutable`. `cargo test` builds a proc-macro
+    /// member with other settings than `cargo build --all-targets` does, and
+    /// `cargo check` makes the dependency builds `cargo clippy` uses too.
+    pub fn seed_commands(self) -> &'static [&'static [&'static str]] {
         match self {
-            Self::Cargo => Some(&["cargo", "build", "--all-targets"]),
-            Self::Npm => Some(&["npm", "ci"]),
-            Self::Pnpm => Some(&["pnpm", "install", "--frozen-lockfile"]),
-            Self::Yarn => Some(&["yarn", "install", "--frozen-lockfile"]),
-            Self::Bun => Some(&["bun", "install", "--frozen-lockfile"]),
-            Self::Go => Some(&["go", "build", "./..."]),
-            Self::Zig => Some(&["zig", "build"]),
+            Self::Cargo => &[
+                &["cargo", "build", "--all-targets"],
+                &["cargo", "test", "--no-run"],
+                &["cargo", "check", "--all-targets"],
+            ],
+            Self::Npm => &[&["npm", "ci"]],
+            Self::Pnpm => &[&["pnpm", "install", "--frozen-lockfile"]],
+            Self::Yarn => &[&["yarn", "install", "--frozen-lockfile"]],
+            Self::Bun => &[&["bun", "install", "--frozen-lockfile"]],
+            Self::Go => &[&["go", "build", "./..."]],
+            Self::Zig => &[&["zig", "build"]],
             // Building needs a scheme, and Xcode's outputs record their path;
             // C builds have no usual command.
-            Self::Xcode | Self::Ccache => None,
+            Self::Xcode | Self::Ccache => &[],
         }
     }
 
