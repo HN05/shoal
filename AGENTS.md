@@ -335,6 +335,11 @@ next step depends on, where that step reads it, and only a condition that
 cannot hold before the awaited event: a file a child writes does not prove the
 daemon recorded its start.
 
+The harness runs tests in parallel but a test's cases one after another, so a
+test must not outlast the others by looping over cases that each need their own
+repository, workspace or daemon: split those cases into separate tests that
+share a helper, and let cases that need no isolation share one fixture.
+
 ## Profiling
 
 `python3 scripts/profile_shoal.py [--setup ARGS]... -- <shoal args>` times a

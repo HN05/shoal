@@ -651,6 +651,9 @@ configured command for another agent, plus proven child
   Check timing against AGENTS.md's validation rule: tests must not depend on
   runner speed, and a wait must observe the awaited event itself, not a proxy
   that can hold first.
+  Flag a test that outlasts the others by looping over cases that each create
+  their own repository, workspace or daemon; AGENTS.md has such cases split
+  into separate tests.
   Flag tests that cannot catch a behavior regression, as AGENTS.md's rule
   defines them: assertions on prose the code spells out as a literal beyond the
   fragment that tells outcomes apart, restated constants, defaults or tables,
