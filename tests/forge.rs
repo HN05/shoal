@@ -114,6 +114,9 @@ impl Fixture {
         fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
         let repo = init_repo(root.path(), "repo", &[("tracked", "committed\n")]);
         git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+        // Fetches over SSH, as the daemon's background sync of the GitHub
+        // origin, fail here without reaching the network.
+        git(&repo, &["config", "core.sshCommand", "false"]);
         let mut launch = support::cli(root.path());
         let daemon = DaemonGuard::start(root.path(), &mut launch);
         let mut fixture = Self {

@@ -143,6 +143,10 @@ impl Fixture {
         );
         // Model a starting commit already present on a remote, without network I/O.
         git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+        // Fetches over SSH, as the daemon's background sync of a GitHub
+        // origin a test adds, fail here without reaching the network; a test
+        // that serves SSH itself sets its own command.
+        git(&repo, &["config", "core.sshCommand", "false"]);
         let daemon = DaemonGuard::start(root.path(), &mut daemon_launch(root.path()));
         let fixture = Self {
             commands: CommandGroup::new(),
@@ -15007,6 +15011,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             "git@github.com:team/other.git",
         ],
     );
+    git(&other, &["config", "core.sshCommand", "false"]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     fixture.add_github_origin();
     let bin = fixture.root.path().join("issue-bin");
