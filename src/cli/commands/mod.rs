@@ -2,7 +2,6 @@
 //! daemon modules own lifecycle and allocation policy.
 use crate::paths::PathsExt;
 mod acquisition;
-mod agent_queue;
 mod agent_state;
 mod api;
 mod approvals;
@@ -41,6 +40,7 @@ mod ports;
 mod push_gate;
 mod questions;
 mod queue;
+mod queued_agents;
 mod reactions;
 mod repo_menu;
 mod repo_setup;

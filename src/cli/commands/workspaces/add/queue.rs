@@ -5,7 +5,7 @@ use super::{AddOptions, agent::AddSettings, plan::planned_workspace_name, target
 use crate::{
     cli::{
         client::{self},
-        commands::{agent_queue, issues},
+        commands::{issues, queued_agents},
         context::Context,
     },
     forge::IssueInput,
@@ -83,21 +83,21 @@ pub(super) async fn admit_launch(
     let Some(agent) = plan.agent_name() else {
         return Ok(None);
     };
-    let launch = agent_queue::Launch {
+    let launch = queued_agents::Launch {
         agent,
         name: planned_workspace_name(ctx, target, &plan.creation).await?,
         issue_title: issue.map(|issue| issue.title.clone()),
         now,
         after,
     };
-    match agent_queue::admit(ctx, plan, launch).await? {
-        agent_queue::Admission::Start { entry, base } => {
+    match queued_agents::admit(ctx, plan, launch).await? {
+        queued_agents::Admission::Start { entry, base } => {
             plan.queue_entry = entry;
             plan.creation.build_on(base);
             Ok(None)
         }
-        agent_queue::Admission::Queued(entry, waiting) => {
-            agent_queue::report_queued(ctx, &entry, waiting).map(Some)
+        queued_agents::Admission::Queued(entry, waiting) => {
+            queued_agents::report_queued(ctx, &entry, waiting).map(Some)
         }
     }
 }
@@ -109,7 +109,7 @@ pub(super) async fn failing_entry<T>(
     result: Result<T>,
 ) -> Result<T> {
     if let (Some(entry), Err(error)) = (entry, &result) {
-        agent_queue::fail(ctx, entry, error).await;
+        queued_agents::fail(ctx, entry, error).await;
     }
     result
 }

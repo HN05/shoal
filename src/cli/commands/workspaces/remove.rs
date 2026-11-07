@@ -6,7 +6,7 @@ use crate::client::output::workspaces::{Removals, Removed};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
-        commands::{agent_queue, chat::removal as chats},
+        commands::{chat::removal as chats, queued_agents},
         context::Context,
         output::Style,
         ui,
@@ -22,7 +22,7 @@ pub(in crate::cli::commands) async fn remove(
 ) -> Result<i32> {
     // A number always names a space, never a queued launch.
     if let [SpaceSelector::IdOrName(selector)] = names.as_slice()
-        && let Some(code) = agent_queue::remove(ctx, selector).await?
+        && let Some(code) = queued_agents::remove(ctx, selector).await?
     {
         return Ok(code);
     }

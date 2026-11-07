@@ -5,7 +5,7 @@ use crate::{
     cli::{
         args::internal::InternalCommand,
         commands::{
-            agent_queue, agent_state, approvals, events, menu, messages, operations, push_gate,
+            agent_state, approvals, events, menu, messages, operations, push_gate, queued_agents,
             subagents, workspaces, worktree_hooks,
         },
         context::Context,
@@ -117,7 +117,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             args,
         } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
         InternalCommand::PushGate { remote, url } => push_gate::run(&ctx, remote, url).await,
-        InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
+        InternalCommand::QueueStart { entry } => queued_agents::start(&ctx, entry).await,
         InternalCommand::Operation => operations::worker(&ctx).await,
         InternalCommand::Launch { file } => crate::terminal::run_launch(&file),
         InternalCommand::TakeOver {

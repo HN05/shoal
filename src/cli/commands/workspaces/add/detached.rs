@@ -16,7 +16,7 @@ use super::{
 use crate::{
     cli::{
         agents,
-        commands::{agent_queue, issues},
+        commands::{issues, queued_agents},
         context::Context,
         terminal,
     },
@@ -136,7 +136,7 @@ async fn start_admitted(ctx: &Context, target: &AddTarget, plan: AddPlan) -> Res
     let id = (plan.queue_entry.as_deref())
         .context("the daemon admitted a waiting agent without an entry")?;
     // Read before the agent starts and takes the entry.
-    let entry = (agent_queue::entries(ctx).await?.into_iter())
+    let entry = (queued_agents::entries(ctx).await?.into_iter())
         .find(|queued| queued.id == id)
         .context("the admitted agent left the agent queue")?;
     let name = planned_workspace_name(ctx, target, &plan.creation).await?;

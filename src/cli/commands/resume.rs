@@ -334,16 +334,16 @@ pub async fn start_entry(
         anyhow::bail!("a queued restore names one workspace and its stopped execution");
     };
     crate::env::launch_queue_entry(&entry);
-    let _hold = super::agent_queue::Hold::start(&ctx.paths, &entry).await;
+    let _hold = super::queued_agents::Hold::start(&ctx.paths, &entry).await;
     // A stop or completion since admission cancelled it.
-    let admitted = super::agent_queue::entries(ctx)
+    let admitted = super::queued_agents::entries(ctx)
         .await?
         .iter()
         .any(|queued| queued.id == entry && queued.state == QueueState::Starting);
     ensure!(admitted, "the queued restore was cancelled");
     let restored = run(ctx, workspace.clone(), Some(execution), false, true).await;
     if let Err(error) = &restored {
-        super::agent_queue::fail(ctx, &entry, error).await;
+        super::queued_agents::fail(ctx, &entry, error).await;
     }
     restored
 }

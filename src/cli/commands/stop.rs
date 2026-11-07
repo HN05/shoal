@@ -11,7 +11,7 @@ use crate::client::output::agents::{
 };
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    cli::{args::SpaceTargets, commands::agent_queue, context::Context, output::Style, ui},
+    cli::{args::SpaceTargets, commands::queued_agents, context::Context, output::Style, ui},
     client::processes::{Selection, Stopped},
     execution::recovery,
     model::{SpaceKind, StoppedWorkspace, Workspace},
@@ -29,7 +29,7 @@ pub(super) async fn run(
     }
     // A number always names a space, never a queued launch.
     if let [SpaceSelector::IdOrName(selector)] = targets.space.as_slice()
-        && let Some(code) = agent_queue::remove_new(ctx, selector).await?
+        && let Some(code) = queued_agents::remove_new(ctx, selector).await?
     {
         return Ok(code);
     }

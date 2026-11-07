@@ -7,7 +7,7 @@ use anyhow::{Result, bail, ensure};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
-        commands::{agent_queue, sessions},
+        commands::{queued_agents, sessions},
         context::Context,
     },
     model::QueueEntry,
@@ -21,7 +21,7 @@ const POLL: Duration = Duration::from_millis(200);
 /// Refuse to attach to the entry `selector` names when it is a CI job,
 /// which has no session, before anything starts it.
 pub(super) async fn require_session(ctx: &Context, selector: &str) -> Result<()> {
-    let entries = agent_queue::entries(ctx).await?;
+    let entries = queued_agents::entries(ctx).await?;
     let job = entries.iter().find(|entry| {
         entry.kind == QueueKind::Job && (entry.id == selector || entry.name == selector)
     });
@@ -48,7 +48,7 @@ async fn agent_session(ctx: &Context, entry: &QueueEntry) -> Result<(String, Str
     let deadline = tokio::time::Instant::now() + WAIT;
     let mut workspace = entry.workspace().map(str::to_owned);
     loop {
-        let current = (agent_queue::entries(ctx).await?)
+        let current = (queued_agents::entries(ctx).await?)
             .into_iter()
             .find(|queued| queued.id == entry.id);
         if let Some(opened) = current.as_ref().and_then(QueueEntry::workspace) {

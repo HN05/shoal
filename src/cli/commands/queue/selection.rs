@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result, bail, ensure};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     cli::{
-        commands::{agent_queue, restart::skip_reason},
+        commands::{queued_agents, restart::skip_reason},
         context::Context,
         ui,
     },
@@ -16,7 +16,7 @@ use crate::{
 
 /// The waiting entries in queue order.
 pub(super) async fn waiting(ctx: &Context) -> Result<Vec<QueueEntry>> {
-    let mut entries = agent_queue::entries(ctx).await?;
+    let mut entries = queued_agents::entries(ctx).await?;
     entries.retain(|entry| entry.state == QueueState::Queued);
     Ok(entries)
 }
@@ -87,7 +87,7 @@ pub(super) async fn pick_place(ctx: &Context, selector: &str) -> Result<QueuePla
 /// The waiting entry `selector` names, or `None` for a workspace whose
 /// running agent can move.
 async fn move_target(ctx: &Context, selector: &str) -> Result<Option<QueueEntry>> {
-    let entries = agent_queue::entries(ctx).await?;
+    let entries = queued_agents::entries(ctx).await?;
     let named: Vec<_> = entries
         .into_iter()
         .filter(|entry| entry.id == selector || entry.name == selector)
@@ -137,7 +137,7 @@ async fn movable_agent(ctx: &Context, selector: &str) -> Result<()> {
 
 /// `entries` as picker entries: each ID with its listing row.
 async fn labelled(ctx: &Context, entries: &[QueueEntry]) -> Result<ui::Entries> {
-    let rows = agent_queue::rows(ctx, entries).await?;
+    let rows = queued_agents::rows(ctx, entries).await?;
     Ok(entries
         .iter()
         .map(|entry| entry.id.clone())

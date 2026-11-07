@@ -15,7 +15,7 @@ use crate::{
     cli::{
         agents,
         commands::{
-            agent_queue, issues, operations,
+            issues, operations, queued_agents,
             workspaces::{SetUp, follow_setup},
         },
         context::Context,
@@ -64,7 +64,7 @@ pub(super) async fn holding<T>(
     entry: &str,
     start: impl std::future::Future<Output = Result<T>>,
 ) -> Result<T> {
-    let _hold = agent_queue::Hold::start(&ctx.paths, entry).await;
+    let _hold = queued_agents::Hold::start(&ctx.paths, entry).await;
     failing_entry(ctx, Some(entry), start.await).await
 }
 
@@ -128,7 +128,7 @@ pub(super) async fn add_planned(
     };
     let started = start_add_workspace(ctx, &target, start, issue.as_ref()).await?;
     if let Some(entry) = &queue_entry {
-        agent_queue::attach(ctx, entry, &started.workspace).await?;
+        queued_agents::attach(ctx, entry, &started.workspace).await?;
     }
     let (branch, title) = (started.workspace.branch_or_name(), &started.workspace.title);
     let label = match (place_name, &issue, title) {
@@ -160,7 +160,7 @@ pub(super) async fn add_planned(
             let error = anyhow::anyhow!(
                 "setup of {name} did not complete; retry it with `shoal work setup {name}` or skip it with `shoal work setup {name} --skip`"
             );
-            agent_queue::fail(ctx, entry, &error).await;
+            queued_agents::fail(ctx, entry, &error).await;
         }
         return Ok(1);
     };
@@ -227,7 +227,7 @@ pub(super) fn report_queued_in(
             entry.agent,
             workspace.name,
             entry.position.unwrap_or(1),
-            agent_queue::starts_when(entry)
+            queued_agents::starts_when(entry)
         ),
         _ => format!("Starting {} in {}", entry.agent, workspace.name),
     };

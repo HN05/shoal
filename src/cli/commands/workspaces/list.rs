@@ -2,7 +2,7 @@
 use anyhow::Result;
 
 use crate::cli::{
-    commands::{agent_queue, chat, listing},
+    commands::{chat, listing, queued_agents},
     context::Context,
     output::{self, Palette},
     ui,
@@ -18,7 +18,7 @@ pub(in crate::cli::commands) async fn list(
     let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
     workspaces
         .retain(|workspace| filter.keeps_workspace(workspace, stopped.contains(&workspace.id)));
-    let queued = agent_queue::rows(ctx, &agent_queue::listed(ctx, filter).await?).await?;
+    let queued = queued_agents::rows(ctx, &queued_agents::listed(ctx, filter).await?).await?;
     let rows = ui::workspace_tree_rows(
         &workspaces,
         &chats,

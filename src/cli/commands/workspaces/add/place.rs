@@ -12,7 +12,7 @@ use crate::{
     agent::Agent,
     cli::{
         agents,
-        commands::{agent_queue, workspaces::prepare::queue_in_workspace},
+        commands::{queued_agents, workspaces::prepare::queue_in_workspace},
         context::Context,
         terminal,
     },
@@ -55,7 +55,7 @@ pub(super) async fn launch_placed(
     let slot = match place(ctx, &workspace, launch).await? {
         Placement::Queued(entry) => return report_queued_in(ctx, &workspace, &entry),
         Placement::Waiting(entry, waiting) => {
-            return agent_queue::report_queued(ctx, &entry, waiting);
+            return queued_agents::report_queued(ctx, &entry, waiting);
         }
         Placement::Here(slot) => slot,
     };
@@ -103,7 +103,7 @@ async fn admit_here(
     workspace: &Workspace,
     launch: QueuedLaunch,
 ) -> Result<Placement> {
-    let request = agent_queue::Launch {
+    let request = queued_agents::Launch {
         agent: launch.agent.clone(),
         name: workspace.name.clone(),
         issue_title: launch.issue.as_ref().map(|issue| issue.title.clone()),
@@ -111,15 +111,15 @@ async fn admit_here(
         after: Vec::new(),
     };
     let plan = AddPlan::agent_in(workspace, launch)?;
-    match agent_queue::admit(ctx, &plan, request).await? {
-        agent_queue::Admission::Start { entry, .. } => {
+    match queued_agents::admit(ctx, &plan, request).await? {
+        queued_agents::Admission::Start { entry, .. } => {
             if let Some(entry) = &entry {
-                agent_queue::attach(ctx, entry, workspace).await?;
+                queued_agents::attach(ctx, entry, workspace).await?;
             }
             Ok(Placement::Here(entry))
         }
-        agent_queue::Admission::Queued(entry, waiting) => {
-            agent_queue::attach(ctx, &entry.id, workspace).await?;
+        queued_agents::Admission::Queued(entry, waiting) => {
+            queued_agents::attach(ctx, &entry.id, workspace).await?;
             Ok(Placement::Waiting(entry, waiting))
         }
     }
