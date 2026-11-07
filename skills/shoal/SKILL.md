@@ -570,7 +570,8 @@ process of the workspace Shoal does not track, never the agent or its shells.
 
 The daemon, its service and the Shoal installation belong to the user.
 Stopping the daemon stops every agent, and while it restarts every agent's
-`shoal` commands fail.
+`shoal` commands fail. `shoal daemon reload` applies the config on disk without
+stopping anything; an invalid file leaves the previous settings in place.
 
 ## Skill
 

@@ -158,6 +158,16 @@ fn config_show_and_reference_are_available_to_workspace_processes() {
 }
 
 #[test]
+fn only_reloading_the_daemon_is_available_to_workspace_processes() {
+    let reload = Cli::try_parse_from(["shoal", "daemon", "reload"]).unwrap();
+    assert!(!reload.command.unwrap().is_administrative());
+    for verb in ["start", "stop", "restart"] {
+        let command = Cli::try_parse_from(["shoal", "daemon", verb]).unwrap();
+        assert!(command.command.unwrap().is_administrative(), "{verb}");
+    }
+}
+
+#[test]
 fn skipping_setup_is_administrative() {
     let skip = Cli::try_parse_from(["shoal", "work", "setup", "--skip"]).unwrap();
     assert!(skip.command.unwrap().is_administrative());

@@ -123,8 +123,9 @@ install <name>` replaces the entire global file with a packaged template;
 copied, so package upgrades leave installed edits alone. Unknown names fail
 without changing either file; installation needs no daemon. `shoal config` edits,
 installs and resets apply to a running daemon at once; after editing the file by
-hand, run `shoal daemon reload`. Reloading keeps running agents and leases, and an
-invalid file leaves the daemon's previous settings in place. The CLI reads agent
+hand, run `shoal daemon reload`, which scoped processes may also run. Reloading
+keeps running agents and leases, and an invalid file leaves the daemon's previous
+settings in place. The CLI reads agent
 settings on each command. The global file's `[machine]` table holds the settings
 that describe this machine; everything outside it follows the repository config
 schema, so a setting copies between the two files. Only a repository config may
@@ -5296,7 +5297,8 @@ but cannot change configuration.
 They `merge` only with [approval](#merge-into-the-default-branch) and cannot
 reach spaces other than the ones below theirs, create spaces other than below
 theirs, remove spaces other than those below theirs without holds, read
-notifications, or administer repositories or the daemon service; nested commands
+notifications, or administer repositories or the daemon service, except `daemon
+reload`; nested commands
 keep the scope. A command whose ancestor carries scope for the same state directory
 gets the CLI's scoped refusals even after the token is removed from its
 environment. Scope is cooperative and does not restrict direct filesystem or

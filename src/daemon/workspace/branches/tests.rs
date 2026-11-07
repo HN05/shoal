@@ -1203,7 +1203,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                 ExecutionMethod::CheckMerge.into(),
                 kind == ExecutionKind::Merge,
             ),
-            (DaemonMethod::ReloadConfig.into(), false),
+            (DaemonMethod::ReloadConfig.into(), true),
             (
                 RemovalMethod::StopWorkspace {
                     workspace: workspace.id.clone(),

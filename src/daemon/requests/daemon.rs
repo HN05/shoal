@@ -24,9 +24,10 @@ pub(super) async fn handle(server: &Server, method: DaemonMethod) -> Result<Answ
 
 impl Scoped for DaemonMethod {
     async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+        // Reloading applies the config on disk and stops nothing, so a
+        // setup agent may apply the config it wrote.
         Ok(match self {
-            DaemonMethod::Status => None,
-            DaemonMethod::ReloadConfig => return Err(denied()),
+            DaemonMethod::Status | DaemonMethod::ReloadConfig => None,
         })
     }
 }

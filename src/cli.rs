@@ -258,7 +258,6 @@ impl Command {
                                 | DaemonCommand::Start
                                 | DaemonCommand::Stop
                                 | DaemonCommand::Restart
-                                | DaemonCommand::Reload
                         }
                 )
         )
