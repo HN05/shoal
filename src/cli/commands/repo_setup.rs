@@ -12,10 +12,11 @@ use super::{repositories, workspaces};
 use crate::{
     agent::{Agent, ModelChoice},
     agent_queue::Creation,
-    cli::{context::Context, ui::ModeChoice},
+    cli::{agents, context::Context, ui::ModeChoice},
     config::modes,
     git,
     model::Repository,
+    protocol::ConfigTarget,
     repository,
 };
 
@@ -45,6 +46,12 @@ pub(super) async fn start(
     let selector = repositories::chosen(ctx, repository).await?;
     let repos = crate::client::repositories::list(&ctx.paths).await?;
     let repo = repository::select(&repos, &selector).await?.clone();
+    // Chosen before anything is created, so a declined agent leaves no
+    // workspace.
+    let target = ConfigTarget::Repository(selector.clone());
+    let Some(agent) = agents::default_agent(ctx, target, options.agent).await? else {
+        return Ok(0);
+    };
     let local_config = local_config(ctx, selector).await?;
     let add = workspaces::AddOptions {
         here: options.here,
@@ -58,7 +65,7 @@ pub(super) async fn start(
         Some(repo.id.clone()),
         creation(&repo).await?,
         None,
-        workspaces::AgentLaunch::IssueDefault(options.agent),
+        workspaces::AgentLaunch::Explicit(Some(agent)),
         options.args,
         add,
     )

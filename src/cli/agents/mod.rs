@@ -423,6 +423,22 @@ pub(super) async fn run_named(
     .await
 }
 
+/// The requested agent, else the configured `agent.default`, else a picker.
+pub(super) async fn default_agent(
+    ctx: &Context,
+    target: ConfigTarget,
+    agent: Option<Agent>,
+) -> Result<Option<Agent>> {
+    let settings = crate::client::workspaces::settings(&ctx.paths, target).await?;
+    match agent.or(settings.agent.default.clone()) {
+        Some(agent) => {
+            ensure_available(agent.name(), &settings)?;
+            Ok(Some(agent))
+        }
+        None => pick_default_agent(ctx, &settings),
+    }
+}
+
 /// The picker standing in for a missing `agent.default`.
 pub(super) fn pick_default_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
