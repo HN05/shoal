@@ -129,6 +129,10 @@ pub enum QueueCommand {
     Start {
         /// Entry by workspace name or ID; omit to choose one.
         entry: Option<String>,
+        /// Attach this terminal to the agent's session once it has one, as
+        /// shoal attach does.
+        #[arg(long)]
+        attach: bool,
     },
     /// Move an entry to another position, or stop a running agent and
     /// queue its restore there.
