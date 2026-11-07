@@ -2240,7 +2240,7 @@ the kind, reach and rules of `worker` in a workspace and of `orchestrate` in a
 chat without a repository, as config sets them, and [its own
 instructions](../src/client/config/modes/setup.md) after its subject. Config
 cannot change it: `[modes.setup]` in any layer and a `modes/setup.md` file are
-errors, and `shoal start --mode setup` is refused.
+errors that ask for another name, and `shoal start --mode setup` is refused.
 
 `shoal start` starts every new agent, in the mode `-m`/`--mode` names, and in the
 kind of space the mode names unless `--chat`, `--in` or `--worktree` says

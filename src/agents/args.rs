@@ -101,8 +101,7 @@ pub(crate) async fn workspace_args(
 /// The arguments that give a workspace's agent `name` the configured agent
 /// directories and the repository's workspaces directory as other working
 /// directories, so it may also work in the child workspaces it splits
-/// there, in its temporary directory and, in setup mode, on the local
-/// config beside them.
+/// there and in its temporary directory.
 pub(crate) async fn workspace_dir_args(
     paths: &Paths,
     settings: &Effective,

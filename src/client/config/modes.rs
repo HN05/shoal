@@ -155,7 +155,8 @@ pub fn validate(config: &RepoConfig) -> Result<()> {
 fn ensure_configurable(name: &str) -> Result<()> {
     ensure!(
         name != SETUP,
-        "mode {SETUP} is built in, and config cannot change it"
+        "mode {SETUP} is built in, and config cannot change it; give your own mode \
+         another name to keep it"
     );
     Ok(())
 }
