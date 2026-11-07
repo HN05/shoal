@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail, ensure};
 use tokio::sync::watch;
 
 use super::{log, workspace::Manager};
-use crate::client::space_names::SpaceSelector;
+use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
     agent::Agent,
     config::Effective,
@@ -120,7 +120,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let settings = self.workspace_settings(&workspace).await?;
         let agent = reviewing_agent(&settings, agent)?;
-        let (id, now) = (workspace.id.clone(), now());
+        let (id, now) = (workspace.id.clone(), UnixTime::now());
         // A repository move, which refuses while a review is queued, holds
         // the registry gate, so no review is queued while one runs.
         let _registry = self.gates.lock_registry().await;
@@ -145,7 +145,7 @@ impl Manager {
             (None, Some(selector)) => self.active_review(selector).await?,
             (None, None) => bail!("name a review or a workspace"),
         };
-        let now = now();
+        let now = UnixTime::now();
         let cancelled = self
             .store
             .run(move |db| store::cancel(db, id, by.as_deref(), now))
@@ -238,7 +238,7 @@ impl Manager {
     /// Add a reply to `finding`.
     pub async fn reply_to_finding(&self, finding: FindingId, body: String) -> Result<Review> {
         crate::validate::agent_message(&body)?;
-        let now = now();
+        let now = UnixTime::now();
         self.store
             .run(move |db| store::reply(db, finding, &body, now))
             .await?;
@@ -388,10 +388,6 @@ fn reviewing_agent(settings: &Effective, agent: Option<Agent>) -> Result<String>
         .context("no reviewer: pass --agent, or set review.agent or agent.default")?;
     settings.check_reviewer(agent.name())?;
     Ok(agent.name().to_owned())
-}
-
-fn now() -> crate::time::UnixTime {
-    crate::time::UnixTime::now()
 }
 
 #[cfg(test)]

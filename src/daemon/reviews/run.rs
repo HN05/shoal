@@ -7,11 +7,11 @@ use anyhow::{Context, Result};
 use tokio::{sync::watch, task::JoinSet};
 
 use super::{
-    CheckoutHold, history, now,
+    CheckoutHold, history,
     reviewer::{self, Ended, Files, Reviewer},
     store,
 };
-use crate::client::space_names::SpaceSelector;
+use crate::client::{space_names::SpaceSelector, time::UnixTime};
 use crate::{
     agent::ModelChoice,
     config::{Effective, templates},
@@ -114,7 +114,7 @@ impl Manager {
             None => FailureReason::ExecutionFailed,
         };
         let _operation = self.gates.operation().await;
-        let now = now();
+        let now = UnixTime::now();
         let failed = self
             .store
             .run(move |db| store::fail(db, id, None, reason, now))
@@ -203,7 +203,7 @@ impl Manager {
     /// Record that review `id` started on `commits`; false when it is no
     /// longer queued.
     async fn start_review(&self, id: i64, commits: &Commits) -> Result<bool> {
-        let (head, base, now) = (commits.head.clone(), commits.base.clone(), now());
+        let (head, base, now) = (commits.head.clone(), commits.base.clone(), UnixTime::now());
         self.store
             .run(move |db| store::start(db, id, &head, &base, now))
             .await
@@ -317,7 +317,7 @@ impl Manager {
             return Ok(if requeued { Pass::Stopped } else { Pass::Ended });
         }
         let reviewer = reviewer.to_owned();
-        let now = now();
+        let now = UnixTime::now();
         let recorded = self
             .store
             .run(move |db| match ended {
@@ -454,7 +454,7 @@ impl Manager {
             self.hold_unreconciled_run(*run).await;
         }
         let ids: Vec<i64> = kept.iter().map(|run| run.id).collect();
-        let now = now();
+        let now = UnixTime::now();
         let (failed, requeued) = self
             .store
             .run(move |db| store::settle_interrupted(db, &ids, now))
