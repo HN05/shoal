@@ -132,7 +132,7 @@ pub(crate) fn writable_config_dir(file: &Path) -> Result<PathBuf> {
 
 /// [`writable_config_dir`] for a launch, which starts without it, with a
 /// warning, when it cannot be created.
-fn launch_config_dir(file: &Path) -> Option<PathBuf> {
+pub(crate) fn launch_config_dir(file: &Path) -> Option<PathBuf> {
     writable_config_dir(file)
         .map_err(|error| eprintln!("warning: the agent may not write its config: {error:#}"))
         .ok()

@@ -1151,7 +1151,7 @@ as a missing agent executable does.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),
 [Rex](#rex), [tmux](#tmux) or [Zellij](#zellij) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.
-`-H`/`--here` on `shoal start`, `contribute` and `repo setup`
+`-H`/`--here` on `shoal start`, `contribute`, `repo setup` and `config setup`
 runs the launch in this terminal instead of a new tab or detached session,
 whatever the host. An agent that `start` or `contribute` then starts runs as
 these launches do, in a zmx session attached here on a terminal; a chat runs in
@@ -2233,6 +2233,14 @@ these modes:
 | `plan` | chat | `work`, `chat` | [settle the issue's plan](../src/client/config/modes/plan.md) |
 | `orchestrate` | chat without a repository | `work`, `chat`, [`orchestrate`](../src/client/config/rules/orchestrate.md) | none |
 
+The built-in `setup` mode is apart from these: [`repo setup` and `config
+setup`](#set-up-config) start it, and a space records it as its mode. It takes
+the kind, reach and rules of `worker` in a workspace and of `orchestrate` in a
+chat without a repository, as config sets them, and [its own
+instructions](../src/client/config/modes/setup.md) after its subject. Config
+cannot change it: `[modes.setup]` in any layer and a `modes/setup.md` file are
+errors, and `shoal start --mode setup` is refused.
+
 `shoal start` starts every new agent, in the mode `-m`/`--mode` names, and in the
 kind of space the mode names unless `--chat`, `--in` or `--worktree` says
 otherwise; `worker` always starts in a workspace, and config that gives it
@@ -2678,7 +2686,24 @@ mentions a committed or local config the repository has.
 Every launch and restore of the agent gets the local config's `.shoal`
 directory, created when missing, as another working directory. The agent is
 `--agent`, else `agent.default`, else one chosen from the agent picker;
-arguments after `--` go to the agent. Only the user runs `repo setup`.
+arguments after `--` go to the agent.
+
+`config setup [--here] [--agent NAME] [-- ARGS]` starts a `setup` agent in a
+[chat without a repository](#master-session) named `setup`, with the
+`orchestrate` mode's rules and reach, which writes the global `config.toml`:
+the `[machine]` settings and the defaults every repository inherits, never a
+repository's config. It bases them on the AI tools installed, the forge hosts
+and Git identities of the registered repositories and their configs, and tells
+you about a setting every repository repeats instead of moving it. It edits the
+file in place, keeping its comments, checks it with `config show`, runs
+`daemon reload` and tells you when the reload rejected the file. When the file
+does not exist, the command first writes the packaged default, as `config
+install default` does. Every launch and restore of the agent gets the file's
+directory as another working directory; `--here` and `--agent` work as for
+`repo setup`.
+
+Only the user runs `repo setup` and `config setup`, since both change the
+user's own config.
 
 ### Contributions
 

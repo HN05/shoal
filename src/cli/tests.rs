@@ -168,9 +168,11 @@ fn only_reloading_the_daemon_is_available_to_workspace_processes() {
 }
 
 #[test]
-fn only_the_user_sets_up_a_repositorys_config() {
+fn only_the_user_sets_up_config() {
     let setup = Cli::try_parse_from(["shoal", "repo", "setup", "app"]).unwrap();
     assert!(setup.command.unwrap().is_administrative());
+    let global = Cli::try_parse_from(["shoal", "config", "setup"]).unwrap();
+    assert!(global.command.unwrap().is_administrative());
 }
 
 #[test]

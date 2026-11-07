@@ -1,7 +1,12 @@
 //! Arguments of `shoal config`, `shoal update` and `shoal daemon`.
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
-use clap::Subcommand;
+use clap::{Args, Subcommand};
+
+use crate::{
+    agent::Agent,
+    cli::args::{AgentParser, ModelArgs},
+};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -59,6 +64,39 @@ pub enum ConfigCommand {
     },
     /// Rewrite the config with the defaults; the old file becomes config.toml.backup.
     Reset,
+    /// Have an agent write the global config in a chat without a repository,
+    /// installing the default config first when there is none.
+    Setup(Box<ConfigSetupArgs>),
+}
+
+// Arguments of `shoal config setup`.
+#[derive(Debug, Args)]
+pub struct ConfigSetupArgs {
+    /// Run in this terminal instead of a new tab or detached session.
+    #[arg(long)]
+    pub here: bool,
+    /// Agent to start; defaults to agent.default, otherwise a picker.
+    #[arg(long, value_parser = AgentParser)]
+    pub agent: Option<Agent>,
+    #[command(flatten)]
+    pub model: ModelArgs,
+    /// Name of the chat; defaults to setup. A chat that reopens in a new tab
+    /// or a restore passes it.
+    #[arg(long, hide = true)]
+    pub name: Option<String>,
+    /// Agent session the chat continues, which shoal resume passes.
+    #[arg(long, hide = true)]
+    pub session: Option<String>,
+    /// Stopped chat, by ID, that this start restores under its own name,
+    /// which shoal resume passes.
+    #[arg(long, hide = true, requires = "name")]
+    pub restore: Option<String>,
+    /// Handoff of the starter that waits on this background place.
+    #[arg(long, hide = true, requires = "here")]
+    pub handoff: Option<PathBuf>,
+    /// Arguments forwarded to the agent.
+    #[arg(last = true)]
+    pub args: Vec<OsString>,
 }
 
 #[derive(Debug, Subcommand)]

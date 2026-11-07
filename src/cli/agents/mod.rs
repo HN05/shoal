@@ -556,7 +556,8 @@ pub(in crate::cli) fn fork_args(
 
 /// The arguments that give agent `name` of `chat` the configured agent
 /// directories and the chat's temporary directory as other working
-/// directories.
+/// directories; for a setup chat without a repository also the directory
+/// of the global config beside `home`, which it may write.
 pub(in crate::cli) fn chat_dir_args(
     settings: &Effective,
     name: &str,
@@ -567,7 +568,20 @@ pub(in crate::cli) fn chat_dir_args(
         .tmp_dir
         .as_ref()
         .map(|directory| std::fs::canonicalize(directory).unwrap_or_else(|_| directory.clone()));
-    dir_args(settings, name, home, tmp_dir.as_slice())
+    let extra: Vec<_> = tmp_dir
+        .into_iter()
+        .chain(global_config_dir(chat, home))
+        .collect();
+    dir_args(settings, name, home, &extra)
+}
+
+/// The directory of the global config beside `home` when `chat` sets it up,
+/// as a setup chat without a repository does.
+fn global_config_dir(chat: &Chat, home: &Path) -> Option<PathBuf> {
+    let sets_up_global = chat.mode == modes::SETUP && chat.repository_id.is_none();
+    sets_up_global
+        .then(|| crate::agents::launch_config_dir(&Config::path_for_home(home)))
+        .flatten()
 }
 
 /// Start a chat of agent `name` its integration's own way; `None` leaves it

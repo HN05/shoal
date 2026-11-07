@@ -40,6 +40,31 @@ fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
     assert!(!installed("undefined"));
 }
 
+fn chat(mode: &str, repository_id: Option<&str>, tmp_dir: Option<std::path::PathBuf>) -> Chat {
+    Chat {
+        mode: mode.into(),
+        number: 1,
+        id: "chat-id".into(),
+        repository_id: repository_id.map(Into::into),
+        name: "talk".into(),
+        agent: "codex".into(),
+        workspace: None,
+        pid: 1,
+        started_at: 0,
+        origin: None,
+        tmp_dir,
+        root_dir: None,
+        session: None,
+        restore: None,
+        links: Default::default(),
+        review: Vec::new(),
+        completion: None,
+        agent_state: None,
+        parent: None,
+        children: Vec::new(),
+    }
+}
+
 #[test]
 fn a_chat_agent_gets_its_temporary_directory_after_the_configured_ones() {
     let defaults = crate::config::Config::from_toml("")
@@ -50,28 +75,7 @@ fn a_chat_agent_gets_its_temporary_directory_after_the_configured_ones() {
     let tmp = fs::canonicalize("/tmp").unwrap();
     let cache = home.path().join("cache");
     fs::create_dir(&cache).unwrap();
-    let chat = Chat {
-        mode: "chat".into(),
-        number: 1,
-        id: "chat-id".into(),
-        repository_id: Some("repo".into()),
-        name: "talk".into(),
-        agent: "codex".into(),
-        workspace: None,
-        pid: 1,
-        started_at: 0,
-        origin: None,
-        tmp_dir: Some(cache.join("chat-id")),
-        root_dir: None,
-        session: None,
-        restore: None,
-        links: Default::default(),
-        review: Vec::new(),
-        completion: None,
-        agent_state: None,
-        parent: None,
-        children: Vec::new(),
-    };
+    let chat = chat("chat", Some("repo"), Some(cache.join("chat-id")));
     assert_eq!(
         chat_dir_args(&defaults, "codex", home.path(), &chat),
         [
@@ -81,6 +85,32 @@ fn a_chat_agent_gets_its_temporary_directory_after_the_configured_ones() {
             cache.join("chat-id").into()
         ]
     );
+}
+
+#[test]
+fn a_setup_chat_without_a_repository_may_write_the_global_config() {
+    let defaults = crate::config::Config::from_toml("")
+        .unwrap()
+        .resolve(&crate::config::repo::ConfigLayers::default())
+        .unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let tmp = OsString::from(fs::canonicalize("/tmp").unwrap());
+    let setup = chat(crate::config::modes::SETUP, None, None);
+    let args = chat_dir_args(&defaults, "codex", home.path(), &setup);
+    let file = crate::config::Config::path_for_home(home.path());
+    let config_dir = fs::canonicalize(file.parent().unwrap()).unwrap();
+    assert_eq!(
+        args,
+        [
+            "--add-dir".into(),
+            tmp.clone(),
+            "--add-dir".into(),
+            config_dir.into()
+        ]
+    );
+    let other = chat(crate::config::modes::ORCHESTRATE, None, None);
+    let args = chat_dir_args(&defaults, "codex", home.path(), &other);
+    assert_eq!(args, [OsString::from("--add-dir"), tmp]);
 }
 
 #[test]

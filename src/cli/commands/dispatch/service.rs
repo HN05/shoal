@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::{
     cli::{
         args::service::{ConfigCommand, ServiceCommand},
-        commands::{configuration, service, update},
+        commands::{config_setup, configuration, service, update},
         context::Context,
     },
     daemon::handoff::Handoff,
@@ -33,6 +33,7 @@ pub(in crate::cli::commands) async fn run(
                 let name = service::packaged_config(&ctx, name)?;
                 service::install_config(&ctx, Some(name)).await
             }
+            ConfigCommand::Setup(args) => config_setup::start(&ctx, *args).await,
         },
         ServiceCommand::Update => update::run(&ctx).await,
         ServiceCommand::Daemon { command } => service::run(ctx, command, handoff).await,

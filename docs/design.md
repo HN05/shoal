@@ -1553,7 +1553,9 @@ gives the agent that directory as another working directory on every launch, so
 one agent serves both answers; a local result applies as soon as it is saved,
 the agent tests it in its own worktree and its `done` removes the workspace and
 its empty branch. `setup` takes the rules and reach of a base mode and adds only
-its instructions, so config cannot change what it does. A `review` command such as tuicr owns its own
+its instructions, so config cannot change what it does. `config setup` starts
+the same mode for the global config in a chat without a repository, whose reach
+lets it read how every repository is set up. A `review` command such as tuicr owns its own
 storage, exports and forge authentication, with explicit feedback handoff to
 agents.
 

@@ -12,6 +12,7 @@ mod catalog;
 mod chat;
 mod ci;
 mod cleanup;
+mod config_setup;
 mod configuration;
 pub(crate) mod configured;
 mod contribute;

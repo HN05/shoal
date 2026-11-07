@@ -89,11 +89,11 @@ pub(super) async fn start(
     crate::client::chats::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
 }
 
-/// Start a chat in `mode` without a repository, in `root_dir`, which
+/// Start a chat about `topic` without a repository, in `root_dir`, which
 /// manages the spaces of every repository.
 pub(super) async fn start_outside_repositories(
     ctx: &Context,
-    mode: String,
+    topic: Topic,
     options: Options,
 ) -> Result<i32> {
     let restores = options.restore.clone();
@@ -103,8 +103,7 @@ pub(super) async fn start_outside_repositories(
         check_parent(ctx, None, None, options.parent.as_deref()).await?;
         let repository = ChatRepository::Outside(root_dir(ctx).await?);
         let settings = crate::client::workspaces::settings(&ctx.paths, repository.config()).await?;
-        crate::config::modes::get(&settings.modes, &mode)?;
-        let topic = Topic::outside_repositories(&mode);
+        crate::config::modes::resolve(&settings.modes, &topic.mode, SpaceKind::Chat, false)?;
         begin(ctx, repository, settings, topic, options).await
     }
     .await;

@@ -253,6 +253,7 @@ impl Command {
                             command: ConfigCommand::Install { .. }
                                 | ConfigCommand::Reset
                                 | ConfigCommand::Set { .. }
+                                | ConfigCommand::Setup(_)
                                 | ConfigCommand::Unset { .. }
                         }
                         | ServiceCommand::Daemon {

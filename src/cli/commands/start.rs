@@ -528,7 +528,8 @@ async fn in_chat(ctx: &Context, mut args: StartArgs, mode: ModeChoice) -> Result
 /// on no repository or issue.
 async fn outside_repositories(ctx: &Context, mut args: StartArgs, mode: String) -> Result<i32> {
     ensure_no_repository(&args, &mode)?;
-    chat::start_outside_repositories(ctx, mode, chat_options(&mut args)).await
+    let topic = chat::Topic::outside_repositories(&mode);
+    chat::start_outside_repositories(ctx, topic, chat_options(&mut args)).await
 }
 
 /// Refuse a repository or issue `args` names for `mode`, which starts a chat
