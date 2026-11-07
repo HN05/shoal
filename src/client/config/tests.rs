@@ -136,6 +136,15 @@ fn template_states_the_defaults_and_its_examples_are_valid() {
 }
 
 #[test]
+fn a_home_other_than_the_users_keeps_its_config_inside() {
+    let home = tempfile::tempdir().unwrap();
+    assert_eq!(
+        Config::path_for_home(home.path()),
+        home.path().join(".config/shoal/config.toml")
+    );
+}
+
+#[test]
 fn install_writes_the_template_once_and_keeps_edits() {
     let home = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(home.path());
