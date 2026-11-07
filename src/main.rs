@@ -25,6 +25,7 @@ mod process;
 mod proxy;
 mod push_gate;
 mod refusal;
+mod releases;
 mod removal;
 mod repository;
 mod secrets;

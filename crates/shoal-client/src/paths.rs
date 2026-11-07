@@ -117,6 +117,12 @@ impl Paths {
         self.state.join("reviews")
     }
 
+    /// The copies of Shoal's release that execution wrappers run from, kept
+    /// while one runs from them.
+    pub fn releases(&self) -> PathBuf {
+        self.state.join("releases")
+    }
+
     /// Run data Shoal keeps for one workspace, such as detached session logs;
     /// deleted with the workspace record.
     pub fn workspace_state(&self, workspace_id: &str) -> PathBuf {

@@ -40,6 +40,7 @@ pub mod questions;
 pub(crate) mod queue;
 pub(crate) mod queued_starts;
 pub mod recovery;
+mod releases;
 mod requests;
 pub mod resources;
 mod restart_recovery;

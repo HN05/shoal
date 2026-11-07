@@ -222,6 +222,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<(), SweepFa
     step("contributions", manager.sweep_contributions().await);
     step("proposal files", manager.sweep_proposal_files().await);
     step("temporary directories", manager.sweep_tmp_dirs().await);
+    step("release copies", manager.sweep_releases().await);
     step("leftovers", manager.find_leftovers().await);
     step("grace periods", manager.end_unclaimed_grace().await);
     failed.into_result()
