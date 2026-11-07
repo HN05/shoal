@@ -2,7 +2,7 @@
 //! of the idle agent and starts its next turn with it.
 use std::ffi::OsString;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 
 use super::Inbox;
 use crate::{
@@ -12,33 +12,43 @@ use crate::{
     },
     client::links::Updates,
     installed::Executable,
+    protocol::WakeEnd,
 };
 
 /// Claude Code's `asyncRewake` `Stop` hook: wait for the next messages or
 /// item activity of the agent's workspace or chat, then exit 2, which starts
 /// the idle agent's next turn with them. A failed wait is tried again, since
-/// without one the agent stays idle; a newer delivery or the exit of `agent`,
-/// the agent's process, ends it with 0 and leaves the agent idle. `space`
-/// and `resumed` continue the wait of the hook an upgrade replaced.
+/// without one the agent stays idle; a newer delivery, the exit of `agent`,
+/// the agent's process, or a signal ends it with 0 and leaves the agent
+/// idle, and the daemon logs why. `space` and `resumed` continue the wait of
+/// the hook an upgrade replaced.
 pub(in crate::cli::commands) async fn wake(
     ctx: &Context,
     agent: u32,
     space: Option<String>,
     resumed: bool,
 ) -> Result<i32> {
-    let wait = WakeWait {
+    let mut wait = WakeWait {
         space,
         inbox: None,
         restarted: resumed,
     };
-    let next = tokio::select! {
-        next = retry_next_updates(ctx, wait) => next,
-        () = agent_exit(agent) => return Ok(0),
+    let outcome = tokio::select! {
+        next = retry_next_updates(ctx, &mut wait) => Ok(next),
+        ended = agent_exit(agent) => Err(ended),
+        ended = ending_signal() => Err(ended),
     };
-    let Some((inbox, updates)) = next else {
-        return Ok(0);
+    let (inbox, updates) = match outcome {
+        // The daemon logs the wait a newer delivery took.
+        Ok(None) => return Ok(0),
+        Ok(Some(next)) => next,
+        Err(ended) => {
+            report_end(ctx, &wait, ended).await;
+            return Ok(0);
+        }
     };
     if !woken_turn_starts(ctx, &inbox).await {
+        report_end(ctx, &wait, WakeEnd::Stopped).await;
         return Ok(0);
     }
     eprintln!("{}", inbox.hook_context(&updates));
@@ -47,6 +57,58 @@ pub(in crate::cli::commands) async fn wake(
         eprintln!("shoal: these updates may be delivered again: {error:#}");
     }
     Ok(2)
+}
+
+/// Tell the daemon why the hook ends without starting the agent's turn, so
+/// a missed wake can be traced, for the inbox the wait found or was named,
+/// else the current one. Only Claude Code's debug output shows a failure.
+async fn report_end(ctx: &Context, wait: &WakeWait, ended: WakeEnd) {
+    let report = async {
+        let space = match &wait.inbox {
+            Some(inbox) => inbox.space.clone(),
+            None => {
+                Inbox::waited_for(ctx, wait.space.as_deref(), false)
+                    .await?
+                    .space
+            }
+        };
+        crate::client::agents::report_wake_end(&ctx.paths, space, ended).await
+    };
+    let limit = crate::agents::hooks::MESSAGE_DAEMON_LIMIT;
+    let reported = tokio::time::timeout(limit, report)
+        .await
+        .context("the daemon did not answer in time");
+    if let Err(error) = reported.and_then(|reported| reported) {
+        eprintln!("shoal: the end of the wake hook was not reported: {error:#}");
+    }
+}
+
+/// Resolves with the signal that ends the hook, which it catches to report
+/// it: SIGTERM, SIGHUP or SIGINT. Never, when it can catch none.
+async fn ending_signal() -> WakeEnd {
+    use tokio::signal::unix::{SignalKind, signal};
+    let kinds = [
+        (SignalKind::terminate(), "SIGTERM"),
+        (SignalKind::hangup(), "SIGHUP"),
+        (SignalKind::interrupt(), "SIGINT"),
+    ];
+    let caught = kinds
+        .into_iter()
+        .filter_map(|(kind, name)| {
+            let mut received = signal(kind).ok()?;
+            Some(Box::pin(async move {
+                received.recv().await;
+                name
+            }))
+        })
+        .collect::<Vec<_>>();
+    if caught.is_empty() {
+        return std::future::pending().await;
+    }
+    let (signal, _, _) = futures_util::future::select_all(caught).await;
+    WakeEnd::Signalled {
+        signal: signal.to_owned(),
+    }
 }
 
 /// Report the turn the wake starts before delivering its updates: Claude
@@ -68,17 +130,24 @@ async fn woken_turn_starts(ctx: &Context, inbox: &Inbox) -> bool {
 /// How often the wake hook checks that its agent still runs.
 const AGENT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
-/// Resolves once process `agent` has exited. Claude Code runs hooks in their
-/// own process group, so stopping the agent's group leaves the hook running,
-/// and a surviving process keeps Shoal from proving the stop. A process that
-/// cannot be identified counts as exited, so the hook never outlives it.
-async fn agent_exit(agent: u32) {
+/// Resolves once process `agent` has exited, with how the hook saw it.
+/// Claude Code runs hooks in their own process group, so stopping the
+/// agent's group leaves the hook running, and a surviving process keeps
+/// Shoal from proving the stop. A process that cannot be inspected counts as
+/// exited, so the hook never outlives it.
+async fn agent_exit(agent: u32) -> WakeEnd {
     use crate::process::identity;
-    let Ok(Some(agent)) = identity::capture(agent) else {
-        return;
+    let agent = match identity::capture(agent) {
+        Ok(Some(agent)) => agent,
+        Ok(None) => return WakeEnd::AgentExited,
+        Err(_) => return WakeEnd::AgentUnknown,
     };
-    while identity::alive(&agent).unwrap_or(false) {
-        tokio::time::sleep(AGENT_POLL_INTERVAL).await;
+    loop {
+        match identity::alive(&agent) {
+            Ok(true) => tokio::time::sleep(AGENT_POLL_INTERVAL).await,
+            Ok(false) => return WakeEnd::AgentExited,
+            Err(_) => return WakeEnd::AgentUnknown,
+        }
     }
 }
 
@@ -93,7 +162,7 @@ const WAKE_RETRY_MAX: std::time::Duration = std::time::Duration::from_secs(60);
 /// the first failure is reported: whatever the hook prints reaches the agent
 /// with the updates that wake it, and a lasting failure would repeat there
 /// once per retry.
-async fn retry_next_updates(ctx: &Context, mut wait: WakeWait) -> Option<(Inbox, Updates)> {
+async fn retry_next_updates(ctx: &Context, wait: &mut WakeWait) -> Option<(Inbox, Updates)> {
     let executable = Executable::current();
     let mut delay = WAKE_RETRY_INITIAL;
     let mut reported = false;

@@ -1,10 +1,34 @@
-//! The daemon log's record of a wake hook's wait that ends without updates
-//! for its agent, so an agent left idle can be traced to how its hook's wait
-//! ended.
+//! The daemon log's record of a wake hook that ends without starting its
+//! agent's turn, so an agent left idle can be traced to how its hook ended:
+//! the daemon logs how the hook's wait ended, and the hook reports the
+//! reasons the daemon cannot see.
 use anyhow::Result;
 
 use super::Updates;
-use crate::daemon::log::log;
+use crate::{
+    daemon::{log::log, workspace::Manager},
+    protocol::WakeEnd,
+};
+
+impl Manager {
+    /// Log that the wake hook of the agent of the workspace or running chat
+    /// `selector` names ended for `ended` without starting the agent's turn.
+    pub(crate) async fn report_wake_end(&self, selector: &str, ended: &WakeEnd) -> Result<()> {
+        let space = self.present_space(selector).await?;
+        let name = space.name();
+        match ended {
+            WakeEnd::AgentExited => log!("wake hook of {name} ended: its agent exited"),
+            WakeEnd::AgentUnknown => {
+                log!("wake hook of {name} ended: its agent's process could not be inspected");
+            }
+            WakeEnd::Stopped => {
+                log!("wake hook of {name} ended: a stop of its agent came before the turn");
+            }
+            WakeEnd::Signalled { signal } => log!("wake hook of {name} ended by {signal}"),
+        }
+        Ok(())
+    }
+}
 
 /// How a wake hook's wait ended without updates.
 #[derive(Debug, PartialEq, Eq)]

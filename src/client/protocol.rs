@@ -49,7 +49,7 @@ mod subscriptions;
 mod version;
 mod workspaces;
 
-pub use agents::{AgentMethod, TurnEnd, WokenTurn};
+pub use agents::{AgentMethod, TurnEnd, WakeEnd, WokenTurn};
 pub use approvals::ApprovalMethod;
 pub use assignments::AssignmentMethod;
 pub use chats::{ChatMethod, ChatRoot, ScopeToken};

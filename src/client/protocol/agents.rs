@@ -37,6 +37,13 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "TurnEnd::is_empty")]
         turn_end: TurnEnd,
     },
+    /// The wake hook of the space's agent ended for `ended` without
+    /// starting the agent's turn, which the daemon logs so that a missed
+    /// wake can be traced.
+    ReportWakeEnd {
+        space: String,
+        ended: WakeEnd,
+    },
     /// A turn-state report of the caller's agent that failed with `error`,
     /// which leaves the state shown as last reported.
     ReportStateFailure {
@@ -154,6 +161,21 @@ pub enum AgentMethod {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WokenTurn {
     pub starts: bool,
+}
+
+/// Why a wake hook ended without starting its agent's turn, apart from a
+/// newer delivery taking its updates, which the daemon sees itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WakeEnd {
+    /// The agent's process exited.
+    AgentExited,
+    /// The agent's process could not be inspected, which counts as exited.
+    AgentUnknown,
+    /// A stop of the agent came before the turn the hook would start.
+    Stopped,
+    /// `signal` ended the hook.
+    Signalled { signal: String },
 }
 
 /// What an agent reports when a turn ends.

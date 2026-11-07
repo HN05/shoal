@@ -96,6 +96,10 @@ pub(super) async fn handle(
                 )
                 .await?,
         ),
+        AgentMethod::ReportWakeEnd { space, ended } => {
+            manager.report_wake_end(&space, &ended).await?;
+            Body::Ok
+        }
         AgentMethod::ReportStateFailure { workspace, error } => {
             manager.report_state_failure(&workspace, &error).await?;
             Body::Ok
@@ -191,6 +195,7 @@ impl Scoped for AgentMethod {
             | AgentMethod::MarkAgentMessagesDelivered { space, .. }
             | AgentMethod::AgentUpdates { space }
             | AgentMethod::WaitAgentUpdates { space }
+            | AgentMethod::ReportWakeEnd { space, .. }
             | AgentMethod::AcknowledgePrUpdates { space, .. } => Some(space),
             AgentMethod::ReportTurnFailure {
                 execution: Some(_), ..

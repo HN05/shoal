@@ -8,7 +8,7 @@ use crate::{
         sessions::Origin,
     },
     model::{AgentSession, AgentStatus, PendingRestart, RunningAgent},
-    protocol::{AgentMethod, ChatMethod, ExecutionMethod, TurnEnd, WokenTurn},
+    protocol::{AgentMethod, ChatMethod, ExecutionMethod, TurnEnd, WakeEnd, WokenTurn},
     state::{AgentState, TurnFailure},
 };
 
@@ -64,6 +64,12 @@ pub async fn report_state_failure(
     error: String,
 ) -> Result<()> {
     request(daemon, AgentMethod::ReportStateFailure { workspace, error }).await
+}
+
+/// Tell the daemon that the wake hook of `space`'s agent ended for `ended`
+/// without starting the agent's turn.
+pub async fn report_wake_end(daemon: &impl Daemon, space: String, ended: WakeEnd) -> Result<()> {
+    request(daemon, AgentMethod::ReportWakeEnd { space, ended }).await
 }
 
 /// Record that the interrupt key typed into `execution` of `workspace`
