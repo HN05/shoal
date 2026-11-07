@@ -172,7 +172,8 @@ instead of the PR delivery guidance below.
   events, which the user receives as notifications if the chat is removed first; a workspace's own Shoal comments, thread replies,
   closing and reopening are not reported back to it. The only terminal input Shoal writes is
   the tracked wrapper's fixed prompt into an idle Codex's terminal session, or an
-  idle Claude Code's after an interrupted turn, once per idle stretch, the
+  idle Claude Code's after an interrupted turn or once it has idled with no
+  wait for its updates for three minutes, once per idle stretch, the
   agent's interrupt key the CLI types for `shoal stop --interrupt`, and the
   fixed prompt with which `shoal resume` continues that turn; the daemon never
   writes to a terminal. Workspace events are an unscoped, durable lifecycle
