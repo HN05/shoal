@@ -211,6 +211,25 @@ impl Agent {
         self.overload.is_some()
     }
 
+    /// Refuse another stop of the agent: protection stopped it and it waits
+    /// for its restore, or a stop of it is in progress.
+    fn ensure_not_stopped(&self) -> anyhow::Result<()> {
+        if let Some(protection) = &self.overload {
+            anyhow::bail!(
+                "{} is stopped ({}) and resumes once {}",
+                self.name,
+                protection.reason,
+                protection.resumes_when
+            );
+        }
+        anyhow::ensure!(
+            !*self.stop.borrow() && self.restarts.current.is_none(),
+            "{} is already stopping",
+            self.name
+        );
+        Ok(())
+    }
+
     /// Whether the agent is connected and nothing is stopping it.
     fn running(&self) -> bool {
         !self.stop.is_closed() && !*self.stop.borrow()

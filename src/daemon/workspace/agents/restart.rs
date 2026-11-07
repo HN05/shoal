@@ -153,7 +153,7 @@ impl Manager {
             "{} has no command to resume its session; configure its [agents.<name>] resume_command",
             agent.name
         );
-        ensure!(!*agent.stop.borrow(), "{} is already stopping", agent.name);
+        agent.ensure_not_stopped()?;
         // Save the handoff before the stop, so a wrapper that dies stopping
         // the agent leaves it for `shoal resume`.
         let handoff = recovery::save_record(

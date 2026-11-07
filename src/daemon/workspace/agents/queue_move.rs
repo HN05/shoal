@@ -50,11 +50,7 @@ impl Manager {
             "{} has no command to resume its session; configure its [agents.<name>] resume_command",
             agent.name
         );
-        ensure!(
-            !*agent.stop.borrow() && agent.restarts.current.is_none() && agent.overload.is_none(),
-            "{} is already stopping",
-            agent.name
-        );
+        agent.ensure_not_stopped()?;
         let protection = Protection::queue_move();
         let handoff = recovery::save_record(
             &self.paths,

@@ -181,16 +181,16 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await
         .unwrap();
-    let stopping = manager
+    let stopped = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await
         .unwrap();
     track(&manager, &workspace, &custom.plan.id, "custom", false).await;
-    track(&manager, &workspace, &stopping.plan.id, "claude", true).await;
+    track(&manager, &workspace, &stopped.plan.id, "claude", true).await;
     manager
         .stop_agent_for_overload("critical memory pressure")
         .await;
-    assert!(*stopping.stop.borrow());
+    assert!(*stopped.stop.borrow());
 
     manager
         .restart_agent(&custom.plan.id, None, true)
@@ -199,11 +199,15 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
     assert!(!*custom.stop.borrow());
     // A refused restart saves no handoff.
     assert!(!recovery::record_path(&manager.paths, &workspace.id, &custom.plan.id).exists());
-    manager
-        .restart_agent(&stopping.plan.id, None, true)
+    // The agent waits for its restore, which is no stop in progress.
+    let refused = manager
+        .restart_agent(&stopped.plan.id, None, true)
         .await
-        .unwrap_err();
-    assert!(!manager.restart_requested(&stopping.plan.id).await);
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("critical memory pressure"), "{refused}");
+    assert!(!refused.contains("already stopping"), "{refused}");
+    assert!(!manager.restart_requested(&stopped.plan.id).await);
     manager
         .restart_agent("unknown", None, true)
         .await
