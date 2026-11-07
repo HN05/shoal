@@ -25,12 +25,7 @@ pub(super) async fn copy_spaces(
     let mut report = ui::Report::new("copy");
     for space in spaces {
         let name = space.name();
-        let file = directory.file(name);
-        let copied = async {
-            export::copy::copy(ctx, space.id().to_owned(), checkpoint, file.clone()).await?;
-            remote.import(&file, resume).await
-        };
-        match copied.await {
+        match copy_one(ctx, remote, &directory, space, checkpoint, resume).await {
             Ok(imported) => {
                 let message = copied_message(name, &remote.host, &imported);
                 report.done(ctx, &message, imported)
@@ -49,6 +44,22 @@ pub(super) async fn copy_spaces(
         ),
     };
     report.finish(ctx, &summary, |copied, failed| Copies { copied, failed })
+}
+
+/// Write a copy of `space` to its file in `directory`, then import it on
+/// `remote`, queueing its agents' restores or starting its chat there when
+/// `resume`.
+async fn copy_one(
+    ctx: &Context,
+    remote: &Remote,
+    directory: &export::ExportDirectory,
+    space: &PresentSpace,
+    checkpoint: Option<u64>,
+    resume: bool,
+) -> Result<Imported> {
+    let file = directory.file(space.name());
+    export::copy::copy(ctx, space.id().to_owned(), checkpoint, file.clone()).await?;
+    remote.import(&file, resume).await
 }
 
 /// The report of copying `name` to `host`, naming the copy when the import
