@@ -258,11 +258,7 @@ async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<Stri
 pub(super) async fn ensure_below(ctx: &Context, selected: &[String]) -> Result<()> {
     const REFUSAL: &str =
         "scoped processes stop only the workspaces below theirs; finish their own with shoal done";
-    let own = std::env::var(crate::env::WORKSPACE_ID)
-        .ok()
-        .filter(|own| !own.is_empty())
-        .or_else(crate::env::in_chat)
-        .context(REFUSAL)?;
+    let own = crate::env::own_space().context(REFUSAL)?;
     ensure!(crate::env::is_scoped(), "{REFUSAL}");
     for selector in selected {
         let id = crate::client::workspaces::inspect(&ctx.paths, selector.clone())

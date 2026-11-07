@@ -83,7 +83,10 @@ pub(super) async fn handle(
         ChatMethod::ChatScope { chat } => Body::ScopeToken(crate::protocol::ScopeToken {
             token: manager.chat_scope(&chat).await?,
         }),
-        ChatMethod::ChatAgents => Body::RunningAgents(manager.running_chat_agents().await?),
+        ChatMethod::ChatAgents => {
+            let agents = manager.running_chat_agents().await?;
+            Body::RunningAgents(manager.visible_agents(caller, agents).await?)
+        }
         ChatMethod::RestartChat { chat, join, run } => Body::RestartedPlace(match join {
             Some(joined) => manager.join_chat_restart(&chat, joined.run, run).await?,
             None => manager.restart_chat(&chat, run).await?,
@@ -121,6 +124,18 @@ impl Scoped for ChatMethod {
                 manager.parent_below(caller, parent).await?;
                 None
             }
+            // The handler narrows the list to the chats below the caller's
+            // space, the ones it may restart.
+            ChatMethod::ChatAgents => None,
+            ChatMethod::RestartChat { chat, .. } => Some(
+                manager
+                    .workspace_below(
+                        caller,
+                        chat,
+                        "scoped processes restart only the agents of the spaces below their own",
+                    )
+                    .await?,
+            ),
             ChatMethod::MoveChat { chat, .. }
             | ChatMethod::SaveChat { chat, .. }
             | ChatMethod::ChatScope { chat } => Some(
@@ -144,9 +159,7 @@ impl Scoped for ChatMethod {
             ChatMethod::CheckChatName { .. }
             | ChatMethod::FreeChatName { .. }
             | ChatMethod::ChatRoot => None,
-            ChatMethod::RestoreChat { .. }
-            | ChatMethod::ChatAgents
-            | ChatMethod::RestartChat { .. } => return Err(denied()),
+            ChatMethod::RestoreChat { .. } => return Err(denied()),
         })
     }
 }

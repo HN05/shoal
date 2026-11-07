@@ -748,7 +748,7 @@ messages instead, falling back to the user without a coordinator or when its
 messages are full. Events a process causes in a child without an agent of its
 own are the coordinator's own work and reach the user. The coordinator answers
 questions asked below it or passes them up with its own question, and may
-stop the agents below it and discard their stopped work, since only it knows
+stop or restart the agents below it and discard their stopped work, since only it knows
 whether a child agent still has work. It resumes only what it or a workspace
 below it stopped, which the stopped session records, through the queue, so the
 daemon starts them detached; resuming what the user or Shoal stopped, and

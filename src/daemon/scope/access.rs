@@ -9,7 +9,7 @@ use crate::{
         workspace::Manager,
     },
     execution::recovery,
-    model::{Chat, PresentSpace, QueueEntry, QueueRequest, Repository, SpaceTarget},
+    model::{Chat, PresentSpace, QueueEntry, QueueRequest, Repository, RunningAgent, SpaceTarget},
     repository::Selector,
 };
 
@@ -222,6 +222,42 @@ impl Manager {
             chats.retain(|chat| reached.contains(&chat.id));
         }
         Ok(chats)
+    }
+
+    /// The `agents` `caller` may restart: those of the spaces its scope
+    /// reaches but its own, or all of them for an unscoped caller.
+    pub(in crate::daemon) async fn visible_agents(
+        &self,
+        caller: Option<&Caller>,
+        mut agents: Vec<RunningAgent>,
+    ) -> Result<Vec<RunningAgent>> {
+        if let Some(caller) = caller {
+            let reached = self.reached_spaces(Some(caller)).await?;
+            agents.retain(|agent| {
+                agent.space_id != caller.space_id
+                    && reached
+                        .as_ref()
+                        .is_none_or(|reached| reached.contains(&agent.space_id))
+            });
+        }
+        Ok(agents)
+    }
+
+    /// Refuse `caller` the restart of the workspace agent that runs, or ran
+    /// before a restart, as `execution`, unless it runs in a workspace below
+    /// the caller's space.
+    pub(in crate::daemon) async fn ensure_agent_below(
+        &self,
+        caller: &Caller,
+        execution: &str,
+    ) -> Result<()> {
+        let agents = self.running_agents().await?;
+        let agents = self.visible_agents(Some(caller), agents).await?;
+        ensure!(
+            agents.iter().any(|agent| agent.ran_as(execution)),
+            "scoped processes restart only the agents of the spaces below their own"
+        );
+        Ok(())
     }
 
     /// The agent queue `caller` may see: the entries for the workspaces its

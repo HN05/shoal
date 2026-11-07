@@ -147,7 +147,8 @@ instead of the PR delivery guidance below.
   the user holds nothing below, recovery and shared repository/service administration stay denied. For the workspaces below their own, scoped callers hold them, queue agents,
   which the daemon starts detached so they never inherit the caller's scope, cancel their queue
   entries or move them back, send agent messages,
-  answer questions, stop their executions, queue restores of the agents they or the workspaces below them stopped and
+  answer questions, stop their executions, restart their agents and those of the chats below their own,
+  queue restores of the agents they or the workspaces below them stopped and
   discard stopped work; the nearest space above with an agent, of either kind, receives a child agent's messages,
   questions, completion and ready marks and its agent's exits and stops instead of the user,
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,

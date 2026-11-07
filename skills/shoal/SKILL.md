@@ -108,12 +108,14 @@ with `shoal start` receives its own issue and PR activity.
 shoal messages send --space <child> "<text>"   # --body-file F, --attach FILE
 shoal questions <S.N> --answer "<answer or choice number>"
 shoal stop <child>                  # --skip-children stops only the child
+shoal restart <child>               # Its agent, a workspace's or a chat's
 shoal resume <child>                # --discard forgets the saved session
 shoal files <child>
 ```
 
 `stop` stops the child's agent and those below it, keeping their sessions, and
-cancels agents queued to start there; `resume` queues the agents the caller
+cancels agents queued to start there; `restart` stops the child's agent and
+starts its session again at once; `resume` queues the agents the caller
 stopped, while the user resumes the ones the user stopped.
 
 A child's approval request comes to its coordinator first.

@@ -1,6 +1,6 @@
 //! Which agents a run restarts, in what order, and which it skips: those of
 //! workspaces and of chats alike.
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 pub(super) use crate::client::output::agents::Skipped;
 use crate::{
@@ -72,6 +72,21 @@ impl Selection {
             agents,
             named,
         })
+    }
+
+    /// Refuse a selection that includes the scoped caller's own space,
+    /// before any restarts, as the daemon would refuse its agent.
+    pub(super) fn ensure_below(&self) -> Result<()> {
+        let own = crate::env::own_space();
+        ensure!(
+            own.is_some()
+                && self
+                    .spaces
+                    .iter()
+                    .all(|space| Some(space.id()) != own.as_deref()),
+            "scoped processes restart only the spaces below their own; finish their own with shoal done"
+        );
+        Ok(())
     }
 
     /// The agents named `agent` to restart, ready ones first, and those that

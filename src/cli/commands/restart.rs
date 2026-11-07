@@ -50,12 +50,14 @@ pub(super) async fn run(
     agent: Option<Agent>,
     options: Options,
 ) -> Result<i32> {
-    // A process that cleared its scope token is still the workspace's.
-    ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state),
-        "restart agents outside scoped executions"
-    );
+    let scoped = crate::env::inherits_scope(&ctx.paths.state);
+    if scoped {
+        ensure_named(&targets)?;
+    }
     let selection = Selection::load(ctx, targets).await?;
+    if scoped {
+        selection.ensure_below()?;
+    }
     let plan = selection.plan(agent.as_ref().map(Agent::name), options.in_place);
     if plan.restarts.is_empty() && plan.skipped.is_empty() {
         let message = match &agent {
@@ -94,6 +96,18 @@ pub(super) async fn run(
         return progress.interrupted(ctx, &agents, agent.as_ref().map(Agent::name));
     }
     progress.finish(ctx)
+}
+
+/// Refuse a restart in a scoped process, a workspace's or a chat's agent,
+/// that does not name the spaces it restarts. The daemon refuses each space
+/// not below the caller's, which needs the scope token: a process that
+/// cleared it stays refused.
+fn ensure_named(targets: &SpaceTargets) -> Result<()> {
+    ensure!(
+        crate::env::is_scoped() && !targets.all && !targets.space.is_empty(),
+        "scoped processes restart only the spaces below their own, by name: shoal restart <space>"
+    );
+    Ok(())
 }
 
 async fn restart_all(

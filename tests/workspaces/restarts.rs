@@ -27,6 +27,8 @@ fn restart_starts_the_agent_in_a_new_wrapper_where_the_old_one_could_not() {
     .unwrap();
     let mut agent = Running {
         fixture: &fixture,
+        workspace: "renewed",
+        path: path.clone(),
         agent: fixture
             .command()
             .env("BROKEN_TREE", "1")
@@ -126,16 +128,202 @@ fn restart_restores_a_chat_in_a_new_place() {
     wait_zmx_sessions_ended(&home);
 }
 
-/// The first wrapper of the workspace `renewed`, which the daemon stops when
+/// A workspace's agent restarts the agent of a workspace and of a chat below
+/// its own, and is refused its own and a workspace outside its tree.
+#[test]
+fn a_workspaces_agent_restarts_the_agents_below_its_workspace() {
+    let fixture = parent_fixture();
+    fixture.add("parent");
+    restarts_the_agents_below(&fixture, &Parent::Workspace("parent"));
+}
+
+/// A chat's agent restarts the agents below its chat as a workspace's agent
+/// does below its workspace.
+#[test]
+fn a_chats_agent_restarts_the_agents_below_its_chat() {
+    let fixture = parent_fixture();
+    let (mut agent, id) = start_test_chat(&fixture, "planning");
+    let parent = Parent::chat(&fixture, "planning", id);
+    restarts_the_agents_below(&fixture, &parent);
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+/// A fixture whose workspace agents restart with `resume.sh` in their
+/// worktree, whose chats run `agent.sh` in the checkout, and whose detached
+/// places are zmx sessions.
+fn parent_fixture() -> Fixture {
+    let fixture = Fixture::with_config(Some(&format!(
+        "{UNLIMITED_AGENTS}[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n"
+    )));
+    install_test_script(fixture.root.path().join("bin/zmx"), terminal_zmx());
+    fs::write(
+        fixture.repo.join("agent.sh"),
+        format!(
+            "printf '{{\"session_id\":\"chat-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n\
+             case \" $* \" in *' --resume '*) touch \"$HOME/chat-restored\";; *) touch \"$HOME/chat-started\";; esac\n\
+             trap 'exit 0' TERM\n\
+             while :; do sleep 1; done\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    fixture
+}
+
+/// The space whose agent runs a test's commands, with its scope.
+enum Parent {
+    /// A workspace's process, by the workspace's name.
+    Workspace(&'static str),
+    /// A chat's agent.
+    Chat {
+        name: &'static str,
+        id: String,
+        token: String,
+    },
+}
+
+impl Parent {
+    /// The chat `id`, named `name`, with the scope token its agent carries.
+    fn chat(fixture: &Fixture, name: &'static str, id: String) -> Self {
+        let scope = fixture.request(serde_json::json!({"chat_scope": {"chat": id}}));
+        let token = scope["data"]["token"].as_str().unwrap().to_owned();
+        Self::Chat { name, id, token }
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Workspace(name) | Self::Chat { name, .. } => name,
+        }
+    }
+
+    /// Run `shoal --json <args>` as the space's agent runs it.
+    fn run(&self, fixture: &Fixture, args: &[&str]) -> Output {
+        match self {
+            Self::Workspace(name) => scoped_command(fixture, name, args),
+            Self::Chat { id, token, .. } => fixture
+                .command()
+                .env("SHOAL_CHAT", id)
+                .env("SHOAL_SCOPE_TOKEN", token)
+                .arg("--json")
+                .args(args)
+                .stdin(Stdio::null())
+                .output()
+                .unwrap(),
+        }
+    }
+
+    /// [`Self::run`], which must succeed, returning what it printed.
+    fn ok(&self, fixture: &Fixture, args: &[&str]) -> Value {
+        let output = self.run(fixture, args);
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        serde_json::from_slice(&output.stdout).unwrap()
+    }
+}
+
+/// `parent` restarts the agent of the workspace `child` and of the chat
+/// `talk` below it, and is refused its own space and the workspace `other`
+/// outside its tree.
+fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
+    let home = fixture.root.path().to_owned();
+    let repo = fixture.repo.to_str().unwrap();
+    let child = fixture.ok(&["start", repo, "child", "--parent", parent.name()]);
+    fixture.add("other");
+    let mut agent = Running::start(fixture, "child", &child);
+    for refused in [parent.name(), "other"] {
+        let output = parent.run(fixture, &["restart", refused]);
+        assert!(!output.status.success(), "{refused}: {output:?}");
+    }
+
+    let restarted = parent.ok(fixture, &["restart", "child"]);
+    assert_eq!(restarted["restarted"][0]["space"], "child", "{restarted}");
+    wait_until("agent to restore", || agent.path.join("restored").exists());
+    assert!(
+        try_wait_for(|| agent.agent.try_wait().unwrap()).is_some(),
+        "the old wrapper still runs"
+    );
+
+    std::thread::scope(|scope| {
+        let chat = scope.spawn(|| {
+            fixture.interactive_command(
+                fixture.command().current_dir(&fixture.repo).args([
+                    "start",
+                    "--chat",
+                    "--here",
+                    "--agent",
+                    "claude",
+                    "--name",
+                    "talk",
+                    "--parent",
+                    parent.name(),
+                ]),
+                "",
+            )
+        });
+        wait_until("chat started", || home.join("chat-started").exists());
+        let restarted = parent.ok(fixture, &["restart", "talk"]);
+        assert_eq!(restarted["restarted"][0]["space"], "talk", "{restarted}");
+        let (output, transcript) = chat.join().unwrap();
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+    });
+    wait_until("chat restored", || home.join("chat-restored").exists());
+    fixture.ok(&["rm", "talk", "--yes"]);
+    drop(agent);
+    wait_zmx_sessions_ended(&home);
+}
+
+/// The first wrapper of a workspace's agent, which the daemon stops when
 /// the test ends, so a test that fails first leaves nothing running.
 struct Running<'a> {
     fixture: &'a Fixture,
+    workspace: &'a str,
+    /// The workspace's worktree.
+    path: PathBuf,
     agent: Child,
+}
+
+impl<'a> Running<'a> {
+    /// Start the agent of `workspace`, as `shoal start` reported it, which
+    /// `resume.sh` restores, once it runs.
+    fn start(fixture: &'a Fixture, workspace: &'a str, started: &Value) -> Self {
+        let path = PathBuf::from(started["path"].as_str().unwrap());
+        fs::write(
+            path.join("agent.sh"),
+            "trap 'exit 0' TERM\ntouch agent-started\nwhile :; do sleep 1; done\n",
+        )
+        .unwrap();
+        fs::write(
+            path.join("resume.sh"),
+            "trap 'exit 0' TERM\ntouch restored\nwhile :; do sleep 1; done\n",
+        )
+        .unwrap();
+        let agent = fixture
+            .command()
+            .args(["claude", workspace])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let running = Self {
+            fixture,
+            workspace,
+            path,
+            agent,
+        };
+        wait_until("agent to start", || {
+            running.path.join("agent-started").exists()
+        });
+        wait_registered_execution(fixture, workspace);
+        running
+    }
 }
 
 impl Drop for Running<'_> {
     fn drop(&mut self) {
-        let _ = self.fixture.command().args(["stop", "renewed"]).output();
+        let _ = (self.fixture.command())
+            .args(["stop", self.workspace])
+            .output();
         if try_wait_for(|| self.agent.try_wait().ok().flatten()).is_none() {
             let _ = self.agent.kill();
             let _ = self.agent.wait();

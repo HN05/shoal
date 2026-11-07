@@ -6,7 +6,7 @@ use anyhow::{Result, ensure};
 use super::super::{
     answer::Answer,
     execution_connection,
-    scope::{Caller, Scoped, denied},
+    scope::{Caller, Scoped},
     workspace::{ExecutionKind, Manager},
 };
 use crate::protocol::{Body, ExecutionMethod};
@@ -61,7 +61,10 @@ pub(super) async fn handle(
             require_kind(caller, ExecutionKind::Unmerge, "unmerge execution required")?;
             Body::Ok
         }
-        ExecutionMethod::ListAgents => Body::RunningAgents(manager.running_agents().await?),
+        ExecutionMethod::ListAgents => {
+            let agents = manager.running_agents().await?;
+            Body::RunningAgents(manager.visible_agents(caller, agents).await?)
+        }
         ExecutionMethod::RestartAgent {
             execution,
             join,
@@ -75,10 +78,14 @@ pub(super) async fn handle(
 }
 
 impl Scoped for ExecutionMethod {
-    async fn scope(&mut self, _: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
-            ExecutionMethod::ListAgents | ExecutionMethod::RestartAgent { .. } => {
-                return Err(denied());
+            // The handler narrows the list to the agents below the caller's
+            // space, the ones it may restart.
+            ExecutionMethod::ListAgents => None,
+            ExecutionMethod::RestartAgent { execution, .. } => {
+                manager.ensure_agent_below(caller, execution).await?;
+                None
             }
             ExecutionMethod::CheckMerge => {
                 require_kind(

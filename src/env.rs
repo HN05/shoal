@@ -392,6 +392,15 @@ pub fn in_chat() -> Option<String> {
     own_chat(std::env::var_os(WORKSPACE_ID), chat())
 }
 
+/// The space whose process this is: its workspace, else the chat whose own
+/// agent it belongs to.
+pub fn own_space() -> Option<String> {
+    std::env::var(WORKSPACE_ID)
+        .ok()
+        .filter(|own| !own.is_empty())
+        .or_else(in_chat)
+}
+
 /// `chat`, unless `workspace` names the workspace the process belongs to.
 fn own_chat(workspace: Option<OsString>, chat: Option<String>) -> Option<String> {
     chat.filter(|_| workspace.is_none_or(|workspace| workspace.is_empty()))
