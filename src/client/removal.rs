@@ -58,13 +58,6 @@ pub struct RemovalCheck {
     /// the worktree, while removal keeps the branch.
     #[serde(default)]
     pub starting_commits: bool,
-    /// The default branch used by this inspection, when it could be resolved.
-    ///
-    /// This is daemon state used to keep the removal decision consistent with
-    /// the inspection; it is not part of the CLI protocol response.
-    #[cfg(feature = "cli")]
-    #[serde(skip)]
-    pub(crate) default_branch: Option<String>,
     /// The spaces below it, which removal takes first, each after those
     /// below it; filled in for a manual removal's check.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -73,11 +66,6 @@ pub struct RemovalCheck {
     /// without asking.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub disposable_children: Vec<String>,
-    /// The restores of idle agents, which `running_commands` and
-    /// `processes` leave out; daemon state like `default_branch`.
-    #[cfg(feature = "cli")]
-    #[serde(skip)]
-    pub(crate) idle_restores: Vec<crate::removal::IdleRestore>,
 }
 
 /// What a manual removal may delete that neither a branch nor a remote

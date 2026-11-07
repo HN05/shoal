@@ -20,13 +20,33 @@ pub(crate) struct IdleRestore {
     pub wrapper: Option<u32>,
 }
 
-impl RemovalCheck {
-    pub async fn load_changed_files(&mut self) -> Result<()> {
-        let status = git::status::changed_files(&self.workspace.path).await?;
-        (self.changed_files, self.changed_files_omitted) = changed_files_preview(&status);
-        Ok(())
-    }
+/// A [`RemovalCheck`] with the daemon state that keeps the removal decision
+/// consistent with the inspection, which the protocol leaves out.
+#[derive(Debug)]
+pub(crate) struct Inspection {
+    pub check: RemovalCheck,
+    /// The default branch the inspection used, when it could be resolved.
+    pub default_branch: Option<String>,
+    /// The restores of idle agents, which `running_commands` and
+    /// `processes` leave out.
+    pub idle_restores: Vec<IdleRestore>,
+}
 
+impl std::ops::Deref for Inspection {
+    type Target = RemovalCheck;
+
+    fn deref(&self) -> &RemovalCheck {
+        &self.check
+    }
+}
+
+impl std::ops::DerefMut for Inspection {
+    fn deref_mut(&mut self) -> &mut RemovalCheck {
+        &mut self.check
+    }
+}
+
+impl Inspection {
     /// The processes `users` finds in the worktree, besides the wrappers
     /// waiting to restore idle agents.
     pub async fn load_directory_processes(
@@ -38,6 +58,13 @@ impl RemovalCheck {
             .await?;
         Ok(())
     }
+}
+
+/// Fill in the changed files `check` lists.
+pub(crate) async fn load_changed_files(check: &mut RemovalCheck) -> Result<()> {
+    let status = git::status::changed_files(&check.workspace.path).await?;
+    (check.changed_files, check.changed_files_omitted) = changed_files_preview(&status);
+    Ok(())
 }
 
 /// The wrappers waiting to restore the idle agents, which may use the
@@ -86,41 +113,49 @@ pub(crate) async fn inspect(
     idle_restores: Vec<IdleRestore>,
     policy: InspectionPolicy,
     default_branch: Option<&str>,
-) -> Result<RemovalCheck> {
-    let mut check = RemovalCheck {
-        workspace,
-        running_commands,
-        idle_restores,
-        children: vec![],
-        disposable_children: vec![],
-        processes: vec![],
-        dirty: false,
-        starting_files: false,
-        starting_commits: false,
-        changed_files: vec![],
-        changed_files_omitted: 0,
-        unsaved_files_archived: false,
-        unpushed_commits: 0,
-        branch: None,
-        head: None,
-        matches_default_branch: false,
-        integrated: false,
+) -> Result<Inspection> {
+    let mut inspection = Inspection {
+        check: RemovalCheck {
+            workspace,
+            running_commands,
+            children: vec![],
+            disposable_children: vec![],
+            processes: vec![],
+            dirty: false,
+            starting_files: false,
+            starting_commits: false,
+            changed_files: vec![],
+            changed_files_omitted: 0,
+            unsaved_files_archived: false,
+            unpushed_commits: 0,
+            branch: None,
+            head: None,
+            matches_default_branch: false,
+            integrated: false,
+        },
         default_branch: default_branch.map(str::to_owned),
+        idle_restores,
     };
-    if !off_runtime::exists(&check.workspace.path).await? {
-        return Ok(check);
+    if !off_runtime::exists(&inspection.workspace.path).await? {
+        return Ok(inspection);
     }
-    // Nothing in a disposable workspace is worth keeping, so nothing is
-    // inspected for unsaved work; which branch it is on, which removal may
-    // delete, and whether it is in use still are.
+    inspect_git(&mut inspection.check, default_branch).await?;
+    if policy == InspectionPolicy::IncludeDirectoryProcesses {
+        inspection
+            .load_directory_processes(&process::DirectoryUsers::default())
+            .await?;
+    }
+    Ok(inspection)
+}
+
+/// Fill in what Git says removing the existing worktree would discard.
+/// Nothing in a disposable workspace is worth keeping, so nothing is
+/// inspected for unsaved work; which branch it is on, which removal may
+/// delete, still is.
+async fn inspect_git(check: &mut RemovalCheck, default_branch: Option<&str>) -> Result<()> {
     if check.workspace.disposable {
         check.branch = checked_out_branch(&check.workspace.path).await?;
-        if policy == InspectionPolicy::IncludeDirectoryProcesses {
-            check
-                .load_directory_processes(&process::DirectoryUsers::default())
-                .await?;
-        }
-        return Ok(check);
+        return Ok(());
     }
     let path = &check.workspace.path;
     let head = git::resolve_commit(path, "HEAD", git::run).await?;
@@ -145,12 +180,7 @@ pub(crate) async fn inspect(
         check.starting_commits =
             check.unpushed_commits > 0 && only_starting_commits(&check.workspace, &kept).await?;
     }
-    if policy == InspectionPolicy::IncludeDirectoryProcesses {
-        check
-            .load_directory_processes(&process::DirectoryUsers::default())
-            .await?;
-    }
-    Ok(check)
+    Ok(())
 }
 
 /// Whether the workspace is a copy still at its starting HEAD with the

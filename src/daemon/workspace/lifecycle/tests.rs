@@ -1344,6 +1344,11 @@ async fn a_clean_confirmation_naming_children_removes_clean_only() {
     assert_eq!(confirmed.children(), Some(&[child.id][..]));
     // Files appearing after the final inspection are not the caller's to
     // delete, so only unsaved work it confirmed forces removal.
+    let check = crate::removal::Inspection {
+        check,
+        default_branch: None,
+        idle_restores: vec![],
+    };
     let (files, _) = worktrunk_removal_options(&check, &confirmed);
     assert!(matches!(files, FileRemoval::CleanOnly));
     let (files, _) = worktrunk_removal_options(&check, &UnsavedWork::All);
