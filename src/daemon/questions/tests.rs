@@ -661,6 +661,37 @@ async fn a_workspace_reserved_for_removal_takes_no_question() {
 }
 
 #[tokio::test]
+async fn done_closes_a_question_it_cannot_read() {
+    let (_root, manager, workspace) = fixture().await;
+    let asked = manager
+        .ask_question(
+            &SpaceSelector::from(&workspace.name),
+            ask("Which database?", &[]),
+            Vec::new(),
+            &Attacher::User,
+        )
+        .await
+        .unwrap();
+    let (id, number) = (workspace.id.clone(), asked.number);
+    let closed = manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE questions SET choices='not json' WHERE space_number=?1 AND number=?2",
+                params![number.space, number.item],
+            )?;
+            let tx = db.transaction()?;
+            let closed = close_open(&tx, &id)?;
+            tx.commit()?;
+            Ok(closed)
+        })
+        .await
+        .unwrap();
+    assert_eq!(closed, vec![asked.number]);
+    assert!(!manager.has_open_questions(&workspace.id).await.unwrap());
+}
+
+#[tokio::test]
 async fn done_closes_open_questions_for_good() {
     let (_root, manager, workspace) = fixture().await;
     let answered = manager
