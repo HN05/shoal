@@ -168,6 +168,33 @@ impl Manager {
         Ok(workspace)
     }
 
+    /// `chat`, which must be a stopped chat below the caller's space that
+    /// the caller's process or one below it stopped: a chat the user or
+    /// Shoal stopped, or whose agent exited, is the user's to resume.
+    pub(in crate::daemon) async fn stopped_chat_below<'a>(
+        &self,
+        caller: &Caller,
+        chat: &'a mut String,
+    ) -> Result<&'a mut String> {
+        let chat = self
+            .workspace_below(
+                caller,
+                chat,
+                "scoped processes resume only the chats below their own space",
+            )
+            .await?;
+        let id = self.present_space(chat).await?.id().to_owned();
+        let ours = match self.chat_stopped_by(&id).await? {
+            Some(stopper) => self.within_subtree(&caller.space_id, &stopper).await?,
+            None => false,
+        };
+        ensure!(
+            ours,
+            "scoped processes resume only the chats that they or the spaces below them stopped; ask the user to resume this one"
+        );
+        Ok(chat)
+    }
+
     /// `workspace`, which must be one below the caller's that the user
     /// holds nothing of, nor of any workspace below it: removing it releases
     /// their holds, and only the holds agents placed are agents' to release.

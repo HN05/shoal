@@ -149,6 +149,27 @@ fn a_chats_agent_restarts_the_agents_below_its_chat() {
     agent.wait().unwrap();
 }
 
+/// A workspace's agent resumes a chat below its own that its restart left
+/// stopped, and is refused one the user's restart left stopped.
+#[test]
+fn a_workspaces_agent_resumes_the_chats_it_stopped() {
+    let fixture = parent_fixture();
+    fixture.add("parent");
+    resumes_the_chats_it_stopped(&fixture, &Parent::Workspace("parent"));
+}
+
+/// A chat's agent resumes the chats below its chat that it stopped, as a
+/// workspace's agent does.
+#[test]
+fn a_chats_agent_resumes_the_chats_it_stopped() {
+    let fixture = parent_fixture();
+    let (mut agent, id) = start_test_chat(&fixture, "planning");
+    let parent = Parent::chat(&fixture, "planning", id);
+    resumes_the_chats_it_stopped(&fixture, &parent);
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
 /// A fixture whose workspace agents restart with `resume.sh` in their
 /// worktree, whose chats run `agent.sh` in the checkout, and whose detached
 /// places are zmx sessions.
@@ -269,6 +290,55 @@ fn restarts_the_agents_below(fixture: &Fixture, parent: &Parent) {
     wait_until("chat restored", || home.join("chat-restored").exists());
     fixture.ok(&["rm", "talk", "--yes"]);
     drop(agent);
+    wait_zmx_sessions_ended(&home);
+}
+
+/// `parent` resumes the chat `talk` below it once its restart, which no
+/// place could restore, left the chat stopped, but not once the user's did.
+fn resumes_the_chats_it_stopped(fixture: &Fixture, parent: &Parent) {
+    let home = fixture.root.path().to_owned();
+    let zmx = home.join("bin/zmx");
+    let restored = home.join("chat-restored");
+    std::thread::scope(|scope| {
+        let chat = scope.spawn(|| {
+            fixture.interactive_command(
+                fixture.command().current_dir(&fixture.repo).args([
+                    "start",
+                    "--chat",
+                    "--here",
+                    "--agent",
+                    "claude",
+                    "--name",
+                    "talk",
+                    "--parent",
+                    parent.name(),
+                ]),
+                "",
+            )
+        });
+        wait_until("chat started", || home.join("chat-started").exists());
+        install_test_script(&zmx, "#!/bin/sh\nexit 1\n");
+        let output = fixture.run(&["restart", "talk"]);
+        assert!(!output.status.success(), "{output:?}");
+        chat.join().unwrap();
+    });
+    install_test_script(&zmx, terminal_zmx());
+    let output = parent.run(fixture, &["resume", "talk"]);
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("ask the user"), "{output:?}");
+    assert!(!restored.exists());
+
+    fixture.ok(&["resume", "talk"]);
+    wait_until("the user's restore", || restored.exists());
+    fs::remove_file(&restored).unwrap();
+    install_test_script(&zmx, "#!/bin/sh\nexit 1\n");
+    let output = parent.run(fixture, &["restart", "talk"]);
+    assert!(!output.status.success(), "{output:?}");
+    install_test_script(&zmx, terminal_zmx());
+    let resumed = parent.ok(fixture, &["resume", "talk"]);
+    assert_eq!(resumed["chats"][0]["chat"], "talk", "{resumed}");
+    wait_until("the parent's restore", || restored.exists());
+    fixture.ok(&["rm", "talk", "--yes"]);
     wait_zmx_sessions_ended(&home);
 }
 

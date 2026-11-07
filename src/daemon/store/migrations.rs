@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use super::{chat_names, place_servers};
 
 /// Schema version written by this build; older databases are migrated on open.
-pub(super) const SCHEMA_VERSION: i64 = 137;
+pub(super) const SCHEMA_VERSION: i64 = 138;
 
 /// Runs before a migration's SQL to check existing rows, or to change them
 /// where SQL cannot; failure aborts the upgrade.
@@ -400,7 +400,13 @@ pub(super) const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (135, WORKSPACE_COPIES, None),
     (136, "", Some(allow_chats_without_repository)),
     (137, "", Some(allow_files_without_repository)),
+    (138, CHAT_STOPPERS, None),
 ];
+
+/// The space whose process stopped a stopped chat, such as by a restart
+/// whose restore failed, which may resume it; NULL for a chat the user or
+/// Shoal stopped, or whose agent exited, which is the user's to resume.
+pub(super) const CHAT_STOPPERS: &str = "ALTER TABLE chats ADD COLUMN stopped_by TEXT;";
 
 /// The workspace a copy was made from, its checkpoint the copy started
 /// from, the number of the copy's own checkpoint of what it started with,

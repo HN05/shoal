@@ -6,7 +6,7 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     chats::NewChat,
-    scope::{Caller, Scoped, denied},
+    scope::{Caller, Scoped},
     workspace::Manager,
 };
 use crate::protocol::{Body, ChatMethod};
@@ -89,7 +89,10 @@ pub(super) async fn handle(
         }
         ChatMethod::RestartChat { chat, join, run } => Body::RestartedPlace(match join {
             Some(joined) => manager.join_chat_restart(&chat, joined.run, run).await?,
-            None => manager.restart_chat(&chat, run).await?,
+            None => {
+                let stopped_by = caller.map(|caller| caller.space_id.clone());
+                manager.restart_chat(&chat, run, stopped_by).await?
+            }
         }),
     }))
 }
@@ -159,7 +162,11 @@ impl Scoped for ChatMethod {
             ChatMethod::CheckChatName { .. }
             | ChatMethod::FreeChatName { .. }
             | ChatMethod::ChatRoot => None,
-            ChatMethod::RestoreChat { .. } => return Err(denied()),
+            // A scoped caller restores a chat from the background place it
+            // opens for it, with its scope.
+            ChatMethod::RestoreChat { chat, .. } => {
+                Some(manager.stopped_chat_below(caller, chat).await?)
+            }
         })
     }
 }

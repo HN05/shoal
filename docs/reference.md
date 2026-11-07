@@ -372,10 +372,13 @@ Run stop, restart and resume outside scoped executions, except that a workspace
 process may stop the workspaces below its own with `shoal stop <workspace>`,
 without `--yes`, restart the agents of the spaces below its own, workspaces and
 chats alike, with `shoal restart <space>`, discard their stopped work with
-`shoal resume <workspace> --discard`, and queue with `shoal resume <workspace>`
-the restores of the agents that it or a workspace below it stopped, which the
-daemon starts detached. An agent the user or Shoal stopped, or that exited on
-its own, is the user's to resume.
+`shoal resume <space> --discard`, queue with `shoal resume <workspace>`
+the restores of the agents that it or a space below it stopped, which the
+daemon starts detached, and restore with `shoal resume <chat>`, in a
+background place, the chats below its own whose restart by it or a space
+below it left them stopped. An agent or chat the user or Shoal stopped, or
+that exited on its own, is the user's to resume. A chat's agent may do the
+same below its chat.
 
 `shoal stop --interrupt [workspace...]` cancels the current turn of each agent
 in the selected workspaces and keeps the agent running with its background

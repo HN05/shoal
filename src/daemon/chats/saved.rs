@@ -5,7 +5,7 @@
 //! restores it in a new process or it is removed.
 use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{
     ensure_place_free,
@@ -40,7 +40,11 @@ impl Manager {
         let Saved {
             running: saved,
             released,
-        } = match self.store.run(move |db| save(db, restore, None)).await {
+        } = match self
+            .store
+            .run(move |db| save(db, restore, None, None))
+            .await
+        {
             Ok(saved) => saved,
             Err(error) => {
                 log!("chats not saved: {error:#}");
@@ -61,15 +65,17 @@ impl Manager {
     }
 
     /// Save the running chat `id` for `shoal resume`, then stop the processes
-    /// it owns, as [`Self::save_chats`] saves each chat.
-    pub(crate) async fn save_chat(&self, id: &str) -> Result<()> {
+    /// it owns, as [`Self::save_chats`] saves each chat; the process of the
+    /// space `stopped_by` stops it, which may resume it.
+    pub(crate) async fn save_chat(&self, id: &str, stopped_by: Option<&str>) -> Result<()> {
         let _saving = self.chat_saves.lock().await;
         let _handoffs = self.chat_handoffs.write().await;
         self.stop_finished_chats().await?;
         let chat = id.to_owned();
+        let stopped_by = stopped_by.map(str::to_owned);
         let Saved { running, released } = self
             .store
-            .run(move |db| save(db, ChatRestore::Resume, Some(&chat)))
+            .run(move |db| save(db, ChatRestore::Resume, Some(&chat), stopped_by.as_deref()))
             .await?;
         let (id, process) = running
             .into_iter()
@@ -225,6 +231,24 @@ impl Manager {
         Ok(())
     }
 
+    /// The space whose process stopped the stopped chat `id`; none when the
+    /// user or Shoal stopped it, or its agent exited.
+    pub(crate) async fn chat_stopped_by(&self, id: &str) -> Result<Option<String>> {
+        let id = id.to_owned();
+        (self.store)
+            .run(move |db| {
+                let stopper = db
+                    .query_row(
+                        "SELECT stopped_by FROM chats WHERE id=?1 AND restore IS NOT NULL",
+                        [id],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                Ok(stopper.flatten())
+            })
+            .await
+    }
+
     /// The stopped chat `selector` names, by ID or name.
     async fn saved_chat(&self, selector: &str) -> Result<Chat> {
         self.recorded_chat(selector)
@@ -282,8 +306,14 @@ struct Saved {
 }
 
 /// Mark every running chat, or only the chat `only`, saved to come back as
-/// `restore` says.
-fn save(db: &mut Connection, restore: ChatRestore, only: Option<&str>) -> Result<Saved> {
+/// `restore` says, stopped by the process of the space `stopped_by`, or by
+/// Shoal.
+fn save(
+    db: &mut Connection,
+    restore: ChatRestore,
+    only: Option<&str>,
+    stopped_by: Option<&str>,
+) -> Result<Saved> {
     let tx = db.transaction()?;
     let mut running = super::recorded_processes(&tx)?;
     running.retain(|(id, _)| only.is_none_or(|only| only == id));
@@ -291,8 +321,8 @@ fn save(db: &mut Connection, restore: ChatRestore, only: Option<&str>) -> Result
     for (id, process) in &running {
         tx.execute(
             "UPDATE chats SET restore=?2,unique_id=COALESCE(?3,unique_id),stopped_at=unixepoch(),
-                saved=1 WHERE id=?1",
-            params![id, restore, live_unique_id(process)?],
+                saved=1,stopped_by=?4 WHERE id=?1",
+            params![id, restore, live_unique_id(process)?, stopped_by],
         )?;
         released.extend(release_decided_by(&tx, id)?);
     }

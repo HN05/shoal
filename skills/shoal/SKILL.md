@@ -116,7 +116,8 @@ shoal files <child>
 `stop` stops the child's agent and those below it, keeping their sessions, and
 cancels agents queued to start there; `restart` stops the child's agent and
 starts its session again at once; `resume` queues the agents the caller
-stopped, while the user resumes the ones the user stopped.
+stopped and restores the chats its restart left stopped in a background
+place, while the user resumes the ones the user stopped.
 
 A child's approval request comes to its coordinator first.
 `shoal approvals --approve <S.N>` works only for a request to hold a workspace

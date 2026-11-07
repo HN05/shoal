@@ -42,7 +42,7 @@ pub async fn select(
         ensure_below(&targets, now || focus)?;
     }
     let named = !targets.space.is_empty();
-    let mut selected = Selected::load(ctx, targets, scoped).await?;
+    let mut selected = Selected::load(ctx, targets).await?;
     if named
         && !discard
         && execution.is_none()
@@ -51,8 +51,7 @@ pub async fn select(
         return Ok(code);
     }
     if scoped && !discard {
-        let workspaces = selected.workspaces.unwrap_or_default();
-        return queue_below(ctx, workspaces, execution).await;
+        return queue_below(ctx, selected, execution).await;
     }
     let queuing = Queuing::of(ctx, now);
     match (selected.chats.as_slice(), selected.workspaces.as_deref()) {
@@ -131,16 +130,17 @@ async fn continue_turns(ctx: &Context, selected: &mut Selected) -> Result<Option
     continuation.submit(ctx).await.map(Some)
 }
 
-/// Refuse a resume in a workspace process that does not name the workspaces
+/// Refuse a resume in a workspace process that does not name the spaces
 /// below its own or restores in this terminal, `here`: it only queues the
-/// restores of the agents it stopped there, which the daemon starts, or
-/// discards their stopped work.
+/// restores of the agents it stopped there, which the daemon starts, and
+/// restores the chats it stopped in a background place, or discards their
+/// stopped work.
 fn ensure_below(targets: &SpaceTargets, here: bool) -> Result<()> {
-    // The daemon checks that each workspace is below the caller's, which
-    // needs the scope token: a process that cleared it stays refused.
+    // The daemon checks that each space is below the caller's, which needs
+    // the scope token: a process that cleared it stays refused.
     ensure!(
         crate::env::is_scoped() && !targets.all && !targets.space.is_empty() && !here,
-        "workspace processes resume only the workspaces below theirs, by name and without --now or --focus: shoal resume <workspace> [--discard]"
+        "workspace processes resume only the spaces below theirs, by name and without --now or --focus: shoal resume <space> [--discard]"
     );
     Ok(())
 }
@@ -184,19 +184,17 @@ async fn resume_each(
 }
 
 /// Queue the restores of the stopped agents and last sessions of the
-/// workspaces below this process's that `selectors` name, only `execution`'s
-/// when given; the daemon refuses those this process or one below it did
-/// not stop, and starts the rest detached.
-async fn queue_below(
-    ctx: &Context,
-    selectors: Vec<String>,
-    execution: Option<String>,
-) -> Result<i32> {
+/// `selected` workspaces below this process's, only `execution`'s when
+/// given, and restore the `selected` chats in a background place; the daemon
+/// refuses those this process or one below it did not stop, and starts the
+/// workspaces' agents detached.
+async fn queue_below(ctx: &Context, selected: Selected, execution: Option<String>) -> Result<i32> {
     let mut stopped = Vec::new();
-    for selector in selectors {
+    for selector in selected.workspaces.unwrap_or_default() {
         stopped.push(stopped_agents(ctx, selector, execution.as_deref()).await?);
     }
-    queue::queue_all(ctx, stopped, Vec::new(), Vec::new(), false).await
+    let (chats, failed) = chats::restore_each(ctx, &selected.chats).await;
+    queue::queue_all(ctx, stopped, chats, failed, false).await
 }
 
 /// Executions stopped so their workspaces could move, by workspace.

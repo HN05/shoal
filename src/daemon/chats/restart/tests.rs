@@ -22,7 +22,10 @@ async fn a_restart_saves_a_chat_and_restores_it_as_shoal_resume_does() {
         .await
         .unwrap();
 
-    manager.restart_chat(&chat.id, run("a")).await.unwrap();
+    manager
+        .restart_chat(&chat.id, run("a"), None)
+        .await
+        .unwrap();
 
     // Its agent stopped, and the daemon ran `shoal resume` for the saved chat.
     assert!(!process.wait().unwrap().success());
@@ -30,6 +33,8 @@ async fn a_restart_saves_a_chat_and_restores_it_as_shoal_resume_does() {
     assert_eq!(saved.restore, Some(ChatRestore::Resume));
     assert!(manager.chat_saved(&chat.id).await.unwrap());
     assert!(RESUMED.lock().unwrap().contains(&chat.id));
+    // The user's restart is the user's stop.
+    assert_eq!(manager.chat_stopped_by(&chat.id).await.unwrap(), None);
     // A run that continues it learns the restart started it again.
     manager
         .join_chat_restart(&chat.id, run("a"), run("b"))
@@ -47,7 +52,10 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
         .unwrap();
     UNRESUMABLE.lock().unwrap().push(chat.name.clone());
 
-    let error = manager.restart_chat(&chat.id, run("a")).await.unwrap_err();
+    let coordinator = Some("coordinator".to_owned());
+    let error = (manager.restart_chat(&chat.id, run("a"), coordinator.clone()))
+        .await
+        .unwrap_err();
 
     assert!(
         format!("{error:#}").contains("shoal resume unrestored"),
@@ -56,8 +64,39 @@ async fn a_chat_whose_restore_fails_stays_stopped_for_shoal_resume() {
     assert!(!process.wait().unwrap().success());
     let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.restore, Some(ChatRestore::Resume));
+    // The space whose process asked for the restart stopped it.
+    let stopper = manager.chat_stopped_by(&chat.id).await.unwrap();
+    assert_eq!(stopper, coordinator);
     let agents = manager.running_chat_agents().await.unwrap();
     assert!(agents.iter().all(|agent| agent.execution != chat.id));
+}
+
+/// A chat a coordinator stopped is the user's to resume once its restored
+/// agent exits on its own.
+#[tokio::test]
+async fn an_exit_after_a_restore_leaves_the_chat_to_the_user() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = named_chat(root.path(), &manager, "exited").await;
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+    UNRESUMABLE.lock().unwrap().push(chat.name.clone());
+    let coordinator = Some("coordinator".to_owned());
+    let restart = manager.restart_chat(&chat.id, run("a"), coordinator);
+    assert!(restart.await.is_err());
+    process.wait().unwrap();
+    let restored = ProcessGroup::spawn(unmarked("sleep").arg("600"));
+    manager
+        .restore_chat(&chat.id, restored.id(), None, false)
+        .await
+        .unwrap();
+
+    restored.kill();
+
+    let stopped = manager.chats().await.unwrap();
+    assert_eq!(stopped[0].restore, Some(ChatRestore::Resume));
+    assert_eq!(manager.chat_stopped_by(&chat.id).await.unwrap(), None);
 }
 
 #[tokio::test]
@@ -88,7 +127,12 @@ async fn a_chat_whose_agent_cannot_resume_its_session_keeps_running() {
 
     let agents = manager.running_chat_agents().await.unwrap();
     assert!(!agents[0].restorable);
-    assert!(manager.restart_chat(&chat.id, run("a")).await.is_err());
+    assert!(
+        manager
+            .restart_chat(&chat.id, run("a"), None)
+            .await
+            .is_err()
+    );
     let running = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
     assert_eq!(running.restore, None);
     assert!(!RESUMED.lock().unwrap().contains(&chat.id));
@@ -105,7 +149,7 @@ async fn a_daemon_update_waits_for_a_chat_restart() {
     HELD.lock().unwrap().push(chat.name.clone());
     let restart = tokio::spawn({
         let (manager, id) = (manager.clone(), chat.id.clone());
-        async move { manager.restart_chat(&id, run("a")).await }
+        async move { manager.restart_chat(&id, run("a"), None).await }
     });
     while !RESUMED.lock().unwrap().contains(&chat.id) {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;

@@ -441,6 +441,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 137 {
         allow_files_without_repository(&db)?;
     }
+    if version >= 138 {
+        db.execute_batch(CHAT_STOPPERS)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

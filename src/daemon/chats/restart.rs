@@ -19,12 +19,13 @@ use crate::{
 
 impl Manager {
     /// Restart the agent of the running chat `id` for the `shoal restart`
-    /// `run`, or join the restart in progress, returning the place it runs
-    /// in again.
+    /// `run`, which the process of the space `stopped_by` asks for, or join
+    /// the restart in progress, returning the place it runs in again.
     pub(crate) async fn restart_chat(
         self: &Arc<Self>,
         id: &str,
         run: Option<String>,
+        stopped_by: Option<String>,
     ) -> Result<Option<Origin>> {
         let chat = self.running_chat(id).await?;
         let resumes = match &chat {
@@ -39,7 +40,7 @@ impl Manager {
             let operation = self.gates.owned_operation().await;
             let manager = self.clone();
             tokio::spawn(async move {
-                manager.run_chat_restart(chat).await;
+                manager.run_chat_restart(chat, stopped_by).await;
                 drop(operation);
             });
         }
@@ -101,18 +102,24 @@ impl Manager {
         Ok(launch.arguments.resume_args(Some(session)).is_some())
     }
 
-    /// Restart `chat` and answer the requests for it with how that ended.
-    async fn run_chat_restart(&self, chat: Chat) {
-        let outcome = self.save_and_restore(&chat).await;
+    /// Restart `chat` for the process of the space `stopped_by` and answer
+    /// the requests for it with how that ended.
+    async fn run_chat_restart(&self, chat: Chat, stopped_by: Option<String>) {
+        let outcome = self.save_and_restore(&chat, stopped_by.as_deref()).await;
         let outcome = outcome.map_err(|error| format!("{error:#}"));
         self.chat_agents.finish(&chat.id, &outcome);
     }
 
-    /// Save `chat` and stop its agent, then restore it, returning the place
-    /// it runs in again. A chat whose restore fails stays stopped for
-    /// `shoal resume`.
-    async fn save_and_restore(&self, chat: &Chat) -> Result<Option<Origin>> {
-        self.save_chat(&chat.id).await?;
+    /// Save `chat` and stop its agent for the process of the space
+    /// `stopped_by`, then restore it, returning the place it runs in again.
+    /// A chat whose restore fails stays stopped for `shoal resume`, the
+    /// stopper's to resume.
+    async fn save_and_restore(
+        &self,
+        chat: &Chat,
+        stopped_by: Option<&str>,
+    ) -> Result<Option<Origin>> {
+        self.save_chat(&chat.id, stopped_by).await?;
         let restored = resume(&self.paths, chat)
             .await
             .map_err(|error| format!("{error:#}"));

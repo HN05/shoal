@@ -46,8 +46,8 @@ impl Selected {
     /// workspace for `--all`; otherwise the current workspace when it has
     /// something to resume, else those picked among the workspaces and saved
     /// chats, or all of them when nothing is resumable anywhere.
-    pub async fn load(ctx: &Context, targets: SpaceTargets, scoped: bool) -> Result<Self> {
-        let spaces = candidates(ctx, scoped).await?;
+    pub async fn load(ctx: &Context, targets: SpaceTargets) -> Result<Self> {
+        let spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
         let saved = saved_chats(&spaces);
         if targets.all {
             return Ok(Self::every(saved));
@@ -91,16 +91,6 @@ impl Selected {
             }
         }
     }
-}
-
-/// The spaces a resume can name. A workspace process, `scoped` by its scope
-/// or its ancestry, gets no chats, which act with the user's authority.
-async fn candidates(ctx: &Context, scoped: bool) -> Result<Spaces> {
-    let mut spaces = crate::client::workspaces::spaces(&ctx.paths).await?;
-    if scoped {
-        spaces.chats.clear();
-    }
-    Ok(spaces)
 }
 
 /// The stopped chats among `spaces`.
