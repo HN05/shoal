@@ -1,4 +1,4 @@
-//! An app's calls through `shoal::client`, as the user and as a
+//! An app's calls through `shoal_client`, as the user and as a
 //! workspace's agent, against a daemon on an isolated state directory.
 use crate::client::space_names::SpaceSelector;
 use crate::daemon::approvals::ApprovalRequestExt;
