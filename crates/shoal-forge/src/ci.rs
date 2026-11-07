@@ -13,7 +13,6 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::state::states;
 use crate::{
     ForgeRepo,
     account::Account,
@@ -22,6 +21,7 @@ use crate::{
     items::{item::ItemState, link::ItemKind},
     transport::api::{HttpMethod, Request},
 };
+use crate::{ci::check_state::CheckState, state::states};
 
 states!(CiAction: ValueEnum {
     Rerun => "rerun",
@@ -60,6 +60,18 @@ impl JobState {
     /// Whether the job or run has yet to finish.
     pub(crate) fn unfinished(self) -> bool {
         matches!(self, Self::Waiting | Self::Running)
+    }
+}
+
+/// A cancelled check failed to finish, so it can be rerun.
+impl From<CheckState> for JobState {
+    fn from(state: CheckState) -> Self {
+        match state {
+            CheckState::Waiting | CheckState::Queued => Self::Waiting,
+            state if !state.complete() => Self::Running,
+            state if state.failed() || state == CheckState::Cancelled => Self::Failed,
+            _ => Self::Finished,
+        }
     }
 }
 

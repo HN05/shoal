@@ -1,7 +1,5 @@
 //! GitLab's REST shapes: issues and merge requests numbered by `iid`,
 //! projects addressed by their encoded path, and states of its own.
-use std::collections::BTreeMap;
-
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
@@ -11,7 +9,7 @@ use crate::{
     backends::rest::{RestCheck, RestReads, fingerprints},
     capability::{self, Capability, Support},
     ci::{
-        CiAction, CiCheck, Job, JobState, Location, Operation, check,
+        CiAction, CiCheck, Job, Location, Operation, check,
         check_state::CheckState,
         checks::plain,
         id,
@@ -831,7 +829,7 @@ impl Backend for GitLab {
             url: text(&value["web_url"]).context("pipeline has no URL")?,
             branch: text(&value["ref"]).filter(|_| value["tag"] != true),
             workflow: None,
-            state: status_state(&value["status"])?,
+            state: status_state(&value["status"])?.into(),
             waiting: false,
         })
     }
@@ -869,7 +867,7 @@ impl Backend for GitLab {
                 Ok(RunJob {
                     id: job["id"].as_u64().context("GitLab job has no ID")?,
                     name: text(&job["name"]).context("GitLab job has no name")?,
-                    state: status_state(&job["status"])?,
+                    state: status_state(&job["status"])?.into(),
                     url: text(&job["web_url"]),
                 })
             })
@@ -1184,37 +1182,22 @@ fn user_ids(current: &Current, names: &[String]) -> Result<Vec<u64>> {
         .collect()
 }
 
-/// The newest status of each name; retried jobs keep their earlier ones.
+/// The newest status of each name, with a failure the job is allowed as a
+/// warning, which does not fail the PR's checks.
 fn statuses(statuses: &[Value]) -> Result<Vec<RestCheck>> {
-    let mut latest = BTreeMap::new();
-    for status in statuses {
-        let name = status["name"]
-            .as_str()
-            .context("GitLab status has no name")?;
-        let id = status["id"].as_u64().context("GitLab status has no ID")?;
-        let state = match status["status"].as_str() {
-            Some("created" | "waiting_for_resource" | "pending" | "scheduled") => {
-                CheckState::Waiting
-            }
-            Some("preparing" | "running" | "canceling" | "waiting_for_callback") => {
-                CheckState::Pending
-            }
-            Some("success") => CheckState::Success,
-            Some("failed") if status["allow_failure"] == true => CheckState::Warning,
-            Some("failed") => CheckState::Failure,
-            Some("canceled") => CheckState::Cancelled,
-            // A manual job waits for someone to start it, which CI cannot.
-            Some("skipped" | "manual") => CheckState::Skipped,
-            state => bail!("unknown GitLab CI state {state:?}"),
-        };
-        if latest.get(name).is_none_or(|(newest, _)| *newest < id) {
-            latest.insert(name.to_owned(), (id, state));
-        }
-    }
-    Ok(latest
+    latest_statuses(statuses)?
         .into_iter()
-        .map(|(name, (_, state))| RestCheck { name, state })
-        .collect())
+        .map(|(name, status)| {
+            let state = match status_state(&status["status"])? {
+                CheckState::Failure if status["allow_failure"] == true => CheckState::Warning,
+                state => state,
+            };
+            Ok(RestCheck {
+                name: name.into(),
+                state,
+            })
+        })
+        .collect()
 }
 
 /// Reviewers' latest states, then approvals, which outrank them.
@@ -1332,36 +1315,45 @@ fn labels(labels: &Value) -> Vec<String> {
         .collect()
 }
 
-/// GitLab's newest status of each name; a retried job keeps its earlier ones.
-/// The state a commit status, pipeline or job reports.
-fn status_state(status: &Value) -> Result<JobState> {
+/// The state a commit status, pipeline or job reports. One being cancelled
+/// is pending until it ends.
+fn status_state(status: &Value) -> Result<CheckState> {
     Ok(match status.as_str() {
-        Some("created" | "waiting_for_resource" | "pending" | "scheduled") => JobState::Waiting,
-        Some("preparing" | "running" | "waiting_for_callback") => JobState::Running,
-        Some("failed" | "canceled") => JobState::Failed,
-        Some("success" | "skipped" | "manual" | "canceling") => JobState::Finished,
+        Some("created" | "waiting_for_resource" | "pending" | "scheduled") => CheckState::Waiting,
+        Some("preparing" | "running" | "canceling" | "waiting_for_callback") => CheckState::Pending,
+        Some("success") => CheckState::Success,
+        Some("failed") => CheckState::Failure,
+        Some("canceled") => CheckState::Cancelled,
+        // A manual job waits for someone to start it, which CI cannot.
+        Some("skipped" | "manual") => CheckState::Skipped,
         state => bail!("unknown GitLab CI state {state:?}"),
     })
 }
 
 fn latest_checks(statuses: &[Value]) -> Result<Vec<CiCheck>> {
-    let mut latest = std::collections::BTreeMap::new();
-    for status in statuses {
-        let id = status["id"].as_u64().context("GitLab status has no ID")?;
-        let check = check(
-            status,
-            "name",
-            status_state(&status["status"])?,
-            "target_url",
-        )?;
-        if latest
-            .get(&check.0)
-            .is_none_or(|(newest, _): &(u64, CiCheck)| *newest < id)
-        {
-            latest.insert(check.0.clone(), (id, check));
-        }
-    }
-    Ok(latest.into_values().map(|(_, check)| check).collect())
+    latest_statuses(statuses)?
+        .into_iter()
+        .map(|(_, status)| {
+            let state = status_state(&status["status"])?.into();
+            check(status, "name", state, "target_url")
+        })
+        .collect()
+}
+
+/// The newest status of each name, by name; a retried job keeps its
+/// earlier ones.
+fn latest_statuses(statuses: &[Value]) -> Result<Vec<(&str, &Value)>> {
+    let keyed = statuses
+        .iter()
+        .map(|status| {
+            let name = status["name"]
+                .as_str()
+                .context("GitLab status has no name")?;
+            let id = status["id"].as_u64().context("GitLab status has no ID")?;
+            Ok((name, id, (name, status)))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(rest::latest_by_key(keyed))
 }
 
 /// The list endpoint that runs `search` for items of `kind`. GitLab keeps

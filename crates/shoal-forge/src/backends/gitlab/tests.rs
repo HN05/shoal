@@ -1,4 +1,5 @@
 use super::*;
+use crate::ci::JobState;
 
 #[test]
 fn open_blocking_issues_are_the_open_is_blocked_by_links() {
@@ -269,6 +270,8 @@ fn retried_jobs_report_their_newest_attempt() {
         json!({"id": 8, "name": "docs", "status": "canceled"}),
         json!({"id": 10, "name": "deploy", "status": "waiting_for_callback"}),
         json!({"id": 11, "name": "audit", "status": "pending"}),
+        // A job being cancelled runs until it ends.
+        json!({"id": 12, "name": "lint", "status": "canceling"}),
     ];
     assert_eq!(
         latest_checks(&gitlab).unwrap(),
@@ -276,6 +279,7 @@ fn retried_jobs_report_their_newest_attempt() {
             ("audit".into(), JobState::Waiting, String::new()),
             ("deploy".into(), JobState::Running, String::new()),
             ("docs".into(), JobState::Failed, String::new()),
+            ("lint".into(), JobState::Running, String::new()),
             ("rust".into(), JobState::Running, "new".into())
         ]
     );

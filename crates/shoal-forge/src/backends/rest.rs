@@ -1,5 +1,7 @@
 //! Reads shared by the forges Shoal reaches through their REST APIs; GitHub
 //! keeps its own activity reads.
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result, ensure};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::Value;
@@ -142,6 +144,20 @@ pub(crate) async fn pr_status(
     }
     .await
     .hint_login(reads)
+}
+
+/// The item of each key with the greatest order, in key order; of those
+/// with the same order, the first.
+pub(crate) fn latest_by_key<K: Ord, O: Ord, T>(
+    items: impl IntoIterator<Item = (K, O, T)>,
+) -> Vec<T> {
+    let mut latest = BTreeMap::<K, (O, T)>::new();
+    for (key, order, item) in items {
+        if latest.get(&key).is_none_or(|(newest, _)| *newest < order) {
+            latest.insert(key, (order, item));
+        }
+    }
+    latest.into_values().map(|(_, item)| item).collect()
 }
 
 /// The checks on `pull`'s head while it is open; a closed PR has none to read.

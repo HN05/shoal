@@ -937,37 +937,32 @@ fn merge_request(endpoint: String, method: MergeMethod, delete_branch: bool) -> 
 
 /// The newest status of each build, by its key.
 fn statuses(statuses: &[Value]) -> Result<Vec<RestCheck>> {
-    let mut latest = BTreeMap::new();
-    for status in statuses {
-        let key = status["key"]
-            .as_str()
-            .context("Bitbucket status has no key")?;
-        let name = status["name"]
-            .as_str()
-            .filter(|name| !name.is_empty())
-            .unwrap_or(key);
-        let updated = status["updated_on"].as_str().unwrap_or_default();
-        let state = match status["state"].as_str() {
-            Some("INPROGRESS") => CheckState::Pending,
-            Some("SUCCESSFUL") => CheckState::Success,
-            Some("FAILED") => CheckState::Failure,
-            Some("STOPPED") => CheckState::Cancelled,
-            state => bail!("unknown Bitbucket build state {state:?}"),
-        };
-        if latest
-            .get(key)
-            .is_none_or(|(newest, _, _): &(&str, &str, CheckState)| *newest < updated)
-        {
-            latest.insert(key, (updated, name, state));
-        }
-    }
-    Ok(latest
-        .into_values()
-        .map(|(_, name, state)| RestCheck {
-            name: name.into(),
-            state,
+    let keyed = statuses
+        .iter()
+        .map(|status| {
+            let key = status["key"]
+                .as_str()
+                .context("Bitbucket status has no key")?;
+            let name = status["name"]
+                .as_str()
+                .filter(|name| !name.is_empty())
+                .unwrap_or(key);
+            let updated = status["updated_on"].as_str().unwrap_or_default();
+            let state = match status["state"].as_str() {
+                Some("INPROGRESS") => CheckState::Pending,
+                Some("SUCCESSFUL") => CheckState::Success,
+                Some("FAILED") => CheckState::Failure,
+                Some("STOPPED") => CheckState::Cancelled,
+                state => bail!("unknown Bitbucket build state {state:?}"),
+            };
+            let check = RestCheck {
+                name: name.into(),
+                state,
+            };
+            Ok((key, updated, check))
         })
-        .collect())
+        .collect::<Result<Vec<_>>>()?;
+    Ok(rest::latest_by_key(keyed))
 }
 
 /// Participants who approved or requested changes.
