@@ -24,7 +24,7 @@ mod plan;
 mod progress;
 
 pub(super) use plan::skip_reason;
-use plan::{Restart, Selection, Skipped, running_agents, space_skip_reason};
+use plan::{Restart, Selection, Skipped, running_agents, space_skip_reason, stopped_reason};
 use progress::Progress;
 
 /// How many agents restart at once, each holding one of the daemon's
@@ -295,8 +295,8 @@ async fn next_idle(
 
 /// Take each agent's turn state and restart from `running`, where a
 /// restart may have started it in a new wrapper, and drop the agents that no
-/// longer run, whose wrapper is gone, or that another command of `run`
-/// restarted meanwhile, returning them.
+/// longer run, whose wrapper is gone, that protection stopped, or that
+/// another command of `run` restarted meanwhile, returning them.
 fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent], run: &str) -> Vec<Skipped> {
     let mut ended = Vec::new();
     for mut restart in std::mem::take(restarts) {
@@ -308,7 +308,9 @@ fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent], run: &str) -> 
             continue;
         };
         let restarted = restart.joins.is_none() && current.restarted_by.iter().any(|by| by == run);
-        match space_skip_reason(&restart.space, current) {
+        let reason = stopped_reason(restart.space.name(), current)
+            .or_else(|| space_skip_reason(&restart.space, current));
+        match reason {
             Some(reason) => ended.push(restart.skipped(reason)),
             None if restarted => {
                 ended.push(restart.skipped("another command of this run restarted it already"));

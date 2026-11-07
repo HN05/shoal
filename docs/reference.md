@@ -429,7 +429,9 @@ restarting continues the run that asked for it: it reports on that restart,
 even with `--wait`, and skips the agents that run restarted already. A
 restarted agent keeps its agent slot, and commands keep running. Agents without
 a command to resume their session and executions whose wrapper is gone are
-skipped, for `shoal stop` and `shoal resume`. An agent or chat that does not start
+skipped, for `shoal stop` and `shoal resume`. An agent protection stopped waits
+for its restore and is left out; a named space whose only agent waits is
+reported with why it stopped and that `shoal resume` restores it now. An agent or chat that does not start
 again, as when no terminal host can open its new place, stays stopped for
 `shoal resume`, and the exit status is 1. One whose stopped
 processes do not exit is reported as pending with their PIDs and the command that

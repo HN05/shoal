@@ -91,7 +91,9 @@ impl Selection {
     }
 
     /// The agents named `agent` to restart, ready ones first, and those that
-    /// cannot restart, `in_place` when asked, or already run again.
+    /// cannot restart, `in_place` when asked, or already run again. Agents
+    /// protection stopped wait for their restore and are left out, unless
+    /// their space was named and runs no other.
     pub(super) fn plan(self, agent: Option<&str>, in_place: bool) -> Plan {
         let mut plan = Plan {
             restarts: Vec::new(),
@@ -100,7 +102,7 @@ impl Selection {
         };
         for space in self.spaces {
             // An execution whose wrapper is gone may run any agent.
-            let agents: Vec<_> = self
+            let (stopped, agents): (Vec<_>, Vec<_>) = self
                 .agents
                 .iter()
                 .filter(|running| running.space_id == space.id())
@@ -108,15 +110,12 @@ impl Selection {
                     agent.is_none() || running.agent.is_none() || running.agent.as_deref() == agent
                 })
                 .cloned()
-                .collect();
+                .partition(|running| running.stopped.is_some());
             if agents.is_empty() && self.named {
                 plan.skipped.push(Skipped {
                     space: space.name().to_owned(),
                     agent: agent.map(str::to_owned),
-                    reason: match agent {
-                        Some(agent) => format!("no {agent} agent runs there"),
-                        None => "no agent runs there".into(),
-                    },
+                    reason: absent_reason(space.name(), agent, &stopped),
                 });
             }
             for running in agents {
@@ -235,6 +234,32 @@ pub(super) fn space_skip_reason(space: &PresentSpace, running: &RunningAgent) ->
         }
         PresentSpace::Chat(_) => None,
     }
+}
+
+/// Why the named `space` restarts no agent named `agent`, when the only ones
+/// it has are those of `stopped`, which protection stopped.
+fn absent_reason(space: &str, agent: Option<&str>, stopped: &[RunningAgent]) -> String {
+    if let Some(reason) = stopped
+        .iter()
+        .find_map(|running| stopped_reason(space, running))
+    {
+        return reason;
+    }
+    match agent {
+        Some(agent) => format!("no {agent} agent runs there"),
+        None => "no agent runs there".into(),
+    }
+}
+
+/// Why `running`, the agent of `space`, does not restart when protection
+/// stopped it: it waits for its restore, which `shoal resume` starts now.
+pub(super) fn stopped_reason(space: &str, running: &RunningAgent) -> Option<String> {
+    let protection = running.stopped.as_ref()?;
+    let agent = running.agent.as_deref().unwrap_or("its agent");
+    Some(format!(
+        "{agent} is stopped ({}) and resumes once {}; restore it now with shoal resume {space}",
+        protection.reason, protection.resumes_when
+    ))
 }
 
 /// Why `running` cannot restart in place, if it cannot; `shoal queue move`

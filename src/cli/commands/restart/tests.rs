@@ -89,3 +89,42 @@ fn an_agent_another_command_of_the_run_restarted_is_skipped() {
     assert!(restarts.is_empty());
     assert_eq!(skipped.len(), 1);
 }
+
+#[test]
+fn an_agent_protection_stopped_while_the_run_waited_is_skipped() {
+    let workspace = Workspace::new_record(
+        "repository".into(),
+        "docs".into(),
+        "docs".into(),
+        Some("docs".into()),
+        WorkspaceState::Ready,
+    );
+    let agent = RunningAgent {
+        execution: "docs-execution".into(),
+        space_id: workspace.id.clone(),
+        agent: Some("claude".into()),
+        restorable: true,
+        state: Some(AgentState::Working),
+        interrupted: false,
+        origin: None,
+        restarted_by: Vec::new(),
+        restart: None,
+        stopped: None,
+        restarted_from: Vec::new(),
+    };
+    let mut restarts = vec![Restart {
+        space: PresentSpace::Workspace(workspace),
+        agent: agent.clone(),
+        joins: None,
+    }];
+    let stopped = RunningAgent {
+        stopped: Some(crate::client::protocol::Protection {
+            reason: "critical memory pressure".into(),
+            resumes_when: "system load is healthy".into(),
+        }),
+        ..agent
+    };
+    let skipped = refresh(&mut restarts, &[stopped], "run");
+    assert!(restarts.is_empty());
+    assert!(skipped[0].reason.contains("shoal resume docs"));
+}

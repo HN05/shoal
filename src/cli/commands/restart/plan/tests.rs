@@ -113,6 +113,46 @@ fn a_named_workspace_without_the_agent_is_reported() {
     assert_eq!(skipped(&plan), ["codex"]);
 }
 
+/// An agent of `workspace` that protection stopped, waiting for its restore.
+fn protection_stopped(workspace: &Workspace) -> RunningAgent {
+    RunningAgent {
+        stopped: Some(crate::client::protocol::Protection {
+            reason: "critical memory pressure".into(),
+            resumes_when: "system load is healthy".into(),
+        }),
+        ..running(workspace, Some("claude"), true)
+    }
+}
+
+#[test]
+fn agents_waiting_for_their_restore_are_left_out_unless_named() {
+    let [running_too, stopped] = ["running-too", "stopped"].map(workspace);
+    let agents = vec![
+        RunningAgent {
+            execution: "waits".into(),
+            ..protection_stopped(&running_too)
+        },
+        running(&running_too, Some("claude"), true),
+        protection_stopped(&stopped),
+    ];
+    let selection = |named| Selection {
+        spaces: spaces([running_too.clone(), stopped.clone()]),
+        agents: agents.clone(),
+        named,
+    };
+
+    let plan = selection(false).plan(None, false);
+    assert_eq!(restarted(&plan), ["running-too"]);
+    assert!(plan.skipped.is_empty());
+
+    let plan = selection(true).plan(None, false);
+    assert_eq!(restarted(&plan), ["running-too"]);
+    assert_eq!(skipped(&plan), ["stopped"]);
+    let reason = &plan.skipped[0].reason;
+    assert!(reason.contains("critical memory pressure"), "{reason}");
+    assert!(reason.contains("shoal resume stopped"), "{reason}");
+}
+
 #[test]
 fn only_an_agents_own_report_makes_it_idle() {
     let shared = workspace("shared");
