@@ -101,8 +101,9 @@ impl Fixture {
     }
 
     fn with_tools(config: Option<&str>, fake_sim: bool) -> Self {
+        static WORKTRUNK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         assert!(
-            Command::new("wt").arg("--version").output().is_ok(),
+            *WORKTRUNK.get_or_init(|| Command::new("wt").arg("--version").output().is_ok()),
             "workspace integration tests require Worktrunk (wt)"
         );
         let root = tempfile::tempdir_in("/tmp").unwrap();
