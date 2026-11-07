@@ -6,8 +6,8 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use crate::{
     agent::ModelChoice,
     reviews::{
-        Check, FailureReason, Finding, FindingId, Outcome, Posted, Reply, Review, ReviewId,
-        ReviewState, ReviewStatus, ReviewTarget,
+        Check, FailureReason, Finding, FindingId, Outcome, OutcomeKind, Posted, Reply, Review,
+        ReviewId, ReviewState, ReviewStatus, ReviewTarget,
         output::{Checked, ReviewerOutput},
     },
 };
@@ -71,8 +71,8 @@ pub(crate) fn active(
 ) -> Result<Option<(ReviewId, ReviewState)>> {
     Ok(db
         .query_row(
-            "SELECT id,state FROM reviews WHERE workspace_id=?1 AND state IN ('queued','running')",
-            [workspace_id],
+            "SELECT id,state FROM reviews WHERE workspace_id=?1 AND state IN (?2,?3)",
+            params![workspace_id, ReviewState::Queued, ReviewState::Running],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?)
@@ -83,17 +83,20 @@ pub(crate) fn active_in(db: &Connection, repository_id: &str) -> Result<Vec<Revi
     Ok(db
         .prepare(
             "SELECT reviews.id FROM reviews JOIN workspaces ON workspaces.id=workspace_id
-                WHERE repository_id=?1 AND reviews.state IN ('queued','running')",
+                WHERE repository_id=?1 AND reviews.state IN (?2,?3)",
         )?
-        .query_map([repository_id], |row| row.get(0))?
+        .query_map(
+            params![repository_id, ReviewState::Queued, ReviewState::Running],
+            |row| row.get(0),
+        )?
         .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Every queued review, oldest first.
 pub(crate) fn queued(db: &Connection) -> Result<Vec<ReviewId>> {
     Ok(db
-        .prepare("SELECT id FROM reviews WHERE state='queued' ORDER BY id")?
-        .query_map([], |row| row.get(0))?
+        .prepare("SELECT id FROM reviews WHERE state=?1 ORDER BY id")?
+        .query_map([ReviewState::Queued], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
@@ -101,9 +104,13 @@ pub(crate) fn queued(db: &Connection) -> Result<Vec<ReviewId>> {
 /// except those in `kept`, whose runs could not be cleaned up.
 pub(crate) fn requeue_running(db: &Connection, kept: &[ReviewId]) -> Result<usize> {
     Ok(db.execute(
-        "UPDATE reviews SET state='queued',head=NULL,base=NULL,started_at=NULL,reviewer=NULL
-            WHERE state='running' AND id NOT IN (SELECT value FROM json_each(?1))",
-        [serde_json::to_string(kept)?],
+        "UPDATE reviews SET state=?2,head=NULL,base=NULL,started_at=NULL,reviewer=NULL
+            WHERE state=?3 AND id NOT IN (SELECT value FROM json_each(?1))",
+        params![
+            serde_json::to_string(kept)?,
+            ReviewState::Queued,
+            ReviewState::Running
+        ],
     )?)
 }
 
@@ -128,10 +135,10 @@ pub(crate) fn settle_interrupted(
 /// for healthy readings; false when it is no longer running.
 pub(crate) fn requeue(db: &Connection, id: ReviewId) -> Result<bool> {
     Ok(db.execute(
-        "UPDATE reviews SET state='queued',head=NULL,base=NULL,started_at=NULL,reviewer=NULL,
+        "UPDATE reviews SET state=?2,head=NULL,base=NULL,started_at=NULL,reviewer=NULL,
             waits_for_recovery=1
-            WHERE id=?1 AND state='running'",
-        [id],
+            WHERE id=?1 AND state=?3",
+        params![id, ReviewState::Queued, ReviewState::Running],
     )? == 1)
 }
 
@@ -151,8 +158,8 @@ pub(crate) fn waits_for_recovery(db: &Connection, id: ReviewId) -> Result<bool> 
 /// The reviews that are running.
 pub(crate) fn running(db: &Connection) -> Result<Vec<ReviewId>> {
     Ok(db
-        .prepare("SELECT id FROM reviews WHERE state='running' ORDER BY id")?
-        .query_map([], |row| row.get(0))?
+        .prepare("SELECT id FROM reviews WHERE state=?1 ORDER BY id")?
+        .query_map([ReviewState::Running], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
@@ -166,9 +173,16 @@ pub(crate) fn start(
     now: crate::time::UnixTime,
 ) -> Result<bool> {
     Ok(db.execute(
-        "UPDATE reviews SET state='running',head=?2,base=?3,started_at=?4,waits_for_recovery=0
-            WHERE id=?1 AND state='queued'",
-        params![id, head, base, now],
+        "UPDATE reviews SET state=?5,head=?2,base=?3,started_at=?4,waits_for_recovery=0
+            WHERE id=?1 AND state=?6",
+        params![
+            id,
+            head,
+            base,
+            now,
+            ReviewState::Running,
+            ReviewState::Queued
+        ],
     )? == 1)
 }
 
@@ -184,9 +198,17 @@ pub(crate) fn finish(
 ) -> Result<bool> {
     let tx = db.transaction()?;
     let finished = tx.execute(
-        "UPDATE reviews SET state='finished',reviewer=?2,summary=?3,verdict=?4,ended_at=?5
-            WHERE id=?1 AND state='running'",
-        params![id, reviewer, output.summary, output.verdict, now],
+        "UPDATE reviews SET state=?6,reviewer=?2,summary=?3,verdict=?4,ended_at=?5
+            WHERE id=?1 AND state=?7",
+        params![
+            id,
+            reviewer,
+            output.summary,
+            output.verdict,
+            now,
+            ReviewState::Finished,
+            ReviewState::Running
+        ],
     )? == 1;
     if !finished {
         return Ok(false);
@@ -218,7 +240,7 @@ pub(crate) fn finish(
 fn record_check(db: &Connection, id: ReviewId, checked: &Checked) -> Result<()> {
     db.execute(
         "UPDATE review_findings SET check_result=?3,checked_by=?4
-            WHERE review_id=?1 AND number=?2 AND json_extract(outcome,'$.outcome')='fixed'
+            WHERE review_id=?1 AND number=?2 AND json_extract(outcome,'$.outcome')=?5
             AND review_id IN (SELECT earlier.id FROM reviews earlier JOIN reviews this
                 ON this.workspace_id=earlier.workspace_id
                 WHERE this.id=?4 AND earlier.id<?4)",
@@ -226,7 +248,8 @@ fn record_check(db: &Connection, id: ReviewId, checked: &Checked) -> Result<()> 
             checked.finding.review,
             checked.finding.number,
             checked.result,
-            id
+            id,
+            OutcomeKind::Fixed
         ],
     )?;
     Ok(())
@@ -241,9 +264,17 @@ pub(crate) fn fail(
     now: crate::time::UnixTime,
 ) -> Result<bool> {
     Ok(db.execute(
-        "UPDATE reviews SET state='failed',failure=?2,reviewer=?3,ended_at=?4
-            WHERE id=?1 AND state IN ('queued','running')",
-        params![id, reason, reviewer, now],
+        "UPDATE reviews SET state=?5,failure=?2,reviewer=?3,ended_at=?4
+            WHERE id=?1 AND state IN (?6,?7)",
+        params![
+            id,
+            reason,
+            reviewer,
+            now,
+            ReviewState::Failed,
+            ReviewState::Queued,
+            ReviewState::Running
+        ],
     )? == 1)
 }
 
@@ -256,9 +287,16 @@ pub(crate) fn cancel(
     now: crate::time::UnixTime,
 ) -> Result<bool> {
     Ok(db.execute(
-        "UPDATE reviews SET state='cancelled',cancelled_by=?2,ended_at=?3
-            WHERE id=?1 AND state IN ('queued','running')",
-        params![id, by, now],
+        "UPDATE reviews SET state=?4,cancelled_by=?2,ended_at=?3
+            WHERE id=?1 AND state IN (?5,?6)",
+        params![
+            id,
+            by,
+            now,
+            ReviewState::Cancelled,
+            ReviewState::Queued,
+            ReviewState::Running
+        ],
     )? == 1)
 }
 
@@ -391,8 +429,8 @@ pub(crate) fn finished_at(
     head: &str,
 ) -> Result<Option<Review>> {
     let id: Option<ReviewId> = db.query_row(
-        "SELECT MAX(id) FROM reviews WHERE workspace_id=?1 AND head=?2 AND state='finished'",
-        params![workspace_id, head],
+        "SELECT MAX(id) FROM reviews WHERE workspace_id=?1 AND head=?2 AND state=?3",
+        params![workspace_id, head, ReviewState::Finished],
         |row| row.get(0),
     )?;
     match id {
@@ -433,11 +471,10 @@ fn latest_id(db: &Connection, workspace_id: &str) -> Result<Option<ReviewId>> {
 /// first: the history a new review receives.
 pub(crate) fn earlier(db: &Connection, workspace_id: &str, id: ReviewId) -> Result<Vec<Review>> {
     let ids: Vec<ReviewId> = db
-        .prepare(
-            "SELECT id FROM reviews WHERE workspace_id=?1 AND id<?2 AND state='finished'
-                ORDER BY id",
-        )?
-        .query_map(params![workspace_id, id], |row| row.get(0))?
+        .prepare("SELECT id FROM reviews WHERE workspace_id=?1 AND id<?2 AND state=?3 ORDER BY id")?
+        .query_map(params![workspace_id, id, ReviewState::Finished], |row| {
+            row.get(0)
+        })?
         .collect::<rusqlite::Result<_>>()?;
     ids.into_iter()
         .filter_map(|id| load(db, id).transpose())
