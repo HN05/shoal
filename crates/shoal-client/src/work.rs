@@ -5,11 +5,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     connection::{self, Daemon},
-    events::{ChatEvent, EventKind, FileEvent, WorkspaceEvent},
+    events::{ChatEvent, EventCursor, EventKind, FileEvent, WorkspaceEvent},
     forge::updates::UpdateKind,
     protocol::WorkspaceMethod,
     space_names::SpaceSelector,
     state::states,
+    time::UnixTime,
 };
 
 states!(
@@ -46,7 +47,7 @@ pub enum LogEntry {
 
 impl LogEntry {
     /// The journal ID, which orders a space's entries.
-    pub fn id(&self) -> i64 {
+    pub fn id(&self) -> EventCursor {
         match self {
             Self::Event(event) => event.id,
             Self::Chat(event) => event.id,
@@ -54,8 +55,7 @@ impl LogEntry {
         }
     }
 
-    /// Unix seconds.
-    pub fn created_at(&self) -> i64 {
+    pub fn created_at(&self) -> UnixTime {
         match self {
             Self::Event(event) => event.created_at,
             Self::Chat(event) => event.created_at,

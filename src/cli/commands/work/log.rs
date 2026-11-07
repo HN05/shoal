@@ -75,7 +75,7 @@ struct Printer<'a> {
     palette: Palette,
     date: Option<String>,
     /// The newest entry printed.
-    last: Option<i64>,
+    last: Option<crate::client::events::EventCursor>,
 }
 
 impl<'a> Printer<'a> {
@@ -102,7 +102,7 @@ impl<'a> Printer<'a> {
             outln!("{}", crate::client::output::json(entry)?);
             return Ok(());
         }
-        let stamp = crate::time::local_minutes(entry.created_at());
+        let stamp = entry.created_at().local_minutes();
         let (date, time) = stamp.split_once(' ').unwrap_or(("", &stamp));
         if self.date.as_deref() != Some(date) {
             if self.date.is_some() {

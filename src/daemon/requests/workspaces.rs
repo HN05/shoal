@@ -9,7 +9,7 @@ use super::super::{
     scope::{Caller, Scoped, denied},
     workspace::{self, Manager},
 };
-use crate::client::space_names::SpaceSelector;
+use crate::client::{events::EventCursor, space_names::SpaceSelector};
 use crate::protocol::{self, Body, ConfigTarget, ErrorCode, Response, WorkspaceMethod};
 
 pub(super) async fn handle(
@@ -18,10 +18,10 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        WorkspaceMethod::WatchWorkspaceEvents { since, follow } => {
+        WorkspaceMethod::WatchWorkspaceEvents { after, follow } => {
             let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                watch_workspace_events(stream, request_id, manager, since, follow, guard)
+                watch_workspace_events(stream, request_id, manager, after, follow, guard)
             }));
         }
         WorkspaceMethod::SpaceLog {
@@ -385,11 +385,11 @@ pub(in crate::daemon) async fn watch_workspace_events(
     mut stream: UnixStream,
     request_id: u64,
     manager: Arc<Manager>,
-    since: Option<i64>,
+    after: Option<EventCursor>,
     follow: bool,
     startup: OperationGuard,
 ) -> Result<()> {
-    if since.is_some_and(|id| id < 0) {
+    if after.is_some_and(|cursor| cursor.id() < 0) {
         return protocol::write(
             &mut stream,
             &Response::new(
@@ -413,7 +413,7 @@ pub(in crate::daemon) async fn watch_workspace_events(
         Some(startup)
     };
     let (mut reader, mut writer) = stream.split();
-    let mut cursor = since;
+    let mut cursor = after;
     let mut pruned = None;
     loop {
         let operation = manager.gates.operation().await;

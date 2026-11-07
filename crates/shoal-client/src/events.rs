@@ -1,5 +1,5 @@
 //! The workspace and chat event journal, as `shoal events` replays it.
-use std::path::PathBuf;
+use std::{fmt, path::PathBuf, str::FromStr};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -9,7 +9,64 @@ use crate::{
     connection::{Daemon, open_buffered, reconnect, stream_closed},
     protocol::{self, Body, Response, WorkspaceMethod},
     state::states,
+    time::UnixTime,
 };
+
+/// An event's ID in the journal, where a replay after it resumes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct EventCursor(i64);
+
+impl EventCursor {
+    pub const fn new(id: i64) -> Self {
+        Self(id)
+    }
+
+    pub const fn id(self) -> i64 {
+        self.0
+    }
+
+    /// The cursor a replay of this event and those after it starts from.
+    pub const fn before(self) -> Self {
+        Self(self.0 - 1)
+    }
+
+    /// The event a replay from this cursor reads first.
+    pub const fn next(self) -> Self {
+        Self(self.0 + 1)
+    }
+}
+
+impl fmt::Display for EventCursor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// A nonnegative event ID, as the command line passes a cursor.
+impl FromStr for EventCursor {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> Result<Self> {
+        let id: i64 = text.parse().context("an event cursor is an event ID")?;
+        anyhow::ensure!(id >= 0, "an event cursor is nonnegative");
+        Ok(Self(id))
+    }
+}
+
+#[cfg(feature = "rusqlite")]
+impl rusqlite::types::ToSql for EventCursor {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        self.0.to_sql()
+    }
+}
+
+#[cfg(feature = "rusqlite")]
+impl rusqlite::types::FromSql for EventCursor {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        i64::column_result(value).map(Self)
+    }
+}
 
 states!(EventKind {
     Created => "created",
@@ -352,24 +409,24 @@ pub struct ItemActivityUpdate {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceEvent {
-    pub id: i64,
-    pub created_at: i64,
+    pub id: EventCursor,
+    pub created_at: UnixTime,
     #[serde(flatten)]
     pub details: EventDetails,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatEvent {
-    pub id: i64,
-    pub created_at: i64,
+    pub id: EventCursor,
+    pub created_at: UnixTime,
     pub kind: ChatEventKind,
     pub chat: crate::model::Chat,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileEvent {
-    pub id: i64,
-    pub created_at: i64,
+    pub id: EventCursor,
+    pub created_at: UnixTime,
     #[serde(flatten)]
     pub details: FileEventDetails,
 }
@@ -395,16 +452,18 @@ pub enum EventItem {
     Event(Box<WorkspaceEvent>),
     Chat(Box<ChatEvent>),
     File(Box<FileEvent>),
+    /// The requested cursor lies outside the retained journal.
     Gap {
-        since: i64,
-        oldest_id: i64,
-        latest_id: i64,
+        #[serde(rename = "since")]
+        after: EventCursor,
+        oldest_id: EventCursor,
+        latest_id: EventCursor,
     },
 }
 
 impl EventItem {
     /// The journal ID of an event; a gap has none.
-    pub fn event_id(&self) -> Option<i64> {
+    pub fn event_id(&self) -> Option<EventCursor> {
         match self {
             Self::Event(event) => Some(event.id),
             Self::Chat(event) => Some(event.id),
@@ -415,12 +474,12 @@ impl EventItem {
 
     /// Where a replay resumes after this item: the event, or for a gap the
     /// start of the retained journal.
-    pub fn cursor(&self) -> i64 {
+    pub fn cursor(&self) -> EventCursor {
         match self {
             Self::Event(event) => event.id,
             Self::Chat(event) => event.id,
             Self::File(event) => event.id,
-            Self::Gap { oldest_id, .. } => oldest_id - 1,
+            Self::Gap { oldest_id, .. } => oldest_id.before(),
         }
     }
 }
@@ -431,24 +490,28 @@ impl EventItem {
 pub struct Events {
     reader: BufReader<UnixStream>,
     follow: bool,
-    cursor: Option<i64>,
+    cursor: Option<EventCursor>,
 }
 
 impl Events {
-    /// The events after `since`, or every retained one.
-    pub async fn open(daemon: &impl Daemon, since: Option<i64>, follow: bool) -> Result<Self> {
-        let method = WorkspaceMethod::WatchWorkspaceEvents { since, follow };
+    /// The events after `after`, or every retained one.
+    pub async fn open(
+        daemon: &impl Daemon,
+        after: Option<EventCursor>,
+        follow: bool,
+    ) -> Result<Self> {
+        let method = WorkspaceMethod::WatchWorkspaceEvents { after, follow };
         let (reader, body) = open_buffered(daemon, method).await?;
         <()>::try_from(body)?;
         Ok(Self {
             reader,
             follow,
-            cursor: since,
+            cursor: after,
         })
     }
 
     /// Where the stream resumes: after the last item it returned.
-    pub fn cursor(&self) -> Option<i64> {
+    pub fn cursor(&self) -> Option<EventCursor> {
         self.cursor
     }
 
@@ -458,8 +521,8 @@ impl Events {
             let response: Response = match protocol::read_buffered(&mut self.reader).await {
                 Ok(response) => response,
                 Err(error) if self.follow && stream_closed(&error) => {
-                    let (since, follow) = (self.cursor, self.follow);
-                    let method = || WorkspaceMethod::WatchWorkspaceEvents { since, follow };
+                    let (after, follow) = (self.cursor, self.follow);
+                    let method = || WorkspaceMethod::WatchWorkspaceEvents { after, follow };
                     let (reader, body) = reconnect(daemon, method).await?;
                     <()>::try_from(body)?;
                     self.reader = reader;

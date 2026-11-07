@@ -1,11 +1,15 @@
+use std::time::Duration;
+
+use super::UnixTime;
+
 #[test]
 fn local_times_use_a_fixed_width_date_and_time() {
     // Check the shape without assuming the process time zone.
-    let text = super::local_minutes(1_700_000_000);
+    let text = UnixTime::from_seconds(1_700_000_000).local_minutes();
     assert_eq!(text.len(), 16, "{text}");
     assert_eq!(&text[4..5], "-");
     assert_eq!(&text[10..11], " ");
-    let text = super::local_seconds(1_700_000_000);
+    let text = UnixTime::from_seconds(1_700_000_000).local_seconds();
     assert_eq!(text.len(), 19, "{text}");
     assert_eq!(&text[16..17], ":");
 }
@@ -26,14 +30,12 @@ fn calendar_days_count_from_the_epoch() {
 fn same_day_shows_the_time_and_earlier_days_how_long_ago() {
     // Noon local time keeps whole-day steps clear of midnight.
     let noon = noon_today();
-    let day = 86_400;
+    let minute = Duration::from_secs(60);
+    let day = Duration::from_secs(86_400);
+    assert_eq!(noon.local_ago(noon + minute), &noon.local_minutes()[11..]);
     assert_eq!(
-        super::local_ago(noon, noon + 60),
-        &super::local_minutes(noon)[11..]
-    );
-    assert_eq!(
-        super::local_ago(noon + 60, noon),
-        &super::local_minutes(noon + 60)[11..]
+        (noon + minute).local_ago(noon),
+        &(noon + minute).local_minutes()[11..]
     );
     for (days, text) in [
         (1, "1 day ago"),
@@ -45,16 +47,51 @@ fn same_day_shows_the_time_and_earlier_days_how_long_ago() {
         (365, "1 year ago"),
         (800, "2 years ago"),
     ] {
-        assert_eq!(super::local_ago(noon - days * day, noon), text, "{days}");
+        assert_eq!((noon - day * days).local_ago(noon), text, "{days}");
     }
 }
 
+#[test]
+fn arithmetic_saturates_and_elapsed_time_is_never_negative() {
+    let time = UnixTime::from_seconds(100);
+    assert_eq!(
+        time + Duration::from_millis(1_900),
+        UnixTime::from_seconds(101)
+    );
+    assert_eq!(time - Duration::from_secs(150), UnixTime::from_seconds(-50));
+    assert_eq!(UnixTime::MAX + Duration::from_secs(1), UnixTime::MAX);
+    assert_eq!(time + Duration::MAX, UnixTime::MAX);
+    assert_eq!(
+        time.duration_since(UnixTime::from_seconds(40)),
+        Duration::from_secs(60)
+    );
+    assert_eq!(time.duration_since(UnixTime::MAX), Duration::ZERO);
+}
+
+#[test]
+fn times_are_json_numbers_and_sqlite_integers() -> anyhow::Result<()> {
+    let time = UnixTime::from_seconds(1_700_000_000);
+    assert_eq!(serde_json::to_string(&time)?, "1700000000");
+    assert_eq!(serde_json::from_str::<UnixTime>("1700000000")?, time);
+    #[cfg(feature = "rusqlite")]
+    {
+        let db = rusqlite::Connection::open_in_memory()?;
+        let (stored, kind): (UnixTime, String) =
+            db.query_row("SELECT ?1, typeof(?1)", [time], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?;
+        assert_eq!((stored, kind.as_str()), (time, "integer"));
+    }
+    Ok(())
+}
+
 /// About noon today in the local time zone.
-fn noon_today() -> i64 {
-    let now = super::unix_seconds() as i64;
-    let Some(tm) = super::local_tm(now) else {
+fn noon_today() -> UnixTime {
+    let now = UnixTime::now();
+    let Some(tm) = now.local_tm() else {
         return now;
     };
-    let since_midnight = i64::from(tm.tm_hour * 3600 + tm.tm_min * 60 + tm.tm_sec);
-    now - since_midnight + 12 * 3600
+    let since_midnight = tm.tm_hour * 3600 + tm.tm_min * 60 + tm.tm_sec;
+    now - Duration::from_secs(since_midnight.try_into().unwrap_or(0))
+        + Duration::from_secs(12 * 3600)
 }

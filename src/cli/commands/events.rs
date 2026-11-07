@@ -1,14 +1,14 @@
 //! `shoal internal events`: the integration stream that never consumes user notifications.
 use crate::{
     cli::{context::Context, installed::arguments_with},
-    client::events::{EventItem, Events},
+    client::events::{EventCursor, EventItem, Events},
     installed::Executable,
 };
 use anyhow::Result;
 
-pub(super) async fn run(ctx: &Context, follow: bool, since: Option<i64>) -> Result<i32> {
+pub(super) async fn run(ctx: &Context, follow: bool, after: Option<EventCursor>) -> Result<i32> {
     let executable = Executable::current();
-    let mut events = Events::open(&ctx.paths, since, follow).await?;
+    let mut events = Events::open(&ctx.paths, after, follow).await?;
     loop {
         let next = events.next(&ctx.paths).await.map_err(|error| {
             let cursor = events.cursor();
@@ -31,11 +31,11 @@ pub(super) async fn run(ctx: &Context, follow: bool, since: Option<i64>) -> Resu
                 )
             }
             EventItem::Gap {
-                since,
+                after,
                 oldest_id,
                 latest_id,
             } => outln!(
-                "event gap after {since}; retained events start at {oldest_id} (latest {latest_id})"
+                "event gap after {after}; retained events start at {oldest_id} (latest {latest_id})"
             ),
         })?;
     }

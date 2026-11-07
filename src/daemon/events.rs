@@ -6,9 +6,10 @@ use serde::Deserialize;
 
 use super::{log, workspace::Manager};
 pub(crate) use crate::client::events::{
-    AgentEvent, AlertEvent, ApprovalEvent, ChatEvent, ChatEventKind, EventCause, EventDetails,
-    EventItem, EventKind, FileEvent, FileEventDetails, WorkspaceEvent,
+    AgentEvent, AlertEvent, ApprovalEvent, ChatEvent, ChatEventKind, EventCause, EventCursor,
+    EventDetails, EventItem, EventKind, FileEvent, FileEventDetails, WorkspaceEvent,
 };
+use crate::time::UnixTime;
 
 /// A journal row as stored: chat events carry the chat in place of a
 /// workspace, and file events the space's identity.
@@ -24,7 +25,7 @@ enum Record {
 }
 
 /// The stored event `record` with its journal ID and time.
-fn decode(id: i64, created_at: i64, record: &str) -> Result<EventItem> {
+fn decode(id: EventCursor, created_at: UnixTime, record: &str) -> Result<EventItem> {
     Ok(match serde_json::from_str(record)? {
         Record::Workspace(details) => EventItem::Event(Box::new(WorkspaceEvent {
             id,
@@ -49,10 +50,10 @@ fn decode(id: i64, created_at: i64, record: &str) -> Result<EventItem> {
 /// them.
 fn replay(
     db: &Connection,
-    cursor: Option<i64>,
-    known_pruned: Option<i64>,
+    cursor: Option<EventCursor>,
+    known_pruned: Option<EventCursor>,
     limit: u32,
-) -> Result<(Vec<EventItem>, i64)> {
+) -> Result<(Vec<EventItem>, EventCursor)> {
     let bounds = Bounds::read(db)?;
     let (resume, gap) = bounds.resume_after(cursor, known_pruned);
     let mut items: Vec<_> = gap.into_iter().collect();
@@ -63,22 +64,23 @@ fn replay(
 /// What the journal holds: its oldest and newest IDs, and the highest ID
 /// retention deleted.
 struct Bounds {
-    oldest: i64,
-    latest: i64,
-    pruned: i64,
+    oldest: EventCursor,
+    latest: EventCursor,
+    pruned: EventCursor,
 }
 
 impl Bounds {
     fn read(db: &Connection) -> Result<Self> {
-        let (oldest, latest, pruned): (Option<i64>, Option<i64>, i64) = db.query_row(
-            "SELECT MIN(id),MAX(id),(SELECT id FROM journal_pruned) FROM workspace_events",
-            [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-        )?;
+        let (oldest, latest, pruned): (Option<EventCursor>, Option<EventCursor>, EventCursor) = db
+            .query_row(
+                "SELECT MIN(id),MAX(id),(SELECT id FROM journal_pruned) FROM workspace_events",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )?;
         Ok(Self {
-            oldest: oldest.unwrap_or(1),
+            oldest: oldest.unwrap_or(EventCursor::new(1)),
             // Deleting the newest event does not move a follower's cursor ahead.
-            latest: latest.unwrap_or(0).max(pruned),
+            latest: latest.unwrap_or(EventCursor::new(0)).max(pruned),
             pruned,
         })
     }
@@ -90,18 +92,22 @@ impl Bounds {
     /// gap, and for a later batch only one since the batch before.
     fn resume_after(
         &self,
-        cursor: Option<i64>,
-        known_pruned: Option<i64>,
-    ) -> (i64, Option<EventItem>) {
+        cursor: Option<EventCursor>,
+        known_pruned: Option<EventCursor>,
+    ) -> (EventCursor, Option<EventItem>) {
         let Some(cursor) = cursor else {
-            return (self.oldest - 1, None);
+            return (self.oldest.before(), None);
         };
-        let outside = cursor < self.oldest - 1 || cursor > self.latest;
-        let deleted = self.pruned > cursor.max(known_pruned.unwrap_or(-1));
-        let resume = if outside { self.oldest - 1 } else { cursor };
+        let outside = cursor < self.oldest.before() || cursor > self.latest;
+        let deleted = self.pruned > known_pruned.map_or(cursor, |known| cursor.max(known));
+        let resume = if outside {
+            self.oldest.before()
+        } else {
+            cursor
+        };
         let gap = (outside || deleted).then_some(EventItem::Gap {
-            since: cursor,
-            oldest_id: resume + 1,
+            after: cursor,
+            oldest_id: resume.next(),
             latest_id: self.latest,
         });
         (resume, gap)
@@ -109,16 +115,12 @@ impl Bounds {
 }
 
 /// The first `limit` events after `cursor`.
-fn events_after(db: &Connection, cursor: i64, limit: u32) -> Result<Vec<EventItem>> {
+fn events_after(db: &Connection, cursor: EventCursor, limit: u32) -> Result<Vec<EventItem>> {
     let mut statement = db.prepare(
         "SELECT id,created_at,record FROM workspace_events WHERE id>?1 ORDER BY id LIMIT ?2",
     )?;
     let rows = statement.query_map(params![cursor, limit], |r| {
-        Ok((
-            r.get::<_, i64>(0)?,
-            r.get::<_, i64>(1)?,
-            r.get::<_, String>(2)?,
-        ))
+        Ok((r.get(0)?, r.get(1)?, r.get::<_, String>(2)?))
     })?;
     rows.map(|row| {
         let (id, created_at, record) = row?;
@@ -353,7 +355,7 @@ impl Manager {
         }).await
     }
 
-    pub(crate) async fn latest_workspace_event_id(&self) -> Result<i64> {
+    pub(crate) async fn latest_workspace_event_id(&self) -> Result<EventCursor> {
         self.store
             .run(|db| {
                 Ok(db.query_row(
@@ -368,8 +370,12 @@ impl Manager {
     /// A consistent replay batch from a client's cursor, including an
     /// explicit expired or future one.
     #[cfg(test)]
-    pub async fn workspace_events(&self, since: Option<i64>, limit: u32) -> Result<Vec<EventItem>> {
-        let (items, _) = self.workspace_events_page(since, None, limit).await?;
+    pub async fn workspace_events(
+        &self,
+        after: Option<EventCursor>,
+        limit: u32,
+    ) -> Result<Vec<EventItem>> {
+        let (items, _) = self.workspace_events_page(after, None, limit).await?;
         Ok(items)
     }
 
@@ -378,12 +384,12 @@ impl Manager {
     /// client's own cursor. Returns that ID as of this batch, for the next.
     pub(crate) async fn workspace_events_page(
         &self,
-        cursor: Option<i64>,
-        pruned: Option<i64>,
+        cursor: Option<EventCursor>,
+        pruned: Option<EventCursor>,
         limit: u32,
-    ) -> Result<(Vec<EventItem>, i64)> {
+    ) -> Result<(Vec<EventItem>, EventCursor)> {
         ensure!(
-            cursor.is_none_or(|id| id >= 0),
+            cursor.is_none_or(|cursor| cursor.id() >= 0),
             "event cursor must be nonnegative"
         );
         self.store

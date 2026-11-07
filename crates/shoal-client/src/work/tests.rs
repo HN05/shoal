@@ -59,7 +59,7 @@ fn an_entry_keeps_the_journal_lines_json() {
     }))
     .unwrap();
     assert_eq!(
-        (chat.id(), chat.created_at(), chat.is_entry()),
-        (8, 2, true)
+        (chat.id().id(), chat.created_at(), chat.is_entry()),
+        (8, crate::time::UnixTime::from_seconds(2), true)
     );
 }

@@ -219,7 +219,8 @@ pub enum WorkspaceMethod {
         target: ConfigTarget,
     },
     WatchWorkspaceEvents {
-        since: Option<i64>,
+        #[serde(rename = "since")]
+        after: Option<crate::events::EventCursor>,
         follow: bool,
     },
     /// The newest `limit` events of a space's log that `filter` shows,

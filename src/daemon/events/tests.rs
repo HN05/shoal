@@ -26,14 +26,19 @@ async fn receive(stream: &mut BufReader<UnixStream>) -> Body {
 
 async fn connect(
     manager: Arc<Manager>,
-    since: Option<i64>,
+    after: Option<i64>,
     follow: bool,
 ) -> (BufReader<UnixStream>, JoinHandle<Result<()>>) {
     let (server, client) = UnixStream::pair().unwrap();
     let mut client = BufReader::new(client);
     let startup = manager.gates.owned_operation().await;
     let task = tokio::spawn(crate::daemon::requests::workspaces::watch_workspace_events(
-        server, 1, manager, since, follow, startup,
+        server,
+        1,
+        manager,
+        after.map(EventCursor::new),
+        follow,
+        startup,
     ));
     assert!(matches!(receive(&mut client).await, Body::Ok));
     (client, task)
@@ -80,20 +85,20 @@ async fn replay_drains_multiple_batches_and_live_readers_do_not_consume_notifica
         let Body::EventItem(EventItem::Event(event)) = receive(&mut first).await else {
             panic!("expected event");
         };
-        assert_eq!(event.id, id);
+        assert_eq!(event.id.id(), id);
     }
     for id in 201..=205 {
         let Body::EventItem(EventItem::Event(event)) = receive(&mut second).await else {
             panic!("expected event");
         };
-        assert_eq!(event.id, id);
+        assert_eq!(event.id.id(), id);
     }
     seed(&manager, 1).await;
     for stream in [&mut first, &mut second] {
         let Body::EventItem(EventItem::Event(event)) = receive(stream).await else {
             panic!("expected live event");
         };
-        assert_eq!(event.id, 206);
+        assert_eq!(event.id.id(), 206);
     }
     assert_eq!(manager.unread_notifications().await.unwrap(), 1);
     drop(first);
@@ -116,13 +121,14 @@ async fn finite_replay_reports_gaps_and_survives_reopen() {
     else {
         panic!("expected gap");
     };
+    let (oldest_id, latest_id) = (oldest_id.id(), latest_id.id());
     assert_eq!((oldest_id, latest_id), (506, 1005));
     let count = latest_id - oldest_id + 1;
     for index in 0..count {
         let Body::EventItem(EventItem::Event(event)) = receive(&mut stream).await else {
             panic!("expected retained event");
         };
-        assert_eq!(event.id, oldest_id + index);
+        assert_eq!(event.id.id(), oldest_id + index);
     }
     assert!(matches!(receive(&mut stream).await, Body::Ok));
     task.await.unwrap().unwrap();
@@ -149,7 +155,7 @@ async fn branch_observations_preserve_ownership_and_scope_denies_events() {
         .unwrap();
     for follow in [false, true] {
         let mut method = WorkspaceMethod::WatchWorkspaceEvents {
-            since: Some(0),
+            after: Some(EventCursor::new(0)),
             follow,
         };
         assert!(
@@ -318,36 +324,47 @@ async fn boundary_future_and_empty_cursors_have_explicit_gap_semantics() {
     assert!(matches!(
         receive(&mut stream).await,
         Body::EventItem(EventItem::Gap {
-            oldest_id: 1,
-            latest_id: 0,
+            oldest_id,
+            latest_id,
             ..
-        })
+        }) if (oldest_id.id(), latest_id.id()) == (1, 0)
     ));
     seed_turns(&manager, 1).await;
     assert!(matches!(
         receive(&mut stream).await,
-        Body::EventItem(EventItem::Event(event)) if event.id == 1
+        Body::EventItem(EventItem::Event(event)) if event.id.id() == 1
     ));
     drop(stream);
     task.await.unwrap().unwrap();
     seed_turns(&manager, 1004).await;
-    let boundary = manager.workspace_events(Some(505), 1000).await.unwrap();
+    let boundary = manager
+        .workspace_events(Some(EventCursor::new(505)), 1000)
+        .await
+        .unwrap();
     assert_eq!(boundary.len(), 500);
     assert!(matches!(
         &boundary[0],
-        EventItem::Event(event) if event.id == 506
+        EventItem::Event(event) if event.id.id() == 506
     ));
-    let future = manager.workspace_events(Some(1006), 1000).await.unwrap();
+    let future = manager
+        .workspace_events(Some(EventCursor::new(1006)), 1000)
+        .await
+        .unwrap();
     assert!(matches!(
         future[0],
         EventItem::Gap {
-            since: 1006,
-            oldest_id: 506,
-            latest_id: 1005
-        }
+            after,
+            oldest_id,
+            latest_id,
+        } if (after.id(), oldest_id.id(), latest_id.id()) == (1006, 506, 1005)
     ));
     assert_eq!(future.len(), 501);
-    assert!(manager.workspace_events(Some(-1), 100).await.is_err());
+    assert!(
+        manager
+            .workspace_events(Some(EventCursor::new(-1)), 100)
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -418,20 +435,26 @@ async fn a_cursor_below_what_retention_pruned_reports_the_gap() {
     // Ids 2 to 601; the space keeps the newest 500, so 2 to 101 go.
     seed_turns(&manager, 600).await;
     seed(&manager, 1).await;
-    let behind = manager.workspace_events(Some(50), 1000).await.unwrap();
+    let behind = manager
+        .workspace_events(Some(EventCursor::new(50)), 1000)
+        .await
+        .unwrap();
     assert!(matches!(
         behind[0],
         EventItem::Gap {
-            since: 50,
-            oldest_id: 51,
-            latest_id: 602
-        }
+            after,
+            oldest_id,
+            latest_id,
+        } if (after.id(), oldest_id.id(), latest_id.id()) == (50, 51, 602)
     ));
-    assert!(matches!(&behind[1], EventItem::Event(event) if event.id == 102));
-    let past = manager.workspace_events(Some(101), 1000).await.unwrap();
-    assert!(matches!(&past[0], EventItem::Event(event) if event.id == 102));
+    assert!(matches!(&behind[1], EventItem::Event(event) if event.id.id() == 102));
+    let past = manager
+        .workspace_events(Some(EventCursor::new(101)), 1000)
+        .await
+        .unwrap();
+    assert!(matches!(&past[0], EventItem::Event(event) if event.id.id() == 102));
     let all = manager.workspace_events(None, 1000).await.unwrap();
-    assert!(matches!(&all[0], EventItem::Event(event) if event.id == 1));
+    assert!(matches!(&all[0], EventItem::Event(event) if event.id.id() == 1));
 }
 
 #[tokio::test]
@@ -445,7 +468,7 @@ async fn a_paged_full_replay_keeps_every_event_retention_left() {
     let mut ids = Vec::new();
     loop {
         match receive(&mut stream).await {
-            Body::EventItem(EventItem::Event(event)) => ids.push(event.id),
+            Body::EventItem(EventItem::Event(event)) => ids.push(event.id.id()),
             Body::Ok => break,
             body => panic!("expected only events: {body:?}"),
         }

@@ -4,7 +4,8 @@
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{EventItem, EventKind, decode};
+use super::{EventCursor, EventItem, EventKind, decode};
+use crate::time::UnixTime;
 use crate::{
     client::{
         space_names::SpaceSelector,
@@ -106,7 +107,7 @@ fn events_of(db: &Connection, id: &str) -> Result<Vec<LogEntry>> {
     let rows = statement.query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
     let mut entries = Vec::new();
     for row in rows {
-        let (id, created_at, record): (i64, i64, String) = row?;
+        let (id, created_at, record): (EventCursor, UnixTime, String) = row?;
         entries.push(match decode(id, created_at, &record)? {
             EventItem::Event(event) => LogEntry::Event(event),
             EventItem::Chat(event) => LogEntry::Chat(event),

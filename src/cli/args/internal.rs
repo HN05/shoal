@@ -3,7 +3,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::Subcommand;
 
-use crate::client::space_names::SpaceSelector;
+use crate::client::{events::EventCursor, space_names::SpaceSelector};
 use crate::{cli::commands, sessions::HostName, workers};
 
 #[derive(Debug, Subcommand)]
@@ -15,8 +15,8 @@ pub enum InternalCommand {
         #[arg(long)]
         follow: bool,
         /// Replay events after this event ID.
-        #[arg(long, value_parser = clap::value_parser!(i64).range(0..))]
-        since: Option<i64>,
+        #[arg(long = "since")]
+        after: Option<EventCursor>,
     },
     /// Print a view's rows for the bare `shoal` picker to reload.
     MenuRows { view: commands::menu::View },

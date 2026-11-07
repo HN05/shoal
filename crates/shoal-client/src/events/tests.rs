@@ -18,10 +18,10 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
             request.method,
             Method::Operation(Operation::Workspace(
                 WorkspaceMethod::WatchWorkspaceEvents {
-                    since: Some(9),
+                    after: Some(after),
                     follow: true
                 }
-            ))
+            )) if after == EventCursor::new(9)
         ));
         protocol::write(&mut stream, &Response::new(request.id, Body::Ok))
             .await
@@ -31,9 +31,9 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
             &Response::new(
                 request.id,
                 Body::EventItem(EventItem::Gap {
-                    since: 9,
-                    oldest_id: 4,
-                    latest_id: 5,
+                    after: EventCursor::new(9),
+                    oldest_id: EventCursor::new(4),
+                    latest_id: EventCursor::new(5),
                 }),
             ),
         )
@@ -46,10 +46,10 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
             request.method,
             Method::Operation(Operation::Workspace(
                 WorkspaceMethod::WatchWorkspaceEvents {
-                    since: Some(3),
+                    after: Some(after),
                     follow: true
                 }
-            ))
+            )) if after == EventCursor::new(3)
         ));
         // Finish the infinite follower with an explicit terminal response.
         protocol::write(&mut stream, &Response::new(request.id, Body::Ok))
@@ -68,7 +68,7 @@ async fn follower_reconnects_at_the_last_displayed_cursor() {
         .unwrap();
     });
     let follow = async {
-        let mut events = Events::open(&paths, Some(9), true).await?;
+        let mut events = Events::open(&paths, Some(EventCursor::new(9)), true).await?;
         while events.next(&paths).await?.is_some() {}
         anyhow::Ok(())
     };
