@@ -50,3 +50,35 @@ fn a_place_takes_a_scoped_token_once_and_refuses_a_handoff_its_starter_left() {
     drop(scoped);
     assert!(take_scope(&path).is_err());
 }
+
+#[tokio::test(start_paused = true)]
+async fn the_starter_waits_on_a_running_place_beyond_the_pickup_limit() {
+    let handoff = Handoff::create(None).unwrap();
+    let path = handoff.path().to_owned();
+    // The only test that holds a place, which this process does until it
+    // exits.
+    hold(&path).unwrap();
+    let waiting = tokio::spawn(handoff.wait());
+    tokio::time::sleep(PICKUP * 10).await;
+    assert!(!waiting.is_finished());
+    write_report(&path, STARTED);
+    waiting.await.unwrap().unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_starter_learns_of_a_place_that_ended_without_a_report() {
+    let handoff = Handoff::create(None).unwrap();
+    // A place that took the handoff and exited left its lock unheld.
+    File::create(handoff.path().join(PLACE)).unwrap();
+    let error = handoff.wait().await.unwrap_err();
+    assert!(error.to_string().contains("ended"), "{error}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_starter_gives_up_on_a_place_that_never_takes_the_handoff() {
+    let handoff = Handoff::create(None).unwrap();
+    let started = tokio::time::Instant::now();
+    let error = handoff.wait().await.unwrap_err();
+    assert!(error.to_string().contains("did not run Shoal"), "{error}");
+    assert!(started.elapsed() >= PICKUP);
+}

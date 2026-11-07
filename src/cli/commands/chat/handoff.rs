@@ -1,18 +1,22 @@
 //! The handoff of a chat that a process starts in a background place: the
 //! starter waits until the place reports that the chat is about to run its
-//! agent, or why it does not, since opening the place proves neither. A
+//! agent, or why it does not, since opening the place proves neither. Once
+//! the place takes the handoff it holds a lock there until it exits, so the
+//! starter waits as long as the place runs and learns when it ended without
+//! a report; only a place that never takes the handoff meets a limit. A
 //! scoped starter's place records the chat with the starter's scope token,
 //! which may end with the starter, so that token goes through the handoff
 //! too. The handoff is a private directory that the place's command names,
 //! never the place's environment, which a shell left there after the chat
 //! would keep.
 use std::{
+    fs::File,
     path::{Path, PathBuf},
     sync::{
         OnceLock,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -27,8 +31,11 @@ const UNSCOPED: &str = "unscoped";
 const REPORT: &str = "report";
 /// What the place reports once the chat holds its own scope token.
 const STARTED: &str = "started";
-/// How long the starter waits for the place to report.
-const WAIT: Duration = Duration::from_secs(60);
+/// The file the place holds locked from taking the handoff until it exits.
+const PLACE: &str = "place";
+/// How long the starter waits for the place to take the handoff, a hang
+/// guard for a place that never runs Shoal.
+const PICKUP: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(100);
 
 /// The directory the starter hands the place its scope token in and waits
@@ -62,21 +69,62 @@ impl Handoff {
     /// Wait until the place reports, returning why the chat did not start
     /// as the error.
     pub async fn wait(self) -> Result<()> {
-        let deadline = Instant::now() + WAIT;
-        let report = self.0.path().join(REPORT);
+        let deadline = tokio::time::Instant::now() + PICKUP;
         loop {
-            match std::fs::read_to_string(&report) {
-                Ok(text) if text == STARTED => return Ok(()),
-                Ok(error) => bail!("{error}"),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => ensure!(
-                    Instant::now() < deadline,
-                    "the chat did not start in its background place within {} seconds",
-                    WAIT.as_secs()
+            // The place reports before it exits, so a place found ended
+            // before the report is read ended without one.
+            let place = place(self.0.path())?;
+            match reported(self.0.path())? {
+                Some(text) if text == STARTED => return Ok(()),
+                Some(error) => bail!("{error}"),
+                None => {}
+            }
+            match place {
+                Place::Waiting => ensure!(
+                    tokio::time::Instant::now() < deadline,
+                    "the background place did not run Shoal within {} seconds",
+                    PICKUP.as_secs()
                 ),
-                Err(error) => return Err(error).context("read the chat's handoff"),
+                Place::Running => {}
+                Place::Ended => bail!("the background place ended before the chat started"),
             }
             tokio::time::sleep(POLL).await;
         }
+    }
+}
+
+/// What the place of the handoff at `path` reported, if it has.
+fn reported(path: &Path) -> Result<Option<String>> {
+    match std::fs::read_to_string(path.join(REPORT)) {
+        Ok(text) => Ok(Some(text)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).context("read the chat's handoff"),
+    }
+}
+
+/// Where the place of a handoff is.
+enum Place {
+    /// It has not taken the handoff.
+    Waiting,
+    /// It took the handoff and runs.
+    Running,
+    /// It took the handoff and exited.
+    Ended,
+}
+
+/// Where the place of the handoff at `path` is, by its lock.
+fn place(path: &Path) -> Result<Place> {
+    let file = match File::open(path.join(PLACE)) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Place::Waiting),
+        Err(error) => return Err(error).context("read the chat's handoff"),
+    };
+    match fs2::FileExt::try_lock_shared(&file) {
+        Ok(()) => Ok(Place::Ended),
+        Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => {
+            Ok(Place::Running)
+        }
+        Err(error) => Err(error).context("read the chat's handoff"),
     }
 }
 
@@ -96,6 +144,20 @@ pub(super) fn receive(path: &Path) -> Result<()> {
             "this process already holds a handed scope token"
         );
     }
+    hold(path)
+}
+
+/// Hold the lock that tells the starter at the handoff `path` this place
+/// runs, until this process exits. The lock is taken before the file is
+/// where the starter looks, so the starter never finds it unheld while
+/// this process runs.
+fn hold(path: &Path) -> Result<()> {
+    static HELD: OnceLock<File> = OnceLock::new();
+    let staging = path.join(format!("{PLACE}.staging"));
+    let file = File::create(&staging).context("take the chat's handoff")?;
+    fs2::FileExt::lock_exclusive(&file).context("take the chat's handoff")?;
+    std::fs::rename(&staging, path.join(PLACE)).context("take the chat's handoff")?;
+    let _ = HELD.set(file);
     Ok(())
 }
 
