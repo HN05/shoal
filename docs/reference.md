@@ -2129,7 +2129,7 @@ with its run, `waiting_for` while dependencies remain,
 `base` once a launch starts on a dependency's branch, while `work --json` stays
 a list of workspaces. Entries are named as listed, by workspace name or by ID
 when several share one. On a terminal, `shoal queue` picks a waiting entry and
-then starts, moves or cancels it.
+then starts it, with or without attaching, moves or cancels it.
 
 `queue start` starts a waiting entry now regardless of the limits, as `--now`
 does, or restores an idle agent waiting for an update; it refuses a launch
