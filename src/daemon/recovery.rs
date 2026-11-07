@@ -211,7 +211,7 @@ impl Manager {
                     "{error}; to keep the workspace as it is without retrying, accept a failed setup with shoal work setup --skip"
                 ),
                 None => format!(
-                    "Workspace is {}; shoal status shows why",
+                    "Workspace is {}; shoal work status shows why",
                     workspace.state
                 ),
             });

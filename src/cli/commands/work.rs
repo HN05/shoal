@@ -10,6 +10,7 @@ mod rename;
 
 pub(super) async fn run(ctx: &Context, command: WorkCommand) -> Result<i32> {
     match command {
+        WorkCommand::Status { space, item } => workspaces::status(ctx, space, item).await,
         WorkCommand::Env { workspace, revoke } => {
             workspaces::environment(ctx, workspace, revoke).await
         }

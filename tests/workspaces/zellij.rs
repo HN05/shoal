@@ -482,9 +482,9 @@ fn zellij_log() -> String {
         )
 }
 
-/// The names of `workspace`'s sessions, as `shoal status` lists them.
+/// The names of `workspace`'s sessions, as `shoal work status` lists them.
 fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
-    fixture.ok(&["status", workspace])["sessions"]
+    fixture.ok(&["work", "status", workspace])["sessions"]
         .as_array()
         .unwrap()
         .iter()
@@ -493,7 +493,7 @@ fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
 }
 
 fn executions(fixture: &Fixture, workspace: &str) -> usize {
-    fixture.ok(&["status", workspace])["executions"]
+    fixture.ok(&["work", "status", workspace])["executions"]
         .as_array()
         .unwrap()
         .len()
@@ -511,7 +511,7 @@ fn wait_for_agent(fixture: &Fixture, workspace: &str) {
             .iter()
             .any(|listed| listed["name"] == workspace)
             && executions(fixture, workspace) == 1
-            && fixture.ok(&["status", workspace])["setup_finished"] == true
+            && fixture.ok(&["work", "status", workspace])["setup_finished"] == true
     });
 }
 
@@ -543,7 +543,7 @@ fn additions_open_owned_tabs_that_removal_closes_leaving_the_users_pane() {
     };
     add_inside(&fixture, &mut zellij, "placed");
     // Where no client shows the user's session, Shoal opens one of its own.
-    let status = fixture.ok(&["status", "placed"]);
+    let status = fixture.ok(&["work", "status", "placed"]);
     assert_eq!(status["places"][0]["group"], "caller", "{status}");
     // A listing can still miss the tab Shoal saw open.
     wait_until("the tab Shoal opened to show", || {
@@ -671,7 +671,7 @@ fn additions_outside_zellij_open_sessions_that_removal_ends() {
 /// The place Shoal recorded for `workspace`, with `pane` of the user's
 /// session in its stead: on the same server instance.
 fn place_beside(fixture: &Fixture, workspace: &str, pane: &str) -> Value {
-    let mut place = fixture.ok(&["status", workspace])["places"][0].clone();
+    let mut place = fixture.ok(&["work", "status", workspace])["places"][0].clone();
     place["place"] = format!("caller:{pane}").into();
     place
 }

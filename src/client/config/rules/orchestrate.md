@@ -11,7 +11,7 @@ to you: their messages, questions, completion, ready marks and exits arrive as
 Shoal messages naming their space, and their approval requests come to you
 first. Spaces the user starts report to the user.
 
-You reach every space: `shoal work` lists them, `shoal status <space>`,
+You reach every space: `shoal work` lists them, `shoal work status <space>`,
 `shoal view --space <space>` and `shoal files <space>` show one, and
 `shoal questions` and `shoal approvals` list what waits. For any space but your
 own you may write to its agent with `shoal messages send --space <space>`

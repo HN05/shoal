@@ -169,8 +169,8 @@ shoal queue                   # Agents waiting for a slot under the agent limits
 shoal work --chats            # Running chats
 shoal work --repo my-project  # Only one repository's workspaces, chats and queued agents
 shoal work --status needs-input,failed  # Only rows with these statuses
-shoal status fix-login        # A workspace's or chat's activity, issue and PR state; a workspace's changes and resources
-shoal status pr 12            # Workspaces and chats that link PR 12; also issue, ci or resource
+shoal work status fix-login   # A workspace's or chat's activity, issue and PR state; a workspace's changes and resources
+shoal work status pr 12       # Workspaces and chats that link PR 12; also issue, ci or resource
 shoal config show fix-login   # Effective settings and the source of each value
 shoal config reference        # This release's command and configuration reference
 shoal config set agent.default codex
@@ -465,7 +465,7 @@ A chat whose agent stopped goes by the same rules.
 `shoal cleanup` lists what Shoal left behind: those spaces, kept branches, and
 shared caches nothing is using, with why it keeps the other spaces. On a terminal
 it opens a picker, where Tab selects several, and removes what you pick.
-`shoal cleanup spaces`, `branches` or `caches` acts on one kind, and `shoal status`
+`shoal cleanup spaces`, `branches` or `caches` acts on one kind, and `shoal work status`
 shows why it keeps one workspace.
 Removal keeps the workspace's HEAD and unsaved files in a checkpoint, except a
 disposable workspace's, as `shoal work checkpoint` does and Shoal does when an
@@ -499,7 +499,7 @@ enabled = false
 ```
 
 When something looks wrong, `shoal inbox` and `shoal alerts` show what Shoal
-found and the command that fixes it, and `shoal status <name>` shows one
+found and the command that fixes it, and `shoal work status <name>` shows one
 workspace or chat; see [cleanup](docs/reference.md#automatic-cleanup) and
 [recovery](docs/reference.md#recovery) for details.
 

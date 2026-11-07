@@ -184,7 +184,6 @@ pub const BUILT_IN_COMMANDS: &[&str] = &[
     "cd",
     "edit",
     "open",
-    "status",
     "messages",
     "files",
     "questions",

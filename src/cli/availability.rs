@@ -23,7 +23,7 @@ impl Need {
             | ["forge", "capabilities" | "reactions" | "api" | "download"]
             | ["ci", ..] => Self::Any,
             ["work", "setup"] => Self::Setup,
-            ["work", "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
+            ["work", "status" | "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
             ["work", "checkpoint"] => Self::Checkpoint,
             ["branch", "rename"] => Self::Settled,
             ["branch", "base", "clear"] => Self::Base,
@@ -41,9 +41,9 @@ impl Need {
             | ["questions", "ask"]
             | ["demo", "start"] => Self::Ready,
             [
-                "status" | "diff" | "conflicts" | "rm" | "leases" | "messages" | "files"
-                | "questions" | "approvals" | "view" | "resume" | "catalog" | "history" | "config"
-                | "pr" | "issue" | "alerts" | "demo" | "queue" | "review",
+                "diff" | "conflicts" | "rm" | "leases" | "messages" | "files" | "questions"
+                | "approvals" | "view" | "resume" | "catalog" | "history" | "config" | "pr"
+                | "issue" | "alerts" | "demo" | "queue" | "review",
                 ..,
             ] => Self::Any,
             ["internal", ..] => Self::Any,

@@ -47,7 +47,7 @@ use crate::client::space_names::SpaceSelector;
     about,
     disable_help_subcommand = true,
     help_template = help::template(),
-    after_help = "Start here (with a registered repository):\n  shoal start my-project fix-login\n  shoal run --workspace fix-login -- cargo test\n  shoal status fix-login\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
+    after_help = "Start here (with a registered repository):\n  shoal start my-project fix-login\n  shoal run --workspace fix-login -- cargo test\n  shoal work status fix-login\n\nRun `shoal run` to list configured commands.\nUse `shoal <command> --help` for details."
 )]
 pub struct Cli {
     #[arg(skip)]
@@ -207,7 +207,10 @@ impl Command {
             Command::Workspace(WorkspaceCommand::Edit { .. }) => "edit".into(),
             Command::Workspace(WorkspaceCommand::Open { .. }) => "open".into(),
             Command::Changes(ChangesCommand::Diff { .. }) => "diff".into(),
-            Command::Workspace(WorkspaceCommand::Status { .. }) => "status".into(),
+            Command::Workspace(WorkspaceCommand::Work {
+                command: Some(WorkCommand::Status { .. }),
+                ..
+            }) => "status".into(),
             Command::Run {
                 name: None, args, ..
             } if !args.is_empty() => "run".into(),

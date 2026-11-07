@@ -662,7 +662,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             )),
             session: None,
         }),
-        Row::Failed(workspace) => Command::Workspace(WorkspaceCommand::Status {
+        Row::Failed(workspace) => work(WorkCommand::Status {
             space: Some(SpaceSelector::parse(&workspace)),
             item: None,
         }),
@@ -688,7 +688,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
                 target: Some(SpaceSelector::parse(&chat)),
                 session: None,
             }),
-            None => Command::Workspace(WorkspaceCommand::Status {
+            None => work(WorkCommand::Status {
                 space: Some(SpaceSelector::parse(&space)),
                 item: None,
             }),
@@ -698,16 +698,10 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             name: Some(name),
             workspace: Some(SpaceSelector::parse(&workspace)),
         }),
-        Row::Untracked(path) => Command::Workspace(WorkspaceCommand::Work {
-            command: Some(WorkCommand::Adopt {
-                path,
-                repository: None,
-                copy: false,
-            }),
-            chats: false,
+        Row::Untracked(path) => work(WorkCommand::Adopt {
+            path,
             repository: None,
-            status: Vec::new(),
-            print: false,
+            copy: false,
         }),
         Row::Cleanup => Command::Service(ServiceCommand::Daemon {
             command: DaemonCommand::Status,
@@ -730,6 +724,17 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     })))
 }
 
+/// `shoal work`'s subcommand `command`.
+fn work(command: WorkCommand) -> Command {
+    Command::Workspace(WorkspaceCommand::Work {
+        command: Some(command),
+        chats: false,
+        repository: None,
+        status: Vec::new(),
+        print: false,
+    })
+}
+
 /// “+ Add workspace” starts a worker in a new workspace.
 fn add() -> Command {
     Command::Create(CreateCommand::Start(Box::new(StartArgs {
@@ -750,7 +755,7 @@ async fn workspace_command(
             space: workspace.into_iter().collect(),
             confirmation: ConfirmationArgs::default(),
         }),
-        Key::Status => Command::Workspace(WorkspaceCommand::Status {
+        Key::Status => work(WorkCommand::Status {
             space: workspace,
             item: None,
         }),
