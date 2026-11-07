@@ -1,0 +1,533 @@
+//! Local reviews: a one-shot, read-only reviewer's findings on a workspace's
+//! committed HEAD or a PR, which the daemon stores and the workspace's agent
+//! answers with typed outcomes.
+use std::{fmt, str::FromStr};
+
+use anyhow::{Context, Result, bail};
+use serde::{Deserialize, Serialize};
+
+use crate::space_names::SpaceSelector;
+use crate::{
+    agent::{Agent, ModelChoice},
+    connection::{Daemon, await_reply, pages, request},
+    protocol::{ReviewMethod, ReviewPiece},
+    repository::Selector,
+    state::states,
+};
+
+mod failure;
+pub mod output;
+
+states!(
+    /// Where a review is in its run.
+    ReviewState {
+        /// Waiting to start; it takes the workspace's HEAD when it does.
+        Queued => "queued",
+        Running => "running",
+        /// The reviewer returned its findings, whatever its verdict.
+        Finished => "finished",
+        /// No reviewer returned findings; the review says why.
+        Failed => "failed",
+        Cancelled => "cancelled",
+    }
+);
+
+impl ReviewState {
+    /// Whether the review has yet to end.
+    pub fn is_active(self) -> bool {
+        matches!(self, Self::Queued | Self::Running)
+    }
+}
+
+states!(
+    /// How much a finding matters, as the reviewer judged it.
+    Severity: ValueEnum {
+        /// Must change before merging.
+        Blocker => "blocker",
+        ShouldFix => "should-fix",
+        Nit => "nit",
+    }
+);
+
+states!(
+    /// The reviewer's overall judgement, which is shown but decides nothing.
+    Verdict {
+        Approve => "approve",
+        Comment => "comment",
+        RequestChanges => "request_changes",
+    }
+);
+
+states!(
+    /// Why no reviewer returned findings.
+    FailureReason {
+        UsageLimit => "usage-limit",
+        QuotaExhausted => "quota-exhausted",
+        RateLimit => "rate-limit",
+        AuthenticationFailed => "authentication-failed",
+        /// The reviewer exited unsuccessfully for another reason.
+        ExecutionFailed => "execution-failed",
+        /// The reviewer's output is missing or does not match the schema.
+        InvalidOutput => "invalid-output",
+        TimedOut => "timed-out",
+        /// The repository's false positives file cannot be read.
+        InvalidFalsePositives => "invalid-false-positives",
+    }
+);
+
+impl FailureReason {
+    /// What the reason means for the user.
+    pub fn describe(self) -> &'static str {
+        match self {
+            Self::UsageLimit => "the reviewer's usage limit was reached; retry after it resets",
+            Self::QuotaExhausted => "the reviewer's quota or credits are exhausted",
+            Self::RateLimit => "the reviewer was rate limited; retry later",
+            Self::AuthenticationFailed => "the reviewer could not authenticate; sign in again",
+            Self::ExecutionFailed => "the reviewer exited unsuccessfully",
+            Self::InvalidOutput => "the reviewer's output did not match the review schema",
+            Self::TimedOut => "the reviewer ran longer than 30 minutes and was stopped",
+            Self::InvalidFalsePositives => {
+                "the repository's .shoal/false-positives.toml is invalid; fix or delete it, then review again"
+            }
+        }
+    }
+}
+
+states!(
+    /// What a later review found of a finding resolved `fixed`.
+    FixCheck {
+        Confirmed => "confirmed",
+        StillPresent => "still-present",
+    }
+);
+
+/// A finding by its review and its number there, written `<review>.<n>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FindingId {
+    pub review: i64,
+    pub number: i64,
+}
+
+impl fmt::Display for FindingId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}", self.review, self.number)
+    }
+}
+
+impl FromStr for FindingId {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> Result<Self> {
+        let parse = || {
+            let (review, number) = text.split_once('.')?;
+            let id = Self {
+                review: review.parse().ok()?,
+                number: number.parse().ok()?,
+            };
+            (id.review > 0 && id.number > 0).then_some(id)
+        };
+        parse().with_context(|| {
+            format!("{text:?} is not a finding; findings are <review>.<n>, such as 17.2")
+        })
+    }
+}
+
+impl Serialize for FindingId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for FindingId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+/// How the workspace's agent answered a finding; each outcome carries what
+/// it needs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum Outcome {
+    /// The code was changed to address it; the next review checks it.
+    Fixed,
+    /// The claim is wrong.
+    FalsePositive { reason: String },
+    /// The claim holds, but the code is not changed.
+    WontFix { reason: String },
+    /// The claim holds and other work fixes it.
+    Deferred { issue: String },
+    /// It makes the same point as another finding.
+    Duplicate { of: FindingId },
+}
+
+states!(
+    /// An outcome's name, as `shoal review resolve` takes it.
+    OutcomeKind: ValueEnum {
+        Fixed => "fixed",
+        FalsePositive => "false-positive",
+        WontFix => "wont-fix",
+        Deferred => "deferred",
+        Duplicate => "duplicate",
+    }
+);
+
+impl Outcome {
+    /// The outcome `kind` with its data, refusing data it does not take and
+    /// missing data it needs.
+    pub fn new(
+        kind: OutcomeKind,
+        reason: Option<String>,
+        issue: Option<String>,
+        of: Option<FindingId>,
+    ) -> Result<Self> {
+        let reason = reason.filter(|reason| !reason.trim().is_empty());
+        let issue = issue.filter(|issue| !issue.trim().is_empty());
+        let outcome = match (kind, reason, issue, of) {
+            (OutcomeKind::Fixed, None, None, None) => Self::Fixed,
+            (OutcomeKind::FalsePositive, Some(reason), None, None) => {
+                Self::FalsePositive { reason }
+            }
+            (OutcomeKind::WontFix, Some(reason), None, None) => Self::WontFix { reason },
+            (OutcomeKind::Deferred, None, Some(issue), None) => Self::Deferred { issue },
+            (OutcomeKind::Duplicate, None, None, Some(of)) => Self::Duplicate { of },
+            (kind, ..) => bail!("{kind} takes {}", kind.data()),
+        };
+        Ok(outcome)
+    }
+
+    pub fn kind(&self) -> OutcomeKind {
+        match self {
+            Self::Fixed => OutcomeKind::Fixed,
+            Self::FalsePositive { .. } => OutcomeKind::FalsePositive,
+            Self::WontFix { .. } => OutcomeKind::WontFix,
+            Self::Deferred { .. } => OutcomeKind::Deferred,
+            Self::Duplicate { .. } => OutcomeKind::Duplicate,
+        }
+    }
+
+    /// The outcome with its data, as one line.
+    pub fn describe(&self) -> String {
+        match self {
+            Self::Fixed => "fixed".into(),
+            Self::FalsePositive { reason } => format!("false-positive: {reason}"),
+            Self::WontFix { reason } => format!("wont-fix: {reason}"),
+            Self::Deferred { issue } => format!("deferred to {issue}"),
+            Self::Duplicate { of } => format!("duplicate of {of}"),
+        }
+    }
+}
+
+impl OutcomeKind {
+    /// The option the outcome needs.
+    fn data(self) -> &'static str {
+        match self {
+            Self::Fixed => "no --reason, --issue or --of",
+            Self::FalsePositive | Self::WontFix => "--reason and nothing else",
+            Self::Deferred => "--issue and nothing else",
+            Self::Duplicate => "--of and nothing else",
+        }
+    }
+}
+
+/// What a review covers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ReviewTarget {
+    /// The workspace's committed HEAD against its diff base.
+    Workspace,
+    /// A PR's head branch against its base branch, both as fetched from
+    /// origin, posted there when `post` is set.
+    Pr {
+        url: String,
+        head: String,
+        base: String,
+        post: bool,
+    },
+}
+
+/// One reviewer finding and how it was answered.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Finding {
+    pub id: FindingId,
+    pub severity: Severity,
+    pub path: String,
+    /// The line in the reviewed version of the file.
+    pub line: u32,
+    pub title: String,
+    pub body: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub replies: Vec<Reply>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<Outcome>,
+    /// What the review that checked a `fixed` outcome found.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check: Option<Check>,
+}
+
+impl Finding {
+    pub fn resolved(&self) -> bool {
+        self.outcome.is_some()
+    }
+}
+
+/// A discussion reply to a finding, which does not resolve it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reply {
+    pub created_at: i64,
+    pub body: String,
+}
+
+/// A later review's check of a finding resolved `fixed`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Check {
+    pub result: FixCheck,
+    /// The review that checked it.
+    pub review: i64,
+}
+
+/// One review: what it covers, who ran it, how it ended and its findings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Review {
+    pub id: i64,
+    pub workspace_id: String,
+    /// The workspace's name.
+    pub workspace: String,
+    pub target: ReviewTarget,
+    /// The agent asked to review.
+    pub agent: String,
+    /// The model and effort asked for `agent`; what it leaves out follows
+    /// the agent's configuration.
+    #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
+    pub model: crate::agent::ModelChoice,
+    /// The agent that produced the result, which differs from `agent` after
+    /// a fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reviewer: Option<String>,
+    pub state: ReviewState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<FailureReason>,
+    /// The commit reviewed, set when the review starts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<String>,
+    /// The commit it was compared against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    /// Unix seconds.
+    pub created_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<Verdict>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<Finding>,
+    /// Where a PR review was posted, or why it could not be.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub posted: Option<Posted>,
+    /// Whether the workspace's HEAD has moved past the reviewed commit;
+    /// absent when HEAD was not read. Never stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outdated: Option<bool>,
+}
+
+/// What posting a PR review did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "posted", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Posted {
+    /// The review is on the PR.
+    Posted { url: String },
+    /// The forge refused it or could not be reached.
+    Failed { error: String },
+}
+
+impl Review {
+    /// Seconds from start to end, once both are known.
+    pub fn duration(&self) -> Option<i64> {
+        Some(self.ended_at? - self.started_at?)
+    }
+
+    /// The findings no outcome resolves.
+    pub fn unresolved(&self) -> impl Iterator<Item = &Finding> {
+        self.findings.iter().filter(|finding| !finding.resolved())
+    }
+
+    /// The finding `id`, if this review has it.
+    pub fn finding(&self, id: FindingId) -> Option<&Finding> {
+        self.findings.iter().find(|finding| finding.id == id)
+    }
+
+    /// The review's state in one line: queued, running, the finding counts
+    /// by severity, or why it failed or that it was cancelled.
+    pub fn status(&self) -> String {
+        match self.state {
+            ReviewState::Finished => {
+                let counts = severity_counts(&self.findings);
+                match counts.is_empty() {
+                    true => "finished: no findings".into(),
+                    false => format!("finished: {counts}"),
+                }
+            }
+            ReviewState::Failed => match self.failure {
+                Some(reason) => format!("failed: {reason}"),
+                None => "failed".into(),
+            },
+            state => state.to_string(),
+        }
+    }
+}
+
+/// A workspace's latest review as lists show it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewStatus {
+    pub id: i64,
+    pub state: ReviewState,
+    /// [`Review::status`].
+    pub status: String,
+    pub unresolved: usize,
+}
+
+impl From<&Review> for ReviewStatus {
+    fn from(review: &Review) -> Self {
+        Self {
+            id: review.id,
+            state: review.state,
+            status: review.status(),
+            unresolved: review.unresolved().count(),
+        }
+    }
+}
+
+/// The findings counted by severity, most severe first as [`Severity::ALL`]
+/// lists them, such as
+/// "1 blocker, 2 should-fix"; empty without findings.
+pub fn severity_counts(findings: &[Finding]) -> String {
+    Severity::ALL
+        .iter()
+        .filter_map(|severity| {
+            let count = findings
+                .iter()
+                .filter(|finding| finding.severity == *severity)
+                .count();
+            (count > 0).then(|| format!("{count} {severity}"))
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The note every delivered or posted review with findings ends with: the
+/// reviewer is automated, and its findings are claims to check.
+pub const AUTOMATED_NOTE: &str = "This review is automated and can be wrong. Each finding is a \
+     suggestion, not an instruction: check it against the code and the project's rules, and \
+     reject it when it does not hold.";
+
+/// Queue a review of `target` in `workspace` by `agent` with `model`.
+pub async fn run(
+    daemon: &impl Daemon,
+    workspace: SpaceSelector,
+    target: ReviewTarget,
+    agent: Agent,
+    model: ModelChoice,
+) -> Result<Review> {
+    let method = ReviewMethod::RunReview {
+        workspace,
+        target,
+        agent: Some(agent),
+        model,
+    };
+    reassembled(daemon, method).await
+}
+
+/// Cancel the review `id`, or `workspace`'s queued or running one.
+pub async fn cancel(
+    daemon: &impl Daemon,
+    workspace: Option<SpaceSelector>,
+    id: Option<i64>,
+) -> Result<Review> {
+    reassembled(daemon, ReviewMethod::CancelReview { workspace, id }).await
+}
+
+/// The reviews of `workspace` or `repository`, or every review, newest first.
+pub async fn list(
+    daemon: &impl Daemon,
+    workspace: Option<SpaceSelector>,
+    repository: Option<Selector>,
+) -> Result<Vec<Review>> {
+    let method = ReviewMethod::ListReviews {
+        workspace,
+        repository,
+    };
+    reassembled(daemon, method).await
+}
+
+/// The review `id`, or `workspace`'s latest.
+pub async fn show(
+    daemon: &impl Daemon,
+    workspace: Option<SpaceSelector>,
+    id: Option<i64>,
+) -> Result<Review> {
+    reassembled(daemon, ReviewMethod::ShowReview { workspace, id }).await
+}
+
+/// The ID of the review `id`, or of `workspace`'s latest, once it has
+/// ended, waiting across daemon restarts.
+pub async fn await_ended(
+    daemon: &impl Daemon,
+    workspace: Option<SpaceSelector>,
+    id: Option<i64>,
+) -> Result<i64> {
+    let method = || ReviewMethod::AwaitReview {
+        workspace: workspace.clone(),
+        id,
+    };
+    i64::try_from(await_reply(daemon, method, false).await?)
+}
+
+/// Reply `body` to `finding`.
+pub async fn reply(daemon: &impl Daemon, finding: FindingId, body: String) -> Result<Review> {
+    let method = ReviewMethod::ReplyToFinding {
+        workspace: None,
+        finding,
+        body,
+    };
+    reassembled(daemon, method).await
+}
+
+/// Resolve `finding` with `outcome`, or reopen it without one.
+pub async fn resolve(
+    daemon: &impl Daemon,
+    finding: FindingId,
+    outcome: Option<Outcome>,
+) -> Result<Review> {
+    let method = ReviewMethod::ResolveFinding {
+        workspace: None,
+        finding,
+        outcome,
+    };
+    reassembled(daemon, method).await
+}
+
+/// Refuse a PR for `workspace` that `[review] require_for_pr` holds back
+/// until a finished review covers HEAD.
+pub async fn check_pr_gate(daemon: &impl Daemon, workspace: SpaceSelector) -> Result<()> {
+    request(daemon, ReviewMethod::CheckPrGate { workspace }).await
+}
+
+/// What a review request returns, a review or a listing of them,
+/// reassembled from the pieces of JSON the daemon sends it in.
+async fn reassembled<T: serde::de::DeserializeOwned>(
+    daemon: &impl Daemon,
+    method: ReviewMethod,
+) -> Result<T> {
+    let pieces = pages::<ReviewPiece>(daemon, method).await?;
+    let json: String = pieces.into_iter().map(|piece| piece.0).collect();
+    serde_json::from_str(&json).context("the daemon sent an invalid review")
+}
+
+#[cfg(test)]
+mod tests;

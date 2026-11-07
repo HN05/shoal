@@ -129,7 +129,7 @@ fn install_works_offline_and_backs_up_the_existing_config() {
     let home = tempfile::tempdir().unwrap();
     let config = home.path().join("xdg/shoal/config.toml");
     let backup = config.with_extension("toml.backup");
-    let template = include_str!("../configs/default.toml");
+    let template = include_str!("../crates/shoal-client/configs/default.toml");
     for previous in [None, Some("invalid TOML ["), Some("# another edit\n")] {
         if let Some(previous) = previous {
             fs::write(&config, previous).unwrap();

@@ -174,8 +174,6 @@ jobs:
         if: env.DOCS_ONLY != 'true'
         run: |
           cargo clippy --locked --all-targets -- -D warnings
-          # Apps build shoal::client alone, without the CLI and the daemon.
-          cargo clippy --locked --lib --no-default-features -- -D warnings
 
       - name: cargo check of each crate alone
         if: env.DOCS_ONLY != 'true'
@@ -202,7 +200,7 @@ jobs:
           musl_target="$(uname -m)-unknown-linux-musl"
           cargo-zigbuild check --locked --target "$musl_target" --lib --bins
           # GNU-only tests cannot catch musl's unsupported Metadata::created().
-          # Testing rebuilds the whole crate with codegen for 5 tests of the
+          # Testing rebuilds the whole binary with codegen for 5 tests of the
           # identity module, so a PR runs them only when it changes that
           # module, the dependencies or this workflow; pushes to main and
           # dispatches, and a PR whose base the workspace lacks, always run them.
@@ -210,7 +208,7 @@ jobs:
               ! git diff --quiet "$PR_BASE" HEAD -- \
                 src/daemon/workspace/identity.rs src/daemon/workspace/identity \
                 Cargo.toml Cargo.lock .forgejo/workflows/ci.yml; then
-            cargo-zigbuild test --locked --target "$musl_target" --lib daemon::workspace::identity
+            cargo-zigbuild test --locked --target "$musl_target" --bin shoal daemon::workspace::identity
           else
             echo "the PR leaves the identity module and the dependencies alone: skipping the musl test"
           fi

@@ -203,3 +203,6 @@ pub type UnmergeResult = std::result::Result<crate::model::Unmerged, String>;
 pub async fn setup(paths: &Paths, workspace: String) -> Result<i32> {
     run_tracked(paths, workspace, vec![], Mode::Setup, None).await
 }
+
+#[cfg(test)]
+mod tests;

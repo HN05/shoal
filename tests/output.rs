@@ -438,7 +438,7 @@ fn shoal_output_json_refuses_to_prompt_on_a_terminal() {
 /// failures, with the library's types.
 #[test]
 fn a_program_reads_json_output_with_the_librarys_types() {
-    use shoal::client::{
+    use shoal_client::{
         model::Repository,
         output::{daemon::Status, error::CommandError, skill::Skill},
     };

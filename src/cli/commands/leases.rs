@@ -1,5 +1,4 @@
 //! Typed acquisition and release across ports, simulators, and resources.
-use std::fmt;
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -125,18 +124,6 @@ fn resource_request(
         resource: member,
         reason: lease.reason.clone(),
         queue: lease.queue,
-    }
-}
-
-impl fmt::Display for Held {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Port { name } => write!(f, "port {name}"),
-            Self::Sim { name } => write!(f, "simulator {name}"),
-            Self::Resource { pool, name } => write!(f, "resource {pool}/{name}"),
-            Self::Repo { pool, name } => write!(f, "repo {pool}/{name}"),
-            Self::Secret { name } => write!(f, "secret {name}"),
-        }
     }
 }
 

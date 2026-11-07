@@ -1,0 +1,37 @@
+[package]
+name = "shoal-client"
+version = "0.1.0"
+description = "The Shoal daemon's protocol and the client-side logic apps share with the CLI"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+# Store typed names in SQLite columns.
+rusqlite = ["dep:rusqlite"]
+# Take typed names as CLI values.
+clap = ["dep:clap"]
+# Conversions and paths for the tests of crates that use this one.
+test-support = []
+
+[dependencies]
+anyhow.workspace = true
+base64.workspace = true
+clap = { workspace = true, features = ["derive"], optional = true }
+futures-util.workspace = true
+libc.workspace = true
+rusqlite = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+shoal-config-derive.workspace = true
+shoal-forge.workspace = true
+shoal-subprocess.workspace = true
+tokio = { workspace = true, features = ["io-util", "macros", "net", "process", "rt", "sync", "time"] }
+toml.workspace = true
+toml_edit.workspace = true
+uuid = { workspace = true, features = ["serde", "v4"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

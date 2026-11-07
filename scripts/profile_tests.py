@@ -203,7 +203,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("mode", choices=["suite", "tests"])
     parser.add_argument("--binary", action="append",
-                        help="only this binary, such as `workspaces` or `shoal (lib)`; repeatable")
+                        help="only this binary, such as `workspaces` or `shoal (bin)`; repeatable")
     parser.add_argument("--jobs", type=int, default=os.cpu_count(),
                         help="tests run at once in `tests` mode (default: CPU count)")
     parser.add_argument("--csv", help="write every test's row to this file")

@@ -174,11 +174,11 @@ impl Fixture {
         support::daemon_client::protocol(self.root.path())
     }
 
-    /// The daemon as an app reaches it through `shoal::client`, as the user.
-    fn connector(&self) -> shoal::client::connection::Connector {
+    /// The daemon as an app reaches it through `shoal_client`, as the user.
+    fn connector(&self) -> shoal_client::connection::Connector {
         let state = self.root.path().join("state");
-        shoal::client::connection::Connector {
-            paths: shoal::client::paths::Paths {
+        shoal_client::connection::Connector {
+            paths: shoal_client::paths::Paths {
                 home: self.root.path().into(),
                 socket: state.join("daemon.sock"),
                 state,
@@ -21408,10 +21408,11 @@ fn strip_shoal_arguments(text: &str, separator: char) -> String {
 /// Every workspace agent's prompt starts with Shoal's guidance, which spans
 /// these lines and ends with the space rules.
 const GUIDANCE_START: &str = "You are working in Shoal workspace ";
-const SPACE_RULES: &str = include_str!("../src/client/config/templates/space_rules.md");
+const SPACE_RULES: &str =
+    include_str!("../crates/shoal-client/src/config/templates/space_rules.md");
 /// The built-in `work` rule, which the built-in modes list right after the
 /// guidance.
-const WORK_RULE: &str = include_str!("../src/client/config/rules/work.md");
+const WORK_RULE: &str = include_str!("../crates/shoal-client/src/config/rules/work.md");
 
 /// Where the guidance that starts at `start` in `text` ends, with the
 /// built-in `work` rule when it follows.
@@ -23929,7 +23930,7 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 
 #[test]
 fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
-    use shoal::client::{
+    use shoal_client::{
         connection,
         protocol::{
             OperationMethod,
@@ -23961,13 +23962,13 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
     }
 }
 
-/// An app creates workspaces through `shoal::client` and follows their
+/// An app creates workspaces through `shoal_client` and follows their
 /// preparation in the daemon's worker: setup's output as setup writes it,
 /// the post-setup hook, then the ready workspace, or the typed failure of
 /// setup or the hook.
 #[test]
 fn an_app_follows_the_setup_of_a_workspace_it_creates() {
-    use shoal::client::{
+    use shoal_client::{
         operations::{Followed, Following},
         protocol::{
             ErrorCode, OperationMethod,
@@ -24007,7 +24008,7 @@ fn an_app_follows_the_setup_of_a_workspace_it_creates() {
             agent: None,
         };
         runtime
-            .block_on(shoal::client::connection::request::<StartedWorkspace>(
+            .block_on(shoal_client::connection::request::<StartedWorkspace>(
                 &app, create,
             ))
             .unwrap()
@@ -30151,11 +30152,11 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     // An app's request for the head with an agent that can run is refused
     // before anything is created, since the head holds no agent of its own.
     let before = fixture.ok(&["work"]);
-    let start = shoal::client::protocol::OperationMethod::StartWorkspace {
+    let start = shoal_client::protocol::OperationMethod::StartWorkspace {
         repository: fixture.repo.to_str().unwrap().into(),
-        start: shoal::client::protocol::operations::WorkspaceStart::PullHead {
+        start: shoal_client::protocol::operations::WorkspaceStart::PullHead {
             url: url.into(),
-            head: shoal::client::protocol::PullHead {
+            head: shoal_client::protocol::PullHead {
                 number: 8,
                 reference: "refs/pull/8/head".into(),
                 commit: first.clone(),
@@ -30169,19 +30170,17 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
         options: Default::default(),
         issue: None,
         pr: Some(url.into()),
-        agent: Some(Box::new(
-            shoal::client::protocol::operations::QueuedLaunch {
-                agent: "reviewer".into(),
-                ..Default::default()
-            },
-        )),
+        agent: Some(Box::new(shoal_client::protocol::operations::QueuedLaunch {
+            agent: "reviewer".into(),
+            ..Default::default()
+        })),
         env: None,
     };
     let refused =
         tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(shoal::client::connection::request::<
-                shoal::client::protocol::operations::StartedWorkspace,
+            .block_on(shoal_client::connection::request::<
+                shoal_client::protocol::operations::StartedWorkspace,
             >(&fixture.connector(), start));
     assert!(refused.is_err(), "expected a refusal: {refused:?}");
     assert_eq!(fixture.ok(&["work"]), before);

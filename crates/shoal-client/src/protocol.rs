@@ -1,0 +1,1199 @@
+//! Newline-delimited JSON over the daemon's Unix socket. Bump [`VERSION`]
+//! whenever a request, response, or event changes shape or spelling.
+use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+
+use crate::{
+    config::repo::ConfigLayers,
+    events::EventItem,
+    model::{
+        ConflictCheck, DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation,
+        PortSuggestion, Repository, RepositoryRemoval, SpaceStatus, SyncedRepository, Workspace,
+    },
+    notifications::Notification,
+    processes::Identity,
+    recovery::Report,
+    removal::{RemovalCheck, RemovalResult},
+    resources::{Overview, ResourceLease},
+    sim::{AuditEntry, Simulator, SimulatorCatalog},
+};
+
+mod agents;
+mod approvals;
+mod assignments;
+mod chats;
+mod ci;
+mod daemon;
+mod demos;
+mod executions;
+mod files;
+mod holds;
+mod items;
+mod notifications;
+pub mod operations;
+mod ports;
+mod questions;
+mod queue;
+mod reads;
+mod recovery;
+mod removal;
+mod repositories;
+mod resources;
+mod reviews;
+mod secrets;
+mod simulators;
+mod subscriptions;
+mod version;
+mod workspaces;
+
+pub use agents::{AgentMethod, TurnEnd, WakeEnd, WokenTurn};
+pub use approvals::ApprovalMethod;
+pub use assignments::AssignmentMethod;
+pub use chats::{ChatMethod, ChatRoot, ScopeToken};
+pub use ci::CiMethod;
+pub use daemon::{DaemonMethod, Exit, ExitRequest};
+pub use demos::DemoMethod;
+pub use executions::ExecutionMethod;
+pub use files::FileMethod;
+pub use holds::HoldMethod;
+pub use items::{DownloadPiece, ItemContext, ItemMethod, ViewPiece};
+pub use notifications::NotificationMethod;
+pub use operations::OperationMethod;
+pub use ports::PortMethod;
+pub use questions::QuestionMethod;
+pub use queue::QueueMethod;
+pub use recovery::RecoveryMethod;
+pub use removal::{QueuedLaunches, RemovalMethod};
+pub use repositories::RepositoryMethod;
+pub use resources::ResourceMethod;
+pub use reviews::{ReviewMethod, ReviewPiece};
+pub use secrets::SecretMethod;
+pub use simulators::SimulatorMethod;
+pub use subscriptions::SubscriptionMethod;
+pub use version::VERSION;
+pub use workspaces::{CommitStart, CopySource, CreationOptions, PullHead, WorkspaceMethod};
+
+/// The first protocol whose wrappers read [`Control::RestoreWaits`].
+pub const RESTORE_WAITS: u32 = 174;
+pub const MAX_FRAME: usize = 64 * 1024;
+
+/// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
+pub mod timing {
+    use std::time::Duration;
+
+    /// Release a daemon connection slot if the client never sends its request.
+    pub const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(5);
+    /// Status and shutdown should fail promptly when the daemon is unresponsive.
+    pub const ADMIN_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+    /// A status request during daemon startup waits this long for it to end
+    /// before learning the running step, within the admin request timeout.
+    pub const STARTUP_STATUS_WAIT: Duration = Duration::from_secs(2);
+    /// Ordinary requests may include slow Git, simulator, or hook work.
+    pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(3600);
+    /// Allow daemon startup or shutdown to settle across repeated status requests.
+    pub const DAEMON_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+    /// A long-lived wait that lost its daemon gives the next one this long to
+    /// listen and know the caller's scope again: the service manager's restart
+    /// throttle, the startup audit, and the wrapper's reattachment.
+    pub const DAEMON_RESTART_TIMEOUT: Duration = Duration::from_secs(120);
+    /// Observe daemon transitions promptly without busy-polling the socket.
+    pub const DAEMON_POLL_INTERVAL: Duration = Duration::from_millis(100);
+    /// A managed daemon restarts with an installed update once its running
+    /// operations finish, which can include a long setup.
+    pub const UPDATE_WAIT_TIMEOUT: Duration = Duration::from_secs(600);
+    /// Each refused attempt briefly holds back the update it waits for.
+    pub const UPDATE_POLL_INTERVAL: Duration = Duration::from_secs(1);
+
+    /// Ordinary command registration needs no slow preparation, but its process
+    /// and worktree checks run subprocesses; only guard against a hung daemon.
+    pub const EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(30);
+    /// Setup and merge can wait for Git gates, hooks, and upstream refreshes.
+    pub const PREPARED_EXECUTION_START_TIMEOUT: Duration = Duration::from_secs(120);
+    /// Wait for the daemon to persist the spawned child's process group.
+    pub const START_ACK_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Cover stopping an exited agent's survivors and the completion scan,
+    /// with room for ownership checks and persistence.
+    pub const COMPLETION_ACK_TIMEOUT: Duration = Duration::from_secs(60);
+    /// Bound the commands that inspect processes: the `ps` that describes
+    /// them and the probe that finds a Linux subreaper. The completion budget
+    /// allows it for each process inventory too.
+    pub const PROCESS_INVENTORY_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Give an identity-verified survivor time to handle SIGTERM before SIGKILL.
+    pub const PROCESS_TERM_GRACE: Duration = Duration::from_secs(2);
+    /// Wait for a survivor to disappear after SIGKILL before reporting it.
+    pub const PROCESS_KILL_WAIT: Duration = Duration::from_secs(1);
+    /// Wait within one scan for processes caught mid-exec to publish their
+    /// environment, and again for the ones an inspection finds unattributed.
+    pub const PROCESS_SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
+    /// Cover ordinary EXECUTION_START_TIMEOUT plus START_ACK_TIMEOUT and wrapper startup.
+    pub const DETACHED_LAUNCH_TIMEOUT: Duration = Duration::from_secs(60);
+    /// Collect a failed detached wrapper's exit status without waiting indefinitely.
+    pub const DETACHED_EXIT_TIMEOUT: Duration = Duration::from_secs(5);
+    /// Give the child time to handle a stop signal before escalating to SIGKILL.
+    pub const EXECUTION_STOP_GRACE: Duration = Duration::from_secs(2);
+    /// Retry incomplete process proof without extending the wrapper completion budget.
+    pub const PROCESS_PROOF_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Cover child registration, its stop grace, and the daemon completion acknowledgement.
+    pub const WORKSPACE_STOP_TIMEOUT: Duration = Duration::from_secs(90);
+    /// Notice completed execution records promptly while workspace stopping waits.
+    pub const WORKSPACE_STOP_POLL_INTERVAL: Duration = Duration::from_millis(50);
+    /// First retry of a detached wrapper; the delay doubles up to the cap.
+    pub const REATTACH_RETRY_INITIAL: Duration = Duration::from_millis(100);
+    /// Keep a detached wrapper's scope gap short once the daemon returns.
+    pub const REATTACH_RETRY_MAX: Duration = Duration::from_secs(1);
+    /// Give up on an unresponsive daemon's reattach reply and retry.
+    pub const REATTACH_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+    /// After its command exits, wait this long for a restarting daemon to take
+    /// the exit report; cover a stop with its workspace drain plus a start.
+    pub const REATTACH_EXIT_TIMEOUT: Duration = Duration::from_secs(120);
+
+    const _: () = {
+        // Each pass scans markers, then inspects related processes with a
+        // second inventory and lets unattributed ones settle; an exited agent
+        // gets a stop pass before completion.
+        assert!(
+            COMPLETION_ACK_TIMEOUT.as_millis()
+                > 2 * (2 * PROCESS_INVENTORY_TIMEOUT.as_millis()
+                    + 2 * PROCESS_SETTLE_TIMEOUT.as_millis())
+                    + PROCESS_TERM_GRACE.as_millis()
+                    + PROCESS_KILL_WAIT.as_millis()
+        );
+        assert!(
+            DETACHED_LAUNCH_TIMEOUT.as_millis()
+                > EXECUTION_START_TIMEOUT.as_millis() + START_ACK_TIMEOUT.as_millis()
+        );
+        assert!(
+            WORKSPACE_STOP_TIMEOUT.as_millis()
+                > START_ACK_TIMEOUT.as_millis()
+                    + EXECUTION_STOP_GRACE.as_millis()
+                    + COMPLETION_ACK_TIMEOUT.as_millis()
+        );
+        assert!(PROCESS_PROOF_TIMEOUT.as_millis() < COMPLETION_ACK_TIMEOUT.as_millis());
+        assert!(
+            REATTACH_EXIT_TIMEOUT.as_millis()
+                > WORKSPACE_STOP_TIMEOUT.as_millis() + 2 * DAEMON_WAIT_TIMEOUT.as_millis()
+        );
+        assert!(
+            DAEMON_RESTART_TIMEOUT.as_millis()
+                > DAEMON_WAIT_TIMEOUT.as_millis() + REATTACH_RETRY_MAX.as_millis()
+        );
+    };
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Request {
+    pub protocol: u32,
+    pub id: u64,
+    pub method: Method,
+    #[serde(default)]
+    pub scope: Option<String>,
+}
+
+impl Request {
+    /// A request from this process, carrying its workspace scope token if any.
+    pub fn new(method: impl Into<Method>) -> Self {
+        Self {
+            protocol: VERSION,
+            id: 1,
+            method: method.into(),
+            scope: crate::env::scope_token(),
+        }
+    }
+}
+
+/// Every request; each decodes from its own spelling.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Method {
+    /// Answered before the protocol check and authorization.
+    Reattach(Reattachment),
+    /// Answered before the protocol check.
+    Exit(ExitRequest),
+    Operation(Operation),
+}
+
+/// A request that resumes a connection rather than asking a domain.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Reattachment {
+    /// Long-lived: an execution connection resumed after a daemon restart.
+    Reattach(Reattach),
+}
+
+/// A request one of the daemon's domains answers, by its domain.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Operation {
+    Daemon(DaemonMethod),
+    Repository(RepositoryMethod),
+    Workspace(WorkspaceMethod),
+    Removal(RemovalMethod),
+    Recovery(RecoveryMethod),
+    Execution(ExecutionMethod),
+    Assignment(AssignmentMethod),
+    Agent(AgentMethod),
+    Chat(ChatMethod),
+    Queue(QueueMethod),
+    Hold(HoldMethod),
+    Demo(DemoMethod),
+    File(FileMethod),
+    Item(ItemMethod),
+    Ci(CiMethod),
+    Notification(NotificationMethod),
+    Operations(OperationMethod),
+    Question(QuestionMethod),
+    Review(ReviewMethod),
+    Approval(ApprovalMethod),
+    Port(PortMethod),
+    Secret(SecretMethod),
+    Resource(ResourceMethod),
+    Simulator(SimulatorMethod),
+    Subscription(SubscriptionMethod),
+}
+
+impl Method {
+    /// The request's protocol name, for timing lines.
+    pub fn name(&self) -> String {
+        match serde_json::to_value(self) {
+            Ok(serde_json::Value::String(name)) => name,
+            Ok(serde_json::Value::Object(fields)) => fields
+                .into_iter()
+                .next()
+                .map(|(name, _)| name)
+                .unwrap_or_default(),
+            _ => String::new(),
+        }
+    }
+
+    /// Daemon administration, which must reach a daemon of any release.
+    pub fn controls_daemon(&self) -> bool {
+        match self {
+            Self::Reattach(_) => false,
+            Self::Exit(_) => true,
+            Self::Operation(operation) => operation.controls_daemon(),
+        }
+    }
+
+    /// How long the request keeps its connection.
+    pub fn lifetime(&self) -> Lifetime {
+        match self {
+            Self::Reattach(_) => Lifetime::Resumed,
+            Self::Exit(_) => Lifetime::Reply,
+            Self::Operation(operation) => operation.lifetime(),
+        }
+    }
+
+    /// Executions, waits and streams, which keep the connection open after
+    /// the request.
+    pub fn holds_connection(&self) -> bool {
+        self.lifetime() != Lifetime::Reply
+    }
+
+    /// Long-lived requests whose clients send them again when the daemon
+    /// closes the connection unanswered, as across a restart.
+    pub fn retries_when_closed(&self) -> bool {
+        self.lifetime() == Lifetime::Resumed
+    }
+}
+
+impl Operation {
+    /// Daemon administration, which must reach a daemon of any release.
+    pub fn controls_daemon(&self) -> bool {
+        matches!(self, Self::Daemon(_))
+    }
+
+    pub fn lifetime(&self) -> Lifetime {
+        match self {
+            Self::Workspace(method) => method.lifetime(),
+            Self::Execution(method) => method.lifetime(),
+            Self::Agent(method) => method.lifetime(),
+            Self::Chat(method) => method.lifetime(),
+            Self::Queue(method) => method.lifetime(),
+            Self::Item(method) => method.lifetime(),
+            Self::Notification(method) => method.lifetime(),
+            Self::Operations(method) => method.lifetime(),
+            Self::Question(method) => method.lifetime(),
+            Self::Review(method) => method.lifetime(),
+            Self::Subscription(method) => method.lifetime(),
+            Self::Daemon(_)
+            | Self::Repository(_)
+            | Self::Removal(_)
+            | Self::Recovery(_)
+            | Self::Assignment(_)
+            | Self::Hold(_)
+            | Self::Demo(_)
+            | Self::File(_)
+            | Self::Ci(_)
+            | Self::Approval(_)
+            | Self::Port(_)
+            | Self::Secret(_)
+            | Self::Resource(_)
+            | Self::Simulator(_) => Lifetime::Reply,
+        }
+    }
+}
+
+impl From<Exit> for Method {
+    fn from(exit: Exit) -> Self {
+        Self::Exit(ExitRequest { exit })
+    }
+}
+
+impl From<Operation> for Method {
+    fn from(operation: Operation) -> Self {
+        Self::Operation(operation)
+    }
+}
+
+/// Each domain's requests convert into the operation and call carrying them.
+macro_rules! from_domains {
+    ($($variant:ident($method:ty)),+ $(,)?) => {$(
+        impl From<$method> for Operation {
+            fn from(method: $method) -> Self {
+                Self::$variant(method)
+            }
+        }
+
+        impl From<$method> for Method {
+            fn from(method: $method) -> Self {
+                Self::Operation(method.into())
+            }
+        }
+    )+};
+}
+
+from_domains!(
+    Daemon(DaemonMethod),
+    Repository(RepositoryMethod),
+    Workspace(WorkspaceMethod),
+    Removal(RemovalMethod),
+    Recovery(RecoveryMethod),
+    Execution(ExecutionMethod),
+    Assignment(AssignmentMethod),
+    Agent(AgentMethod),
+    Chat(ChatMethod),
+    Queue(QueueMethod),
+    Hold(HoldMethod),
+    Demo(DemoMethod),
+    File(FileMethod),
+    Item(ItemMethod),
+    Ci(CiMethod),
+    Notification(NotificationMethod),
+    Operations(OperationMethod),
+    Question(QuestionMethod),
+    Review(ReviewMethod),
+    Approval(ApprovalMethod),
+    Port(PortMethod),
+    Secret(SecretMethod),
+    Resource(ResourceMethod),
+    Simulator(SimulatorMethod),
+    Subscription(SubscriptionMethod),
+);
+
+/// How long a request keeps its connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lifetime {
+    /// Until the reply.
+    Reply,
+    /// Until either side hangs up, as an execution or a stream does.
+    Open,
+    /// Until either side hangs up; the client sends it again when the daemon
+    /// closes the connection unanswered, as across a restart.
+    Resumed,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Response {
+    pub protocol: u32,
+    pub id: u64,
+    /// More frames of this response follow, each continuing its list: a
+    /// list too large for one frame arrives in pages.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub more: bool,
+    #[serde(flatten)]
+    pub body: Body,
+}
+
+impl Response {
+    pub fn new(id: u64, body: Body) -> Self {
+        Self {
+            protocol: VERSION,
+            id,
+            more: false,
+            body,
+        }
+    }
+
+    /// The frames that send this response: itself, or the pages of a list
+    /// too large for one frame, each but the last marked [`Self::more`].
+    pub fn frames(self) -> Result<Vec<Self>> {
+        if serde_json::to_vec(&self)?.len() < MAX_FRAME {
+            return Ok(vec![self]);
+        }
+        let mut frames: Vec<_> = self
+            .body
+            .pages()?
+            .into_iter()
+            .map(|body| Self {
+                more: true,
+                ..Self::new(self.id, body)
+            })
+            .collect();
+        if let Some(last) = frames.last_mut() {
+            last.more = false;
+        }
+        Ok(frames)
+    }
+}
+
+/// Whose repository config: a workspace's worktree file under the saved
+/// config, the registered checkout's before a workspace exists, or none,
+/// for the global config alone.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigTarget {
+    Workspace(crate::space_names::SpaceSelector),
+    Repository(crate::repository::Selector),
+    Global,
+}
+
+impl ConfigTarget {
+    /// The config of `chat`: its repository's, or the global config alone
+    /// for a chat without a repository.
+    pub fn chat(chat: &crate::model::Chat) -> Self {
+        match &chat.repository_id {
+            Some(id) => Self::Repository(id.clone().into()),
+            None => Self::Global,
+        }
+    }
+}
+
+crate::state::open_enum! {
+    /// Open on receipt so newer daemons can still explain failures.
+    ErrorCode {
+        InvalidRequest => "invalid_request",
+        ProtocolMismatch => "protocol_mismatch",
+        ScopeDenied => "scope_denied",
+        OperationFailed => "operation_failed",
+        ExecutionFailed => "execution_failed",
+        /// Stopping needs the user to confirm that an execution Shoal cannot
+        /// prove ended did.
+        UnprovenStop => "unproven_stop",
+        /// A restart continues once the stopped agent's remaining processes
+        /// exit, which the message names.
+        RestartWaits => "restart_waits",
+        /// The workspace, repository, link, question or approval does not exist.
+        NotFound => "not_found",
+        /// A workspace, an unfinished rename or a running chat has the name or
+        /// branch.
+        NameTaken => "name_taken",
+        /// The workspace is not ready, or its worktree is not verified as its own.
+        NotReady => "not_ready",
+        /// Removal would delete unsaved work the caller did not confirm.
+        UnsavedWork => "unsaved_work",
+        /// The user denied the approval the request needed.
+        ApprovalDenied => "approval_denied",
+        /// The workspace's setup command failed; the workspace is kept as
+        /// failed.
+        SetupFailed => "setup_failed",
+        /// The post-setup hook failed; the ready workspace is kept.
+        HookFailed => "hook_failed",
+        /// Pushing the workspace's branch failed.
+        PushFailed => "push_failed",
+    }
+}
+
+impl ErrorCode {
+    /// Whether a failure's message says all its code does: `operation_failed`
+    /// is every failure without a more specific code, and a refusal's message
+    /// states the refusal.
+    fn in_message(&self) -> bool {
+        matches!(
+            self,
+            Self::OperationFailed
+                | Self::NotFound
+                | Self::NameTaken
+                | Self::NotReady
+                | Self::UnsavedWork
+                | Self::ApprovalDenied
+                | Self::SetupFailed
+                | Self::HookFailed
+                | Self::PushFailed
+        )
+    }
+}
+
+// Keep payload conversions and variant names tied to the wire enum.
+macro_rules! response_bodies {
+    ($($variant:ident($payload:ty),)*) => {
+        #[derive(Debug, Serialize, Deserialize)]
+        #[serde(tag = "type", content = "data", rename_all = "snake_case")]
+        pub enum Body {
+            Ok,
+            Error { code: ErrorCode, message: String },
+            Busy { message: String },
+            $($variant($payload),)*
+        }
+
+        impl Body {
+            pub fn variant_name(&self) -> &'static str {
+                match self {
+                    Self::Ok => "Ok",
+                    Self::Error { .. } => "Error",
+                    Self::Busy { .. } => "Busy",
+                    $(Self::$variant(_) => stringify!($variant),)*
+                }
+            }
+        }
+
+        $(impl TryFrom<Body> for $payload {
+            type Error = anyhow::Error;
+
+            fn try_from(body: Body) -> Result<Self> {
+                match body {
+                    Body::$variant(value) => Ok(value),
+                    body => Err(body.unexpected(stringify!($variant))),
+                }
+            }
+        })*
+    };
+}
+
+response_bodies! {
+    Status(DaemonStatus),
+    Repositories(Vec<Repository>),
+    Repository(Repository),
+    LocalConfigPath(std::path::PathBuf),
+    ChatRoot(chats::ChatRoot),
+    LocalConfigEdit(crate::model::LocalConfigEdit),
+    RepositoryRemoved(RepositoryRemoval),
+    RepositoryMoves(crate::model::RepositoryMoves),
+    MovedRepositories(Vec<crate::model::MovedRepository>),
+    Workspace(Workspace),
+    Hold(crate::model::WorkspaceHold),
+    QueueAdmission(crate::model::QueueAdmission),
+    QueueEntries(Vec<crate::model::QueueEntry>),
+    StoppedWorkspace(crate::model::StoppedWorkspace),
+    RunningAgents(Vec<crate::model::RunningAgent>),
+    RestartedPlace(Option<crate::sessions::Origin>),
+    OwnedPlaces(Vec<crate::model::OwnedPlace>),
+    PlaceClose(crate::sessions::PlaceClose),
+    PlaceOwnership(crate::sessions::PlaceOwnership),
+    QueueEntry(crate::model::QueueEntry),
+    MovedEntry(crate::model::MovedEntry),
+    QueuedPlan(crate::model::QueuedPlan),
+    Holds(Vec<crate::model::WorkspaceHold>),
+    AttachedFiles(Vec<crate::files::AttachedFile>),
+    Demos(Vec<crate::demos::Running>),
+    DemoProgress(crate::demos::Progress),
+    Workspaces(Vec<Workspace>),
+    Reached(crate::output::messages::Reached),
+    Chat(crate::model::Chat),
+    RenamedChat(crate::model::RenamedChat),
+    RetitledWorkspace(crate::model::RetitledWorkspace),
+    Chats(Vec<crate::model::Chat>),
+    RemovedChat(crate::output::chat::RemovedChat),
+    ChatName(crate::space_names::SpaceName),
+    ScopeToken(ScopeToken),
+    Branches(Vec<crate::model::Branch>),
+    OpenedWorkspace(crate::model::OpenedWorkspace),
+    Inspection(Inspection),
+    Item(crate::forge::items::item::Item),
+    Items(Vec<crate::forge::items::item::Item>),
+    ApiResponse(Vec<String>),
+    Downloaded(Vec<DownloadPiece>),
+    Labels(Vec<crate::forge::conventions::labels::Label>),
+    Reviewers(Vec<crate::forge::review::reviewers::Reviewer>),
+    Capabilities(crate::forge::capability::Capabilities),
+    Reactions(crate::forge::items::reaction::allowed::AllowedReactions),
+    Thread(crate::forge::review::thread::Thread),
+    LinkKind(crate::forge::items::link::LinkKind),
+    Dependencies(Vec<crate::model::Dependency>),
+    PullRequest(crate::forge::PullRequest),
+    ViewPieces(Vec<ViewPiece>),
+    Opened(crate::links::OpenOutcome),
+    Push(crate::links::PushOutcome),
+    BranchPush(crate::links::BranchPush),
+    Completion(crate::model::Completion),
+    Discarded(crate::executions::Discarded),
+    ReviewMarks(Vec<crate::model::ReviewMark>),
+    ReadyOutcomes(Vec<crate::model::ReadyOutcome>),
+    AgentStatus(crate::model::AgentStatus),
+    WokenTurn(WokenTurn),
+    AgentSession(crate::model::AgentSession),
+    SpaceStatus(Box<SpaceStatus>),
+    SpaceSessions(crate::transcripts::SpaceSessions),
+    Spaces(Vec<crate::model::PresentSpace>),
+    SelectedItems(crate::model::Selected),
+    MergedPull(crate::forge::items::revert::MergedPull),
+    CheckLog(crate::forge::ci::checks::CheckLog),
+    CiActed(crate::forge::ci::CiActed),
+    CiRunStarted(crate::forge::ci::run::StartedRun),
+    CiRunActed(crate::forge::ci::run_action::RunActed),
+    CiRunsApproved(crate::forge::ci::approval::RunsApproved),
+    CiRun(crate::forge::ci::run_action::Run),
+    CiRunJobs(Vec<crate::forge::ci::run_view::RunJob>),
+    CiRuns(Vec<crate::forge::ci::run_action::Run>),
+    WorkspaceEnv(std::collections::BTreeMap<String, String>),
+    Cleanup(crate::cleanup::ManualCleanup),
+    RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),
+    AgentEnvironments(Vec<std::collections::BTreeMap<String, String>>),
+    KeptBranches(Vec<crate::model::KeptBranch>),
+    UntrackedWorktrees(Vec<crate::model::UntrackedWorktree>),
+    RestoredWorkspace(Box<crate::model::RestoredWorkspace>),
+    Checkpoint(crate::model::Checkpoint),
+    Checkpoints(Option<Vec<crate::model::Checkpoint>>),
+    RestoredCheckpoint(crate::model::RestoredCheckpoint),
+    FastForwarded(bool),
+    Reconciled(Vec<Report>),
+    Execution(ExecutionPlan),
+    RemovalCheck(RemovalCheck),
+    RemovalResult(RemovalResult),
+    StoppedProcesses(crate::processes::Stopped),
+    ExportedSpace(crate::transfer::ExportedSpace),
+    DiffBase(DiffBase),
+    Conflicts(ConflictCheck),
+    MergeWarning(Option<crate::model::MergeWarning>),
+    MergePreview(crate::model::MergePreview),
+    Hook(Option<std::path::PathBuf>),
+    LayeredConfig(Box<ConfigLayers>),
+    SyncedRepository(SyncedRepository),
+    FailingSyncs(Vec<crate::model::CheckoutSync>),
+    Notifications(Vec<Notification>),
+    Cleared(crate::notifications::Cleared),
+    AgentMessages(Vec<crate::agent_messages::AgentMessage>),
+    Question(crate::questions::Question),
+    Questions(crate::questions::Listing),
+    ReviewPieces(Vec<ReviewPiece>),
+    ReviewId(i64),
+    Notification(Notification),
+    Sent(crate::notifications::Sent),
+    EventItem(EventItem),
+    PrUpdates(crate::links::Updates),
+    Port(PortReservation),
+    PortSuggestion(PortSuggestion),
+    PortOverview(PortOverview),
+    PortCatalog(crate::model::PortCatalog),
+    ApprovalRequest(Box<crate::approvals::ApprovalRequest>),
+    ApprovalRequests(Vec<crate::approvals::ApprovalRequest>),
+    SecretGrant(crate::secrets::SecretGrant),
+    SecretCatalog(crate::secrets::SecretCatalog),
+    ResourceLease(ResourceLease),
+    ResourceOverview(Overview),
+    ResourceCatalog(crate::resources::Catalog),
+    Simulator(Simulator),
+    Simulators(Vec<Simulator>),
+    SimCatalog(SimulatorCatalog),
+    SimOverview(crate::sim::SimulatorOverview),
+    SimHistory(Vec<AuditEntry>),
+    OperationStarted(operations::Started),
+    WorkspaceStarted(operations::StartedWorkspace),
+    OperationEvent(operations::OperationEvent),
+    OperationEnded(operations::Ended),
+    Records(Vec<crate::subscriptions::records::Record>),
+    RecordChanged(crate::subscriptions::records::Record),
+    RecordRemoved(crate::subscriptions::records::RecordKey),
+}
+
+// The lists a response sends in pages when they do not fit in one frame.
+macro_rules! paged_bodies {
+    ($($variant:ident),* $(,)?) => {
+        impl Body {
+            /// This body in pages that each fit in a frame: a list's items,
+            /// in order; any other body whole.
+            pub fn pages(self) -> Result<Vec<Self>> {
+                Ok(match self {
+                    $(Self::$variant(items) => frame_pages(items)?
+                        .into_iter()
+                        .map(Self::$variant)
+                        .collect(),)*
+                    body => vec![body],
+                })
+            }
+
+            /// Append `page`, the next page of this list.
+            pub fn extend(&mut self, page: Self) -> Result<()> {
+                match (self, page) {
+                    $((Self::$variant(items), Self::$variant(more)) => items.extend(more),)*
+                    (body, page) => anyhow::bail!(
+                        "a {} response cannot continue with {}",
+                        body.variant_name(),
+                        page.variant_name()
+                    ),
+                }
+                Ok(())
+            }
+        }
+    };
+}
+
+paged_bodies!(
+    Repositories,
+    MovedRepositories,
+    QueueEntries,
+    RunningAgents,
+    OwnedPlaces,
+    Holds,
+    AttachedFiles,
+    Demos,
+    Workspaces,
+    Chats,
+    Spaces,
+    Branches,
+    Items,
+    ApiResponse,
+    Downloaded,
+    Labels,
+    Reviewers,
+    Dependencies,
+    ViewPieces,
+    ReviewMarks,
+    ReadyOutcomes,
+    CiRunJobs,
+    CiRuns,
+    RemovedWorkspaces,
+    AgentEnvironments,
+    KeptBranches,
+    UntrackedWorktrees,
+    FailingSyncs,
+    Reconciled,
+    Notifications,
+    AgentMessages,
+    ReviewPieces,
+    ApprovalRequests,
+    Simulators,
+    SimHistory,
+    Records,
+);
+
+impl TryFrom<Body> for () {
+    type Error = anyhow::Error;
+
+    fn try_from(body: Body) -> Result<Self> {
+        match body {
+            Body::Ok => Ok(()),
+            body => Err(body.unexpected("Ok")),
+        }
+    }
+}
+
+/// A daemon failure, retaining its wire code and message for callers to inspect.
+#[derive(Debug)]
+pub struct RemoteError {
+    pub code: ErrorCode,
+    pub message: String,
+}
+
+/// Only a code the message does not state adds to it.
+impl std::fmt::Display for RemoteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.code.in_message() {
+            return f.write_str(&self.message);
+        }
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for RemoteError {}
+
+impl Body {
+    /// Preserve remote errors even when the caller expected a different variant.
+    pub fn unexpected(self, expected: &str) -> anyhow::Error {
+        match self.into_result() {
+            Err(error) => error,
+            Ok(body) => anyhow::anyhow!(
+                "unexpected daemon response; expected {expected}, received {}",
+                body.variant_name()
+            ),
+        }
+    }
+
+    pub fn into_result(self) -> Result<Self> {
+        match self {
+            Self::Error { code, message } => Err(RemoteError { code, message }.into()),
+            body => Ok(body),
+        }
+    }
+
+    pub fn error(code: ErrorCode, error: impl std::fmt::Display) -> Self {
+        Self::Error {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DaemonStatus {
+    pub pid: u32,
+    pub version: String,
+    pub uptime_secs: u64,
+    pub managed: bool,
+    pub unread_notifications: u64,
+    /// Directories whose file access stalls now.
+    #[serde(default)]
+    pub access_stalls: Vec<AccessStall>,
+    /// Why automatic cleanup is failing other than in a workspace, or has
+    /// stalled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup_error: Option<String>,
+}
+
+/// A directory whose file access stalled, as while macOS waits for an answer
+/// to a privacy prompt, until a later check there finishes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccessStall {
+    /// The directory holding the checked path, whose other paths' checks
+    /// skip it meanwhile.
+    pub directory: std::path::PathBuf,
+    /// The path whose check stalled first.
+    pub path: std::path::PathBuf,
+    /// Unix seconds.
+    pub since: u64,
+    /// How the check stalled, such as `did not finish within 30s`.
+    pub reason: String,
+}
+
+impl AccessStall {
+    /// What the user reads about the stall.
+    pub fn message(&self) -> String {
+        format!(
+            "File access in {} stalled: a check of {} {}. A macOS privacy prompt may be waiting for an answer.",
+            self.directory.display(),
+            self.path.display(),
+            self.reason
+        )
+    }
+}
+
+/// A wrapper's request to restore its execution connection after the daemon
+/// went away. It is permanent: daemons accept it at every protocol version, so
+/// wrappers from older releases can reattach after an upgrade. Add fields only
+/// with defaults, and keep the execution events and controls such a wrapper
+/// understands.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Reattach {
+    pub execution: String,
+    pub wrapper: Identity,
+    pub child: Option<Identity>,
+    pub group_id: u32,
+    pub scope_token: String,
+    /// Transient agent metadata the daemon lost with its memory.
+    #[serde(default)]
+    pub agent: Option<String>,
+    /// The model and effort the agent runs with.
+    #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
+    pub model: crate::agent::ModelChoice,
+    /// The mode the agent started in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub recover: bool,
+    /// How long the command has run, keeping the overload stop order.
+    #[serde(default)]
+    pub running_ms: u64,
+    /// Set while the wrapper waits to restore an agent that protection
+    /// stopped; `child` and `group_id` then name the stopped child.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub awaiting_restore: Option<Protection>,
+    /// Set from a demo's report that its child exited until the next run
+    /// registers; `child` and `group_id` name the exited child, which the
+    /// daemon may already have forgotten.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub between_runs: bool,
+}
+
+/// Why protection stopped an agent, and what its automatic restore waits for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Protection {
+    pub reason: String,
+    /// Completes "once …"; recovery also waits for every other signal.
+    pub resumes_when: String,
+}
+
+/// Wrapper → daemon messages after an [`ExecutionMethod::Execute`] response.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ExecutionEvent {
+    Started {
+        child: Option<Identity>,
+        group_id: u32,
+        /// The child restores a saved agent, which leaves the workspace's
+        /// other last sessions; a new agent replaces them.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        restored: bool,
+    },
+    Finished {
+        exit_code: i32,
+    },
+    Paused,
+    /// The child exited and the wrapper starts another, as a demo's does,
+    /// once the daemon answers [`Control::ChildReleased`].
+    ChildExited,
+    /// The wrapper continues from the installed binary, which an upgrade put
+    /// in place of its own, between a [`Control::Resume`] that allows it and
+    /// its next child's start, and registers again from `origin`, the place it runs in. The
+    /// daemon answers [`Control::Registered`], or a stop.
+    Register {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        origin: Option<Box<crate::sessions::Origin>>,
+    },
+}
+
+/// Daemon → wrapper messages during an execution.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Control {
+    Started,
+    /// Stop without saving anything to resume. Older wrappers ignore the
+    /// reason and `removed`.
+    Stop {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        /// The workspace is being removed; its removal record keeps the agent
+        /// whose restore this cancels.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        removed: bool,
+    },
+    /// Stop and save what `shoal resume` restores. Older wrappers ignore the
+    /// reason.
+    Pause {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        /// The workspace is being removed; its removal record keeps the session.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        removed: bool,
+        /// The system is shutting down, which may end the wrapper before its
+        /// command: save the session first, as a signal ending it does.
+        /// Older wrappers pause as `shoal stop` does.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        shutdown: bool,
+    },
+    OverloadStop {
+        recover: bool,
+        #[serde(default = "default_overload_reason")]
+        reason: String,
+        /// The condition automatic recovery waits for, completing "once …".
+        #[serde(default = "default_resumes_when")]
+        resumes_when: String,
+    },
+    Resume {
+        ports: Vec<crate::model::PortReservation>,
+        /// The binary the daemon runs, which a wrapper whose own binary an
+        /// upgrade replaced may continue from, since it speaks the daemon's
+        /// protocol. Older daemons leave it out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        executable: Option<crate::executions::FileIdentity>,
+    },
+    Finished {
+        complete: bool,
+    },
+    /// What the exited child left is stopped and the worktree is still the
+    /// recorded one, so the wrapper may start its next run.
+    ChildReleased,
+    /// The daemon is shutting down; keep the command running and reattach.
+    Detach,
+    /// The plan of an execution whose wrapper registered again.
+    Registered {
+        plan: Box<crate::model::ExecutionPlan>,
+    },
+    /// The waiting restore also waits until the stopped agent's remaining
+    /// processes exit, which `issue` names. Only wrappers of
+    /// [`RESTORE_WAITS`] and later read it.
+    RestoreWaits {
+        issue: String,
+    },
+}
+
+fn default_overload_reason() -> String {
+    "system overload".into()
+}
+
+/// What memory and CPU protection wait for, and what older daemons meant.
+pub fn default_resumes_when() -> String {
+    "system load is healthy".into()
+}
+
+pub async fn read<T: DeserializeOwned>(stream: &mut (impl AsyncRead + Unpin)) -> Result<T> {
+    read_buffered(&mut BufReader::new(stream)).await
+}
+
+pub async fn read_buffered<T: DeserializeOwned>(
+    stream: &mut (impl tokio::io::AsyncBufRead + Unpin),
+) -> Result<T> {
+    let mut bytes = Vec::new();
+    stream
+        .take(MAX_FRAME as u64 + 1)
+        .read_until(b'\n', &mut bytes)
+        .await?;
+    ensure!(
+        bytes.len() <= MAX_FRAME,
+        "protocol frame exceeds {MAX_FRAME} bytes"
+    );
+    // The peer closed the connection, possibly partway through a frame.
+    if bytes.last() != Some(&b'\n') {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "incomplete protocol frame",
+        )
+        .into());
+    }
+    serde_json::from_slice(&bytes).context("invalid protocol message")
+}
+
+/// A response, joining the pages of one sent in several frames.
+pub async fn read_response(
+    stream: &mut (impl tokio::io::AsyncBufRead + Unpin),
+) -> Result<Response> {
+    let mut response: Response = read_buffered(stream).await?;
+    while response.more {
+        let page: Response = read_buffered(stream).await?;
+        ensure!(
+            page.id == response.id,
+            "a response page answers another request"
+        );
+        response.body.extend(page.body)?;
+        response.more = page.more;
+    }
+    Ok(response)
+}
+
+/// Responses read one after another from a stream, such as a subscription's,
+/// in a way that loses nothing when a read is cancelled: the start of a frame
+/// and the earlier pages of a response wait for the next read.
+pub struct Responses<R> {
+    reader: R,
+    /// Bytes read past the last whole frame.
+    buffer: Vec<u8>,
+    /// A paged response whose remaining pages have yet to arrive.
+    joined: Option<Response>,
+}
+
+impl<R: AsyncRead + Unpin> Responses<R> {
+    pub fn new(reader: R) -> Self {
+        Self {
+            reader,
+            buffer: Vec::new(),
+            joined: None,
+        }
+    }
+
+    /// The next response, joining the pages of one sent in several frames.
+    pub async fn next(&mut self) -> Result<Response> {
+        loop {
+            let page: Response = self.frame().await?;
+            let Some(mut response) = self.joined.take() else {
+                if page.more {
+                    self.joined = Some(page);
+                    continue;
+                }
+                return Ok(page);
+            };
+            ensure!(
+                page.id == response.id,
+                "a response page answers another request"
+            );
+            response.body.extend(page.body)?;
+            response.more = page.more;
+            if !response.more {
+                return Ok(response);
+            }
+            self.joined = Some(response);
+        }
+    }
+
+    /// The next frame. A read fills the buffer only once it returns, so a
+    /// cancelled one leaves it as it was.
+    async fn frame<T: DeserializeOwned>(&mut self) -> Result<T> {
+        loop {
+            if let Some(end) = self.buffer.iter().position(|byte| *byte == b'\n') {
+                let frame: Vec<u8> = self.buffer.drain(..=end).collect();
+                return serde_json::from_slice(&frame).context("invalid protocol message");
+            }
+            ensure!(
+                self.buffer.len() <= MAX_FRAME,
+                "protocol frame exceeds {MAX_FRAME} bytes"
+            );
+            let mut chunk = [0u8; 8192];
+            let read = self.reader.read(&mut chunk).await?;
+            if read == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "incomplete protocol frame",
+                )
+                .into());
+            }
+            self.buffer.extend_from_slice(&chunk[..read]);
+        }
+    }
+}
+
+/// `items` in pages that each fit in a frame with room for the envelope,
+/// in order. There is always a first page, empty when `items` is.
+pub fn frame_pages<T: Serialize>(items: Vec<T>) -> Result<Vec<Vec<T>>> {
+    const PAGE_BYTES: usize = MAX_FRAME - 1024;
+    let mut pages = vec![Vec::new()];
+    let mut bytes = 0;
+    for item in items {
+        let size = serde_json::to_vec(&item)?.len() + 1;
+        let page = pages.last_mut().expect("pages start with one");
+        if bytes + size > PAGE_BYTES && !page.is_empty() {
+            pages.push(Vec::new());
+            bytes = 0;
+        }
+        bytes += size;
+        pages.last_mut().expect("pages start with one").push(item);
+    }
+    Ok(pages)
+}
+
+/// `text` in pieces that each fit in a frame's page, however much JSON
+/// escaping grows them.
+pub fn text_pieces(text: &str) -> Vec<String> {
+    const PIECE_BYTES: usize = MAX_FRAME / 4;
+    let mut pieces = Vec::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        let mut end = rest.len().min(PIECE_BYTES);
+        while !rest.is_char_boundary(end) {
+            end -= 1;
+        }
+        let (piece, tail) = rest.split_at(end);
+        pieces.push(piece.to_owned());
+        rest = tail;
+    }
+    pieces
+}
+
+/// A message longer than [`MAX_FRAME`]; none of it was written.
+#[derive(Debug)]
+pub struct FrameTooLarge {
+    pub bytes: usize,
+}
+
+impl std::fmt::Display for FrameTooLarge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the {}-byte message exceeds the {MAX_FRAME}-byte protocol frame",
+            self.bytes
+        )
+    }
+}
+
+impl std::error::Error for FrameTooLarge {}
+
+pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: &T) -> Result<()> {
+    let mut bytes = serde_json::to_vec(value)?;
+    bytes.push(b'\n');
+    if bytes.len() > MAX_FRAME {
+        return Err(FrameTooLarge { bytes: bytes.len() }.into());
+    }
+    stream.write_all(&bytes).await?;
+    stream.flush().await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

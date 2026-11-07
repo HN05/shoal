@@ -18,11 +18,12 @@ instead of the PR delivery guidance below.
   backlog and ownership lock across exec; read-only streams reconnect after the
   handoff, preserving event cursors, and continue in the installed release when
   the protocol changes. Only requests a daemon refused unrun are sent again.
-- Apps use the protocol through `shoal::client`, which keeps no compatibility
-  promise beyond the exact version match. The CLI and apps share that module's
-  connection and client-side logic; the CLI sends each daemon request through
-  a named client operation and never builds one itself. The module builds
-  without the `cli` feature.
+- Apps use the protocol through the `shoal-client` crate, which keeps no
+  compatibility promise beyond the exact version match. The CLI and apps share
+  that crate's connection and client-side logic; the CLI sends each daemon
+  request through a named client operation and never builds one itself.
+  `shoal-client` depends on no Shoal crate but `shoal-forge`,
+  `shoal-subprocess` and `shoal-config-derive`.
 - Modules under `cli` serve only the CLI: flag code outside `src/cli`, other
   than the crate's `main`, that names the `cli` module, and code under `cli`
   that the daemon, the execution wrapper, the proxy or the workers need.
