@@ -154,23 +154,32 @@ pub fn set_inherited(fd: std::os::fd::RawFd, inherited: bool) -> anyhow::Result<
 /// versioned directory, so a later run of it reaches an upgraded binary.
 /// Once that path names another binary, it is the file this process runs.
 /// A process started from a release copy was started through the path the
-/// process it replaced handed it.
+/// process it replaced handed it, while the file there is the one it was then.
 pub fn invoked_executable() -> io::Result<PathBuf> {
+    let current = running_executable()?;
     if let Some(invoked) = crate::releases::invoked() {
-        return Ok(invoked.path.clone());
+        return Ok(if invoked.unchanged() {
+            invoked.path.clone()
+        } else {
+            current
+        });
     }
-    // macOS's `current_exe` is the path as started, so it would follow a
-    // replaced symlink too; the kernel's path for the image does not.
-    let current = match crate::process::identity::executable(std::process::id()) {
-        Some(path) => path,
-        None => std::env::current_exe()?,
-    };
     Ok(invoked_path(
         std::env::args_os().next(),
         &std::env::var_os("PATH").unwrap_or_default(),
         &std::env::current_dir()?,
         current,
     ))
+}
+
+/// The file this process runs. macOS's `current_exe` is the path as
+/// started, so it would follow a replaced symlink too; the kernel's path for
+/// the image does not.
+pub fn running_executable() -> io::Result<PathBuf> {
+    match crate::process::identity::executable(std::process::id()) {
+        Some(path) => Ok(path),
+        None => std::env::current_exe(),
+    }
 }
 
 /// The app bundle `executable` is the main program of, as in

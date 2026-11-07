@@ -28,6 +28,13 @@ impl Invoked {
         let identity = FileIdentity::of(&path).ok();
         Self { path, identity }
     }
+
+    /// Whether the file at the path is still the one there at the time; not
+    /// once an upgrade replaced or removed it.
+    pub(crate) fn unchanged(&self) -> bool {
+        self.identity
+            .is_some_and(|identity| FileIdentity::of(&self.path).is_ok_and(|now| now == identity))
+    }
 }
 
 struct Inherited {
@@ -108,3 +115,6 @@ pub(crate) fn handover(
     variables.push((env::RELEASE_LOCKS, locks.join(":").into()));
     Ok(variables)
 }
+
+#[cfg(test)]
+mod tests;

@@ -56,7 +56,7 @@ mod macos {
     /// Replace this process with a copy of its release, responsible for
     /// itself. Returns only on failure.
     fn replace(releases: Option<&Releases>) -> io::Error {
-        let replacement = running_binary().and_then(|executable| {
+        let replacement = crate::fsutil::running_executable().and_then(|executable| {
             let invoked = Invoked::at(crate::fsutil::invoked_executable()?);
             Replacement::of(releases, executable, &invoked)
         });
@@ -68,15 +68,6 @@ mod macos {
         match Image::of(&replacement) {
             Ok(image) => image.replace_disclaimed(),
             Err(error) => error,
-        }
-    }
-
-    /// The file this process runs: the kernel's path for its image, since
-    /// `current_exe` is the path as started, such as an installation symlink.
-    fn running_binary() -> io::Result<std::path::PathBuf> {
-        match crate::process::identity::executable(std::process::id()) {
-            Some(path) => Ok(path),
-            None => std::env::current_exe(),
         }
     }
 
