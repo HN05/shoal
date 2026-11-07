@@ -319,7 +319,9 @@ async fn start_add_workspace(
         pr,
         agent,
     };
-    crate::client::operations::start_workspace(&ctx.paths, new, crate::env::without_secrets()).await
+    let env = crate::env::without_secrets();
+    let started = crate::client::operations::start_workspace(&ctx.paths, new, env);
+    ctx.progress("Opening workspace", started).await
 }
 
 /// What preparing the added workspace does after setup: linking `pr`, then
