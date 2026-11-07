@@ -562,7 +562,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     let error: Value = serde_json::from_slice(&denied.stderr).unwrap();
     assert_eq!(error["error"]["code"], "scope_denied", "{error}");
     assert_eq!(
-        fixture.ok(&["status", "other"])["workspace"]["branch"],
+        fixture.ok(&["work", "status", "other"])["workspace"]["branch"],
         "other"
     );
     let renamed = fixture.ok(&[
@@ -601,7 +601,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
             &["--json", "branch", "rename", "explicit", "other"][..],
             "name_taken",
         ),
-        (&["--json", "status", "missing"], "not_found"),
+        (&["--json", "work", "status", "missing"], "not_found"),
     ] {
         let output = fixture.run(args);
         assert!(!output.status.success(), "{args:?}");
@@ -617,7 +617,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     let denied = fixture.rename("explicit", "blocked");
     assert_eq!(denied["type"], "error");
     assert_eq!(
-        fixture.ok(&["status", "explicit"])["workspace"]["branch"],
+        fixture.ok(&["work", "status", "explicit"])["workspace"]["branch"],
         "explicit"
     );
     db.execute("DELETE FROM executions WHERE id='unknown'", [])
@@ -654,14 +654,14 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     assert_eq!(blocked["type"], "error");
     fixture.request(serde_json::json!({"set_pr":{"space":"original","clear":true}}));
     fixture.ok(&["done", "original"]);
-    let before = fixture.ok(&["status", "original"]);
+    let before = fixture.ok(&["work", "status", "original"]);
     let response = fixture.rename("original", "feature/topic");
     assert_eq!(response["type"], "workspace", "{response}");
     let renamed = &response["data"];
     assert_eq!(renamed["name"], "feature-topic");
     assert_eq!(renamed["branch"], "feature/topic");
     assert_eq!(
-        fixture.ok(&["status", "feature-topic"])["workspace"]["branch"],
+        fixture.ok(&["work", "status", "feature-topic"])["workspace"]["branch"],
         "feature/topic"
     );
     fs::write(path.join("after-rename"), "changed after rename\n").unwrap();
@@ -682,7 +682,12 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
     ] {
         assert_eq!(renamed[field], workspace[field]);
     }
-    assert!(!fixture.run(&["status", "original"]).status.success());
+    assert!(
+        !fixture
+            .run(&["work", "status", "original"])
+            .status
+            .success()
+    );
     assert_eq!(
         git(path, &["symbolic-ref", "HEAD"]).trim(),
         "refs/heads/feature/topic"
@@ -699,11 +704,11 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
         "preserve\n"
     );
     assert_eq!(
-        fixture.ok(&["status", "dependent"])["workspace"]["base_ref"],
+        fixture.ok(&["work", "status", "dependent"])["workspace"]["base_ref"],
         "refs/heads/feature/topic"
     );
     fixture.restart();
-    let after = fixture.ok(&["status", id]);
+    let after = fixture.ok(&["work", "status", id]);
     for field in ["ports", "resources"] {
         assert_eq!(after[field], before[field]);
     }
@@ -747,7 +752,10 @@ fn workspace_rename_refuses_collisions_and_recovers_git_failure() {
     ] {
         let response = fixture.rename("original", branch);
         assert_eq!(response["type"], "error", "{branch}: {response}");
-        assert_eq!(fixture.ok(&["status", "original"])["workspace"], workspace);
+        assert_eq!(
+            fixture.ok(&["work", "status", "original"])["workspace"],
+            workspace
+        );
         assert_eq!(
             git(path, &["symbolic-ref", "HEAD"]).trim(),
             "refs/heads/original"
@@ -801,7 +809,10 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
                 .unwrap();
         }
         fixture.restart();
-        assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
+        assert_eq!(
+            fixture.ok(&["work", "status", id])["workspace"]["state"],
+            "failed"
+        );
         let rejected = fixture.run(&["start", fixture.repo.to_str().unwrap(), "new-topic"]);
         assert!(!rejected.status.success());
         if branch == "unrelated" {
@@ -820,7 +831,7 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
             vec![id, "--repair"]
         };
         repaired_workspaces(&fixture, &repair_args);
-        let inspection = fixture.ok(&["status", id]);
+        let inspection = fixture.ok(&["work", "status", id]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(
             inspection["workspace"]["branch"],
@@ -877,11 +888,17 @@ fn work_rename_finishes_an_interrupted_rename() {
         )
         .unwrap();
         fixture.restart();
-        assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
+        assert_eq!(
+            fixture.ok(&["work", "status", id])["workspace"]["state"],
+            "failed"
+        );
         // Another recorded execution keeps the rename unfinished.
         let refused = fixture.run(&["branch", "rename", id, requested]);
         assert!(!refused.status.success());
-        assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
+        assert_eq!(
+            fixture.ok(&["work", "status", id])["workspace"]["state"],
+            "failed"
+        );
         db.execute("DELETE FROM executions WHERE id='leftover'", [])
             .unwrap();
         // Running the rename again finishes or cancels the interrupted one,
@@ -923,7 +940,12 @@ fn deleted_worktree_with_interrupted_rename_can_be_removed() {
     drop(db);
     let removed = fixture.ok(&["rm", "original"]);
     assert_eq!(removed["branch_deleted"], false);
-    assert!(!fixture.run(&["status", "original"]).status.success());
+    assert!(
+        !fixture
+            .run(&["work", "status", "original"])
+            .status
+            .success()
+    );
     assert!(
         fixture
             .ok(&["leases", "port", "--all"])
@@ -1562,7 +1584,7 @@ fn export_of_several_workspaces_writes_a_file_each_to_the_directory() {
     assert!(!refused.status.success(), "{refused:?}");
     assert!(rows.is_empty(), "{rows}");
     // An existing directory takes the workspaces the picker selects.
-    let third = fixture.ok(&["status", "third"])["workspace"]["id"]
+    let third = fixture.ok(&["work", "status", "third"])["workspace"]["id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -2169,7 +2191,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             "{args:?}"
         );
     }
-    assert!(complete(&["status", "fi"], fixture.root.path()).contains(&"first".into()));
+    assert!(complete(&["work", "status", "fi"], fixture.root.path()).contains(&"first".into()));
     // A command taking several workspaces offers each one once.
     let choices = complete(&["rm", "first", ""], fixture.root.path());
     assert!(choices.contains(&"second".into()), "{choices:?}");
@@ -2440,7 +2462,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
             assert!(!text.contains("other-only"), "{text}");
         }
         let output = command(cwd, scoped, false)
-            .args(["--json", "status"])
+            .args(["--json", "work", "status"])
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
@@ -2459,7 +2481,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
         );
     }
     for args in [
-        vec!["status", "context-other"],
+        vec!["work", "status", "context-other"],
         vec!["stop"],
         vec!["config", "show", "context-other"],
     ] {
@@ -2549,7 +2571,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
 
     let output = fixture
         .command()
-        .args(["--json", "status"])
+        .args(["--json", "work", "status"])
         .current_dir(path)
         .output()
         .unwrap();
@@ -2578,7 +2600,10 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     );
     // The busy signing permit notified about the waiter, not this workspace.
     assert_eq!(status["unread_notifications"], 0);
-    assert_eq!(fixture.ok(&["status", "waiter"])["unread_notifications"], 1);
+    assert_eq!(
+        fixture.ok(&["work", "status", "waiter"])["unread_notifications"],
+        1
+    );
     assert_eq!(status["prs"][0]["state"], Value::Null);
     assert!(status["prs"][0]["errors"][0].is_string(), "{status}");
 
@@ -2599,7 +2624,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
             {"context": "ci / rust", "status": "success"}, {"context": "review", "status": "pending"}
         ]}),
     );
-    let status = fixture.ok(&["status", "summary"]);
+    let status = fixture.ok(&["work", "status", "summary"]);
     assert_eq!(
         status["prs"][0]["url"],
         "https://forge.example/team/repo/pulls/7"
@@ -2617,7 +2642,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     assert_eq!(status["cleanup_reason"]["reason"], "pr_watch");
     assert!(status["prs"][0]["errors"][0].is_string(), "{status}");
 
-    let text = fixture.run(&["status", "summary"]);
+    let text = fixture.run(&["work", "status", "summary"]);
     assert!(text.status.success());
     let text = String::from_utf8(text.stdout).unwrap();
     for expected in [
@@ -2627,7 +2652,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     ] {
         assert!(text.contains(expected), "missing {expected:?} in {text:?}");
     }
-    assert!(!fixture.run(&["status"]).status.success());
+    assert!(!fixture.run(&["work", "status"]).status.success());
 
     for target in [
         vec!["pr", "7"],
@@ -2635,7 +2660,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         vec!["resource", "devices"],
         vec!["resource", "signing"],
     ] {
-        let found = fixture.ok(&[&["status"], target.as_slice()].concat());
+        let found = fixture.ok(&[&["work", "status"], target.as_slice()].concat());
         let found = found.as_array().unwrap();
         assert_eq!(found.len(), 1, "{target:?}");
         assert_eq!(found[0]["workspace"]["name"], "summary");
@@ -2650,7 +2675,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
         vec!["ci", "2765"],
         vec!["summary", "7"],
     ] {
-        let output = fixture.run(&[&["status"], target.as_slice()].concat());
+        let output = fixture.run(&[&["work", "status"], target.as_slice()].concat());
         assert!(!output.status.success(), "{target:?}");
     }
     let scoped = |workspace: &str| {
@@ -2663,7 +2688,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
                 "--",
                 support::shoal_binary(),
             ])
-            .args(["--json", "status", "resource", "devices"])
+            .args(["--json", "work", "status", "resource", "devices"])
             .output()
             .unwrap()
     };
@@ -2684,7 +2709,7 @@ fn status_keeps_shared_state_when_the_worktree_is_missing() {
     fixture.ok(&["acquire", "port", "web", "--workspace", "missing-status"]);
     fs::remove_dir_all(workspace["path"].as_str().unwrap()).unwrap();
 
-    let status = fixture.ok(&["status", "missing-status"]);
+    let status = fixture.ok(&["work", "status", "missing-status"]);
     assert_eq!(status["workspace"]["name"], "missing-status");
     assert_eq!(status["ports"].as_array().unwrap().len(), 1);
     assert!(status["diff"].is_null());
@@ -2953,7 +2978,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
 
     // Without confirmation nothing stops.
     assert!(!fixture.run(&["move", "root", "~/moved"]).status.success());
-    let running = fixture.ok(&["status", "moving"]);
+    let running = fixture.ok(&["work", "status", "moving"]);
     assert!(
         !running["executions"].as_array().unwrap().is_empty(),
         "{running}"
@@ -3285,7 +3310,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
     assert!(!fixture.run(&["rm", "dirty"]).status.success());
     assert_eq!(fs::read_to_string(file).unwrap(), "keep me");
     assert_eq!(
-        fixture.ok(&["status", "dirty"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "dirty"])["workspace"]["state"],
         "ready"
     );
     fixture.ok(&["rm", "dirty", "--yes"]);
@@ -3303,7 +3328,7 @@ fn dirty_workspace_is_retained_and_failed_creation_can_be_removed() {
             .success()
     );
     assert_eq!(
-        fixture.ok(&["status", "broken"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "broken"])["workspace"]["state"],
         "failed"
     );
     fixture.ok(&["rm", "broken"]);
@@ -3321,7 +3346,7 @@ fn failed_creation_cannot_adopt_an_unrelated_worktree_at_its_reserved_path() {
     ]);
     assert!(!failed.status.success());
     let reserved = PathBuf::from(
-        fixture.ok(&["status", "reserved"])["workspace"]["path"]
+        fixture.ok(&["work", "status", "reserved"])["workspace"]["path"]
             .as_str()
             .unwrap(),
     );
@@ -3595,7 +3620,7 @@ fn ports_are_named_idempotent_exported_and_released_with_the_workspace() {
         format!("{}:{}", web["port"], api["port"])
     );
     assert_eq!(
-        fixture.ok(&["status", "first"])["ports"]
+        fixture.ok(&["work", "status", "first"])["ports"]
             .as_array()
             .unwrap()
             .len(),
@@ -4155,7 +4180,8 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
             .contains("https://forge.example/api/v1/repos/team/project/pulls/7\n")
     );
     let url = "https://forge.example/team/project/pulls/7";
-    let linked_prs = || fixture.ok(&["status", "stack-top"])["workspace"]["links"]["prs"].clone();
+    let linked_prs =
+        || fixture.ok(&["work", "status", "stack-top"])["workspace"]["links"]["prs"].clone();
     assert_eq!(linked_prs(), serde_json::json!([url]));
     // Opening the PR again relinks it to its owner.
     fixture.ok(&["unlink", "pr", url, "assigned", "--space", "stack-top"]);
@@ -4180,7 +4206,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
         "https://forge.example/team/project/src/branch/stack%2Ftop",
     ]);
     assert_eq!(branch["id"], added["id"]);
-    let workspace = &fixture.ok(&["status", "stack-top"])["workspace"];
+    let workspace = &fixture.ok(&["work", "status", "stack-top"])["workspace"];
     assert_eq!(workspace["base_ref"], "refs/remotes/origin/stack/base");
     let path_in = Path::new(workspace["path"].as_str().unwrap());
     assert_eq!(
@@ -4627,7 +4653,7 @@ fn start_runs_a_copys_agent_from_a_fork_of_the_copied_workspaces_session() {
     assert!(output.status.success(), "{output:?}");
     let home = fixture.root.path();
     let errors = fs::read_to_string(home.join("copy.err")).unwrap();
-    let copy = &fixture.ok(&["status", "parent-copy"])["workspace"];
+    let copy = &fixture.ok(&["work", "status", "parent-copy"])["workspace"];
     assert_eq!(copy["branch"], "parent-copy", "{copy} {errors}");
     assert_eq!(copy["copied_from"]["workspace"]["name"], "parent", "{copy}");
     let path = Path::new(copy["path"].as_str().unwrap());
@@ -4672,7 +4698,7 @@ fn a_scoped_start_reports_an_agent_refused_after_the_childs_setup() {
         "waiter",
     ]);
     assert!(!output.status.success(), "{output:?}");
-    let child = &fixture.ok(&["status", "child"])["workspace"];
+    let child = &fixture.ok(&["work", "status", "child"])["workspace"];
     assert_eq!(child["state"], "ready", "{child}");
     assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 }
@@ -4758,7 +4784,7 @@ fn interactive_add_preserves_literal_branch_spelling() {
         "\u{2003}henrik/topic\u{2003}\n",
     );
     assert!(output.status.success(), "{transcript}");
-    let workspace = &fixture.ok(&["status", "henrik-topic-"])["workspace"];
+    let workspace = &fixture.ok(&["work", "status", "henrik-topic-"])["workspace"];
     assert_eq!(workspace["branch"], "\u{2003}henrik/topic\u{2003}");
     fixture.ok(&["rm", "henrik-topic-"]);
 }
@@ -4925,7 +4951,7 @@ finally:
                 );
             }
         }
-        let workspace = fixture.ok(&["status", "terminal"]);
+        let workspace = fixture.ok(&["work", "status", "terminal"]);
         fs::remove_file(
             Path::new(workspace["workspace"]["path"].as_str().unwrap()).join("raw-ready"),
         )
@@ -4960,7 +4986,7 @@ fn execution_preserves_pipes_exit_code_environment_and_current_workspace() {
     assert_eq!(output.stdout, b"pipe:execute");
     assert_eq!(output.stderr, b"error");
     assert_eq!(
-        fixture.ok(&["status", "execute"])["executions"],
+        fixture.ok(&["work", "status", "execute"])["executions"],
         serde_json::json!([])
     );
     fixture.ok(&["rm", "execute"]);
@@ -5085,7 +5111,7 @@ exit 7
         let during: Value = serde_json::from_slice(&fs::read(&inspection).unwrap()).unwrap();
         assert_eq!(during["workspace"]["name"], name);
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
-        let after = fixture.ok(&["status", name]);
+        let after = fixture.ok(&["work", "status", name]);
         assert_eq!(after["executions"], serde_json::json!([]));
         let path = after["workspace"]["path"].as_str().unwrap();
         assert!(Path::new(path).join("tracked").exists());
@@ -5138,7 +5164,12 @@ exit 7
             .unwrap()
     };
     assert!(!add("missing-agent").status.success());
-    assert!(!fixture.run(&["status", "missing-agent"]).status.success());
+    assert!(
+        !fixture
+            .run(&["work", "status", "missing-agent"])
+            .status
+            .success()
+    );
 
     // A launch that fails only once it starts leaves the worktree for retry.
     fs::write(
@@ -5148,7 +5179,7 @@ exit 7
     .unwrap();
     let output = add("failed-agent");
     assert!(!output.status.success());
-    let workspace = fixture.ok(&["status", "failed-agent"]);
+    let workspace = fixture.ok(&["work", "status", "failed-agent"]);
     assert!(
         Path::new(workspace["workspace"]["path"].as_str().unwrap())
             .join("tracked")
@@ -5505,7 +5536,7 @@ fn stop_and_manual_removal_terminate_connected_executions() {
             .spawn()
             .unwrap();
         wait_until("execution registration", || {
-            !fixture.ok(&["status", "running"])["executions"]
+            !fixture.ok(&["work", "status", "running"])["executions"]
                 .as_array()
                 .unwrap()
                 .is_empty()
@@ -5707,7 +5738,7 @@ fn leftovers_reach_status_and_the_agent_hook_once() {
     // The daemon sweeps as it starts.
     fixture.restart();
     let leftovers = wait_for("the sweep to find the leftover", || {
-        let status = fixture.ok(&["status", "leaky"]);
+        let status = fixture.ok(&["work", "status", "leaky"]);
         let leftovers = status["leftovers"].as_array().unwrap().clone();
         (!leftovers.is_empty()).then_some(leftovers)
     });
@@ -5773,7 +5804,7 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
     fixture.add("unused");
     for name in running {
         wait_until("execution registration", || {
-            !fixture.ok(&["status", name])["executions"]
+            !fixture.ok(&["work", "status", name])["executions"]
                 .as_array()
                 .unwrap()
                 .is_empty()
@@ -5804,7 +5835,7 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
     let refused = fixture.run(&["stop", "first", "second"]);
     assert!(!refused.status.success());
     assert_eq!(
-        fixture.ok(&["status", "first"])["executions"]
+        fixture.ok(&["work", "status", "first"])["executions"]
             .as_array()
             .unwrap()
             .len(),
@@ -5816,7 +5847,7 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
         ["first", "second"]
     );
     assert_eq!(
-        fixture.ok(&["status", "third"])["executions"]
+        fixture.ok(&["work", "status", "third"])["executions"]
             .as_array()
             .unwrap()
             .len(),
@@ -5921,7 +5952,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
     let split = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(split.status.success(), "{split:?}");
     let save_agent = |name: &str| {
-        let id = fixture.ok(&["status", name])["workspace"]["id"]
+        let id = fixture.ok(&["work", "status", name])["workspace"]["id"]
             .as_str()
             .unwrap()
             .to_owned();
@@ -5970,7 +6001,7 @@ fn an_agent_splits_copies_of_its_own_workspace_only() {
     let fixture = Fixture::new();
     fixture.add("parent");
     fixture.add("other");
-    let parent = fixture.ok(&["status", "parent"])["workspace"].clone();
+    let parent = fixture.ok(&["work", "status", "parent"])["workspace"].clone();
     let path = PathBuf::from(parent["path"].as_str().unwrap());
     fs::write(path.join("untracked"), "work in progress\n").unwrap();
     for (args, branch) in [
@@ -6010,7 +6041,7 @@ fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
     let split = scoped_command(&fixture, "child", &["split", "grandchild"]);
     assert!(split.status.success(), "{split:?}");
     let paths = ["child", "grandchild"].map(|name| {
-        let workspace = fixture.ok(&["status", name])["workspace"].clone();
+        let workspace = fixture.ok(&["work", "status", name])["workspace"].clone();
         let state = fixture
             .root
             .path()
@@ -6074,7 +6105,7 @@ fn stopping_a_workspace_stops_the_workspaces_below_it() {
     let split = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(split.status.success(), "{split:?}");
     // Only the child has an agent, stopped so its restore queues.
-    let child = fixture.ok(&["status", "child"])["workspace"].clone();
+    let child = fixture.ok(&["work", "status", "child"])["workspace"].clone();
     let state = fixture
         .root
         .path()
@@ -6090,7 +6121,7 @@ fn stopping_a_workspace_stops_the_workspaces_below_it() {
     fixture.ok(&["resume", "child"]);
     wait_until("the restore", || path.join("restored").exists());
     let running = || {
-        fixture.ok(&["status", "child"])["executions"]
+        fixture.ok(&["work", "status", "child"])["executions"]
             .as_array()
             .unwrap()
             .iter()
@@ -6132,7 +6163,7 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     let refused = scoped_command(&fixture, "parent", &["rm", "child", "held", "--yes"]);
     assert!(!refused.status.success(), "{refused:?}");
     assert_eq!(
-        fixture.ok(&["status", "child"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "child"])["workspace"]["state"],
         "preparing"
     );
     let removed = scoped_command(&fixture, "parent", &["rm", "child", "--yes"]);
@@ -6140,11 +6171,11 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     let again = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(again.status.success(), "{again:?}");
     assert_eq!(
-        fixture.ok(&["status", "child"])["workspace"]["parent"]["name"],
+        fixture.ok(&["work", "status", "child"])["workspace"]["parent"]["name"],
         "parent"
     );
     assert_eq!(
-        fixture.ok(&["status", "other"])["workspace"]["name"],
+        fixture.ok(&["work", "status", "other"])["workspace"]["name"],
         "other"
     );
 }
@@ -6178,7 +6209,7 @@ fn claude_worktree_hooks_split_and_finish_a_child_workspace() {
     );
     // Claude Code reads the last line as the worktree's path.
     let path = created.lines().last().unwrap();
-    let child = fixture.ok(&["status", "agent-a1b2"]);
+    let child = fixture.ok(&["work", "status", "agent-a1b2"]);
     assert_eq!(child["workspace"]["path"], path, "{created}");
     assert_eq!(child["workspace"]["parent"]["name"], "parent");
     assert!(child["completion"].is_null());
@@ -6186,7 +6217,7 @@ fn claude_worktree_hooks_split_and_finish_a_child_workspace() {
         "worktree-remove",
         serde_json::json!({"hook_event_name": "WorktreeRemove", "worktree_path": path}),
     );
-    assert!(!fixture.ok(&["status", "agent-a1b2"])["completion"].is_null());
+    assert!(!fixture.ok(&["work", "status", "agent-a1b2"])["completion"].is_null());
     // A child its subagent already finished is torn down as it is.
     hook(
         "worktree-remove",
@@ -6278,7 +6309,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     ];
     let mut last_inspection = Value::Null;
     let ids = try_wait_for(|| {
-        let inspection = fixture.ok(&["status", "stopped"]);
+        let inspection = fixture.ok(&["work", "status", "stopped"]);
         last_inspection = inspection.clone();
         let ids = inspection["executions"]
             .as_array()
@@ -6308,7 +6339,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     assert!(
-        fixture.ok(&["status", "stopped"])["executions"]
+        fixture.ok(&["work", "status", "stopped"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -6407,7 +6438,7 @@ fn status_shows_where_each_reported_session_keeps_its_transcript() {
     assert!(output.status.success(), "{output:?}");
 
     // Its files are not on this machine yet.
-    let status = fixture.ok(&["status", "talked"]);
+    let status = fixture.ok(&["work", "status", "talked"]);
     assert_eq!(
         status["transcripts"],
         serde_json::json!([{
@@ -6426,7 +6457,7 @@ fn status_shows_where_each_reported_session_keeps_its_transcript() {
     fs::create_dir_all(subagent.parent().unwrap()).unwrap();
     fs::write(&transcript, "{}\n").unwrap();
     fs::write(&subagent, "{}\n").unwrap();
-    let status = fixture.ok(&["status", "talked"]);
+    let status = fixture.ok(&["work", "status", "talked"]);
     let found = &status["transcripts"][0];
     assert_eq!(found["path"], transcript.to_str().unwrap(), "{status}");
     assert_eq!(
@@ -6709,7 +6740,7 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         fs::create_dir_all(&project).unwrap();
         let transcript = project.join("chat-session.jsonl");
         fs::write(&transcript, "{\"turn\":1}\n").unwrap();
-        let status = fixture.ok(&["status", "talk"]);
+        let status = fixture.ok(&["work", "status", "talk"]);
         assert_eq!(
             (
                 &status["transcripts"][0]["path"],
@@ -6845,7 +6876,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     );
     assert!(!state.join(format!("{execution}.recovery.json")).exists());
     assert!(
-        fixture.ok(&["status", "quarantined"])["executions"]
+        fixture.ok(&["work", "status", "quarantined"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -6906,7 +6937,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
         saved
     };
     let running = |fixture: &Fixture| {
-        fixture.ok(&["status", "restarted"])["executions"]
+        fixture.ok(&["work", "status", "restarted"])["executions"]
             .as_array()
             .unwrap()
             .iter()
@@ -6937,7 +6968,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     assert!(agent.wait().unwrap().success());
     assert_eq!(saved(), [".last-session.json"]);
     assert!(
-        fixture.ok(&["status", "restarted"])["executions"]
+        fixture.ok(&["work", "status", "restarted"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -7369,7 +7400,7 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
         "#!/bin/sh\ntouch \"$HOME/picked\"\nawk -F '\\t' -v id=\"$PICK_ID\" '$1 == id {print}'\n",
     );
 
-    for action in ["status", "stop"] {
+    for action in [&["work", "status"][..], &["stop"]] {
         let pick = other["id"].as_str().unwrap();
         for (cwd, explicit, json, expected, picker) in [
             (nested.as_path(), None, false, &own, false),
@@ -7394,33 +7425,33 @@ fn workspace_targets_precede_directory_and_picker_fallback() {
             if json {
                 command.arg("--json");
             }
-            command.arg(action).args(explicit);
+            command.args(action).args(explicit);
             let output = command.output().unwrap();
-            if picker && action == "stop" {
+            if picker && action == ["stop"] {
                 // Stop leaves the idle workspaces out of its picker, which
                 // has nothing to offer.
                 assert!(!output.status.success(), "{output:?}");
                 assert!(!picked.exists());
                 continue;
             }
-            assert!(output.status.success(), "{action}: {output:?}");
+            assert!(output.status.success(), "{action:?}: {output:?}");
             assert_eq!(picked.exists(), picker);
             if picker {
                 fs::remove_file(&picked).unwrap();
             }
-            if action == "status" && json {
+            if action == ["work", "status"] && json {
                 let result: Value = serde_json::from_slice(&output.stdout).unwrap();
                 assert_eq!(result["workspace"]["id"], expected["id"]);
-            } else if action == "status" {
+            } else if action == ["work", "status"] {
                 let text = String::from_utf8_lossy(&output.stdout);
                 let name = expected["name"].as_str().unwrap();
                 assert!(text.starts_with(&format!("{name} ")), "{text}");
             }
         }
         for (cwd, args) in [
-            (nested.as_path(), vec![action, "missing"]),
-            (fixture.root.path(), vec![action, "missing"]),
-            (fixture.root.path(), vec!["--json", action]),
+            (nested.as_path(), [action, &["missing"]].concat()),
+            (fixture.root.path(), [action, &["missing"]].concat()),
+            (fixture.root.path(), [&["--json"], action].concat()),
         ] {
             let (_master, slave) = pty::open();
             let output = fixture
@@ -7457,7 +7488,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
     .unwrap();
     let mut agent = Some(agent_in_session(&fixture, "available", "available"));
 
-    for args in [vec!["status"], vec!["attach"], vec!["rm", "--yes"]] {
+    for args in [vec!["work", "status"], vec!["attach"], vec!["rm", "--yes"]] {
         if args[0] == "rm" {
             drop(agent.take());
         }
@@ -7498,7 +7529,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
         } else {
             assert!(transcript.is_empty(), "{transcript}");
         }
-        if args[0] == "status" {
+        if args[0] == "work" {
             assert!(stdout.starts_with("available "), "{stdout}");
         } else if args[0] == "attach" {
             assert!(stdout.is_empty(), "{stdout}");
@@ -7523,7 +7554,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         &["start"][..],
         &["run", "--", "true"],
         &["rm"],
-        &["status"],
+        &["work", "status"],
         &["stop"],
         &["diff"],
         &["view", "pr", "12"],
@@ -7596,7 +7627,7 @@ test "${PWD##*/}" = acknowledged
 shoal done --undo
 rm untracked
 shoal done
-until ! shoal status acknowledged >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal work status acknowledged >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal start "$REPO" held
@@ -7604,7 +7635,7 @@ shoal acquire hold --workspace held --name review
 shoal done --cleanup
 test "${PWD##*/}" = held
 shoal release hold --workspace held --name review
-until ! shoal status held >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal work status held >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 shoal start "$REPO" completed
@@ -7614,7 +7645,7 @@ test "${PWD##*/}" = completed
 shoal done --undo
 rm untracked
 shoal done --cleanup
-until ! shoal status completed >/dev/null 2>&1; do sleep 0.1; done
+until ! shoal work status completed >/dev/null 2>&1; do sleep 0.1; done
 _shoal_recover_directory
 test "$PWD" = "$shoal_repo_dir"
 printf 'navigation-ok\n'
@@ -7934,7 +7965,7 @@ fn execution_scope_limits_management_and_expires() {
         "hookhook"
     );
     assert_eq!(
-        fixture.ok(&["status", "worker"])["executions"],
+        fixture.ok(&["work", "status", "worker"])["executions"],
         serde_json::json!([]),
         "hook survivors must not belong to the invoking execution"
     );
@@ -7954,7 +7985,7 @@ fn execution_scope_limits_management_and_expires() {
     for args in [
         vec!["rm", "worker", "--yes"],
         vec!["stop", "worker"],
-        vec!["status", "other"],
+        vec!["work", "status", "other"],
         vec!["run", "--workspace", "other", "--", "true"],
         vec!["work", "setup", "other"],
         vec!["link", "pr", "42", "assigned", "--space", "other"],
@@ -8078,7 +8109,7 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
     });
     assert!(path.join("setup-finished").exists());
     assert_eq!(
-        fixture.ok(&["status", "slow"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "slow"])["workspace"]["state"],
         "ready"
     );
 }
@@ -8165,7 +8196,7 @@ fn interrupting_the_cli_during_the_pre_setup_hook_stops_setup_as_it_starts() {
     fs::write(&release, "").unwrap();
     let status = wait_for("the CLI to stop", || add.try_wait().unwrap());
     assert!(!status.success());
-    let status = fixture.ok(&["status", "gated"]);
+    let status = fixture.ok(&["work", "status", "gated"]);
     assert_eq!(status["workspace"]["state"], "failed");
     assert_eq!(status["executions"], serde_json::json!([]));
 }
@@ -8198,7 +8229,7 @@ fn interrupting_the_cli_stops_the_post_setup_hook_and_what_ignores_sigterm_below
     assert!(!status.success());
     wait_until("what the hook started to stop", || !process_running(pid));
     assert_eq!(
-        fixture.ok(&["status", "hooked"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "hooked"])["workspace"]["state"],
         "ready"
     );
 }
@@ -8403,7 +8434,10 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
     fixture.add("second");
     let first = fixture.ok(&["acquire", "sim", "--workspace", "first"]);
     assert_eq!(first["state"], "leased");
-    assert_eq!(fixture.ok(&["status", "first"])["simulators"][0], first);
+    assert_eq!(
+        fixture.ok(&["work", "status", "first"])["simulators"][0],
+        first
+    );
     assert_eq!(
         fixture.ok(&["acquire", "sim", "--workspace", "first"]),
         first
@@ -8439,7 +8473,7 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
         "first",
     ]);
     assert_eq!(
-        fixture.ok(&["status", "first"])["simulators"],
+        fixture.ok(&["work", "status", "first"])["simulators"],
         serde_json::json!([])
     );
     let second = waiting.wait_with_output().unwrap();
@@ -9421,7 +9455,7 @@ fn release_narrows_from_every_lease_to_one_kind_or_item() {
             .status
             .success()
     );
-    let inspection = fixture.ok(&["status", "first"]);
+    let inspection = fixture.ok(&["work", "status", "first"]);
     assert!(inspection["ports"].as_array().unwrap().is_empty());
     assert!(inspection["resources"].as_array().unwrap().is_empty());
 }
@@ -9534,7 +9568,7 @@ fn resources_enforce_pool_and_member_capacity_and_named_permits() {
         "Parallel job",
     ]);
     assert_eq!(
-        fixture.ok(&["status", "third"])["resources"]
+        fixture.ok(&["work", "status", "third"])["resources"]
             .as_array()
             .unwrap()
             .len(),
@@ -9996,7 +10030,10 @@ fn repo_resources_share_across_branches_and_refuse_conflicting_definitions() {
     assert_eq!(renewed["id"], lease["id"]);
     assert_eq!(renewed["created_at"], lease["created_at"]);
     assert_eq!(renewed["reason"], "still signing");
-    assert_eq!(fixture.ok(&["status", "first"])["resources"][0], renewed);
+    assert_eq!(
+        fixture.ok(&["work", "status", "first"])["resources"][0],
+        renewed
+    );
     fs::remove_file(first_path.join(".shoal.toml")).unwrap();
     fixture.ok(&[
         "release",
@@ -10273,7 +10310,7 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
     ]);
     assert!(!output.status.success());
     assert_eq!(
-        fixture.ok(&["status", "from-remote"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "from-remote"])["workspace"]["state"],
         "failed"
     );
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), initial);
@@ -10914,9 +10951,12 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
     let fixture = Fixture::new();
     fixture.add("first");
     fixture.add("second");
-    fixture.ok(&["status", "first"]);
+    fixture.ok(&["work", "status", "first"]);
     assert!(fixture.run(&["diff", "second"]).status.success());
-    assert_eq!(fixture.ok(&["status", "-"])["workspace"]["name"], "first");
+    assert_eq!(
+        fixture.ok(&["work", "status", "-"])["workspace"]["name"],
+        "first"
+    );
     let unsupported = fixture.run(&["work", "setup", "-"]);
     assert!(!unsupported.status.success());
     let binary = support::shoal_binary();
@@ -10929,6 +10969,7 @@ fn previous_workspace_is_remembered_per_command_and_not_for_scoped_callers() {
             "--",
             binary,
             "--json",
+            "work",
             "status",
             "-",
         ])
@@ -11377,7 +11418,7 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
     assert!(!rows.contains(foreign["id"].as_str().unwrap()));
     assert_eq!(
-        fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
 }
@@ -11849,7 +11890,7 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
     for _ in 0..2 {
         fixture.restart();
         for (state, workspace) in states.iter().zip(&workspaces) {
-            let inspection = fixture.ok(&["status", state]);
+            let inspection = fixture.ok(&["work", "status", state]);
             let saved = &inspection["workspace"];
             assert_eq!(
                 saved["state"],
@@ -11932,7 +11973,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     .unwrap();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["status", "interrupted"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "interrupted"])["workspace"]["state"],
         "failed"
     );
     let preview = recovery_report(&fixture, &["interrupted"]);
@@ -11940,7 +11981,7 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
     let issue = preview[0]["issues"][0].as_str().unwrap();
     assert!(issue.starts_with(preview[0]["workspace"]["error"].as_str().unwrap()));
     assert_eq!(
-        fixture.ok(&["status", "interrupted"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "interrupted"])["workspace"]["state"],
         "failed"
     );
     db.execute(
@@ -12005,7 +12046,7 @@ fn owner_marker_keeps_workspaces_verified_when_filesystem_identity_changes() {
     db.execute("UPDATE workspaces SET git_dir_id='birth:1:2:3'", [])
         .unwrap();
     fixture.restart();
-    let saved = fixture.ok(&["status", "marked"])["workspace"].clone();
+    let saved = fixture.ok(&["work", "status", "marked"])["workspace"].clone();
     assert_eq!(saved["state"], "ready", "{saved}");
     assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
     assert!(
@@ -12054,7 +12095,7 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
     .unwrap();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "reclaimed"])["workspace"]["state"],
         "failed"
     );
     // Reclaiming still requires the recorded branch and metadata no one else owns.
@@ -12070,7 +12111,7 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
     let refused = fixture.run(&["work", "adopt", path_arg, "--repo", "missing"]);
     assert!(!refused.status.success());
     assert_eq!(
-        fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "reclaimed"])["workspace"]["state"],
         "failed"
     );
 
@@ -12084,7 +12125,7 @@ fn adopting_a_workspace_path_again_reclaims_its_unverifiable_worktree() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fs::read_to_string(&directive).unwrap().trim(), path_arg);
-    let reclaimed = fixture.ok(&["status", "reclaimed"])["workspace"].clone();
+    let reclaimed = fixture.ok(&["work", "status", "reclaimed"])["workspace"].clone();
     assert_eq!(reclaimed["id"], workspace["id"]);
     assert_eq!(reclaimed["state"], "ready");
     assert_eq!(
@@ -12122,7 +12163,7 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     .unwrap();
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "reclaimed"])["workspace"]["state"],
         "failed"
     );
     let report = recovery_report(&fixture, &["reclaimed", "--repair"]);
@@ -12162,7 +12203,7 @@ fn reconcile_reclaims_unverifiable_worktrees_only_on_explicit_request() {
     );
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["status", "reclaimed"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "reclaimed"])["workspace"]["state"],
         "ready"
     );
 }
@@ -12241,7 +12282,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
     }
     fixture.restart();
     for (name, workspace, legacy, lease) in cases {
-        let saved = fixture.ok(&["status", name])["workspace"].clone();
+        let saved = fixture.ok(&["work", "status", name])["workspace"].clone();
         if name == "ready" {
             assert_eq!(saved["state"], "ready");
             assert_eq!(saved["git_dir_id"], workspace["git_dir_id"]);
@@ -12250,7 +12291,7 @@ fn legacy_worktree_identity_upgrades_only_after_verification() {
             assert_eq!(saved["git_dir_id"], legacy);
         }
         recovery_report(&fixture, &[name]);
-        assert_eq!(fixture.ok(&["status", name])["workspace"], saved);
+        assert_eq!(fixture.ok(&["work", "status", name])["workspace"], saved);
         let report = recovery_report(&fixture, &[name, "--repair"]);
         if name == "renumbered" {
             assert_eq!(report[0]["directory"], "unverified");
@@ -12417,7 +12458,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
     })
     .unwrap_or_else(|| panic!("deleted worktrees remain: {last_names:?}"));
     assert_eq!(
-        fixture.ok(&["status", "moved"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "moved"])["workspace"]["state"],
         "failed"
     );
     assert!(!fixture.run(&["rm", "moved"]).status.success());
@@ -12494,7 +12535,7 @@ fn deleted_worktrees_are_forgotten_with_their_resources_but_moved_ones_are_kept(
 
 fn wait_registered_execution(fixture: &Fixture, workspace: &str) -> Value {
     wait_for("registered execution with a child", || {
-        let inspection = fixture.ok(&["status", workspace]);
+        let inspection = fixture.ok(&["work", "status", workspace]);
         inspection["executions"]
             .as_array()
             .unwrap()
@@ -12520,7 +12561,7 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
     wait_until("orphan execution to become unknown", || {
-        fixture.ok(&["status", "orphan"])["executions"][0]["state"] == "unknown"
+        fixture.ok(&["work", "status", "orphan"])["executions"][0]["state"] == "unknown"
     });
     let report = recovery_report(&fixture, &["orphan", "--repair"]);
     assert!(
@@ -12531,7 +12572,7 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
             .any(|p| p["pid"] == execution["child"]["pid"])
     );
     assert_eq!(
-        fixture.ok(&["status", "orphan"])["executions"]
+        fixture.ok(&["work", "status", "orphan"])["executions"]
             .as_array()
             .unwrap()
             .len(),
@@ -12542,11 +12583,11 @@ fn reconcile_stops_identity_verified_orphans_after_wrapper_death() {
         &["orphan", "--repair", "--stop", "--acknowledge-stopped"],
     );
     assert_eq!(
-        fixture.ok(&["status", "orphan"])["executions"],
+        fixture.ok(&["work", "status", "orphan"])["executions"],
         serde_json::json!([])
     );
     assert_eq!(
-        fixture.ok(&["status", "orphan"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "orphan"])["workspace"]["state"],
         "ready"
     );
 }
@@ -12603,7 +12644,7 @@ fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_without_launch_i
     assert!(!report[0]["executions"][0]["cleared"].as_bool().unwrap());
     repaired_workspaces(&fixture, &["crash", "--repair", "--acknowledge-stopped"]);
     assert_eq!(
-        fixture.ok(&["status", "crash"])["executions"],
+        fixture.ok(&["work", "status", "crash"])["executions"],
         serde_json::json!([])
     );
 }
@@ -12625,7 +12666,7 @@ fn a_finished_command_stops_the_detached_children_it_leaves() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stderr}");
     assert_eq!(
-        fixture.ok(&["status", "detached"])["executions"],
+        fixture.ok(&["work", "status", "detached"])["executions"],
         serde_json::json!([])
     );
     let pid = fs::read_to_string(Path::new(workspace["path"].as_str().unwrap()).join("child-pid"))
@@ -12653,7 +12694,7 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
     wait_until("orphan execution to become unknown", || {
-        fixture.ok(&["status", "orphan"])["executions"][0]["state"] == "unknown"
+        fixture.ok(&["work", "status", "orphan"])["executions"][0]["state"] == "unknown"
     });
     fixture.ok(&["rm", "orphan"]);
     assert_eq!(
@@ -12698,7 +12739,7 @@ fn reconcile_preserves_connected_commands_until_stop_is_explicit() {
     repaired_workspaces(&fixture, &["connected", "--repair", "--stop"]);
     wrapper.wait().unwrap();
     assert_eq!(
-        fixture.ok(&["status", "connected"])["executions"],
+        fixture.ok(&["work", "status", "connected"])["executions"],
         serde_json::json!([])
     );
     assert_eq!(
@@ -12746,7 +12787,7 @@ time.sleep(30)
     wrapper.kill().unwrap();
     wrapper.wait().unwrap();
     wait_until("orphan execution to become unknown", || {
-        fixture.ok(&["status", "orphan"])["executions"][0]["state"] == "unknown"
+        fixture.ok(&["work", "status", "orphan"])["executions"][0]["state"] == "unknown"
     });
     let mut stopping = fixture
         .command()
@@ -12813,7 +12854,7 @@ fn open_hands_workspaces_to_desktop_apps_without_cli_flags_or_execution_records(
                 )
             );
             assert_eq!(
-                fixture.ok(&["status", "desktop"])["executions"],
+                fixture.ok(&["work", "status", "desktop"])["executions"],
                 serde_json::json!([])
             );
         }
@@ -13051,7 +13092,7 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
         .spawn()
         .unwrap();
     wait_until("execution registration", || {
-        !fixture.ok(&["status", "first"])["executions"]
+        !fixture.ok(&["work", "status", "first"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -13746,13 +13787,13 @@ fn work_setup_skip_accepts_a_failed_setup() {
     let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "skipped"]);
     assert!(!output.status.success());
     assert_eq!(
-        fixture.ok(&["status", "skipped"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "skipped"])["workspace"]["state"],
         "failed"
     );
 
     // Adopting its path again reclaims ownership only; a verified worktree
     // with a failed setup stays failed.
-    let path = fixture.ok(&["status", "skipped"])["workspace"]["path"].clone();
+    let path = fixture.ok(&["work", "status", "skipped"])["workspace"]["path"].clone();
     assert!(
         !fixture
             .run(&["work", "adopt", path.as_str().unwrap()])
@@ -13760,7 +13801,7 @@ fn work_setup_skip_accepts_a_failed_setup() {
             .success()
     );
     assert_eq!(
-        fixture.ok(&["status", "skipped"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "skipped"])["workspace"]["state"],
         "failed"
     );
     let skipped = fixture.ok(&["work", "setup", "skipped", "--skip"]);
@@ -13808,7 +13849,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
         "claude",
     ]);
     assert!(!output.status.success());
-    let failed = fixture.ok(&["status", "failed-setup"]);
+    let failed = fixture.ok(&["work", "status", "failed-setup"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert_eq!(failed["executions"], serde_json::json!([]));
     let report = recovery_report(&fixture, &["failed-setup"]);
@@ -13818,11 +13859,11 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let issue = issues[0].as_str().unwrap();
     assert!(issue.contains("setup failed (exit 17"));
     assert_eq!(
-        fixture.ok(&["status", "failed-setup"])["workspace"],
+        fixture.ok(&["work", "status", "failed-setup"])["workspace"],
         failed["workspace"]
     );
     assert_eq!(
-        fixture.ok(&["status", "failed-setup"])["setup_finished"],
+        fixture.ok(&["work", "status", "failed-setup"])["setup_finished"],
         false
     );
     let path = Path::new(failed["workspace"]["path"].as_str().unwrap());
@@ -13843,7 +13884,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
         "ready"
     );
     assert_eq!(
-        fixture.ok(&["status", "failed-setup"])["setup_finished"],
+        fixture.ok(&["work", "status", "failed-setup"])["setup_finished"],
         true
     );
     assert_eq!(
@@ -13881,11 +13922,14 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     );
     assert!(ignored.status.success(), "{transcript}");
     assert_eq!(
-        fixture.ok(&["status", "ignored"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "ignored"])["workspace"]["state"],
         "ready"
     );
-    assert_eq!(fixture.ok(&["status", "ignored"])["setup_finished"], false);
-    let ignored_path = fixture.ok(&["status", "ignored"])["workspace"]["path"]
+    assert_eq!(
+        fixture.ok(&["work", "status", "ignored"])["setup_finished"],
+        false
+    );
+    let ignored_path = fixture.ok(&["work", "status", "ignored"])["workspace"]["path"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -13897,7 +13941,7 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
         "d\ny\n",
     );
     assert!(!deleted.status.success(), "{transcript}");
-    assert!(!fixture.run(&["status", "deleted"]).status.success());
+    assert!(!fixture.run(&["work", "status", "deleted"]).status.success());
     assert!(
         git(&fixture.repo, &["branch", "--list", "deleted"])
             .trim()
@@ -13905,14 +13949,14 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     );
     assert!(fixture.repo.is_dir());
     assert_eq!(
-        fixture.ok(&["status", "existing"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "existing"])["workspace"]["state"],
         "ready"
     );
     let (canceled, transcript) =
         fixture.interactive(&["start", fixture.repo.to_str().unwrap(), "canceled"], "\n");
     assert!(!canceled.status.success(), "{transcript}");
     assert_eq!(
-        fixture.ok(&["status", "canceled"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "canceled"])["workspace"]["state"],
         "failed"
     );
 }
@@ -13953,7 +13997,7 @@ Path('setup-result').write_text('complete')
             command.arg("--json");
         }
         let (output, transcript) = fixture.interactive_command(&mut command, "");
-        let inspection = fixture.ok(&["status", "survivor"]);
+        let inspection = fixture.ok(&["work", "status", "survivor"]);
         let path = Path::new(inspection["workspace"]["path"].as_str().unwrap());
         let pid = fs::read_to_string(path.join("survivor-pid")).unwrap();
         // Reap the test-owned survivor before making assertions about the
@@ -13963,7 +14007,7 @@ Path('setup-result').write_text('complete')
         assert!(stopped.status.success(), "{stopped:?}");
         assert!(skipped.status.success(), "{skipped:?}");
         assert_eq!(
-            fixture.ok(&["status", "survivor"])["workspace"]["state"],
+            fixture.ok(&["work", "status", "survivor"])["workspace"]["state"],
             "ready"
         );
         assert!(!output.status.success(), "{transcript}");
@@ -14010,7 +14054,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
         false
     });
     assert_eq!(
-        fixture.ok(&["status", "interrupted"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "interrupted"])["workspace"]["state"],
         "preparing"
     );
     assert!(
@@ -14030,12 +14074,12 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
     assert_eq!(unsafe { libc::kill(add.id() as i32, libc::SIGTERM) }, 0);
     let status = wait_for("setup to stop", || add.try_wait().unwrap());
     assert!(!status.success());
-    let inspection = fixture.ok(&["status", "interrupted"]);
+    let inspection = fixture.ok(&["work", "status", "interrupted"]);
     assert_eq!(inspection["workspace"]["state"], "failed");
     assert_eq!(inspection["executions"], serde_json::json!([]));
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["status", "interrupted"])["workspace"]["state"],
+        fixture.ok(&["work", "status", "interrupted"])["workspace"]["state"],
         "failed"
     );
     assert!(path.join("setup-started").exists());
@@ -14096,7 +14140,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         fs::read_to_string(home.join("post-setup-ran")).unwrap(),
         format!("{}\nhooked\n", path.display())
     );
-    let inspection = fixture.ok(&["status", "hooked"]);
+    let inspection = fixture.ok(&["work", "status", "hooked"]);
     assert_eq!(
         inspection["executions"],
         serde_json::json!([]),
@@ -14123,7 +14167,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         .output()
         .unwrap();
     assert!(!output.status.success());
-    let failed = fixture.ok(&["status", "hook-fails"]);
+    let failed = fixture.ok(&["work", "status", "hook-fails"]);
     assert_eq!(failed["workspace"]["state"], "ready");
     let failed_path = Path::new(failed["workspace"]["path"].as_str().unwrap());
     assert!(!failed_path.join("agent-started").exists());
@@ -14148,7 +14192,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         fs::read_to_string(home.join("pre-remove-ran")).unwrap(),
         format!("{}\nhooked\n", path.display())
     );
-    let retained = fixture.ok(&["status", "hooked"]);
+    let retained = fixture.ok(&["work", "status", "hooked"]);
     assert_eq!(retained["workspace"]["state"], "ready");
     assert!(path.join("tracked").exists());
     fs::remove_file(path.join("fail-removal")).unwrap();
@@ -14386,7 +14430,7 @@ fn a_build_without_the_proxy_refuses_a_proxied_agent_and_ends_its_execution() {
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
     assert!(!fixture.root.path().join("claude-args").exists());
-    let status = fixture.ok(&["status", "proxied"]);
+    let status = fixture.ok(&["work", "status", "proxied"]);
     assert_eq!(status["executions"], serde_json::json!([]), "{status}");
 }
 
@@ -14405,7 +14449,7 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
     assert!(!home.join("claude-args").exists());
-    let status = fixture.ok(&["status", "proxied"]);
+    let status = fixture.ok(&["work", "status", "proxied"]);
     assert_eq!(status["executions"], serde_json::json!([]), "{status}");
 
     // With it, Claude Code is pointed at the proxy on a loopback port.
@@ -14795,7 +14839,7 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
         let name = format!("{number}-fix-api-timeout");
         assert_eq!(workspace["name"], name);
         assert_eq!(workspace["branch"], name);
-        assert_eq!(fixture.ok(&["status", &name])["issue"]["url"], url);
+        assert_eq!(fixture.ok(&["work", "status", &name])["issue"]["url"], url);
         let api = if host == "github.com" {
             "https://api.github.com"
         } else {
@@ -14813,7 +14857,7 @@ fn add_from_issue_reads_the_forge_and_passes_context_to_agents() {
         assert!(prompt.contains(body));
         assert!(invocation.contains("\0--model\0test-model\0"));
         assert_eq!(
-            fixture.ok(&["status", &name])["executions"],
+            fixture.ok(&["work", "status", &name])["executions"],
             serde_json::json!([])
         );
     }
@@ -14929,7 +14973,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         let cwd = match number {
             45 => fixture.repo.join("nested"),
             46 => PathBuf::from(
-                fixture.ok(&["status", "41-paste-issue"])["workspace"]["path"]
+                fixture.ok(&["work", "status", "41-paste-issue"])["workspace"]["path"]
                     .as_str()
                     .unwrap(),
             )
@@ -14968,7 +15012,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         assert!(prompt.contains(&url) && prompt.contains(body), "{prompt}");
         assert!(invocation.contains("\0--model\0test-model\0"));
         assert_eq!(
-            fixture.ok(&["status", &name])["executions"],
+            fixture.ok(&["work", "status", &name])["executions"],
             serde_json::json!([])
         );
     }
@@ -15004,7 +15048,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
         assert!(output.status.success(), "{output:?}");
         let workspace: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(workspace["name"], format!("{number}-create-workspace"));
-        let inspection = fixture.ok(&["status", workspace["name"].as_str().unwrap()]);
+        let inspection = fixture.ok(&["work", "status", workspace["name"].as_str().unwrap()]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
         assert!(!agent_args.exists());
@@ -15076,7 +15120,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
             continue;
         }
         assert!(output.status.success(), "{output:?}\n{transcript}");
-        let inspection = fixture.ok(&["status", "298-pick-agent"]);
+        let inspection = fixture.ok(&["work", "status", "298-pick-agent"]);
         assert_eq!(inspection["workspace"]["state"], "ready");
         assert_eq!(inspection["executions"], serde_json::json!([]));
         if choice == "No agent" {
@@ -15422,7 +15466,7 @@ fn add_existing_branch_runs_setup_once_and_keeps_scoped_callers_to_their_tree() 
         "elsewhere",
     ]);
     assert!(!output.status.success());
-    assert!(fixture.ok(&["status", "elsewhere"])["workspace"]["parent"].is_null());
+    assert!(fixture.ok(&["work", "status", "elsewhere"])["workspace"]["parent"].is_null());
     assert!(
         !fixture
             .run(&[
@@ -15472,7 +15516,7 @@ fn interactive_add_picks_existing_branch_and_reopens_workspace() {
             "",
         );
         assert!(output.status.success(), "{transcript}");
-        let workspace = fixture.ok(&["status", "coworker-topic"]);
+        let workspace = fixture.ok(&["work", "status", "coworker-topic"]);
         assert_eq!(
             fs::read_to_string(&directive).unwrap().trim(),
             workspace["workspace"]["path"].as_str().unwrap()
@@ -15509,7 +15553,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
     };
     let (output, transcript) = add("Use an issue", "34");
     assert!(output.status.success(), "{output:?} {transcript}");
-    let issue = fixture.ok(&["status", "34-fix-api-timeout"]);
+    let issue = fixture.ok(&["work", "status", "34-fix-api-timeout"]);
     assert_eq!(
         issue["issue"]["url"],
         "https://github.com/team/project/issues/34"
@@ -15519,7 +15563,7 @@ fn interactive_add_picks_an_open_issue_or_pull_request() {
     assert!(output.status.success(), "{output:?} {transcript}");
     assert_eq!(
         fs::read_to_string(&directive).unwrap().trim(),
-        fixture.ok(&["status", "topic"])["workspace"]["path"]
+        fixture.ok(&["work", "status", "topic"])["workspace"]["path"]
             .as_str()
             .unwrap()
     );
@@ -15560,7 +15604,7 @@ fn link_picks_an_omitted_open_issue_or_pull_request() {
         let (output, transcript) = fixture.interactive_command(fixture.command().args(&args), "");
         assert!(output.status.success(), "{output:?} {transcript}");
     }
-    let workspace = fixture.ok(&["status", "topic"]);
+    let workspace = fixture.ok(&["work", "status", "topic"]);
     assert_eq!(
         workspace["workspace"]["links"]["prs"],
         serde_json::json!(["https://github.com/team/project/pull/7"])
@@ -15632,7 +15676,7 @@ fn wait_removed(fixture: &Fixture, name: &str) {
     .unwrap_or_else(|| {
         panic!(
             "PR cleanup did not remove workspace: {}",
-            fixture.ok(&["status", name])
+            fixture.ok(&["work", "status", name])
         )
     });
 }
@@ -15640,7 +15684,7 @@ fn wait_removed(fixture: &Fixture, name: &str) {
 fn wait_pr_error(fixture: &Fixture, name: &str, message: &str) {
     let mut inspection = Value::Null;
     try_wait_for(|| {
-        inspection = fixture.ok(&["status", name]);
+        inspection = fixture.ok(&["work", "status", name]);
         inspection["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|s| s.contains(message))
@@ -15709,7 +15753,7 @@ fn merged_retains_dirty_work_and_changed_head_across_restart_and_can_be_cancelle
     wait_pr_error(&fixture, "retain", "HEAD changed");
     assert!(path.join("dirty").exists());
     fixture.ok(&["unlink", "pr", "assigned", "--space", "retain"]);
-    assert!(fixture.ok(&["status", "retain"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "status", "retain"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -15721,13 +15765,13 @@ fn pr_cleanup_can_be_disabled_independently() {
     fixture.script_github(&github_pr(7, "keep"));
     fixture.ok(&["link", "pr", "7", "assigned", "--space", "keep"]);
     assert_eq!(
-        fixture.ok(&["status", "keep"])["workspace"]["links"]["prs"],
+        fixture.ok(&["work", "status", "keep"])["workspace"]["links"]["prs"],
         serde_json::json!(["https://github.com/team/project/pull/7"])
     );
     fixture.ok(&["unlink", "pr", "assigned", "--space", "keep"]);
     let output = fixture.acknowledge("keep");
     assert_eq!(output["type"], "error");
-    assert!(fixture.ok(&["status", "keep"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "status", "keep"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -15753,9 +15797,9 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
         )
         .unwrap();
         fixture.restart();
-        assert_eq!(fixture.ok(&["status", name])["pr_cleanup"], record);
+        assert_eq!(fixture.ok(&["work", "status", name])["pr_cleanup"], record);
         assert_eq!(fixture.acknowledge(name)["type"], "error");
-        assert_eq!(fixture.ok(&["status", name])["pr_cleanup"], record);
+        assert_eq!(fixture.ok(&["work", "status", name])["pr_cleanup"], record);
         // Clear remains allowed while disabled, including for a scoped caller.
         assert_eq!(
             fixture.ok(&[
@@ -15772,7 +15816,7 @@ fn legacy_pr_registrations_survive_disabled_cleanup_and_clear_after_restart() {
             serde_json::json!({"registered": false})
         );
         fixture.restart();
-        assert!(fixture.ok(&["status", name])["pr_cleanup"].is_null());
+        assert!(fixture.ok(&["work", "status", name])["pr_cleanup"].is_null());
         let again = fixture.run(&["unlink", "pr", "assigned", "--space", name]);
         assert!(!again.status.success(), "{again:?}");
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
@@ -15794,11 +15838,11 @@ fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
         )
         .unwrap();
         fixture.restart();
-        let output = fixture.run(&["status", "invalid"]);
+        let output = fixture.run(&["work", "status", "invalid"]);
         assert!(!output.status.success());
         assert!(Path::new(workspace["path"].as_str().unwrap()).exists());
         fixture.ok(&["unlink", "pr", "assigned", "--space", "invalid"]);
-        assert!(fixture.ok(&["status", "invalid"])["pr_cleanup"].is_null());
+        assert!(fixture.ok(&["work", "status", "invalid"])["pr_cleanup"].is_null());
     }
 }
 
@@ -15834,7 +15878,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
     fixture.add("kept");
     let output = fixture.acknowledge("kept");
     assert_eq!(output["type"], "error");
-    assert!(fixture.ok(&["status", "kept"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "status", "kept"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -15843,7 +15887,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     let workspace = fixture.add("watch");
     let failed = fixture.run(&["link", "pr", "56", "assigned", "--space", "watch"]);
     assert!(!failed.status.success());
-    assert!(fixture.ok(&["status", "watch"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "status", "watch"])["pr_cleanup"].is_null());
     git(
         &fixture.repo,
         &[
@@ -15862,7 +15906,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
         "watch",
     ]);
     assert!(!failed.status.success());
-    assert!(fixture.ok(&["status", "watch"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "status", "watch"])["pr_cleanup"].is_null());
     assert!(
         !fixture
             .run(&[
@@ -15941,7 +15985,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
     ]);
     fixture.restart();
     assert_eq!(
-        fixture.ok(&["status", "watch"])["pr_cleanup"]["url"],
+        fixture.ok(&["work", "status", "watch"])["pr_cleanup"]["url"],
         "https://github.com/team/repo/pull/56"
     );
     // Watched PRs are looked up once the assignment is done.
@@ -16017,7 +16061,7 @@ fn pr_watch_checks_forgejo_merge_and_commits_through_the_api() {
     );
     fixture.ok(&["link", "pr", "56", "assigned", "--space", "forgejo-watch"]);
     // A merge alone waits for the agent's explicit done.
-    assert!(fixture.ok(&["status", "forgejo-watch"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "status", "forgejo-watch"])["completion"].is_null());
     fixture.ok(&["done", "forgejo-watch"]);
     wait_removed(&fixture, "forgejo-watch");
 }
@@ -16111,7 +16155,7 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
     let third = fixture.ok(&["watch", "pr", "--space", "watch"]);
     assert_eq!(third["updates"].as_array().unwrap().len(), 1, "{third}");
     assert_eq!(third["updates"][0]["kind"], "merge_conflict");
-    assert!(fixture.ok(&["status", "watch"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "status", "watch"])["completion"].is_null());
     fixture.ok(&["unlink", "pr", "assigned", "--space", "watch"]);
     let missing = fixture.run(&["watch", "pr", "--space", "watch"]);
     assert!(!missing.status.success());
@@ -16276,7 +16320,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         "1",
         "assigned",
     ]);
-    let inspection = fixture.ok(&["status", "items"]);
+    let inspection = fixture.ok(&["work", "status", "items"]);
     assert!(inspection["issue"].is_null());
     assert_eq!(
         inspection["pr_cleanup"]["url"],
@@ -16288,16 +16332,16 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
         explicit["updates"][0]["url"],
         "https://github.com/team/project/issues/2"
     );
-    let inspection = fixture.ok(&["status", "items"]);
+    let inspection = fixture.ok(&["work", "status", "items"]);
     assert!(inspection["issue"].is_null() && inspection["completion"].is_null());
     write_issue(&fixture, 1, "relink");
     fixture.ok(&["link", "issue", "1", "assigned", "--space", "items"]);
     fixture.ok(&["unlink", "assigned", "--space", "items"]);
-    assert!(fixture.ok(&["status", "items"])["issue"].is_null());
-    assert!(fixture.ok(&["status", "items"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "status", "items"])["issue"].is_null());
+    assert!(fixture.ok(&["work", "status", "items"])["pr_cleanup"].is_null());
     // With nothing linked, a watch waits for branch conflicts alone.
     let items = PathBuf::from(
-        fixture.ok(&["status", "items"])["workspace"]["path"]
+        fixture.ok(&["work", "status", "items"])["workspace"]["path"]
             .as_str()
             .unwrap(),
     );
@@ -16320,7 +16364,7 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
     fixture.script_github(&fork);
     let explicit = fixture.ok(&["watch", "pr", "7", "--space", "items"]);
     assert_eq!(explicit["updates"].as_array().unwrap().len(), 1);
-    assert!(fixture.ok(&["status", "items"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "status", "items"])["pr_cleanup"].is_null());
     assert!(
         !fixture
             .run(&[
@@ -16374,7 +16418,7 @@ fn watch_explicit_forgejo_fork_pr_without_linking_or_checkout() {
     assert_eq!(updates[0]["kind"], "comment");
     assert_eq!(updates[1]["message"], "rust: Success");
     assert_eq!(updates[0]["url"], "https://forge.example/team/repo/pulls/7");
-    let inspection = fixture.ok(&["status", "items"]);
+    let inspection = fixture.ok(&["work", "status", "items"]);
     assert!(inspection["pr_cleanup"].is_null());
     assert!(inspection["completion"].is_null());
     assert_eq!(inspection["workspace"]["branch"], "items");
@@ -16428,7 +16472,7 @@ fn watch_forgejo_issue_reports_comments_closure_and_reopening() {
     state("open");
     let reopened = fixture.ok(&["watch", "issue", "8", "--space", "issue-watch"]);
     assert_eq!(reopened["updates"][0]["kind"], "reopened");
-    assert!(fixture.ok(&["status", "issue-watch"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "status", "issue-watch"])["completion"].is_null());
 }
 
 #[test]
@@ -16854,7 +16898,7 @@ fn merge_asks_before_merging_files_changed_on_both_sides() {
         check["changed_on_both_sides"],
         serde_json::json!(["version"])
     );
-    let status = fixture.ok(&["status", "worker"]);
+    let status = fixture.ok(&["work", "status", "worker"]);
     assert_eq!(
         status["changed_on_both_sides"]["files"],
         serde_json::json!(["version"])
@@ -16990,7 +17034,7 @@ fn view_shows_linked_items_with_status_and_discussion() {
         "{pr}"
     );
 
-    let status = fixture.ok(&["status", "view"]);
+    let status = fixture.ok(&["work", "status", "view"]);
     assert_eq!(status["issue_status"]["state"], "open");
 
     let brief = fixture.ok(&["view", "pr", "--no-comments", "--space", "view"]);
@@ -17174,7 +17218,7 @@ while True:
         "descendant cleanup was killed: {output:?}"
     );
     assert_eq!(
-        fixture.ok(&["status", "worker"])["executions"],
+        fixture.ok(&["work", "status", "worker"])["executions"],
         serde_json::json!([])
     );
 }
@@ -17277,7 +17321,7 @@ fn merge_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
             .trim()
             .parse()
             .unwrap();
-        let during = fixture.ok(&["status", "worker"]);
+        let during = fixture.ok(&["work", "status", "worker"]);
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
         assert!(during["executions"][0]["child"].is_object());
         // The daemon starts the merge, whose wrapper restores the checkout
@@ -17476,7 +17520,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         let execution_id = launch["execution_id"].as_str().unwrap();
         let log = PathBuf::from(launch["log"].as_str().unwrap());
         assert!(log.starts_with(fixture.root.path().join("state/workspaces")));
-        let inspection = fixture.ok(&["status", &name]);
+        let inspection = fixture.ok(&["work", "status", &name]);
         let executions = inspection["executions"].as_array().unwrap();
         assert_eq!(executions.len(), 1, "{inspection}");
         assert_eq!(executions[0]["id"], execution_id);
@@ -17519,7 +17563,7 @@ fn happy_sessions_launch_detached_tracked_and_stop_with_the_workspace() {
         wait_until("happy to exit", || !process_alive(pid));
         if operation == "stop" {
             assert_eq!(
-                fixture.ok(&["status", &name])["executions"],
+                fixture.ok(&["work", "status", &name])["executions"],
                 serde_json::json!([])
             );
             assert!(log.exists());
@@ -18161,7 +18205,7 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "unknown"]);
     assert!(!output.status.success());
-    let failed = fixture.ok(&["status", "unknown"]);
+    let failed = fixture.ok(&["work", "status", "unknown"]);
     assert_eq!(failed["workspace"]["state"], "failed");
     assert!(Path::new(failed["workspace"]["path"].as_str().unwrap()).is_dir());
     fixture.ok(&["rm", "unknown", "--yes"]);
@@ -18242,7 +18286,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
         b"pipe:custom\nliteral $HOME\ntwo words\n--flag\n"
     );
     assert_eq!(
-        fixture.ok(&["status", "custom"])["executions"],
+        fixture.ok(&["work", "status", "custom"])["executions"],
         serde_json::json!([])
     );
     fs::write(
@@ -19438,7 +19482,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     }
     assert_eq!(rest, format!("literal {{prompt}}\0{branch}\0"));
     assert_eq!(
-        fixture.ok(&["status", workspace["id"].as_str().unwrap()])["executions"],
+        fixture.ok(&["work", "status", workspace["id"].as_str().unwrap()])["executions"],
         serde_json::json!([])
     );
     assert!(!fixture.root.path().join(".claude.json").exists());
@@ -19534,7 +19578,7 @@ fn start_runs_a_repositorys_own_mode_and_records_it() {
         let workspace: Value =
             serde_json::from_slice(output.stdout.split(|b| *b == b'\n').next().unwrap()).unwrap();
         let args = fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
-        let status = fixture.ok(&["status", workspace["name"].as_str().unwrap()]);
+        let status = fixture.ok(&["work", "status", workspace["name"].as_str().unwrap()]);
         (workspace, remove_guidance(&args), status)
     };
     let (workspace, args, status) = start(&["--mode", "triage", "--base", "HEAD"]);
@@ -19779,7 +19823,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
         "test signing",
     ]);
     assert!(!output.status.success());
-    let inspection = fixture.ok(&["status", "hooked"]);
+    let inspection = fixture.ok(&["work", "status", "hooked"]);
     let lease = &inspection["resources"][0];
     assert_eq!(lease["reason"], "test signing");
     assert_eq!(inspection["executions"], serde_json::json!([]));
@@ -19818,7 +19862,10 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
         let output = fixture.run(&args);
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("resource busy"));
-        assert_eq!(fixture.ok(&["status", "hooked"])["resources"][0], *lease);
+        assert_eq!(
+            fixture.ok(&["work", "status", "hooked"])["resources"][0],
+            *lease
+        );
         assert!(path.exists());
     }
     fs::remove_file(path.join("pre_resource_release-fails")).unwrap();
@@ -19870,7 +19917,7 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
     wait_until("permit hook", || {
         fixture.root.path().join("hook-entered").exists()
     });
-    let leases = fixture.ok(&["status", "hooked"])["resources"].clone();
+    let leases = fixture.ok(&["work", "status", "hooked"])["resources"].clone();
     assert_eq!(leases.as_array().unwrap().len(), 1);
     assert_eq!(leases[0]["resource"], "signing");
     for args in [
@@ -20031,7 +20078,7 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
     fs::write(home.join("fail-before"), "").unwrap();
     let output = fixture.run(&["start", fixture.repo.to_str().unwrap(), "hooked"]);
     assert!(!output.status.success());
-    let inspection = fixture.ok(&["status", "hooked"]);
+    let inspection = fixture.ok(&["work", "status", "hooked"]);
     assert_eq!(inspection["workspace"]["state"], "failed");
     assert_eq!(inspection["executions"], serde_json::json!([]));
     assert_eq!(
@@ -20126,7 +20173,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
             .unwrap()
             .contains("external cleanup failed")
     );
-    assert!(!fixture.run(&["status", "hooked"]).status.success());
+    assert!(!fixture.run(&["work", "status", "hooked"]).status.success());
     let notifications = fixture.ok(&["alerts"]);
     assert!(
         notifications
@@ -20260,7 +20307,7 @@ fn a_chats_commands_act_on_the_workspace_below_it_whose_directory_they_run_in() 
     let renamed = rename_in(&other["path"], "replanning");
     assert_eq!(renamed, chat.as_str());
     assert_eq!(
-        fixture.ok(&["status", "other"])["workspace"]["title"],
+        fixture.ok(&["work", "status", "other"])["workspace"]["title"],
         Value::Null
     );
     for agent in [&mut agent, &mut nested_agent] {
@@ -20314,7 +20361,7 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
             &serde_json::json!("PR #12 is ready to merge")
         )]
     );
-    assert!(fixture.ok(&["status", "sender"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "status", "sender"])["completion"].is_null());
 }
 
 #[test]
@@ -20743,7 +20790,7 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
     let own = fixture.add("own");
     let (mut agent, chat) = start_test_chat(&fixture, "planning");
 
-    let status = fixture.ok(&["status", "planning"]);
+    let status = fixture.ok(&["work", "status", "planning"]);
     assert_eq!(status["kind"], "chat", "{status}");
     assert_eq!(status["chat"]["id"], chat.as_str(), "{status}");
     assert_eq!(status["sessions"], serde_json::json!([]), "{status}");
@@ -20751,7 +20798,7 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
         assert_eq!(status.get(worktree), None, "{worktree}: {status}");
     }
 
-    let status = fixture.ok(&["status", "own"]);
+    let status = fixture.ok(&["work", "status", "own"]);
     assert_eq!(status["kind"], "workspace", "{status}");
     assert_eq!(status["workspace"]["id"], own["id"], "{status}");
     assert_eq!(status["setup_finished"], true, "{status}");
@@ -20764,6 +20811,7 @@ fn status_shows_a_chat_without_the_parts_a_worktree_has() {
             "own",
             "--",
             support::shoal_binary(),
+            "work",
             "status",
             other,
         ]);
@@ -21105,7 +21153,7 @@ fn done_hands_back_files_that_shoal_files_lists() {
     fs::write(fixture.root.path().join("report.md"), "No leaks").unwrap();
     let missing = fixture.run(&["done", "audit", "--attach", "/missing/report.md"]);
     assert!(!missing.status.success(), "{missing:?}");
-    assert!(fixture.ok(&["status", "audit"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "status", "audit"])["completion"].is_null());
 
     let output = fixture
         .command()
@@ -21210,7 +21258,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
         "{shown}"
     );
     assert!(
-        fixture.ok(&["status", "reporter"])["workspace"]
+        fixture.ok(&["work", "status", "reporter"])["workspace"]
             .get("agent_state")
             .is_none()
     );
@@ -21314,7 +21362,7 @@ fn agent_state_reports_from_an_input_that_never_closes() {
     let output = child.wait_with_output().unwrap();
     assert!(status.is_some_and(|status| status.success()), "{output:?}");
     assert_eq!(
-        fixture.ok(&["status", "reporter"])["workspace"]["agent_state"]["state"],
+        fixture.ok(&["work", "status", "reporter"])["workspace"]["agent_state"]["state"],
         "waiting"
     );
 }
@@ -21362,7 +21410,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
     // An outdated mark no longer needs the user.
     assert_eq!(fixture.ok(&["inbox"]), serde_json::json!([]));
     assert_eq!(
-        fixture.ok(&["status", "reviewed"])["workspace"]["review"][0]["stale"],
+        fixture.ok(&["work", "status", "reviewed"])["workspace"]["review"][0]["stale"],
         true
     );
 
@@ -21377,7 +21425,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
         1
     );
     assert!(
-        fixture.ok(&["status", "reviewed"])["workspace"]
+        fixture.ok(&["work", "status", "reviewed"])["workspace"]
             .get("review")
             .is_none()
     );
@@ -21755,7 +21803,7 @@ fn repository_resources_return_checkouts_and_preserve_them_on_cleanup() {
     for args in [
         vec!["acquire", "repo", "server", "--workspace", "consumer"],
         vec!["leases", "repo", "--workspace", "consumer"],
-        vec!["status", "consumer"],
+        vec!["work", "status", "consumer"],
     ] {
         let rendered = fixture.run(&args);
         assert!(rendered.status.success());
@@ -21848,7 +21896,7 @@ fn acquire_picks_an_omitted_resource_of_its_kind() {
     );
     assert!(output.status.success(), "{output:?}");
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
-    let pools: Vec<_> = fixture.ok(&["status", "consumer"])["resources"]
+    let pools: Vec<_> = fixture.ok(&["work", "status", "consumer"])["resources"]
         .as_array()
         .unwrap()
         .iter()
@@ -21932,7 +21980,7 @@ fn repository_resources_validate_targets_before_claiming_and_bind_approvals() {
     let missing = fixture.run(&["acquire", "repo", "server", "--workspace", "consumer"]);
     assert!(!missing.status.success());
     assert!(
-        fixture.ok(&["status", "consumer"])["resources"]
+        fixture.ok(&["work", "status", "consumer"])["resources"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -23199,7 +23247,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
         fs::read_to_string(&events).unwrap(),
         "post_agent_exit|agent-work|helper|7|true|unset|unset\n"
     );
-    assert!(fixture.ok(&["status", "agent-work"])["completion"].is_null());
+    assert!(fixture.ok(&["work", "status", "agent-work"])["completion"].is_null());
     assert_eq!(
         fixture
             .run(&["run", "failing", "--workspace", "agent-work"])
@@ -23264,7 +23312,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     ]);
     assert_eq!(agent.status.code(), Some(7), "{agent:?}");
     wait_until("completion from exit hook", || {
-        fixture.ok(&["status", "agent-work"])["completion"]["cleanup"] == false
+        fixture.ok(&["work", "status", "agent-work"])["completion"]["cleanup"] == false
     });
 }
 
@@ -23369,7 +23417,7 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     fs::write(path.join("retain-work"), "uncommitted work\n").unwrap();
     fixture.ok(&["done", "hooked"]);
     wait_until("completion cleanup error", || {
-        fixture.ok(&["status", "hooked"])["completion"]["error"].is_string()
+        fixture.ok(&["work", "status", "hooked"])["completion"]["error"].is_string()
     });
     assert_eq!(
         fs::read_to_string(&events).unwrap(),
@@ -23431,7 +23479,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
         fixture.root.path().join("done-started").exists()
     });
     assert_eq!(
-        fixture.ok(&["status", "hooked"])["completion"]["cleanup"],
+        fixture.ok(&["work", "status", "hooked"])["completion"]["cleanup"],
         false
     );
     for args in [
@@ -23519,10 +23567,10 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
     fs::write(path.join("work"), "retain").unwrap();
     fixture.ok(&["done", "unfinished"]);
     wait_until("completion cleanup error", || {
-        fixture.ok(&["status", "unfinished"])["completion"]["error"].is_string()
+        fixture.ok(&["work", "status", "unfinished"])["completion"]["error"].is_string()
     });
     assert_eq!(fs::read_to_string(path.join("work")).unwrap(), "retain");
-    assert!(fixture.ok(&["status", "unfinished"])["pr_cleanup"].is_null());
+    assert!(fixture.ok(&["work", "status", "unfinished"])["pr_cleanup"].is_null());
 }
 
 #[test]
@@ -23566,7 +23614,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
         fixture.ok(&["link", "pr", "2", "assigned", "--space", "multi"]);
         fixture.ok(&["link", "pr", "1", "assigned", "--space", "multi"]);
         assert_eq!(
-            fixture.ok(&["status", "multi"])["pr_cleanup"]["urls"]
+            fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["urls"]
                 .as_array()
                 .unwrap()
                 .len(),
@@ -23586,7 +23634,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             "assigned",
         ]);
         assert_eq!(
-            fixture.ok(&["status", "multi"])["pr_cleanup"]["url"],
+            fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["url"],
             "https://github.com/team/project/pull/1"
         );
         fixture.ok(&[
@@ -23613,16 +23661,16 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
                 .unwrap()
                 .contains("GET repos/team/project/pulls/2\"")
         });
-        assert!(fixture.ok(&["status", "multi"])["pr_cleanup"]["merged_head"].is_null());
+        assert!(fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["merged_head"].is_null());
         write_pr(&fixture, 2, "merged", head.trim());
         fixture.restart();
         if cleanup {
             wait_removed(&fixture, "multi");
         } else {
             wait_until("confirmed merges", || {
-                fixture.ok(&["status", "multi"])["pr_cleanup"]["merged_head"] == head.trim()
+                fixture.ok(&["work", "status", "multi"])["pr_cleanup"]["merged_head"] == head.trim()
             });
-            let state = fixture.ok(&["status", "multi"]);
+            let state = fixture.ok(&["work", "status", "multi"]);
             assert_eq!(state["pr_cleanup"]["merged_head"], head.trim());
             fixture.ok(&["alerts"]);
             // A changed default must not change a kept assignment.
@@ -23633,7 +23681,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             .unwrap();
             fixture.restart();
             assert_eq!(
-                fixture.ok(&["status", "multi"])["completion"]["cleanup"],
+                fixture.ok(&["work", "status", "multi"])["completion"]["cleanup"],
                 false
             );
         }
@@ -23717,14 +23765,14 @@ cat >/dev/null
         fixture.ok(&["link", "pr", "2", "assigned", "--space", "upper"]);
         fixture.restart();
         assert_eq!(
-            fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
+            fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"]["name"],
             "lower"
         );
 
         write_pr(1, "Merged", "lower", "main");
         fixture.restart();
         wait_until("restacked upper", || {
-            fixture.ok(&["status", "upper"])["workspace"]["base_workspace"].is_null()
+            fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"].is_null()
         });
         let edits = fs::read_to_string(root.join("edits")).unwrap();
         assert_eq!(edits, "2 main\n");
@@ -23828,7 +23876,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     fs::write(root.join("fail"), "commits").unwrap();
     fixture.restart();
     wait_until("recorded merge lookup failure", || {
-        fixture.ok(&["status", "lower"])["pr_cleanup"]["error"]
+        fixture.ok(&["work", "status", "lower"])["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|error| error.contains("could not check whether"))
     });
@@ -23839,12 +23887,12 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     write_pr(&fixture, 1, "merged", "lower", "main", &"0".repeat(40));
     fixture.restart();
     wait_until("recorded unmerged base HEAD", || {
-        fixture.ok(&["status", "lower"])["pr_cleanup"]["error"]
+        fixture.ok(&["work", "status", "lower"])["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|error| error.contains("do not contain the base workspace's HEAD"))
     });
     assert_eq!(
-        fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
     // A failure after the merge is confirmed is reported: the merged PR now
@@ -23854,21 +23902,21 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     write_pr(&fixture, 1, "merged", "lower", "", head.trim());
     fixture.restart();
     wait_until("reported restack failure", || {
-        fixture.ok(&["status", "lower"])["pr_cleanup"]["error"]
+        fixture.ok(&["work", "status", "lower"])["pr_cleanup"]["error"]
             .as_str()
             .is_some_and(|error| error.contains("has no head or base branch"))
     });
     assert_eq!(
-        fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
+        fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
     // Recovery restacks and clears the recorded error.
     write_pr(&fixture, 1, "merged", "lower", "main", head.trim());
     fixture.restart();
     wait_until("restack after recovery", || {
-        let lower = fixture.ok(&["status", "lower"]);
+        let lower = fixture.ok(&["work", "status", "lower"]);
         lower["pr_cleanup"]["error"].is_null()
-            && fixture.ok(&["status", "upper"])["workspace"]["base_workspace"].is_null()
+            && fixture.ok(&["work", "status", "upper"])["workspace"]["base_workspace"].is_null()
     });
 }
 
@@ -24456,7 +24504,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     assert_eq!(agent.status.code(), Some(7), "{agent:?} {transcript}");
     // The tab's shell, not the caller's, enters the workspace after the agent.
     let tab_directive = herdr_tab_directive(&fixture);
-    let workspace = fixture.ok(&["status", "herdr-agent"]);
+    let workspace = fixture.ok(&["work", "status", "herdr-agent"]);
     assert_eq!(
         fs::read_to_string(&tab_directive).unwrap(),
         format!("{}\n", workspace["workspace"]["path"].as_str().unwrap())
@@ -24833,7 +24881,7 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
         &["tab", "rename", "w1:t9", "Agent tab names"]
     );
     assert_eq!(
-        fixture.ok(&["status", "topic"])["workspace"]["title"],
+        fixture.ok(&["work", "status", "topic"])["workspace"]["title"],
         "Agent tab names"
     );
 
@@ -25007,7 +25055,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
     let (worker, transcript) =
         fixture.interactive_command(herdr_worker_command(&fixture).env("SHELL", shell), "");
     assert!(worker.status.success(), "{worker:?} {transcript}");
-    let workspace = fixture.ok(&["status", "herdr-shell"]);
+    let workspace = fixture.ok(&["work", "status", "herdr-shell"]);
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("shell-cwd"))
             .unwrap()
@@ -25192,7 +25240,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
         fixture.root.path().join("happy-exited").exists()
     });
     wait_until("Happy execution reporting", || {
-        fixture.ok(&["status", "happy-tab"])["executions"]
+        fixture.ok(&["work", "status", "happy-tab"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -25201,7 +25249,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
     fixture.restart();
     fixture.ok(&["done", "happy-tab"]);
     wait_for_herdr_close(&fixture);
-    assert!(fixture.ok(&["status", "happy-tab"])["completion"].is_object());
+    assert!(fixture.ok(&["work", "status", "happy-tab"])["completion"].is_object());
 }
 
 #[test]
@@ -25355,7 +25403,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
     ]);
     scoped(&fixture, &["done"]);
     assert_eq!(
-        fixture.ok(&["status", "issue-work"])["workspace"]["done"],
+        fixture.ok(&["work", "status", "issue-work"])["workspace"]["done"],
         true
     );
     let undone = scoped(&fixture, &["done", "--undo"]);
@@ -25370,7 +25418,7 @@ fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
         "--undo",
     ]);
     assert!(!refused.status.success());
-    let inspection = fixture.ok(&["status", "issue-work"]);
+    let inspection = fixture.ok(&["work", "status", "issue-work"]);
     assert!(inspection["completion"].is_null());
     assert_eq!(inspection["workspace"]["done"], false);
     fixture.ok(&[
@@ -25436,7 +25484,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
         format!("{}|{}", web["port"], api["port"])
     );
     assert!(
-        fixture.ok(&["status", "external"])["executions"]
+        fixture.ok(&["work", "status", "external"])["executions"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -25451,7 +25499,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
             .unwrap()
     };
     for args in [
-        vec!["status"],
+        vec!["work", "status"],
         vec!["leases", "port"],
         vec!["work", "setup"],
         vec!["run", "--", support::shoal_binary(), "leases", "port"],
@@ -25463,13 +25511,13 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     // its own.
     let below = scoped(&["start", fixture.repo.to_str().unwrap(), "below"]);
     assert!(below.status.success(), "{below:?}");
-    let below = fixture.ok(&["status", "below"]);
+    let below = fixture.ok(&["work", "status", "below"]);
     assert_eq!(below["workspace"]["parent"]["name"], "external", "{below}");
     for args in [
         vec!["rm", "external", "--yes"],
         vec!["rm", "other", "--yes"],
         vec!["alerts"],
-        vec!["status", "other"],
+        vec!["work", "status", "other"],
         vec!["work", "env"],
         vec!["work", "env", "other"],
         vec![
@@ -25487,7 +25535,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     let output = fixture
         .command()
         .envs(&values)
-        .args(["status", "external"])
+        .args(["work", "status", "external"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -25506,7 +25554,7 @@ fn exported_tokens_expire_on_revocation_and_successful_removal() {
         fixture
             .command()
             .env("SHOAL_SCOPE_TOKEN", token)
-            .args(["status", "external"])
+            .args(["work", "status", "external"])
             .output()
             .unwrap()
     };
@@ -25555,7 +25603,7 @@ fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
         .unwrap();
     };
     let executions = |fixture: &Fixture| {
-        fixture.ok(&["status", "legacy"])["executions"]
+        fixture.ok(&["work", "status", "legacy"])["executions"]
             .as_array()
             .unwrap()
             .len()
@@ -25568,7 +25616,7 @@ fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
     let piped = fixture.run(&["stop", "legacy"]);
     assert!(!piped.status.success());
     assert_eq!(executions(&fixture), 1);
-    assert!(fixture.ok(&["status", "legacy"])["workspace"]["error"].is_null());
+    assert!(fixture.ok(&["work", "status", "legacy"])["workspace"]["error"].is_null());
 
     let (output, transcript) = fixture.interactive(&["stop", "legacy"], "y\n");
     assert!(output.status.success(), "{transcript}");
@@ -25614,7 +25662,7 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     assert_eq!(hold["workspace_id"], workspace["id"]);
     let expected = serde_json::json!([hold]);
     assert_eq!(
-        fixture.ok(&["status", "held"])["workspace"]["holds"],
+        fixture.ok(&["work", "status", "held"])["workspace"]["holds"],
         expected
     );
     assert_eq!(fixture.ok(&["work"])[0]["holds"], expected);
@@ -26195,7 +26243,7 @@ fn a_workspace_a_chat_opens_is_below_it_and_in_its_repository() {
     fixture.ok(&["split", "below", "--workspace", "opened"]);
 
     // One parent link names the chat or the workspace above, of either kind.
-    let opened = fixture.ok(&["status", "opened"]);
+    let opened = fixture.ok(&["work", "status", "opened"]);
     assert_eq!(opened["workspace"]["parent"]["id"], chat.as_str());
     assert_eq!(opened["workspace"]["parent"]["kind"], "chat");
     assert_eq!(opened["workspace"]["children"][0]["name"], "below");
@@ -26360,7 +26408,7 @@ run remove rm below --yes
         .map(|workspace| workspace["name"].as_str().unwrap().to_owned())
         .collect();
     assert_eq!(names, ["outside"]);
-    assert!(fixture.ok(&["status", "outside"])["workspace"]["parent"].is_null());
+    assert!(fixture.ok(&["work", "status", "outside"])["workspace"]["parent"].is_null());
 }
 
 /// A chat's agent adds a workspace with an agent, which the daemon starts
@@ -26400,7 +26448,7 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
     assert_eq!(reports.len(), 2, "{added}");
     assert_eq!(reports[0]["name"], "worker", "{added}");
     assert_eq!(reports[1]["agent"], "codex", "{added}");
-    let worker = fixture.ok(&["status", "worker"]);
+    let worker = fixture.ok(&["work", "status", "worker"]);
     assert_eq!(
         worker["workspace"]["parent"]["name"], "planning",
         "{worker}"
@@ -26418,7 +26466,7 @@ fn a_chats_agent_adds_a_workspace_whose_agent_the_daemon_starts() {
         let error = fs::read_to_string(home.join(format!("{name}.err"))).unwrap();
         let code = fs::read_to_string(home.join(name)).unwrap();
         assert_eq!(code.trim(), "1", "{error}");
-        assert!(!fixture.run(&["status", name]).status.success());
+        assert!(!fixture.run(&["work", "status", name]).status.success());
     }
     // The chat's own session is not relabelled as the worker's.
     let id = worker["workspace"]["id"].as_str().unwrap();
@@ -26462,7 +26510,7 @@ fn a_chats_agent_adds_a_workspace_for_an_issue_it_reads_in_its_chat() {
     let report: Value = serde_json::from_str(added.lines().next().unwrap_or_default())
         .unwrap_or_else(|_| panic!("{added}\n{error}"));
     assert_eq!(report["name"], "12-clarify-retries", "{added}");
-    let worker = fixture.ok(&["status", "12-clarify-retries"]);
+    let worker = fixture.ok(&["work", "status", "12-clarify-retries"]);
     assert_eq!(
         worker["workspace"]["parent"]["name"], "planning",
         "{worker}"
@@ -26484,7 +26532,7 @@ fn a_workspaces_agent_reads_the_issue_it_adds_or_plans_in_its_workspace() {
     let repo = fixture.repo.to_str().unwrap();
     let added = scoped_command(&fixture, "parent", &["start", repo, "--issue", "12"]);
     assert!(added.status.success(), "{added:?}");
-    let worker = fixture.ok(&["status", "12-clarify-retries"]);
+    let worker = fixture.ok(&["work", "status", "12-clarify-retries"]);
     assert_eq!(worker["workspace"]["parent"]["name"], "parent", "{worker}");
     // Planning the issue reads it there too.
     let planned = scoped_command(
@@ -26527,7 +26575,7 @@ fn any_space_opens_any_kind_of_child() {
     let below = scoped_command(&fixture, "parent", &["start", repo, "below"]);
     assert!(below.status.success(), "{below:?}");
     let parent = |space: &Value| space["parent"]["name"].as_str().map(str::to_owned);
-    let status = fixture.ok(&["status", "below"]);
+    let status = fixture.ok(&["work", "status", "below"]);
     assert_eq!(parent(&status["workspace"]).as_deref(), Some("parent"));
     // ...but not a chat in its own terminal, whose processes would be its
     // own...
@@ -26626,7 +26674,7 @@ fn a_chat_between_workspaces_decides_and_coordinates_for_the_one_below() {
     );
     assert!(middle.status.success(), "{middle:?}");
     wait_until("the chat's workspace", || home.join("chat-ready").exists());
-    let deep = fixture.ok(&["status", "deep"]);
+    let deep = fixture.ok(&["work", "status", "deep"]);
     assert_eq!(deep["workspace"]["parent"]["name"], "middle", "{deep}");
     let chats = fixture.ok(&["work", "--chats"]);
     let middle = chats[0]["id"].as_str().unwrap().to_owned();
@@ -26740,7 +26788,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
     install_recording_agent(&fixture, "claude");
     fixture.add("worker");
     let worktree = fs::canonicalize(
-        fixture.ok(&["status", "worker"])["workspace"]["path"]
+        fixture.ok(&["work", "status", "worker"])["workspace"]["path"]
             .as_str()
             .unwrap(),
     )
@@ -26791,7 +26839,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
             .output()
             .unwrap()
     };
-    let status = in_chat(&["status"]);
+    let status = in_chat(&["work", "status"]);
     assert!(status.status.success(), "{status:?}");
     let status: Value = serde_json::from_slice(&status.stdout).unwrap();
     assert_eq!(status["workspace"]["name"], "worker", "{status}");
@@ -26821,7 +26869,7 @@ fn a_chat_runs_in_a_workspaces_worktree_and_goes_with_it() {
 
     // Each status names the other.
     assert_eq!(
-        fixture.ok(&["status", "worker"])["chats"][0]["name"],
+        fixture.ok(&["work", "status", "worker"])["chats"][0]["name"],
         "worker-chat"
     );
 
@@ -27060,7 +27108,7 @@ fn repository_setup_starts_a_setup_agent_on_the_setup_branch() {
     assert!(output.status.success(), "{output:?}");
 
     // The agent works in a workspace on the setup branch, in setup mode.
-    let workspace = &fixture.ok(&["status", "shoal-setup"])["workspace"];
+    let workspace = &fixture.ok(&["work", "status", "shoal-setup"])["workspace"];
     assert_eq!(workspace["branch"], "shoal-setup", "{workspace}");
     assert_eq!(workspace["mode"], "setup", "{workspace}");
     // It is told where the local config goes, which lies in the
@@ -27662,7 +27710,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     assert!(session["SHOAL_ADD_PLAN"].is_string(), "{session}");
     let log = fs::read_to_string(home.join("zmx-background.log")).unwrap_or_default();
     assert_eq!(runs(), "background tracked go\n", "{log}");
-    let workspace = fixture.ok(&["status", "background"]);
+    let workspace = fixture.ok(&["work", "status", "background"]);
     let id = workspace["workspace"]["id"].as_str().unwrap();
     let labels = [
         "set",
@@ -27681,7 +27729,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     // detaching returns to the caller's shell where it was. Its slot must be
     // free in the daemon; the previous agent's output does not prove that.
     wait_until("the detached agent's recorded completion", || {
-        fixture.ok(&["status", "background"])["executions"] == serde_json::json!([])
+        fixture.ok(&["work", "status", "background"])["executions"] == serde_json::json!([])
     });
     let directive = home.join("shell-directive");
     let (output, transcript) = fixture.terminal_command(
@@ -27710,7 +27758,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let workspace = fixture.ok(&["status", "shell-here"]);
+    let workspace = fixture.ok(&["work", "status", "shell-here"]);
     assert_eq!(
         fs::read_to_string(&directive).unwrap().trim(),
         workspace["workspace"]["path"].as_str().unwrap()
@@ -27736,7 +27784,7 @@ fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
     wait_until("the detached workspace shell", || {
         fs::read_to_string(home.join("shell-cwd")).is_ok_and(|cwd| !cwd.is_empty())
     });
-    let workspace = fixture.ok(&["status", "shell-only"]);
+    let workspace = fixture.ok(&["work", "status", "shell-only"]);
     let log = fs::read_to_string(home.join("zmx-shell-only.log")).unwrap_or_default();
     assert_eq!(
         fs::read_to_string(home.join("shell-cwd"))
@@ -27910,7 +27958,7 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
     });
     assert!(ended.is_some(), "{}\n{transcript}", watched());
     assert!(
-        fixture.ok(&["status", "kept"])["workspace"]["done"]
+        fixture.ok(&["work", "status", "kept"])["workspace"]["done"]
             .as_bool()
             .unwrap()
     );
@@ -28288,7 +28336,7 @@ fn agent_in_session<'a>(fixture: &'a Fixture, workspace: &str, session: &str) ->
         workspace: workspace.to_owned(),
         agent,
     };
-    let id = fixture.ok(&["status", workspace])["workspace"]["id"].clone();
+    let id = fixture.ok(&["work", "status", workspace])["workspace"]["id"].clone();
     wait_until("the agent listed in its session", || {
         if let Some(status) = agent.agent.try_wait().unwrap() {
             panic!(
@@ -28656,7 +28704,7 @@ fn attach_reaches_a_session_shoal_opened_for_a_workspace_without_an_agent() {
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(attached(), ["attach", "failed"]);
     assert_eq!(
-        fixture.ok(&["status", "failed"])["sessions"],
+        fixture.ok(&["work", "status", "failed"])["sessions"],
         serde_json::json!([{"name": "failed", "agent": null, "clients": 0}])
     );
 }
@@ -28668,7 +28716,7 @@ fn a_later_session_under_a_recorded_name_is_not_the_recorded_one() {
     let sessions = fixture.root.path().join("zmx-sessions");
     fs::write(&sessions, "  name=persist\tpid=1\tcreated=10\tclients=0\n").unwrap();
     let agent = agent_in_session(&fixture, "persist", "persist");
-    let listed = || fixture.ok(&["status", "persist"])["sessions"].clone();
+    let listed = || fixture.ok(&["work", "status", "persist"])["sessions"].clone();
     assert_eq!(
         listed(),
         serde_json::json!([{"name": "persist", "agent": "claude", "clients": 0}])
@@ -28691,14 +28739,14 @@ fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
     )
     .unwrap();
     let agent = agent_in_session(&fixture, "persist", "persist");
-    let status = fixture.ok(&["status", "persist"]);
+    let status = fixture.ok(&["work", "status", "persist"]);
     assert_eq!(
         status["sessions"],
         serde_json::json!([{"name": "persist", "agent": "claude", "clients": 1}])
     );
 
     install_test_script(home.join("bin/zmx"), "#!/bin/sh\necho broken >&2\nexit 1\n");
-    let status = fixture.ok(&["status", "persist"]);
+    let status = fixture.ok(&["work", "status", "persist"]);
     assert_eq!(status["sessions"], serde_json::json!([]));
     assert!(status["sessions_error"].is_string(), "{status}");
     // The agent stops through the daemon, which reads zmx again.
@@ -28721,7 +28769,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
         true,
     );
     assert!(!output.status.success(), "{transcript}");
-    assert!(!fixture.run(&["status", "no-zmx"]).status.success());
+    assert!(!fixture.run(&["work", "status", "no-zmx"]).status.success());
 
     // Without a terminal the agent starts detached, which needs zmx too,
     // unless --here runs it in place.
@@ -28736,7 +28784,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
     };
     let output = start(&[]);
     assert!(!output.status.success(), "{output:?}");
-    assert!(!fixture.run(&["status", "no-zmx"]).status.success());
+    assert!(!fixture.run(&["work", "status", "no-zmx"]).status.success());
     let output = start(&["--here"]);
     assert!(output.status.success(), "{output:?}");
 }
@@ -29030,7 +29078,7 @@ fn a_start_without_a_terminal_leaves_its_agent_to_the_daemon() {
     let started = fixture.root.path().join("waiter-started");
     wait_until("the detached agent start", || started.exists());
     wait_until("the detached agent's execution", || {
-        fixture.ok(&["status", "detached"])["executions"]
+        fixture.ok(&["work", "status", "detached"])["executions"]
             .as_array()
             .is_some_and(|executions| !executions.is_empty())
     });
@@ -29115,7 +29163,7 @@ fn a_start_without_a_terminal_admits_a_happy_agent_before_it_opens_here() {
     assert_eq!(entry["state"], "queued", "{stdout}");
     assert!(!record.exists());
     // It waits as a launch in the workspace it set up, which it keeps.
-    let status = fixture.ok(&["status", "happy"]);
+    let status = fixture.ok(&["work", "status", "happy"]);
     assert_eq!(
         fixture.ok(&["queue"])[0]["opens"],
         status["workspace"]["id"]
@@ -29675,13 +29723,13 @@ fn a_demo_outlives_the_command_that_started_it() {
     // Its completion scan finds none of its processes in the demo, so the
     // command finishes and the demo keeps running.
     wait_until("the starting command to finish", || {
-        fixture.ok(&["status", "tried"])["executions"]
+        fixture.ok(&["work", "status", "tried"])["executions"]
             .as_array()
             .unwrap()
             .len()
             == 1
     });
-    let executions = fixture.ok(&["status", "tried"])["executions"].clone();
+    let executions = fixture.ok(&["work", "status", "tried"])["executions"].clone();
     assert_eq!(executions[0]["state"], "running", "{executions}");
     assert_eq!(
         demo(&fixture, &["ls", "--workspace", "tried"])["running"]
@@ -29900,7 +29948,7 @@ fn removing_a_parent_lists_and_removes_its_children() {
     let (yes, prompt) = fixture.interactive(&["rm", "parent"], "y\n");
     assert!(yes.status.success(), "{prompt}");
     assert!(!child_path.exists());
-    assert!(!fixture.run(&["status", "child"]).status.success());
+    assert!(!fixture.run(&["work", "status", "child"]).status.success());
 
     fixture.add("parent");
     fixture.ok(&["split", "child", "--workspace", "parent"]);
@@ -30338,7 +30386,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     assert!(output.status.success(), "{output:?}");
     let ended = fixture.ok(&["watch", "review", "1"]);
     assert_eq!(ended["head"], first, "{ended}");
-    let workspace = &fixture.ok(&["status", "pr-8"])["workspace"];
+    let workspace = &fixture.ok(&["work", "status", "pr-8"])["workspace"];
     assert_eq!(workspace["branch"], Value::Null);
     assert_eq!(workspace["at"]["made_for"], serde_json::json!({"pr": 8}));
     assert_eq!(workspace["setup_skipped"], true);
@@ -30373,7 +30421,7 @@ fn a_fork_prs_head_opens_in_one_workspace_at_a_commit() {
     let output = run(&["review", "run", url, "--agent", "reviewer", "--no-post"]);
     assert!(output.status.success(), "{output:?}");
     fixture.ok(&["watch", "review", &review_number(&output)]);
-    let moved = &fixture.ok(&["status", "pr-8"])["workspace"];
+    let moved = &fixture.ok(&["work", "status", "pr-8"])["workspace"];
     assert_eq!(moved["id"], workspace["id"]);
     assert_eq!(moved["at"]["commit"], second);
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);

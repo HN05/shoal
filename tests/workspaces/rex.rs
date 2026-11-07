@@ -165,9 +165,9 @@ impl Drop for RexServer {
     }
 }
 
-/// The names of `workspace`'s sessions, as `shoal status` lists them.
+/// The names of `workspace`'s sessions, as `shoal work status` lists them.
 fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
-    fixture.ok(&["status", workspace])["sessions"]
+    fixture.ok(&["work", "status", workspace])["sessions"]
         .as_array()
         .unwrap()
         .iter()
@@ -176,7 +176,7 @@ fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
 }
 
 fn executions(fixture: &Fixture, workspace: &str) -> usize {
-    fixture.ok(&["status", workspace])["executions"]
+    fixture.ok(&["work", "status", workspace])["executions"]
         .as_array()
         .unwrap()
         .len()
@@ -220,7 +220,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     // agent keeps running in its block. Setup records its place too, so
     // only once it finished is the one execution the agent's.
     wait_until("setup to finish with the agent running", || {
-        let status = fixture.ok(&["status", "placed"]);
+        let status = fixture.ok(&["work", "status", "placed"]);
         status["setup_finished"] == true
             && status["executions"]
                 .as_array()
@@ -278,7 +278,7 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
             .iter()
             .any(|workspace| workspace["name"] == "placed")
             && executions(&fixture, "placed") == 1
-            && fixture.ok(&["status", "placed"])["setup_finished"] == true
+            && fixture.ok(&["work", "status", "placed"])["setup_finished"] == true
     });
     // The split names itself, never the caller's window.
     assert_eq!(rex.windows(&session), windows);

@@ -36,22 +36,6 @@ pub enum WorkspaceCommand {
         #[arg(short = 'p', long)]
         print: bool,
     },
-    /// Show a space's activity and issue and PR state, and a workspace's
-    /// changes and resources.
-    ///
-    /// Name a workspace or chat, find the spaces that link an issue, PR or
-    /// CI run, or the workspaces that hold a resource: `status pr 12`,
-    /// `status ci 2765`, `status <issue-PR-or-run-URL>`, `status resource
-    /// <pool-or-member>`.
-    Status {
-        /// Workspace or chat, issue, PR or CI run URL, or pr, issue, ci or
-        /// resource.
-        #[arg(value_name = "TARGET")]
-        space: Option<SpaceSelector>,
-        /// Number, URL, or resource name after pr, issue, ci or resource.
-        #[arg(value_parser = item_reference)]
-        item: Option<String>,
-    },
     /// Enter a workspace, or use - for the one you were in before.
     ///
     /// Omit the workspace to open the picker, even inside a workspace.
@@ -87,6 +71,22 @@ pub use crate::config::repo::DesktopApp;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum WorkCommand {
+    /// Show a space's activity and issue and PR state, and a workspace's
+    /// changes and resources.
+    ///
+    /// Name a workspace or chat, find the spaces that link an issue, PR or
+    /// CI run, or the workspaces that hold a resource: `work status pr
+    /// 12`, `work status ci 2765`, `work status <issue-PR-or-run-URL>`,
+    /// `work status resource <pool-or-member>`.
+    Status {
+        /// Workspace or chat, issue, PR or CI run URL, or pr, issue, ci or
+        /// resource.
+        #[arg(value_name = "TARGET")]
+        space: Option<SpaceSelector>,
+        /// Number, URL, or resource name after pr, issue, ci or resource.
+        #[arg(value_parser = item_reference)]
+        item: Option<String>,
+    },
     /// Export the environment for processes started in a workspace.
     Env {
         workspace: Option<SpaceSelector>,

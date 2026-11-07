@@ -22,7 +22,7 @@ worktree resolves the workspace from its directory, without scope or lifecycle
 tracking; `shoal work` lists the workspaces with their `path`. Leases need a
 managed workspace.
 
-Every space has a number, which `shoal work` and `shoal status` show. A
+Every space has a number, which `shoal work` and `shoal work status` show. A
 command that takes a space selects it by that number, its name or its ID:
 `shoal attach 3`, `--space 3`. Space names are never all digits, so
 `shoal work rename` refuses one. A removed workspace has no number. Approval
@@ -31,7 +31,7 @@ then the item's own, such as `3.2`.
 
 A chat in a workspace's worktree (`shoal start --in <workspace>`) reads that
 workspace and changes nothing there: `shoal diff`, `shoal conflicts`,
-`shoal status` and `shoal branch base` act on the workspace, the commands that
+`shoal work status` and `shoal branch base` act on the workspace, the commands that
 also act on chats act on the chat, and `--space <workspace>` reads the
 workspace's issue, PRs and CI runs. Removing the workspace removes the chat.
 
@@ -136,13 +136,13 @@ coordinator may deny one with `--reason` or pass it up.
 ```sh
 shoal work            # Spaces, children below their parent; --chats for chats
 shoal inbox           # Questions, approvals, waiting or failed spaces, ready marks
-shoal status fix-login
+shoal work status fix-login
 shoal alerts
 ```
 
-`status` names a workspace's base, parent and children, its watched PRs in
+`work status` names a workspace's base, parent and children, its watched PRs in
 `prs` with state, merge conflicts, CI results, review state and lookup errors,
-and in `cleanup_reason` why cleanup keeps it. `work` and `status` show the
+and in `cleanup_reason` why cleanup keeps it. `work` and `work status` show the
 `agent_state` agents' hooks report (`working`, `waiting`, `idle`).
 Notifications report agent exits, alerts, questions, busy resources, pending
 approvals and cleanup Shoal did on its own; reading them marks them read, and

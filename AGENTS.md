@@ -240,7 +240,7 @@ for delivering a PR, under Committing near the end, decide when work is done.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed; preserve their existing SQLite/JSON representation
   and reject unknown values.
-- Problems show where the user looks (`inbox`, `alerts`, `status`, the failing
+- Problems show where the user looks (`inbox`, `alerts`, `work status`, the failing
   command's error) and name the command that fixes them; repair preserves work
   and resource leases. Startup audits ownership and never deletes work, and the cleanup sweep readies a
   workspace the audit failed once its ownership verifies; the daemon clears an unknown

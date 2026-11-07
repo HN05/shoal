@@ -506,7 +506,7 @@ it exists, can wait too, and no time limit interrupts a read waiting in the
 kernel, so requests and sweeps read worktree files on the blocking pool, where
 a read holds no runtime thread and a check's time limit ends the wait for it.
 The startup audit, its recheck, the sweep's branch observation and cleanup
-checks, the Git reads of `shoal status`, and the reads of a checkout's or
+checks, the Git reads of `shoal work status`, and the reads of a checkout's or
 worktree's config file, which every command that resolves its settings, such
 as `shoal attach`, waits on, check a worktree within 30 seconds, a status
 reporting what it could not read; one that runs out or is interrupted
@@ -732,7 +732,7 @@ whatever their own work, unless one of their own keep-reasons, or a space still
 below them, keeps them; a child's own `done` follows the usual rules. The parent owns its
 children, so its processes may remove and hold them, except that the user's
 holds anywhere below refuse the removal. `work` lists children below their
-parent, and `status` names the parent and children of either kind. `shoal start`
+parent, and `work status` names the parent and children of either kind. `shoal start`
 is the only command that starts an agent, so `split` creates worktrees alone: a
 workspace process's `start` gives a child an agent of its own through the agent
 queue, and `start --fork` gives it the parent's agent
@@ -833,7 +833,7 @@ Leftovers are reported, not stopped on sight: the cleanup sweep finds every
 space's from one process listing and keeps them in memory, so no tool call
 waits for a scan, and the agent's hook names each new one once, since the agent
 knows whether its own test servers should keep running. They create no
-notification; `shoal status` lists them for the user.
+notification; `shoal work status` lists them for the user.
 They use global defaults below repository config.
 The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;
@@ -1162,7 +1162,7 @@ tab Herdr finds to close, rename or focus. Generic code passes the
 record to the host that reads it and never interprets the data, which for Rex
 is how to reach the server and its CLI. Queued entries carry the queuing
 terminal's origin, recovery records the stopped agent's, demos their launch's,
-and the daemon the place each execution and chat runs in, which `attach`, `status`
+and the daemon the place each execution and chat runs in, which `attach`, `work status`
 and attach completion ask the host about for every host, together with the
 places Shoal created for each workspace, whose records outlive their sessions;
 the host never calls the daemon. A host
@@ -1443,7 +1443,7 @@ terminal; noninteractive and JSON calls require it.
 An agent whose executables are not on PATH
 is refused before any work starts and left out of pickers, the workspace menu
 and completion; pickers offer “No agent” to continue without launching one. `config show` reports effective repository values with their winning layers and uses a registered checkout
-before a workspace exists, then the picker; `--repo` names a repository's checkout directly. `status` shows any space,
+before a workspace exists, then the picker; `--repo` names a repository's checkout directly. `work status` shows any space,
 a workspace or a chat, running or stopped, through one path: links, watched PR state,
 completion, sessions and what awaits the user for both, and for a workspace also
 lifecycle, fork-point changes, active work and leases; the daemon looks PRs up on each
@@ -1747,7 +1747,7 @@ otherwise miss (busy resources and who holds them, port conflicts, exits of
 shortcut-launched agents, workspaces it removed or retained on its own, messages
 a workspace's agent sends to ask for attention) and the
 CLI shows them once, unless asked to keep them unread, on request or as a followed stream that also raises the
-terminal's own notifications (OSC 9); workspace `status` and `daemon status` only count them. Recording never fails the operation it describes,
+terminal's own notifications (OSC 9); `work status` and `daemon status` only count them. Recording never fails the operation it describes,
 repeated polled conflicts and identical messages collapse until read, and scoped
 processes cannot read them. Agent messages are separate from completion: telling
 the user a PR is ready neither ends the assignment nor affects cleanup. What a
@@ -2640,7 +2640,7 @@ logins, as it merges, also outside a workspace, and refuses workspace
 processes, which stay within their own repository. A workflow file's URL also
 names the branch a run starts on.
 Forges hold the runs of fork and first-time contributors' PRs for approval, which
-leaves such a PR without checks; `view` and `status` report the waiting runs
+leaves such a PR without checks; `view` and `work status` report the waiting runs
 beside the checks, which stay exactly what the forge reports, so watches and
 their wake-ups do not change. Approving lets outside code run, so like merging it
 uses the user's login and is refused to workspace processes. Only GitHub has an
@@ -2854,7 +2854,7 @@ Passing checks wait on the cursor while another check on the PR's head commit is
 pending, since a pass asks nothing of the agent until the rest finish and each
 wake costs it a turn: a check that does not pass delivers them at once, the last
 pending one with itself, and a new head drops them. A check that never finishes
-keeps them held; `status` shows them meanwhile. Holding happens where the poll
+keeps them held; `work status` shows them meanwhile. Holding happens where the poll
 queues activity, so watches and agent hooks report the same updates, and only
 for a PR's checks; the `item_activity` stream reports each one.
 A conflict belongs to the head and base commits it was seen at, so a push or base

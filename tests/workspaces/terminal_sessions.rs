@@ -148,7 +148,7 @@ fn assert_failed_labelling_refuses_launches(
         assert!(!fixture.root.path().join("new-agent-started").exists());
         assert_eq!(fs::read_to_string(&recovery)?, saved);
         assert_eq!(
-            fixture.ok(&["status", "new-owner"])["executions"],
+            fixture.ok(&["work", "status", "new-owner"])["executions"],
             serde_json::json!([])
         );
     }
@@ -381,7 +381,7 @@ fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow:
         "{sent:?}"
     );
     assert!(
-        fixture.ok(&["status", "resumed"])["workspace"]["done"]
+        fixture.ok(&["work", "status", "resumed"])["workspace"]["done"]
             .as_bool()
             .unwrap_or_default()
     );

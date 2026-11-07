@@ -1,4 +1,4 @@
-//! What `shoal status` prints.
+//! What `shoal work status` prints.
 use serde::{Deserialize, Serialize};
 
 use crate::{

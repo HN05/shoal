@@ -143,9 +143,9 @@ impl Drop for TmuxServer {
     }
 }
 
-/// The names of `workspace`'s sessions, as `shoal status` lists them.
+/// The names of `workspace`'s sessions, as `shoal work status` lists them.
 fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
-    fixture.ok(&["status", workspace])["sessions"]
+    fixture.ok(&["work", "status", workspace])["sessions"]
         .as_array()
         .unwrap()
         .iter()
@@ -154,7 +154,7 @@ fn sessions(fixture: &Fixture, workspace: &str) -> Vec<String> {
 }
 
 fn executions(fixture: &Fixture, workspace: &str) -> usize {
-    fixture.ok(&["status", workspace])["executions"]
+    fixture.ok(&["work", "status", workspace])["executions"]
         .as_array()
         .unwrap()
         .len()
@@ -172,7 +172,7 @@ fn wait_for_agent(fixture: &Fixture, workspace: &str) {
             .iter()
             .any(|listed| listed["name"] == workspace)
             && executions(fixture, workspace) == 1
-            && fixture.ok(&["status", workspace])["setup_finished"] == true
+            && fixture.ok(&["work", "status", workspace])["setup_finished"] == true
     });
 }
 

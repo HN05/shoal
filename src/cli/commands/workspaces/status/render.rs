@@ -469,7 +469,7 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
     }
 }
 
-/// A request the agent's proxy waits to retry as `status` shows it.
+/// A request the agent's proxy waits to retry as `work status` shows it.
 fn proxy_retry_label(retry: &crate::client::executions::ProxyRetry) -> String {
     let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
     format!(
@@ -480,7 +480,7 @@ fn proxy_retry_label(retry: &crate::client::executions::ProxyRetry) -> String {
     )
 }
 
-/// When the idle agent's prompt cache expires, or expired, as `status`
+/// When the idle agent's prompt cache expires, or expired, as `work status`
 /// shows it.
 fn prompt_cache_label(expires_at: i64) -> String {
     let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
@@ -492,7 +492,7 @@ fn prompt_cache_label(expires_at: i64) -> String {
     }
 }
 
-/// A pending retry of the agent's failed turn as `status` shows it.
+/// A pending retry of the agent's failed turn as `work status` shows it.
 fn turn_retry_label(retry: &crate::client::executions::TurnRetry) -> String {
     let (failure, attempt) = (retry.failure.describe(), retry.attempt);
     if retry.delivered {
