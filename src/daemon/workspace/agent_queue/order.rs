@@ -76,5 +76,10 @@ pub(super) fn place(tx: &Transaction<'_>, moved: &str, place: &QueuePlace) -> Re
     })
 }
 
+/// Place the waiting entry `id` at `place` within `tx`.
+pub(crate) fn place_entry(tx: &Transaction<'_>, id: &str, place: &QueuePlace) -> Result<()> {
+    self::place(tx, id, place).map(|_| ())
+}
+
 #[cfg(test)]
 mod tests;

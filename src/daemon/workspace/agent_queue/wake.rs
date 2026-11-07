@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use anyhow::Result;
 use rusqlite::Connection;
 
-use super::{Wake, Work};
+use super::limits::{Wake, Work};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     daemon::workspace::Manager,

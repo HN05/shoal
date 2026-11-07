@@ -8,8 +8,10 @@ use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::params;
 
 use super::{
-    ENTRY_COLUMNS, Grant, WaitingRestore, dependencies::Readiness, entry as queue_entry, order,
-    record_waiting_restore,
+    Grant,
+    dependencies::Readiness,
+    order,
+    store::{ENTRY_COLUMNS, WaitingRestore, entry as queue_entry, record_waiting_restore},
 };
 use crate::client::space_names::SpaceSelector;
 use crate::{
