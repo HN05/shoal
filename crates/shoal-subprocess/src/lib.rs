@@ -231,12 +231,22 @@ fn check(program: &str, output: io::Result<Output>) -> Result<Output> {
     };
     if !output.status.success() {
         bail!(
-            "{program} failed ({}): {}",
+            "{program} failed ({}){}",
             output.status,
-            diagnostic(&output.stderr)
+            printed(&output.stderr)
         );
     }
     Ok(output)
+}
+
+/// What a failed command printed to `stderr`, saying so when it printed
+/// nothing, so an empty error is not mistaken for a lost one.
+fn printed(stderr: &[u8]) -> String {
+    let diagnostic = diagnostic(stderr);
+    match diagnostic.trim().is_empty() {
+        true => " and printed nothing to stderr".to_owned(),
+        false => format!(": {diagnostic}"),
+    }
 }
 
 /// Bound diagnostics even when callers interpret exit status themselves.

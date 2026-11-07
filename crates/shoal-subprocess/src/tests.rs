@@ -99,6 +99,19 @@ async fn reports_spawn_failure_and_limits_unicode_diagnostics() {
 }
 
 #[tokio::test]
+async fn a_failure_that_printed_nothing_says_so() {
+    let error = Run::new(shell("printf 'not a diagnostic'; exit 1"))
+        .output()
+        .await
+        .unwrap_err();
+    let message = error.to_string();
+    assert!(
+        message.ends_with("and printed nothing to stderr"),
+        "{message}"
+    );
+}
+
+#[tokio::test]
 async fn early_stdin_close_preserves_exit_status_and_diagnostics() {
     let output = Run::new(shell("exec 0<&-; printf 'early exit' >&2; exit 7"))
         .input(vec![0; 1024 * 1024])
