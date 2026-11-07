@@ -10,7 +10,10 @@ use futures_util::{StreamExt, TryStreamExt, stream};
 use rusqlite::{OptionalExtension, params};
 use tokio::sync::Notify;
 
-use self::cursor::{all_pending, cursor_record, pending_updates, save_cursor_record, save_pending};
+use self::{
+    cursor::{all_pending, cursor_record, pending_updates, save_cursor_record, save_pending},
+    wake_log::WakeWaitLog,
+};
 use super::{
     pr::RegistrationKind,
     space::{LinkSpace, require_ready_space},
@@ -30,6 +33,7 @@ use crate::{
 pub(crate) use crate::client::links::Updates;
 
 mod cursor;
+mod wake_log;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -218,14 +222,19 @@ impl Manager {
     /// running chat `selector` names, unless a newer wait or delivery takes
     /// them first: a workspace's as an unfiltered [`Self::wait_items`]
     /// without a deadline finds them, a chat's as
-    /// [`Self::wait_chat_messages`] does.
+    /// [`Self::wait_chat_messages`] does. The wake hook's wait, so the daemon
+    /// logs how one ends without updates.
     pub async fn wait_space_updates(&self, selector: &str) -> Result<Updates> {
-        match self.present_space(selector).await? {
+        let space = self.present_space(selector).await?;
+        let log = WakeWaitLog::start(space.name());
+        let updates = match space {
             PresentSpace::Workspace(workspace) => {
                 (self.wait_items(&workspace.id, &Selection::default(), None)).await
             }
             PresentSpace::Chat(chat) => self.wait_chat_messages(&chat.id).await,
-        }
+        };
+        log.answered(&updates);
+        updates
     }
 
     /// What the workspace's agent has not received: its settled messages and
