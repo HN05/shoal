@@ -1,7 +1,7 @@
 //! A chat without a repository acting in each registered repository.
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    config::repo::Opening,
+    config::permissions::Opening,
     daemon::test_support::manager,
     daemon::{chats::NewChat, links::proposals::tests::store_issue_proposal, workspace::Manager},
     forge::items::create::NewIssue,

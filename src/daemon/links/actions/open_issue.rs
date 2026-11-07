@@ -9,7 +9,7 @@ use anyhow::{Context as _, Result, bail};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     config::{
-        repo::{Opening, OtherRepositories},
+        permissions::{Opening, OtherRepositories},
         resolve::Effective,
     },
     daemon::{

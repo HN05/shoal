@@ -10,7 +10,7 @@ use super::{
 };
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    config::{repo::Opening, resolve::Effective},
+    config::{permissions::Opening, resolve::Effective},
     daemon::{events, reviews::gate::Gate, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,

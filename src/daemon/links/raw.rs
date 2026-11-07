@@ -106,7 +106,7 @@ impl Manager {
                 "scoped processes can only send GET requests to another repository"
             );
             ensure!(
-                settings.permissions.api_writes == crate::config::repo::ApiWrites::Direct,
+                settings.permissions.api_writes == crate::config::permissions::ApiWrites::Direct,
                 "scoped processes can only send GET requests; [permissions] api_writes = \"direct\" lets agents send {method}"
             );
         }

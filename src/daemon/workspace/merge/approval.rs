@@ -49,7 +49,7 @@ impl Manager {
     /// Whether `[permissions] merge` and `[permissions] push` let
     /// `workspace`'s processes merge, push and unmerge without approval.
     async fn merges_directly(&self, workspace: &Workspace) -> Result<bool> {
-        use crate::config::repo::{Opening, Pushes};
+        use crate::config::permissions::{Opening, Pushes};
         let settings = self.workspace_settings(workspace).await?;
         let permissions = &settings.permissions;
         Ok(permissions.merge == Opening::Direct && permissions.push == Pushes::Direct)

@@ -7,7 +7,7 @@ use anyhow::{Result, bail, ensure};
 use super::{proposals::OpenOutcome, space::LinkSpace};
 use crate::client::space_names::SpaceSelector;
 use crate::{
-    config::repo::{Opening, Pushes},
+    config::permissions::{Opening, Pushes},
     daemon::{scope::Caller, workspace::Manager},
     forge::{
         conventions,

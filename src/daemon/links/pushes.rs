@@ -10,7 +10,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::links::PushOutcome,
-    config::repo::Pushes,
+    config::permissions::Pushes,
     daemon::{
         approvals::{
             ApprovalRequest, DecisionStatus, PushSpecification, Specification, Target,

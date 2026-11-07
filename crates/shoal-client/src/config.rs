@@ -9,6 +9,7 @@ pub mod named_commands;
 pub mod options;
 pub mod overload;
 mod parse;
+pub mod permissions;
 pub mod placeholders;
 pub mod presets;
 pub mod proxies;

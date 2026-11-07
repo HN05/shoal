@@ -23,7 +23,7 @@ use super::{
 use crate::client::space_names::SpaceSelector;
 use crate::{
     client::{approvals::Undecided, connection},
-    config::repo::Pushes,
+    config::permissions::Pushes,
     env,
     model::ExecutionPlan,
     paths::Paths,
